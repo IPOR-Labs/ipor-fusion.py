@@ -75,7 +75,7 @@ jobs:
 
       - name: Set up Poetry
         # from tag: v3.0.0
-        uses: abatilo/python-poetry-action@7b6d33e44b4f08d7021a1dee3c044e9c253d6439
+        uses: abatilo/actions-poetry@7b6d33e44b4f08d7021a1dee3c044e9c253d6439
         with:
           poetry-version: ${{ inputs.poetry-version }}
 
