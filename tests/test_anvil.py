@@ -8,10 +8,10 @@ from anvil_container import AnvilTestContainerStarter
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-ANVIL_FORK_URL = "ANVIL_FORK_URL"
-FORK_URL = os.getenv(ANVIL_FORK_URL)
+ARBITRUM_PROVIDER_URL = "ARBITRUM_PROVIDER_URL"
+FORK_URL = os.getenv(ARBITRUM_PROVIDER_URL)
 if not FORK_URL:
-  raise ValueError("Environment variable ANVIL_FORK_URL must be set")
+  raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
 
 
 @pytest.fixture(scope="module")

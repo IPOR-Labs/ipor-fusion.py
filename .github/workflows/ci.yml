@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  notify:
+    uses: ./.github/workflows/notify-slack.yml
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+  build:
+    needs: notify
+    uses: ./.github/workflows/python-build.yml
+    secrets:
+      ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
+
+  report:
+    if: ${{ always() }}
+    needs:
+      - notify
+      - build
+    uses: ./.github/workflows/report-slack.yml
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+    with:
+      success: ${{ needs.build.result == 'success' }}
+      slack-status-msg-id: ${{ needs.notify.outputs.slack-status-msg-id }}

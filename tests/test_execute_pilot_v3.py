@@ -23,10 +23,10 @@ from ipor_fusion_sdk.operation.Withdraw import Withdraw
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-ANVIL_FORK_URL = "ANVIL_FORK_URL"
-FORK_URL = os.getenv(ANVIL_FORK_URL)
+ARBITRUM_PROVIDER_URL = "ARBITRUM_PROVIDER_URL"
+FORK_URL = os.getenv(ARBITRUM_PROVIDER_URL)
 if not FORK_URL:
-  raise ValueError("Environment variable ANVIL_FORK_URL must be set")
+  raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
 
 SET_ANVIL_WALLET_AS_PILOT_V3_ALPHA_COMMAND = ["cast", "send", "--unlocked", "--from",
                                               "0x4E3C666F0c898a9aE1F8aBB188c6A2CC151E17fC",

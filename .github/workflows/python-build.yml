@@ -1,0 +1,111 @@
+name: Python build
+
+on:
+  workflow_call:
+
+    secrets:
+      ARBITRUM_PROVIDER_URL:
+        required: true
+      PYPI_USERNAME:
+        required: false
+      PYPI_PASSWORD:
+        required: false
+      PYPI_TOKEN:
+        required: false
+
+
+    inputs:
+      python-version:
+        description: "Python version"
+        type: string
+        default: 3.12
+        required: false
+      poetry-version:
+        description: "Poetry version"
+        type: string
+        default: 1.8
+        required: false
+      test-options:
+        description: "Extra pytest options"
+        type: string
+        default: "-v -s"
+        required: false
+      build-enabled:
+        description: "Enable package build"
+        type: boolean
+        default: true
+        required: false
+      test-enabled:
+        description: "Enable pytest tests"
+        type: boolean
+        default: true
+        required: false
+      publish-enabled:
+        description: "Enable package publishing"
+        type: boolean
+        default: false
+        required: false
+
+
+env:
+  POETRY_VIRTUALENVS_PATH: "~/.cache/pypoetry/virtualenvs"
+
+jobs:
+  smart-contracts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        # from tag: v4.1.7
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        # from tag: v5.2.0
+      - uses: actions/setup-python@f677139bbe7f9c59b41e40162b753c062f5d49a3
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      #      - name: Set up Poetry
+      #        # from tag: v9
+      #        uses: Gr1N/setup-poetry@48b0f77c8c1b1b19cb962f0f00dff7b4be8f81ec
+      #        with:
+      #          poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Set up Poetry
+        # from tag: v3.0.0
+        uses: abatilo/python-poetry-action@v2@7b6d33e44b4f08d7021a1dee3c044e9c253d6439
+        with:
+          poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Cache
+        # from tag: v4.0.2
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9
+        with:
+          path: ${{ env.POETRY_VIRTUALENVS_PATH }}
+          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+
+      - name: Install
+        run: poetry install
+
+      - name: Build
+        if: inputs.build-enabled
+        run: poetry build
+        id: build
+
+      - name: Tests
+        if: inputs.test-enabled
+        run: |
+          poetry run pytest ${{ inputs.test-options }}
+        env:
+          ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
+        id: tests
+
+      - name: Publish
+        if: inputs.publish-enabled
+        run: |
+          poetry publish --username ${{ secrets.PYPI_USERNAME }} --password ${{ secrets.PYPI_PASSWORD }}
+        env:
+          POETRY_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        id: publish

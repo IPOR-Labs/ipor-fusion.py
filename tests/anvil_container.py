@@ -2,18 +2,20 @@ import logging
 import os
 import time
 from typing import Union
+from dotenv import load_dotenv
 
 from testcontainers.core.container import DockerContainer
 from web3 import Web3, HTTPProvider
 
+load_dotenv(verbose=True)
 
 class AnvilTestContainerStarter:
-  ANVIL_FORK_URL = "ANVIL_FORK_URL"
+  ARBITRUM_PROVIDER_URL = "ARBITRUM_PROVIDER_URL"
   ANVIL_CONTAINER = os.getenv("ANVIL_TEST_CONTAINER",
                               "ghcr.io/foundry-rs/foundry:nightly-be451fb93a0d0ec52152fb67cc6c36cd8fbd7ae1")
-  FORK_URL = os.getenv(ANVIL_FORK_URL)
+  FORK_URL = os.getenv(ARBITRUM_PROVIDER_URL)
   if not FORK_URL:
-    raise ValueError("Environment variable ANVIL_FORK_URL must be set")
+    raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
   MAX_WAIT_SECONDS = 1201
   ANVIL_HTTP_PORT = 8545
   CHAIN_ID = 42161

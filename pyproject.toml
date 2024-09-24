@@ -2,7 +2,7 @@
 name = "ipor-fusion-sdk"
 version = "0.1.0"
 description = ""
-authors = ["Adam Mydlarz <amydlarz@gmail.com>"]
+authors = ["Adam Mydlarz <amydlarz@gmail.com>", "rav <rav@ipor.io>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -10,9 +10,10 @@ python = "^3.12"
 eth-typing = "5.0.0"
 eth-abi = "5.1.0"
 web3 = "7.2.0"
+python-dotenv = "1.0.1"
 
 [tool.poetry.dev-dependencies]
-pytest = "8.3.2"
+pytest = "8.3.3"
 testcontainers = "4.8.1"
 
 [build-system]

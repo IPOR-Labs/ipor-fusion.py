@@ -1,0 +1,37 @@
+name: Release
+
+on: workflow_dispatch
+
+jobs:
+
+  notify:
+    uses: ./.github/workflows/notify-slack.yml
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.MAINNET_SLACK_BOT_TOKEN }}
+    with:
+      status-slack-channel-name: github-mainnet-ci
+
+  release:
+    needs: notify
+    uses: ./.github/workflows/python-build.yml
+    secrets:
+      ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
+      PYPI_USERNAME: ${{ secrets.PYPI_USERNAME }}
+      PYPI_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+    with:
+      publish-enabled: ${{ needs.notify.outputs.branch-name == 'main' }}
+
+  report:
+    if: ${{ always() }}
+    needs:
+      - notify
+      - release
+    uses: ./.github/workflows/report-slack.yml
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.MAINNET_SLACK_BOT_TOKEN }}
+    with:
+      success: ${{ needs.release.result == 'success' }}
+      slack-status-msg-id: ${{ needs.notify.outputs.slack-status-msg-id }}
+      status-slack-channel-name: github-mainnet-ci
+      alarms-slack-channel-name: alarms-mainnet-github

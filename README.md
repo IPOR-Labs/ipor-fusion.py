@@ -5,9 +5,10 @@
 poetry install
 ```
 
-#### Setup ANVIL_FORK_URL environment variable
+#### Setup ARBITRUM_PROVIDER_URL environment variable
+Some node providers are not supported. It's working with QuickNode but not with Alchemy.
 ```bash
-export ANVIL_FORK_URL="https://..."
+export ARBITRUM_PROVIDER_URL="https://..."
 ```
 
 #### Run tests

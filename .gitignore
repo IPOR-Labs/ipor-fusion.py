@@ -1,6 +1,28 @@
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
 .idea
-dist
+*.iws
+*.iml
+*.ipr
+
+### VS Code ###
+.vscode/
+
+### Confidential ###
 .env
 
+### Build Artifacts ###
+dist
 __pycache__/
 *.pyc
+
+### Unit test / coverage reports ###
+.pytest_cache/

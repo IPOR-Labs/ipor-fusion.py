@@ -1,0 +1,37 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  notify:
+    uses: ./.github/workflows/notify-slack.yml
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+  build:
+    needs: notify
+    uses: ./.github/workflows/python-build.yml
+    secrets:
+      ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
+# TODO: Uncomment the following lines to enable publishing to PyPI
+#      PYPI_USERNAME: ${{ secrets.PYPI_USERNAME }}
+#      PYPI_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+#      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+#    with:
+#      publish-enabled: ${{ needs.notify.outputs.branch-name == 'main' }}
+
+  report:
+    if: ${{ always() }}
+    needs:
+      - notify
+      - build
+    uses: ./.github/workflows/report-slack.yml
+    secrets:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+    with:
+      success: ${{ needs.build.result == 'success' }}
+      slack-status-msg-id: ${{ needs.notify.outputs.slack-status-msg-id }}
