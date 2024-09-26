@@ -226,7 +226,7 @@ def test_should_collect_all_after_decrease_liquidity(
 
     (
         version,
-        token_id,
+        new_token_id,
         liquidity,
         amount0,
         amount1,
@@ -235,12 +235,12 @@ def test_should_collect_all_after_decrease_liquidity(
         fee,
         tick_lower,
         tick_upper,
-    ) = extract_data_form_new_position_event(receipt)
+    ) = extract_enter_data_form_new_position_event(receipt)
 
     # Decrease Uniswap V3 position
     decrease_position = DecreasePosition(
         market_id=MarketId(UniswapV3ModifyPositionFuse.PROTOCOL_ID, "modify-position"),
-        token_id=token_id,
+        token_id=new_token_id,
         liquidity=liquidity,
         amount0_min=0,
         amount1_min=0,
@@ -260,7 +260,7 @@ def test_should_collect_all_after_decrease_liquidity(
     # Collect
     collect = Collect(
         market_id=MarketId(UniswapV3CollectFuse.PROTOCOL_ID, "collect"),
-        token_ids=[token_id],
+        token_ids=[new_token_id],
     )
     execute_transaction(
         web3,
@@ -291,13 +291,26 @@ def test_should_collect_all_after_decrease_liquidity(
 
     close_position = ClosePosition(
         market_id=MarketId(UniswapV3NewPositionFuse.PROTOCOL_ID, "new-position"),
-        token_ids=[token_id],
+        token_ids=[new_token_id],
     )
 
-    # function = vault_execute_call_factory.create_execute_call([close_position])
+    call = vault_execute_call_factory.create_execute_call([close_position])
 
+    receipt = execute_transaction(
+        web3,
+        PLASMA_VAULT_V4,
+        call,
+        account,
+    )
 
-def extract_data_form_new_position_event(receipt):
+    (
+        version,
+        close_token_id,
+    ) = extract_exit_data_form_new_position_event(receipt)
+
+    assert new_token_id == close_token_id, "new_token_id == close_token_id"
+
+def extract_enter_data_form_new_position_event(receipt):
     event_signature_hash = Web3.keccak(
         text="UniswapV3NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
     )
@@ -342,4 +355,27 @@ def extract_data_form_new_position_event(receipt):
                 fee,
                 tick_lower,
                 tick_upper,
+            )
+
+def extract_exit_data_form_new_position_event(receipt):
+    event_signature_hash = Web3.keccak(
+        text="UniswapV3NewPositionFuseExit(address,uint256)"
+    )
+
+    for log in receipt.logs:
+        if log.topics[0] == event_signature_hash:
+            decoded_data = decode(
+                [
+                    "address",
+                    "uint256",
+                ],
+                log["data"],
+            )
+            (
+                version,
+                token_id,
+            ) = decoded_data
+            return (
+                version,
+                token_id,
             )

@@ -8,6 +8,7 @@ from web3.contract.contract import ContractFunction
 from ipor_fusion_sdk.fuse import Fuse
 from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
 from ipor_fusion_sdk.operation.Claim import Claim
+from ipor_fusion_sdk.operation.ClosePosition import ClosePosition
 from ipor_fusion_sdk.operation.Collect import Collect
 from ipor_fusion_sdk.operation.DecreasePosition import DecreasePosition
 from ipor_fusion_sdk.operation.NewPosition import NewPosition
@@ -101,6 +102,10 @@ class VaultExecuteCallFactory:
                 operation.amount0_min(),
                 operation.amount1_min(),
                 operation.deadline(),
+            )
+        if isinstance(operation, ClosePosition):
+            return fuse.create_fuse_exit_action(
+                operation.token_ids(),
             )
         if isinstance(operation, DecreasePosition):
             return fuse.create_fuse_exit_action(

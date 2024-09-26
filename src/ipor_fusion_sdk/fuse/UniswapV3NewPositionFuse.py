@@ -72,7 +72,7 @@ class UniswapV3NewPositionFuseExitData:
 
     @staticmethod
     def function_selector() -> bytes:
-        return function_signature_to_4byte_selector("enter((uint256[]))")
+        return function_signature_to_4byte_selector("exit((uint256[]))")
 
     def function_call(self) -> bytes:
         return self.function_selector() + self.encode()
