@@ -27,6 +27,7 @@ from ipor_fusion_sdk.operation.BaseOperation import MarketId
 from ipor_fusion_sdk.operation.ClosePosition import ClosePosition
 from ipor_fusion_sdk.operation.Collect import Collect
 from ipor_fusion_sdk.operation.DecreasePosition import DecreasePosition
+from ipor_fusion_sdk.operation.IncreasePosition import IncreasePosition
 from ipor_fusion_sdk.operation.NewPosition import NewPosition
 from ipor_fusion_sdk.operation.Swap import Swap
 
@@ -305,6 +306,104 @@ def test_should_collect_all_after_decrease_liquidity(
     ) = extract_exit_data_form_new_position_event(receipt)
 
     assert new_token_id == close_token_id, "new_token_id == close_token_id"
+
+
+def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
+    # given
+    timestamp = web3.eth.get_block("latest")["timestamp"]
+
+    token_in_amount = int(500e6)
+    min_out_amount = 0
+    fee = 100
+
+    swap = Swap(
+        MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "swap"),
+        USDC,
+        USDT,
+        fee,
+        token_in_amount,
+        min_out_amount,
+    )
+
+    execute_transaction(
+        web3,
+        PLASMA_VAULT_V4,
+        vault_execute_call_factory.create_execute_call([swap]),
+        account,
+    )
+
+    new_position = NewPosition(
+        market_id=MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "new-position"),
+        token0=USDC,
+        token1=USDT,
+        fee=100,
+        tick_lower=-100,
+        tick_upper=101,
+        amount0_desired=int(400e6),
+        amount1_desired=int(400e6),
+        amount0_min=0,
+        amount1_min=0,
+        deadline=timestamp + 100,
+    )
+
+    function = vault_execute_call_factory.create_execute_call([new_position])
+
+    receipt = execute_transaction(web3, PLASMA_VAULT_V4, function, account)
+
+    (
+        _,
+        new_token_id,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+    ) = extract_enter_data_form_new_position_event(receipt)
+
+    # Increase Uniswap V3 position
+    increase_position = IncreasePosition(
+        market_id=MarketId(UniswapV3ModifyPositionFuse.PROTOCOL_ID, "modify-position"),
+        token0=USDC,
+        token1=USDT,
+        token_id=new_token_id,
+        amount0_desired=int(99e6),
+        amount1_desired=int(99e6),
+        amount0_min=0,
+        amount1_min=0,
+        deadline=timestamp + 100,
+    )
+
+    vault_usdc_balance_before_increase = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
+    vault_usdt_balance_before_increase = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+
+    # when
+    execute_transaction(
+        web3,
+        PLASMA_VAULT_V4,
+        vault_execute_call_factory.create_execute_call([increase_position]),
+        account,
+    )
+
+    # then
+    vault_usdc_balance_after_increase = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
+    vault_usdt_balance_after_increase = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+
+    increase_position_change_usdc = (
+        vault_usdc_balance_after_increase - vault_usdc_balance_before_increase
+    )
+    increase_position_change_usdt = (
+        vault_usdt_balance_after_increase - vault_usdt_balance_before_increase
+    )
+
+    assert (
+        increase_position_change_usdc == -99_000000
+    ), "increase_position_change_usdc == -99_000000"
+    assert (
+        increase_position_change_usdt == -97_046288
+    ), "increase_position_change_usdt == -97_046288"
 
 
 def extract_enter_data_form_new_position_event(
