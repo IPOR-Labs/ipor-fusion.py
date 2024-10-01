@@ -100,7 +100,7 @@ class UniswapV3NewPositionFuse(Fuse):
         amount0_min: int,
         amount1_min: int,
         deadline: int,
-    ):
+    ) -> FuseActionDynamicStruct:
         data = UniswapV3NewPositionFuseEnterData(
             token0,
             token1,
@@ -113,21 +113,17 @@ class UniswapV3NewPositionFuse(Fuse):
             amount1_min,
             deadline,
         )
-        return [
-            FuseActionDynamicStruct(
-                self.uniswap_v_3_new_position_fuse_address, data.function_call()
-            )
-        ]
+        return FuseActionDynamicStruct(
+            self.uniswap_v_3_new_position_fuse_address, data.function_call()
+        )
 
     def create_fuse_close_position_action(
         self, token_ids: List[int]
-    ) -> List[FuseActionDynamicStruct]:
+    ) -> FuseActionDynamicStruct:
         data = UniswapV3NewPositionFuseExitData(token_ids)
-        return [
-            FuseActionDynamicStruct(
-                self.uniswap_v_3_new_position_fuse_address, data.function_call()
-            )
-        ]
+        return FuseActionDynamicStruct(
+            self.uniswap_v_3_new_position_fuse_address, data.function_call()
+        )
 
     def supports(self, market_id: MarketId) -> bool:
         if market_id is None:

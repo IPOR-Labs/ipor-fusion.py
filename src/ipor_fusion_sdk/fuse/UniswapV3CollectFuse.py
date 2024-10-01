@@ -31,17 +31,10 @@ class UniswapV3CollectFuse:
             "uniswap_v3_collect_fuse_address is required",
         )
 
-    def create_fuse_enter_action(self, token_ids: List[int]):
+    def create_fuse_enter_action(self, token_ids: List[int]) -> FuseActionDynamicStruct:
         data = UniswapV3CollectFuseEnterData(token_ids)
-        return [
-            FuseActionDynamicStruct(
-                self.uniswap_v3_collect_fuse_address, data.function_call()
-            )
-        ]
-
-    def create_fuse_exit_action(self):
-        raise NotImplementedError(
-            "Fuse exit action not supported for UniswapV3CollectFuse"
+        return FuseActionDynamicStruct(
+            self.uniswap_v3_collect_fuse_address, data.function_call()
         )
 
     @staticmethod

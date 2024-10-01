@@ -55,16 +55,14 @@ class UniswapV3SwapFuse(Fuse):
         fee: int,
         token_in_amount: int,
         min_out_amount: int,
-    ):
+    ) -> FuseActionDynamicStruct:
         path = UniswapV3SwapPathFuseEnterData(
             token_in_address, token_out_address, fee
         ).encode()
         data = UniswapV3SwapFuseEnterData(token_in_amount, min_out_amount, path)
-        return [
-            FuseActionDynamicStruct(
-                self.uniswap_v_3_swap_fuse_address, data.function_call()
-            )
-        ]
+        return FuseActionDynamicStruct(
+            self.uniswap_v_3_swap_fuse_address, data.function_call()
+        )
 
     def supports(self, market_id: MarketId) -> bool:
         if market_id is None:

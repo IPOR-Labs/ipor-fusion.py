@@ -111,7 +111,7 @@ class UniswapV3ModifyPositionFuse:
         amount0_min: int,
         amount1_min: int,
         deadline: int,
-    ):
+    ) -> FuseActionDynamicStruct:
         data = UniswapV3ModifyPositionFuseEnterData(
             token0,
             token1,
@@ -122,11 +122,9 @@ class UniswapV3ModifyPositionFuse:
             amount1_min,
             deadline,
         )
-        return [
-            FuseActionDynamicStruct(
-                self.uniswap_v3_modify_position_fuse_address, data.function_call()
-            )
-        ]
+        return FuseActionDynamicStruct(
+            self.uniswap_v3_modify_position_fuse_address, data.function_call()
+        )
 
     def create_fuse_exit_action(
         self,
@@ -135,15 +133,13 @@ class UniswapV3ModifyPositionFuse:
         amount0_min: int,
         amount1_min: int,
         deadline: int,
-    ):
+    ) -> FuseActionDynamicStruct:
         data = UniswapV3ModifyPositionFuseExitData(
             token_id, liquidity, amount0_min, amount1_min, deadline
         )
-        return [
-            FuseActionDynamicStruct(
-                self.uniswap_v3_modify_position_fuse_address, data.function_call()
-            )
-        ]
+        return FuseActionDynamicStruct(
+            self.uniswap_v3_modify_position_fuse_address, data.function_call()
+        )
 
     @staticmethod
     def _require_non_null(value, message):

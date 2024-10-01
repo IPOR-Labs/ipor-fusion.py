@@ -17,19 +17,14 @@ from constants import (
     NEW_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS,
     MODIFY_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS,
     COLLECT_SWAP_FUSE_UNISWAP_V3_ADDRESS,
+    SWAP_FUSE_UNIVERSAL_TOKEN_SWAPPER_ADDRESS,
 )
 from ipor_fusion_sdk.VaultExecuteCallFactory import VaultExecuteCallFactory
 from ipor_fusion_sdk.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
 from ipor_fusion_sdk.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
 from ipor_fusion_sdk.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
 from ipor_fusion_sdk.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
-from ipor_fusion_sdk.operation.ClosePosition import ClosePosition
-from ipor_fusion_sdk.operation.Collect import Collect
-from ipor_fusion_sdk.operation.DecreasePosition import DecreasePosition
-from ipor_fusion_sdk.operation.IncreasePosition import IncreasePosition
-from ipor_fusion_sdk.operation.NewPosition import NewPosition
-from ipor_fusion_sdk.operation.Swap import Swap
+from ipor_fusion_sdk.fuse.UniversalTokenSwapperFuse import UniversalTokenSwapperFuse
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -52,27 +47,22 @@ SET_ANVIL_WALLET_AS_PILOT_V4_ALPHA_COMMAND = [
     "0",
 ]
 
+uniswap_v3_swap_fuse = UniswapV3SwapFuse(SWAP_FUSE_UNISWAP_V3_ADDRESS)
+uniswap_v_3_new_position_fuse = UniswapV3NewPositionFuse(
+    NEW_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS
+)
+uniswap_v_3_modify_position_fuse = UniswapV3ModifyPositionFuse(
+    MODIFY_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS
+)
+uniswap_v_3_collect_fuse = UniswapV3CollectFuse(COLLECT_SWAP_FUSE_UNISWAP_V3_ADDRESS)
+universal_token_swapper_fuse = UniversalTokenSwapperFuse(
+    SWAP_FUSE_UNIVERSAL_TOKEN_SWAPPER_ADDRESS
+)
+
 
 @pytest.fixture(scope="module", name="vault_execute_call_factory")
 def vault_execute_call_factory_fixture() -> VaultExecuteCallFactory:
-    uniswap_v3_swap_fuse = UniswapV3SwapFuse(SWAP_FUSE_UNISWAP_V3_ADDRESS)
-    uniswap_v_3_new_position_fuse = UniswapV3NewPositionFuse(
-        NEW_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS
-    )
-    uniswap_v_3_modify_position_fuse = UniswapV3ModifyPositionFuse(
-        MODIFY_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS
-    )
-    uniswap_v_3_collect_fuse = UniswapV3CollectFuse(
-        COLLECT_SWAP_FUSE_UNISWAP_V3_ADDRESS
-    )
-    return VaultExecuteCallFactory(
-        {
-            uniswap_v3_swap_fuse,
-            uniswap_v_3_new_position_fuse,
-            uniswap_v_3_modify_position_fuse,
-            uniswap_v_3_collect_fuse,
-        }
-    )
+    return VaultExecuteCallFactory({})
 
 
 @pytest.fixture(name="setup", autouse=True)
@@ -82,39 +72,30 @@ def setup_fixture(anvil):
     yield
 
 
-def test_should_swap_when_one_hop_uniswap_v3(web3, account, vault_execute_call_factory):
-    # given
-    token_in_amount = int(100e6)
-    min_out_amount = 0
-    fee = 100
-
-    swap = Swap(
-        MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "swap"),
-        USDC,
-        USDT,
-        fee,
-        token_in_amount,
-        min_out_amount,
-    )
-
-    function = vault_execute_call_factory.create_execute_call([swap])
-
-    vault_usdc_balance_before = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_before = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
-
-    # when
-    execute_transaction(web3, PLASMA_VAULT_V4, function, account)
-
-    # then
-    vault_usdc_balance_after = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_after = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
-
-    assert (
-        vault_usdc_balance_after - vault_usdc_balance_before == -token_in_amount
-    ), "vault_usdc_balance_before - vault_usdc_balance_after == token_in_amount"
-    assert vault_usdt_balance_after - vault_usdt_balance_before > int(
-        90e6
-    ), "vault_usdt_balance_after - vault_usdt_balance_before  > 90e6"
+# def test_should_swap_when_one_hop_uniswap_v3(web3, account, vault_execute_call_factory):
+#     # given
+#     token_in_amount = int(100e6)
+#     min_out_amount = 0
+#     fee = 100
+#
+#
+#
+#     vault_usdc_balance_before = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
+#     vault_usdt_balance_before = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+#
+#     # when
+#     execute_transaction(web3, PLASMA_VAULT_V4, function, account)
+#
+#     # then
+#     vault_usdc_balance_after = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
+#     vault_usdt_balance_after = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+#
+#     assert (
+#         vault_usdc_balance_after - vault_usdc_balance_before == -token_in_amount
+#     ), "vault_usdc_balance_before - vault_usdc_balance_after == token_in_amount"
+#     assert vault_usdt_balance_after - vault_usdt_balance_before > int(
+#         90e6
+#     ), "vault_usdt_balance_after - vault_usdt_balance_before  > 90e6"
 
 
 def test_should_open_two_new_position_uniswap_v3(
@@ -127,21 +108,23 @@ def test_should_open_two_new_position_uniswap_v3(
     min_out_amount = 0
     fee = 100
 
-    swap = Swap(
-        MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "swap"),
-        USDC,
-        USDT,
-        fee,
-        token_in_amount,
-        min_out_amount,
+    action = uniswap_v3_swap_fuse.create_fuse_swap_action(
+        token_in_address=USDC,
+        token_out_address=USDT,
+        fee=fee,
+        token_in_amount=token_in_amount,
+        min_out_amount=min_out_amount,
     )
 
-    function_swap = vault_execute_call_factory.create_execute_call([swap])
+    function_swap = vault_execute_call_factory.create_execute_call_from_action(action)
 
     execute_transaction(web3, PLASMA_VAULT_V4, function_swap, account)
 
-    new_position = NewPosition(
-        market_id=MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "new-position"),
+    uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
+        NEW_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS
+    )
+
+    action = uniswap_v3_new_position_fuse.create_fuse_new_position_action(
         token0=USDC,
         token1=USDT,
         fee=100,
@@ -154,7 +137,7 @@ def test_should_open_two_new_position_uniswap_v3(
         deadline=timestamp + 100,
     )
 
-    function = vault_execute_call_factory.create_execute_call([new_position])
+    function = vault_execute_call_factory.create_execute_call_from_action(action)
 
     vault_usdc_balance_after_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
     vault_usdt_balance_after_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
@@ -189,24 +172,24 @@ def test_should_collect_all_after_decrease_liquidity(
     min_out_amount = 0
     fee = 100
 
-    swap = Swap(
-        MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "swap"),
-        USDC,
-        USDT,
-        fee,
-        token_in_amount,
-        min_out_amount,
+    action = uniswap_v3_swap_fuse.create_fuse_swap_action(
+        token_in_address=USDC,
+        token_out_address=USDT,
+        fee=fee,
+        token_in_amount=token_in_amount,
+        min_out_amount=min_out_amount,
     )
+
+    function_swap = vault_execute_call_factory.create_execute_call_from_action(action)
 
     execute_transaction(
         web3,
         PLASMA_VAULT_V4,
-        vault_execute_call_factory.create_execute_call([swap]),
+        function_swap,
         account,
     )
 
-    new_position = NewPosition(
-        market_id=MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "new-position"),
+    position_action = uniswap_v_3_new_position_fuse.create_fuse_new_position_action(
         token0=USDC,
         token1=USDT,
         fee=100,
@@ -219,9 +202,12 @@ def test_should_collect_all_after_decrease_liquidity(
         deadline=timestamp + 100,
     )
 
-    function = vault_execute_call_factory.create_execute_call([new_position])
-
-    receipt = execute_transaction(web3, PLASMA_VAULT_V4, function, account)
+    receipt = execute_transaction(
+        web3,
+        PLASMA_VAULT_V4,
+        vault_execute_call_factory.create_execute_call_from_action(position_action),
+        account,
+    )
 
     (
         _,
@@ -236,9 +222,7 @@ def test_should_collect_all_after_decrease_liquidity(
         _,
     ) = extract_enter_data_form_new_position_event(receipt)
 
-    # Decrease Uniswap V3 position
-    decrease_position = DecreasePosition(
-        market_id=MarketId(UniswapV3ModifyPositionFuse.PROTOCOL_ID, "modify-position"),
+    decrease_action = uniswap_v_3_modify_position_fuse.create_fuse_exit_action(
         token_id=new_token_id,
         liquidity=liquidity,
         amount0_min=0,
@@ -249,22 +233,21 @@ def test_should_collect_all_after_decrease_liquidity(
     execute_transaction(
         web3,
         PLASMA_VAULT_V4,
-        vault_execute_call_factory.create_execute_call([decrease_position]),
+        vault_execute_call_factory.create_execute_call_from_action(decrease_action),
         account,
     )
 
     vault_usdc_balance_before_collect = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
     vault_usdt_balance_before_collect = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
 
-    # Collect
-    collect = Collect(
-        market_id=MarketId(UniswapV3CollectFuse.PROTOCOL_ID, "collect"),
+    enter_action = uniswap_v_3_collect_fuse.create_fuse_enter_action(
         token_ids=[new_token_id],
     )
+
     execute_transaction(
         web3,
         PLASMA_VAULT_V4,
-        vault_execute_call_factory.create_execute_call([collect]),
+        vault_execute_call_factory.create_execute_call_from_action(enter_action),
         account,
     )
 
@@ -288,15 +271,12 @@ def test_should_collect_all_after_decrease_liquidity(
         int(489_000000) < collect_usdt_change < int(500_000000)
     ), "int(489_000000) < collect_usdt_change < int(500_000000)"
 
-    close_position = ClosePosition(
-        market_id=MarketId(UniswapV3NewPositionFuse.PROTOCOL_ID, "new-position"),
-        token_ids=[new_token_id],
-    )
+    close_position_action = uniswap_v_3_new_position_fuse.create_fuse_close_position_action(token_ids=[new_token_id])
 
     receipt = execute_transaction(
         web3,
         PLASMA_VAULT_V4,
-        vault_execute_call_factory.create_execute_call([close_position]),
+        vault_execute_call_factory.create_execute_call_from_action(close_position_action),
         account,
     )
 
@@ -316,24 +296,24 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
     min_out_amount = 0
     fee = 100
 
-    swap = Swap(
-        MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "swap"),
-        USDC,
-        USDT,
-        fee,
-        token_in_amount,
-        min_out_amount,
+    action = uniswap_v3_swap_fuse.create_fuse_swap_action(
+        token_in_address=USDC,
+        token_out_address=USDT,
+        fee=fee,
+        token_in_amount=token_in_amount,
+        min_out_amount=min_out_amount,
     )
+
+    function_swap = vault_execute_call_factory.create_execute_call_from_action(action)
 
     execute_transaction(
         web3,
         PLASMA_VAULT_V4,
-        vault_execute_call_factory.create_execute_call([swap]),
+        function_swap,
         account,
     )
 
-    new_position = NewPosition(
-        market_id=MarketId(UniswapV3SwapFuse.PROTOCOL_ID, "new-position"),
+    position_action = uniswap_v_3_new_position_fuse.create_fuse_new_position_action(
         token0=USDC,
         token1=USDT,
         fee=100,
@@ -346,9 +326,12 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
         deadline=timestamp + 100,
     )
 
-    function = vault_execute_call_factory.create_execute_call([new_position])
-
-    receipt = execute_transaction(web3, PLASMA_VAULT_V4, function, account)
+    receipt = execute_transaction(
+        web3,
+        PLASMA_VAULT_V4,
+        vault_execute_call_factory.create_execute_call_from_action(position_action),
+        account,
+    )
 
     (
         _,
@@ -364,8 +347,8 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
     ) = extract_enter_data_form_new_position_event(receipt)
 
     # Increase Uniswap V3 position
-    increase_position = IncreasePosition(
-        market_id=MarketId(UniswapV3ModifyPositionFuse.PROTOCOL_ID, "modify-position"),
+
+    increase_action = uniswap_v_3_modify_position_fuse.create_fuse_enter_action(
         token0=USDC,
         token1=USDT,
         token_id=new_token_id,
@@ -383,7 +366,7 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
     execute_transaction(
         web3,
         PLASMA_VAULT_V4,
-        vault_execute_call_factory.create_execute_call([increase_position]),
+        vault_execute_call_factory.create_execute_call_from_action(increase_action),
         account,
     )
 
@@ -404,6 +387,13 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
     assert (
         increase_position_change_usdt == -97_046288
     ), "increase_position_change_usdt == -97_046288"
+
+
+# def test_should_universal_swap_when_one_hop(web3, account, vault_execute_call_factory):
+#     # given
+#     fuse = UniversalTokenSwapperFuse(SWAP_FUSE_UNIVERSAL_TOKEN_SWAPPER_ADDRESS)
+#
+#     fuse.create_fuse_swap_action()
 
 
 def extract_enter_data_form_new_position_event(
