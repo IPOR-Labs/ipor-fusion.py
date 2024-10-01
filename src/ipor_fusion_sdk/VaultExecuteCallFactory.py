@@ -55,7 +55,9 @@ class VaultExecuteCallFactory:
     def create_claim_rewards_call(self, claims: List[Claim]) -> ContractFunction:
         raise NotImplementedError("Not implemented")
 
-    def create_action_data(self, operation: BaseOperation) -> List[FuseActionDynamicStruct]:
+    def create_action_data(
+        self, operation: BaseOperation
+    ) -> List[FuseActionDynamicStruct]:
         fuse = next((f for f in self.fuses if f.supports(operation.market_id())), None)
         for f in self.fuses:
             print(f.supports(operation.market_id()))

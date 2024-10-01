@@ -225,7 +225,14 @@ def test_should_collect_all_after_decrease_liquidity(
     (
         _,
         new_token_id,
-        liquidity, _, _, _, _, _, _, _,
+        liquidity,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
     ) = extract_enter_data_form_new_position_event(receipt)
 
     # Decrease Uniswap V3 position
@@ -299,7 +306,10 @@ def test_should_collect_all_after_decrease_liquidity(
 
     assert new_token_id == close_token_id, "new_token_id == close_token_id"
 
-def extract_enter_data_form_new_position_event(receipt: TxReceipt) -> (str,int,int,int,int,str,str,int,int,int):
+
+def extract_enter_data_form_new_position_event(
+    receipt: TxReceipt,
+) -> (str, int, int, int, int, str, str, int, int, int):
     event_signature_hash = Web3.keccak(
         text="UniswapV3NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
     )
@@ -346,6 +356,7 @@ def extract_enter_data_form_new_position_event(receipt: TxReceipt) -> (str,int,i
                 tick_upper,
             )
     return None, None, None, None, None, None, None, None, None, None
+
 
 def extract_exit_data_form_new_position_event(receipt: TxReceipt) -> (str, int):
     event_signature_hash = Web3.keccak(

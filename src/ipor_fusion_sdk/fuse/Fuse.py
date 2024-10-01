@@ -7,7 +7,7 @@ from ipor_fusion_sdk.operation.BaseOperation import MarketId
 
 class Fuse(ABC):
     def supports(self, market_id: MarketId) -> bool:
-      raise NotImplementedError("Method not implemented")
+        raise NotImplementedError("Method not implemented")
 
     def create_fuse_enter_action(
         self, market_id: MarketId, amount: int
