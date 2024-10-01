@@ -1,5 +1,9 @@
 from typing import List, Set
 
+from eth_abi import encode
+from eth_utils import function_signature_to_4byte_selector
+from web3.contract.contract import ContractFunction
+
 from ipor_fusion_sdk.fuse import Fuse
 from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
 from ipor_fusion_sdk.operation.BaseOperation import BaseOperation
@@ -22,6 +26,35 @@ class VaultExecuteCallFactory:
         if fuses is None:
             raise ValueError("fuses is required")
         self.fuses = set(fuses)
+
+    def create_execute_call(self, operations: List[BaseOperation]) -> bytes:
+        if operations is None:
+            raise ValueError("operations is required")
+        if not operations:
+            raise ValueError("operations is empty")
+
+        actions = []
+        for operation in operations:
+            actions.extend(self.create_action_data(operation))
+
+        bytes_data = []
+
+        for action in actions:
+            bytes_data.append([action.fuse, action.data])
+
+        encoded_arguments = encode(["(address,bytes)[]"], [bytes_data])
+
+        return self.create_raw_function_call(encoded_arguments)
+
+    def create_raw_function_call(self, encoded_arguments):
+        return self.execute_function_call_encoded_sig() + encoded_arguments
+
+    @staticmethod
+    def execute_function_call_encoded_sig():
+        return function_signature_to_4byte_selector("execute((address,bytes)[])")
+
+    def create_claim_rewards_call(self, claims: List[Claim]) -> ContractFunction:
+        raise NotImplementedError("Not implemented")
 
     def create_action_data(
         self, operation: BaseOperation
