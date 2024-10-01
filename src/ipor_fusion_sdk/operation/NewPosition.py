@@ -1,5 +1,4 @@
-from ipor_fusion_sdk import MarketId
-from ipor_fusion_sdk.operation.BaseOperation import BaseOperation
+from ipor_fusion_sdk.operation.BaseOperation import BaseOperation, MarketId
 
 
 class NewPosition(BaseOperation):

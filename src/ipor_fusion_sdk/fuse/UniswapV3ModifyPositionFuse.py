@@ -1,8 +1,8 @@
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk.MarketId import MarketId
 from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
+from ipor_fusion_sdk.operation.BaseOperation import MarketId
 
 
 class UniswapV3ModifyPositionFuseEnterData:

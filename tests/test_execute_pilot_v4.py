@@ -18,12 +18,12 @@ from constants import (
     MODIFY_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS,
     COLLECT_SWAP_FUSE_UNISWAP_V3_ADDRESS,
 )
-from ipor_fusion_sdk.MarketId import MarketId
 from ipor_fusion_sdk.VaultExecuteCallFactory import VaultExecuteCallFactory
 from ipor_fusion_sdk.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
 from ipor_fusion_sdk.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
 from ipor_fusion_sdk.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
 from ipor_fusion_sdk.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
+from ipor_fusion_sdk.operation.BaseOperation import MarketId
 from ipor_fusion_sdk.operation.ClosePosition import ClosePosition
 from ipor_fusion_sdk.operation.Collect import Collect
 from ipor_fusion_sdk.operation.DecreasePosition import DecreasePosition

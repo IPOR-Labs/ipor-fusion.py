@@ -1,8 +1,8 @@
 from abc import ABC
 from typing import List
 
-from ipor_fusion_sdk import MarketId
 from ipor_fusion_sdk.fuse import FuseActionDynamicStruct
+from ipor_fusion_sdk.operation.BaseOperation import MarketId
 
 
 class Fuse(ABC):

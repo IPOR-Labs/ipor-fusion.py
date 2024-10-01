@@ -26,12 +26,12 @@ from constants import (
     IPOR_FUSION_V3_ACCESS_MANAGER_USDC_ADDRESS,
     ANVIL_WALLET,
 )
-from ipor_fusion_sdk.MarketId import MarketId
 from ipor_fusion_sdk.VaultExecuteCallFactory import VaultExecuteCallFactory
 from ipor_fusion_sdk.fuse.AaveV3SupplyFuse import AaveV3SupplyFuse
 from ipor_fusion_sdk.fuse.CompoundV3SupplyFuse import CompoundV3SupplyFuse
 from ipor_fusion_sdk.fuse.FluidInstadappSupplyFuse import FluidInstadappSupplyFuse
 from ipor_fusion_sdk.fuse.GearboxSupplyFuse import GearboxSupplyFuse
+from ipor_fusion_sdk.operation.BaseOperation import MarketId
 from ipor_fusion_sdk.operation.Supply import Supply
 from ipor_fusion_sdk.operation.Withdraw import Withdraw
 

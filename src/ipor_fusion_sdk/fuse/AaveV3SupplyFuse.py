@@ -3,9 +3,9 @@ from typing import List
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk import MarketId
 from ipor_fusion_sdk.fuse.Fuse import Fuse
 from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
+from ipor_fusion_sdk.operation.BaseOperation import MarketId
 
 
 class AaveV3SupplyFuse(Fuse):
