@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import List
 
 from ipor_fusion_sdk import MarketId
@@ -6,46 +6,26 @@ from ipor_fusion_sdk.fuse import FuseActionDynamicStruct
 
 
 class Fuse(ABC):
-    @abstractmethod
     def supports(self, market_id: MarketId) -> bool:
-        """
-        Check if the fuse supports the market.
+      raise NotImplementedError("Method not implemented")
 
-        :param market_id: The market id
-        :return: True if the fuse supports the market, False otherwise
-        """
-
-    @abstractmethod
     def create_fuse_enter_action(
         self, market_id: MarketId, amount: int
     ) -> List[FuseActionDynamicStruct]:
-        """
-        Create an action to enter the fuse.
+        raise NotImplementedError("Method not implemented")
 
-        :param market_id: The market id
-        :param amount: The amount to enter
-        :return: A list of FuseActionDynamicStruct representing the enter action
-        """
-
-    @abstractmethod
     def create_fuse_exit_action(
         self, market_id: MarketId, amount: int
     ) -> List[FuseActionDynamicStruct]:
-        """
-        Create an action to exit the fuse.
+        raise NotImplementedError("Method not implemented")
 
-        :param market_id: The market id
-        :param amount: The amount to exit
-        :return: A list of FuseActionDynamicStruct representing the exit action
-        """
-
-    @abstractmethod
     def create_fuse_claim_action(
         self, market_id: MarketId
     ) -> List[FuseActionDynamicStruct]:
-        """
-        Create an action to claim from the fuse.
+        raise NotImplementedError("Method not implemented")
 
-        :param market_id: The market id
-        :return: A list of FuseActionDynamicStruct representing the claim action
-        """
+    @staticmethod
+    def _require_non_null(value, message):
+        if value is None:
+            raise ValueError(message)
+        return value

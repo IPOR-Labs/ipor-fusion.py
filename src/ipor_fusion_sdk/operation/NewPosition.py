@@ -1,8 +1,8 @@
 from ipor_fusion_sdk import MarketId
-from ipor_fusion_sdk.operation.Operation import Operation
+from ipor_fusion_sdk.operation.BaseOperation import BaseOperation
 
 
-class NewPosition(Operation):
+class NewPosition(BaseOperation):
     def __init__(
         self,
         market_id: MarketId,
@@ -35,7 +35,7 @@ class NewPosition(Operation):
             if field_value is None:
                 raise ValueError(f"{field_name} is required")
 
-        self._market_id = market_id
+        super().__init__(market_id)
         self._token0 = token0
         self._token1 = token1
         self._fee = fee
@@ -46,9 +46,6 @@ class NewPosition(Operation):
         self._amount0_min = amount0_min
         self._amount1_min = amount1_min
         self._deadline = deadline
-
-    def market_id(self) -> MarketId:
-        return self._market_id
 
     def token0(self) -> str:
         return self._token0
@@ -79,15 +76,3 @@ class NewPosition(Operation):
 
     def deadline(self) -> int:
         return self._deadline
-
-    def __str__(self) -> str:
-        return (
-            f"NewPosition[marketId={self._market_id}, token0={self._token0}, "
-            f"token1={self._token1}, fee={self._fee}, "
-            f"tickLower={self._tick_lower}, tickUpper={self._tick_upper}, "
-            f"amount0Desired={self._amount0_desired}, amount1Desired={self._amount1_desired}, "
-            f"amount0Min={self._amount0_min}, amount1Min={self._amount1_min}, deadline={self._deadline}]"
-        )
-
-    def __repr__(self) -> str:
-        return self.__str__()

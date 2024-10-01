@@ -11,7 +11,7 @@ from ipor_fusion_sdk.operation.ClosePosition import ClosePosition
 from ipor_fusion_sdk.operation.Collect import Collect
 from ipor_fusion_sdk.operation.DecreasePosition import DecreasePosition
 from ipor_fusion_sdk.operation.NewPosition import NewPosition
-from ipor_fusion_sdk.operation.Operation import Operation
+from ipor_fusion_sdk.operation.BaseOperation import BaseOperation
 from ipor_fusion_sdk.operation.Supply import Supply
 from ipor_fusion_sdk.operation.Swap import Swap
 from ipor_fusion_sdk.operation.Withdraw import Withdraw
@@ -26,7 +26,7 @@ class VaultExecuteCallFactory:
             raise ValueError("fuses is required")
         self.fuses = set(fuses)
 
-    def create_execute_call(self, operations: List[Operation]) -> bytes:
+    def create_execute_call(self, operations: List[BaseOperation]) -> bytes:
         if operations is None:
             raise ValueError("operations is required")
         if not operations:
@@ -55,7 +55,7 @@ class VaultExecuteCallFactory:
     def create_claim_rewards_call(self, claims: List[Claim]) -> ContractFunction:
         raise NotImplementedError("Not implemented")
 
-    def create_action_data(self, operation: Operation) -> List[FuseActionDynamicStruct]:
+    def create_action_data(self, operation: BaseOperation) -> List[FuseActionDynamicStruct]:
         fuse = next((f for f in self.fuses if f.supports(operation.market_id())), None)
         for f in self.fuses:
             print(f.supports(operation.market_id()))
@@ -80,7 +80,7 @@ class VaultExecuteCallFactory:
                 operation.min_out_amount(),
             )
         if isinstance(operation, NewPosition):
-            return fuse.create_fuse_enter_action(
+            return fuse.create_fuse_new_position_action(
                 operation.token0(),
                 operation.token1(),
                 operation.fee(),
@@ -93,7 +93,7 @@ class VaultExecuteCallFactory:
                 operation.deadline(),
             )
         if isinstance(operation, ClosePosition):
-            return fuse.create_fuse_exit_action(
+            return fuse.create_fuse_close_position_action(
                 operation.token_ids(),
             )
         if isinstance(operation, DecreasePosition):

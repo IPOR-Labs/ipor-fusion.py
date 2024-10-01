@@ -4,6 +4,7 @@ from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion_sdk.MarketId import MarketId
+from ipor_fusion_sdk.fuse.Fuse import Fuse
 from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
 
 
@@ -78,7 +79,7 @@ class UniswapV3NewPositionFuseExitData:
         return self.function_selector() + self.encode()
 
 
-class UniswapV3NewPositionFuse:
+class UniswapV3NewPositionFuse(Fuse):
     PROTOCOL_ID = "uniswap-v3"
 
     def __init__(self, uniswap_v_3_new_position_fuse_address: str):
@@ -87,7 +88,7 @@ class UniswapV3NewPositionFuse:
             "uniswap_v_3_new_position_fuse_address is required",
         )
 
-    def create_fuse_enter_action(
+    def create_fuse_new_position_action(
         self,
         token0: str,
         token1: str,
@@ -118,7 +119,7 @@ class UniswapV3NewPositionFuse:
             )
         ]
 
-    def create_fuse_exit_action(
+    def create_fuse_close_position_action(
         self, token_ids: List[int]
     ) -> List[FuseActionDynamicStruct]:
         data = UniswapV3NewPositionFuseExitData(token_ids)
@@ -127,12 +128,6 @@ class UniswapV3NewPositionFuse:
                 self.uniswap_v_3_new_position_fuse_address, data.function_call()
             )
         ]
-
-    @staticmethod
-    def _require_non_null(value, message):
-        if value is None:
-            raise ValueError(message)
-        return value
 
     def supports(self, market_id: MarketId) -> bool:
         if market_id is None:

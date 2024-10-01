@@ -1,8 +1,8 @@
 from ipor_fusion_sdk import MarketId
-from ipor_fusion_sdk.operation.Operation import Operation
+from ipor_fusion_sdk.operation.BaseOperation import BaseOperation
 
 
-class DecreasePosition(Operation):
+class DecreasePosition(BaseOperation):
     def __init__(
         self,
         market_id: MarketId,
@@ -12,8 +12,7 @@ class DecreasePosition(Operation):
         amount1_min: int,
         deadline: int,
     ):
-        if market_id is None:
-            raise ValueError("market_id is required")
+        super().__init__(market_id)
         if token_id is None:
             raise ValueError("token_id is required")
         if liquidity is None:
@@ -25,15 +24,11 @@ class DecreasePosition(Operation):
         if deadline is None:
             raise ValueError("deadline is required")
 
-        self._market_id = market_id
         self._token_id = token_id
         self._liquidity = liquidity
         self._amount0_min = amount0_min
         self._amount1_min = amount1_min
         self._deadline = deadline
-
-    def market_id(self) -> MarketId:
-        return self._market_id
 
     def token_id(self) -> int:
         return self._token_id

@@ -1,8 +1,8 @@
 from ipor_fusion_sdk import MarketId
-from ipor_fusion_sdk.operation.Operation import Operation
+from ipor_fusion_sdk.operation.BaseOperation import BaseOperation
 
 
-class Swap(Operation):
+class Swap(BaseOperation):
 
     def __init__(
         self,
@@ -13,8 +13,7 @@ class Swap(Operation):
         token_in_amount: int,
         min_out_amount: int,
     ):
-        if market_id is None:
-            raise ValueError("marketId is required")
+        super().__init__(market_id)
         if token_in_address is None:
             raise ValueError("token_in_address is required")
         if token_out_address is None:
@@ -32,9 +31,6 @@ class Swap(Operation):
         self._fee = fee
         self._token_in_amount = token_in_amount
         self._min_out_amount = min_out_amount
-
-    def market_id(self) -> MarketId:
-        return self._market_id
 
     def token_in_address(self) -> str:
         return self._token_in_address
