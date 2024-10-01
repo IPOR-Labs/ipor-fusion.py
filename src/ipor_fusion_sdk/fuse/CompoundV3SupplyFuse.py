@@ -3,12 +3,11 @@ from typing import List
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk.fuse.Fuse import Fuse
-from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
+from ipor_fusion_sdk.fuse.FuseAction import FuseAction
+from ipor_fusion_sdk.MarketId import MarketId
 
 
-class CompoundV3SupplyFuse(Fuse):
+class CompoundV3SupplyFuse:
     PROTOCOL_ID = "compound-v3"
     ENTER = "enter"
     EXIT = "exit"
@@ -21,41 +20,25 @@ class CompoundV3SupplyFuse(Fuse):
         self.fuse_address = fuse_address
         self.asset_address = asset_address
 
-    def supports(self, market_id: MarketId) -> bool:
-        if market_id is None:
-            raise ValueError("marketId is required")
-        return (
-            market_id.protocol_id == self.PROTOCOL_ID
-            and market_id.market_id == self.asset_address
-        )
-
-    def create_fuse_enter_action(
-        self, market_id: MarketId, amount: int
-    ) -> List[FuseActionDynamicStruct]:
+    def supply(self, market_id: MarketId, amount: int) -> List[FuseAction]:
         compound_v3_supply_fuse_enter_data = CompoundV3SupplyFuseEnterData(
             market_id.market_id, amount
         )
         return [
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.fuse_address, compound_v3_supply_fuse_enter_data.function_call()
             )
         ]
 
-    def create_fuse_exit_action(
-        self, market_id: MarketId, amount: int
-    ) -> List[FuseActionDynamicStruct]:
+    def withdraw(self, market_id: MarketId, amount: int) -> FuseAction:
         compound_v3_supply_fuse_exit_data = CompoundV3SupplyFuseExitData(
             market_id.market_id, amount
         )
-        return [
-            FuseActionDynamicStruct(
-                self.fuse_address, compound_v3_supply_fuse_exit_data.function_call()
-            )
-        ]
+        return FuseAction(
+            self.fuse_address, compound_v3_supply_fuse_exit_data.function_call()
+        )
 
-    def create_fuse_claim_action(
-        self, market_id: MarketId
-    ) -> List[FuseActionDynamicStruct]:
+    def claim(self, market_id: MarketId) -> List[FuseAction]:
         raise NotImplementedError("Fuse claim action is not supported for Compound V3")
 
 

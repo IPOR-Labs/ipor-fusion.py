@@ -3,16 +3,15 @@ from typing import List
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
+from ipor_fusion_sdk.MarketId import MarketId
 from ipor_fusion_sdk.fuse.Erc4626SupplyFuse import (
     Erc4626SupplyFuseExitData,
     Erc4626SupplyFuseEnterData,
 )
-from ipor_fusion_sdk.fuse.Fuse import Fuse
-from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
+from ipor_fusion_sdk.fuse.FuseAction import FuseAction
 
 
-class GearboxSupplyFuse(Fuse):
+class GearboxSupplyFuse:
     PROTOCOL_ID = "gearbox-v3"
     ENTER = "enter"
     EXIT = "exit"
@@ -49,17 +48,7 @@ class GearboxSupplyFuse(Fuse):
             raise ValueError(message)
         return value
 
-    def supports(self, market_id: MarketId) -> bool:
-        if market_id is None:
-            raise ValueError("marketId is required")
-        return (
-            market_id.protocol_id == self.PROTOCOL_ID
-            and market_id.market_id == self.d_token_address
-        )
-
-    def create_fuse_enter_action(
-        self, market_id: MarketId, amount: int
-    ) -> List[FuseActionDynamicStruct]:
+    def supply_and_stake(self, market_id: MarketId, amount: int) -> List[FuseAction]:
         erc4626_supply_fuse_enter_data = Erc4626SupplyFuseEnterData(
             market_id.market_id, amount
         )
@@ -67,19 +56,19 @@ class GearboxSupplyFuse(Fuse):
             self.MAX_UINT256, self.farmd_token_address
         )
         return [
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.erc4626_fuse_address,
                 erc4626_supply_fuse_enter_data.function_call(),
             ),
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.farm_fuse_address,
                 gearbox_v3_farmd_supply_fuse_enter_data.function_call(),
             ),
         ]
 
-    def create_fuse_exit_action(
+    def unstake_and_withdraw(
         self, market_id: MarketId, amount: int
-    ) -> List[FuseActionDynamicStruct]:
+    ) -> List[FuseAction]:
         gearbox_v3_farmd_supply_fuse_exit_data = GearboxV3FarmdSupplyFuseExitData(
             amount, self.farmd_token_address
         )
@@ -87,20 +76,14 @@ class GearboxSupplyFuse(Fuse):
             market_id.market_id, self.MAX_UINT256
         )
         return [
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.farm_fuse_address,
                 gearbox_v3_farmd_supply_fuse_exit_data.function_call(),
             ),
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.erc4626_fuse_address, erc4626_supply_fuse_exit_data.function_call()
             ),
         ]
-
-    def create_fuse_claim_action(
-        self, market_id: MarketId
-    ) -> List[FuseActionDynamicStruct]:
-        claim_data = b""  # Assuming no specific data for the claim action
-        return [FuseActionDynamicStruct(self.claim_fuse_address, claim_data)]
 
 
 class GearboxV3FarmdSupplyFuseEnterData:

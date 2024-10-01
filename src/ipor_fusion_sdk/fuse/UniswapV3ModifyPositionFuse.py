@@ -1,8 +1,7 @@
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
+from ipor_fusion_sdk.fuse.FuseAction import FuseAction
 
 
 class UniswapV3ModifyPositionFuseEnterData:
@@ -101,7 +100,7 @@ class UniswapV3ModifyPositionFuse:
             "uniswap_v3_modify_position_fuse_address is required",
         )
 
-    def create_fuse_enter_action(
+    def increase_position(
         self,
         token0: str,
         token1: str,
@@ -111,7 +110,7 @@ class UniswapV3ModifyPositionFuse:
         amount0_min: int,
         amount1_min: int,
         deadline: int,
-    ) -> FuseActionDynamicStruct:
+    ) -> FuseAction:
         data = UniswapV3ModifyPositionFuseEnterData(
             token0,
             token1,
@@ -122,22 +121,22 @@ class UniswapV3ModifyPositionFuse:
             amount1_min,
             deadline,
         )
-        return FuseActionDynamicStruct(
+        return FuseAction(
             self.uniswap_v3_modify_position_fuse_address, data.function_call()
         )
 
-    def create_fuse_exit_action(
+    def decrease_position(
         self,
         token_id: int,
         liquidity: int,
         amount0_min: int,
         amount1_min: int,
         deadline: int,
-    ) -> FuseActionDynamicStruct:
+    ) -> FuseAction:
         data = UniswapV3ModifyPositionFuseExitData(
             token_id, liquidity, amount0_min, amount1_min, deadline
         )
-        return FuseActionDynamicStruct(
+        return FuseAction(
             self.uniswap_v3_modify_position_fuse_address, data.function_call()
         )
 
@@ -146,11 +145,3 @@ class UniswapV3ModifyPositionFuse:
         if value is None:
             raise ValueError(message)
         return value
-
-    def supports(self, market_id: MarketId) -> bool:
-        if market_id is None:
-            raise ValueError("marketId is required")
-        return (
-            market_id.protocol_id == self.PROTOCOL_ID
-            and market_id.market_id == "modify-position"
-        )

@@ -3,7 +3,7 @@ from typing import List
 from eth_abi import encode
 
 
-class FuseActionDynamicStruct:
+class FuseAction:
     def __init__(self, fuse: str, data: bytes):
         self.fuse = fuse
         self.data = data

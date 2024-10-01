@@ -3,9 +3,7 @@ from typing import List
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk.fuse.Fuse import Fuse
-from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
+from ipor_fusion_sdk.fuse.FuseAction import FuseAction
 
 
 class UniversalTokenSwapperData:
@@ -66,16 +64,15 @@ class UniversalTokenSwapperEnterData:
         return self.function_selector() + self.encode()
 
 
-class UniversalTokenSwapperFuse(Fuse):
+class UniversalTokenSwapperFuse:
     PROTOCOL_ID = "universal-token-swapper"
 
     def __init__(self, universal_token_swapper_fuse_address: str):
-        self._universal_token_swapper_fuse_address = self._require_non_null(
-            universal_token_swapper_fuse_address,
-            "universal_token_swapper_fuse_address is required",
+        self._universal_token_swapper_fuse_address = (
+            universal_token_swapper_fuse_address
         )
 
-    def create_fuse_swap_action(
+    def swap(
         self,
         token_in: str,
         token_out: str,
@@ -96,20 +93,8 @@ class UniversalTokenSwapperFuse(Fuse):
         )
 
         return [
-            FuseActionDynamicStruct(
+            FuseAction(
                 self._universal_token_swapper_fuse_address,
                 universal_token_swapper_enter_data.function_call(),
             )
         ]
-
-    def supports(self, market_id: MarketId) -> bool:
-        if market_id is None:
-            raise ValueError("marketId is required")
-        if not hasattr(market_id, "protocol_id"):
-            raise AttributeError("marketId does not have attribute 'protocol_id'")
-        if not hasattr(market_id, "market_id"):
-            raise AttributeError("marketId does not have attribute 'market_id'")
-        return (
-            market_id.protocol_id == self.PROTOCOL_ID
-            and market_id.market_id == "universal-swap"
-        )

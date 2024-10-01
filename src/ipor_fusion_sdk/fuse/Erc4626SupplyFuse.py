@@ -3,12 +3,11 @@ from typing import List
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
-from ipor_fusion_sdk.fuse.Fuse import Fuse
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
+from ipor_fusion_sdk.fuse.FuseAction import FuseAction
+from ipor_fusion_sdk.MarketId import MarketId
 
 
-class Erc4626SupplyFuse(Fuse):
+class Erc4626SupplyFuse:
     ENTER = "enter"
     EXIT = "exit"
 
@@ -23,31 +22,15 @@ class Erc4626SupplyFuse(Fuse):
         self.protocol_id = protocol_id
         self.erc4626_address = erc4626_address
 
-    def supports(self, market_id: MarketId) -> bool:
-        if market_id is None:
-            raise ValueError("marketId is required")
-        return (
-            market_id.protocol_id == self.protocol_id
-            and market_id.market_id == self.erc4626_address
-        )
-
-    def create_fuse_enter_action(
-        self, market_id: MarketId, amount: int
-    ) -> List[FuseActionDynamicStruct]:
+    def supply(self, market_id: MarketId, amount: int) -> List[FuseAction]:
         enter_data = Erc4626SupplyFuseEnterData(market_id.market_id, amount)
-        return [FuseActionDynamicStruct(self.fuse_address, enter_data.function_call())]
+        return [FuseAction(self.fuse_address, enter_data.function_call())]
 
-    def create_fuse_exit_action(
-        self, market_id: MarketId, amount: int
-    ) -> List[FuseActionDynamicStruct]:
+    def withdraw(self, market_id: MarketId, amount: int) -> List[FuseAction]:
         exit_data = Erc4626SupplyFuseExitData(market_id.market_id, amount)
-        return [
-            FuseActionDynamicStruct(self.fuse_address, exit_data.function_selector())
-        ]
+        return [FuseAction(self.fuse_address, exit_data.function_selector())]
 
-    def create_fuse_claim_action(
-        self, market_id: MarketId
-    ) -> List[FuseActionDynamicStruct]:
+    def create_fuse_claim_action(self, market_id: MarketId) -> List[FuseAction]:
         raise NotImplementedError(
             "Fuse claim action is not supported for generic ERC4626"
         )

@@ -7,15 +7,14 @@ from ipor_fusion_sdk.fuse.Erc4626SupplyFuse import (
     Erc4626SupplyFuseExitData,
     Erc4626SupplyFuseEnterData,
 )
-from ipor_fusion_sdk.fuse.Fuse import Fuse
-from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
+from ipor_fusion_sdk.fuse.FuseAction import FuseAction
+from ipor_fusion_sdk.MarketId import MarketId
 
 
 # Assuming the MarketId, Fuse, and FuseActionDynamicStruct classes are defined as per previous translations
 
 
-class FluidInstadappSupplyFuse(Fuse):
+class FluidInstadappSupplyFuse:
     PROTOCOL_ID = "fluid-instadapp"
     ENTER = "enter"
     EXIT = "exit"
@@ -58,17 +57,7 @@ class FluidInstadappSupplyFuse(Fuse):
             raise ValueError(message)
         return value
 
-    def supports(self, market_id: MarketId) -> bool:
-        if market_id is None:
-            raise ValueError("marketId is required")
-        return (
-            market_id.protocol_id == self.PROTOCOL_ID
-            and market_id.market_id == self.fluid_instadapp_pool_token_address
-        )
-
-    def create_fuse_enter_action(
-        self, market_id: MarketId, amount: int
-    ) -> List[FuseActionDynamicStruct]:
+    def supply_and_stake(self, market_id: MarketId, amount: int) -> List[FuseAction]:
         erc4626_supply_fuse_enter_data = Erc4626SupplyFuseEnterData(
             market_id.market_id, amount
         )
@@ -78,19 +67,19 @@ class FluidInstadappSupplyFuse(Fuse):
         )
 
         return [
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.erc4626_fuse_address,
                 erc4626_supply_fuse_enter_data.function_call(),
             ),
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.fluid_staking_fuse_address,
                 fluid_staking_enter_data.function_call(),
             ),
         ]
 
-    def create_fuse_exit_action(
+    def unstake_and_withdraw(
         self, market_id: MarketId, amount: int
-    ) -> List[FuseActionDynamicStruct]:
+    ) -> List[FuseAction]:
         fluid_instadapp_staking_exit_data = FluidInstadappStakingSupplyFuseExitData(
             amount, self.fluid_instadapp_staking_contract_address
         )
@@ -99,22 +88,18 @@ class FluidInstadappSupplyFuse(Fuse):
         )
 
         return [
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.fluid_staking_fuse_address,
                 fluid_instadapp_staking_exit_data.function_call(),
             ),
-            FuseActionDynamicStruct(
+            FuseAction(
                 self.erc4626_fuse_address, erc4626_supply_fuse_exit_data.function_call()
             ),
         ]
 
-    def create_fuse_claim_action(
-        self, market_id: MarketId
-    ) -> List[FuseActionDynamicStruct]:
+    def create_fuse_claim_action(self) -> List[FuseAction]:
         claim_data = b""  # Assuming no specific data for the claim action
-        return [
-            FuseActionDynamicStruct(self.fluid_instadapp_claim_fuse_address, claim_data)
-        ]
+        return [FuseAction(self.fluid_instadapp_claim_fuse_address, claim_data)]
 
 
 class FluidInstadappStakingSupplyFuseEnterData:

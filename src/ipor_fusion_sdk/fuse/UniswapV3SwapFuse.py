@@ -2,9 +2,7 @@ from eth_abi import encode
 from eth_abi.packed import encode_packed
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk.fuse.Fuse import Fuse
-from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
+from ipor_fusion_sdk.fuse.FuseAction import FuseAction
 
 
 class UniswapV3SwapPathFuseEnterData:
@@ -40,37 +38,22 @@ class UniswapV3SwapFuseEnterData:
         return self.function_selector() + self.encode()
 
 
-class UniswapV3SwapFuse(Fuse):
+class UniswapV3SwapFuse:
     PROTOCOL_ID = "uniswap-v3"
 
     def __init__(self, uniswap_v_3_swap_fuse_address: str):
-        self.uniswap_v_3_swap_fuse_address = self._require_non_null(
-            uniswap_v_3_swap_fuse_address, "uniswap_v_3_swap_fuse_address is required"
-        )
+        self.uniswap_v_3_swap_fuse_address = uniswap_v_3_swap_fuse_address
 
-    def create_fuse_swap_action(
+    def swap(
         self,
         token_in_address: str,
         token_out_address: str,
         fee: int,
         token_in_amount: int,
         min_out_amount: int,
-    ) -> FuseActionDynamicStruct:
+    ) -> FuseAction:
         path = UniswapV3SwapPathFuseEnterData(
             token_in_address, token_out_address, fee
         ).encode()
         data = UniswapV3SwapFuseEnterData(token_in_amount, min_out_amount, path)
-        return FuseActionDynamicStruct(
-            self.uniswap_v_3_swap_fuse_address, data.function_call()
-        )
-
-    def supports(self, market_id: MarketId) -> bool:
-        if market_id is None:
-            raise ValueError("marketId is required")
-        if not hasattr(market_id, "protocol_id"):
-            raise AttributeError("marketId does not have attribute 'protocol_id'")
-        if not hasattr(market_id, "market_id"):
-            raise AttributeError("marketId does not have attribute 'market_id'")
-        return (
-            market_id.protocol_id == self.PROTOCOL_ID and market_id.market_id == "swap"
-        )
+        return FuseAction(self.uniswap_v_3_swap_fuse_address, data.function_call())

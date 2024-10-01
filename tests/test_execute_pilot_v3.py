@@ -31,9 +31,7 @@ from ipor_fusion_sdk.fuse.AaveV3SupplyFuse import AaveV3SupplyFuse
 from ipor_fusion_sdk.fuse.CompoundV3SupplyFuse import CompoundV3SupplyFuse
 from ipor_fusion_sdk.fuse.FluidInstadappSupplyFuse import FluidInstadappSupplyFuse
 from ipor_fusion_sdk.fuse.GearboxSupplyFuse import GearboxSupplyFuse
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
-from ipor_fusion_sdk.operation.Supply import Supply
-from ipor_fusion_sdk.operation.Withdraw import Withdraw
+from ipor_fusion_sdk.MarketId import MarketId
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -56,32 +54,30 @@ SET_ANVIL_WALLET_AS_PILOT_V3_ALPHA_COMMAND = [
     "0",
 ]
 
+fluid_fuse = FluidInstadappSupplyFuse(
+    FLUID_INSTADAPP_USDC_POOL_ADDRESS,
+    FLUID_INSTADAPP_POOL_FUSE_ADDRESS,
+    FLUID_INSTADAPP_STAKING_ADDRESS,
+    FLUID_INSTADAPP_STAKING_FUSE_ADDRESS,
+    FLUID_INSTADAPP_CLAIM_FUSE_ADDRESS,
+)
+
+gearbox_fuse = GearboxSupplyFuse(
+    GEARBOX_USDC_POOL_ADDRESS,
+    GEARBOX_POOL_FUSE_ADDRESS,
+    GEARBOX_FARM_USDC_POOL_ADDRESS,
+    GEARBOX_FARM_FUSE_ADDRESS,
+    GEARBOX_CLAIM_FUSE_ADDRESS,
+)
+
+aave_v3_fuse = AaveV3SupplyFuse(AAVEV_V3_FUSE_ADDRESS, USDC)
+
+compound_v3_fuse = CompoundV3SupplyFuse(COMPOUND_V3_FUSE_ADDRESS, USDC)
+
 
 @pytest.fixture(scope="module", name="vault_execute_call_factory")
 def vault_execute_call_factory_fixture() -> VaultExecuteCallFactory:
-    fluid_fuse = FluidInstadappSupplyFuse(
-        FLUID_INSTADAPP_USDC_POOL_ADDRESS,
-        FLUID_INSTADAPP_POOL_FUSE_ADDRESS,
-        FLUID_INSTADAPP_STAKING_ADDRESS,
-        FLUID_INSTADAPP_STAKING_FUSE_ADDRESS,
-        FLUID_INSTADAPP_CLAIM_FUSE_ADDRESS,
-    )
-
-    gearbox_fuse = GearboxSupplyFuse(
-        GEARBOX_USDC_POOL_ADDRESS,
-        GEARBOX_POOL_FUSE_ADDRESS,
-        GEARBOX_FARM_USDC_POOL_ADDRESS,
-        GEARBOX_FARM_FUSE_ADDRESS,
-        GEARBOX_CLAIM_FUSE_ADDRESS,
-    )
-
-    aave_v3_fuse = AaveV3SupplyFuse(AAVEV_V3_FUSE_ADDRESS, USDC)
-
-    compound_v3_fuse = CompoundV3SupplyFuse(COMPOUND_V3_FUSE_ADDRESS, USDC)
-
-    return VaultExecuteCallFactory(
-        {fluid_fuse, gearbox_fuse, aave_v3_fuse, compound_v3_fuse}
-    )
+    return VaultExecuteCallFactory()
 
 
 @pytest.fixture(name="setup", autouse=True)
@@ -97,16 +93,14 @@ def withdraw_from_fluid(web3, account, vault_execute_call_factory):
         web3, PLASMA_VAULT_V3, FLUID_INSTADAPP_STAKING_ADDRESS
     )
 
-    withdraw = Withdraw(
-        MarketId(
+    actions = fluid_fuse.unstake_and_withdraw(
+        market_id=MarketId(
             FluidInstadappSupplyFuse.PROTOCOL_ID, FLUID_INSTADAPP_USDC_POOL_ADDRESS
         ),
-        fluid_staking_balance_before,
+        amount=fluid_staking_balance_before,
     )
 
-    operations = [withdraw]
-
-    function_call = vault_execute_call_factory.create_execute_call(operations)
+    function_call = vault_execute_call_factory.create_execute_call_from_actions(actions)
 
     execute_transaction(web3, PLASMA_VAULT_V3, function_call, account)
 
@@ -118,17 +112,18 @@ def test_supply_and_withdraw_from_gearbox(web3, account, vault_execute_call_fact
         web3, PLASMA_VAULT_V3, GEARBOX_FARM_USDC_POOL_ADDRESS
     )
 
-    supply = Supply(
-        MarketId(GearboxSupplyFuse.PROTOCOL_ID, GEARBOX_USDC_POOL_ADDRESS),
-        vault_balance_before,
+    actions = gearbox_fuse.supply_and_stake(
+        market_id=MarketId(GearboxSupplyFuse.PROTOCOL_ID, GEARBOX_USDC_POOL_ADDRESS),
+        amount=vault_balance_before,
     )
 
-    operations = [supply]
-
-    function = vault_execute_call_factory.create_execute_call(operations)
-
     # when supply
-    execute_transaction(web3, PLASMA_VAULT_V3, function, account)
+    execute_transaction(
+        web3,
+        PLASMA_VAULT_V3,
+        vault_execute_call_factory.create_execute_call_from_actions(actions),
+        account,
+    )
 
     vault_balance_after = read_token_balance(web3, PLASMA_VAULT_V3, USDC)
     gearbox_farm_balance_after = read_token_balance(
@@ -148,17 +143,18 @@ def test_supply_and_withdraw_from_gearbox(web3, account, vault_execute_call_fact
         web3, PLASMA_VAULT_V3, GEARBOX_FARM_USDC_POOL_ADDRESS
     )
 
-    withdraw = Withdraw(
-        MarketId(GearboxSupplyFuse.PROTOCOL_ID, GEARBOX_USDC_POOL_ADDRESS),
-        gearbox_farm_balance_after,
+    actions = gearbox_fuse.unstake_and_withdraw(
+        market_id=MarketId(GearboxSupplyFuse.PROTOCOL_ID, GEARBOX_USDC_POOL_ADDRESS),
+        amount=gearbox_farm_balance_before,
     )
 
-    operations = [withdraw]
-
-    function = vault_execute_call_factory.create_execute_call(operations)
-
     # when withdraw
-    execute_transaction(web3, PLASMA_VAULT_V3, function, account)
+    execute_transaction(
+        web3,
+        PLASMA_VAULT_V3,
+        vault_execute_call_factory.create_execute_call_from_actions(actions),
+        account,
+    )
 
     # then after withdraw
     vault_balance_after = read_token_balance(web3, PLASMA_VAULT_V3, USDC)
@@ -181,19 +177,20 @@ def test_supply_and_withdraw_from_fluid(web3, account, vault_execute_call_factor
         web3, PLASMA_VAULT_V3, FLUID_USDC_STAKING_POOL
     )
 
-    supply = Supply(
-        MarketId(
+    enter_actions = fluid_fuse.supply_and_stake(
+        market_id=MarketId(
             FluidInstadappSupplyFuse.PROTOCOL_ID, FLUID_INSTADAPP_USDC_POOL_ADDRESS
         ),
-        vault_balance_before,
+        amount=vault_balance_before,
     )
 
-    operations = [supply]
-
-    function = vault_execute_call_factory.create_execute_call(operations)
-
     # when supply
-    execute_transaction(web3, PLASMA_VAULT_V3, function, account)
+    execute_transaction(
+        web3,
+        PLASMA_VAULT_V3,
+        vault_execute_call_factory.create_execute_call_from_actions(enter_actions),
+        account,
+    )
 
     vault_balance_after = read_token_balance(web3, PLASMA_VAULT_V3, USDC)
     fluid_staking_balance_after = read_token_balance(
@@ -213,16 +210,14 @@ def test_supply_and_withdraw_from_fluid(web3, account, vault_execute_call_factor
         web3, PLASMA_VAULT_V3, FLUID_USDC_STAKING_POOL
     )
 
-    withdraw = Withdraw(
-        MarketId(
+    actions = fluid_fuse.unstake_and_withdraw(
+        market_id=MarketId(
             FluidInstadappSupplyFuse.PROTOCOL_ID, FLUID_INSTADAPP_USDC_POOL_ADDRESS
         ),
-        fluid_staking_balance_before,
+        amount=fluid_staking_balance_before,
     )
 
-    operations = [withdraw]
-
-    function = vault_execute_call_factory.create_execute_call(operations)
+    function = vault_execute_call_factory.create_execute_call_from_actions(actions)
 
     # when withdraw
     execute_transaction(web3, PLASMA_VAULT_V3, function, account)
@@ -248,14 +243,18 @@ def test_supply_and_withdraw_from_aave_v3(web3, account, vault_execute_call_fact
         web3, PLASMA_VAULT_V3, AAVE_A_TOKEN_ARB_USDC_N
     )
 
-    supply = Supply(MarketId(AaveV3SupplyFuse.PROTOCOL_ID, USDC), vault_balance_before)
-
-    operations = [supply]
-
-    function = vault_execute_call_factory.create_execute_call(operations)
+    action = aave_v3_fuse.supply(
+        market_id=MarketId(AaveV3SupplyFuse.PROTOCOL_ID, USDC),
+        amount=vault_balance_before,
+    )
 
     # when supply
-    execute_transaction(web3, PLASMA_VAULT_V3, function, account)
+    execute_transaction(
+        web3,
+        PLASMA_VAULT_V3,
+        vault_execute_call_factory.create_execute_call_from_action(action),
+        account,
+    )
 
     vault_balance_after = read_token_balance(web3, PLASMA_VAULT_V3, USDC)
     protocol_balance_after = read_token_balance(
@@ -273,16 +272,18 @@ def test_supply_and_withdraw_from_aave_v3(web3, account, vault_execute_call_fact
         web3, PLASMA_VAULT_V3, AAVE_A_TOKEN_ARB_USDC_N
     )
 
-    withdraw = Withdraw(
-        MarketId(AaveV3SupplyFuse.PROTOCOL_ID, USDC), protocol_balance_before
+    action = aave_v3_fuse.withdraw(
+        market_id=MarketId(AaveV3SupplyFuse.PROTOCOL_ID, USDC),
+        amount=protocol_balance_before,
     )
 
-    operations = [withdraw]
-
-    function = vault_execute_call_factory.create_execute_call(operations)
-
     # when withdraw
-    execute_transaction(web3, PLASMA_VAULT_V3, function, account)
+    execute_transaction(
+        web3,
+        PLASMA_VAULT_V3,
+        vault_execute_call_factory.create_execute_call_from_action(action),
+        account,
+    )
 
     # then after withdraw
     vault_balance_after = read_token_balance(web3, PLASMA_VAULT_V3, USDC)
@@ -305,16 +306,18 @@ def test_supply_and_withdraw_from_compound_v3(
         web3, PLASMA_VAULT_V3, COMPOUND_V3_C_TOKEN_ADDRESS
     )
 
-    supply = Supply(
-        MarketId(CompoundV3SupplyFuse.PROTOCOL_ID, USDC), vault_balance_before
+    actions = compound_v3_fuse.supply(
+        market_id=MarketId(CompoundV3SupplyFuse.PROTOCOL_ID, USDC),
+        amount=vault_balance_before,
     )
 
-    operations = [supply]
-
-    function = vault_execute_call_factory.create_execute_call(operations)
-
     # when supply
-    execute_transaction(web3, PLASMA_VAULT_V3, function, account)
+    execute_transaction(
+        web3,
+        PLASMA_VAULT_V3,
+        vault_execute_call_factory.create_execute_call_from_actions(actions),
+        account,
+    )
 
     vault_balance_after = read_token_balance(web3, PLASMA_VAULT_V3, USDC)
     protocol_balance_after = read_token_balance(
@@ -332,13 +335,12 @@ def test_supply_and_withdraw_from_compound_v3(
         web3, PLASMA_VAULT_V3, COMPOUND_V3_C_TOKEN_ADDRESS
     )
 
-    withdraw = Withdraw(
-        MarketId(CompoundV3SupplyFuse.PROTOCOL_ID, USDC), protocol_balance_before
+    action = compound_v3_fuse.withdraw(
+        market_id=MarketId(CompoundV3SupplyFuse.PROTOCOL_ID, USDC),
+        amount=protocol_balance_before,
     )
 
-    operations = [withdraw]
-
-    function = vault_execute_call_factory.create_execute_call(operations)
+    function = vault_execute_call_factory.create_execute_call_from_action(action)
 
     # when withdraw
     execute_transaction(web3, PLASMA_VAULT_V3, function, account)

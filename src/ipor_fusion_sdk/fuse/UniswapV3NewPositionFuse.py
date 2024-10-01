@@ -3,9 +3,7 @@ from typing import List
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk.fuse.Fuse import Fuse
-from ipor_fusion_sdk.fuse.FuseActionDynamicStruct import FuseActionDynamicStruct
-from ipor_fusion_sdk.operation.BaseOperation import MarketId
+from ipor_fusion_sdk.fuse.FuseAction import FuseAction
 
 
 class UniswapV3NewPositionFuseEnterData:
@@ -79,16 +77,15 @@ class UniswapV3NewPositionFuseExitData:
         return self.function_selector() + self.encode()
 
 
-class UniswapV3NewPositionFuse(Fuse):
+class UniswapV3NewPositionFuse:
     PROTOCOL_ID = "uniswap-v3"
 
     def __init__(self, uniswap_v_3_new_position_fuse_address: str):
-        self.uniswap_v_3_new_position_fuse_address = self._require_non_null(
-            uniswap_v_3_new_position_fuse_address,
-            "uniswap_v_3_new_position_fuse_address is required",
+        self.uniswap_v_3_new_position_fuse_address = (
+            uniswap_v_3_new_position_fuse_address
         )
 
-    def create_fuse_new_position_action(
+    def new_position(
         self,
         token0: str,
         token1: str,
@@ -100,7 +97,7 @@ class UniswapV3NewPositionFuse(Fuse):
         amount0_min: int,
         amount1_min: int,
         deadline: int,
-    ) -> FuseActionDynamicStruct:
+    ) -> FuseAction:
         data = UniswapV3NewPositionFuseEnterData(
             token0,
             token1,
@@ -113,26 +110,12 @@ class UniswapV3NewPositionFuse(Fuse):
             amount1_min,
             deadline,
         )
-        return FuseActionDynamicStruct(
+        return FuseAction(
             self.uniswap_v_3_new_position_fuse_address, data.function_call()
         )
 
-    def create_fuse_close_position_action(
-        self, token_ids: List[int]
-    ) -> FuseActionDynamicStruct:
+    def close_position(self, token_ids: List[int]) -> FuseAction:
         data = UniswapV3NewPositionFuseExitData(token_ids)
-        return FuseActionDynamicStruct(
+        return FuseAction(
             self.uniswap_v_3_new_position_fuse_address, data.function_call()
-        )
-
-    def supports(self, market_id: MarketId) -> bool:
-        if market_id is None:
-            raise ValueError("marketId is required")
-        if not hasattr(market_id, "protocol_id"):
-            raise AttributeError("marketId does not have attribute 'protocol_id'")
-        if not hasattr(market_id, "market_id"):
-            raise AttributeError("marketId does not have attribute 'market_id'")
-        return (
-            market_id.protocol_id == self.PROTOCOL_ID
-            and market_id.market_id == "new-position"
         )
