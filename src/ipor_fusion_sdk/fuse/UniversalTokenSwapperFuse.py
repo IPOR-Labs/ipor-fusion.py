@@ -79,7 +79,7 @@ class UniversalTokenSwapperFuse:
         amount_in: int,
         targets: List[str],
         data: List[bytes],
-    ):
+    ) -> FuseAction:
         universal_token_swapper_data = UniversalTokenSwapperData(
             targets=targets,
             data=data,
@@ -92,9 +92,7 @@ class UniversalTokenSwapperFuse:
             data=universal_token_swapper_data,
         )
 
-        return [
-            FuseAction(
-                self._universal_token_swapper_fuse_address,
-                universal_token_swapper_enter_data.function_call(),
-            )
-        ]
+        return FuseAction(
+            self._universal_token_swapper_fuse_address,
+            universal_token_swapper_enter_data.function_call(),
+        )
