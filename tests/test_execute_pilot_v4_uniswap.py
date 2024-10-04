@@ -11,17 +11,7 @@ from web3.types import TxReceipt
 from commons import execute_transaction, read_token_balance
 from constants import (
     ANVIL_WALLET,
-    USDC,
-    USDT,
-    SWAP_FUSE_UNISWAP_V3_ADDRESS,
-    PLASMA_VAULT_V4,
-    IPOR_FUSION_V4_ACCESS_MANAGER_USDC_ADDRESS,
-    NEW_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS,
-    MODIFY_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS,
-    COLLECT_SWAP_FUSE_UNISWAP_V3_ADDRESS,
-    SWAP_FUSE_UNIVERSAL_TOKEN_SWAPPER_ADDRESS,
-    UNISWAP_V3_UNIVERSAL_ROUTER_ADDRESS,
-    WETH,
+    ARBITRUM,
 )
 from ipor_fusion_sdk.VaultExecuteCallFactory import VaultExecuteCallFactory
 from ipor_fusion_sdk.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
@@ -44,23 +34,25 @@ SET_ANVIL_WALLET_AS_PILOT_V4_ALPHA_COMMAND = [
     "--unlocked",
     "--from",
     "0x4E3C666F0c898a9aE1F8aBB188c6A2CC151E17fC",
-    IPOR_FUSION_V4_ACCESS_MANAGER_USDC_ADDRESS,
+    ARBITRUM.PILOT.V4.ACCESS_MANAGER,
     "grantRole(uint64,address,uint32)()",
     "200",
     ANVIL_WALLET,
     "0",
 ]
 
-uniswap_v3_swap_fuse = UniswapV3SwapFuse(SWAP_FUSE_UNISWAP_V3_ADDRESS)
+uniswap_v3_swap_fuse = UniswapV3SwapFuse(ARBITRUM.PILOT.V4.UNISWAP_V3_SWAP_FUSE)
 uniswap_v_3_new_position_fuse = UniswapV3NewPositionFuse(
-    NEW_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS
+    ARBITRUM.PILOT.V4.UNISWAP_V3_NEW_POSITION_SWAP_FUSE
 )
 uniswap_v_3_modify_position_fuse = UniswapV3ModifyPositionFuse(
-    MODIFY_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS
+    ARBITRUM.PILOT.V4.UNISWAP_V3_MODIFY_POSITION_SWAP_FUSE
 )
-uniswap_v_3_collect_fuse = UniswapV3CollectFuse(COLLECT_SWAP_FUSE_UNISWAP_V3_ADDRESS)
+uniswap_v_3_collect_fuse = UniswapV3CollectFuse(
+    ARBITRUM.PILOT.V4.UNISWAP_V3_COLLECT_SWAP_FUSE
+)
 universal_token_swapper_fuse = UniversalTokenSwapperFuse(
-    SWAP_FUSE_UNIVERSAL_TOKEN_SWAPPER_ADDRESS
+    ARBITRUM.PILOT.V4.UNIVERSAL_TOKEN_SWAPPER_FUSE
 )
 
 
@@ -81,20 +73,27 @@ def test_should_swap_when_one_hop_uniswap_v3(web3, account, vault_execute_call_f
     depositAmount = int(100e6)
     minOutAmount = int(99e6)
 
-    vault_usdc_balance_before_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_before_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_before_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_before_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
-    targets = [USDC, UNISWAP_V3_UNIVERSAL_ROUTER_ADDRESS]
+    targets = [ARBITRUM.USDC, ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
 
     function_selector_0 = function_signature_to_4byte_selector(
         "transfer(address,uint256)"
     )
     function_args_0 = encode(
-        ["address", "uint256"], [UNISWAP_V3_UNIVERSAL_ROUTER_ADDRESS, depositAmount]
+        ["address", "uint256"], [ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER, depositAmount]
     )
     function_call_0 = function_selector_0 + function_args_0
 
-    path = encode_packed(["address", "uint24", "address"], [USDC, 100, USDT])
+    path = encode_packed(
+        ["address", "uint24", "address"],
+        [ARBITRUM.USDC, 100, ARBITRUM.USDT],
+    )
     inputs = [
         encode(
             ["address", "uint256", "uint256", "bytes", "bool"],
@@ -115,19 +114,25 @@ def test_should_swap_when_one_hop_uniswap_v3(web3, account, vault_execute_call_f
 
     data = [function_call_0, function_call_1]
 
-    swap = universal_token_swapper_fuse.swap(USDC, USDT, depositAmount, targets, data)
+    swap = universal_token_swapper_fuse.swap(
+        ARBITRUM.USDC, ARBITRUM.USDT, depositAmount, targets, data
+    )
 
     # when
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(swap),
         account,
     )
 
     # then
-    vault_usdc_balance_after_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_after_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_after_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_after_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
     vault_usdc_balance_change = (
         vault_usdc_balance_after_swap - vault_usdc_balance_before_swap
@@ -149,22 +154,26 @@ def test_should_swap_when_multiple_hop(web3, account, vault_execute_call_factory
     depositAmount = int(100e6)
     minOutAmount = int(99e6)
 
-    vault_usdc_balance_before_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_before_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_before_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_before_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
-    targets = [USDC, UNISWAP_V3_UNIVERSAL_ROUTER_ADDRESS]
+    targets = [ARBITRUM.USDC, ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
 
     function_selector_0 = function_signature_to_4byte_selector(
         "transfer(address,uint256)"
     )
     function_args_0 = encode(
-        ["address", "uint256"], [UNISWAP_V3_UNIVERSAL_ROUTER_ADDRESS, depositAmount]
+        ["address", "uint256"], [ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER, depositAmount]
     )
     function_call_0 = function_selector_0 + function_args_0
 
     path = encode_packed(
         ["address", "uint24", "address", "uint24", "address"],
-        [USDC, 500, WETH, 3000, USDT],
+        [ARBITRUM.USDC, 500, ARBITRUM.WETH, 3000, ARBITRUM.USDT],
     )
     inputs = [
         encode(
@@ -186,19 +195,25 @@ def test_should_swap_when_multiple_hop(web3, account, vault_execute_call_factory
 
     data = [function_call_0, function_call_1]
 
-    swap = universal_token_swapper_fuse.swap(USDC, USDT, depositAmount, targets, data)
+    swap = universal_token_swapper_fuse.swap(
+        ARBITRUM.USDC, ARBITRUM.USDT, depositAmount, targets, data
+    )
 
     # when
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(swap),
         account,
     )
 
     # then
-    vault_usdc_balance_after_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_after_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_after_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_after_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
     vault_usdc_balance_change = (
         vault_usdc_balance_after_swap - vault_usdc_balance_before_swap
@@ -226,8 +241,8 @@ def test_should_open_two_new_position_uniswap_v3(
     fee = 100
 
     swap = uniswap_v3_swap_fuse.swap(
-        token_in_address=USDC,
-        token_out_address=USDT,
+        token_in_address=ARBITRUM.USDC,
+        token_out_address=ARBITRUM.USDT,
         fee=fee,
         token_in_amount=token_in_amount,
         min_out_amount=min_out_amount,
@@ -235,18 +250,18 @@ def test_should_open_two_new_position_uniswap_v3(
 
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(swap),
         account,
     )
 
     uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
-        NEW_POSITION_SWAP_FUSE_UNISWAP_V3_ADDRESS
+        ARBITRUM.PILOT.V4.UNISWAP_V3_NEW_POSITION_SWAP_FUSE
     )
 
     new_position = uniswap_v3_new_position_fuse.new_position(
-        token0=USDC,
-        token1=USDT,
+        token0=ARBITRUM.USDC,
+        token1=ARBITRUM.USDT,
         fee=100,
         tick_lower=-100,
         tick_upper=101,
@@ -257,23 +272,27 @@ def test_should_open_two_new_position_uniswap_v3(
         deadline=timestamp + 100,
     )
 
-    vault_usdc_balance_after_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_after_swap = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_after_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_after_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
     # when
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(new_position),
         account,
     )
 
     # then
     vault_usdc_balance_after_new_position = read_token_balance(
-        web3, PLASMA_VAULT_V4, USDC
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
     )
     vault_usdt_balance_after_new_position = read_token_balance(
-        web3, PLASMA_VAULT_V4, USDT
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
     )
 
     assert vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap == -int(
@@ -296,8 +315,8 @@ def test_should_collect_all_after_decrease_liquidity(
     fee = 100
 
     action = uniswap_v3_swap_fuse.swap(
-        token_in_address=USDC,
-        token_out_address=USDT,
+        token_in_address=ARBITRUM.USDC,
+        token_out_address=ARBITRUM.USDT,
         fee=fee,
         token_in_amount=token_in_amount,
         min_out_amount=min_out_amount,
@@ -305,14 +324,14 @@ def test_should_collect_all_after_decrease_liquidity(
 
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(action),
         account,
     )
 
     new_position = uniswap_v_3_new_position_fuse.new_position(
-        token0=USDC,
-        token1=USDT,
+        token0=ARBITRUM.USDC,
+        token1=ARBITRUM.USDT,
         fee=100,
         tick_lower=-100,
         tick_upper=101,
@@ -325,7 +344,7 @@ def test_should_collect_all_after_decrease_liquidity(
 
     receipt = execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(new_position),
         account,
     )
@@ -353,13 +372,17 @@ def test_should_collect_all_after_decrease_liquidity(
 
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(decrease_action),
         account,
     )
 
-    vault_usdc_balance_before_collect = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_before_collect = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_before_collect = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_before_collect = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
     enter_action = uniswap_v_3_collect_fuse.collect(
         token_ids=[new_token_id],
@@ -367,14 +390,18 @@ def test_should_collect_all_after_decrease_liquidity(
 
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(enter_action),
         account,
     )
 
     # then
-    vault_usdc_balance_after_collect = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_after_collect = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_after_collect = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_after_collect = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
     collect_usdc_change = (
         vault_usdc_balance_after_collect - vault_usdc_balance_before_collect
@@ -396,7 +423,7 @@ def test_should_collect_all_after_decrease_liquidity(
 
     receipt = execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(
             close_position_action
         ),
@@ -420,8 +447,8 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
     fee = 100
 
     action = uniswap_v3_swap_fuse.swap(
-        token_in_address=USDC,
-        token_out_address=USDT,
+        token_in_address=ARBITRUM.USDC,
+        token_out_address=ARBITRUM.USDT,
         fee=fee,
         token_in_amount=token_in_amount,
         min_out_amount=min_out_amount,
@@ -431,14 +458,14 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
 
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         function_swap,
         account,
     )
 
     position_action = uniswap_v_3_new_position_fuse.new_position(
-        token0=USDC,
-        token1=USDT,
+        token0=ARBITRUM.USDC,
+        token1=ARBITRUM.USDT,
         fee=100,
         tick_lower=-100,
         tick_upper=101,
@@ -451,7 +478,7 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
 
     receipt = execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(position_action),
         account,
     )
@@ -472,8 +499,8 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
     # Increase Uniswap V3 position
 
     increase_action = uniswap_v_3_modify_position_fuse.increase_position(
-        token0=USDC,
-        token1=USDT,
+        token0=ARBITRUM.USDC,
+        token1=ARBITRUM.USDT,
         token_id=new_token_id,
         amount0_desired=int(99e6),
         amount1_desired=int(99e6),
@@ -482,20 +509,28 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
         deadline=timestamp + 100,
     )
 
-    vault_usdc_balance_before_increase = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_before_increase = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_before_increase = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_before_increase = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
     # when
     execute_transaction(
         web3,
-        PLASMA_VAULT_V4,
+        ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(increase_action),
         account,
     )
 
     # then
-    vault_usdc_balance_after_increase = read_token_balance(web3, PLASMA_VAULT_V4, USDC)
-    vault_usdt_balance_after_increase = read_token_balance(web3, PLASMA_VAULT_V4, USDT)
+    vault_usdc_balance_after_increase = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_after_increase = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    )
 
     increase_position_change_usdc = (
         vault_usdc_balance_after_increase - vault_usdc_balance_before_increase
