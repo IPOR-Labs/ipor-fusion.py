@@ -6,6 +6,7 @@ import pytest
 from commons import read_token_balance, execute_transaction
 from constants import (
     ANVIL_WALLET,
+    ARBITRUM,
 )
 from ipor_fusion_sdk.MarketId import MarketId
 from ipor_fusion_sdk.VaultExecuteCallFactory import VaultExecuteCallFactory
@@ -13,7 +14,6 @@ from ipor_fusion_sdk.fuse.AaveV3SupplyFuse import AaveV3SupplyFuse
 from ipor_fusion_sdk.fuse.CompoundV3SupplyFuse import CompoundV3SupplyFuse
 from ipor_fusion_sdk.fuse.FluidInstadappSupplyFuse import FluidInstadappSupplyFuse
 from ipor_fusion_sdk.fuse.GearboxSupplyFuse import GearboxSupplyFuse
-from tests.constants import ARBITRUM
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
