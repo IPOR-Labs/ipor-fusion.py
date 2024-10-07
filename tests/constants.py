@@ -78,20 +78,17 @@ class ARBITRUM:
             UNIVERSAL_TOKEN_SWAPPER_FUSE = Web3.to_checksum_address(
                 "0xB052b0D983E493B4D40DeC75A03D21b70b83c2ca"
             )
-            RAMSES_V2_SWAP_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
+            RAMSES_V2_NEW_POSITION_FUSE = Web3.to_checksum_address(
+                "0x9b8254aB90830E8c3d52eb5Ca3A53ed8A0EE5BD6"
             )
-            RAMSES_V2_NEW_POSITION_SWAP_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
+            RAMSES_V2_MODIFY_POSITION_FUSE = Web3.to_checksum_address(
+                "0xA4A1940AF863a87ea4f324207039b508B74Dc246"
             )
-            RAMSES_V2_MODIFY_POSITION_SWAP_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
-            )
-            RAMSES_V2_COLLECT_SWAP_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
+            RAMSES_V2_COLLECT_FUSE = Web3.to_checksum_address(
+                "0x0a2AF02b2D1d3CcF870Ba773B753Bb948527B95b"
             )
             RAMSES_V2_CLAIM_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
+                "0xD41501B46a68DeA06a460fD79a7bCda9e3b92674"
             )
 
     class UNISWAP:

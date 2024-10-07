@@ -42,7 +42,7 @@ SET_ANVIL_WALLET_AS_PILOT_V4_ALPHA_COMMAND = [
 ]
 
 uniswap_v3_swap_fuse = UniswapV3SwapFuse(ARBITRUM.PILOT.V4.UNISWAP_V3_SWAP_FUSE)
-uniswap_v_3_new_position_fuse = UniswapV3NewPositionFuse(
+uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
     ARBITRUM.PILOT.V4.UNISWAP_V3_NEW_POSITION_SWAP_FUSE
 )
 uniswap_v_3_modify_position_fuse = UniswapV3ModifyPositionFuse(
@@ -230,7 +230,7 @@ def test_should_swap_when_multiple_hop(web3, account, vault_execute_call_factory
     ), "98e6 < vault_usdt_balance_change < 100e6"
 
 
-def test_should_open_two_new_position_uniswap_v3(
+def test_should_open_new_position_uniswap_v3(
     web3, account, vault_execute_call_factory
 ):
     # given
@@ -253,10 +253,6 @@ def test_should_open_two_new_position_uniswap_v3(
         ARBITRUM.PILOT.V4.PLASMA_VAULT,
         vault_execute_call_factory.create_execute_call_from_action(swap),
         account,
-    )
-
-    uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
-        ARBITRUM.PILOT.V4.UNISWAP_V3_NEW_POSITION_SWAP_FUSE
     )
 
     new_position = uniswap_v3_new_position_fuse.new_position(
@@ -329,7 +325,7 @@ def test_should_collect_all_after_decrease_liquidity(
         account,
     )
 
-    new_position = uniswap_v_3_new_position_fuse.new_position(
+    new_position = uniswap_v3_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
         token1=ARBITRUM.USDT,
         fee=100,
@@ -417,7 +413,7 @@ def test_should_collect_all_after_decrease_liquidity(
         int(489_000000) < collect_usdt_change < int(500_000000)
     ), "int(489_000000) < collect_usdt_change < int(500_000000)"
 
-    close_position_action = uniswap_v_3_new_position_fuse.close_position(
+    close_position_action = uniswap_v3_new_position_fuse.close_position(
         token_ids=[new_token_id]
     )
 
@@ -463,7 +459,7 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
         account,
     )
 
-    position_action = uniswap_v_3_new_position_fuse.new_position(
+    position_action = uniswap_v3_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
         token1=ARBITRUM.USDT,
         fee=100,

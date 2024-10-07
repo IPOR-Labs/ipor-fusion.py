@@ -39,13 +39,13 @@ SET_ANVIL_WALLET_AS_PILOT_V4_ALPHA_COMMAND = [
 ]
 
 ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(
-    ARBITRUM.PILOT.V4.RAMSES_V2_NEW_POSITION_SWAP_FUSE
+    ARBITRUM.PILOT.V4.RAMSES_V2_NEW_POSITION_FUSE
 )
 ramses_v2_modify_position_fuse = RamsesV2ModifyPositionFuse(
-    ARBITRUM.PILOT.V4.RAMSES_V2_MODIFY_POSITION_SWAP_FUSE
+    ARBITRUM.PILOT.V4.RAMSES_V2_MODIFY_POSITION_FUSE
 )
 ramses_v2_collect_fuse = RamsesV2CollectFuse(
-    ARBITRUM.PILOT.V4.RAMSES_V2_COLLECT_SWAP_FUSE
+    ARBITRUM.PILOT.V4.RAMSES_V2_COLLECT_FUSE
 )
 uniswap_v3_swap_fuse = UniswapV3SwapFuse(ARBITRUM.PILOT.V4.UNISWAP_V3_SWAP_FUSE)
 
@@ -57,12 +57,12 @@ def vault_execute_call_factory_fixture() -> VaultExecuteCallFactory:
 
 @pytest.fixture(name="setup", autouse=True)
 def setup_fixture(anvil):
-    anvil.reset_fork(254261635)
-    anvil.execute_in_container(SET_ANVIL_WALLET_AS_PILOT_V4_ALPHA_COMMAND)
+    # anvil.reset_fork(254261635)
+    # anvil.execute_in_container(SET_ANVIL_WALLET_AS_PILOT_V4_ALPHA_COMMAND)
     yield
 
 
-def test_should_open_two_new_position_ramses_v2(
+def test_should_open_new_position_ramses_v2(
     web3, account, vault_execute_call_factory
 ):
     # given
@@ -74,10 +74,17 @@ def test_should_open_two_new_position_ramses_v2(
 
     swap = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
-        token_out_address=ARBITRUM.USDC,
+        token_out_address=ARBITRUM.USDT,
         fee=fee,
         token_in_amount=token_in_amount,
         min_out_amount=min_out_amount,
+    )
+
+    vault_usdc_balance_before_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_before_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
     )
 
     execute_transaction(
@@ -87,9 +94,16 @@ def test_should_open_two_new_position_ramses_v2(
         account,
     )
 
+    vault_usdc_balance_after_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+    vault_usdt_balance_after_swap = read_token_balance(
+        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    )
+
     new_position = ramses_v2_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
-        token1=ARBITRUM.USDC,
+        token1=ARBITRUM.USDT,
         fee=50,
         tick_lower=-1,
         tick_upper=1,
@@ -101,12 +115,6 @@ def test_should_open_two_new_position_ramses_v2(
         ve_ram_token_id=0,
     )
 
-    vault_usdc_balance_after_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_after_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
 
     # when
     execute_transaction(
@@ -125,12 +133,12 @@ def test_should_open_two_new_position_ramses_v2(
     )
 
     assert vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap == -int(
-        499e6
-    ), "vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap == -499e6"
+        157_104526
+    ), "vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap == -157_104526"
     assert (
         vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap
-        == -489_152502
-    ), "vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap == -499e6"
+        == -int(157_104526)
+    ), "vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap == -157_104526"
 
 
 def test_should_collect_all_after_decrease_liquidity(
@@ -145,7 +153,7 @@ def test_should_collect_all_after_decrease_liquidity(
 
     action = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
-        token_out_address=ARBITRUM.USDC,
+        token_out_address=ARBITRUM.USDT,
         fee=fee,
         token_in_amount=token_in_amount,
         min_out_amount=min_out_amount,
@@ -160,7 +168,7 @@ def test_should_collect_all_after_decrease_liquidity(
 
     new_position = ramses_v2_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
-        token1=ARBITRUM.USDC,
+        token1=ARBITRUM.USDT,
         fee=100,
         tick_lower=-100,
         tick_upper=101,
@@ -278,7 +286,7 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
 
     action = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
-        token_out_address=ARBITRUM.USDC,
+        token_out_address=ARBITRUM.USDT,
         fee=fee,
         token_in_amount=token_in_amount,
         min_out_amount=min_out_amount,
@@ -295,7 +303,7 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
 
     position_action = ramses_v2_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
-        token1=ARBITRUM.USDC,
+        token1=ARBITRUM.USDT,
         fee=100,
         tick_lower=-100,
         tick_upper=101,
@@ -330,7 +338,7 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
     # Increase position
     increase_action = ramses_v2_modify_position_fuse.increase_position(
         token0=ARBITRUM.USDC,
-        token1=ARBITRUM.USDC,
+        token1=ARBITRUM.USDT,
         token_id=new_token_id,
         amount0_desired=int(99e6),
         amount1_desired=int(99e6),
@@ -373,7 +381,7 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
         increase_position_change_usdc == -99_000000
     ), "increase_position_change_usdc == -99_000000"
     assert (
-        increase_position_change_usdt == -97_046288
+        increase_position_change_usdt == -99_000000
     ), "increase_position_change_usdt == -97_046288"
 
 
