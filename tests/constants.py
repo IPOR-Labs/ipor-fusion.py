@@ -55,21 +55,6 @@ class ARBITRUM:
             COMPOUND_V3_FUSE = Web3.to_checksum_address(
                 "0x34BCBC3f10CE46894Bb39De0C667257EFb35c079"
             )
-            RAMSES_V2_SWAP_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
-            )
-            RAMSES_V2_NEW_POSITION_SWAP_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
-            )
-            RAMSES_V2_MODIFY_POSITION_SWAP_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
-            )
-            RAMSES_V2_COLLECT_SWAP_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
-            )
-            RAMSES_V2_CLAIM_FUSE = Web3.to_checksum_address(
-                "0x0000000000000000000000000000000000000000"
-            )
 
         class V4:
             PLASMA_VAULT = Web3.to_checksum_address(
@@ -92,6 +77,21 @@ class ARBITRUM:
             )
             UNIVERSAL_TOKEN_SWAPPER_FUSE = Web3.to_checksum_address(
                 "0xB052b0D983E493B4D40DeC75A03D21b70b83c2ca"
+            )
+            RAMSES_V2_SWAP_FUSE = Web3.to_checksum_address(
+                "0x0000000000000000000000000000000000000000"
+            )
+            RAMSES_V2_NEW_POSITION_SWAP_FUSE = Web3.to_checksum_address(
+                "0x0000000000000000000000000000000000000000"
+            )
+            RAMSES_V2_MODIFY_POSITION_SWAP_FUSE = Web3.to_checksum_address(
+                "0x0000000000000000000000000000000000000000"
+            )
+            RAMSES_V2_COLLECT_SWAP_FUSE = Web3.to_checksum_address(
+                "0x0000000000000000000000000000000000000000"
+            )
+            RAMSES_V2_CLAIM_FUSE = Web3.to_checksum_address(
+                "0x0000000000000000000000000000000000000000"
             )
 
     class UNISWAP:
