@@ -1,7 +1,7 @@
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion_sdk.fuse.FuseAction import FuseAction
+from ipor_fusion.fuse.FuseAction import FuseAction
 
 
 class RamsesV2ModifyPositionFuseEnterData:

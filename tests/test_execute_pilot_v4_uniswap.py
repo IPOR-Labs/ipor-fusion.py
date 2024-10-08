@@ -13,12 +13,12 @@ from constants import (
     ANVIL_WALLET,
     ARBITRUM,
 )
-from ipor_fusion_sdk.VaultExecuteCallFactory import VaultExecuteCallFactory
-from ipor_fusion_sdk.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
-from ipor_fusion_sdk.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
-from ipor_fusion_sdk.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
-from ipor_fusion_sdk.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
-from ipor_fusion_sdk.fuse.UniversalTokenSwapperFuse import UniversalTokenSwapperFuse
+from ipor_fusion.VaultExecuteCallFactory import VaultExecuteCallFactory
+from ipor_fusion.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
+from ipor_fusion.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
+from ipor_fusion.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
+from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
+from ipor_fusion.fuse.UniversalTokenSwapperFuse import UniversalTokenSwapperFuse
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)

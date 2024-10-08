@@ -11,12 +11,12 @@
 #     ANVIL_WALLET,
 #     ARBITRUM,
 # )
-# from ipor_fusion_sdk.VaultExecuteCallFactory import VaultExecuteCallFactory
-# from ipor_fusion_sdk.fuse.RamsesClaimFuse import RamsesClaimFuse
-# from ipor_fusion_sdk.fuse.RamsesV2CollectFuse import RamsesV2CollectFuse
-# from ipor_fusion_sdk.fuse.RamsesV2ModifyPositionFuse import RamsesV2ModifyPositionFuse
-# from ipor_fusion_sdk.fuse.RamsesV2NewPositionFuse import RamsesV2NewPositionFuse
-# from ipor_fusion_sdk.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
+# from ipor_fusion.VaultExecuteCallFactory import VaultExecuteCallFactory
+# from ipor_fusion.fuse.RamsesClaimFuse import RamsesClaimFuse
+# from ipor_fusion.fuse.RamsesV2CollectFuse import RamsesV2CollectFuse
+# from ipor_fusion.fuse.RamsesV2ModifyPositionFuse import RamsesV2ModifyPositionFuse
+# from ipor_fusion.fuse.RamsesV2NewPositionFuse import RamsesV2NewPositionFuse
+# from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
 #
 # logging.basicConfig(level=logging.DEBUG)
 # log = logging.getLogger(__name__)
