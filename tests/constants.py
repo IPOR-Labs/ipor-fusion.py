@@ -99,8 +99,8 @@ class ARBITRUM:
 
     class RAMSES:
         class V2:
-            RAM = Web3.to_checksum_address("0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418")
-            X_RAM = Web3.to_checksum_address(
+            REM = Web3.to_checksum_address("0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418")
+            X_REM = Web3.to_checksum_address(
                 "0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7"
             )
 

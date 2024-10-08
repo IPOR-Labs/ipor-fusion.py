@@ -230,9 +230,7 @@ def test_should_swap_when_multiple_hop(web3, account, vault_execute_call_factory
     ), "98e6 < vault_usdt_balance_change < 100e6"
 
 
-def test_should_open_new_position_uniswap_v3(
-    web3, account, vault_execute_call_factory
-):
+def test_should_open_new_position_uniswap_v3(web3, account, vault_execute_call_factory):
     # given
     timestamp = web3.eth.get_block("latest")["timestamp"]
 

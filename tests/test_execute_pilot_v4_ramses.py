@@ -12,6 +12,7 @@ from constants import (
     ARBITRUM,
 )
 from ipor_fusion_sdk.VaultExecuteCallFactory import VaultExecuteCallFactory
+from ipor_fusion_sdk.fuse.RamsesClaimFuse import RamsesClaimFuse
 from ipor_fusion_sdk.fuse.RamsesV2CollectFuse import RamsesV2CollectFuse
 from ipor_fusion_sdk.fuse.RamsesV2ModifyPositionFuse import RamsesV2ModifyPositionFuse
 from ipor_fusion_sdk.fuse.RamsesV2NewPositionFuse import RamsesV2NewPositionFuse
@@ -44,10 +45,9 @@ ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(
 ramses_v2_modify_position_fuse = RamsesV2ModifyPositionFuse(
     ARBITRUM.PILOT.V4.RAMSES_V2_MODIFY_POSITION_FUSE
 )
-ramses_v2_collect_fuse = RamsesV2CollectFuse(
-    ARBITRUM.PILOT.V4.RAMSES_V2_COLLECT_FUSE
-)
+ramses_v2_collect_fuse = RamsesV2CollectFuse(ARBITRUM.PILOT.V4.RAMSES_V2_COLLECT_FUSE)
 uniswap_v3_swap_fuse = UniswapV3SwapFuse(ARBITRUM.PILOT.V4.UNISWAP_V3_SWAP_FUSE)
+ramses_claim_fuse = RamsesClaimFuse(ARBITRUM.PILOT.V4.RAMSES_V2_CLAIM_FUSE)
 
 
 @pytest.fixture(scope="module", name="vault_execute_call_factory")
@@ -62,9 +62,7 @@ def setup_fixture(anvil):
     yield
 
 
-def test_should_open_new_position_ramses_v2(
-    web3, account, vault_execute_call_factory
-):
+def test_should_open_new_position_ramses_v2(web3, account, vault_execute_call_factory):
     # given
     timestamp = web3.eth.get_block("latest")["timestamp"]
 
@@ -78,13 +76,6 @@ def test_should_open_new_position_ramses_v2(
         fee=fee,
         token_in_amount=token_in_amount,
         min_out_amount=min_out_amount,
-    )
-
-    vault_usdc_balance_before_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_before_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
     )
 
     execute_transaction(
@@ -115,7 +106,6 @@ def test_should_open_new_position_ramses_v2(
         ve_ram_token_id=0,
     )
 
-
     # when
     execute_transaction(
         web3,
@@ -135,9 +125,8 @@ def test_should_open_new_position_ramses_v2(
     assert vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap == -int(
         157_104526
     ), "vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap == -157_104526"
-    assert (
-        vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap
-        == -int(157_104526)
+    assert vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap == -int(
+        157_104526
     ), "vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap == -157_104526"
 
 
@@ -383,6 +372,78 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
     assert (
         increase_position_change_usdt == -99_000000
     ), "increase_position_change_usdt == -97_046288"
+
+
+# def test_should_claim_rewards_ramses_v2(web3, account, vault_execute_call_factory):
+#     # given
+#     timestamp = web3.eth.get_block("latest")["timestamp"]
+# 
+#     token_in_amount = int(500e6)
+#     min_out_amount = 0
+#     fee = 100
+# 
+#     swap = uniswap_v3_swap_fuse.swap(
+#         token_in_address=ARBITRUM.USDC,
+#         token_out_address=ARBITRUM.USDT,
+#         fee=fee,
+#         token_in_amount=token_in_amount,
+#         min_out_amount=min_out_amount,
+#     )
+# 
+#     execute_transaction(
+#         web3,
+#         ARBITRUM.PILOT.V4.PLASMA_VAULT,
+#         vault_execute_call_factory.create_execute_call_from_action(swap),
+#         account,
+#     )
+# 
+#     new_position = ramses_v2_new_position_fuse.new_position(
+#         token0=ARBITRUM.USDC,
+#         token1=ARBITRUM.USDT,
+#         fee=50,
+#         tick_lower=-1,
+#         tick_upper=1,
+#         amount0_desired=int(499e6),
+#         amount1_desired=int(499e6),
+#         amount0_min=0,
+#         amount1_min=0,
+#         deadline=timestamp + 100,
+#         ve_ram_token_id=0,
+#     )
+# 
+#     # when
+#     receipt = execute_transaction(
+#         web3,
+#         ARBITRUM.PILOT.V4.PLASMA_VAULT,
+#         vault_execute_call_factory.create_execute_call_from_action(new_position),
+#         account,
+#     )
+# 
+#     (
+#         _,
+#         new_token_id,
+#         _,
+#         _,
+#         _,
+#         _,
+#         _,
+#         _,
+#         _,
+#         _,
+#     ) = extract_enter_data_form_new_position_event(receipt)
+# 
+#     token_rewards = [[ARBITRUM.RAMSES.V2.REM, ARBITRUM.RAMSES.V2.X_REM]]
+# 
+#     claim = ramses_claim_fuse.claim(
+#         token_ids=[new_token_id], token_rewards=token_rewards
+#     )
+# 
+#     execute_transaction(
+#         web3,
+#         ARBITRUM.PILOT.V4.PLASMA_VAULT,
+#         vault_execute_call_factory.create_claim_rewards_call([claim]),
+#         account,
+#     )
 
 
 def extract_enter_data_form_new_position_event(
