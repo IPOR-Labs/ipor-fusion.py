@@ -6,10 +6,14 @@ ONE_HUNDRED = 100
 
 ANVIL_WALLET = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
 
+ALPHA_WALLET = ANVIL_WALLET
+
 # pylint: disable=no-value-for-parameter
 ANVIL_WALLET_PRIVATE_KEY = Account.from_key(
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 )
+
+ALPHA_PRIVATE_KEY = ANVIL_WALLET_PRIVATE_KEY
 
 ONE_HUNDRED_USDC = 100 * 10**6
 GAS_PRICE_MARGIN = 25
