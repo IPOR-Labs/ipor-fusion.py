@@ -73,7 +73,7 @@ class AnvilTestContainerStarter:
 
         self.log.info("[CONTAINER] [ANVIL] Anvil fork reset")
 
-    def increase_time(self, delta_time: int):
+    def move_time(self, delta_time: int):
         self.log.info("[CONTAINER] [ANVIL] Anvil evm increaseTime")
         w3 = self.get_client()
 

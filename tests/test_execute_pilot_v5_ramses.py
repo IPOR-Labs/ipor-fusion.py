@@ -3,9 +3,6 @@ import os
 import time
 
 import pytest
-from eth_abi import decode
-from web3 import Web3
-from web3.types import TxReceipt
 
 from constants import (
     ANVIL_WALLET,
@@ -22,6 +19,8 @@ from ipor_fusion.fuse.RamsesV2CollectFuse import RamsesV2CollectFuse
 from ipor_fusion.fuse.RamsesV2ModifyPositionFuse import RamsesV2ModifyPositionFuse
 from ipor_fusion.fuse.RamsesV2NewPositionFuse import RamsesV2NewPositionFuse
 from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
+
+_30_DAYS = 30 * 24 * 60 * 60
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -153,8 +152,6 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
         min_out_amount=0,
     )
 
-    plasma_vault.execute([swap_action])
-
     new_position = ramses_v2_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
         token1=ARBITRUM.USDT,
@@ -169,7 +166,7 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
         ve_ram_token_id=0,
     )
 
-    receipt = plasma_vault.execute([new_position])
+    receipt = plasma_vault.execute([swap_action, new_position])
 
     (
         _,
@@ -182,7 +179,7 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
         _,
         _,
         _,
-    ) = extract_enter_data_form_new_position_event(receipt)
+    ) = ramses_v2_new_position_fuse.extract_data_form_new_position_enter_event(receipt)
 
     decrease_action = ramses_v2_modify_position_fuse.decrease_position(
         token_id=new_token_id,
@@ -225,7 +222,7 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
     (
         _,
         close_token_id,
-    ) = extract_exit_data_form_new_position_event(receipt)
+    ) = ramses_v2_new_position_fuse.extract_data_form_new_position_exit_event(receipt)
 
     assert new_token_id == close_token_id, "new_token_id == close_token_id"
 
@@ -272,7 +269,7 @@ def test_should_increase_liquidity(anvil, plasma_vault):
         _,
         _,
         _,
-    ) = extract_enter_data_form_new_position_event(receipt)
+    ) = ramses_v2_new_position_fuse.extract_data_form_new_position_enter_event(receipt)
 
     # Increase position
     increase_action = ramses_v2_modify_position_fuse.increase_position(
@@ -341,7 +338,7 @@ def test_should_claim_rewards_ramses_v2(
         ve_ram_token_id=0,
     )
 
-    receipt = plasma_vault.execute([swap, new_position])
+    tx_result = plasma_vault.execute([swap, new_position])
 
     (
         _,
@@ -354,14 +351,15 @@ def test_should_claim_rewards_ramses_v2(
         _,
         _,
         _,
-    ) = extract_enter_data_form_new_position_event(receipt)
+    ) = ramses_v2_new_position_fuse.extract_data_form_new_position_enter_event(
+        tx_result
+    )
 
-    anvil.increase_time(30 * 24 * 60 * 60)
-
-    token_rewards = [[ARBITRUM.RAMSES.V2.REM, ARBITRUM.RAMSES.V2.X_REM]]
+    anvil.move_time(_30_DAYS)
 
     claim_action = ramses_claim_fuse.claim(
-        token_ids=[new_token_id], token_rewards=token_rewards
+        token_ids=[new_token_id],
+        token_rewards=[[ARBITRUM.RAMSES.V2.REM, ARBITRUM.RAMSES.V2.X_REM]],
     )
 
     # then
@@ -380,79 +378,3 @@ def test_should_claim_rewards_ramses_v2(
         ALPHA_WALLET, ARBITRUM.RAMSES.V2.REM
     )
     assert rem_after_transfer > 0
-
-
-def extract_enter_data_form_new_position_event(
-    receipt: TxReceipt,
-) -> (str, int, int, int, int, str, str, int, int, int):
-    event_signature_hash = Web3.keccak(
-        text="RamsesV2NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
-    )
-
-    for evnet_log in receipt.logs:
-        if evnet_log.topics[0] == event_signature_hash:
-            decoded_data = decode(
-                [
-                    "address",
-                    "uint256",
-                    "uint128",
-                    "uint256",
-                    "uint256",
-                    "address",
-                    "address",
-                    "uint24",
-                    "int24",
-                    "int24",
-                ],
-                evnet_log["data"],
-            )
-            (
-                version,
-                token_id,
-                liquidity,
-                amount0,
-                amount1,
-                sender,
-                recipient,
-                fee,
-                tick_lower,
-                tick_upper,
-            ) = decoded_data
-            return (
-                version,
-                token_id,
-                liquidity,
-                amount0,
-                amount1,
-                sender,
-                recipient,
-                fee,
-                tick_lower,
-                tick_upper,
-            )
-    return None, None, None, None, None, None, None, None, None, None
-
-
-def extract_exit_data_form_new_position_event(receipt: TxReceipt) -> (str, int):
-    event_signature_hash = Web3.keccak(
-        text="RamsesV2NewPositionFuseExit(address,uint256)"
-    )
-
-    for event_log in receipt.logs:
-        if event_log.topics[0] == event_signature_hash:
-            decoded_data = decode(
-                [
-                    "address",
-                    "uint256",
-                ],
-                event_log["data"],
-            )
-            (
-                version,
-                token_id,
-            ) = decoded_data
-            return (
-                version,
-                token_id,
-            )
-    return None, None

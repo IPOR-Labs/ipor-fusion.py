@@ -1,7 +1,9 @@
 from typing import List
 
-from eth_abi import encode
+from eth_abi import encode, decode
 from eth_utils import function_signature_to_4byte_selector
+from web3 import Web3
+from web3.types import TxReceipt
 
 from ipor_fusion.fuse.FuseAction import FuseAction
 
@@ -124,3 +126,79 @@ class RamsesV2NewPositionFuse:
         return FuseAction(
             self._ramses_v2_new_position_fuse_address, data.function_call()
         )
+
+    @staticmethod
+    def extract_data_form_new_position_enter_event(
+        receipt: TxReceipt,
+    ) -> (str, int, int, int, int, str, str, int, int, int):
+        event_signature_hash = Web3.keccak(
+            text="RamsesV2NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
+        )
+
+        for evnet_log in receipt.logs:
+            if evnet_log.topics[0] == event_signature_hash:
+                decoded_data = decode(
+                    [
+                        "address",
+                        "uint256",
+                        "uint128",
+                        "uint256",
+                        "uint256",
+                        "address",
+                        "address",
+                        "uint24",
+                        "int24",
+                        "int24",
+                    ],
+                    evnet_log["data"],
+                )
+                (
+                    version,
+                    token_id,
+                    liquidity,
+                    amount0,
+                    amount1,
+                    sender,
+                    recipient,
+                    fee,
+                    tick_lower,
+                    tick_upper,
+                ) = decoded_data
+                return (
+                    version,
+                    token_id,
+                    liquidity,
+                    amount0,
+                    amount1,
+                    sender,
+                    recipient,
+                    fee,
+                    tick_lower,
+                    tick_upper,
+                )
+        return None, None, None, None, None, None, None, None, None, None
+
+    @staticmethod
+    def extract_data_form_new_position_exit_event(receipt: TxReceipt) -> (str, int):
+        event_signature_hash = Web3.keccak(
+            text="RamsesV2NewPositionFuseExit(address,uint256)"
+        )
+
+        for event_log in receipt.logs:
+            if event_log.topics[0] == event_signature_hash:
+                decoded_data = decode(
+                    [
+                        "address",
+                        "uint256",
+                    ],
+                    event_log["data"],
+                )
+                (
+                    version,
+                    token_id,
+                ) = decoded_data
+                return (
+                    version,
+                    token_id,
+                )
+        return None, None
