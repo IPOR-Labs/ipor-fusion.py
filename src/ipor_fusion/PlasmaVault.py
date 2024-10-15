@@ -4,6 +4,7 @@ from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3.types import TxReceipt
 
+from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.fuse.FuseAction import FuseAction
 
@@ -21,7 +22,8 @@ class PlasmaVault:
         return self._transaction_executor.execute(self._plasma_vault, function)
 
     def balance_of(self, asset: str) -> int:
-        return self._transaction_executor.balance_of(self._plasma_vault, asset)
+        erc20 = ERC20(self._transaction_executor, asset)
+        return erc20.balance_of(self._plasma_vault)
 
     @staticmethod
     def __execute(actions: List[FuseAction]) -> bytes:

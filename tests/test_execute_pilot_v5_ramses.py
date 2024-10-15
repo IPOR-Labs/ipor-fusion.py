@@ -4,23 +4,16 @@ import time
 
 import pytest
 
-from constants import (
-    ANVIL_WALLET,
-    ARBITRUM,
-    ALPHA_WALLET,
-)
+from constants import ARBITRUM, ALPHA_WALLET, DAY, MONTH
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.Roles import Roles
-from ipor_fusion.TransactionExecutor import TransactionExecutor
-from ipor_fusion.VaultExecuteCallFactory import VaultExecuteCallFactory
+from ipor_fusion.UniswapV3UniversalRouter import UniswapV3UniversalRouter
 from ipor_fusion.fuse.RamsesClaimFuse import RamsesClaimFuse
 from ipor_fusion.fuse.RamsesV2CollectFuse import RamsesV2CollectFuse
 from ipor_fusion.fuse.RamsesV2ModifyPositionFuse import RamsesV2ModifyPositionFuse
 from ipor_fusion.fuse.RamsesV2NewPositionFuse import RamsesV2NewPositionFuse
 from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
-
-_30_DAYS = 30 * 24 * 60 * 60
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -29,23 +22,6 @@ ARBITRUM_PROVIDER_URL = "ARBITRUM_PROVIDER_URL"
 FORK_URL = os.getenv(ARBITRUM_PROVIDER_URL)
 if not FORK_URL:
     raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
-
-
-def grant_role(anvil, role):
-    cmd = [
-        "cast",
-        "send",
-        "--unlocked",
-        "--from",
-        "0x4E3C666F0c898a9aE1F8aBB188c6A2CC151E17fC",
-        ARBITRUM.PILOT.V5.ACCESS_MANAGER,
-        "grantRole(uint64,address,uint32)()",
-        f"{role}",
-        ANVIL_WALLET,
-        "0",
-    ]
-    anvil.execute_in_container(cmd)
-
 
 ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(
     ARBITRUM.PILOT.V5.RAMSES_V2_NEW_POSITION_FUSE
@@ -56,11 +32,6 @@ ramses_v2_modify_position_fuse = RamsesV2ModifyPositionFuse(
 ramses_v2_collect_fuse = RamsesV2CollectFuse(ARBITRUM.PILOT.V5.RAMSES_V2_COLLECT_FUSE)
 uniswap_v3_swap_fuse = UniswapV3SwapFuse(ARBITRUM.PILOT.V5.UNISWAP_V3_SWAP_FUSE)
 ramses_claim_fuse = RamsesClaimFuse(ARBITRUM.PILOT.V5.RAMSES_V2_CLAIM_FUSE)
-
-
-@pytest.fixture(scope="module", name="transaction_executor")
-def transaction_executor_fixture(web3, account) -> TransactionExecutor:
-    return TransactionExecutor(web3, account)
 
 
 @pytest.fixture(scope="module", name="rewards_claim_manager")
@@ -79,15 +50,20 @@ def plasma_vault_fixture(transaction_executor) -> PlasmaVault:
     )
 
 
-@pytest.fixture(scope="module", name="vault_execute_call_factory")
-def vault_execute_call_factory_fixture() -> VaultExecuteCallFactory:
-    return VaultExecuteCallFactory()
+@pytest.fixture(scope="module", name="uniswap_v3_universal_router")
+def uniswap_v3_universal_router_fixture(
+    transaction_executor,
+) -> UniswapV3UniversalRouter:
+    return UniswapV3UniversalRouter(
+        transaction_executor=transaction_executor,
+        universal_router_address=ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER,
+    )
 
 
 @pytest.fixture(name="setup", autouse=True)
 def setup_fixture(anvil):
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
-    grant_role(anvil, Roles.ALPHA_ROLE)
+    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
     yield
 
 
@@ -140,7 +116,7 @@ def test_should_open_new_position_ramses_v2(plasma_vault):
 def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
-    grant_role(anvil, Roles.ALPHA_ROLE)
+    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
 
     timestamp = int(time.time())
 
@@ -230,7 +206,7 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
 def test_should_increase_liquidity(anvil, plasma_vault):
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
-    grant_role(anvil, Roles.ALPHA_ROLE)
+    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
 
     action = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
@@ -239,8 +215,6 @@ def test_should_increase_liquidity(anvil, plasma_vault):
         token_in_amount=(int(500e6)),
         min_out_amount=0,
     )
-
-    plasma_vault.execute([action])
 
     new_position = ramses_v2_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
@@ -256,7 +230,7 @@ def test_should_increase_liquidity(anvil, plasma_vault):
         ve_ram_token_id=0,
     )
 
-    receipt = plasma_vault.execute([new_position])
+    receipt = plasma_vault.execute([action, new_position])
 
     (
         _,
@@ -303,18 +277,24 @@ def test_should_increase_liquidity(anvil, plasma_vault):
     ), "increase_position_change_usdt == -90_509683"
 
 
-def test_should_claim_rewards_ramses_v2(
+def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manager(
     anvil,
     plasma_vault,
     rewards_claim_manager,
-    transaction_executor,
+    uniswap_v3_universal_router,
+    usdc,
+    ram,
 ):
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
-    grant_role(anvil, Roles.ATOMIST_ROLE)
-    grant_role(anvil, Roles.ALPHA_ROLE)
-    grant_role(anvil, Roles.CLAIM_REWARDS_ROLE)
-    grant_role(anvil, Roles.TRANSFER_REWARDS_ROLE)
+    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ATOMIST_ROLE)
+    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
+    anvil.grant_role(
+        ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.CLAIM_REWARDS_ROLE
+    )
+    anvil.grant_role(
+        ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.TRANSFER_REWARDS_ROLE
+    )
 
     swap = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
@@ -355,26 +335,61 @@ def test_should_claim_rewards_ramses_v2(
         tx_result
     )
 
-    anvil.move_time(_30_DAYS)
+    # One month later
+    anvil.move_time(MONTH)
 
     claim_action = ramses_claim_fuse.claim(
         token_ids=[new_token_id],
-        token_rewards=[[ARBITRUM.RAMSES.V2.REM, ARBITRUM.RAMSES.V2.X_REM]],
+        token_rewards=[[ARBITRUM.RAMSES.V2.RAM, ARBITRUM.RAMSES.V2.X_REM]],
     )
 
-    # then
+    # Claim RAM rewards
     rewards_claim_manager.claim_rewards([claim_action])
 
-    rem_after_claim = rewards_claim_manager.balance_of(ARBITRUM.RAMSES.V2.REM)
+    ram_after_claim = rewards_claim_manager.balance_of(ARBITRUM.RAMSES.V2.RAM)
 
-    assert rem_after_claim > 0
+    assert ram_after_claim > 0
 
-    # transfer REM to ALPHA wallet
+    # Transfer REM to ALPHA wallet
     rewards_claim_manager.transfer(
-        ARBITRUM.RAMSES.V2.REM, ALPHA_WALLET, rem_after_claim
+        ARBITRUM.RAMSES.V2.RAM, ALPHA_WALLET, ram_after_claim
     )
 
-    rem_after_transfer = transaction_executor.balance_of(
-        ALPHA_WALLET, ARBITRUM.RAMSES.V2.REM
+    ram_after_transfer = ram.balance_of(ALPHA_WALLET)
+    assert ram_after_transfer > 0
+
+    usdc_before_swap_ram = usdc.balance_of(ALPHA_WALLET)
+
+    # swap RAM -> USDC
+    path = [ARBITRUM.RAMSES.V2.RAM, 10000, ARBITRUM.WETH, 500, ARBITRUM.USDC]
+    uniswap_v3_universal_router.swap(ARBITRUM.RAMSES.V2.RAM, path, ram_after_transfer)
+
+    usdc_after_swap_ram = usdc.balance_of(ALPHA_WALLET)
+
+    rewards_in_usdc = usdc_after_swap_ram - usdc_before_swap_ram
+    assert rewards_in_usdc > 0
+
+    # Transfer USDC to rewards_claim_manager
+    usdc.transfer(to=ARBITRUM.PILOT.V5.REWARDS_CLAIM_MANAGER, amount=rewards_in_usdc)
+
+    usdc_after_transfer = usdc.balance_of(ALPHA_WALLET)
+    assert usdc_after_transfer == 0
+
+    # Update balance on rewards_claim_manager
+    rewards_claim_manager.update_balance()
+    rewards_claim_manager_balance_before_vesting = rewards_claim_manager.balance_of(
+        ARBITRUM.USDC
     )
-    assert rem_after_transfer > 0
+    assert rewards_claim_manager_balance_before_vesting > 0
+
+    rewards_claim_manager.update_balance()
+
+    # One month later
+    anvil.move_time(DAY)
+    rewards_claim_manager.update_balance()
+
+    rewards_claim_manager_balance_after_vesting = rewards_claim_manager.balance_of(
+        ARBITRUM.USDC
+    )
+
+    assert rewards_claim_manager_balance_after_vesting == 0

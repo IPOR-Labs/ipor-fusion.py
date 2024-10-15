@@ -46,27 +46,77 @@
 </table>
 
 #### Install dependencies
+
 ```bash
 poetry install
 ```
 
 #### Setup ARBITRUM_PROVIDER_URL environment variable
+
 Some node providers are not supported. It's working with QuickNode but not with Alchemy.
+
 ```bash
 export ARBITRUM_PROVIDER_URL="https://..."
 ```
 
 #### Run tests
+
 ```bash
 poetry run pytest -v -s
 ```
 
 #### Run pylint
+
 ```bash 
 poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
 ```
 
 #### Run black
+
 ```bash 
 poetry run black ./
+```
+
+## Example of usage
+
+```python
+uniswap_v3_swap_fuse = UniswapV3SwapFuse(ARBITRUM.PILOT.V5.UNISWAP_V3_SWAP_FUSE)
+ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(ARBITRUM.PILOT.V5.RAMSES_V2_NEW_POSITION_FUSE)
+ramses_claim_fuse = RamsesClaimFuse(ARBITRUM.PILOT.V5.RAMSES_CLAIM_FUSE)
+plasma_vault = PlasmaVault(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+rewards_claim_manager = RewardsClaimManager(ARBITRUM.PILOT.V5.REWARDS_CLAIM_MANAGER)
+
+swap = uniswap_v3_swap_fuse.swap(token_in_address=ARBITRUM.USDC,
+                                 token_out_address=ARBITRUM.USDT,
+                                 fee=100,
+                                 token_in_amount=int(500e6),
+                                 min_out_amount=0, )
+
+new_position = ramses_v2_new_position_fuse.new_position(token0=ARBITRUM.USDC,
+                                                        token1=ARBITRUM.USDT,
+                                                        fee=50,
+                                                        tick_lower=-100,
+                                                        tick_upper=100,
+                                                        amount0_desired=int(499e6),
+                                                        amount1_desired=int(499e6),
+                                                        amount0_min=0,
+                                                        amount1_min=0,
+                                                        deadline=int(time.time()) + 100,
+                                                        ve_ram_token_id=0, )
+
+tx_result = plasma_vault.execute([swap, new_position])
+
+(_, new_token_id, _, _, _, _, _, _, _, _,) = ramses_v2_new_position_fuse.extract_data_form_new_position_enter_event(
+  tx_result)
+
+# >>>>>>>>>>>>>>>>>>>>>>>>>>> 30 days have passed
+
+claim_action = ramses_claim_fuse.claim(token_ids=[new_token_id],
+                                       token_rewards=[[ARBITRUM.RAMSES.V2.RAM, ARBITRUM.RAMSES.V2.X_REM]], )
+
+rewards_claim_manager.claim_rewards([claim_action])
+
+ram_after_claim = rewards_claim_manager.balance_of(ARBITRUM.RAMSES.V2.RAM)
+
+assert ram_after_claim > 0
 ```

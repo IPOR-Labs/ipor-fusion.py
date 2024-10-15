@@ -19,6 +19,11 @@ ONE_HUNDRED_USDC = 100 * 10**6
 GAS_PRICE_MARGIN = 25
 GAS_MARGIN = 20
 
+DAY = 24 * 60 * 60
+WEEK = 7 * DAY
+MONTH = 30 * DAY
+YEAR = 365 * DAY
+
 
 class ARBITRUM:
 
@@ -117,7 +122,7 @@ class ARBITRUM:
 
     class RAMSES:
         class V2:
-            REM = Web3.to_checksum_address("0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418")
+            RAM = Web3.to_checksum_address("0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418")
             X_REM = Web3.to_checksum_address(
                 "0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7"
             )

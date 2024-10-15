@@ -5,9 +5,10 @@ class TransactionExecutor:
     DEFAULT_TRANSACTION_MAX_PRIORITY_FEE = 2_000_000_000
     GAS_PRICE_MARGIN = 25
 
-    def __init__(self, web3, account):
+    def __init__(self, web3, account, gas_multiplier=1.25):
         self._web3 = web3
         self._account = account
+        self._gas_multiplier = gas_multiplier
 
     def execute(self, contract_address: str, function: bytes) -> TxReceipt:
         nonce = self._web3.eth.get_transaction_count(self._account.address)
@@ -16,7 +17,7 @@ class TransactionExecutor:
         max_priority_fee_per_gas = self.get_max_priority_fee(gas_price)
         data = f"0x{function.hex()}"
         estimated_gas = int(
-            1.25
+            self._gas_multiplier
             * self._web3.eth.estimate_gas(
                 {"to": contract_address, "from": self._account.address, "data": data}
             )

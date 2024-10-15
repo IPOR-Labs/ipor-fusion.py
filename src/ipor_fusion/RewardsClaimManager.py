@@ -45,3 +45,13 @@ class RewardsClaimManager:
         function_signature = f"transfer({",".join(args)})"
         selector = function_signature_to_4byte_selector(function_signature)
         return selector + encode(args, [asset, to, amount])
+
+    def update_balance(self):
+        function = self.__update_balance()
+        return self._transaction_executor.execute(self._rewards_claim_manager, function)
+
+    @staticmethod
+    def __update_balance():
+        function_signature = "updateBalance()"
+        selector = function_signature_to_4byte_selector(function_signature)
+        return selector
