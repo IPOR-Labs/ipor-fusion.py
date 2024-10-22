@@ -1,9 +1,11 @@
 [tool.poetry]
-name = "ipor-fusion"
+name = "ipor_fusion"
 version = "0.1.0"
 description = ""
 authors = ["Adam Mydlarz <amydlarz@gmail.com>", "rav <rav@ipor.io>"]
 readme = "README.md"
+
+packages = [{ include = "ipor_fusion", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"

@@ -21,6 +21,10 @@ class PlasmaVault:
         function = self.__execute(actions)
         return self._transaction_executor.execute(self._plasma_vault, function)
 
+    def deposit(self, assets: int, receiver: str) -> TxReceipt:
+        function = self.__deposit(assets, receiver)
+        return self._transaction_executor.execute(self._plasma_vault, function)
+
     def balance_of(self, asset: str) -> int:
         erc20 = ERC20(self._transaction_executor, asset)
         return erc20.balance_of(self._plasma_vault)
@@ -36,3 +40,11 @@ class PlasmaVault:
             function_signature_to_4byte_selector("execute((address,bytes)[])")
             + encoded_arguments
         )
+
+    @staticmethod
+    def __deposit(assets: int, receiver: str) -> bytes:
+        args = ["uint256", "address"]
+        join = ",".join(args)
+        function_signature = f"deposit({join})"
+        selector = function_signature_to_4byte_selector(function_signature)
+        return selector + encode(args, [assets, receiver])

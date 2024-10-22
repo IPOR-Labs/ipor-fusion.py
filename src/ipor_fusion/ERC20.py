@@ -21,6 +21,7 @@ class ERC20:
     @staticmethod
     def __transfer(to: str, amount: int) -> bytes:
         args = ["address", "uint256"]
-        function_signature = f"transfer({",".join(args)})"
+        join = ",".join(args)
+        function_signature = f"transfer({join})"
         selector = function_signature_to_4byte_selector(function_signature)
         return selector + encode(args, [to, amount])

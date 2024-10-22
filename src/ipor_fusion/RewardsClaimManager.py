@@ -42,7 +42,8 @@ class RewardsClaimManager:
     @staticmethod
     def __transfer(asset: str, to: str, amount: int) -> bytes:
         args = ["address", "address", "uint256"]
-        function_signature = f"transfer({",".join(args)})"
+        join = ",".join(args)
+        function_signature = f"transfer({join})"
         selector = function_signature_to_4byte_selector(function_signature)
         return selector + encode(args, [asset, to, amount])
 
