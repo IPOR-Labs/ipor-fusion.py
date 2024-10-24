@@ -25,9 +25,9 @@ class PlasmaVault:
         function = self.__deposit(assets, receiver)
         return self._transaction_executor.execute(self._plasma_vault, function)
 
-    def balance_of(self, asset: str) -> int:
-        erc20 = ERC20(self._transaction_executor, asset)
-        return erc20.balance_of(self._plasma_vault)
+    def balance_of(self, account: str) -> int:
+        erc20 = ERC20(self._transaction_executor, self._plasma_vault)
+        return erc20.balance_of(account)
 
     @staticmethod
     def __execute(actions: List[FuseAction]) -> bytes:

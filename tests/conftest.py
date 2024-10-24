@@ -8,6 +8,8 @@ from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
 from ipor_fusion.TestTransactionExecutor import TestTransactionExecutor
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 
+logger = logging.getLogger(__name__)
+
 
 @pytest.fixture(scope="module", name="anvil")
 def anvil_fixture():
@@ -20,8 +22,8 @@ def anvil_fixture():
 @pytest.fixture(scope="module", name="web3")
 def web3_fixture(anvil):
     client = anvil.get_client()
-    print(f"Connected to Ethereum network with chain ID: {anvil.get_chain_id()}")
-    print(f"Anvil HTTP URL: {anvil.get_anvil_http_url()}")
+    logger.info("Connected to Ethereum network with chain ID: %s", anvil.get_chain_id())
+    logger.info("Anvil HTTP URL: %s", anvil.get_anvil_http_url())
     return client
 
 
@@ -43,6 +45,11 @@ def test_transaction_executor_fixture(web3, account) -> TestTransactionExecutor:
 @pytest.fixture(scope="module", name="usdc")
 def usdc_fixture(transaction_executor):
     return ipor_fusion.ERC20.ERC20(transaction_executor, constants.ARBITRUM.USDC)
+
+
+@pytest.fixture(scope="module", name="usdt")
+def usdt_fixture(transaction_executor):
+    return ipor_fusion.ERC20.ERC20(transaction_executor, constants.ARBITRUM.USDT)
 
 
 @pytest.fixture(scope="module", name="ram")

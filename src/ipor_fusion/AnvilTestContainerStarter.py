@@ -37,6 +37,9 @@ class AnvilTestContainerStarter:
     def get_anvil_http_url(self):
         return f"http://{self.anvil.get_container_host_ip()}:{self.anvil.get_exposed_port(self.ANVIL_HTTP_PORT)}"
 
+    def get_anvil_wss_url(self):
+        return f"wss://{self.anvil.get_container_host_ip()}:{self.anvil.get_exposed_port(self.ANVIL_HTTP_PORT)}"
+
     def get_chain_id(self):
         return self.CHAIN_ID
 

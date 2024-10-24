@@ -67,7 +67,7 @@ def setup_fixture(anvil):
     yield
 
 
-def test_should_open_new_position_ramses_v2(plasma_vault):
+def test_should_open_new_position_ramses_v2(plasma_vault, usdc, usdt):
     # given
     swap = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
@@ -79,8 +79,8 @@ def test_should_open_new_position_ramses_v2(plasma_vault):
 
     plasma_vault.execute([swap])
 
-    vault_usdc_balance_after_swap = plasma_vault.balance_of(ARBITRUM.USDC)
-    vault_usdt_balance_after_swap = plasma_vault.balance_of(ARBITRUM.USDT)
+    vault_usdc_balance_after_swap = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_after_swap = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     new_position = ramses_v2_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
@@ -100,8 +100,12 @@ def test_should_open_new_position_ramses_v2(plasma_vault):
     plasma_vault.execute([new_position])
 
     # then
-    vault_usdc_balance_after_new_position = plasma_vault.balance_of(ARBITRUM.USDC)
-    vault_usdt_balance_after_new_position = plasma_vault.balance_of(ARBITRUM.USDC)
+    vault_usdc_balance_after_new_position = usdc.balance_of(
+        ARBITRUM.PILOT.V5.PLASMA_VAULT
+    )
+    vault_usdt_balance_after_new_position = usdt.balance_of(
+        ARBITRUM.PILOT.V5.PLASMA_VAULT
+    )
 
     assert (
         vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap
@@ -109,11 +113,11 @@ def test_should_open_new_position_ramses_v2(plasma_vault):
     ), ("new_position_usdc_change == -int(456_205368)")
     assert (
         vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap
-        == -int(454_355935)
-    ), ("new_position_usdt_change == -int(454_355935)")
+        == -int(499_000000)
+    ), ("new_position_usdt_change == -int(499000000)")
 
 
-def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
+def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault, usdc, usdt):
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
     anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
@@ -167,8 +171,8 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
 
     plasma_vault.execute([decrease_action])
 
-    vault_usdc_balance_before_collect = plasma_vault.balance_of(ARBITRUM.USDC)
-    vault_usdt_balance_before_collect = plasma_vault.balance_of(ARBITRUM.USDT)
+    vault_usdc_balance_before_collect = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_before_collect = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     collect_action = ramses_v2_collect_fuse.collect(
         token_ids=[new_token_id],
@@ -177,8 +181,8 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
     plasma_vault.execute([collect_action])
 
     # then
-    vault_usdc_balance_after_collect = plasma_vault.balance_of(ARBITRUM.USDC)
-    vault_usdt_balance_after_collect = plasma_vault.balance_of(ARBITRUM.USDT)
+    vault_usdc_balance_after_collect = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_after_collect = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     assert (
         vault_usdc_balance_after_collect - vault_usdc_balance_before_collect
@@ -203,7 +207,7 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault):
     assert new_token_id == close_token_id, "new_token_id == close_token_id"
 
 
-def test_should_increase_liquidity(anvil, plasma_vault):
+def test_should_increase_liquidity(anvil, plasma_vault, usdc, usdt):
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
     anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
@@ -257,15 +261,15 @@ def test_should_increase_liquidity(anvil, plasma_vault):
         deadline=int(time.time()) + 100,
     )
 
-    vault_usdc_balance_before_increase = plasma_vault.balance_of(ARBITRUM.USDC)
-    vault_usdt_balance_before_increase = plasma_vault.balance_of(ARBITRUM.USDT)
+    vault_usdc_balance_before_increase = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_before_increase = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     # when
     plasma_vault.execute([increase_action])
 
     # then
-    vault_usdc_balance_after_increase = plasma_vault.balance_of(ARBITRUM.USDC)
-    vault_usdt_balance_after_increase = plasma_vault.balance_of(ARBITRUM.USDT)
+    vault_usdc_balance_after_increase = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_after_increase = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     assert (
         vault_usdc_balance_after_increase - vault_usdc_balance_before_increase
