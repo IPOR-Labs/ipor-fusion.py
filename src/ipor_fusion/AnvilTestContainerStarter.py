@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from typing import Union
+from typing import Union, List
 
 from docker.models.containers import ExecResult
 from dotenv import load_dotenv
@@ -95,9 +95,26 @@ class AnvilTestContainerStarter:
             "--from",
             "0x4E3C666F0c898a9aE1F8aBB188c6A2CC151E17fC",
             access_manager,
-            "grantRole(uint64,address,uint32)()",
+            "grantRole(uint64,address,uint32)",
             f"{role}",
             who_to_assign,
             "0",
         ]
         self.execute_in_container(cmd)
+
+    def grant_market_substrates(
+        self, _from: str, plasma_vault, market_id: int, substrates: List[str]
+    ):
+        join = ",".join(substrates)
+        cmd = [
+            "cast",
+            "send",
+            "--unlocked",
+            f"--from {_from}",
+            f"{plasma_vault}",
+            '"grantMarketSubstrates(uint256,bytes32[])"',
+            f"{market_id}",
+            f'"[{join}]"',
+        ]
+        oneline = " ".join(cmd)
+        self.execute_in_container(oneline)

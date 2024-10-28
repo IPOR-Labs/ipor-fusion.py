@@ -1,5 +1,25 @@
 from web3.types import TxReceipt
 
+ERC20_ABI = [
+    {
+        "constant": True,
+        "inputs": [{"name": "_owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "balance", "type": "uint256"}],
+        "type": "function",
+    },
+    {
+        "constant": False,
+        "inputs": [
+            {"name": "_spender", "type": "address"},
+            {"name": "_value", "type": "uint256"},
+        ],
+        "name": "approve",
+        "outputs": [{"name": "", "type": "bool"}],
+        "type": "function",
+    },
+]
+
 
 class TransactionExecutor:
     DEFAULT_TRANSACTION_MAX_PRIORITY_FEE = 2_000_000_000
@@ -45,15 +65,7 @@ class TransactionExecutor:
     def __read_token_balance(self, holder, token):
         contract = self._web3.eth.contract(
             address=token,
-            abi=[
-                {
-                    "constant": True,
-                    "inputs": [{"name": "_owner", "type": "address"}],
-                    "name": "balanceOf",
-                    "outputs": [{"name": "balance", "type": "uint256"}],
-                    "type": "function",
-                }
-            ],
+            abi=ERC20_ABI,
         )
         return contract.functions.balanceOf(holder).call()
 
