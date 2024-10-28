@@ -46,14 +46,16 @@ def setup_fixture(anvil):
     yield
 
 
-def test_should_deposit_to_plasma_vault_v5(test_transaction_executor, plasma_vault):
+def test_should_deposit_to_plasma_vault_v5(
+    test_transaction_executor, plasma_vault, usdc
+):
     whitelisted = "0x4E3C666F0c898a9aE1F8aBB188c6A2CC151E17fC"
 
-    balance_before = plasma_vault.balance_of(ARBITRUM.USDC)
+    balance_before = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     test_transaction_executor.set_account(whitelisted)
     plasma_vault.deposit(int(2e6), whitelisted)
 
-    balance_after = plasma_vault.balance_of(ARBITRUM.USDC)
+    balance_after = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     assert balance_after - balance_before == int(2e6)
