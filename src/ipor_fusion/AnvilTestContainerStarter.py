@@ -18,18 +18,19 @@ class AnvilTestContainerStarter:
         "ANVIL_TEST_CONTAINER",
         "ghcr.io/foundry-rs/foundry:nightly-be451fb93a0d0ec52152fb67cc6c36cd8fbd7ae1",
     )
-    FORK_URL = os.getenv(ARBITRUM_PROVIDER_URL)
-    if not FORK_URL:
-        raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
+
     MAX_WAIT_SECONDS = 1201
     ANVIL_HTTP_PORT = 8545
     CHAIN_ID = 42161
     FORK_BLOCK_NUMBER = 250690377
-    ANVIL_COMMAND_FORMAT = f'"anvil --steps-tracing --auto-impersonate --host 0.0.0.0 --fork-url {FORK_URL} --fork-block-number {FORK_BLOCK_NUMBER}"'
 
     def __init__(self):
         self.log = logging.getLogger(__name__)
         self.anvil = DockerContainer(self.ANVIL_CONTAINER)
+        self.FORK_URL = os.getenv(self.ARBITRUM_PROVIDER_URL)
+        if not self.FORK_URL:
+            raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
+        self.ANVIL_COMMAND_FORMAT = f'"anvil --steps-tracing --auto-impersonate --host 0.0.0.0 --fork-url {self.FORK_URL} --fork-block-number {self.FORK_BLOCK_NUMBER}"'
         self.anvil.with_exposed_ports(self.ANVIL_HTTP_PORT).with_command(
             self.ANVIL_COMMAND_FORMAT
         )
