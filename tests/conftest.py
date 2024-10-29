@@ -52,6 +52,34 @@ def usdt_fixture(transaction_executor):
     return ipor_fusion.ERC20.ERC20(transaction_executor, constants.ARBITRUM.USDT)
 
 
+@pytest.fixture(scope="module", name="fluid_usdc_staking_pool")
+def fluid_usdc_staking_pool_fixture(transaction_executor):
+    return ipor_fusion.ERC20.ERC20(
+        transaction_executor, constants.ARBITRUM.FLUID_INSTADAPP.V1.USDC.STAKING_POOL
+    )
+
+
+@pytest.fixture(scope="module", name="gearbox_v3_usdc_farm_pool")
+def gearbox_v3_usdc_farm_pool_fixture(transaction_executor):
+    return ipor_fusion.ERC20.ERC20(
+        transaction_executor, constants.ARBITRUM.GEARBOX.V3.USDC.FARM_POOL
+    )
+
+
+@pytest.fixture(scope="module", name="aave_v3_usdc_a_token_arb_usdc_n")
+def aave_v3_usdc_a_token_arb_usdc_n_fixture(transaction_executor):
+    return ipor_fusion.ERC20.ERC20(
+        transaction_executor, constants.ARBITRUM.AAVE.V3.USDC.A_TOKEN_ARB_USDC_N
+    )
+
+
+@pytest.fixture(scope="module", name="compound_v3_usdc_c_token")
+def compound_v3_usdc_c_token_fixture(transaction_executor):
+    return ipor_fusion.ERC20.ERC20(
+        transaction_executor, constants.ARBITRUM.COMPOUND.V3.USDC.C_TOKEN
+    )
+
+
 @pytest.fixture(scope="module", name="ram")
 def ram_fixture(transaction_executor):
     return ipor_fusion.ERC20.ERC20(

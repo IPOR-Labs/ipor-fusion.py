@@ -1,5 +1,5 @@
 import logging
-import os
+import time
 
 import pytest
 from eth_abi import decode, encode
@@ -8,12 +8,12 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
-from commons import execute_transaction, read_token_balance
 from constants import (
     ANVIL_WALLET,
     ARBITRUM,
 )
-from ipor_fusion.VaultExecuteCallFactory import VaultExecuteCallFactory
+from ipor_fusion.PlasmaVault import PlasmaVault
+from ipor_fusion.Roles import Roles
 from ipor_fusion.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
 from ipor_fusion.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
 from ipor_fusion.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
@@ -22,24 +22,6 @@ from ipor_fusion.fuse.UniversalTokenSwapperFuse import UniversalTokenSwapperFuse
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
-
-ARBITRUM_PROVIDER_URL = "ARBITRUM_PROVIDER_URL"
-FORK_URL = os.getenv(ARBITRUM_PROVIDER_URL)
-if not FORK_URL:
-    raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
-
-SET_ANVIL_WALLET_AS_PILOT_V4_ALPHA_COMMAND = [
-    "cast",
-    "send",
-    "--unlocked",
-    "--from",
-    "0x4E3C666F0c898a9aE1F8aBB188c6A2CC151E17fC",
-    ARBITRUM.PILOT.V4.ACCESS_MANAGER,
-    "grantRole(uint64,address,uint32)()",
-    "200",
-    ANVIL_WALLET,
-    "0",
-]
 
 uniswap_v3_swap_fuse = UniswapV3SwapFuse(ARBITRUM.PILOT.V4.UNISWAP_V3_SWAP_FUSE)
 uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
@@ -56,84 +38,75 @@ universal_token_swapper_fuse = UniversalTokenSwapperFuse(
 )
 
 
-@pytest.fixture(scope="module", name="vault_execute_call_factory")
-def vault_execute_call_factory_fixture() -> VaultExecuteCallFactory:
-    return VaultExecuteCallFactory()
+@pytest.fixture(scope="module", name="plasma_vault")
+def plasma_vault_fixture(test_transaction_executor) -> PlasmaVault:
+    return PlasmaVault(
+        transaction_executor=test_transaction_executor,
+        plasma_vault_address=ARBITRUM.PILOT.V4.PLASMA_VAULT,
+    )
 
 
-@pytest.fixture(name="setup", autouse=True)
-def setup_fixture(anvil):
+def test_should_swap_when_one_hop_uniswap_v3(anvil, plasma_vault, usdc, usdt):
+    # Setup: Reset state and grant necessary roles
     anvil.reset_fork(254084008)
-    anvil.execute_in_container(SET_ANVIL_WALLET_AS_PILOT_V4_ALPHA_COMMAND)
-    yield
+    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
 
+    # Record initial balances before swap
+    vault_usdc_balance_before_swap = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_before_swap = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-def test_should_swap_when_one_hop_uniswap_v3(web3, account, vault_execute_call_factory):
-    # given
-    depositAmount = int(100e6)
-    minOutAmount = int(99e6)
-
-    vault_usdc_balance_before_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_before_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
-
+    # Define swap targets
     targets = [ARBITRUM.USDC, ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
 
+    # Create the first function call to transfer USDC to the universal router
     function_selector_0 = function_signature_to_4byte_selector(
         "transfer(address,uint256)"
     )
     function_args_0 = encode(
-        ["address", "uint256"], [ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER, depositAmount]
+        ["address", "uint256"], [ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER, (int(100e6))]
     )
     function_call_0 = function_selector_0 + function_args_0
 
+    # Encode the path for the swap (USDC to USDT)
     path = encode_packed(
-        ["address", "uint24", "address"],
-        [ARBITRUM.USDC, 100, ARBITRUM.USDT],
+        ["address", "uint24", "address"], [ARBITRUM.USDC, 100, ARBITRUM.USDT]
     )
+
+    # Prepare inputs for the execute function call
     inputs = [
         encode(
             ["address", "uint256", "uint256", "bytes", "bool"],
             [
                 "0x0000000000000000000000000000000000000001",
-                depositAmount,
-                minOutAmount,
+                (int(100e6)),
+                (int(99e6)),
                 path,
                 False,
             ],
         )
     ]
+
+    # Create the second function call to execute the swap
     function_selector_1 = function_signature_to_4byte_selector("execute(bytes,bytes[])")
     function_args_1 = encode(
         ["bytes", "bytes[]"], [encode_packed(["bytes1"], [bytes.fromhex("00")]), inputs]
     )
     function_call_1 = function_selector_1 + function_args_1
 
+    # Combine both function calls into the swap transaction
     data = [function_call_0, function_call_1]
-
     swap = universal_token_swapper_fuse.swap(
-        ARBITRUM.USDC, ARBITRUM.USDT, depositAmount, targets, data
+        ARBITRUM.USDC, ARBITRUM.USDT, int(100e6), targets, data
     )
 
-    # when
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(swap),
-        account,
-    )
+    # Execute the swap transaction
+    plasma_vault.execute([swap])
 
-    # then
-    vault_usdc_balance_after_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_after_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
+    # Record balances after the swap
+    vault_usdc_balance_after_swap = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_after_swap = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
+    # Calculate balance changes
     vault_usdc_balance_change = (
         vault_usdc_balance_after_swap - vault_usdc_balance_before_swap
     )
@@ -141,47 +114,50 @@ def test_should_swap_when_one_hop_uniswap_v3(web3, account, vault_execute_call_f
         vault_usdt_balance_after_swap - vault_usdt_balance_before_swap
     )
 
-    assert (
-        vault_usdc_balance_change == -depositAmount
-    ), "vault_usdc_balance_change == -depositAmount"
+    # Assertions to verify the results of the swap
+    assert vault_usdc_balance_change == -int(
+        100e6
+    ), "USDC balance should decrease by the deposit amount"
     assert (
         98e6 < vault_usdt_balance_change < 100e6
-    ), "98e6 < vault_usdt_balance_change < 100e6"
+    ), "USDT balance change should be between 98e6 and 100e6"
 
 
-def test_should_swap_when_multiple_hop(web3, account, vault_execute_call_factory):
-    # given
-    depositAmount = int(100e6)
-    minOutAmount = int(99e6)
+def test_should_swap_when_multiple_hop(anvil, plasma_vault, usdc, usdt):
+    # Reset state and grant necessary roles
+    anvil.reset_fork(254084008)
+    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
 
-    vault_usdc_balance_before_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_before_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
+    # Record initial balances
+    vault_usdc_balance_before_swap = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_before_swap = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
+    # Define swap targets and data for multi-hop
     targets = [ARBITRUM.USDC, ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
 
+    # First function call: transfer depositAmount of USDC to router
     function_selector_0 = function_signature_to_4byte_selector(
         "transfer(address,uint256)"
     )
     function_args_0 = encode(
-        ["address", "uint256"], [ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER, depositAmount]
+        ["address", "uint256"], [ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER, (int(100e6))]
     )
     function_call_0 = function_selector_0 + function_args_0
 
+    # Path encoding for USDC -> WETH -> USDT swap
     path = encode_packed(
         ["address", "uint24", "address", "uint24", "address"],
         [ARBITRUM.USDC, 500, ARBITRUM.WETH, 3000, ARBITRUM.USDT],
     )
+
+    # Second function call: execute swap with encoded path and parameters
     inputs = [
         encode(
             ["address", "uint256", "uint256", "bytes", "bool"],
             [
                 "0x0000000000000000000000000000000000000001",
-                depositAmount,
-                minOutAmount,
+                int(100e6),
+                int(99e6),
                 path,
                 False,
             ],
@@ -193,66 +169,54 @@ def test_should_swap_when_multiple_hop(web3, account, vault_execute_call_factory
     )
     function_call_1 = function_selector_1 + function_args_1
 
+    # Combined data for swap
     data = [function_call_0, function_call_1]
 
+    # Initiate the swap through the plasma vault
     swap = universal_token_swapper_fuse.swap(
-        ARBITRUM.USDC, ARBITRUM.USDT, depositAmount, targets, data
+        ARBITRUM.USDC, ARBITRUM.USDT, int(100e6), targets, data
     )
 
-    # when
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(swap),
-        account,
-    )
+    # Execute swap
+    plasma_vault.execute([swap])
 
-    # then
-    vault_usdc_balance_after_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_after_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
+    # Record balances after swap
+    vault_usdc_balance_after_swap = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_after_swap = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    vault_usdc_balance_change = (
-        vault_usdc_balance_after_swap - vault_usdc_balance_before_swap
-    )
-    vault_usdt_balance_change = (
-        vault_usdt_balance_after_swap - vault_usdt_balance_before_swap
-    )
+    # Calculate balance changes
+    usdc_balance_change = vault_usdc_balance_after_swap - vault_usdc_balance_before_swap
+    usdt_balance_change = vault_usdt_balance_after_swap - vault_usdt_balance_before_swap
 
+    # Assertions on balance changes to confirm swap
+    assert usdc_balance_change == -int(
+        100e6
+    ), "USDC balance change should match deposit amount (-100e6)"
     assert (
-        vault_usdc_balance_change == -depositAmount
-    ), "vault_usdc_balance_change == -depositAmount"
-    assert (
-        98e6 < vault_usdt_balance_change < 100e6
-    ), "98e6 < vault_usdt_balance_change < 100e6"
+        98e6 < usdt_balance_change < 100e6
+    ), "USDT balance change should be between 98e6 and 100e6"
 
 
-def test_should_open_new_position_uniswap_v3(web3, account, vault_execute_call_factory):
-    # given
-    timestamp = web3.eth.get_block("latest")["timestamp"]
+def test_should_open_new_position_uniswap_v3(anvil, plasma_vault, usdc, usdt):
+    # Reset state and grant necessary roles
+    anvil.reset_fork(254084008)
+    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
 
-    token_in_amount = int(500e6)
-    min_out_amount = 0
-    fee = 100
-
+    # Swap USDC to USDT
     swap = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
         token_out_address=ARBITRUM.USDT,
-        fee=fee,
-        token_in_amount=token_in_amount,
-        min_out_amount=min_out_amount,
+        fee=100,
+        token_in_amount=int(500e6),
+        min_out_amount=0,
     )
+    plasma_vault.execute([swap])
 
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(swap),
-        account,
-    )
+    # Check balances after swap
+    vault_usdc_balance_after_swap = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_after_swap = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
+    # Create a new position with specified parameters
     new_position = uniswap_v3_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
         token1=ARBITRUM.USDT,
@@ -263,66 +227,48 @@ def test_should_open_new_position_uniswap_v3(web3, account, vault_execute_call_f
         amount1_desired=int(499e6),
         amount0_min=0,
         amount1_min=0,
-        deadline=timestamp + 100,
+        deadline=int(time.time()) + 100,
     )
 
-    vault_usdc_balance_after_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
+    # Execute the creation of the new position
+    plasma_vault.execute([new_position])
+
+    # Check balances after opening the new position
+    vault_usdc_balance_after_new_position = usdc.balance_of(
+        ARBITRUM.PILOT.V4.PLASMA_VAULT
     )
-    vault_usdt_balance_after_swap = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
+    vault_usdt_balance_after_new_position = usdt.balance_of(
+        ARBITRUM.PILOT.V4.PLASMA_VAULT
     )
 
-    # when
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(new_position),
-        account,
-    )
+    # Assert on balance changes after creating the new position
+    usdc_change = vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap
+    usdt_change = vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap
 
-    # then
-    vault_usdc_balance_after_new_position = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_after_new_position = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
-
-    assert vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap == -int(
+    assert usdc_change == -int(
         499e6
-    ), "vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap == -499e6"
+    ), "USDC balance after new position does not match expected change of -499e6"
     assert (
-        vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap
-        == -489_152502
-    ), "vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap == -499e6"
+        usdt_change == -489_152502
+    ), "USDT balance after new position does not match expected change of -489_152502"
 
 
-def test_should_collect_all_after_decrease_liquidity(
-    web3, account, vault_execute_call_factory
-):
-    # given
-    timestamp = web3.eth.get_block("latest")["timestamp"]
+def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault, usdc, usdt):
+    # Reset state and grant necessary roles
+    anvil.reset_fork(254084008)
+    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
 
-    token_in_amount = int(500e6)
-    min_out_amount = 0
-    fee = 100
-
-    action = uniswap_v3_swap_fuse.swap(
+    # Swap USDC to USDT
+    swap = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
         token_out_address=ARBITRUM.USDT,
-        fee=fee,
-        token_in_amount=token_in_amount,
-        min_out_amount=min_out_amount,
+        fee=100,
+        token_in_amount=int(500e6),
+        min_out_amount=0,
     )
+    plasma_vault.execute([swap])
 
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(action),
-        account,
-    )
-
+    # Create a new position with specified parameters
     new_position = uniswap_v3_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
         token1=ARBITRUM.USDT,
@@ -333,131 +279,78 @@ def test_should_collect_all_after_decrease_liquidity(
         amount1_desired=int(499e6),
         amount0_min=0,
         amount1_min=0,
-        deadline=timestamp + 100,
+        deadline=int(time.time()) + 100,
     )
+    tx = plasma_vault.execute([new_position])
 
-    receipt = execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(new_position),
-        account,
-    )
+    # Extract data from the new position creation event
+    _, new_token_id, liquidity, *_ = extract_enter_data_form_new_position_event(tx)
 
-    (
-        _,
-        new_token_id,
-        liquidity,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = extract_enter_data_form_new_position_event(receipt)
-
+    # Decrease the liquidity of the newly created position
     decrease_action = uniswap_v_3_modify_position_fuse.decrease_position(
         token_id=new_token_id,
         liquidity=liquidity,
         amount0_min=0,
         amount1_min=0,
-        deadline=timestamp + 100000,
+        deadline=int(time.time()) + 100,
     )
+    plasma_vault.execute([decrease_action])
 
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(decrease_action),
-        account,
-    )
+    # Check balances before the collect action
+    vault_usdc_balance_before = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_before = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    vault_usdc_balance_before_collect = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_before_collect = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
+    # Perform the collect action
+    collect = uniswap_v_3_collect_fuse.collect(token_ids=[new_token_id])
+    plasma_vault.execute([collect])
 
-    enter_action = uniswap_v_3_collect_fuse.collect(
-        token_ids=[new_token_id],
-    )
+    # Check balances after the collect action
+    vault_usdc_balance_after = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_after = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(enter_action),
-        account,
-    )
+    collect_usdc_change = vault_usdc_balance_after - vault_usdc_balance_before
+    collect_usdt_change = vault_usdt_balance_after - vault_usdt_balance_before
 
-    # then
-    vault_usdc_balance_after_collect = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_after_collect = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
-
-    collect_usdc_change = (
-        vault_usdc_balance_after_collect - vault_usdc_balance_before_collect
-    )
-    collect_usdt_change = (
-        vault_usdt_balance_after_collect - vault_usdt_balance_before_collect
-    )
-
+    # Assert on balance changes after collect action
     assert (
-        int(498_000000) < collect_usdc_change < int(500_000000)
-    ), "int(498_000000) < collect_usdc_change < int(500_000000)"
+        498_000000 < collect_usdc_change < 500_000000
+    ), "USDC balance after collect is out of expected range"
     assert (
-        int(489_000000) < collect_usdt_change < int(500_000000)
-    ), "int(489_000000) < collect_usdt_change < int(500_000000)"
+        489_000000 < collect_usdt_change < 500_000000
+    ), "USDT balance after collect is out of expected range"
 
-    close_position_action = uniswap_v3_new_position_fuse.close_position(
+    # Close the position
+    close_position = uniswap_v3_new_position_fuse.close_position(
         token_ids=[new_token_id]
     )
+    receipt = plasma_vault.execute([close_position])
 
-    receipt = execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(
-            close_position_action
-        ),
-        account,
-    )
+    # Extract data from the position closing event
+    _, close_token_id = extract_exit_data_form_new_position_event(receipt)
 
-    (
-        _,
-        close_token_id,
-    ) = extract_exit_data_form_new_position_event(receipt)
-
-    assert new_token_id == close_token_id, "new_token_id == close_token_id"
+    # Assert that the token ID of the new position matches the closed position's token ID
+    assert (
+        new_token_id == close_token_id
+    ), "Token ID of new position does not match closed position"
 
 
-def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
-    # given
-    timestamp = web3.eth.get_block("latest")["timestamp"]
+def test_should_increase_liquidity(anvil, plasma_vault, usdc, usdt):
+    # Setup: Reset state and grant necessary roles
+    anvil.reset_fork(254084008)
+    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
 
-    token_in_amount = int(500e6)
-    min_out_amount = 0
-    fee = 100
-
-    action = uniswap_v3_swap_fuse.swap(
+    # Initial swap from USDC to USDT
+    swap = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
         token_out_address=ARBITRUM.USDT,
-        fee=fee,
-        token_in_amount=token_in_amount,
-        min_out_amount=min_out_amount,
+        fee=100,
+        token_in_amount=int(500e6),
+        min_out_amount=0,
     )
+    plasma_vault.execute([swap])
 
-    function_swap = vault_execute_call_factory.create_execute_call_from_action(action)
-
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        function_swap,
-        account,
-    )
-
-    position_action = uniswap_v3_new_position_fuse.new_position(
+    # Create a new liquidity position
+    new_position = uniswap_v3_new_position_fuse.new_position(
         token0=ARBITRUM.USDC,
         token1=ARBITRUM.USDT,
         fee=100,
@@ -467,32 +360,15 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
         amount1_desired=int(400e6),
         amount0_min=0,
         amount1_min=0,
-        deadline=timestamp + 100,
+        deadline=int(time.time()) + 100,
     )
+    receipt = plasma_vault.execute([new_position])
 
-    receipt = execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(position_action),
-        account,
-    )
+    # Extract the new token ID from the receipt
+    _, new_token_id, *_ = extract_enter_data_form_new_position_event(receipt)
 
-    (
-        _,
-        new_token_id,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = extract_enter_data_form_new_position_event(receipt)
-
-    # Increase Uniswap V3 position
-
-    increase_action = uniswap_v_3_modify_position_fuse.increase_position(
+    # Prepare to increase liquidity for the existing position
+    increase_position = uniswap_v_3_modify_position_fuse.increase_position(
         token0=ARBITRUM.USDC,
         token1=ARBITRUM.USDT,
         token_id=new_token_id,
@@ -500,32 +376,21 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
         amount1_desired=int(99e6),
         amount0_min=0,
         amount1_min=0,
-        deadline=timestamp + 100,
+        deadline=int(time.time()) + 100,
     )
 
-    vault_usdc_balance_before_increase = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_before_increase = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
+    # Record balances before increasing liquidity
+    vault_usdc_balance_before_increase = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_before_increase = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    # when
-    execute_transaction(
-        web3,
-        ARBITRUM.PILOT.V4.PLASMA_VAULT,
-        vault_execute_call_factory.create_execute_call_from_action(increase_action),
-        account,
-    )
+    # Execute the increase liquidity operation
+    plasma_vault.execute([increase_position])
 
-    # then
-    vault_usdc_balance_after_increase = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDC
-    )
-    vault_usdt_balance_after_increase = read_token_balance(
-        web3, ARBITRUM.PILOT.V4.PLASMA_VAULT, ARBITRUM.USDT
-    )
+    # Record balances after increasing liquidity
+    vault_usdc_balance_after_increase = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
+    vault_usdt_balance_after_increase = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
+    # Calculate balance changes
     increase_position_change_usdc = (
         vault_usdc_balance_after_increase - vault_usdc_balance_before_increase
     )
@@ -533,12 +398,13 @@ def test_should_increase_liquidity(web3, account, vault_execute_call_factory):
         vault_usdt_balance_after_increase - vault_usdt_balance_before_increase
     )
 
-    assert (
-        increase_position_change_usdc == -99_000000
-    ), "increase_position_change_usdc == -99_000000"
-    assert (
-        increase_position_change_usdt == -97_046288
-    ), "increase_position_change_usdt == -97_046288"
+    # Assertions to verify the changes in balance
+    assert increase_position_change_usdc == -int(
+        99e6
+    ), "USDC balance should decrease by 99,000,000"
+    assert increase_position_change_usdt == -int(
+        97_046288
+    ), "USDT balance should decrease by 97,046,288"
 
 
 def extract_enter_data_form_new_position_event(

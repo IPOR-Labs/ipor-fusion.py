@@ -20,15 +20,13 @@ class CompoundV3SupplyFuse:
         self.fuse_address = fuse_address
         self.asset_address = asset_address
 
-    def supply(self, market_id: MarketId, amount: int) -> List[FuseAction]:
+    def supply(self, market_id: MarketId, amount: int) -> FuseAction:
         compound_v3_supply_fuse_enter_data = CompoundV3SupplyFuseEnterData(
             market_id.market_id, amount
         )
-        return [
-            FuseAction(
-                self.fuse_address, compound_v3_supply_fuse_enter_data.function_call()
-            )
-        ]
+        return FuseAction(
+            self.fuse_address, compound_v3_supply_fuse_enter_data.function_call()
+        )
 
     def withdraw(self, market_id: MarketId, amount: int) -> FuseAction:
         compound_v3_supply_fuse_exit_data = CompoundV3SupplyFuseExitData(
