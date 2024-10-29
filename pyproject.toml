@@ -1,11 +1,38 @@
 [tool.poetry]
 name = "ipor_fusion"
 version = "0.1.0"
-description = ""
+description = "The IPOR Fusion SDK for Python"
 authors = ["Adam Mydlarz <amydlarz@gmail.com>", "rav <rav@ipor.io>"]
 readme = "README.md"
-
+license = "BSD-3"
+homepage = "https://ipor.io"
+repository = "https://github.com/IPOR-Labs/ipor-fusion.py"
+documentation = "https://docs.ipor.io/ipor-fusion/fusion-introduction"
+keywords = ["ethereum", "solidity", "testing", "development", "framework"]
 packages = [{ include = "ipor_fusion", from = "src" }]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Cython",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Office/Business :: Financial :: Accounting",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "Natural Language :: English"
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -24,7 +51,7 @@ pylint = "3.3.1"
 
 [tool.black]
 line-length = 88
-target-version = ['py310']
+target-version = ["py310"]
 include = '\.pyi?$'
 unstable = false
 

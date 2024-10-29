@@ -49,6 +49,11 @@ on:
         type: boolean
         default: true
         required: false
+      publish-enabled:
+        description: "Enable package publishing"
+        type: boolean
+        default: false
+        required: false
 
 env:
   POETRY_VIRTUALENVS_PATH: "~/.cache/pypoetry/virtualenvs"
@@ -56,6 +61,12 @@ env:
 jobs:
   python:
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/ipor-fusion
+    permissions:
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout
@@ -109,3 +120,12 @@ jobs:
         if: inputs.static-code-analysis-enabled
         run: poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
         id: static-code-analyze
+
+      - name: Publish
+        if: inputs.publish-enabled
+        # from tag: v1.10.3
+        uses: pypa/gh-action-pypi-publish@f7600683efdcb7656dec5b29656edb7bc586e597
+        with:
+          print-hash: true
+          verify-metadata: true
+        id: publish

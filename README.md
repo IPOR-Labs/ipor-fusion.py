@@ -3,6 +3,13 @@
     <h1 align="center">IPOR Fusion Python SDK</h1>
 </p>
 
+`ipor_fusion` package is the official IPOR Fusion Software Development Kit (SDK) for Python. It allows Python 
+developers to 
+write software, that interacts with **IPOR Fusion Plasma Vaults** smart contracts deployed on Ethereum Virtual 
+Machine (EVM) blockchains.
+
+`ipor-fusion.py` repository is maintained by <a href="https://ipor.io">IPOR Labs AG</a>.
+
 <table>
   <tr>
     <td><strong>Workflow</strong></td>
@@ -32,6 +39,9 @@
   <tr>
     <td><strong>Code</strong></td>
     <td>
+        <a href="https://pypi.org/project/ipor-fusion">
+            <img alt="PyPI version" src="https://img.shields.io/pypi/v/ipor-fusion?color=blue">
+        </a>
         <a href="https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/LICENSE">
             <img alt="GitHub License" src="https://img.shields.io/github/license/IPOR-Labs/ipor-fusion?color=blue">
         </a>
