@@ -20,12 +20,9 @@ class RewardsClaimManager:
         function = self.__transfer(asset, to, amount)
         return self._transaction_executor.execute(self._rewards_claim_manager, function)
 
-    def balance_of(self, account: str) -> int:
-        sig = function_signature_to_4byte_selector("balanceOf(address)")
-        encoded_args = encode(["address"], [account])
-        read = self._transaction_executor.read(
-            self._rewards_claim_manager, sig + encoded_args
-        )
+    def balance_of(self) -> int:
+        signature = function_signature_to_4byte_selector("balanceOf()")
+        read = self._transaction_executor.read(self._rewards_claim_manager, signature)
         (result,) = decode(["uint256"], read)
         return result
 

@@ -10,9 +10,9 @@ class ERC20:
         self._transaction_executor = transaction_executor
         self._asset = asset
 
-    def transfer(self, to: str, value: int):
+    def transfer(self, to: str, amount: int):
         sig = function_signature_to_4byte_selector("transfer(address,uint256)")
-        encoded_args = encode(["address", "uint256"], [to, value])
+        encoded_args = encode(["address", "uint256"], [to, amount])
         return self._transaction_executor.execute(self._asset, sig + encoded_args)
 
     def approve(self, spender: str, amount: int):

@@ -350,7 +350,7 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
     # Claim RAM rewards
     rewards_claim_manager.claim_rewards([claim_action])
 
-    ram_after_claim = rewards_claim_manager.balance_of(ARBITRUM.RAMSES.V2.RAM)
+    ram_after_claim = ram.balance_of(ARBITRUM.PILOT.V5.REWARDS_CLAIM_MANAGER)
 
     assert ram_after_claim > 0
 
@@ -381,8 +381,8 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
 
     # Update balance on rewards_claim_manager
     rewards_claim_manager.update_balance()
-    rewards_claim_manager_balance_before_vesting = rewards_claim_manager.balance_of(
-        ARBITRUM.USDC
+    rewards_claim_manager_balance_before_vesting = usdc.balance_of(
+        ARBITRUM.PILOT.V5.REWARDS_CLAIM_MANAGER
     )
     assert rewards_claim_manager_balance_before_vesting > 0
 
@@ -392,8 +392,8 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
     anvil.move_time(DAY)
     rewards_claim_manager.update_balance()
 
-    rewards_claim_manager_balance_after_vesting = rewards_claim_manager.balance_of(
-        ARBITRUM.USDC
+    rewards_claim_manager_balance_after_vesting = usdc.balance_of(
+        ARBITRUM.PILOT.V5.REWARDS_CLAIM_MANAGER
     )
 
     assert rewards_claim_manager_balance_after_vesting == 0
