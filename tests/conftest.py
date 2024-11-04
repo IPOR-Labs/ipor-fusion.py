@@ -5,7 +5,7 @@ import pytest
 import constants
 import ipor_fusion.ERC20
 from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
-from ipor_fusion.TestTransactionExecutor import TestTransactionExecutor
+from ipor_fusion.CheatingTransactionExecutor import CheatingTransactionExecutor
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 
 logger = logging.getLogger(__name__)
@@ -37,14 +37,21 @@ def transaction_executor_fixture(web3, account) -> TransactionExecutor:
     return TransactionExecutor(web3, account)
 
 
-@pytest.fixture(scope="module", name="test_transaction_executor")
-def test_transaction_executor_fixture(web3, account) -> TestTransactionExecutor:
-    return TestTransactionExecutor(web3, account)
+@pytest.fixture(scope="module", name="cheating_transaction_executor")
+def cheating_transaction_executor_fixture(web3, account) -> CheatingTransactionExecutor:
+    return CheatingTransactionExecutor(web3, account)
 
 
 @pytest.fixture(scope="module", name="usdc")
 def usdc_fixture(transaction_executor):
     return ipor_fusion.ERC20.ERC20(transaction_executor, constants.ARBITRUM.USDC)
+
+
+@pytest.fixture(scope="module", name="cheating_usdc")
+def cheating_usdc_fixture(cheating_transaction_executor):
+    return ipor_fusion.ERC20.ERC20(
+        cheating_transaction_executor, constants.ARBITRUM.USDC
+    )
 
 
 @pytest.fixture(scope="module", name="usdt")

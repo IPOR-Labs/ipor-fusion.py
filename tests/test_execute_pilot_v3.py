@@ -36,9 +36,9 @@ compound_v3_fuse = CompoundV3SupplyFuse(
 
 
 @pytest.fixture(scope="module", name="plasma_vault")
-def plasma_vault_fixture(test_transaction_executor) -> PlasmaVault:
+def plasma_vault_fixture(cheating_transaction_executor) -> PlasmaVault:
     return PlasmaVault(
-        transaction_executor=test_transaction_executor,
+        transaction_executor=cheating_transaction_executor,
         plasma_vault_address=ARBITRUM.PILOT.V3.PLASMA_VAULT,
     )
 

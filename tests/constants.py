@@ -114,6 +114,17 @@ class ARBITRUM:
                 "0x6F292d12a2966c9B796642cAFD67549bbbE3D066"
             )
 
+        class SCHEDULED:
+            PLASMA_VAULT = Web3.to_checksum_address(
+                "0xAC62eDcdA14aF2e2547F85D56EB2CE36D11333DA"
+            )
+            ACCESS_MANAGER = Web3.to_checksum_address(
+                "0xF9A6C0E19FDfc580453b2800A18d8faCF2E42933"
+            )
+            WITHDRAW_MANAGER = Web3.to_checksum_address(
+                "0x8066Ce248a0dC6E303f795B108b2572498B552B4"
+            )
+
     class UNISWAP:
         class V3:
             UNIVERSAL_ROUTER = Web3.to_checksum_address(

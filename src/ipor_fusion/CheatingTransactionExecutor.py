@@ -3,13 +3,13 @@ from web3.types import TxReceipt
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 
 
-class TestTransactionExecutor(TransactionExecutor):
+class CheatingTransactionExecutor(TransactionExecutor):
 
     def __init__(self, web3, account, gas_multiplier=1.25):
         self._account_address = account.address
         super().__init__(web3, account, gas_multiplier)
 
-    def set_account(self, account: str):
+    def prank(self, account: str):
         self._account_address = account
 
     def execute(self, contract_address: str, function: bytes) -> TxReceipt:

@@ -14,16 +14,16 @@ DEPOSIT_AMOUNT = int(2e6)
 
 
 @pytest.fixture(scope="module", name="plasma_vault")
-def plasma_vault_fixture(test_transaction_executor) -> PlasmaVault:
+def plasma_vault_fixture(cheating_transaction_executor) -> PlasmaVault:
     """Fixture to create a PlasmaVault instance for testing."""
     return PlasmaVault(
-        transaction_executor=test_transaction_executor,
+        transaction_executor=cheating_transaction_executor,
         plasma_vault_address=ARBITRUM.PILOT.V5.PLASMA_VAULT,
     )
 
 
 def test_should_deposit_to_plasma_vault_v5(
-    anvil, test_transaction_executor, plasma_vault, usdc
+    anvil, cheating_transaction_executor, plasma_vault, usdc
 ):
     """Test depositing USDC into the plasma vault."""
     # Reset the fork and grant necessary roles
@@ -37,7 +37,7 @@ def test_should_deposit_to_plasma_vault_v5(
     balance_before = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     # Set the account for the transaction executor to the whitelisted account
-    test_transaction_executor.set_account(whale_account)
+    cheating_transaction_executor.prank(whale_account)
 
     # Perform the deposit action
     plasma_vault.deposit(DEPOSIT_AMOUNT, whale_account)

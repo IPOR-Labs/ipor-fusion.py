@@ -1,25 +1,5 @@
 from web3.types import TxReceipt
 
-ERC20_ABI = [
-    {
-        "constant": True,
-        "inputs": [{"name": "_owner", "type": "address"}],
-        "name": "balanceOf",
-        "outputs": [{"name": "balance", "type": "uint256"}],
-        "type": "function",
-    },
-    {
-        "constant": False,
-        "inputs": [
-            {"name": "_spender", "type": "address"},
-            {"name": "_value", "type": "uint256"},
-        ],
-        "name": "approve",
-        "outputs": [{"name": "", "type": "bool"}],
-        "type": "function",
-    },
-]
-
 
 class TransactionExecutor:
     DEFAULT_TRANSACTION_MAX_PRIORITY_FEE = 2_000_000_000
@@ -31,19 +11,23 @@ class TransactionExecutor:
         self._gas_multiplier = gas_multiplier
 
     def execute(self, contract_address: str, function: bytes) -> TxReceipt:
+        transaction = self.prepare_transaction(contract_address, function)
+        signed_tx = self._web3.eth.account.sign_transaction(
+            transaction, self._account.key
+        )
+        tx_hash = self._web3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        receipt = self._web3.eth.wait_for_transaction_receipt(tx_hash)
+        assert receipt["status"] == 1, "Transaction failed"
+        return receipt
+
+    def prepare_transaction(self, contract_address, function):
         nonce = self._web3.eth.get_transaction_count(self._account.address)
         gas_price = self._web3.eth.gas_price
         max_fee_per_gas = self.calculate_max_fee_per_gas(gas_price)
         max_priority_fee_per_gas = self.get_max_priority_fee(gas_price)
         data = f"0x{function.hex()}"
-        estimated_gas = int(
-            self._gas_multiplier
-            * self._web3.eth.estimate_gas(
-                {"to": contract_address, "from": self._account.address, "data": data}
-            )
-        )
-
-        transaction = {
+        estimated_gas = self.estimate_gas(contract_address, data)
+        return {
             "chainId": self._web3.eth.chain_id,
             "gas": estimated_gas,
             "maxFeePerGas": max_fee_per_gas,
@@ -54,23 +38,16 @@ class TransactionExecutor:
             "data": data,
         }
 
-        signed_tx = self._web3.eth.account.sign_transaction(
-            transaction, self._account.key
+    def estimate_gas(self, contract_address, data):
+        return int(
+            self._gas_multiplier
+            * self._web3.eth.estimate_gas(
+                {"to": contract_address, "from": self._account.address, "data": data}
+            )
         )
-        tx_hash = self._web3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        receipt = self._web3.eth.wait_for_transaction_receipt(tx_hash)
-        assert receipt["status"] == 1, "Transaction failed"
-        return receipt
 
-    def __read_token_balance(self, holder, token):
-        contract = self._web3.eth.contract(
-            address=token,
-            abi=ERC20_ABI,
-        )
-        return contract.functions.balanceOf(holder).call()
-
-    def balance_of(self, holder: str, asset: str) -> int:
-        return self.__read_token_balance(holder, asset)
+    def read(self, contract, data):
+        return self._web3.eth.call({"to": contract, "data": data})
 
     def calculate_max_fee_per_gas(self, gas_price):
         return gas_price + self.percent_of(gas_price, self.GAS_PRICE_MARGIN)
