@@ -61,3 +61,20 @@ config-file = "pylintrc.toml"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.semantic_release]
+build_command = "rm -rf dist/* && pip install poetry && poetry build"
+logging_use_named_masks = true
+commit_parser = "angular"
+major_on_zero = true
+#version_variables = ["semantic_release/__init__.py:__version__"]
+version_toml = ["pyproject.toml:tool.poetry.version"]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+prerelease_token = "rc"
+
+[tool.semantic_release.remote]
+type = "github"
+token = { env = "GH_TOKEN" }

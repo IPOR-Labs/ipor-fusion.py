@@ -6,6 +6,12 @@ on:
     secrets:
       ARBITRUM_PROVIDER_URL:
         required: true
+      GH_TOKEN:
+        required: true
+      SSH_SIGN_KEY_PRIVATE:
+        required: true
+      SSH_SIGN_KEY_PUBLIC:
+        required: true
 
     inputs:
       python-version:
@@ -48,6 +54,11 @@ on:
         type: boolean
         default: false
         required: false
+      force-semver-part:
+        description: "SemVer part to increase (empty: auto)"
+        type: string
+        default: ""
+        required: false
 
 env:
   POETRY_VIRTUALENVS_PATH: "~/.cache/pypoetry/virtualenvs"
@@ -72,7 +83,13 @@ jobs:
         # from tag: v4.2.2
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          submodules: recursive
+          token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Set up branch
+        run: |
+          git checkout -B ${{ github.ref_name }} ${{ github.sha }}
 
       - name: Set up Python
         # from tag: v5.3.0
@@ -120,8 +137,35 @@ jobs:
         run: poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
         id: static-code-analyze
 
-      - name: Publish
+      - name: Version release
         if: inputs.publish-enabled
+        id: release
+        # from tag: v9.12.0
+        uses: python-semantic-release/python-semantic-release@c1bcfdbb994243ac7cf419365d5894d6bfb2950e
+        with:
+          github_token: ${{ secrets.GH_TOKEN }}
+          git_committer_name: "bob-the-builder-ipor"
+          git_committer_email: "106537082+bob-the-builder-ipor@users.noreply.github.com"
+          ssh_public_signing_key: ${{ secrets.SSH_SIGN_KEY_PUBLIC }}
+          ssh_private_signing_key: ${{ secrets.SSH_SIGN_KEY_PRIVATE }}
+          build: true
+          commit: true
+          changelog: true
+          tag: true
+          push: true
+          vcs_release: true
+          force: ${{ inputs.force-semver-part }}
+
+      - name: Publish GitHub release
+        # from tag: v9.12.0
+        uses: python-semantic-release/publish-action@7e5b21d0ae796b4efc7a1fc340f48b691cbfdbf9
+        if: inputs.publish-enabled && steps.release.outputs.released
+        with:
+          github_token: ${{ secrets.GH_TOKEN }}
+          tag: ${{ steps.release.outputs.tag }}
+
+      - name: Publish PyPI
+        if: inputs.publish-enabled && steps.release.outputs.released
         # from tag: v1.10.3
         uses: pypa/gh-action-pypi-publish@f7600683efdcb7656dec5b29656edb7bc586e597
         with:
