@@ -1,6 +1,17 @@
 name: Release
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      force-semver-part:
+        type: choice
+        description: "SemVer part to increase (empty: auto)"
+        options:
+          - ""
+          - "patch"
+          - "minor"
+          - "major"
+        default: ""
 
 jobs:
 
@@ -16,8 +27,12 @@ jobs:
     uses: ./.github/workflows/python-publish.yml
     secrets:
       ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SSH_SIGN_KEY_PRIVATE: ${{ secrets.SSH_SIGN_KEY_PRIVATE }}
+      SSH_SIGN_KEY_PUBLIC: ${{ secrets.SSH_SIGN_KEY_PUBLIC }}
     with:
       publish-enabled: ${{ needs.notify.outputs.branch-name == 'main' }}
+      force-semver-part: ${{ inputs.force-semver-part }}
 
   report:
     if: ${{ always() }}
