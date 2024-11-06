@@ -16,21 +16,24 @@ class PlasmaVault:
         self, transaction_executor: TransactionExecutor, plasma_vault_address: str
     ):
         self._transaction_executor = transaction_executor
-        self._plasma_vault = plasma_vault_address
+        self._plasma_vault_address = plasma_vault_address
+
+    def address(self) -> str:
+        return self._plasma_vault_address
 
     def execute(self, actions: List[FuseAction]) -> TxReceipt:
         function = self.__execute(actions)
-        return self._transaction_executor.execute(self._plasma_vault, function)
+        return self._transaction_executor.execute(self._plasma_vault_address, function)
 
     def deposit(self, assets: int, receiver: str) -> TxReceipt:
         function = self.__deposit(assets, receiver)
-        return self._transaction_executor.execute(self._plasma_vault, function)
+        return self._transaction_executor.execute(self._plasma_vault_address, function)
 
     def mint(self, shares: int, receiver: str) -> TxReceipt:
         sig = function_signature_to_4byte_selector("mint(uint256,address)")
         encoded_args = encode(["uint256", "address"], [shares, receiver])
         return self._transaction_executor.execute(
-            self._plasma_vault, sig + encoded_args
+            self._plasma_vault_address, sig + encoded_args
         )
 
     def redeem(self, shares: int, receiver: str, owner: str) -> TxReceipt:
@@ -39,58 +42,66 @@ class PlasmaVault:
             ["uint256", "address", "address"], [shares, receiver, owner]
         )
         return self._transaction_executor.execute(
-            self._plasma_vault, sig + encoded_args
+            self._plasma_vault_address, sig + encoded_args
         )
 
     def balance_of(self, account: str) -> int:
         sig = function_signature_to_4byte_selector("balanceOf(address)")
         encoded_args = encode(["address"], [account])
-        read = self._transaction_executor.read(self._plasma_vault, sig + encoded_args)
+        read = self._transaction_executor.read(
+            self._plasma_vault_address, sig + encoded_args
+        )
         (result,) = decode(["uint256"], read)
         return result
 
     def max_withdraw(self, account: str) -> int:
         sig = function_signature_to_4byte_selector("maxWithdraw(address)")
         encoded_args = encode(["address"], [account])
-        read = self._transaction_executor.read(self._plasma_vault, sig + encoded_args)
+        read = self._transaction_executor.read(
+            self._plasma_vault_address, sig + encoded_args
+        )
         (result,) = decode(["uint256"], read)
         return result
 
     def total_assets_in_market(self, market: int) -> int:
         sig = function_signature_to_4byte_selector("totalAssetsInMarket(uint256)")
         encoded_args = encode(["uint256"], [market])
-        read = self._transaction_executor.read(self._plasma_vault, sig + encoded_args)
+        read = self._transaction_executor.read(
+            self._plasma_vault_address, sig + encoded_args
+        )
         (result,) = decode(["uint256"], read)
         return result
 
     def decimals(self) -> int:
         sig = function_signature_to_4byte_selector("decimals()")
-        read = self._transaction_executor.read(self._plasma_vault, sig)
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["uint256"], read)
         return result
 
     def total_assets(self) -> int:
         sig = function_signature_to_4byte_selector("totalAssets()")
-        read = self._transaction_executor.read(self._plasma_vault, sig)
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["uint256"], read)
         return result
 
-    def asset_address(self) -> str:
+    def underlying_asset_address(self) -> str:
         sig = function_signature_to_4byte_selector("asset()")
-        read = self._transaction_executor.read(self._plasma_vault, sig)
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
         return result
 
     def convert_to_assets(self, amount: int) -> int:
         sig = function_signature_to_4byte_selector("convertToAssets(uint256)")
         encoded_args = encode(["uint256"], [amount])
-        read = self._transaction_executor.read(self._plasma_vault, sig + encoded_args)
+        read = self._transaction_executor.read(
+            self._plasma_vault_address, sig + encoded_args
+        )
         (result,) = decode(["uint256"], read)
         return result
 
     def get_access_manager_address(self) -> str:
         sig = function_signature_to_4byte_selector("getAccessManagerAddress()")
-        read = self._transaction_executor.read(self._plasma_vault, sig)
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
         return result
 
@@ -130,21 +141,21 @@ class PlasmaVault:
             ["uint256", "address", "address"], [assets, receiver, owner]
         )
         return self._transaction_executor.execute(
-            self._plasma_vault, sig + encoded_args
+            self._plasma_vault_address, sig + encoded_args
         )
 
     def transfer(self, to: str, value):
         sig = function_signature_to_4byte_selector("transfer(address,uint256)")
         encoded_args = encode(["address", "uint256"], [to, value])
         return self._transaction_executor.execute(
-            self._plasma_vault, sig + encoded_args
+            self._plasma_vault_address, sig + encoded_args
         )
 
     def approve(self, account: str, amount: int):
         sig = function_signature_to_4byte_selector("approve(address,uint256)")
         encoded_args = encode(["address", "uint256"], [account, amount])
         return self._transaction_executor.execute(
-            self._plasma_vault, sig + encoded_args
+            self._plasma_vault_address, sig + encoded_args
         )
 
     def transfer_from(self, _from: str, to: str, amount: int):
@@ -153,7 +164,7 @@ class PlasmaVault:
         )
         encoded_args = encode(["address", "address", "uint256"], [_from, to, amount])
         return self._transaction_executor.execute(
-            self._plasma_vault, sig + encoded_args
+            self._plasma_vault_address, sig + encoded_args
         )
 
     def get_withdraw_manager_changed_events(self) -> List[LogReceipt]:
@@ -161,6 +172,6 @@ class PlasmaVault:
             Web3.keccak(text="WithdrawManagerChanged(address)")
         ).to_0x_hex()
         logs = self._transaction_executor.get_logs(
-            contract_address=self._plasma_vault, topics=[event_signature_hash]
+            contract_address=self._plasma_vault_address, topics=[event_signature_hash]
         )
         return logs

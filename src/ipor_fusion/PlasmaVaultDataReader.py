@@ -23,7 +23,9 @@ class PlasmaVaultDataReader:
         access_manager_address = Web3.to_checksum_address(
             plasma_vault.get_access_manager_address()
         )
-        asset_address = Web3.to_checksum_address(plasma_vault.asset_address())
+        asset_address = Web3.to_checksum_address(
+            plasma_vault.underlying_asset_address()
+        )
         withdraw_manager_address = Web3.to_checksum_address(
             plasma_vault.withdraw_manager_address()
         )

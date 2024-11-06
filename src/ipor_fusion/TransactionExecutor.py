@@ -12,6 +12,9 @@ class TransactionExecutor:
         self._account = account
         self._gas_multiplier = gas_multiplier
 
+    def get_account_address(self):
+        return self._account.address
+
     def execute(self, contract_address: str, function: bytes) -> TxReceipt:
         transaction = self.prepare_transaction(contract_address, function)
         signed_tx = self._web3.eth.account.sign_transaction(
