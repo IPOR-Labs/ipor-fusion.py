@@ -1,4 +1,6 @@
-from web3.types import TxReceipt
+from typing import List
+
+from web3.types import TxReceipt, LogReceipt
 
 
 class TransactionExecutor:
@@ -58,3 +60,16 @@ class TransactionExecutor:
     @staticmethod
     def percent_of(value, percentage):
         return value * percentage // 100
+
+    def get_logs(
+        self, contract_address: str, topics: List[str], from_block=0, to_block="latest"
+    ) -> List[LogReceipt]:
+        event_filter = self._web3.eth.filter(
+            {
+                "fromBlock": from_block,
+                "toBlock": to_block,
+                "address": contract_address,
+                "topics": topics,
+            }
+        )
+        return event_filter.get_all_entries()

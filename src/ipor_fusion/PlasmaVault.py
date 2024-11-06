@@ -1,8 +1,10 @@
-from typing import List
+from typing import List, Union
 
 from eth_abi import encode, decode
 from eth_utils import function_signature_to_4byte_selector
-from web3.types import TxReceipt
+from hexbytes import HexBytes
+from web3 import Web3
+from web3.types import TxReceipt, LogReceipt
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -73,7 +75,7 @@ class PlasmaVault:
         (result,) = decode(["uint256"], read)
         return result
 
-    def asset(self) -> int:
+    def asset_address(self) -> str:
         sig = function_signature_to_4byte_selector("asset()")
         read = self._transaction_executor.read(self._plasma_vault, sig)
         (result,) = decode(["address"], read)
@@ -85,6 +87,22 @@ class PlasmaVault:
         read = self._transaction_executor.read(self._plasma_vault, sig + encoded_args)
         (result,) = decode(["uint256"], read)
         return result
+
+    def get_access_manager_address(self) -> str:
+        sig = function_signature_to_4byte_selector("getAccessManagerAddress()")
+        read = self._transaction_executor.read(self._plasma_vault, sig)
+        (result,) = decode(["address"], read)
+        return result
+
+    def withdraw_manager_address(self) -> Union[str, None]:
+        events = self.get_withdraw_manager_changed_events()
+        sorted_events = sorted(
+            events, key=lambda event: event["blockNumber"], reverse=True
+        )
+        if sorted_events:
+            (decoded_address,) = decode(["address"], sorted_events[0]["data"])
+            return decoded_address
+        return None
 
     @staticmethod
     def __execute(actions: List[FuseAction]) -> bytes:
@@ -137,3 +155,12 @@ class PlasmaVault:
         return self._transaction_executor.execute(
             self._plasma_vault, sig + encoded_args
         )
+
+    def get_withdraw_manager_changed_events(self) -> List[LogReceipt]:
+        event_signature_hash = HexBytes(
+            Web3.keccak(text="WithdrawManagerChanged(address)")
+        ).to_0x_hex()
+        logs = self._transaction_executor.get_logs(
+            contract_address=self._plasma_vault, topics=[event_signature_hash]
+        )
+        return logs

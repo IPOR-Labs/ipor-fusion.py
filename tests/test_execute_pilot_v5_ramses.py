@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 
 import pytest
@@ -17,11 +16,6 @@ from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
-
-ARBITRUM_PROVIDER_URL = "ARBITRUM_PROVIDER_URL"
-FORK_URL = os.getenv(ARBITRUM_PROVIDER_URL)
-if not FORK_URL:
-    raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
 
 ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(
     ARBITRUM.PILOT.V5.RAMSES_V2_NEW_POSITION_FUSE
