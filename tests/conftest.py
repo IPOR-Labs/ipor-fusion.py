@@ -7,6 +7,7 @@ import ipor_fusion.ERC20
 from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
 from ipor_fusion.CheatingTransactionExecutor import CheatingTransactionExecutor
 from ipor_fusion.TransactionExecutor import TransactionExecutor
+from ipor_fusion.UniswapV3UniversalRouter import UniswapV3UniversalRouter
 
 logger = logging.getLogger(__name__)
 
@@ -91,4 +92,14 @@ def compound_v3_usdc_c_token_fixture(transaction_executor):
 def ram_fixture(transaction_executor):
     return ipor_fusion.ERC20.ERC20(
         transaction_executor, constants.ARBITRUM.RAMSES.V2.RAM
+    )
+
+
+@pytest.fixture(scope="module", name="uniswap_v3_universal_router")
+def uniswap_v3_universal_router_fixture(
+    transaction_executor,
+) -> UniswapV3UniversalRouter:
+    return UniswapV3UniversalRouter(
+        transaction_executor=transaction_executor,
+        universal_router_address=constants.ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER,
     )

@@ -4,6 +4,7 @@ from constants import (
     ARBITRUM,
     ANVIL_WALLET,
 )
+from ipor_fusion.AccessManager import AccessManager
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.Roles import Roles
@@ -36,10 +37,18 @@ compound_v3_fuse = CompoundV3SupplyFuse(
 
 
 @pytest.fixture(scope="module", name="plasma_vault")
-def plasma_vault_fixture(cheating_transaction_executor) -> PlasmaVault:
+def plasma_vault_fixture(transaction_executor) -> PlasmaVault:
     return PlasmaVault(
-        transaction_executor=cheating_transaction_executor,
+        transaction_executor=transaction_executor,
         plasma_vault_address=ARBITRUM.PILOT.V3.PLASMA_VAULT,
+    )
+
+
+@pytest.fixture(scope="module", name="cheating_access_manager")
+def cheating_access_manager_fixture(cheating_transaction_executor) -> AccessManager:
+    return AccessManager(
+        transaction_executor=cheating_transaction_executor,
+        access_manager_address=ARBITRUM.PILOT.V3.ACCESS_MANAGER,
     )
 
 
@@ -59,10 +68,18 @@ def withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool):
 
 
 def test_supply_and_withdraw_from_gearbox(
-    anvil, plasma_vault, usdc, fluid_usdc_staking_pool, gearbox_v3_usdc_farm_pool
+    anvil,
+    plasma_vault,
+    usdc,
+    fluid_usdc_staking_pool,
+    gearbox_v3_usdc_farm_pool,
+    cheating_transaction_executor,
+    cheating_access_manager,
 ):
     anvil.reset_fork(250690377)
-    anvil.grant_role(ARBITRUM.PILOT.V3.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
     withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool)
 
     # given for supply
@@ -122,10 +139,17 @@ def test_supply_and_withdraw_from_gearbox(
 
 
 def test_supply_and_withdraw_from_fluid(
-    anvil, plasma_vault, usdc, fluid_usdc_staking_pool
+    anvil,
+    plasma_vault,
+    usdc,
+    fluid_usdc_staking_pool,
+    cheating_transaction_executor,
+    cheating_access_manager,
 ):
     anvil.reset_fork(250690377)
-    anvil.grant_role(ARBITRUM.PILOT.V3.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
     withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool)
 
     vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
@@ -184,10 +208,18 @@ def test_supply_and_withdraw_from_fluid(
 
 
 def test_supply_and_withdraw_from_aave_v3(
-    anvil, plasma_vault, usdc, fluid_usdc_staking_pool, aave_v3_usdc_a_token_arb_usdc_n
+    anvil,
+    plasma_vault,
+    usdc,
+    fluid_usdc_staking_pool,
+    aave_v3_usdc_a_token_arb_usdc_n,
+    cheating_transaction_executor,
+    cheating_access_manager,
 ):
     anvil.reset_fork(250690377)
-    anvil.grant_role(ARBITRUM.PILOT.V3.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
     withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool)
 
     vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
@@ -237,10 +269,18 @@ def test_supply_and_withdraw_from_aave_v3(
 
 
 def test_supply_and_withdraw_from_compound_v3(
-    anvil, plasma_vault, usdc, fluid_usdc_staking_pool, compound_v3_usdc_c_token
+    anvil,
+    plasma_vault,
+    usdc,
+    fluid_usdc_staking_pool,
+    compound_v3_usdc_c_token,
+    cheating_transaction_executor,
+    cheating_access_manager,
 ):
     anvil.reset_fork(250690377)
-    anvil.grant_role(ARBITRUM.PILOT.V3.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
     withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool)
 
     vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)

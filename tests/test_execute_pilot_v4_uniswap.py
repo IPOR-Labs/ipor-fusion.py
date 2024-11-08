@@ -12,6 +12,7 @@ from constants import (
     ANVIL_WALLET,
     ARBITRUM,
 )
+from ipor_fusion.AccessManager import AccessManager
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.Roles import Roles
 from ipor_fusion.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
@@ -39,17 +40,33 @@ universal_token_swapper_fuse = UniversalTokenSwapperFuse(
 
 
 @pytest.fixture(scope="module", name="plasma_vault")
-def plasma_vault_fixture(cheating_transaction_executor) -> PlasmaVault:
+def plasma_vault_fixture(transaction_executor) -> PlasmaVault:
     return PlasmaVault(
-        transaction_executor=cheating_transaction_executor,
+        transaction_executor=transaction_executor,
         plasma_vault_address=ARBITRUM.PILOT.V4.PLASMA_VAULT,
     )
 
 
-def test_should_swap_when_one_hop_uniswap_v3(anvil, plasma_vault, usdc, usdt):
+@pytest.fixture(scope="module", name="cheating_access_manager")
+def cheating_access_manager_fixture(cheating_transaction_executor) -> AccessManager:
+    return AccessManager(
+        transaction_executor=cheating_transaction_executor,
+        access_manager_address=ARBITRUM.PILOT.V4.ACCESS_MANAGER,
+    )
+
+
+def test_should_swap_when_one_hop_uniswap_v3(
+    anvil,
+    plasma_vault,
+    usdc,
+    usdt,
+    cheating_transaction_executor,
+    cheating_access_manager,
+):
     # Setup: Reset state and grant necessary roles
     anvil.reset_fork(254084008)
-    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Record initial balances before swap
     vault_usdc_balance_before_swap = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
@@ -123,10 +140,18 @@ def test_should_swap_when_one_hop_uniswap_v3(anvil, plasma_vault, usdc, usdt):
     ), "USDT balance change should be between 98e6 and 100e6"
 
 
-def test_should_swap_when_multiple_hop(anvil, plasma_vault, usdc, usdt):
+def test_should_swap_when_multiple_hop(
+    anvil,
+    plasma_vault,
+    usdc,
+    usdt,
+    cheating_transaction_executor,
+    cheating_access_manager,
+):
     # Reset state and grant necessary roles
     anvil.reset_fork(254084008)
-    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Record initial balances
     vault_usdc_balance_before_swap = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
@@ -197,10 +222,18 @@ def test_should_swap_when_multiple_hop(anvil, plasma_vault, usdc, usdt):
     ), "USDT balance change should be between 98e6 and 100e6"
 
 
-def test_should_open_new_position_uniswap_v3(anvil, plasma_vault, usdc, usdt):
+def test_should_open_new_position_uniswap_v3(
+    anvil,
+    plasma_vault,
+    usdc,
+    usdt,
+    cheating_transaction_executor,
+    cheating_access_manager,
+):
     # Reset state and grant necessary roles
     anvil.reset_fork(254084008)
-    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Swap USDC to USDT
     swap = uniswap_v3_swap_fuse.swap(
@@ -253,10 +286,18 @@ def test_should_open_new_position_uniswap_v3(anvil, plasma_vault, usdc, usdt):
     ), "USDT balance after new position does not match expected change of -489_152502"
 
 
-def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault, usdc, usdt):
+def test_should_collect_all_after_decrease_liquidity(
+    anvil,
+    plasma_vault,
+    usdc,
+    usdt,
+    cheating_transaction_executor,
+    cheating_access_manager,
+):
     # Reset state and grant necessary roles
     anvil.reset_fork(254084008)
-    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Swap USDC to USDT
     swap = uniswap_v3_swap_fuse.swap(
@@ -334,10 +375,18 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault, usdc, 
     ), "Token ID of new position does not match closed position"
 
 
-def test_should_increase_liquidity(anvil, plasma_vault, usdc, usdt):
+def test_should_increase_liquidity(
+    anvil,
+    plasma_vault,
+    usdc,
+    usdt,
+    cheating_transaction_executor,
+    cheating_access_manager,
+):
     # Setup: Reset state and grant necessary roles
     anvil.reset_fork(254084008)
-    anvil.grant_role(ARBITRUM.PILOT.V4.ACCESS_MANAGER, ANVIL_WALLET, Roles.ALPHA_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Initial swap from USDC to USDT
     swap = uniswap_v3_swap_fuse.swap(

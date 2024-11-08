@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from testcontainers.core.container import DockerContainer
 from web3 import Web3, HTTPProvider
 from web3.types import RPCEndpoint
+import requests
 
 load_dotenv(verbose=True)
 
@@ -55,10 +56,27 @@ class AnvilTestContainerStarter:
             raise RuntimeError("Error while executing command in container")
         return result
 
+    def wait_for_endpoint_ready(self, timeout: int = 60) -> None:
+        """Wait until the Anvil HTTP endpoint is ready."""
+        start_time = time.time()
+        while True:
+            try:
+                web3 = Web3(HTTPProvider(self.get_anvil_http_url()))
+                block_number = web3.eth.block_number
+                if block_number > 0:
+                    self.log.info("[CONTAINER] [ANVIL] Anvil endpoint is ready")
+                    return
+            except requests.ConnectionError:
+                pass  # Ignore connection errors and keep trying
+
+            if time.time() - start_time > timeout:
+                raise TimeoutError("Anvil endpoint did not become ready in time")
+            time.sleep(1)  # Wait before retrying
+
     def start(self):
         self.log.info("[CONTAINER] [ANVIL] Anvil container is starting")
         self.anvil.start()
-        time.sleep(3)
+        self.wait_for_endpoint_ready()
         self.log.info("[CONTAINER] [ANVIL] Anvil container started")
 
     def reset_fork(self, block_number: int):
@@ -87,21 +105,6 @@ class AnvilTestContainerStarter:
         w3.manager.request_blocking(RPCEndpoint("evm_mine"), [])
 
         self.log.info("[CONTAINER] [ANVIL] Anvil evm increaseTime")
-
-    def grant_role(self, access_manager, who_to_assign, role):
-        cmd = [
-            "cast",
-            "send",
-            "--unlocked",
-            "--from",
-            "0x4E3C666F0c898a9aE1F8aBB188c6A2CC151E17fC",
-            access_manager,
-            "grantRole(uint64,address,uint32)",
-            f"{role}",
-            who_to_assign,
-            "0",
-        ]
-        self.execute_in_container(cmd)
 
     def grant_market_substrates(
         self, _from: str, plasma_vault, market_id: int, substrates: List[str]

@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from constants import ARBITRUM, ALPHA_WALLET
+from ipor_fusion.AccessManager import AccessManager
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.Roles import Roles
 
@@ -19,6 +20,14 @@ def plasma_vault_fixture(cheating_transaction_executor) -> PlasmaVault:
     return PlasmaVault(
         transaction_executor=cheating_transaction_executor,
         plasma_vault_address=ARBITRUM.PILOT.V5.PLASMA_VAULT,
+    )
+
+
+@pytest.fixture(scope="module", name="cheating_access_manager")
+def cheating_access_manager_fixture(cheating_transaction_executor) -> AccessManager:
+    return AccessManager(
+        transaction_executor=cheating_transaction_executor,
+        access_manager_address=ARBITRUM.PILOT.V5.ACCESS_MANAGER,
     )
 
 
