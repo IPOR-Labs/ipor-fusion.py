@@ -76,3 +76,9 @@ class TransactionExecutor:
             }
         )
         return event_filter.get_all_entries()
+
+    def chain_id(self):
+        return self._web3.eth.chain_id
+
+    def prank(self, account: str):
+        raise NotImplementedError("Use CheatingTransactionExecutor for pranks")

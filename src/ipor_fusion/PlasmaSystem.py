@@ -33,6 +33,9 @@ class PlasmaSystem:
         self._usdc = ERC20(transaction_executor, external_systems_data.usdc_address)
         self._usdt = ERC20(transaction_executor, external_systems_data.usdt_address)
 
+    def transaction_executor(self) -> TransactionExecutor:
+        return self._transaction_executor
+
     def plasma_vault(self) -> PlasmaVault:
         return self._plasma_vault
 
