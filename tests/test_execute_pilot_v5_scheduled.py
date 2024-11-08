@@ -1,6 +1,9 @@
 import logging
 
+import pytest
+
 from constants import ARBITRUM, ANVIL_WALLET_PRIVATE_KEY
+from ipor_fusion.AccessManager import AccessManager
 from ipor_fusion.IporFusionMarkets import IporFusionMarkets
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.Roles import Roles
@@ -9,7 +12,17 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 
-def test_should_deposit(anvil, cheating_transaction_executor, cheating_usdc):
+@pytest.fixture(scope="module", name="cheating_access_manager")
+def cheating_access_manager_fixture(cheating_transaction_executor) -> AccessManager:
+    return AccessManager(
+        transaction_executor=cheating_transaction_executor,
+        access_manager_address=ARBITRUM.PILOT.V3.ACCESS_MANAGER,
+    )
+
+
+def test_should_deposit(
+    anvil, cheating_transaction_executor, cheating_usdc, cheating_access_manager
+):
     """Test depositing USDC into the plasma vault."""
     # Reset the fork and grant necessary roles
     anvil.reset_fork(268934406)
@@ -21,11 +34,10 @@ def test_should_deposit(anvil, cheating_transaction_executor, cheating_usdc):
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
-    access_manager = system.access_manager()
     usdc = system.usdc()
 
-    anvil.grant_role(access_manager.address(), system.alpha(), Roles.ALPHA_ROLE)
-    anvil.grant_role(access_manager.address(), system.alpha(), Roles.WHITELIST_ROLE)
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
     amount = 100_000000
     whale_account = "0x1F7bc4dA1a0c2e49d7eF542F74CD46a3FE592cb1"

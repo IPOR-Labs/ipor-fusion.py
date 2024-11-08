@@ -106,21 +106,6 @@ class AnvilTestContainerStarter:
 
         self.log.info("[CONTAINER] [ANVIL] Anvil evm increaseTime")
 
-    def grant_role(self, access_manager, who_to_assign, role):
-        cmd = [
-            "cast",
-            "send",
-            "--unlocked",
-            "--from",
-            "0x4E3C666F0c898a9aE1F8aBB188c6A2CC151E17fC",
-            access_manager,
-            "grantRole(uint64,address,uint32)",
-            f"{role}",
-            who_to_assign,
-            "0",
-        ]
-        self.execute_in_container(cmd)
-
     def grant_market_substrates(
         self, _from: str, plasma_vault, market_id: int, substrates: List[str]
     ):

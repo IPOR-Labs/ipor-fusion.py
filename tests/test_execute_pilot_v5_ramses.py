@@ -4,10 +4,10 @@ import time
 import pytest
 
 from constants import ARBITRUM, ALPHA_WALLET, DAY, MONTH
+from ipor_fusion.AccessManager import AccessManager
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.Roles import Roles
-from ipor_fusion.UniswapV3UniversalRouter import UniswapV3UniversalRouter
 from ipor_fusion.fuse.RamsesClaimFuse import RamsesClaimFuse
 from ipor_fusion.fuse.RamsesV2CollectFuse import RamsesV2CollectFuse
 from ipor_fusion.fuse.RamsesV2ModifyPositionFuse import RamsesV2ModifyPositionFuse
@@ -44,24 +44,26 @@ def plasma_vault_fixture(transaction_executor) -> PlasmaVault:
     )
 
 
-@pytest.fixture(scope="module", name="uniswap_v3_universal_router")
-def uniswap_v3_universal_router_fixture(
-    transaction_executor,
-) -> UniswapV3UniversalRouter:
-    return UniswapV3UniversalRouter(
-        transaction_executor=transaction_executor,
-        universal_router_address=ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER,
+@pytest.fixture(scope="module", name="cheating_access_manager")
+def cheating_access_manager_fixture(cheating_transaction_executor) -> AccessManager:
+    return AccessManager(
+        cheating_transaction_executor, ARBITRUM.PILOT.V5.ACCESS_MANAGER
     )
 
 
-@pytest.fixture(name="setup", autouse=True)
-def setup_fixture(anvil):
+def test_should_open_new_position_ramses_v2(
+    anvil,
+    plasma_vault,
+    usdc,
+    usdt,
+    cheating_transaction_executor,
+    cheating_access_manager,
+):
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
-    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
-    yield
 
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ALPHA_WALLET, 0)
 
-def test_should_open_new_position_ramses_v2(plasma_vault, usdc, usdt):
     # given
     swap = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
@@ -111,10 +113,19 @@ def test_should_open_new_position_ramses_v2(plasma_vault, usdc, usdt):
     ), ("new_position_usdt_change == -int(499000000)")
 
 
-def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault, usdc, usdt):
+def test_should_collect_all_after_decrease_liquidity(
+    anvil,
+    plasma_vault,
+    usdc,
+    usdt,
+    cheating_transaction_executor,
+    cheating_access_manager,
+):
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
-    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
+
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ALPHA_WALLET, 0)
 
     timestamp = int(time.time())
 
@@ -201,10 +212,19 @@ def test_should_collect_all_after_decrease_liquidity(anvil, plasma_vault, usdc, 
     assert new_token_id == close_token_id, "new_token_id == close_token_id"
 
 
-def test_should_increase_liquidity(anvil, plasma_vault, usdc, usdt):
+def test_should_increase_liquidity(
+    anvil,
+    plasma_vault,
+    usdc,
+    usdt,
+    cheating_transaction_executor,
+    cheating_access_manager,
+):
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
-    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
+
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ALPHA_WALLET, 0)
 
     action = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
@@ -282,17 +302,17 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
     uniswap_v3_universal_router,
     usdc,
     ram,
+    cheating_transaction_executor,
+    cheating_access_manager,
 ):
     # given
-    anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
-    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ATOMIST_ROLE)
-    anvil.grant_role(ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.ALPHA_ROLE)
-    anvil.grant_role(
-        ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.CLAIM_REWARDS_ROLE
-    )
-    anvil.grant_role(
-        ARBITRUM.PILOT.V5.ACCESS_MANAGER, ALPHA_WALLET, Roles.TRANSFER_REWARDS_ROLE
-    )
+    anvil.reset_fork(261946538)
+
+    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating_access_manager.grant_role(Roles.ATOMIST_ROLE, ALPHA_WALLET, 0)
+    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ALPHA_WALLET, 0)
+    cheating_access_manager.grant_role(Roles.CLAIM_REWARDS_ROLE, ALPHA_WALLET, 0)
+    cheating_access_manager.grant_role(Roles.TRANSFER_REWARDS_ROLE, ALPHA_WALLET, 0)
 
     swap = uniswap_v3_swap_fuse.swap(
         token_in_address=ARBITRUM.USDC,
