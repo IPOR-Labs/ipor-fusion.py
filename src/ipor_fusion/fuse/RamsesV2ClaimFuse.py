@@ -23,7 +23,7 @@ class RamsesV2ClaimFuseData:
         return self._function_selector + self.encode()
 
 
-class RamsesClaimFuse:
+class RamsesV2ClaimFuse:
 
     def __init__(self, ramses_claim_fuse_address: str):
         self._ramses_claim_fuse_address = ramses_claim_fuse_address

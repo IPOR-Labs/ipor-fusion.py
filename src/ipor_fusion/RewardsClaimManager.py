@@ -14,21 +14,49 @@ class RewardsClaimManager:
         self, transaction_executor: TransactionExecutor, rewards_claim_manager: str
     ):
         self._transaction_executor = transaction_executor
-        self._rewards_claim_manager = rewards_claim_manager
+        self._rewards_claim_manager_address = rewards_claim_manager
+
+    def address(self) -> str:
+        return self._rewards_claim_manager_address
 
     def transfer(self, asset: str, to: str, amount: int) -> TxReceipt:
         function = self.__transfer(asset, to, amount)
-        return self._transaction_executor.execute(self._rewards_claim_manager, function)
+        return self._transaction_executor.execute(
+            self._rewards_claim_manager_address, function
+        )
 
     def balance_of(self) -> int:
         signature = function_signature_to_4byte_selector("balanceOf()")
-        read = self._transaction_executor.read(self._rewards_claim_manager, signature)
+        read = self._transaction_executor.read(
+            self._rewards_claim_manager_address, signature
+        )
         (result,) = decode(["uint256"], read)
+        return result
+
+    def get_rewards_fuses(self) -> List[str]:
+        signature = function_signature_to_4byte_selector("getRewardsFuses()")
+        read = self._transaction_executor.read(
+            self._rewards_claim_manager_address, signature
+        )
+        (result,) = decode(["address[]"], read)
+        return result
+
+    def is_reward_fuse_supported(self, fuse) -> bool:
+        signature = function_signature_to_4byte_selector(
+            "isRewardFuseSupported(address)"
+        )
+        function = signature + encode(["address"], [fuse])
+        read = self._transaction_executor.read(
+            self._rewards_claim_manager_address, function
+        )
+        (result,) = decode(["bool"], read)
         return result
 
     def claim_rewards(self, claims: List[FuseAction]) -> TxReceipt:
         function = self.__claim_rewards(claims)
-        return self._transaction_executor.execute(self._rewards_claim_manager, function)
+        return self._transaction_executor.execute(
+            self._rewards_claim_manager_address, function
+        )
 
     @staticmethod
     def __claim_rewards(claims: List[FuseAction]) -> bytes:
@@ -52,7 +80,9 @@ class RewardsClaimManager:
 
     def update_balance(self):
         function = self.__update_balance()
-        return self._transaction_executor.execute(self._rewards_claim_manager, function)
+        return self._transaction_executor.execute(
+            self._rewards_claim_manager_address, function
+        )
 
     @staticmethod
     def __update_balance():

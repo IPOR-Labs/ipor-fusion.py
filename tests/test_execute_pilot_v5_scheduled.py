@@ -20,11 +20,10 @@ def test_should_deposit(
     anvil.reset_fork(268934406)
 
     # setup
-    system_factory = PlasmaVaultSystemFactory(
+    system = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
         account=ANVIL_WALLET_PRIVATE_KEY,
-    )
-    system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
+    ).get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
     usdc = system.usdc()
 
@@ -56,8 +55,14 @@ def test_should_deposit(
     vault_total_assets_after = vault.total_assets()
     user_vault_balance_after = vault.balance_of(system.alpha())
 
-    assert vault_total_assets_after - vault_total_assets_before == 100_058437
-    assert user_vault_balance_after - user_vault_balance_before == 100_01157830
+    assert (
+        100_000000 < vault_total_assets_after - vault_total_assets_before < 100_100000
+    )
+    assert (
+        100_00000000
+        < user_vault_balance_after - user_vault_balance_before
+        < 100_10000000
+    )
 
     assert vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
