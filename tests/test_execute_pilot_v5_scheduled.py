@@ -22,14 +22,14 @@ def test_should_deposit(
     # setup
     system = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
     usdc = system.usdc()
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
 
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
@@ -74,13 +74,13 @@ def test_should_mint(anvil):
 
     system_factory = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
 
     cheating = CheatingPlasmaVaultSystemFactory(
-        provider_url=anvil.get_anvil_http_url(), account=ANVIL_WALLET_PRIVATE_KEY
+        provider_url=anvil.get_anvil_http_url(), private_key=ANVIL_WALLET_PRIVATE_KEY
     ).get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
 
     cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
@@ -151,7 +151,7 @@ def test_should_redeem(
     # setup
     system_factory = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
@@ -160,7 +160,7 @@ def test_should_redeem(
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
@@ -236,7 +236,7 @@ def test_should_withdraw(
     # setup
     system_factory = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
@@ -245,7 +245,7 @@ def test_should_withdraw(
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     cheating.prank(ARBITRUM.PILOT.V5.OWNER)
@@ -317,7 +317,7 @@ def test_should_transfer(
     # setup
     system_factory = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
@@ -325,7 +325,7 @@ def test_should_transfer(
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
@@ -361,7 +361,7 @@ def test_should_transfer_from(anvil):
     # setup
     system_factory = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
@@ -369,7 +369,7 @@ def test_should_transfer_from(anvil):
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)

@@ -1,21 +1,19 @@
-from eth_account import Account
+import time
 
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 
 # Variables
 PROVIDER_URL = "https://arb-mainnet.g.alchemy.com/v2/XXXXXXXXXXXXXXXXXXXXXXXX"
-ACCOUNT = Account.from_key(
-    private_key="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-)
+PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 PLASMA_VAULT = "0x3F97CEa640B8B93472143f87a96d5A86f1F5167F"
 
 # Setup PlasmaVault System
 system = PlasmaVaultSystemFactory(
-    provider_url=PROVIDER_URL,
-    account=ACCOUNT,
+    PROVIDER_URL,
+    PRIVATE_KEY,
 ).get(PLASMA_VAULT)
 
-# Get swap transaction
+# Get swap fuse action
 swap = system.uniswap_v3().swap(
     token_in_address=system.usdc().address(),
     token_out_address=system.usdt().address(),
@@ -24,7 +22,7 @@ swap = system.uniswap_v3().swap(
     min_out_amount=0,
 )
 
-# Get new position transaction
+# Get new position fuse action
 new_position = system.ramses_v2().new_position(
     token0=system.usdc().address(),
     token1=system.usdt().address(),
@@ -39,5 +37,5 @@ new_position = system.ramses_v2().new_position(
     ve_ram_token_id=0,
 )
 
-# Execute transactions on PlasmaVault in batch
+# Execute fuse actions on PlasmaVault in batch
 tx_result = system.plasma_vault().execute([swap, new_position])

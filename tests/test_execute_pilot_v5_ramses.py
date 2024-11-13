@@ -19,12 +19,12 @@ def test_should_open_new_position_ramses_v2(
 
     system = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     cheating = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     cheating.prank(ARBITRUM.PILOT.V5.OWNER)
@@ -91,12 +91,12 @@ def test_should_collect_all_after_decrease_liquidity(
 
     system = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     cheating = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     cheating.prank(ARBITRUM.PILOT.V5.OWNER)
@@ -184,12 +184,12 @@ def test_should_increase_liquidity(
 
     system = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     cheating = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     cheating.prank(ARBITRUM.PILOT.V5.OWNER)
@@ -269,12 +269,12 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
 
     system = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     cheating = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
-        account=ANVIL_WALLET_PRIVATE_KEY,
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     cheating.prank(ARBITRUM.PILOT.V5.OWNER)
