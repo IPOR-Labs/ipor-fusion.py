@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+from eth_account import Account
 
 import constants
 import ipor_fusion.ERC20
@@ -30,7 +31,8 @@ def web3_fixture(anvil):
 
 @pytest.fixture(scope="module", name="account")
 def account_fixture():
-    return constants.ANVIL_WALLET_PRIVATE_KEY
+    # pylint: disable=no-value-for-parameter
+    return Account.from_key(constants.ANVIL_WALLET_PRIVATE_KEY)
 
 
 @pytest.fixture(scope="module", name="transaction_executor")
