@@ -10,6 +10,7 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.WithdrawManager import WithdrawManager
 from ipor_fusion.markets.RamsesV2Market import RamsesV2Market
 from ipor_fusion.markets.UniswapV3Market import UniswapV3Market
+from ipor_fusion.markets.UniversalMarket import UniversalMarket
 
 
 class PlasmaSystem:
@@ -53,6 +54,7 @@ class PlasmaSystem:
             fuses=self._fuses,
             rewards_fuses=self._rewards_fuses,
         )
+        self._universal_market = UniversalMarket(self._fuses)
 
     def transaction_executor(self) -> TransactionExecutor:
         return self._transaction_executor
@@ -83,3 +85,9 @@ class PlasmaSystem:
 
     def ramses_v2(self) -> RamsesV2Market:
         return self._ramses_v2_market
+
+    def universal(self) -> UniversalMarket:
+        return self._universal_market
+
+    def prank(self, address: str):
+        self._transaction_executor.prank(address)

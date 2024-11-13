@@ -33,7 +33,7 @@ def test_should_deposit(
     )
 
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
 
@@ -41,7 +41,7 @@ def test_should_deposit(
     whale_account = "0x1F7bc4dA1a0c2e49d7eF542F74CD46a3FE592cb1"
 
     # Set the account for the transaction executor to the whitelisted account
-    cheating.transaction_executor().prank(whale_account)
+    cheating.prank(whale_account)
     cheating.usdc().transfer(system.alpha(), amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
 
@@ -79,11 +79,11 @@ def test_should_mint(anvil):
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
 
-    cheating_system_factory = CheatingPlasmaVaultSystemFactory(
+    cheating = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(), account=ANVIL_WALLET_PRIVATE_KEY
-    )
-    cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    ).get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
+
+    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
 
@@ -93,7 +93,7 @@ def test_should_mint(anvil):
     whale_account = "0x1F7bc4dA1a0c2e49d7eF542F74CD46a3FE592cb1"
 
     # Transfer USDC to system.alpha()
-    cheating.transaction_executor().prank(whale_account)
+    cheating.prank(whale_account)
     cheating.usdc().transfer(system.alpha(), amount)
     system.usdc().approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
 
@@ -163,7 +163,7 @@ def test_should_redeem(
         account=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.ATOMIST_ROLE, system.alpha(), 0)
@@ -172,7 +172,7 @@ def test_should_redeem(
     whale_account = "0x1F7bc4dA1a0c2e49d7eF542F74CD46a3FE592cb1"
 
     # Set the account for the transaction executor to the whitelisted account
-    cheating.transaction_executor().prank(whale_account)
+    cheating.prank(whale_account)
     cheating.usdc().transfer(system.alpha(), amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
 
@@ -248,7 +248,7 @@ def test_should_withdraw(
         account=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.ATOMIST_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
@@ -259,7 +259,7 @@ def test_should_withdraw(
     whale_account = "0x1F7bc4dA1a0c2e49d7eF542F74CD46a3FE592cb1"
 
     # Transfer USDC to user_one
-    cheating.transaction_executor().prank(whale_account)
+    cheating.prank(whale_account)
     cheating.usdc().transfer(system.alpha(), amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
 
@@ -277,7 +277,7 @@ def test_should_withdraw(
     # Update withdraw window and request withdrawal
     withdraw_manager.update_withdraw_window(7 * 60 * 60)  # 7 hours
 
-    cheating.transaction_executor().prank(system.alpha())
+    cheating.prank(system.alpha())
     withdraw_manager.request(to_withdraw)
 
     # Move time forward 1 hour
@@ -288,7 +288,7 @@ def test_should_withdraw(
     to_withdraw_second = vault.max_withdraw(system.alpha())
 
     # Perform withdrawal
-    cheating.transaction_executor().prank(system.alpha())
+    cheating.prank(system.alpha())
     vault.withdraw(to_withdraw_second, system.alpha(), system.alpha())
 
     # Record final state
@@ -328,7 +328,7 @@ def test_should_transfer(
         account=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
 
@@ -339,7 +339,7 @@ def test_should_transfer(
     whale_account = "0x1F7bc4dA1a0c2e49d7eF542F74CD46a3FE592cb1"
 
     # Transfer USDC to user_one
-    cheating.transaction_executor().prank(whale_account)
+    cheating.prank(whale_account)
     cheating.usdc().transfer(user_one, amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, 3 * amount)
 
@@ -372,7 +372,7 @@ def test_should_transfer_from(anvil):
         account=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
 
@@ -383,7 +383,7 @@ def test_should_transfer_from(anvil):
     whale_account = "0x1F7bc4dA1a0c2e49d7eF542F74CD46a3FE592cb1"
 
     # Transfer USDC to user_one
-    cheating.transaction_executor().prank(whale_account)
+    cheating.prank(whale_account)
     cheating.usdc().transfer(user_one, amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, 3 * amount)
 
@@ -393,7 +393,7 @@ def test_should_transfer_from(anvil):
     vault.approve(user_one, amount)
 
     # Transfer shares from user_one to user_two using transferFrom
-    cheating.transaction_executor().prank(user_one)
+    cheating.prank(user_one)
     vault.transfer_from(user_one, user_two, amount)
 
     # Verify the transfer

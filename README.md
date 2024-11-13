@@ -90,71 +90,48 @@ poetry run black ./
 ## Example of usage
 
 ```python
-import time
-from web3 import Web3
-from ipor_fusion.contracts import (
-    UniswapV3SwapFuse,
-    UniswapV3NewPositionFuse,
-    PlasmaVault,
-    ERC20,
-    TransactionExecutor,
+from eth_account import Account
+
+from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
+
+# Variables
+PROVIDER_URL = "https://arb-mainnet.g.alchemy.com/v2/XXXXXXXXXXXXXXXXXXXXXXXX"
+ACCOUNT = Account.from_key(
+    private_key="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 )
-from ipor_fusion.constants import ARBITRUM
+PLASMA_VAULT = "0x3F97CEa640B8B93472143f87a96d5A86f1F5167F"
 
-# Initialize Web3 and account
-web3 = Web3(Web3.HTTPProvider("YOUR_NODE_URL"))
-account = "YOUR_PRIVATE_KEY"  # Or use constants.ANVIL_WALLET_PRIVATE_KEY for testing
+# Setup PlasmaVault System
+system = PlasmaVaultSystemFactory(
+    provider_url=PROVIDER_URL,
+    account=ACCOUNT,
+).get(PLASMA_VAULT)
 
-# Initialize transaction executor
-transaction_executor = TransactionExecutor(web3, account)
-
-# Initialize contracts
-uniswap_v3_swap_fuse = UniswapV3SwapFuse(transaction_executor, ARBITRUM.PILOT.V4.UNISWAP_V3_SWAP_FUSE)
-uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(transaction_executor, ARBITRUM.PILOT.V4.UNISWAP_V3_NEW_POSITION_FUSE)
-plasma_vault = PlasmaVault(transaction_executor, ARBITRUM.PILOT.V4.PLASMA_VAULT)
-usdc = ERC20(transaction_executor, ARBITRUM.USDC)
-usdt = ERC20(transaction_executor, ARBITRUM.USDT)
-
-# Swap USDC to USDT
-swap = uniswap_v3_swap_fuse.swap(
-    token_in_address=ARBITRUM.USDC,
-    token_out_address=ARBITRUM.USDT,
+# Get swap transaction
+swap = system.uniswap_v3().swap(
+    token_in_address=system.usdc().address(),
+    token_out_address=system.usdt().address(),
     fee=100,
     token_in_amount=int(500e6),
     min_out_amount=0,
 )
-plasma_vault.execute([swap])
 
-# Check balances after swap
-vault_usdc_balance_after_swap = usdc.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
-vault_usdt_balance_after_swap = usdt.balance_of(ARBITRUM.PILOT.V4.PLASMA_VAULT)
-
-# Create a new position with specified parameters
-new_position = uniswap_v3_new_position_fuse.new_position(
-    token0=ARBITRUM.USDC,
-    token1=ARBITRUM.USDT,
-    fee=100,
+# Get new position transaction
+new_position = system.ramses_v2().new_position(
+    token0=system.usdc().address(),
+    token1=system.usdt().address(),
+    fee=50,
     tick_lower=-100,
-    tick_upper=101,
+    tick_upper=100,
     amount0_desired=int(499e6),
     amount1_desired=int(499e6),
     amount0_min=0,
     amount1_min=0,
     deadline=int(time.time()) + 100,
+    ve_ram_token_id=0,
 )
 
-# Execute the creation of the new position
-plasma_vault.execute([new_position])
+# Execute transactions on PlasmaVault in batch
+tx_result = system.plasma_vault().execute([swap, new_position])
 
-# Check balances after opening the new position
-vault_usdc_balance_after_new_position = usdc.balance_of(
-    ARBITRUM.PILOT.V4.PLASMA_VAULT
-)
-vault_usdt_balance_after_new_position = usdt.balance_of(
-    ARBITRUM.PILOT.V4.PLASMA_VAULT
-)
-
-# Assert on balance changes after creating the new position
-usdc_change = vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap
-usdt_change = vault_usdt_balance_after_new_position - vault_usdt_balance_after_swap
 ```

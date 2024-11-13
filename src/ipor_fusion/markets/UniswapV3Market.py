@@ -1,3 +1,5 @@
+from typing import List
+
 from web3 import Web3
 
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
@@ -10,7 +12,7 @@ class UniswapV3Market:
         "0x84C5aB008C66d664681698A9E4536D942B916F89"
     )
 
-    def __init__(self, fuses: str):
+    def __init__(self, fuses: List[str]):
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse == self.UNISWAP_V3_SWAP_FUSE:

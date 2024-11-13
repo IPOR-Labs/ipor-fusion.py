@@ -27,7 +27,7 @@ def test_should_open_new_position_ramses_v2(
         account=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
     # given
@@ -99,7 +99,7 @@ def test_should_collect_all_after_decrease_liquidity(
         account=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
     swap_action = system.uniswap_v3().swap(
@@ -192,7 +192,7 @@ def test_should_increase_liquidity(
         account=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
     swap = system.uniswap_v3().swap(
@@ -262,7 +262,7 @@ def test_should_increase_liquidity(
 
 
 def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manager(
-    anvil,
+    anvil, uniswap_v3_universal_router
 ):
     # given
     anvil.reset_fork(261946538)
@@ -277,7 +277,7 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
         account=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
-    cheating.transaction_executor().prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
     cheating.access_manager().grant_role(Roles.ATOMIST_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.CLAIM_REWARDS_ROLE, system.alpha(), 0)
@@ -346,9 +346,7 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
         500,
         system.usdc().address(),
     ]
-    system.uniswap_v3().swap(
-        system.ramses_v2().ram().address(), path, ram_after_transfer
-    )  # TODO: use universal swap ??
+    uniswap_v3_universal_router.swap(ARBITRUM.RAMSES.V2.RAM, path, ram_after_transfer)
 
     usdc_after_swap_ram = system.usdc().balance_of(system.alpha())
 

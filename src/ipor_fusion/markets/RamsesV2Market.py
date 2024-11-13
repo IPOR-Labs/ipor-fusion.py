@@ -3,6 +3,7 @@ from typing import List
 from web3 import Web3
 
 from ipor_fusion.ERC20 import ERC20
+from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -36,9 +37,9 @@ class RamsesV2Market:
     def __init__(
         self,
         transaction_executor: TransactionExecutor,
-        fuses: str,
-        rewards_fuses,
-        rewards_claim_manager,
+        fuses: List[str],
+        rewards_fuses: List[str],
+        rewards_claim_manager: RewardsClaimManager,
     ):
         self._transaction_executor = transaction_executor
         for fuse in fuses:
