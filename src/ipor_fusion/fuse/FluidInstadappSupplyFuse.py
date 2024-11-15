@@ -29,7 +29,6 @@ class FluidInstadappSupplyFuse:
         erc4626_fuse_address: str,
         fluid_instadapp_staking_contract_address: str,
         fluid_instadapp_staking_fuse_address: str,
-        fluid_instadapp_claim_fuse_address: str,
     ):
         self.fluid_instadapp_pool_token_address = self._require_non_null(
             fluid_instadapp_pool_token_address,
@@ -45,10 +44,6 @@ class FluidInstadappSupplyFuse:
         self.fluid_staking_fuse_address = self._require_non_null(
             fluid_instadapp_staking_fuse_address,
             "fluidInstadappStakingFuseAddress is required",
-        )
-        self.fluid_instadapp_claim_fuse_address = self._require_non_null(
-            fluid_instadapp_claim_fuse_address,
-            "fluidInstadappClaimFuseAddress is required",
         )
 
     @staticmethod
@@ -96,10 +91,6 @@ class FluidInstadappSupplyFuse:
                 self.erc4626_fuse_address, erc4626_supply_fuse_exit_data.function_call()
             ),
         ]
-
-    def create_fuse_claim_action(self) -> List[FuseAction]:
-        claim_data = b""  # Assuming no specific data for the claim action
-        return [FuseAction(self.fluid_instadapp_claim_fuse_address, claim_data)]
 
 
 class FluidInstadappStakingSupplyFuseEnterData:

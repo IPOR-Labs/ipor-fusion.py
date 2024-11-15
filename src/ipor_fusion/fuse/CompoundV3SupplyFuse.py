@@ -1,10 +1,8 @@
-from typing import List
-
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.MarketId import MarketId
+from ipor_fusion.fuse.FuseAction import FuseAction
 
 
 class CompoundV3SupplyFuse:
@@ -35,9 +33,6 @@ class CompoundV3SupplyFuse:
         return FuseAction(
             self.fuse_address, compound_v3_supply_fuse_exit_data.function_call()
         )
-
-    def claim(self, market_id: MarketId) -> List[FuseAction]:
-        raise NotImplementedError("Fuse claim action is not supported for Compound V3")
 
 
 class CompoundV3SupplyFuseEnterData:

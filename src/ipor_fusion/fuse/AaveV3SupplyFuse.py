@@ -1,10 +1,8 @@
-from typing import List
-
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.MarketId import MarketId
+from ipor_fusion.fuse.FuseAction import FuseAction
 
 
 class AaveV3SupplyFuse:
@@ -36,9 +34,6 @@ class AaveV3SupplyFuse:
         return FuseAction(
             self.fuse_address, aave_v3_supply_fuse_exit_data.function_call()
         )
-
-    def create_fuse_claim_action(self, market_id: MarketId) -> List[FuseAction]:
-        raise NotImplementedError("Fuse claim action is not supported for Aave V3")
 
 
 class AaveV3SupplyFuseEnterData:

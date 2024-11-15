@@ -6,9 +6,9 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 
 class ERC20:
 
-    def __init__(self, transaction_executor: TransactionExecutor, asset: str):
+    def __init__(self, transaction_executor: TransactionExecutor, asset_address: str):
         self._transaction_executor = transaction_executor
-        self._asset_address = asset
+        self._asset_address = asset_address
 
     def address(self) -> str:
         return self._asset_address

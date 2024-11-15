@@ -15,7 +15,6 @@ class GearboxSupplyFuse:
     PROTOCOL_ID = "gearbox-v3"
     ENTER = "enter"
     EXIT = "exit"
-    CLAIM = "claim"
     MAX_UINT256 = (1 << 256) - 1
 
     def __init__(
@@ -24,7 +23,6 @@ class GearboxSupplyFuse:
         erc4626_fuse_address: str,
         farmd_token_address: str,
         farm_fuse_address: str,
-        claim_fuse_address: str,
     ):
         self.d_token_address = self._require_non_null(
             d_token_address, "dTokenAddress is required"
@@ -37,9 +35,6 @@ class GearboxSupplyFuse:
         )
         self.farm_fuse_address = self._require_non_null(
             farm_fuse_address, "farmFuseAddress is required"
-        )
-        self.claim_fuse_address = self._require_non_null(
-            claim_fuse_address, "claimFuseAddress is required"
         )
 
     @staticmethod

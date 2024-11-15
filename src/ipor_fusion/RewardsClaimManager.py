@@ -11,10 +11,12 @@ from ipor_fusion.fuse.FuseAction import FuseAction
 class RewardsClaimManager:
 
     def __init__(
-        self, transaction_executor: TransactionExecutor, rewards_claim_manager: str
+        self,
+        transaction_executor: TransactionExecutor,
+        rewards_claim_manager_address: str,
     ):
         self._transaction_executor = transaction_executor
-        self._rewards_claim_manager_address = rewards_claim_manager
+        self._rewards_claim_manager_address = rewards_claim_manager_address
 
     def address(self) -> str:
         return self._rewards_claim_manager_address

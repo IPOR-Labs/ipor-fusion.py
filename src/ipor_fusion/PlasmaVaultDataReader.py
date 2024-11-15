@@ -28,9 +28,12 @@ class PlasmaVaultDataReader:
         asset_address = Web3.to_checksum_address(
             plasma_vault.underlying_asset_address()
         )
-        withdraw_manager_address = Web3.to_checksum_address(
-            plasma_vault.withdraw_manager_address()
-        )
+        withdraw_manager_address_checksum = None
+        withdraw_manager_address = plasma_vault.withdraw_manager_address()
+        if withdraw_manager_address:
+            withdraw_manager_address_checksum = Web3.to_checksum_address(
+                withdraw_manager_address
+            )
         rewards_claim_manager_address = Web3.to_checksum_address(
             plasma_vault.get_rewards_claim_manager_address()
         )
@@ -39,7 +42,7 @@ class PlasmaVaultDataReader:
         return PlasmaVaultData(
             plasma_vault_address=plasma_vault_address,
             access_manager_address=access_manager_address,
-            withdraw_manager_address=withdraw_manager_address,
+            withdraw_manager_address=withdraw_manager_address_checksum,
             asset_address=asset_address,
             rewards_claim_manager_address=rewards_claim_manager_address,
             fuses=checksum_fuses,

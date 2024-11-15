@@ -30,11 +30,6 @@ class Erc4626SupplyFuse:
         exit_data = Erc4626SupplyFuseExitData(market_id.market_id, amount)
         return [FuseAction(self.fuse_address, exit_data.function_selector())]
 
-    def create_fuse_claim_action(self, market_id: MarketId) -> List[FuseAction]:
-        raise NotImplementedError(
-            "Fuse claim action is not supported for generic ERC4626"
-        )
-
 
 class Erc4626SupplyFuseEnterData:
     def __init__(self, address: str, amount: int):

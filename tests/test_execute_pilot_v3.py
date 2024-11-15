@@ -1,105 +1,64 @@
-import pytest
-
 from constants import (
     ARBITRUM,
     ANVIL_WALLET,
+    ANVIL_WALLET_PRIVATE_KEY,
 )
-from ipor_fusion.AccessManager import AccessManager
-from ipor_fusion.MarketId import MarketId
-from ipor_fusion.PlasmaVault import PlasmaVault
+from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
+    CheatingPlasmaVaultSystemFactory,
+)
+from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.Roles import Roles
-from ipor_fusion.fuse.AaveV3SupplyFuse import AaveV3SupplyFuse
-from ipor_fusion.fuse.CompoundV3SupplyFuse import CompoundV3SupplyFuse
-from ipor_fusion.fuse.FluidInstadappSupplyFuse import FluidInstadappSupplyFuse
-from ipor_fusion.fuse.GearboxSupplyFuse import GearboxSupplyFuse
-
-fluid_fuse = FluidInstadappSupplyFuse(
-    ARBITRUM.FLUID_INSTADAPP.V1.USDC.POOL,
-    ARBITRUM.PILOT.V3.FLUID_INSTADAPP_POOL_FUSE,
-    ARBITRUM.FLUID_INSTADAPP.V1.USDC.STAKING_POOL,
-    ARBITRUM.PILOT.V3.FLUID_INSTADAPP_STAKING_FUSE,
-    ARBITRUM.PILOT.V3.FLUID_INSTADAPP_CLAIM_FUSE,
-)
-
-gearbox_fuse = GearboxSupplyFuse(
-    ARBITRUM.GEARBOX.V3.USDC.POOL,
-    ARBITRUM.PILOT.V3.GEARBOX_POOL_FUSE,
-    ARBITRUM.GEARBOX.V3.USDC.FARM_POOL,
-    ARBITRUM.PILOT.V3.GEARBOX_FARM_FUSE,
-    ARBITRUM.PILOT.V3.GEARBOX_CLAIM_FUSE,
-)
-
-aave_v3_fuse = AaveV3SupplyFuse(ARBITRUM.PILOT.V3.AAVE_V3_FUSE, ARBITRUM.USDC)
-
-compound_v3_fuse = CompoundV3SupplyFuse(
-    ARBITRUM.PILOT.V3.COMPOUND_V3_FUSE, ARBITRUM.USDC
-)
 
 
-@pytest.fixture(scope="module", name="plasma_vault")
-def plasma_vault_fixture(transaction_executor) -> PlasmaVault:
-    return PlasmaVault(
-        transaction_executor=transaction_executor,
-        plasma_vault_address=ARBITRUM.PILOT.V3.PLASMA_VAULT,
+def withdraw_from_fluid(system):
+    fluid_staking_balance_before = (
+        system.fluid_instadapp()
+        .staking_pool()
+        .balance_of(system.plasma_vault().address())
     )
 
-
-@pytest.fixture(scope="module", name="cheating_access_manager")
-def cheating_access_manager_fixture(cheating_transaction_executor) -> AccessManager:
-    return AccessManager(
-        transaction_executor=cheating_transaction_executor,
-        access_manager_address=ARBITRUM.PILOT.V3.ACCESS_MANAGER,
-    )
-
-
-def withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool):
-    fluid_staking_balance_before = fluid_usdc_staking_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
-    )
-
-    unstake_and_withdraw = fluid_fuse.unstake_and_withdraw(
-        market_id=MarketId(
-            FluidInstadappSupplyFuse.PROTOCOL_ID, ARBITRUM.FLUID_INSTADAPP.V1.USDC.POOL
-        ),
+    unstake_and_withdraw = system.fluid_instadapp().unstake_and_withdraw(
         amount=fluid_staking_balance_before,
     )
 
-    plasma_vault.execute(unstake_and_withdraw)
+    system.plasma_vault().execute(unstake_and_withdraw)
 
 
 def test_supply_and_withdraw_from_gearbox(
     anvil,
-    plasma_vault,
-    usdc,
-    fluid_usdc_staking_pool,
-    gearbox_v3_usdc_farm_pool,
-    cheating_transaction_executor,
-    cheating_access_manager,
 ):
     anvil.reset_fork(250690377)
-    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
-    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
-    withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool)
+    system = PlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
+
+    cheating = CheatingPlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
+
+    cheating.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
+    withdraw_from_fluid(system)
 
     # given for supply
-    vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    gearbox_farm_balance_before = gearbox_v3_usdc_farm_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    gearbox_farm_balance_before = (
+        system.gearbox_v3().farm_pool().balance_of(system.plasma_vault().address())
     )
 
-    supply_and_stake = gearbox_fuse.supply_and_stake(
-        market_id=MarketId(
-            GearboxSupplyFuse.PROTOCOL_ID, ARBITRUM.GEARBOX.V3.USDC.POOL
-        ),
+    supply_and_stake = system.gearbox_v3().supply_and_stake(
         amount=vault_balance_before,
     )
 
-    plasma_vault.execute(supply_and_stake)
+    system.plasma_vault().execute(supply_and_stake)
 
-    vault_balance_after = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    gearbox_farm_balance_after = gearbox_v3_usdc_farm_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    gearbox_farm_balance_after = (
+        system.gearbox_v3().farm_pool().balance_of(system.plasma_vault().address())
     )
 
     assert vault_balance_before > 11_000e6, "vault_balance_before > 11_000e6"
@@ -110,24 +69,21 @@ def test_supply_and_withdraw_from_gearbox(
     ), "gearbox_farm_balance_after > 11_000e6"
 
     # given for withdraw
-    vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    gearbox_farm_balance_before = gearbox_v3_usdc_farm_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    gearbox_farm_balance_before = (
+        system.gearbox_v3().farm_pool().balance_of(system.plasma_vault().address())
     )
 
-    unstake_and_withdraw = gearbox_fuse.unstake_and_withdraw(
-        market_id=MarketId(
-            GearboxSupplyFuse.PROTOCOL_ID, ARBITRUM.GEARBOX.V3.USDC.POOL
-        ),
+    unstake_and_withdraw = system.gearbox_v3().unstake_and_withdraw(
         amount=gearbox_farm_balance_before,
     )
 
-    plasma_vault.execute(unstake_and_withdraw)
+    system.plasma_vault().execute(unstake_and_withdraw)
 
     # then after withdraw
-    vault_balance_after = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    gearbox_farm_balance_after = gearbox_v3_usdc_farm_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    gearbox_farm_balance_after = (
+        system.gearbox_v3().farm_pool().balance_of(system.plasma_vault().address())
     )
 
     assert vault_balance_before == 0, "vault_balance_before == 0"
@@ -140,35 +96,42 @@ def test_supply_and_withdraw_from_gearbox(
 
 def test_supply_and_withdraw_from_fluid(
     anvil,
-    plasma_vault,
-    usdc,
-    fluid_usdc_staking_pool,
-    cheating_transaction_executor,
-    cheating_access_manager,
 ):
     anvil.reset_fork(250690377)
-    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
-    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
-    withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool)
+    system = PlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
 
-    vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    fluid_staking_balance_before = fluid_usdc_staking_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    cheating = CheatingPlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
+
+    cheating.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
+    withdraw_from_fluid(system)
+
+    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    fluid_staking_balance_before = (
+        system.fluid_instadapp()
+        .staking_pool()
+        .balance_of(system.plasma_vault().address())
     )
 
-    supply_and_stake = fluid_fuse.supply_and_stake(
-        market_id=MarketId(
-            FluidInstadappSupplyFuse.PROTOCOL_ID, ARBITRUM.FLUID_INSTADAPP.V1.USDC.POOL
-        ),
+    supply_and_stake = system.fluid_instadapp().supply_and_stake(
         amount=vault_balance_before,
     )
 
-    plasma_vault.execute(supply_and_stake)
+    system.plasma_vault().execute(supply_and_stake)
 
-    vault_balance_after = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    fluid_staking_balance_after = fluid_usdc_staking_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    fluid_staking_balance_after = (
+        system.fluid_instadapp()
+        .staking_pool()
+        .balance_of(system.plasma_vault().address())
     )
 
     assert vault_balance_before > 11_000e6, "vault_balance_before > 11_000e6"
@@ -179,24 +142,25 @@ def test_supply_and_withdraw_from_fluid(
     ), "fluid_staking_balance_after > 11_000e6"
 
     # given for withdraw
-    vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    fluid_staking_balance_before = fluid_usdc_staking_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    fluid_staking_balance_before = (
+        system.fluid_instadapp()
+        .staking_pool()
+        .balance_of(system.plasma_vault().address())
     )
 
-    unstake_and_withdraw = fluid_fuse.unstake_and_withdraw(
-        market_id=MarketId(
-            FluidInstadappSupplyFuse.PROTOCOL_ID, ARBITRUM.FLUID_INSTADAPP.V1.USDC.POOL
-        ),
+    unstake_and_withdraw = system.fluid_instadapp().unstake_and_withdraw(
         amount=fluid_staking_balance_before,
     )
 
-    plasma_vault.execute(unstake_and_withdraw)
+    system.plasma_vault().execute(unstake_and_withdraw)
 
     # then after withdraw
-    vault_balance_after = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    fluid_staking_balance_after = fluid_usdc_staking_pool.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    fluid_staking_balance_after = (
+        system.fluid_instadapp()
+        .staking_pool()
+        .balance_of(system.plasma_vault().address())
     )
 
     assert vault_balance_before == 0, "vault_balance_before == 0"
@@ -209,34 +173,42 @@ def test_supply_and_withdraw_from_fluid(
 
 def test_supply_and_withdraw_from_aave_v3(
     anvil,
-    plasma_vault,
-    usdc,
-    fluid_usdc_staking_pool,
-    aave_v3_usdc_a_token_arb_usdc_n,
-    cheating_transaction_executor,
-    cheating_access_manager,
 ):
     anvil.reset_fork(250690377)
-    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
-    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
-    withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool)
+    system = PlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
 
-    vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    protocol_balance_before = aave_v3_usdc_a_token_arb_usdc_n.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    cheating = CheatingPlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
+
+    cheating.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
+    withdraw_from_fluid(system)
+
+    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    protocol_balance_before = (
+        system.aave_v3()
+        .usdc_a_token_arb_usdc_n()
+        .balance_of(system.plasma_vault().address())
     )
 
-    supply = aave_v3_fuse.supply(
-        market_id=MarketId(AaveV3SupplyFuse.PROTOCOL_ID, ARBITRUM.USDC),
+    supply = system.aave_v3().supply(
         amount=vault_balance_before,
     )
 
-    plasma_vault.execute([supply])
+    system.plasma_vault().execute([supply])
 
-    vault_balance_after = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    protocol_balance_after = aave_v3_usdc_a_token_arb_usdc_n.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    protocol_balance_after = (
+        system.aave_v3()
+        .usdc_a_token_arb_usdc_n()
+        .balance_of(system.plasma_vault().address())
     )
 
     assert vault_balance_before > 11_000e6, "vault_balance_before > 11_000e6"
@@ -244,22 +216,25 @@ def test_supply_and_withdraw_from_aave_v3(
     assert protocol_balance_before == 0, "protocol_balance_before == 0"
     assert protocol_balance_after > 11_000e6, "protocol_balance_after > 11_000e6"
 
-    vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    protocol_balance_before = aave_v3_usdc_a_token_arb_usdc_n.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    protocol_balance_before = (
+        system.aave_v3()
+        .usdc_a_token_arb_usdc_n()
+        .balance_of(system.plasma_vault().address())
     )
 
-    withdraw = aave_v3_fuse.withdraw(
-        market_id=MarketId(AaveV3SupplyFuse.PROTOCOL_ID, ARBITRUM.USDC),
+    withdraw = system.aave_v3().withdraw(
         amount=protocol_balance_before,
     )
 
-    plasma_vault.execute([withdraw])
+    system.plasma_vault().execute([withdraw])
 
     # then after withdraw
-    vault_balance_after = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    protocol_balance_after = aave_v3_usdc_a_token_arb_usdc_n.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    protocol_balance_after = (
+        system.aave_v3()
+        .usdc_a_token_arb_usdc_n()
+        .balance_of(system.plasma_vault().address())
     )
 
     assert vault_balance_before == 0, "vault_balance_before == 0"
@@ -270,34 +245,38 @@ def test_supply_and_withdraw_from_aave_v3(
 
 def test_supply_and_withdraw_from_compound_v3(
     anvil,
-    plasma_vault,
-    usdc,
-    fluid_usdc_staking_pool,
-    compound_v3_usdc_c_token,
-    cheating_transaction_executor,
-    cheating_access_manager,
 ):
     anvil.reset_fork(250690377)
-    cheating_transaction_executor.prank(ARBITRUM.PILOT.V3.OWNER)
-    cheating_access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
-    withdraw_from_fluid(plasma_vault, fluid_usdc_staking_pool)
+    system = PlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
 
-    vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    protocol_balance_before = compound_v3_usdc_c_token.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    cheating = CheatingPlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
+
+    cheating.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
+    withdraw_from_fluid(system)
+
+    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    protocol_balance_before = (
+        system.compound_v3().usdc_c_token().balance_of(system.plasma_vault().address())
     )
 
-    supply = compound_v3_fuse.supply(
-        market_id=MarketId(CompoundV3SupplyFuse.PROTOCOL_ID, ARBITRUM.USDC),
+    supply = system.compound_v3().supply(
         amount=vault_balance_before,
     )
 
-    plasma_vault.execute([supply])
+    system.plasma_vault().execute([supply])
 
-    vault_balance_after = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    protocol_balance_after = compound_v3_usdc_c_token.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    protocol_balance_after = (
+        system.compound_v3().usdc_c_token().balance_of(system.plasma_vault().address())
     )
 
     assert vault_balance_before > 11_000e6, "vault_balance_before > 11_000e6"
@@ -306,22 +285,21 @@ def test_supply_and_withdraw_from_compound_v3(
     assert protocol_balance_after > 11_000e6, "protocol_balance_after > 11_000e6"
 
     # given for withdraw
-    vault_balance_before = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    protocol_balance_before = compound_v3_usdc_c_token.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    protocol_balance_before = (
+        system.compound_v3().usdc_c_token().balance_of(system.plasma_vault().address())
     )
 
-    withdraw = compound_v3_fuse.withdraw(
-        market_id=MarketId(CompoundV3SupplyFuse.PROTOCOL_ID, ARBITRUM.USDC),
+    withdraw = system.compound_v3().withdraw(
         amount=protocol_balance_before,
     )
 
-    plasma_vault.execute([withdraw])
+    system.plasma_vault().execute([withdraw])
 
     # then after withdraw
-    vault_balance_after = usdc.balance_of(ARBITRUM.PILOT.V3.PLASMA_VAULT)
-    protocol_balance_after = compound_v3_usdc_c_token.balance_of(
-        ARBITRUM.PILOT.V3.PLASMA_VAULT
+    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    protocol_balance_after = (
+        system.compound_v3().usdc_c_token().balance_of(system.plasma_vault().address())
     )
 
     assert vault_balance_before == 0, "vault_balance_before == 0"
