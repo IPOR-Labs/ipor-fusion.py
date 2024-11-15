@@ -28,7 +28,7 @@ class UniversalMarket:
         targets: List[str],
         data: List[bytes],
     ) -> FuseAction:
-        if not hasattr(self, "_uniswap_v3_swap_fuse"):
+        if not hasattr(self, "_universal_token_swapper_fuse"):
             raise UnsupportedFuseError(
                 "UniversalTokenSwapperFuse is not supported by PlasmaVault"
             )
