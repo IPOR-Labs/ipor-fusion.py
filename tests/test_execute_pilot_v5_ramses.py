@@ -342,11 +342,13 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
     path = [
         system.ramses_v2().ram().address(),
         10000,
-        ARBITRUM.WETH,
+        system.weth().address(),
         500,
         system.usdc().address(),
     ]
-    uniswap_v3_universal_router.swap(ARBITRUM.RAMSES.V2.RAM, path, ram_after_transfer)
+    uniswap_v3_universal_router.swap(
+        system.ramses_v2().ram().address(), path, ram_after_transfer
+    )
 
     usdc_after_swap_ram = system.usdc().balance_of(system.alpha())
 

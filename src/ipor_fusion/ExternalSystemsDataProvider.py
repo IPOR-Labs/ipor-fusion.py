@@ -9,6 +9,8 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 class ExternalSystemsData:
     usdc_address: str
     usdt_address: str
+    weth_address: str
+    dai_address: str
 
 
 class ExternalSystemsDataProvider:
@@ -33,4 +35,6 @@ class ExternalSystemsDataProvider:
         return ExternalSystemsData(
             usdc_address=self._USDC.get(self._chain_id),
             usdt_address=self._USDT.get(self._chain_id),
+            weth_address=self._WETH.get(self._chain_id),
+            dai_address=self._DAI.get(self._chain_id),
         )

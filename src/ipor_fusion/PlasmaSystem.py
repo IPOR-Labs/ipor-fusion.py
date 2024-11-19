@@ -86,6 +86,10 @@ class PlasmaSystem:
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
+        self._weth = ERC20(
+            transaction_executor=transaction_executor,
+            asset_address=external_systems_data.weth_address,
+        )
 
     def transaction_executor(self) -> TransactionExecutor:
         return self._transaction_executor
@@ -107,6 +111,9 @@ class PlasmaSystem:
 
     def usdt(self) -> ERC20:
         return self._usdt
+
+    def weth(self) -> ERC20:
+        return self._weth
 
     def alpha(self) -> str:
         return self._transaction_executor.get_account_address()

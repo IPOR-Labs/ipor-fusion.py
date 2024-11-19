@@ -19,11 +19,9 @@ def test_plasma_vault_data_reader():
     assert (
         plasma_vault_data.plasma_vault_address == ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT
     )
-    assert (
-        plasma_vault_data.withdraw_manager_address
-        == ARBITRUM.PILOT.SCHEDULED.WITHDRAW_MANAGER
+    assert plasma_vault_data.withdraw_manager_address == Web3.to_checksum_address(
+        "0x8066Ce248a0dC6E303f795B108b2572498B552B4"
     )
-    assert (
-        plasma_vault_data.access_manager_address
-        == ARBITRUM.PILOT.SCHEDULED.ACCESS_MANAGER
+    assert plasma_vault_data.access_manager_address == Web3.to_checksum_address(
+        "0xF9A6C0E19FDfc580453b2800A18d8faCF2E42933"
     )

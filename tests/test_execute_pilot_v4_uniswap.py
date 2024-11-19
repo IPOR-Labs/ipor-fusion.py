@@ -46,7 +46,7 @@ def test_should_swap_when_one_hop_uniswap_v3(
     )
 
     # Define swap targets
-    targets = [ARBITRUM.USDC, ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
+    targets = [system.usdc().address(), ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
 
     # Create the first function call to transfer USDC to the universal router
     function_selector_0 = function_signature_to_4byte_selector(
@@ -59,7 +59,8 @@ def test_should_swap_when_one_hop_uniswap_v3(
 
     # Encode the path for the swap (USDC to USDT)
     path = encode_packed(
-        ["address", "uint24", "address"], [ARBITRUM.USDC, 100, ARBITRUM.USDT]
+        ["address", "uint24", "address"],
+        [system.usdc().address(), 100, system.usdt().address()],
     )
 
     # Prepare inputs for the execute function call
@@ -86,7 +87,7 @@ def test_should_swap_when_one_hop_uniswap_v3(
     # Combine both function calls into the swap transaction
     data = [function_call_0, function_call_1]
     swap = system.universal().swap(
-        ARBITRUM.USDC, ARBITRUM.USDT, int(100e6), targets, data
+        system.usdc().address(), system.usdt().address(), int(100e6), targets, data
     )
 
     # Execute the swap transaction
@@ -145,7 +146,7 @@ def test_should_swap_when_multiple_hop(
     )
 
     # Define swap targets and data for multi-hop
-    targets = [ARBITRUM.USDC, ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
+    targets = [system.usdc().address(), ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
 
     # First function call: transfer depositAmount of USDC to router
     function_selector_0 = function_signature_to_4byte_selector(
@@ -159,7 +160,13 @@ def test_should_swap_when_multiple_hop(
     # Path encoding for USDC -> WETH -> USDT swap
     path = encode_packed(
         ["address", "uint24", "address", "uint24", "address"],
-        [ARBITRUM.USDC, 500, ARBITRUM.WETH, 3000, ARBITRUM.USDT],
+        [
+            system.usdc().address(),
+            500,
+            system.weth().address(),
+            3000,
+            system.usdt().address(),
+        ],
     )
 
     # Second function call: execute swap with encoded path and parameters
@@ -186,7 +193,7 @@ def test_should_swap_when_multiple_hop(
 
     # Initiate the swap through the plasma vault
     swap = system.universal().swap(
-        ARBITRUM.USDC, ARBITRUM.USDT, int(100e6), targets, data
+        system.usdc().address(), system.usdt().address(), int(100e6), targets, data
     )
 
     # Execute swap
@@ -234,8 +241,8 @@ def test_should_open_new_position_uniswap_v3(
 
     # Swap USDC to USDT
     swap = system.uniswap_v3().swap(
-        token_in_address=ARBITRUM.USDC,
-        token_out_address=ARBITRUM.USDT,
+        token_in_address=system.usdc().address(),
+        token_out_address=system.usdt().address(),
         fee=100,
         token_in_amount=int(500e6),
         min_out_amount=0,
@@ -252,8 +259,8 @@ def test_should_open_new_position_uniswap_v3(
 
     # Create a new position with specified parameters
     new_position = system.uniswap_v3().new_position(
-        token0=ARBITRUM.USDC,
-        token1=ARBITRUM.USDT,
+        token0=system.usdc().address(),
+        token1=system.usdt().address(),
         fee=100,
         tick_lower=-100,
         tick_upper=101,
@@ -308,8 +315,8 @@ def test_should_collect_all_after_decrease_liquidity(
 
     # Swap USDC to USDT
     swap = system.uniswap_v3().swap(
-        token_in_address=ARBITRUM.USDC,
-        token_out_address=ARBITRUM.USDT,
+        token_in_address=system.usdc().address(),
+        token_out_address=system.usdt().address(),
         fee=100,
         token_in_amount=int(500e6),
         min_out_amount=0,
@@ -318,8 +325,8 @@ def test_should_collect_all_after_decrease_liquidity(
 
     # Create a new position with specified parameters
     new_position = system.uniswap_v3().new_position(
-        token0=ARBITRUM.USDC,
-        token1=ARBITRUM.USDT,
+        token0=system.usdc().address(),
+        token1=system.usdt().address(),
         fee=100,
         tick_lower=-100,
         tick_upper=101,
@@ -401,8 +408,8 @@ def test_should_increase_liquidity(
 
     # Initial swap from USDC to USDT
     swap = system.uniswap_v3().swap(
-        token_in_address=ARBITRUM.USDC,
-        token_out_address=ARBITRUM.USDT,
+        token_in_address=system.usdc().address(),
+        token_out_address=system.usdt().address(),
         fee=100,
         token_in_amount=int(500e6),
         min_out_amount=0,
@@ -411,8 +418,8 @@ def test_should_increase_liquidity(
 
     # Create a new liquidity position
     new_position = system.uniswap_v3().new_position(
-        token0=ARBITRUM.USDC,
-        token1=ARBITRUM.USDT,
+        token0=system.usdc().address(),
+        token1=system.usdt().address(),
         fee=100,
         tick_lower=-100,
         tick_upper=101,
@@ -429,8 +436,8 @@ def test_should_increase_liquidity(
 
     # Prepare to increase liquidity for the existing position
     increase_position = system.uniswap_v3().increase_position(
-        token0=ARBITRUM.USDC,
-        token1=ARBITRUM.USDT,
+        token0=system.usdc().address(),
+        token1=system.usdt().address(),
         token_id=new_token_id,
         amount0_desired=int(99e6),
         amount1_desired=int(99e6),
