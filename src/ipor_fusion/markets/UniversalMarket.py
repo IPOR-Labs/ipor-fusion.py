@@ -13,12 +13,17 @@ class UniversalMarket:
     )
 
     def __init__(self, fuses: List[str]):
+        self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse == self.UNIVERSAL_TOKEN_SWAPPER_FUSE:
                 self._universal_token_swapper_fuse = UniversalTokenSwapperFuse(
                     checksum_fuse
                 )
+                self._any_fuse_supported = True
+
+    def is_market_supported(self) -> bool:
+        return self._any_fuse_supported
 
     def swap(
         self,

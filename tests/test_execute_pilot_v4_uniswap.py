@@ -34,7 +34,7 @@ def test_should_swap_when_one_hop_uniswap_v3(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V4.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Record initial balances before swap
@@ -134,7 +134,7 @@ def test_should_swap_when_multiple_hop(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V4.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Record initial balances
@@ -236,7 +236,7 @@ def test_should_open_new_position_uniswap_v3(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V4.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Swap USDC to USDT
@@ -310,7 +310,7 @@ def test_should_collect_all_after_decrease_liquidity(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V4.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Swap USDC to USDT
@@ -403,7 +403,7 @@ def test_should_increase_liquidity(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V4.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     # Initial swap from USDC to USDT

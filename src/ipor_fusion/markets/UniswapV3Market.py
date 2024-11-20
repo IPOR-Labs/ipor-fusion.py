@@ -23,22 +23,33 @@ class UniswapV3Market:
     UNISWAP_V3_COLLECT_FUSE = Web3.to_checksum_address(
         "0x75781AB6CdcE9c505DbD0848f4Ad8A97c68F53c1"
     )
+    UNISWAP_V3_SUPPLY_FUSE = Web3.to_checksum_address(
+        "0x5C0d0e13B18B3Ea43E05Df0Bd1b89e0a3e4b2B0f"
+    )
 
     def __init__(self, fuses: List[str]):
+        self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse == self.UNISWAP_V3_SWAP_FUSE:
                 self._uniswap_v3_swap_fuse = UniswapV3SwapFuse(checksum_fuse)
+                self._any_fuse_supported = True
             if checksum_fuse == self.UNISWAP_V3_NEW_POSITION_FUSE:
                 self._uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
                     checksum_fuse
                 )
+                self._any_fuse_supported = True
             if checksum_fuse == self.UNISWAP_V3_MODIFY_POSITION_FUSE:
                 self._uniswap_v3_modify_position_fuse = UniswapV3ModifyPositionFuse(
                     checksum_fuse
                 )
+                self._any_fuse_supported = True
             if checksum_fuse == self.UNISWAP_V3_COLLECT_FUSE:
                 self._uniswap_v3_collect_fuse = UniswapV3CollectFuse(checksum_fuse)
+                self._any_fuse_supported = True
+
+    def is_market_supported(self) -> bool:
+        return self._any_fuse_supported
 
     def swap(
         self,

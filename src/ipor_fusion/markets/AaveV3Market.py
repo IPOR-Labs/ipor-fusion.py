@@ -29,12 +29,17 @@ class AaveV3Market:
             transaction_executor, self.AAVE_V3_USDC_A_TOKEN_ARB_USDC_N
         )
 
+        self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse == self.AAVE_V3_SUPPLY_FUSE:
                 self._aave_v3_supply_fuse = AaveV3SupplyFuse(
                     self.AAVE_V3_SUPPLY_FUSE, self.USDC
                 )
+                self._any_fuse_supported = True
+
+    def is_market_supported(self) -> bool:
+        return self._any_fuse_supported
 
     def supply(self, amount: int) -> FuseAction:
         if not hasattr(self, "_aave_v3_supply_fuse"):

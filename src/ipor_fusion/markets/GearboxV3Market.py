@@ -36,17 +36,21 @@ class GearboxV3Market:
         self._transaction_executor = transaction_executor
         self._pool = ERC20(transaction_executor, self.GEARBOX_V3_POOL_USDC)
         self._farm_pool = ERC20(transaction_executor, self.GEARBOX_V3_FARM_POOL_USDC)
+
+        self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if (
-                checksum_fuse == self.GEARBOX_FARM_FUSE
-            ):  # TODO: split and change condition
+            if checksum_fuse == self.GEARBOX_FARM_FUSE:
                 self._gearbox_supply_fuse = GearboxSupplyFuse(
                     self.GEARBOX_V3_POOL_USDC,
                     self.GEARBOX_POOL_FUSE,
                     self.GEARBOX_V3_FARM_POOL_USDC,
                     self.GEARBOX_FARM_FUSE,
                 )
+                self._any_fuse_supported = True
+
+    def is_market_supported(self) -> bool:
+        return self._any_fuse_supported
 
     def pool(self) -> ERC20:
         return self._pool

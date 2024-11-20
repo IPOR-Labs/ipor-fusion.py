@@ -39,7 +39,7 @@ def test_supply_and_withdraw_from_gearbox(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     withdraw_from_fluid(system)
@@ -109,7 +109,7 @@ def test_supply_and_withdraw_from_fluid(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     withdraw_from_fluid(system)
@@ -186,7 +186,7 @@ def test_supply_and_withdraw_from_aave_v3(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     withdraw_from_fluid(system)
@@ -258,7 +258,7 @@ def test_supply_and_withdraw_from_compound_v3(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V3.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V3.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
     withdraw_from_fluid(system)

@@ -8,6 +8,7 @@ from ipor_fusion.PlasmaVaultDataReader import PlasmaVaultData
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.WithdrawManager import WithdrawManager
+from ipor_fusion.error.UnsupportedMarketError import UnsupportedMarketError
 from ipor_fusion.markets.AaveV3Market import AaveV3Market
 from ipor_fusion.markets.CompoundV3Market import CompoundV3Market
 from ipor_fusion.markets.FluidInstadappMarket import FluidInstadappMarket
@@ -119,24 +120,52 @@ class PlasmaSystem:
         return self._transaction_executor.get_account_address()
 
     def uniswap_v3(self) -> UniswapV3Market:
+        if not self._uniswap_v3_market.is_market_supported():
+            raise UnsupportedMarketError(
+                "Uniswap V3 Market is not supported by PlasmaVault"
+            )
         return self._uniswap_v3_market
 
     def ramses_v2(self) -> RamsesV2Market:
+        if not self._ramses_v2_market.is_market_supported():
+            raise UnsupportedMarketError(
+                "Ramses V2 Market is not supported by PlasmaVault"
+            )
         return self._ramses_v2_market
 
     def gearbox_v3(self) -> GearboxV3Market:
+        if not self._gearbox_v3_market.is_market_supported():
+            raise UnsupportedMarketError(
+                "Gearbox V3 Market is not supported by PlasmaVault"
+            )
         return self._gearbox_v3_market
 
     def fluid_instadapp(self) -> FluidInstadappMarket:
+        if not self._fluid_instadapp_market.is_market_supported():
+            raise UnsupportedMarketError(
+                "Fluid Instadapp Market is not supported by PlasmaVault"
+            )
         return self._fluid_instadapp_market
 
     def aave_v3(self) -> AaveV3Market:
+        if not self._aave_v3_market.is_market_supported():
+            raise UnsupportedMarketError(
+                "Aave V3 Market is not supported by PlasmaVault"
+            )
         return self._aave_v3_market
 
     def compound_v3(self) -> CompoundV3Market:
+        if not self._compound_v3_market.is_market_supported():
+            raise UnsupportedMarketError(
+                "Compound V3 Market is not supported by PlasmaVault"
+            )
         return self._compound_v3_market
 
     def universal(self) -> UniversalMarket:
+        if not self._universal_market.is_market_supported():
+            raise UnsupportedMarketError(
+                "Universal Market is not supported by PlasmaVault"
+            )
         return self._universal_market
 
     def prank(self, address: str):

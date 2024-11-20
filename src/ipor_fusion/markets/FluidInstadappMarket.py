@@ -35,17 +35,20 @@ class FluidInstadappMarket:
             transaction_executor, self.FLUID_INSTADAPP_STAKING_POOL_USDC
         )
 
+        self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if (
-                checksum_fuse == self.FLUID_INSTADAPP_POOL_FUSE
-            ):  # TODO: Fix this after fuse split. Add sec fuse address
+            if checksum_fuse == self.FLUID_INSTADAPP_POOL_FUSE:
                 self._fluid_instadapp_pool_fuse = FluidInstadappSupplyFuse(
                     self.FLUID_INSTADAPP_POOL_USDC,
                     self.FLUID_INSTADAPP_POOL_FUSE,
                     self.FLUID_INSTADAPP_STAKING_POOL_USDC,
                     self.FLUID_INSTADAPP_STAKING_FUSE,
                 )
+                self._any_fuse_supported = True
+
+    def is_market_supported(self) -> bool:
+        return self._any_fuse_supported
 
     def staking_pool(self) -> ERC20:
         return self._staking_pool

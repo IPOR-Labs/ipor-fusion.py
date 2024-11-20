@@ -33,7 +33,7 @@ def test_should_deposit(
     )
 
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
 
@@ -83,7 +83,7 @@ def test_should_mint(anvil):
         provider_url=anvil.get_anvil_http_url(), private_key=ANVIL_WALLET_PRIVATE_KEY
     ).get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
 
@@ -163,7 +163,7 @@ def test_should_redeem(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.ATOMIST_ROLE, system.alpha(), 0)
@@ -248,7 +248,7 @@ def test_should_withdraw(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.ATOMIST_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
@@ -328,7 +328,7 @@ def test_should_transfer(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
 
@@ -372,7 +372,7 @@ def test_should_transfer_from(anvil):
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
     cheating = cheating_system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
-    cheating.prank(ARBITRUM.PILOT.SCHEDULED.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, system.alpha(), 0)
 

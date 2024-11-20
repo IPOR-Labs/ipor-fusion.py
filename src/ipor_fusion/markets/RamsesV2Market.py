@@ -42,23 +42,28 @@ class RamsesV2Market:
         rewards_claim_manager: RewardsClaimManager,
     ):
         self._transaction_executor = transaction_executor
+        self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse == self.RAMSES_V2_NEW_POSITION_FUSE:
                 self._ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(
                     checksum_fuse
                 )
+                self._any_fuse_supported = True
             if checksum_fuse == self.RAMSES_V2_MODIFY_POSITION_FUSE:
                 self._ramses_v2_modify_position_fuse = RamsesV2ModifyPositionFuse(
                     checksum_fuse
                 )
+                self._any_fuse_supported = True
             if checksum_fuse == self.RAMSES_V2_COLLECT_FUSE:
                 self._ramses_v2_collect_fuse = RamsesV2CollectFuse(checksum_fuse)
+                self._any_fuse_supported = True
 
         for rewards_fuse in rewards_fuses:
             checksum_rewards_fuse = Web3.to_checksum_address(rewards_fuse)
             if checksum_rewards_fuse == self.RAMSES_V2_CLAIM_FUSE:
                 self._ramses_v2_claim_fuse = RamsesV2ClaimFuse(checksum_rewards_fuse)
+                self._any_fuse_supported = True
 
         if not rewards_fuses:
             if rewards_claim_manager.is_reward_fuse_supported(
@@ -67,6 +72,10 @@ class RamsesV2Market:
                 self._ramses_v2_claim_fuse = RamsesV2ClaimFuse(
                     self.RAMSES_V2_CLAIM_FUSE
                 )
+                self._any_fuse_supported = True
+
+    def is_market_supported(self) -> bool:
+        return self._any_fuse_supported
 
     def new_position(
         self,

@@ -27,7 +27,7 @@ def test_should_open_new_position_ramses_v2(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
     # given
@@ -99,7 +99,7 @@ def test_should_collect_all_after_decrease_liquidity(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
     swap_action = system.uniswap_v3().swap(
@@ -192,7 +192,7 @@ def test_should_increase_liquidity(
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
     swap = system.uniswap_v3().swap(
@@ -277,7 +277,7 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
-    cheating.prank(ARBITRUM.PILOT.V5.OWNER)
+    cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ATOMIST_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.CLAIM_REWARDS_ROLE, system.alpha(), 0)
