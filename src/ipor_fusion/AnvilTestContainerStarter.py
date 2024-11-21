@@ -3,54 +3,47 @@ import os
 import time
 from typing import Union, List
 
+import requests
 from docker.models.containers import ExecResult
 from dotenv import load_dotenv
 from testcontainers.core.container import DockerContainer
 from web3 import Web3, HTTPProvider
 from web3.types import RPCEndpoint
-import requests
 
 load_dotenv(verbose=True)
 
 
 class AnvilTestContainerStarter:
-    ARBITRUM_PROVIDER_URL = "ARBITRUM_PROVIDER_URL"
-    ANVIL_CONTAINER = os.getenv(
+    ANVIL_IMAGE = os.getenv(
         "ANVIL_TEST_CONTAINER",
         "ghcr.io/foundry-rs/foundry:nightly-be451fb93a0d0ec52152fb67cc6c36cd8fbd7ae1",
     )
 
     MAX_WAIT_SECONDS = 1201
     ANVIL_HTTP_PORT = 8545
-    CHAIN_ID = 42161
-    FORK_BLOCK_NUMBER = 250690377
 
-    def __init__(self):
+    def __init__(self, fork_url, fork_block_number):
         self.log = logging.getLogger(__name__)
-        self.anvil = DockerContainer(self.ANVIL_CONTAINER)
-        self.FORK_URL = os.getenv(self.ARBITRUM_PROVIDER_URL)
-        if not self.FORK_URL:
-            raise ValueError("Environment variable ARBITRUM_PROVIDER_URL must be set")
-        self.ANVIL_COMMAND_FORMAT = f'"anvil --steps-tracing --auto-impersonate --host 0.0.0.0 --fork-url {self.FORK_URL} --fork-block-number {self.FORK_BLOCK_NUMBER}"'
-        self.anvil.with_exposed_ports(self.ANVIL_HTTP_PORT).with_command(
+        self._docker_container = DockerContainer(self.ANVIL_IMAGE)
+        self._fork_url = fork_url
+        self._fork_block_number = fork_block_number
+        self.ANVIL_COMMAND_FORMAT = f'"anvil --steps-tracing --auto-impersonate --host 0.0.0.0 --fork-url {self._fork_url} --fork-block-number {self._fork_block_number}"'
+        self._docker_container.with_exposed_ports(self.ANVIL_HTTP_PORT).with_command(
             self.ANVIL_COMMAND_FORMAT
         )
 
     def get_anvil_http_url(self):
-        return f"http://{self.anvil.get_container_host_ip()}:{self.anvil.get_exposed_port(self.ANVIL_HTTP_PORT)}"
+        return f"http://{self._docker_container.get_container_host_ip()}:{self._docker_container.get_exposed_port(self.ANVIL_HTTP_PORT)}"
 
     def get_anvil_wss_url(self):
-        return f"wss://{self.anvil.get_container_host_ip()}:{self.anvil.get_exposed_port(self.ANVIL_HTTP_PORT)}"
-
-    def get_chain_id(self):
-        return self.CHAIN_ID
+        return f"wss://{self._docker_container.get_container_host_ip()}:{self._docker_container.get_exposed_port(self.ANVIL_HTTP_PORT)}"
 
     def get_client(self):
         http_url = self.get_anvil_http_url()
         return Web3(HTTPProvider(http_url))
 
     def execute_in_container(self, command: Union[str, list[str]]) -> tuple[int, bytes]:
-        result = self.anvil.exec(command)
+        result = self._docker_container.exec(command)
         if isinstance(result, ExecResult) and result.exit_code != 0:
             self.log.error("Error while executing command in container: %s", result)
             raise RuntimeError("Error while executing command in container")
@@ -75,7 +68,7 @@ class AnvilTestContainerStarter:
 
     def start(self):
         self.log.info("[CONTAINER] [ANVIL] Anvil container is starting")
-        self.anvil.start()
+        self._docker_container.start()
         self.wait_for_endpoint_ready()
         self.log.info("[CONTAINER] [ANVIL] Anvil container started")
 
@@ -83,7 +76,12 @@ class AnvilTestContainerStarter:
         self.log.info("[CONTAINER] [ANVIL] Anvil fork reset")
         w3 = self.get_client()
         params = [
-            {"forking": {"jsonRpcUrl": self.FORK_URL, "blockNumber": hex(block_number)}}
+            {
+                "forking": {
+                    "jsonRpcUrl": self._fork_url,
+                    "blockNumber": hex(block_number),
+                }
+            }
         ]
 
         w3.manager.request_blocking(RPCEndpoint("anvil_reset"), params)

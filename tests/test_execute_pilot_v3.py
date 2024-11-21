@@ -1,13 +1,20 @@
+import os
+
 from constants import (
     ARBITRUM,
     ANVIL_WALLET,
     ANVIL_WALLET_PRIVATE_KEY,
 )
+from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
 from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
     CheatingPlasmaVaultSystemFactory,
 )
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.Roles import Roles
+
+fork_url = os.getenv("ARBITRUM_PROVIDER_URL")
+anvil = AnvilTestContainerStarter(fork_url, 250690377)
+anvil.start()
 
 
 def withdraw_from_fluid(system):
@@ -24,9 +31,7 @@ def withdraw_from_fluid(system):
     system.plasma_vault().execute(unstake_and_withdraw)
 
 
-def test_supply_and_withdraw_from_gearbox(
-    anvil,
-):
+def test_supply_and_withdraw_from_gearbox():
     anvil.reset_fork(250690377)
 
     system = PlasmaVaultSystemFactory(
@@ -94,9 +99,7 @@ def test_supply_and_withdraw_from_gearbox(
     assert gearbox_farm_balance_after == 0, "gearbox_farm_balance_after == 0"
 
 
-def test_supply_and_withdraw_from_fluid(
-    anvil,
-):
+def test_supply_and_withdraw_from_fluid():
     anvil.reset_fork(250690377)
 
     system = PlasmaVaultSystemFactory(
@@ -171,9 +174,7 @@ def test_supply_and_withdraw_from_fluid(
     assert fluid_staking_balance_after == 0, "fluid_staking_balance_after == 0"
 
 
-def test_supply_and_withdraw_from_aave_v3(
-    anvil,
-):
+def test_supply_and_withdraw_from_aave_v3():
     anvil.reset_fork(250690377)
 
     system = PlasmaVaultSystemFactory(
@@ -243,9 +244,7 @@ def test_supply_and_withdraw_from_aave_v3(
     assert protocol_balance_after < 1e6, "protocol_balance_after < 1e6"
 
 
-def test_supply_and_withdraw_from_compound_v3(
-    anvil,
-):
+def test_supply_and_withdraw_from_compound_v3():
     anvil.reset_fork(250690377)
 
     system = PlasmaVaultSystemFactory(

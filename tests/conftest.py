@@ -5,26 +5,9 @@ from eth_account import Account
 
 from UniswapV3UniversalRouter import UniswapV3UniversalRouter
 from constants import ARBITRUM, ANVIL_WALLET_PRIVATE_KEY
-from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="module", name="anvil")
-def anvil_fixture():
-    logging.basicConfig(level=logging.DEBUG)
-    container = AnvilTestContainerStarter()
-    container.start()
-    return container
-
-
-@pytest.fixture(scope="module", name="web3")
-def web3_fixture(anvil):
-    client = anvil.get_client()
-    logger.info("Connected to Ethereum network with chain ID: %s", anvil.get_chain_id())
-    logger.info("Anvil HTTP URL: %s", anvil.get_anvil_http_url())
-    return client
 
 
 @pytest.fixture(scope="module", name="account")

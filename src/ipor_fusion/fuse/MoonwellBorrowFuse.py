@@ -5,37 +5,30 @@ from ipor_fusion.MarketId import MarketId
 from ipor_fusion.fuse.FuseAction import FuseAction
 
 
-class CompoundV3SupplyFuse:
-    PROTOCOL_ID = "compound-v3"
+class MoonwellBorrowFuse:
+    PROTOCOL_ID = "moonwell"
 
-    def __init__(self, fuse_address: str):
+    def __init__(self, fuse_address: str, asset_address: str):
         if not fuse_address:
             raise ValueError("fuseAddress is required")
         self.fuse_address = fuse_address
 
-    def supply(self, market_id: MarketId, amount: int) -> FuseAction:
-        compound_v3_supply_fuse_enter_data = CompoundV3SupplyFuseEnterData(
-            market_id.market_id, amount
-        )
-        return FuseAction(
-            self.fuse_address, compound_v3_supply_fuse_enter_data.function_call()
-        )
+    def borrow(self, market_id: MarketId, amount: int) -> FuseAction:
+        fuse_enter_data = MoonwellBorrowFuseEnterData(market_id.market_id, amount)
+        return FuseAction(self.fuse_address, fuse_enter_data.function_call())
 
-    def withdraw(self, market_id: MarketId, amount: int) -> FuseAction:
-        compound_v3_supply_fuse_exit_data = CompoundV3SupplyFuseExitData(
-            market_id.market_id, amount
-        )
-        return FuseAction(
-            self.fuse_address, compound_v3_supply_fuse_exit_data.function_call()
-        )
+    def repay(self, market_id: MarketId, amount: int) -> FuseAction:
+        fuse_exit_data = MoonwellBorrowFuseExitData(market_id.market_id, amount)
+        return FuseAction(self.fuse_address, fuse_exit_data.function_call())
 
 
-class CompoundV3SupplyFuseEnterData:
+class MoonwellBorrowFuseEnterData:
     def __init__(self, asset: str, amount: int):
         self.asset = asset
         self.amount = amount
 
     def encode(self) -> bytes:
+        # ABI encoding: address and uint256
         return encode(["address", "uint256"], [self.asset, self.amount])
 
     @staticmethod
@@ -46,12 +39,13 @@ class CompoundV3SupplyFuseEnterData:
         return self.function_selector() + self.encode()
 
 
-class CompoundV3SupplyFuseExitData:
+class MoonwellBorrowFuseExitData:
     def __init__(self, asset: str, amount: int):
         self.asset = asset
         self.amount = amount
 
     def encode(self) -> bytes:
+        # ABI encoding: address and uint256
         return encode(["address", "uint256"], [self.asset, self.amount])
 
     @staticmethod

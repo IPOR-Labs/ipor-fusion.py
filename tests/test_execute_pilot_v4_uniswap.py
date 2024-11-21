@@ -1,3 +1,4 @@
+import os
 import time
 
 from eth_abi import decode, encode
@@ -11,16 +12,19 @@ from constants import (
     ARBITRUM,
     ANVIL_WALLET_PRIVATE_KEY,
 )
+from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
 from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
     CheatingPlasmaVaultSystemFactory,
 )
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.Roles import Roles
 
+fork_url = os.getenv("ARBITRUM_PROVIDER_URL")
+anvil = AnvilTestContainerStarter(fork_url, 250690377)
+anvil.start()
 
-def test_should_swap_when_one_hop_uniswap_v3(
-    anvil,
-):
+
+def test_should_swap_when_one_hop_uniswap_v3():
     # Setup: Reset state and grant necessary roles
     anvil.reset_fork(254084008)
 
@@ -118,9 +122,7 @@ def test_should_swap_when_one_hop_uniswap_v3(
     ), "USDT balance change should be between 98e6 and 100e6"
 
 
-def test_should_swap_when_multiple_hop(
-    anvil,
-):
+def test_should_swap_when_multiple_hop():
     # Reset state and grant necessary roles
     anvil.reset_fork(254084008)
 
@@ -220,9 +222,7 @@ def test_should_swap_when_multiple_hop(
     ), "USDT balance change should be between 98e6 and 100e6"
 
 
-def test_should_open_new_position_uniswap_v3(
-    anvil,
-):
+def test_should_open_new_position_uniswap_v3():
     # Reset state and grant necessary roles
     anvil.reset_fork(254084008)
 
@@ -294,9 +294,7 @@ def test_should_open_new_position_uniswap_v3(
     ), "USDT balance after new position does not match expected change of -489_152502"
 
 
-def test_should_collect_all_after_decrease_liquidity(
-    anvil,
-):
+def test_should_collect_all_after_decrease_liquidity():
     # Reset state and grant necessary roles
     anvil.reset_fork(254084008)
 
@@ -387,9 +385,7 @@ def test_should_collect_all_after_decrease_liquidity(
     ), "Token ID of new position does not match closed position"
 
 
-def test_should_increase_liquidity(
-    anvil,
-):
+def test_should_increase_liquidity():
     # Setup: Reset state and grant necessary roles
     anvil.reset_fork(254084008)
 
