@@ -36,7 +36,7 @@ class CompoundV3Market:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse == self.COMPOUND_V3_SUPPLY_FUSE:
                 self._compound_v3_supply_fuse = CompoundV3SupplyFuse(
-                    self.COMPOUND_V3_SUPPLY_FUSE, self.USDC
+                    self.COMPOUND_V3_SUPPLY_FUSE
                 )
                 self._any_fuse_supported = True
 

@@ -1,6 +1,8 @@
 import logging
+import os
 
 from constants import ARBITRUM, ANVIL_WALLET_PRIVATE_KEY
+from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
 from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
     CheatingPlasmaVaultSystemFactory,
 )
@@ -11,10 +13,12 @@ from ipor_fusion.Roles import Roles
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
+fork_url = os.getenv("ARBITRUM_PROVIDER_URL")
+anvil = AnvilTestContainerStarter(fork_url, 250690377)
+anvil.start()
 
-def test_should_deposit(
-    anvil,
-):
+
+def test_should_deposit():
     """Test depositing USDC into the plasma vault."""
     # Reset the fork and grant necessary roles
     anvil.reset_fork(268934406)
@@ -67,7 +71,7 @@ def test_should_deposit(
     assert vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
 
-def test_should_mint(anvil):
+def test_should_mint():
     """Test minting shares in the plasma vault."""
     # Reset the fork and grant necessary roles
     anvil.reset_fork(268934406)
@@ -142,9 +146,7 @@ def test_should_mint(anvil):
     assert vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
 
-def test_should_redeem(
-    anvil,
-):
+def test_should_redeem():
     # Reset the fork and grant necessary roles
     anvil.reset_fork(268934406)
 
@@ -226,9 +228,7 @@ def test_should_redeem(
     assert vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
 
-def test_should_withdraw(
-    anvil,
-):
+def test_should_withdraw():
     """Test withdrawing assets from the plasma vault."""
     # Reset the fork and grant necessary roles
     anvil.reset_fork(268934406)
@@ -307,9 +307,7 @@ def test_should_withdraw(
     assert vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
 
-def test_should_transfer(
-    anvil,
-):
+def test_should_transfer():
     """Test transferring vault shares between users."""
     # Reset the fork and grant necessary roles
     anvil.reset_fork(268934406)
@@ -353,7 +351,7 @@ def test_should_transfer(
     assert user_two_vault_balance == amount, "Incorrect balance after transfer"
 
 
-def test_should_transfer_from(anvil):
+def test_should_transfer_from():
     """Test transferring vault shares between users using transferFrom."""
     # Reset the fork and grant necessary roles
     anvil.reset_fork(268934406)
