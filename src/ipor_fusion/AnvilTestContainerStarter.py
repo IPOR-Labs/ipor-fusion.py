@@ -22,14 +22,17 @@ class AnvilTestContainerStarter:
     MAX_WAIT_SECONDS = 1201
     ANVIL_HTTP_PORT = 8545
 
-    def __init__(self, fork_url, fork_block_number):
+    def __init__(self, fork_url, fork_block_number=None):
         self.log = logging.getLogger(__name__)
         self._docker_container = DockerContainer(self.ANVIL_IMAGE)
         self._fork_url = fork_url
         self._fork_block_number = fork_block_number
-        self.ANVIL_COMMAND_FORMAT = f'"anvil --steps-tracing --auto-impersonate --host 0.0.0.0 --fork-url {self._fork_url} --fork-block-number {self._fork_block_number}"'
+        fork_block_number_flag = ""
+        if fork_block_number:
+            fork_block_number_flag = f"--fork-block-number {self._fork_block_number}"
+        self.anvil_command = f'"anvil --steps-tracing --auto-impersonate --host 0.0.0.0 --fork-url {self._fork_url} {fork_block_number_flag}"'
         self._docker_container.with_exposed_ports(self.ANVIL_HTTP_PORT).with_command(
-            self.ANVIL_COMMAND_FORMAT
+            self.anvil_command
         )
 
     def get_anvil_http_url(self):

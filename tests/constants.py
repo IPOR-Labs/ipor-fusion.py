@@ -27,7 +27,6 @@ YEAR = 365 * DAY
 
 
 class ARBITRUM:
-
     class PILOT:
         class V3:
             PLASMA_VAULT = Web3.to_checksum_address(
@@ -47,10 +46,4 @@ class ARBITRUM:
         class SCHEDULED:
             PLASMA_VAULT = Web3.to_checksum_address(
                 "0xAC62eDcdA14aF2e2547F85D56EB2CE36D11333DA"
-            )
-
-    class UNISWAP:
-        class V3:
-            UNIVERSAL_ROUTER = Web3.to_checksum_address(
-                "0x5E325eDA8064b456f4781070C0738d849c824258"
             )

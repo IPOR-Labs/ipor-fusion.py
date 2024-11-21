@@ -20,8 +20,12 @@ from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.Roles import Roles
 
 fork_url = os.getenv("ARBITRUM_PROVIDER_URL")
-anvil = AnvilTestContainerStarter(fork_url, 250690377)
+anvil = AnvilTestContainerStarter(fork_url, 254084008)
 anvil.start()
+
+uniswap_v_3_universal_router_address = Web3.to_checksum_address(
+    "0x5E325eDA8064b456f4781070C0738d849c824258"
+)
 
 
 def test_should_swap_when_one_hop_uniswap_v3():
@@ -50,14 +54,14 @@ def test_should_swap_when_one_hop_uniswap_v3():
     )
 
     # Define swap targets
-    targets = [system.usdc().address(), ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
+    targets = [system.usdc().address(), uniswap_v_3_universal_router_address]
 
     # Create the first function call to transfer USDC to the universal router
     function_selector_0 = function_signature_to_4byte_selector(
         "transfer(address,uint256)"
     )
     function_args_0 = encode(
-        ["address", "uint256"], [ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER, (int(100e6))]
+        ["address", "uint256"], [uniswap_v_3_universal_router_address, (int(100e6))]
     )
     function_call_0 = function_selector_0 + function_args_0
 
@@ -148,14 +152,14 @@ def test_should_swap_when_multiple_hop():
     )
 
     # Define swap targets and data for multi-hop
-    targets = [system.usdc().address(), ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER]
+    targets = [system.usdc().address(), uniswap_v_3_universal_router_address]
 
     # First function call: transfer depositAmount of USDC to router
     function_selector_0 = function_signature_to_4byte_selector(
         "transfer(address,uint256)"
     )
     function_args_0 = encode(
-        ["address", "uint256"], [ARBITRUM.UNISWAP.V3.UNIVERSAL_ROUTER, (int(100e6))]
+        ["address", "uint256"], [uniswap_v_3_universal_router_address, (int(100e6))]
     )
     function_call_0 = function_selector_0 + function_args_0
 
