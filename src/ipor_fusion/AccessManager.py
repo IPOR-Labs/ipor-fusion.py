@@ -51,7 +51,7 @@ class AccessManager:
         self, role_ids: List[int]
     ) -> Dict[int, List[ChecksumAddress]]:
         events = self.get_grant_role_events()
-        dict = {}
+        result = {}
         for role_id in role_ids:
             accounts = []
             for event in events:
@@ -59,8 +59,8 @@ class AccessManager:
                 (_account,) = decode(["address"], event["topics"][2])
                 if _role_id == role_id and self.has_role(_role_id, _account):
                     accounts.append(Web3.to_checksum_address(_account))
-            dict.update({role_id: accounts})
-        return dict
+            result.update({role_id: accounts})
+        return result
 
     def get_grant_role_events(self) -> List[LogReceipt]:
         event_signature_hash = HexBytes(
