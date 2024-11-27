@@ -26,3 +26,5 @@ __pycache__/
 
 ### Unit test / coverage reports ###
 .pytest_cache/
+
+plasma_vault.md

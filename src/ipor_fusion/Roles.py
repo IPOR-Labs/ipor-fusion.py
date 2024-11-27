@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: BUSL-1.1
 
+from enum import IntEnum
 
-class Roles:
+
+class Roles(IntEnum):
     """Predefined roles used in the IPOR Fusion protocol."""
 
-    # Constants for roles
     ADMIN_ROLE = 0
     """Account with this role has rights to manage the IporFusionAccessManager in general.
        The highest role, which could manage all roles including ADMIN_ROLE and OWNER_ROLE.
@@ -59,3 +60,11 @@ class Roles:
 
     CONFIG_INSTANT_WITHDRAWAL_FUSES_ROLE = 900
     """Account with this role has rights to configure instant withdrawal fuses order."""
+
+    @classmethod
+    def get_name(cls, value):
+        """Get the role name for a given role value."""
+        try:
+            return cls(value).name
+        except ValueError:
+            return f"UNKNOWN_ROLE_{value}"
