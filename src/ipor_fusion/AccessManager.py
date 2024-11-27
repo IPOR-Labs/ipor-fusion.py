@@ -1,6 +1,7 @@
-from typing import List, Union
+from typing import List, Dict
 
 from eth_abi import encode, decode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
@@ -37,17 +38,29 @@ class AccessManager:
         function = selector + encode(["uint64", "address"], [role_id, account])
         return self._transaction_executor.read(self._access_manager_address, function)
 
-    def owner(self) -> Union[str, None]:
+    def owner(self) -> ChecksumAddress:
+        return self.owners()[0]
+
+    def owners(self) -> List[ChecksumAddress]:
+        return self.get_accounts_with_role(Roles.OWNER_ROLE)
+
+    def get_accounts_with_role(self, role_id: int) -> List[ChecksumAddress]:
+        return self.get_accounts_with_roles([role_id]).get(role_id)
+
+    def get_accounts_with_roles(
+        self, role_ids: List[int]
+    ) -> Dict[int, List[ChecksumAddress]]:
         events = self.get_grant_role_events()
-        sorted_events = sorted(
-            events, key=lambda event: event["blockNumber"], reverse=True
-        )
-        for event in sorted_events:
-            (role_id,) = decode(["uint64"], event["topics"][1])
-            (account,) = decode(["address"], event["topics"][2])
-            if role_id == Roles.OWNER_ROLE:
-                return Web3.to_checksum_address(account)
-        return None
+        dict = {}
+        for role_id in role_ids:
+            accounts = []
+            for event in events:
+                (_role_id,) = decode(["uint64"], event["topics"][1])
+                (_account,) = decode(["address"], event["topics"][2])
+                if _role_id == role_id and self.has_role(_role_id, _account):
+                    accounts.append(Web3.to_checksum_address(_account))
+            dict.update({role_id: accounts})
+        return dict
 
     def get_grant_role_events(self) -> List[LogReceipt]:
         event_signature_hash = HexBytes(
