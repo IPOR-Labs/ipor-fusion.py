@@ -1,4 +1,5 @@
-from typing import List, Dict
+from dataclasses import dataclass
+from typing import List
 
 from eth_abi import encode, decode
 from eth_typing import ChecksumAddress
@@ -9,6 +10,14 @@ from web3.types import TxReceipt, LogReceipt
 
 from ipor_fusion.Roles import Roles
 from ipor_fusion.TransactionExecutor import TransactionExecutor
+
+
+@dataclass
+class RoleAccount:
+    account: ChecksumAddress
+    role_id: int
+    is_member: bool
+    execution_delay: int
 
 
 class AccessManager:
@@ -33,34 +42,56 @@ class AccessManager:
             self._access_manager_address, function
         )
 
-    def has_role(self, role_id: int, account: str) -> TxReceipt:
+    def has_role(self, role_id: int, account: str) -> (bool, int):
         selector = function_signature_to_4byte_selector("hasRole(uint64,address)")
         function = selector + encode(["uint64", "address"], [role_id, account])
-        return self._transaction_executor.read(self._access_manager_address, function)
+        read = self._transaction_executor.read(self._access_manager_address, function)
+        is_member, execution_delay = decode(["bool", "uint32"], read)
+        return is_member, execution_delay
 
     def owner(self) -> ChecksumAddress:
         return self.owners()[0]
 
     def owners(self) -> List[ChecksumAddress]:
-        return self.get_accounts_with_role(Roles.OWNER_ROLE)
+        return [
+            role_account.account
+            for role_account in self.get_accounts_with_role(Roles.OWNER_ROLE)
+        ]
 
-    def get_accounts_with_role(self, role_id: int) -> List[ChecksumAddress]:
-        return self.get_accounts_with_roles([role_id]).get(role_id)
-
-    def get_accounts_with_roles(
-        self, role_ids: List[int]
-    ) -> Dict[int, List[ChecksumAddress]]:
+    def get_accounts_with_role(self, role_id: int) -> List[RoleAccount]:
         events = self.get_grant_role_events()
-        result = {}
-        for role_id in role_ids:
-            accounts = []
-            for event in events:
-                (_role_id,) = decode(["uint64"], event["topics"][1])
-                (_account,) = decode(["address"], event["topics"][2])
-                if _role_id == role_id and self.has_role(_role_id, _account):
-                    accounts.append(Web3.to_checksum_address(_account))
-            result.update({role_id: accounts})
-        return result
+        role_accounts = []
+        for event in events:
+            (_role_id,) = decode(["uint64"], event["topics"][1])
+            (_account,) = decode(["address"], event["topics"][2])
+            if _role_id == role_id:
+                is_member, execution_delay = self.has_role(_role_id, _account)
+                if is_member:
+                    role_account = RoleAccount(
+                        account=Web3.to_checksum_address(_account),
+                        role_id=_role_id,
+                        is_member=is_member,
+                        execution_delay=execution_delay,
+                    )
+                    role_accounts.append(role_account)
+        return role_accounts
+
+    def get_all_role_accounts(self) -> List[RoleAccount]:
+        events = self.get_grant_role_events()
+        role_accounts = []
+        for event in events:
+            (role_id,) = decode(["uint64"], event["topics"][1])
+            (account,) = decode(["address"], event["topics"][2])
+            is_member, execution_delay = self.has_role(role_id, account)
+            if is_member:
+                role_account = RoleAccount(
+                    account=Web3.to_checksum_address(account),
+                    role_id=role_id,
+                    is_member=is_member,
+                    execution_delay=execution_delay,
+                )
+                role_accounts.append(role_account)
+        return role_accounts
 
     def get_grant_role_events(self) -> List[LogReceipt]:
         event_signature_hash = HexBytes(
