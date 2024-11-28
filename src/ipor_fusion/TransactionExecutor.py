@@ -1,5 +1,6 @@
 from typing import List
 
+from hexbytes import HexBytes
 from web3.types import TxReceipt, LogReceipt
 
 
@@ -43,7 +44,7 @@ class TransactionExecutor:
             "data": data,
         }
 
-    def estimate_gas(self, contract_address, data):
+    def estimate_gas(self, contract_address, data) -> int:
         return int(
             self._gas_multiplier
             * self._web3.eth.estimate_gas(
@@ -51,7 +52,7 @@ class TransactionExecutor:
             )
         )
 
-    def read(self, contract, data):
+    def read(self, contract, data) -> HexBytes:
         return self._web3.eth.call({"to": contract, "data": data})
 
     def calculate_max_fee_per_gas(self, gas_price):
