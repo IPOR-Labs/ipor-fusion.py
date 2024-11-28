@@ -1,10 +1,7 @@
 import logging
 import os
-from dataclasses import dataclass
-from typing import List
 
 from dotenv import load_dotenv
-from eth_typing import ChecksumAddress
 
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.Roles import Roles
@@ -17,14 +14,6 @@ load_dotenv()
 provider_url = os.getenv("BASE_PROVIDER_URL")
 plasma_vault_address = os.getenv("PLASMA_VAULT_ADDRESS")
 anvil_private_key = os.getenv("PRIVATE_KEY")
-
-
-@dataclass
-class RoleAccountGrouped:
-    account: ChecksumAddress
-    role_id: List[int]
-    is_member: bool
-    execution_delay: int
 
 
 def main():
