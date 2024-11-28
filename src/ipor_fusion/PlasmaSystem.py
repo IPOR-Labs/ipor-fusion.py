@@ -170,3 +170,6 @@ class PlasmaSystem:
 
     def prank(self, address: str):
         self._transaction_executor.prank(address)
+
+    def chain_id(self):
+        return self._chain_id
