@@ -12,12 +12,43 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-provider_url = os.getenv("ARBITRUM_PROVIDER_URL")
-plasma_vault_address = os.getenv("PLASMA_VAULT_ADDRESS")
+arbitrum_provider_url = os.getenv("ARBITRUM_PROVIDER_URL")
+base_provider_url = os.getenv("BASE_PROVIDER_URL")
 anvil_private_key = os.getenv("PRIVATE_KEY")
 
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
-def main():
+
+class ProviderUrlVaultAddressDto:
+    def __init__(self, provider_url, address):
+        self.provider_url = provider_url
+        self.address = address
+
+
+vaults = []
+vaults.append(
+    ProviderUrlVaultAddressDto(
+        arbitrum_provider_url, "0xea7aB80e2be196152f59ab7Efb3Eb4bff49ad3D4"
+    )
+)
+vaults.append(
+    ProviderUrlVaultAddressDto(
+        arbitrum_provider_url, "0xea7aB80e2be196152f59ab7Efb3Eb4bff49ad3D4"
+    )
+)
+vaults.append(
+    ProviderUrlVaultAddressDto(
+        arbitrum_provider_url, "0xfc0c84ab96Dc00E38CbdE2C6252d3c75655b6F9e"
+    )
+)
+vaults.append(
+    ProviderUrlVaultAddressDto(
+        base_provider_url, "0x55d8d6e5F17F153f3250b229D5AAc9437e908a77"
+    )
+)
+
+
+def check_vault(provider_url, plasma_vault_address):
     # setup
     system = PlasmaVaultSystemFactory(
         provider_url=provider_url,
@@ -55,25 +86,22 @@ def main():
         f.write(f"access_manager_address = {system.access_manager().address()}\n\n")
 
         f.write(f"withdraw_manager_address = {system.withdraw_manager().address()}\n")
-
-        f.write(
-            f"- getWithdrawWindow() = {system.withdraw_manager().get_withdraw_window()}\n\n"
-        )
+        if system.withdraw_manager().address() != ZERO_ADDRESS:
+            f.write(
+                f"- getWithdrawWindow() = {system.withdraw_manager().get_withdraw_window()}\n\n"
+            )
 
         f.write(f"rewards_claim_manager = {system.rewards_claim_manager().address()}\n")
-        (
-            vesting_time,
-            update_balance_timestamp,
-            transferred_tokens,
-            last_update_balance,
-        ) = system.rewards_claim_manager().get_vesting_data()
-        f.write(
-            f"- getVestingData[vesting_time={vesting_time}, update_balance_timestamp={update_balance_timestamp}, transferred_tokens={transferred_tokens}, last_update_balance={last_update_balance}]\n\n"
-        )
-
-        f.write(
-            f"get_market_substrates(18) = {system.plasma_vault().get_market_substrates(18).hex()}\n\n"
-        )
+        if system.rewards_claim_manager().address() != ZERO_ADDRESS:
+            (
+                vesting_time,
+                update_balance_timestamp,
+                transferred_tokens,
+                last_update_balance,
+            ) = system.rewards_claim_manager().get_vesting_data()
+            f.write(
+                f"- getVestingData[vesting_time={vesting_time}, update_balance_timestamp={update_balance_timestamp}, transferred_tokens={transferred_tokens}, last_update_balance={last_update_balance}]\n\n"
+            )
 
         f.write("## getFuses\n")
         for fuse in system.plasma_vault().get_fuses():
@@ -108,6 +136,9 @@ def check_universal(f, system):
     try:
         system.universal()
         f.write("- universal\n")
+        f.write(
+            f"get_market_substrates(UNIVERSAL_TOKEN_SWAPPER=12) = {system.plasma_vault().get_market_substrates(12).hex()}\n"
+        )
     except UnsupportedMarketError:
         pass
 
@@ -124,6 +155,9 @@ def check_ramses_v2(f, system):
     try:
         system.ramses_v2()
         f.write("- ramses_v2\n")
+        f.write(
+            f"get_market_substrates(RAMSES_V2_POSITIONS=18) = {system.plasma_vault().get_market_substrates(18).hex()}\n"
+        )
     except UnsupportedMarketError:
         pass
 
@@ -135,6 +169,11 @@ def check_uniswap_v3(f, system):
         f.write("- uniswap_v3\n")
     except UnsupportedMarketError:
         pass
+
+
+def main():
+    for vault in vaults:
+        check_vault(vault.provider_url, vault.address)
 
 
 if __name__ == "__main__":
