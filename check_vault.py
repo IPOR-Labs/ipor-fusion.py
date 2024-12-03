@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-provider_url = os.getenv("BASE_PROVIDER_URL")
+provider_url = os.getenv("ARBITRUM_PROVIDER_URL")
 plasma_vault_address = os.getenv("PLASMA_VAULT_ADDRESS")
 anvil_private_key = os.getenv("PRIVATE_KEY")
 
@@ -52,13 +52,28 @@ def main():
                 )
             f.write("\n")
 
-        f.write(f"access_manager_address = {system.access_manager().address()}\n")
+        f.write(f"access_manager_address = {system.access_manager().address()}\n\n")
+
         f.write(f"withdraw_manager_address = {system.withdraw_manager().address()}\n")
-        f.write(f"rewards_claim_manager = {system.rewards_claim_manager().address()}\n")
+
         f.write(
-            f"get_market_substrates(18) = {system.plasma_vault().get_market_substrates(18).hex()}\n"
+            f"- getWithdrawWindow() = {system.withdraw_manager().get_withdraw_window()}\n\n"
         )
-        f.write("\n")
+
+        f.write(f"rewards_claim_manager = {system.rewards_claim_manager().address()}\n")
+        (
+            vesting_time,
+            update_balance_timestamp,
+            transferred_tokens,
+            last_update_balance,
+        ) = system.rewards_claim_manager().get_vesting_data()
+        f.write(
+            f"- getVestingData[vesting_time={vesting_time}, update_balance_timestamp={update_balance_timestamp}, transferred_tokens={transferred_tokens}, last_update_balance={last_update_balance}]\n\n"
+        )
+
+        f.write(
+            f"get_market_substrates(18) = {system.plasma_vault().get_market_substrates(18).hex()}\n\n"
+        )
 
         f.write("## getFuses\n")
         for fuse in system.plasma_vault().get_fuses():

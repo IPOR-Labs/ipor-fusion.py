@@ -1,4 +1,4 @@
-from eth_abi import encode
+from eth_abi import encode, decode
 from eth_utils import function_signature_to_4byte_selector
 from web3.types import TxReceipt
 
@@ -39,3 +39,11 @@ class WithdrawManager:
         return self._transaction_executor.execute(
             self._withdraw_manager_address, selector
         )
+
+    def get_withdraw_window(self) -> int:
+        signature = function_signature_to_4byte_selector("getWithdrawWindow()")
+        read = self._transaction_executor.read(
+            self._withdraw_manager_address, signature
+        )
+        (result,) = decode(["uint256"], read)
+        return result
