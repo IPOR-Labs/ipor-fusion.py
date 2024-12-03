@@ -158,9 +158,7 @@ class PlasmaVault:
 
     def get_market_substrates(self, market_id: int) -> bytes:
         sig = function_signature_to_4byte_selector("getMarketSubstrates(uint256)")
-        encoded_args = encode(
-            ["uint256"], [market_id]
-        )
+        encoded_args = encode(["uint256"], [market_id])
         return self._transaction_executor.read(
             self._plasma_vault_address, sig + encoded_args
         )

@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-provider_url = os.getenv("ARBITRUM_PROVIDER_URL")
+provider_url = os.getenv("BASE_PROVIDER_URL")
 plasma_vault_address = os.getenv("PLASMA_VAULT_ADDRESS")
 anvil_private_key = os.getenv("PRIVATE_KEY")
 
@@ -31,7 +31,9 @@ def main():
         if not role_account.account in unique_accounts:
             unique_accounts.append(role_account.account)
 
-    with open(file=f"raports/{plasma_vault_address}.md", mode="w", encoding="utf-8") as f:
+    with open(
+        file=f"raports/{plasma_vault_address}.md", mode="w", encoding="utf-8"
+    ) as f:
         f.write(f"# PlasmaVault\n# {plasma_vault_address}\n")
         f.write(f"# chain_id={system.chain_id()}\n\n")
         f.write("## Accounts with roles:\n")
@@ -53,7 +55,9 @@ def main():
         f.write(f"access_manager_address = {system.access_manager().address()}\n")
         f.write(f"withdraw_manager_address = {system.withdraw_manager().address()}\n")
         f.write(f"rewards_claim_manager = {system.rewards_claim_manager().address()}\n")
-        f.write(f"get_market_substrates(18) = {system.plasma_vault().get_market_substrates(18).hex()}\n")
+        f.write(
+            f"get_market_substrates(18) = {system.plasma_vault().get_market_substrates(18).hex()}\n"
+        )
         f.write("\n")
 
         f.write("## getFuses\n")
