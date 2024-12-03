@@ -81,6 +81,16 @@ jobs:
         run: poetry install
         id: install
 
+      - name: Format code
+        if: inputs.format-code-enabled
+        run: poetry run black --check ./
+        id: format-code
+
+      - name: Static code analysis
+        if: inputs.static-code-analysis-enabled
+        run: poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
+        id: static-code-analyze
+
       - name: Build
         if: inputs.build-enabled
         run: poetry build
@@ -94,12 +104,3 @@ jobs:
           ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
         id: tests
 
-      - name: Format code
-        if: inputs.format-code-enabled
-        run: poetry run black --check ./
-        id: format-code
-
-      - name: Static code analysis
-        if: inputs.static-code-analysis-enabled
-        run: poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
-        id: static-code-analyze
