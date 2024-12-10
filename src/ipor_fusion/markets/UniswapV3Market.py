@@ -1,50 +1,47 @@
 from typing import List
 
-from web3 import Web3
-
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
 from ipor_fusion.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
 from ipor_fusion.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
 from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
+from web3 import Web3
 
 
 class UniswapV3Market:
-    UNISWAP_V3_SWAP_FUSE = Web3.to_checksum_address(
-        "0x84C5aB008C66d664681698A9E4536D942B916F89"
-    )
-    UNISWAP_V3_NEW_POSITION_FUSE = Web3.to_checksum_address(
-        "0x0ce06c57173b7E4079B2AFB132cB9Ce846dDAC9b"
-    )
-    UNISWAP_V3_MODIFY_POSITION_FUSE = Web3.to_checksum_address(
-        "0xba503b6f2b95A4A47ee9884bbBcd80cAce2D2EB3"
-    )
-    UNISWAP_V3_COLLECT_FUSE = Web3.to_checksum_address(
-        "0x75781AB6CdcE9c505DbD0848f4Ad8A97c68F53c1"
-    )
-    UNISWAP_V3_SUPPLY_FUSE = Web3.to_checksum_address(
-        "0x5C0d0e13B18B3Ea43E05Df0Bd1b89e0a3e4b2B0f"
-    )
+    UNISWAP_V3_SWAP_FUSES = [
+        Web3.to_checksum_address("0x84C5aB008C66d664681698A9E4536D942B916F89")
+    ]
+    UNISWAP_V3_NEW_POSITION_FUSES = [
+        Web3.to_checksum_address("0x0ce06c57173b7E4079B2AFB132cB9Ce846dDAC9b"),
+        Web3.to_checksum_address("0x1da7f95e63f12169b3495e2b83d01d0d6592dd86"),
+    ]
+    UNISWAP_V3_MODIFY_POSITION_FUSES = [
+        Web3.to_checksum_address("0xba503b6f2b95A4A47ee9884bbBcd80cAce2D2EB3")
+    ]
+    UNISWAP_V3_COLLECT_FUSES = [
+        Web3.to_checksum_address("0x75781AB6CdcE9c505DbD0848f4Ad8A97c68F53c1")
+    ]
 
     def __init__(self, fuses: List[str]):
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse == self.UNISWAP_V3_SWAP_FUSE:
+            if checksum_fuse in self.UNISWAP_V3_SWAP_FUSES:
                 self._uniswap_v3_swap_fuse = UniswapV3SwapFuse(checksum_fuse)
                 self._any_fuse_supported = True
-            if checksum_fuse == self.UNISWAP_V3_NEW_POSITION_FUSE:
+            if checksum_fuse in self.UNISWAP_V3_NEW_POSITION_FUSES:
                 self._uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
                     checksum_fuse
                 )
                 self._any_fuse_supported = True
-            if checksum_fuse == self.UNISWAP_V3_MODIFY_POSITION_FUSE:
+            if checksum_fuse in self.UNISWAP_V3_MODIFY_POSITION_FUSES:
                 self._uniswap_v3_modify_position_fuse = UniswapV3ModifyPositionFuse(
                     checksum_fuse
                 )
                 self._any_fuse_supported = True
-            if checksum_fuse == self.UNISWAP_V3_COLLECT_FUSE:
+            if checksum_fuse in self.UNISWAP_V3_COLLECT_FUSES:
                 self._uniswap_v3_collect_fuse = UniswapV3CollectFuse(checksum_fuse)
                 self._any_fuse_supported = True
 
