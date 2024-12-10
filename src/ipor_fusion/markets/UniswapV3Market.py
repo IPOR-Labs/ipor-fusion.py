@@ -1,12 +1,13 @@
 from typing import List
 
+from web3 import Web3
+
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
 from ipor_fusion.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
 from ipor_fusion.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
 from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
-from web3 import Web3
 
 
 class UniswapV3Market:
@@ -49,12 +50,12 @@ class UniswapV3Market:
         return self._any_fuse_supported
 
     def swap(
-        self,
-        token_in_address: str,
-        token_out_address: str,
-        fee: int,
-        token_in_amount: int,
-        min_out_amount: int,
+            self,
+            token_in_address: str,
+            token_out_address: str,
+            fee: int,
+            token_in_amount: int,
+            min_out_amount: int,
     ) -> FuseAction:
         # Check if _uniswap_v3_swap_fuse is set
         if not hasattr(self, "_uniswap_v3_swap_fuse"):
@@ -71,17 +72,17 @@ class UniswapV3Market:
         )
 
     def new_position(
-        self,
-        token0: str,
-        token1: str,
-        fee: int,
-        tick_lower: int,
-        tick_upper: int,
-        amount0_desired: int,
-        amount1_desired: int,
-        amount0_min: int,
-        amount1_min: int,
-        deadline: int,
+            self,
+            token0: str,
+            token1: str,
+            fee: int,
+            tick_lower: int,
+            tick_upper: int,
+            amount0_desired: int,
+            amount1_desired: int,
+            amount0_min: int,
+            amount1_min: int,
+            deadline: int,
     ) -> FuseAction:
         if not hasattr(self, "_uniswap_v3_new_position_fuse"):
             raise UnsupportedFuseError(
@@ -102,15 +103,15 @@ class UniswapV3Market:
         )
 
     def increase_position(
-        self,
-        token0: str,
-        token1: str,
-        token_id: int,
-        amount0_desired: int,
-        amount1_desired: int,
-        amount0_min: int,
-        amount1_min: int,
-        deadline: int,
+            self,
+            token0: str,
+            token1: str,
+            token_id: int,
+            amount0_desired: int,
+            amount1_desired: int,
+            amount0_min: int,
+            amount1_min: int,
+            deadline: int,
     ) -> FuseAction:
         if not hasattr(self, "_uniswap_v3_modify_position_fuse"):
             raise UnsupportedFuseError(
@@ -129,12 +130,12 @@ class UniswapV3Market:
         )
 
     def decrease_position(
-        self,
-        token_id: int,
-        liquidity: int,
-        amount0_min: int,
-        amount1_min: int,
-        deadline: int,
+            self,
+            token_id: int,
+            liquidity: int,
+            amount0_min: int,
+            amount1_min: int,
+            deadline: int,
     ) -> FuseAction:
         if not hasattr(self, "_uniswap_v3_modify_position_fuse"):
             raise UnsupportedFuseError(
