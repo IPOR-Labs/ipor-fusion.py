@@ -1,19 +1,16 @@
 from typing import List
 
-from web3 import Web3
-
 from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.AaveV3SupplyFuse import AaveV3SupplyFuse
 from ipor_fusion.fuse.FuseAction import FuseAction
+from web3 import Web3
+from ipor_fusion.FuseMappingLoader import FuseMappingLoader
 
 
 class AaveV3Market:
-    AAVE_V3_SUPPLY_FUSE = Web3.to_checksum_address(
-        "0xd3c752EE5Bb80dE64F76861B800a8f3b464C50f9"
-    )
     USDC = Web3.to_checksum_address("0xaf88d065e77c8cc2239327c5edb3a432268e5831")
     AAVE_V3_USDC_A_TOKEN_ARB_USDC_N = Web3.to_checksum_address(
         "0x724dc807b04555b71ed48a6896b6f41593b8c637"
@@ -21,9 +18,11 @@ class AaveV3Market:
 
     def __init__(
         self,
+        chain_id: int,
         transaction_executor: TransactionExecutor,
         fuses: List[str],
     ):
+        self._chain_id = chain_id
         self._transaction_executor = transaction_executor
         self._usdc_a_token_arb_usdc_n = ERC20(
             transaction_executor, self.AAVE_V3_USDC_A_TOKEN_ARB_USDC_N
@@ -32,10 +31,8 @@ class AaveV3Market:
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse == self.AAVE_V3_SUPPLY_FUSE:
-                self._aave_v3_supply_fuse = AaveV3SupplyFuse(
-                    self.AAVE_V3_SUPPLY_FUSE, self.USDC
-                )
+            if checksum_fuse in FuseMappingLoader.load(chain_id, "AaveV3SupplyFuse"):
+                self._aave_v3_supply_fuse = AaveV3SupplyFuse(checksum_fuse, self.USDC)
                 self._any_fuse_supported = True
 
     def is_market_supported(self) -> bool:

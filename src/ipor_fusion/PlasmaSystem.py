@@ -1,3 +1,5 @@
+import logging
+
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.AccessManager import AccessManager
@@ -16,6 +18,9 @@ from ipor_fusion.markets.GearboxV3Market import GearboxV3Market
 from ipor_fusion.markets.RamsesV2Market import RamsesV2Market
 from ipor_fusion.markets.UniswapV3Market import UniswapV3Market
 from ipor_fusion.markets.UniversalMarket import UniversalMarket
+
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger(__name__)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -58,32 +63,37 @@ class PlasmaSystem:
             asset_address=external_systems_data.usdt_address,
         )
         self._fuses = self._plasma_vault.get_fuses()
-        self._uniswap_v3_market = UniswapV3Market(fuses=self._fuses)
+        self._uniswap_v3_market = UniswapV3Market(chain_id=chain_id, fuses=self._fuses)
         self._rewards_fuses = []
         try:
             self._rewards_fuses = self._rewards_claim_manager.get_rewards_fuses()
         except ContractLogicError as e:
-            print(f"Failed to get rewards fuses: {e}")
+            log.warning(f"Failed to get rewards fuses: {e}")
         self._ramses_v2_market = RamsesV2Market(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             rewards_claim_manager=self._rewards_claim_manager,
             fuses=self._fuses,
             rewards_fuses=self._rewards_fuses,
         )
-        self._universal_market = UniversalMarket(fuses=self._fuses)
+        self._universal_market = UniversalMarket(chain_id=chain_id, fuses=self._fuses)
         self._gearbox_v3_market = GearboxV3Market(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
         self._fluid_instadapp_market = FluidInstadappMarket(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
         self._aave_v3_market = AaveV3Market(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
         self._compound_v3_market = CompoundV3Market(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )

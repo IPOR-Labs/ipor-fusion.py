@@ -28,7 +28,10 @@ class FluidInstadappMarket:
         "0x962A7F0A2CbE97d4004175036A81E643463b76ec"
     )
 
-    def __init__(self, transaction_executor: TransactionExecutor, fuses: List[str]):
+    def __init__(
+        self, chain_id: int, transaction_executor: TransactionExecutor, fuses: List[str]
+    ):
+        self._chain_id = chain_id
         self._transaction_executor = transaction_executor
         self._pool = ERC20(transaction_executor, self.FLUID_INSTADAPP_POOL_USDC)
         self._staking_pool = ERC20(
