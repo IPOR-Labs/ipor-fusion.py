@@ -3,9 +3,10 @@ from typing import List
 from eth_abi import encode, decode
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
-from ipor_fusion.TransactionExecutor import TransactionExecutor
 from web3 import Web3
+from web3.exceptions import ContractPanicError
 from web3.types import TxReceipt, LogReceipt
+from ipor_fusion.TransactionExecutor import TransactionExecutor
 
 
 class WithdrawManager:
@@ -44,11 +45,11 @@ class WithdrawManager:
                 self._withdraw_manager_address,
                 selector + encode(["uint256"], [timestamp]),
             )
-        else:
-            selector = function_signature_to_4byte_selector("releaseFunds()")
-            return self._transaction_executor.execute(
-                self._withdraw_manager_address, selector
-            )
+
+        selector = function_signature_to_4byte_selector("releaseFunds()")
+        return self._transaction_executor.execute(
+            self._withdraw_manager_address, selector
+        )
 
     def get_withdraw_window(self) -> int:
         signature = function_signature_to_4byte_selector("getWithdrawWindow()")
@@ -88,7 +89,6 @@ class WithdrawManager:
         )
 
     def get_pending_requests_info(self) -> (int, int):
-        withdraw_window = self.get_withdraw_window()
         current_timestamp = self._transaction_executor.get_block()["timestamp"]
         events = self.get_withdraw_request_updated_events()
 
@@ -105,19 +105,18 @@ class WithdrawManager:
                 accounts.append(account)
 
         requested_amount = 0
-        result_timestamp = 0
         for account in accounts:
             try:
                 (
                     amount,
                     end_withdraw_window_timestamp,
-                    can_withdraw,
-                    withdraw_window_in_seconds,
+                    _,
+                    _,
                 ) = self.request_info(account)
 
                 if end_withdraw_window_timestamp > current_timestamp:
                     requested_amount += amount
-            except:
+            except ContractPanicError:
                 pass
 
         return requested_amount, current_timestamp
