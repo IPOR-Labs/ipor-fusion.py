@@ -121,7 +121,7 @@ class PlasmaVault:
         sig = function_signature_to_4byte_selector("getFuses()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address[]"], read)
-        return result
+        return list(result)
 
     def withdraw_manager_address(self) -> Union[str, None]:
         events = self.get_withdraw_manager_changed_events()
@@ -199,4 +199,4 @@ class PlasmaVault:
         logs = self._transaction_executor.get_logs(
             contract_address=self._plasma_vault_address, topics=[event_signature_hash]
         )
-        return logs
+        return list(logs)
