@@ -78,6 +78,9 @@ class TransactionExecutor:
         )
         return event_filter.get_all_entries()
 
+    def get_block(self, block="latest"):
+        return self._web3.eth.get_block(block)
+
     def chain_id(self):
         return self._web3.eth.chain_id
 
