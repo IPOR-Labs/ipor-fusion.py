@@ -119,7 +119,7 @@ class WithdrawManager:
             except ContractPanicError:
                 pass
 
-        return requested_amount, current_timestamp
+        return requested_amount, current_timestamp - 1
 
     def get_withdraw_request_updated_events(self) -> List[LogReceipt]:
         event_signature_hash = HexBytes(

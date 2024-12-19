@@ -129,11 +129,15 @@ def test_should_collect_all_after_decrease_liquidity():
 
     receipt = system.plasma_vault().execute([swap_action, new_position])
 
-    _, new_token_id, liquidity, *_ = extract_data_form_new_position_enter_event(receipt)
+    new_position_event = system.ramses_v2().extract_new_position_enter_events(receipt)[
+        0
+    ]
+
+    new_token_id = new_position_event.token_id
 
     decrease_action = system.ramses_v2().decrease_position(
         token_id=new_token_id,
-        liquidity=liquidity,
+        liquidity=new_position_event.liquidity,
         amount0_min=0,
         amount1_min=0,
         deadline=int(time.time()) + 100000,
