@@ -1,0 +1,1262 @@
+contracts/universal_reader/UniversalReader.sol; ZeroAddress(); 0xd92e233d
+contracts/universal_reader/UniversalReader.sol; UnauthorizedCaller(); 0x5c427cd9
+contracts/libraries/errors/Errors.sol; WrongAddress(); 0x1a479e82
+contracts/libraries/errors/Errors.sol; WrongValue(); 0x98d4901c
+contracts/libraries/errors/Errors.sol; WrongDecimals(); 0x27547619
+contracts/libraries/errors/Errors.sol; WrongArrayLength(); 0x2a00e5c6
+contracts/libraries/errors/Errors.sol; WrongCaller(address caller); 0x29507dbf
+contracts/libraries/errors/Errors.sol; UnsupportedQuoteCurrencyFromOracle(); 0xdee4f2f0
+contracts/libraries/errors/Errors.sol; UnsupportedPriceOracleMiddleware(); 0x9be13ab2
+contracts/libraries/AssetDistributionProtectionLib.sol; MarketLimitExceeded(uint256 marketId, uint256 balanceInMarket, uint256 limit); 0x8f56989d
+contracts/libraries/AssetDistributionProtectionLib.sol; MarketLimitSetupInPercentageIsTooHigh(uint256 limit); 0x1a075117
+contracts/libraries/AssetDistributionProtectionLib.sol; WrongMarketId(uint256 marketId); 0x27d3bccb
+contracts/libraries/CallbackHandlerLib.sol; HandlerNotFound(); 0x4bf4de4e
+contracts/libraries/FusesLib.sol; FuseAlreadyExists(); 0xe5b59f70
+contracts/libraries/FusesLib.sol; FuseDoesNotExist(); 0x8f37b074
+contracts/libraries/FusesLib.sol; FuseUnsupported(address fuse); 0xd9ffc5d1
+contracts/libraries/FusesLib.sol; BalanceFuseAlreadyExists(uint256 marketId, address fuse); 0x7a056553
+contracts/libraries/FusesLib.sol; BalanceFuseDoesNotExist(uint256 marketId, address fuse); 0xf278137f
+contracts/libraries/FusesLib.sol; BalanceFuseNotReadyToRemove(uint256 marketId, address fuse, uint256 currentBalance); 0x44e5fd9e
+contracts/libraries/PlasmaVaultLib.sol; InvalidPerformanceFee(uint256 feeInPercentage); 0x29f99fe4
+contracts/libraries/PlasmaVaultLib.sol; InvalidManagementFee(uint256 feeInPercentage); 0x49f1e862
+contracts/managers/withdraw/WithdrawManagerStorageLib.sol; WithdrawWindowLengthCannotBeZero(); 0x4ad6e37b
+contracts/managers/withdraw/WithdrawManager.sol; WithdrawManagerInvalidTimestamp(uint256 timestamp_); 0x170e5403
+contracts/managers/access/IporFusionAccessManagerInitializationLib.sol; AlreadyInitialized(); 0x0dc149f0
+contracts/managers/access/RedemptionDelayLib.sol; AccountIsLocked(uint256 unlockTime); 0xa592703b
+contracts/managers/access/IporFusionAccessManager.sol; AccessManagedUnauthorized(address caller); 0x068ca9d8
+contracts/managers/access/IporFusionAccessManager.sol; TooShortExecutionDelayForRole(uint64 roleId, uint32 executionDelay); 0x640450fe
+contracts/managers/access/IporFusionAccessManager.sol; TooLongRedemptionDelay(uint256 redemptionDelayInSeconds); 0x4a9a6e7a
+contracts/managers/rewards/RewardsClaimManager.sol; UnableToTransferUnderlyingToken(); 0x4a2873d2
+contracts/managers/fee/FeeAccount.sol; OnlyFeeManagerCanApprove(); 0xcb56c31f
+contracts/managers/fee/FeeManager.sol; NotInitialized(); 0x87138d5c
+contracts/managers/fee/FeeManager.sol; AlreadyInitialized(); 0x0dc149f0
+contracts/managers/fee/FeeManager.sol; InvalidFeeRecipientAddress(); 0xbd0f3dfd
+contracts/price_oracle/IPriceOracleMiddleware.sol; EmptyArrayNotSupported(); 0xb9fd259b
+contracts/price_oracle/IPriceOracleMiddleware.sol; ArrayLengthMismatch(); 0xa24a13a6
+contracts/price_oracle/IPriceOracleMiddleware.sol; UnexpectedPriceResult(); 0xb73dbe63
+contracts/price_oracle/IPriceOracleMiddleware.sol; UnsupportedAsset(); 0x24a01144
+contracts/price_oracle/IPriceOracleMiddleware.sol; ZeroAddress(string variableName); 0xeac0d389
+contracts/price_oracle/IPriceOracleMiddleware.sol; WrongDecimals(); 0x27547619
+contracts/price_oracle/IPriceOracleMiddleware.sol; WrongDecimalsInPriceFeed(); 0xb53b7820
+contracts/price_oracle/PriceOracleMiddlewareStorageLib.sol; SourceAddressCanNotBeZero(); 0xbbf7accc
+contracts/price_oracle/PriceOracleMiddlewareStorageLib.sol; AssetsAddressCanNotBeZero(); 0x8eb68d59
+contracts/price_oracle/price_feed/PtPriceFeed.sol; PriceOracle_InvalidConfiguration(); 0x06930594
+contracts/rewards_fuses/ramses/RamsesClaimFuse.sol; RamsesClaimFuseRewardsClaimManagerNotSet(); 0x3b65687c
+contracts/rewards_fuses/ramses/RamsesClaimFuse.sol; RamsesClaimFuseTokenIdsAndTokenRewardsLengthMismatch(); 0x1c49b83d
+contracts/rewards_fuses/morpho/MorphoClaimFuse.sol; MorphoClaimFuseRewardsClaimManagerZeroAddress(address version); 0x5e5570f6
+contracts/rewards_fuses/morpho/MorphoClaimFuse.sol; MorphoClaimFuseUniversalRewardsDistributorZeroAddress(address version); 0x1e5eb29f
+contracts/rewards_fuses/morpho/MorphoClaimFuse.sol; MorphoClaimFuseUnsupportedDistributor(address distributor); 0x2117720a
+contracts/rewards_fuses/compound/CompoundV3ClaimFuse.sol; ClaimManagerZeroAddress(); 0x9df94d9e
+contracts/rewards_fuses/compound/CompoundV3ClaimFuse.sol; CometRewardsZeroAddress(); 0x39f5aea3
+contracts/rewards_fuses/moonwell/MoonwellClaimFuse.sol; MoonwellClaimFuseEmptyArray(); 0x2f993cc2
+contracts/rewards_fuses/moonwell/MoonwellClaimFuse.sol; MoonwellClaimFuseRewardDistributorZeroAddress(); 0xc6982a36
+contracts/rewards_fuses/moonwell/MoonwellClaimFuse.sol; MoonwellClaimFuseRewardsClaimManagerZeroAddress(); 0xe31f6faf
+contracts/rewards_fuses/gearbox_v3/GearboxV3FarmDTokenClaimFuse.sol; GearboxV3FarmDTokenClaimFuseRewardsClaimManagerZeroAddress(address version); 0x470cfe17
+contracts/rewards_fuses/fluid_instadapp/FluidInstadappClaimFuse.sol; FluidInstadappClaimFuseRewardsClaimManagerZeroAddress(address version); 0x1c318053
+contracts/vaults/PlasmaVault.sol; NoSharesToRedeem(); 0xf10cc937
+contracts/vaults/PlasmaVault.sol; NoSharesToMint(); 0x01aeea51
+contracts/vaults/PlasmaVault.sol; NoAssetsToWithdraw(); 0xbb464a5e
+contracts/vaults/PlasmaVault.sol; NoAssetsToDeposit(); 0x182b250f
+contracts/vaults/PlasmaVault.sol; UnsupportedFuse(); 0x2356a16d
+contracts/vaults/PlasmaVault.sol; UnsupportedMethod(); 0x1b517b18
+contracts/vaults/PlasmaVault.sol; WithdrawIsNotAllowed(address caller, uint256 requested); 0x7199992a
+contracts/vaults/PlasmaVaultBase.sol; ERC20ExceededCap(uint256 increasedSupply, uint256 cap); 0x9e79f854
+contracts/vaults/PlasmaVaultBase.sol; ERC20InvalidCap(uint256 cap); 0x392e1e27
+contracts/fuses/curve_gauge/CurveChildLiquidityGaugeBalanceFuse.sol; AssetNotFoundInCurvePool(address curvePool, address asset); 0x4d832167
+contracts/fuses/curve_gauge/CurveChildLiquidityGaugeSupplyFuse.sol; CurveChildLiquidityGaugeSupplyFuseUnsupportedGauge(address childLiquidityGauge); 0x47ca9b6c
+contracts/fuses/pendle/PendleSwapPTFuse.sol; PendleSwapPTFuseInvalidMarketId(); 0x71235367
+contracts/fuses/pendle/PendleSwapPTFuse.sol; PendleSwapPTFuseInvalidRouter(); 0x81a2c52a
+contracts/fuses/pendle/PendleSwapPTFuse.sol; PendleSwapPTFuseInvalidTokenIn(); 0x3a3c7c09
+contracts/fuses/pendle/PendleSwapPTFuse.sol; PendleSwapPTFuseInvalidTokenOut(); 0x02b7a67f
+contracts/fuses/ramses/RamsesV2ModifyPositionFuse.sol; RamsesV2ModifyPositionFuseUnsupportedToken(address token0, address token1); 0xb6af88d6
+contracts/fuses/ramses/RamsesV2NewPositionFuse.sol; RamsesV2NewPositionFuseUnsupportedToken(address token0, address token1); 0xb2e20aa1
+contracts/fuses/compound_v2/CompoundV2SupplyFuse.sol; CompoundV2SupplyFuseUnsupportedAsset(address asset); 0xac2f79f4
+contracts/fuses/aave_v3/AaveV3BorrowFuse.sol; AaveV3BorrowFuseUnsupportedAsset(string action, address asset); 0x8cba8537
+contracts/fuses/aave_v3/AaveV3SupplyFuse.sol; AaveV3SupplyFuseUnsupportedAsset(string action, address asset); 0xc47bb9d5
+contracts/fuses/morpho/MorphoSupplyFuse.sol; MorphoSupplyFuseUnsupportedMarket(string action, bytes32 morphoMarketId); 0x3a3be983
+contracts/fuses/morpho/MorphoCollateralFuse.sol; MorphoCollateralUnsupportedMarket(string action, bytes32 morphoMarketId); 0x5398b92a
+contracts/fuses/morpho/MorphoBorrowFuse.sol; MorphoBorrowFuseUnsupportedMarket(string action, bytes32 morphoMarketId); 0x1c71a2c5
+contracts/fuses/morpho/MorphoFlashLoanFuse.sol; MorphoFlashLoanFuseUnsupportedToken(address token); 0x12574225
+contracts/fuses/morpho/MorphoSupplyWithCallBackDataFuse.sol; MorphoSupplyFuseUnsupportedMarket(string action, bytes32 morphoMarketId); 0x3a3be983
+contracts/fuses/universal_token_swapper/UniversalTokenSwapperFuse.sol; UniversalTokenSwapperFuseUnsupportedAsset(address asset); 0x484e87f9
+contracts/fuses/universal_token_swapper/UniversalTokenSwapperFuse.sol; UniversalTokenSwapperFuseSlippageFail(); 0xda648573
+contracts/fuses/moonwell/MoonwellHelperLib.sol; MoonwellSupplyFuseUnsupportedAsset(address asset); 0x8d1d8dff
+contracts/fuses/moonwell/MoonwellSupplyFuse.sol; MoonwellSupplyFuseMintFailed(); 0x40fb373b
+contracts/fuses/moonwell/MoonwellEnableMarketFuse.sol; MoonwellEnableMarketFuseUnsupportedMToken(address mToken); 0x721f32fa
+contracts/fuses/moonwell/MoonwellEnableMarketFuse.sol; MoonwellEnableMarketFuseEmptyArray(); 0x6f65b94f
+contracts/fuses/moonwell/MoonwellBalanceFuse.sol; MoonwellBalanceFuseInvalidPrice(); 0x6e836fb3
+contracts/fuses/moonwell/MoonwellBorrowFuse.sol; MoonwellBorrowFuseUnsupportedAsset(address asset); 0xc1d0ed54
+contracts/fuses/moonwell/MoonwellBorrowFuse.sol; MoonwellBorrowFuseNoAssetsFound(); 0x6e2704e3
+contracts/fuses/moonwell/MoonwellBorrowFuse.sol; MoonwellBorrowFuseBorrowFailed(); 0xefd62a77
+contracts/fuses/moonwell/MoonwellBorrowFuse.sol; MoonwellBorrowFuseRepayFailed(); 0xfed205cd
+contracts/fuses/curve_stableswap_ng/CurveStableswapNGSingleSideBalanceFuse.sol; AssetNotFoundInCurvePool(address curvePool, address asset); 0x4d832167
+contracts/fuses/curve_stableswap_ng/CurveStableswapNGSingleSideSupplyFuse.sol; CurveStableswapNGSingleSideSupplyFuseUnsupportedPool(address poolAddress); 0x9e8fa8c0
+contracts/fuses/curve_stableswap_ng/CurveStableswapNGSingleSideSupplyFuse.sol; CurveStableswapNGSingleSideSupplyFuseUnsupportedPoolAsset(address asset); 0xffa5112a
+contracts/fuses/erc4626/Erc4626SupplyFuse.sol; Erc4626SupplyFuseUnsupportedVault(string action, address asset); 0x3a029d4b
+contracts/fuses/aave_v2/AaveV2SupplyFuse.sol; AaveV2SupplyFuseUnsupportedAsset(address asset); 0x79d732ba
+contracts/fuses/gearbox_v3/GearboxV3FarmSupplyFuse.sol; GearboxV3FarmdSupplyFuseUnsupportedFarmdToken(string action, address farmdToken); 0xac2fc364
+contracts/fuses/fluid_instadapp/FluidInstadappStakingSupplyFuse.sol; FluidInstadappStakingSupplyFuseUnsupportedStakingPool(string action, address stakingPool); 0x0c86e7fd
+contracts/fuses/euler/EulerV2ControllerFuse.sol; EulerV2ControllerFuseUnsupportedEnterAction(address vault, bytes1 subAccount); 0x5a78394c
+contracts/fuses/euler/EulerV2CollateralFuse.sol; EulerV2CollateralFuseUnsupportedEnterAction(address vault, bytes1 subAccount); 0x825b5209
+contracts/fuses/euler/EulerV2SupplyFuse.sol; EulerV2SupplyFuseUnsupportedEnterAction(address vault, bytes1 subAccount); 0x505194c2
+contracts/fuses/euler/EulerV2BorrowFuse.sol; EulerV2BorrowFuseUnsupportedEnterAction(address vault, bytes1 subAccount); 0x9edd79db
+contracts/fuses/uniswap/UniswapV3SwapFuse.sol; UniswapV3SwapFuseUnsupportedToken(address asset); 0x93fad497
+contracts/fuses/uniswap/UniswapV3SwapFuse.sol; UnsupportedMethod(); 0x1b517b18
+contracts/fuses/uniswap/UniswapV3SwapFuse.sol; SliceOutOfBounds(); 0x3b99b53d
+contracts/fuses/uniswap/UniswapV3CollectFuse.sol; UnsupportedMethod(); 0x1b517b18
+contracts/fuses/uniswap/UniswapV2SwapFuse.sol; UniswapV2SwapFuseUnsupportedToken(address asset); 0xf6fa7abb
+contracts/fuses/uniswap/UniswapV2SwapFuse.sol; UnsupportedMethod(); 0x1b517b18
+contracts/fuses/uniswap/UniswapV3ModifyPositionFuse.sol; UniswapV3ModifyPositionFuseUnsupportedToken(address token0, address token1); 0x0878341c
+contracts/fuses/uniswap/UniswapV3NewPositionFuse.sol; UniswapV3NewPositionFuseUnsupportedToken(address token0, address token1); 0x31d5d726
+contracts/fuses/compound_v3/CompoundV3SupplyFuse.sol; CompoundV3SupplyFuseUnsupportedAsset(string action, address asset); 0xd2ff8510
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts/crosschain/errors.sol; NotCrossChainCall(); 0x4a74df92
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts/crosschain/errors.sol; InvalidCrossChainSender(address actual, address expected); 0xef25d32b
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts/utils/ShortStrings.sol; StringTooLong(string str); 0x305a27a9
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts/utils/ShortStrings.sol; InvalidShortString(); 0xb3512b0c
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts/utils/structs/DoubleEndedQueue.sol; Empty(); 0x3db2a12a
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts/utils/structs/DoubleEndedQueue.sol; OutOfBounds(); 0xb4120f14
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts-upgradeable/crosschain/errorsUpgradeable.sol; NotCrossChainCall(); 0x4a74df92
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts-upgradeable/crosschain/errorsUpgradeable.sol; InvalidCrossChainSender(address actual, address expected); 0xef25d32b
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts-upgradeable/utils/ShortStringsUpgradeable.sol; StringTooLong(string str); 0x305a27a9
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts-upgradeable/utils/ShortStringsUpgradeable.sol; InvalidShortString(); 0xb3512b0c
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts-upgradeable/utils/structs/DoubleEndedQueueUpgradeable.sol; Empty(); 0x3db2a12a
+node_modules/@chainlink/contracts/node_modules/@openzeppelin/contracts-upgradeable/utils/structs/DoubleEndedQueueUpgradeable.sol; OutOfBounds(); 0xb4120f14
+node_modules/@chainlink/contracts/src/v0.8/tests/Broken.sol; Unauthorized(string reason, int256 reason2); 0x34da2743
+node_modules/@chainlink/contracts/src/v0.8/tests/Counter.sol; AlwaysRevert(); 0x8bba4aff
+node_modules/@chainlink/contracts/src/v0.8/tests/VerifiableLoadBase.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/Paymaster.sol; OnlyCallableFromLink(); 0x44b0e3c3
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/Paymaster.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/Paymaster.sol; Unauthorized(address sender, address validator); 0x295a81c1
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/Paymaster.sol; UserOperationAlreadyTried(bytes32 userOpHash); 0x7413dcf8
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/Paymaster.sol; InsufficientFunds(uint256 juelsNeeded, uint256 subscriptionBalance); 0x03eb8b54
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/SCA.sol; IncorrectNonce(uint256 currentNonce, uint256 nonceGiven); 0x7ba63394
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/SCA.sol; NotAuthorized(address sender); 0x4a0bfec1
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/SCA.sol; BadFormatOrOOG(); 0x20e9b5d2
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/SCA.sol; TransactionExpired(uint256 deadline, uint256 currentTimestamp); 0x300249d7
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/SCA.sol; InvalidSignature(bytes32 operationHash, address owner); 0x78d50c7f
+node_modules/@chainlink/contracts/src/v0.8/transmission/dev/ERC-4337/SmartContractAccountFactory.sol; DeploymentFailed(); 0x30116425
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; TooManyConsumers(uint16 maximumConsumers); 0xb72bc703
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; InsufficientBalance(uint96 currentBalanceJuels); 0x6b0fe56f
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; InvalidConsumer(); 0x71e83137
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; CannotRemoveWithPendingRequests(); 0x06eb10c8
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; OnlyCallableFromLink(); 0x44b0e3c3
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; MustBeSubscriptionOwner(); 0x5a68151d
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; TimeoutNotExceeded(); 0xa2376fe8
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsSubscriptions.sol; MustBeProposedOwner(address proposedOwner); 0x4e1d9f18
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/accessControl/TermsOfServiceAllowList.sol; InvalidSignature(); 0x8baa579f
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/accessControl/TermsOfServiceAllowList.sol; InvalidUsage(); 0x381cfcbd
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/accessControl/TermsOfServiceAllowList.sol; RecipientIsBlocked(); 0x62b7a34d
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol; EmptySource(); 0x22ce3edd
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol; EmptySecrets(); 0xe889636f
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol; EmptyArgs(); 0xfe936cb7
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol; NoInlineSecrets(); 0xa80d31f7
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsClient.sol; OnlyRouterCanFulfill(); 0xc6829f83
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/example/FunctionsClientExample.sol; UnexpectedRequestID(bytes32 requestId); 0xd068bf5b
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/ocr/OCR2Base.sol; ReportInvalid(); 0x0be36328
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/ocr/OCR2Base.sol; InvalidConfig(string message); 0x89a61989
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/Routable.sol; RouterMustBeSet(); 0x4a61d10a
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/Routable.sol; OnlyCallableByRouter(); 0xc41a5b09
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/Routable.sol; OnlyCallableByRouterOwner(); 0xa0f0a446
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsCoordinator.sol; InconsistentReportData(); 0xe915fda5
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsCoordinator.sol; EmptyPublicKey(); 0x4f42be3d
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsCoordinator.sol; UnauthorizedPublicKeyChange(); 0xed6dd19b
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; EmptyRequestData(); 0x00c1cfc0
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; OnlyCallableFromCoordinator(); 0x8bec23e7
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; SenderMustAcceptTermsOfService(address sender); 0x22906263
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; InvalidGasFlagValue(uint8 value); 0x45c108ce
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; GasLimitTooBig(uint32 limit); 0x1d70f87a
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; DuplicateRequestId(bytes32 requestId); 0x304f32e8
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; RouteNotFound(bytes32 id); 0x80833e33
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; InvalidProposal(); 0xee032808
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsRouter.sol; IdentifierIsReserved(bytes32 id); 0x4855c288
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; UnsupportedRequestDataVersion(); 0xdada7587
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; UnauthorizedSender(); 0x08094908
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; MustBeSubOwner(address owner); 0xd8a3fb52
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; NoTransmittersSet(); 0x30274b3a
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsBilling.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/ocr/OCR2Base.sol; ReportInvalid(string message); 0x660bd4ba
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/ocr/OCR2Base.sol; InvalidConfig(string message); 0x89a61989
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsCoordinator.sol; InconsistentReportData(); 0xe915fda5
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsCoordinator.sol; EmptyPublicKey(); 0x4f42be3d
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsCoordinator.sol; UnauthorizedPublicKeyChange(); 0xed6dd19b
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; UnsupportedRequestDataVersion(); 0xdada7587
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; UnauthorizedSender(); 0x08094908
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; MustBeSubOwner(address owner); 0xd8a3fb52
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; NoTransmittersSet(); 0x30274b3a
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_1_0/FunctionsBilling.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/accessControl/TermsOfServiceAllowList.sol; InvalidSignature(); 0x8baa579f
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/accessControl/TermsOfServiceAllowList.sol; InvalidUsage(); 0x381cfcbd
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/accessControl/TermsOfServiceAllowList.sol; RecipientIsBlocked(); 0x62b7a34d
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/accessControl/TermsOfServiceAllowList.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsClient.sol; OnlyRouterCanFulfill(); 0xc6829f83
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/ocr/OCR2Base.sol; ReportInvalid(string message); 0x660bd4ba
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/ocr/OCR2Base.sol; InvalidConfig(string message); 0x89a61989
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsCoordinator.sol; InconsistentReportData(); 0xe915fda5
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsCoordinator.sol; EmptyPublicKey(); 0x4f42be3d
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsCoordinator.sol; UnauthorizedPublicKeyChange(); 0xed6dd19b
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; UnsupportedRequestDataVersion(); 0xdada7587
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; UnauthorizedSender(); 0x08094908
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; MustBeSubOwner(address owner); 0xd8a3fb52
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; InvalidUsdLinkPrice(int256 usdLink); 0x56b22ab8
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; NoTransmittersSet(); 0x30274b3a
+node_modules/@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsBilling.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; TooManyConsumers(uint16 maximumConsumers); 0xb72bc703
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; InsufficientBalance(uint96 currentBalanceJuels); 0x6b0fe56f
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; InvalidConsumer(); 0x71e83137
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; CannotRemoveWithPendingRequests(); 0x06eb10c8
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; OnlyCallableFromLink(); 0x44b0e3c3
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; MustBeSubscriptionOwner(); 0x5a68151d
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; TimeoutNotExceeded(); 0xa2376fe8
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsSubscriptions.sol; MustBeProposedOwner(address proposedOwner); 0x4e1d9f18
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/accessControl/TermsOfServiceAllowList.sol; InvalidSignature(); 0x8baa579f
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/accessControl/TermsOfServiceAllowList.sol; InvalidUsage(); 0x381cfcbd
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/accessControl/TermsOfServiceAllowList.sol; RecipientIsBlocked(); 0x62b7a34d
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/accessControl/TermsOfServiceAllowList.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/libraries/FunctionsRequest.sol; EmptySource(); 0x22ce3edd
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/libraries/FunctionsRequest.sol; EmptySecrets(); 0xe889636f
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/libraries/FunctionsRequest.sol; EmptyArgs(); 0xfe936cb7
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/libraries/FunctionsRequest.sol; NoInlineSecrets(); 0xa80d31f7
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsClient.sol; OnlyRouterCanFulfill(); 0xc6829f83
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/example/FunctionsClientExample.sol; UnexpectedRequestID(bytes32 requestId); 0xd068bf5b
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/ocr/OCR2Base.sol; ReportInvalid(string message); 0x660bd4ba
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/ocr/OCR2Base.sol; InvalidConfig(string message); 0x89a61989
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/Routable.sol; RouterMustBeSet(); 0x4a61d10a
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/Routable.sol; OnlyCallableByRouter(); 0xc41a5b09
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/Routable.sol; OnlyCallableByRouterOwner(); 0xa0f0a446
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsCoordinator.sol; InconsistentReportData(); 0xe915fda5
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsCoordinator.sol; EmptyPublicKey(); 0x4f42be3d
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsCoordinator.sol; UnauthorizedPublicKeyChange(); 0xed6dd19b
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; EmptyRequestData(); 0x00c1cfc0
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; OnlyCallableFromCoordinator(); 0x8bec23e7
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; SenderMustAcceptTermsOfService(address sender); 0x22906263
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; InvalidGasFlagValue(uint8 value); 0x45c108ce
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; GasLimitTooBig(uint32 limit); 0x1d70f87a
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; DuplicateRequestId(bytes32 requestId); 0x304f32e8
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; RouteNotFound(bytes32 id); 0x80833e33
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; InvalidProposal(); 0xee032808
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsRouter.sol; IdentifierIsReserved(bytes32 id); 0x4855c288
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; UnsupportedRequestDataVersion(); 0xdada7587
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; UnauthorizedSender(); 0x08094908
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; MustBeSubOwner(address owner); 0xd8a3fb52
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; InvalidUsdLinkPrice(int256 usdLink); 0x56b22ab8
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; NoTransmittersSet(); 0x30274b3a
+node_modules/@chainlink/contracts/src/v0.8/functions/dev/v1_X/FunctionsBilling.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/PermissionedForwardProxy.sol; PermissionNotSet(); 0xf805512f
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/VerifierProxy.sol; AccessForbidden(); 0xef67f5d8
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/VerifierProxy.sol; ZeroAddress(); 0xd92e233d
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/VerifierProxy.sol; ConfigDigestAlreadySet(bytes32 configDigest, address verifier); 0x375d1fe6
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/VerifierProxy.sol; VerifierAlreadyInitialized(address verifier); 0x4e01ccfd
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/VerifierProxy.sol; VerifierInvalid(); 0x75b0527a
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/VerifierProxy.sol; FeeManagerInvalid(); 0x82389419
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/VerifierProxy.sol; VerifierNotFound(bytes32 configDigest); 0xb151802b
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/VerifierProxy.sol; BadVerification(); 0x4df18f07
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/libraries/ByteUtil.sol; MalformedData(); 0x8e5714bc
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; AccessForbidden(); 0xef67f5d8
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; ZeroAddress(); 0xd92e233d
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; FeedIdEmpty(); 0xbd9f4c2b
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; DigestEmpty(); 0xe3322627
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; DigestNotSet(bytes32 feedId, bytes32 configDigest); 0x8bca6311
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; DigestInactive(bytes32 feedId, bytes32 configDigest); 0xfc10a283
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; FaultToleranceMustBePositive(); 0x0743bae6
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; ExcessSigners(uint256 numSigners, uint256 maxSigners); 0x61750f40
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; InsufficientSigners(uint256 numSigners, uint256 minSigners); 0x9dd9e6d8
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; IncorrectSignatureCount(uint256 numSigners, uint256 expectedNumSigners); 0x5348a282
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; MismatchedSignatures(uint256 rsLength, uint256 ssLength); 0xf0d31408
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; NonUniqueSignatures(); 0xf67bc7c4
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; BadVerification(); 0x4df18f07
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; CannotDeactivateLatestConfig(bytes32 feedId, bytes32 configDigest); 0xa403c016
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; InactiveFeed(bytes32 feedId); 0x36dbe748
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/Verifier.sol; InvalidFeed(bytes32 feedId); 0xa25b0b96
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; InvalidSurcharge(); 0x05e8ac29
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; InvalidDiscount(); 0x997ea360
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; InvalidAddress(); 0xe6c4247b
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; InvalidDeposit(); 0xb2e532de
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; ExpiredReport(); 0xb6c405f5
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; InvalidQuote(); 0xf8618030
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; Unauthorized(); 0x82b42900
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; ZeroDeficit(); 0x03aad312
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/FeeManager.sol; InvalidReceivingAddress(); 0xef2af201
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/RewardManager.sol; InvalidWeights(); 0x84677ce8
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/RewardManager.sol; InvalidAddress(); 0xe6c4247b
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/RewardManager.sol; InvalidPoolId(); 0x0afa7ee8
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/RewardManager.sol; Unauthorized(); 0x82b42900
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/RewardManager.sol; InvalidPoolLength(); 0xa22caccc
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; AccessForbidden(); 0xef67f5d8
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; ZeroAddress(); 0xd92e233d
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; FeedIdEmpty(); 0xbd9f4c2b
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; DigestEmpty(); 0xe3322627
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; DigestNotSet(bytes32 configDigest); 0x74eb4b93
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; DigestInactive(bytes32 configDigest); 0xd990d621
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; FaultToleranceMustBePositive(); 0x0743bae6
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; ExcessSigners(uint256 numSigners, uint256 maxSigners); 0x61750f40
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; InsufficientSigners(uint256 numSigners, uint256 minSigners); 0x9dd9e6d8
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; IncorrectSignatureCount(uint256 numSigners, uint256 expectedNumSigners); 0x5348a282
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; MismatchedSignatures(uint256 rsLength, uint256 ssLength); 0xf0d31408
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; NonUniqueSignatures(); 0xf67bc7c4
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; BadVerification(); 0x4df18f07
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; CannotDeactivateLatestConfig(bytes32 configDigest); 0x67863f44
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; InactiveFeed(bytes32 feedId); 0x36dbe748
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelVerifier.sol; InvalidFeed(bytes32 feedId); 0xa25b0b96
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelConfigStore.sol; OnlyCallableByEOA(); 0x74e2cd51
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelConfigStore.sol; StagingConfigAlreadyPromoted(); 0xf3070266
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelConfigStore.sol; EmptyStreamIDs(); 0x4b620e24
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelConfigStore.sol; ZeroReportFormat(); 0xebd3ef02
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelConfigStore.sol; ZeroChainSelector(); 0xf89d7629
+node_modules/@chainlink/contracts/src/v0.8/llo-feeds/dev/ChannelConfigStore.sol; ChannelDefinitionNotFound(); 0xd1a751e2
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; InvalidReport(); 0xb55ac754
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; FaultToleranceMustBePositive(); 0x0743bae6
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; ExcessSigners(uint256 numSigners, uint256 maxSigners); 0x61750f40
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; InsufficientSigners(uint256 numSigners, uint256 minSigners); 0x9dd9e6d8
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; DuplicateSigner(address signer); 0xe021c4f2
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; InvalidSignatureCount(uint256 expected, uint256 received); 0xd6022e8e
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; InvalidConfig(uint64 configId); 0xdf3b81ea
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; InvalidSigner(address signer); 0xbf18af43
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneForwarder.sol; InvalidSignature(bytes signature); 0x2adfdc30
+node_modules/@chainlink/contracts/src/v0.8/keystone/interfaces/IRouter.sol; UnauthorizedForwarder(); 0xd79e123d
+node_modules/@chainlink/contracts/src/v0.8/keystone/interfaces/IRouter.sol; AlreadyAttempted(bytes32 transmissionId); 0xa53dc8ca
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; AccessForbidden(address sender); 0x9473075d
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; LengthMismatch(uint256 lengthOne, uint256 lengthTwo); 0xab8b67c6
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; InvalidNodeOperatorAdmin(); 0xeeacd939
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; InvalidNodeP2PId(bytes32 p2pId); 0x64e2ee92
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; InvalidNodeCapabilities(bytes32[] hashedCapabilityIds); 0x3748d4c6
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; DONDoesNotExist(uint32 donId); 0x2b62be9b
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; InvalidNodeSigner(); 0x83773146
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; CapabilityAlreadyExists(bytes32 hashedCapabilityId); 0xebf52551
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; NodeAlreadyExists(bytes32 nodeP2PId); 0x54618483
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; NodeDoesNotSupportCapability(bytes32 nodeP2PId, bytes32 capabilityId); 0xa7e79250
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; DuplicateDONCapability(uint32 donId, bytes32 capabilityId); 0x3927d080
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; DuplicateDONNode(uint32 donId, bytes32 nodeP2PId); 0x636e4057
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; InvalidFaultTolerance(uint8 f, uint256 nodeCount); 0x25b4d618
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; CapabilityDoesNotExist(bytes32 hashedCapabilityId); 0xe181733f
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; CapabilityIsDeprecated(bytes32 hashedCapabilityId); 0xf7d7a294
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; NodeDoesNotExist(bytes32 nodeP2PId); 0xd82f6adb
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; NodeOperatorDoesNotExist(uint32 nodeOperatorId); 0xadd9ae1e
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; NodePartOfCapabilitiesDON(uint32 donId, bytes32 nodeP2PId); 0x60a6d898
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; NodePartOfWorkflowDON(uint32 donId, bytes32 nodeP2PId); 0x60b9df73
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; CapabilityRequiredByDON(bytes32 hashedCapabilityId, uint32 donId); 0x03dcd862
+node_modules/@chainlink/contracts/src/v0.8/keystone/CapabilitiesRegistry.sol; InvalidCapabilityConfigurationContractInterface(address proposedConfigurationContract); 0xabb5e3fd
+node_modules/@chainlink/contracts/src/v0.8/keystone/ocr/OCR2Base.sol; ReportInvalid(string message); 0x660bd4ba
+node_modules/@chainlink/contracts/src/v0.8/keystone/ocr/OCR2Base.sol; InvalidConfig(string message); 0x89a61989
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneFeedsConsumer.sol; UnauthorizedSender(address sender); 0x3fcc3f17
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneFeedsConsumer.sol; UnauthorizedWorkflowOwner(address workflowOwner); 0xbf241623
+node_modules/@chainlink/contracts/src/v0.8/keystone/KeystoneFeedsConsumer.sol; UnauthorizedWorkflowName(bytes10 workflowName); 0x4b942f80
+node_modules/@chainlink/contracts/src/v0.8/keystone/OCR3Capability.sol; ReportingUnsupported(); 0x07501819
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/arbitrum/ArbitrumSequencerUptimeFeed.sol; Uninitialized(); 0x1c72fad4
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/arbitrum/ArbitrumSequencerUptimeFeed.sol; AlreadyInitialized(); 0x0dc149f0
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/arbitrum/ArbitrumSequencerUptimeFeed.sol; InvalidSender(); 0xddb5de5e
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/arbitrum/ArbitrumSequencerUptimeFeed.sol; NoDataPresent(); 0xbb258700
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/scroll/ScrollSequencerUptimeFeed.sol; InvalidSender(); 0xddb5de5e
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/scroll/ScrollSequencerUptimeFeed.sol; NoDataPresent(); 0xbb258700
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/scroll/ScrollSequencerUptimeFeed.sol; ZeroAddress(); 0xd92e233d
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/optimism/OptimismSequencerUptimeFeed.sol; InvalidSender(); 0xddb5de5e
+node_modules/@chainlink/contracts/src/v0.8/l2ep/dev/optimism/OptimismSequencerUptimeFeed.sol; NoDataPresent(); 0xbb258700
+node_modules/@chainlink/contracts/src/v0.8/shared/token/ERC677/BurnMintERC677.sol; SenderNotMinter(address sender); 0xe2c8c9d5
+node_modules/@chainlink/contracts/src/v0.8/shared/token/ERC677/BurnMintERC677.sol; SenderNotBurner(address sender); 0xc820b10b
+node_modules/@chainlink/contracts/src/v0.8/shared/token/ERC677/BurnMintERC677.sol; MaxSupplyExceeded(uint256 supplyAfterMint); 0xcbbf1113
+node_modules/@chainlink/contracts/src/v0.8/shared/access/AuthorizedCallers.sol; UnauthorizedCaller(address caller); 0xd86ad9cf
+node_modules/@chainlink/contracts/src/v0.8/shared/access/AuthorizedCallers.sol; ZeroAddressNotAllowed(); 0x8579befe
+node_modules/@chainlink/contracts/src/v0.8/shared/util/SortedSetValidationUtil.sol; EmptySet(); 0xe2496841
+node_modules/@chainlink/contracts/src/v0.8/shared/util/SortedSetValidationUtil.sol; NotASortedSet(bytes32[] set); 0x1bc41b42
+node_modules/@chainlink/contracts/src/v0.8/shared/util/SortedSetValidationUtil.sol; NotASubset(bytes32[] subset, bytes32[] superset); 0xd671700c
+node_modules/@chainlink/contracts/src/v0.8/shared/call/CallWithExactGas.sol; NoContract(); 0x0c3b563c
+node_modules/@chainlink/contracts/src/v0.8/shared/call/CallWithExactGas.sol; NoGasForCallExactCheck(); 0xafa32a2c
+node_modules/@chainlink/contracts/src/v0.8/shared/call/CallWithExactGas.sol; NotEnoughGasForCall(); 0x37c3be29
+node_modules/@chainlink/contracts/src/v0.8/shared/ocr2/OCR2Base.sol; ReportInvalid(); 0x0be36328
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFOwnerlessConsumerExample.sol; OnlyCallableFromLink(); 0x44b0e3c3
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorV2TestHelper.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorV2TestHelper.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; TooManyConsumers(); 0x05a48e0f
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; InvalidConsumer(uint64 subId, address consumer); 0xf0019fe6
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; OnlyCallableFromLink(); 0x44b0e3c3
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; MustBeSubOwner(address owner); 0xd8a3fb52
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; PendingRequestExists(); 0xb42f66e8
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; MustBeRequestedOwner(address proposedOwner); 0xd084e975
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; BalanceInvariantViolated(uint256 internalBalance, uint256 externalBalance); 0xa99da302
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; InvalidRequestConfirmations(uint16 have, uint16 min, uint16 max); 0xa7386976
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; GasLimitTooBig(uint32 have, uint32 want); 0xf5d7e01e
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; NumWordsTooBig(uint32 have, uint32 want); 0x47386bec
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; ProvingKeyAlreadyRegistered(bytes32 keyHash); 0x4a0b8fa7
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; NoSuchProvingKey(bytes32 keyHash); 0x77f5b84c
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; InsufficientGasForConsumer(uint256 have, uint256 want); 0xd17e7664
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; NoCorrespondingRequest(); 0x3688124a
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; IncorrectCommitment(); 0xd529142c
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; BlockhashNotInStore(uint256 blockNum); 0x175dadad
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/VRFCoordinatorTestV2.sol; Reentrant(); 0xed3ba6a6
+node_modules/@chainlink/contracts/src/v0.8/vrf/testhelpers/Counter.sol; AlwaysRevert(); 0x8bba4aff
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; TooManyConsumers(); 0x05a48e0f
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; InvalidConsumer(uint64 subId, address consumer); 0xf0019fe6
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; OnlyCallableFromLink(); 0x44b0e3c3
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; MustBeSubOwner(address owner); 0xd8a3fb52
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; PendingRequestExists(); 0xb42f66e8
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; MustBeRequestedOwner(address proposedOwner); 0xd084e975
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; BalanceInvariantViolated(uint256 internalBalance, uint256 externalBalance); 0xa99da302
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; InvalidRequestConfirmations(uint16 have, uint16 min, uint16 max); 0xa7386976
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; GasLimitTooBig(uint32 have, uint32 want); 0xf5d7e01e
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; NumWordsTooBig(uint32 have, uint32 want); 0x47386bec
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; ProvingKeyAlreadyRegistered(bytes32 keyHash); 0x4a0b8fa7
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; NoSuchProvingKey(bytes32 keyHash); 0x77f5b84c
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; InsufficientGasForConsumer(uint256 have, uint256 want); 0xd17e7664
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; NoCorrespondingRequest(); 0x3688124a
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; IncorrectCommitment(); 0xd529142c
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; BlockhashNotInStore(uint256 blockNum); 0x175dadad
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFCoordinatorV2.sol; Reentrant(); 0xed3ba6a6
+node_modules/@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol; OnlyCoordinatorCanFulfill(address have, address want); 0x1cf993f4
+node_modules/@chainlink/contracts/src/v0.8/vrf/AuthorizedReceiver.sol; EmptySendersList(); 0x75158c3b
+node_modules/@chainlink/contracts/src/v0.8/vrf/AuthorizedReceiver.sol; UnauthorizedSender(); 0x08094908
+node_modules/@chainlink/contracts/src/v0.8/vrf/AuthorizedReceiver.sol; NotAllowedToSetSenders(); 0xad77f061
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol; InvalidRequest(); 0x41abc801
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol; InvalidRandomWords(); 0x3f3df5b6
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol; InvalidExtraArgsTag(); 0x5247fdce
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol; NotImplemented(); 0xd6234725
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol; MustBeSubOwner(address owner); 0xd8a3fb52
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol; TooManyConsumers(); 0x05a48e0f
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol; InvalidConsumer(); 0x71e83137
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol; InvalidRandomWords(); 0x3f3df5b6
+node_modules/@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2Mock.sol; Reentrant(); 0xed3ba6a6
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; InvalidRequestConfirmations(uint16 have, uint16 min, uint16 max); 0xa7386976
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; GasLimitTooBig(uint32 have, uint32 want); 0xf5d7e01e
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; NumWordsTooBig(uint32 have, uint32 want); 0x47386bec
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; MsgDataTooBig(uint256 have, uint32 max); 0x0f28961b
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; ProvingKeyAlreadyRegistered(bytes32 keyHash); 0x4a0b8fa7
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; NoSuchProvingKey(bytes32 keyHash); 0x77f5b84c
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; LinkDiscountTooHigh(uint32 flatFeeLinkDiscountPPM, uint32 flatFeeNativePPM); 0x2780dcb2
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; InvalidPremiumPercentage(uint8 premiumPercentage, uint8 max); 0x3acc511a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; NoCorrespondingRequest(); 0x3688124a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; IncorrectCommitment(); 0xd529142c
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; BlockhashNotInStore(uint256 blockNum); 0x175dadad
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; InvalidExtraArgsTag(); 0x5247fdce
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; GasPriceExceeded(uint256 gasPrice, uint256 maxGas); 0x86bca65a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; CoordinatorNotRegistered(address coordinatorAddress); 0x5428d449
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFCoordinatorV2_5.sol; CoordinatorAlreadyRegistered(address coordinatorAddress); 0xac8a27ef
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/OptimismL1Fees.sol; InvalidL1FeeCalculationMode(uint8 mode); 0x1c300f00
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/OptimismL1Fees.sol; InvalidL1FeeCoefficient(uint8 coefficient); 0x1a8a06a0
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol; OnlyCoordinatorCanFulfill(address have, address want); 0x1cf993f4
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol; OnlyOwnerOrCoordinator(address have, address owner, address coordinator); 0x061db9c1
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol; ZeroAddress(); 0xd92e233d
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper_Optimism.sol; UnsupportedL1FeeCalculationMode(uint8 mode); 0x1d6b7000
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2Plus_V2Example.sol; SubscriptionIDCollisionFound(); 0x4d5f486a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2Plus_V2Example.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2Plus_V2Example.sol; MustBePreviousCoordinator(address sender, address previousCoordinator); 0xf5828f73
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2Plus_V2Example.sol; InvalidVersion(uint8 requestVersion, uint8 expectedVersion); 0x8df4607c
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2Plus_V2Example.sol; InvalidNativeBalance(uint256 transferredValue, uint96 expectedValue); 0x6acf1350
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; InvalidRequestConfirmations(uint16 have, uint16 min, uint16 max); 0xa7386976
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; GasLimitTooBig(uint32 have, uint32 want); 0xf5d7e01e
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; NumWordsTooBig(uint32 have, uint32 want); 0x47386bec
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; MsgDataTooBig(uint256 have, uint32 max); 0x0f28961b
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; ProvingKeyAlreadyRegistered(bytes32 keyHash); 0x4a0b8fa7
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; NoSuchProvingKey(bytes32 keyHash); 0x77f5b84c
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; InvalidLinkWeiPrice(int256 linkWei); 0x43d4cf66
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; LinkDiscountTooHigh(uint32 flatFeeLinkDiscountPPM, uint32 flatFeeNativePPM); 0x2780dcb2
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; InvalidPremiumPercentage(uint8 premiumPercentage, uint8 max); 0x3acc511a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; NoCorrespondingRequest(); 0x3688124a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; IncorrectCommitment(); 0xd529142c
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; BlockhashNotInStore(uint256 blockNum); 0x175dadad
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; PaymentTooLarge(); 0xe80fa381
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; InvalidExtraArgsTag(); 0x5247fdce
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; GasPriceExceeded(uint256 gasPrice, uint256 maxGas); 0x86bca65a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; InvalidVersion(uint8 requestVersion, uint8 expectedVersion); 0x8df4607c
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; InvalidNativeBalance(uint256 transferredValue, uint96 expectedValue); 0x6acf1350
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; SubscriptionIDCollisionFound(); 0x4d5f486a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; CoordinatorNotRegistered(address coordinatorAddress); 0x5428d449
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/testhelpers/VRFCoordinatorV2PlusUpgradedVersion.sol; CoordinatorAlreadyRegistered(address coordinatorAddress); 0xac8a27ef
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; TooManyConsumers(); 0x05a48e0f
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; InvalidConsumer(uint256 subId, address consumer); 0x79bfd401
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; InvalidSubscription(); 0x1f6a65b6
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; OnlyCallableFromLink(); 0x44b0e3c3
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; InvalidCalldata(); 0x8129bbcd
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; MustBeSubOwner(address owner); 0xd8a3fb52
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; PendingRequestExists(); 0xb42f66e8
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; MustBeRequestedOwner(address proposedOwner); 0xd084e975
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; BalanceInvariantViolated(uint256 internalBalance, uint256 externalBalance); 0xa99da302
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; LinkAlreadySet(); 0x2d118a6e
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; FailedToSendNative(); 0x950b2479
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; FailedToTransferLink(); 0x7c07fc4c
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; LinkNotSet(); 0xc1f0c0a1
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol; Reentrant(); 0xed3ba6a6
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/TrustedBlockhashStore.sol; NotInWhitelist(); 0x5b0aa2ba
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/TrustedBlockhashStore.sol; InvalidTrustedBlockhashes(); 0xbd750933
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/TrustedBlockhashStore.sol; InvalidRecentBlockhash(); 0xd2f69c95
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper.sol; LinkAlreadySet(); 0x2d118a6e
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper.sol; LinkDiscountTooHigh(uint32 flatFeeLinkDiscountPPM, uint32 flatFeeNativePPM); 0x2780dcb2
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper.sol; InvalidPremiumPercentage(uint8 premiumPercentage, uint8 max); 0x3acc511a
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper.sol; FailedToTransferLink(); 0x7c07fc4c
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper.sol; IncorrectExtraArgsLength(uint16 expectedMinimumLength, uint16 actualLength); 0x51200dce
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper.sol; NativePaymentInOnTokenTransfer(); 0x6048aa68
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper.sol; LINKPaymentInRequestRandomWordsInNative(); 0x6b81746e
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapper.sol; SubscriptionIdMissing(); 0xa81c0bef
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Upgradeable.sol; OnlyCoordinatorCanFulfill(address have, address want); 0x1cf993f4
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFSubscriptionBalanceMonitor.sol; InvalidWatchList(); 0x3869bbe6
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFSubscriptionBalanceMonitor.sol; OnlyKeeperRegistry(); 0xd3a68034
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFSubscriptionBalanceMonitor.sol; DuplicateSubcriptionId(uint64 duplicate); 0x7ceeb8ad
+node_modules/@chainlink/contracts/src/v0.8/vrf/dev/VRFV2PlusWrapperConsumerBase.sol; OnlyVRFWrapperCanFulfill(address have, address want); 0x8ba9316e
+node_modules/@chainlink/contracts/src/v0.8/automation/test/HeartbeatRequester.t.sol; HeartbeatNotPermitted(); 0xa4e06367
+node_modules/@chainlink/contracts/src/v0.8/automation/test/v2_3/WETH9.sol; InsufficientBalance(); 0xf4d678b8
+node_modules/@chainlink/contracts/src/v0.8/automation/libraries/internal/Cron.sol; UnknownFieldType(); 0x7d8d4329
+node_modules/@chainlink/contracts/src/v0.8/automation/libraries/internal/Cron.sol; InvalidSpec(string reason); 0xaf64694e
+node_modules/@chainlink/contracts/src/v0.8/automation/libraries/internal/Cron.sol; InvalidField(string field, string reason); 0x20689754
+node_modules/@chainlink/contracts/src/v0.8/automation/libraries/internal/Cron.sol; ListTooLarge(); 0x88b27b5f
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; EmptyAddress(); 0x7138356f
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; InsufficientFunds(); 0x356680b7
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; KeepersMustTakeTurns(); 0x06bc1040
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyActiveKeepers(); 0xcfbacfd8
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyCallableByProposedAdmin(); 0x6352a853
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyPausedUpkeep(); 0x1b88a784
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; OnlyUnpausedUpkeep(); 0x514b6c24
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; PaymentGreaterThanAllLINK(); 0x2ad7547a
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; UpkeepCancelled(); 0x9c0083a2
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_3/KeeperRegistryBase1_3.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/AutomationBase.sol; OnlySimulatedBackend(); 0xb60ac5db
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/CronUpkeep.sol; CronJobIDNotFound(uint256 id); 0x453d079a
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/CronUpkeep.sol; ExceedsMaxJobs(); 0x976395a4
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/CronUpkeep.sol; InvalidHandler(); 0xd8f59fa5
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/CronUpkeep.sol; TickInFuture(); 0xa0ef6196
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/CronUpkeep.sol; TickTooOld(); 0x753a4acf
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/CronUpkeep.sol; TickDoesntMatchSpec(); 0x1653b6bd
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/EthBalanceMonitor.sol; InvalidWatchList(); 0x3869bbe6
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/EthBalanceMonitor.sol; OnlyKeeperRegistry(); 0xd3a68034
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/EthBalanceMonitor.sol; DuplicateAddress(address duplicate); 0x9f2277f3
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/ERC20BalanceMonitor.sol; InvalidWatchList(); 0x3869bbe6
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/ERC20BalanceMonitor.sol; OnlyKeeperRegistry(); 0xd3a68034
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/ERC20BalanceMonitor.sol; DuplicateAddress(address duplicate); 0x9f2277f3
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/UpkeepBalanceMonitor.sol; InvalidConfig(); 0x35be3ac8
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/UpkeepBalanceMonitor.sol; InvalidTopUpData(); 0x301f2bc4
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/UpkeepBalanceMonitor.sol; OnlyForwarderOrOwner(); 0xd8ef95ed
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalidAddress(address target); 0x8e4c8aa6
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalidMaxCheck(uint16 maxCheck); 0x48936259
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalixMaxPerform(uint16 maxPerform); 0xea1044c0
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalidMinBalance(uint96 minBalance); 0xfd89b5fc
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalidTopUpAmount(uint96 topUpAmount); 0x3e748a02
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalidUpkeepInterval(uint8 upkeepInterval); 0x8b3c14c2
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalidLinkTokenAddress(address lt); 0x8caf4f5a
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalidWatchList(); 0x3869bbe6
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; InvalidChainSelector(); 0x656535ce
+node_modules/@chainlink/contracts/src/v0.8/automation/upkeeps/LinkAvailableBalanceMonitor.sol; DuplicateAddress(address duplicate); 0x9f2277f3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/UpkeepTranscoder3_0.sol; InvalidTranscoding(); 0x90aaccc3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; InsufficientFunds(); 0x356680b7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyActiveTransmitters(); 0x1099ed75
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyCallableByProposedAdmin(); 0x6352a853
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyPausedUpkeep(); 0x1b88a784
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyUnpausedUpkeep(); 0x514b6c24
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; PaymentGreaterThanAllLINK(); 0x2ad7547a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; UpkeepCancelled(); 0x9c0083a2
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; ConfigDigestMismatch(); 0xdfdcf8e7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; IncorrectNumberOfSignatures(); 0x0244f71a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnlyActiveSigners(); 0x0f4c0737
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; DuplicateSigners(); 0xc103be2e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; TooManyOracles(); 0x25d0209c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; IncorrectNumberOfSigners(); 0x1d2d1c58
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; IncorrectNumberOfFaultyOracles(); 0xe77dba56
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; RepeatedSigner(); 0x77cea0fa
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; RepeatedTransmitter(); 0x6a7281ad
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; OnchainConfigNonEmpty(); 0x045b8b6e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; CheckDataExceedsLimit(); 0xae7235df
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; MaxCheckDataSizeCanOnlyIncrease(); 0x1fa9bdcb
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; MaxPerformDataSizeCanOnlyIncrease(); 0xd1d5faa8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; InvalidReport(); 0xb55ac754
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; RegistryPaused(); 0x24522f34
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; ReentrantCall(); 0x37ed32e8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistryBase2_0.sol; UpkeepAlreadyExists(); 0x6e3b930b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; InvalidAdminAddress(); 0x05bb467c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; RequestNotFound(); 0x4b13b31e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; HashMismatch(); 0x3f4d6053
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; OnlyAdminOrOwner(); 0x61685c2b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; InsufficientPayment(); 0xcd1c8867
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; RegistrationRequestFailed(); 0x649bf810
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; OnlyLink(); 0x018d10be
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; AmountMismatch(); 0x55e97b0d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; SenderMismatch(); 0xf8c5638e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; FunctionNotPermitted(); 0xe3d67921
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; LinkTransferFailed(address to); 0xc2e4dce8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_0/KeeperRegistrar2_0.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; CheckDataExceedsLimit(); 0xae7235df
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; ConfigDigestMismatch(); 0xdfdcf8e7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; DuplicateSigners(); 0xc103be2e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; IncorrectNumberOfFaultyOracles(); 0xe77dba56
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; IncorrectNumberOfSignatures(); 0x0244f71a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; IncorrectNumberOfSigners(); 0x1d2d1c58
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; InvalidTrigger(); 0xa768d7fd
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; InvalidReport(); 0xb55ac754
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; InvalidSigner(); 0x815e1d64
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; InvalidTransmitter(); 0x58a70a0a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; InvalidTriggerType(); 0xf2b2d412
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; MaxCheckDataSizeCanOnlyIncrease(); 0x1fa9bdcb
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; MaxPerformDataSizeCanOnlyIncrease(); 0xd1d5faa8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyActiveSigners(); 0x0f4c0737
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyActiveTransmitters(); 0x1099ed75
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyCallableByProposedAdmin(); 0x6352a853
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyCallableByUpkeepPrivilegeManager(); 0x77c35992
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyPausedUpkeep(); 0x1b88a784
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlySimulatedBackend(); 0xb60ac5db
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; OnlyUnpausedUpkeep(); 0x514b6c24
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; PaymentGreaterThanAllLINK(); 0x2ad7547a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; ReentrantCall(); 0x37ed32e8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; RegistryPaused(); 0x24522f34
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; RepeatedSigner(); 0x77cea0fa
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; RepeatedTransmitter(); 0x6a7281ad
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; TooManyOracles(); 0x25d0209c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; UpkeepAlreadyExists(); 0x6e3b930b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; UpkeepCancelled(); 0x9c0083a2
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_2/AutomationRegistryBase2_2.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/StreamsLookupCompatibleInterface.sol; StreamsLookup(string feedParamKey, string[] feeds, string timeParamKey, uint256 time, bytes extraData); 0xf055e4a2
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; CheckDataExceedsLimit(); 0xae7235df
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; ConfigDigestMismatch(); 0xdfdcf8e7
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; DuplicateSigners(); 0xc103be2e
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; IncorrectNumberOfFaultyOracles(); 0xe77dba56
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; IncorrectNumberOfSignatures(); 0x0244f71a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; IncorrectNumberOfSigners(); 0x1d2d1c58
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; InvalidReport(); 0xb55ac754
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; InvalidSigner(); 0x815e1d64
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; InvalidTransmitter(); 0x58a70a0a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; InvalidTrigger(); 0xa768d7fd
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; InvalidTriggerType(); 0xf2b2d412
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; MaxCheckDataSizeCanOnlyIncrease(); 0x1fa9bdcb
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; MaxPerformDataSizeCanOnlyIncrease(); 0xd1d5faa8
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyActiveSigners(); 0x0f4c0737
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyActiveTransmitters(); 0x1099ed75
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyCallableByProposedAdmin(); 0x6352a853
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyCallableByUpkeepPrivilegeManager(); 0x77c35992
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyPausedUpkeep(); 0x1b88a784
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlySimulatedBackend(); 0xb60ac5db
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; OnlyUnpausedUpkeep(); 0x514b6c24
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; PaymentGreaterThanAllLINK(); 0x2ad7547a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; ReentrantCall(); 0x37ed32e8
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; RegistryPaused(); 0x24522f34
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; RepeatedSigner(); 0x77cea0fa
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; RepeatedTransmitter(); 0x6a7281ad
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; TooManyOracles(); 0x25d0209c
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; UpkeepAlreadyExists(); 0x6e3b930b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; UpkeepCancelled(); 0x9c0083a2
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_2/IAutomationRegistryMaster.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; CheckDataExceedsLimit(); 0xae7235df
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; ConfigDigestMismatch(); 0xdfdcf8e7
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; DuplicateSigners(); 0xc103be2e
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; IncorrectNumberOfFaultyOracles(); 0xe77dba56
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; IncorrectNumberOfSignatures(); 0x0244f71a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; IncorrectNumberOfSigners(); 0x1d2d1c58
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InsufficientBalance(uint256 available, uint256 requested); 0xcf479181
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InsufficientLinkLiquidity(); 0x981bb6a0
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidFeed(); 0x1f86e170
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidReport(); 0xb55ac754
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidSigner(); 0x815e1d64
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidToken(); 0xc1ab6dc1
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidTransmitter(); 0x58a70a0a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidTrigger(); 0xa768d7fd
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; InvalidTriggerType(); 0xf2b2d412
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; MustSettleOffchain(); 0x4a3578fb
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; MustSettleOnchain(); 0xe0262d74
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyActiveSigners(); 0x0f4c0737
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyActiveTransmitters(); 0x1099ed75
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyCallableByProposedAdmin(); 0x6352a853
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyCallableByUpkeepPrivilegeManager(); 0x77c35992
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyFinanceAdmin(); 0xb6dfb7a6
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyPausedUpkeep(); 0x1b88a784
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlySimulatedBackend(); 0xb60ac5db
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; OnlyUnpausedUpkeep(); 0x514b6c24
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; ReentrantCall(); 0x37ed32e8
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; RegistryPaused(); 0x24522f34
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; RepeatedSigner(); 0x77cea0fa
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; RepeatedTransmitter(); 0x6a7281ad
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; TooManyOracles(); 0x25d0209c
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; TransferFailed(); 0x90b8ec18
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; UpkeepAlreadyExists(); 0x6e3b930b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; UpkeepCancelled(); 0x9c0083a2
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol; ZeroAddressNotAllowed(); 0x8579befe
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; CheckDataExceedsLimit(); 0xae7235df
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; ConfigDigestMismatch(); 0xdfdcf8e7
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; DuplicateSigners(); 0xc103be2e
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; IncorrectNumberOfFaultyOracles(); 0xe77dba56
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; IncorrectNumberOfSignatures(); 0x0244f71a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; IncorrectNumberOfSigners(); 0x1d2d1c58
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InsufficientFunds(); 0x356680b7
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InvalidReport(); 0xb55ac754
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InvalidSigner(); 0x815e1d64
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InvalidTransmitter(); 0x58a70a0a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InvalidTrigger(); 0xa768d7fd
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; InvalidTriggerType(); 0xf2b2d412
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; MaxCheckDataSizeCanOnlyIncrease(); 0x1fa9bdcb
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; MaxPerformDataSizeCanOnlyIncrease(); 0xd1d5faa8
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyActiveSigners(); 0x0f4c0737
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyActiveTransmitters(); 0x1099ed75
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyCallableByProposedAdmin(); 0x6352a853
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyCallableByUpkeepPrivilegeManager(); 0x77c35992
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyPausedUpkeep(); 0x1b88a784
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlySimulatedBackend(); 0xb60ac5db
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; OnlyUnpausedUpkeep(); 0x514b6c24
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; PaymentGreaterThanAllLINK(); 0x2ad7547a
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; ReentrantCall(); 0x37ed32e8
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; RegistryPaused(); 0x24522f34
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; RepeatedSigner(); 0x77cea0fa
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; RepeatedTransmitter(); 0x6a7281ad
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; TooManyOracles(); 0x25d0209c
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; UpkeepAlreadyExists(); 0x6e3b930b
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; UpkeepCancelled(); 0x9c0083a2
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/interfaces/v2_1/IKeeperRegistryMaster.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; UpkeepNotActive(); 0xd096219c
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; PaymentGreaterThanAllLINK(); 0x2ad7547a
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; OnlyActiveKeepers(); 0xcfbacfd8
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; InsufficientFunds(); 0x356680b7
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; KeepersMustTakeTurns(); 0x06bc1040
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistry1_2.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; InvalidAdminAddress(); 0x05bb467c
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; RequestNotFound(); 0x4b13b31e
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; HashMismatch(); 0x3f4d6053
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; OnlyAdminOrOwner(); 0x61685c2b
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; InsufficientPayment(); 0xcd1c8867
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; RegistrationRequestFailed(); 0x649bf810
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; OnlyLink(); 0x018d10be
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; AmountMismatch(); 0x55e97b0d
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; SenderMismatch(); 0xf8c5638e
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; FunctionNotPermitted(); 0xe3d67921
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; LinkTransferFailed(address to); 0xc2e4dce8
+node_modules/@chainlink/contracts/src/v0.8/automation/v1_2/KeeperRegistrar1_2.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/UpkeepTranscoder.sol; InvalidTranscoding(); 0x90aaccc3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; HashMismatch(); 0x3f4d6053
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; InsufficientPayment(); 0xcd1c8867
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; InvalidAdminAddress(); 0x05bb467c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; InvalidBillingToken(); 0x1183afea
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; TransferFailed(address to); 0x39f1c8d9
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; OnlyAdminOrOwner(); 0x61685c2b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; OnlyLink(); 0x018d10be
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistrar2_3.sol; RequestNotFound(); 0x4b13b31e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/UpkeepTranscoder5_0.sol; InvalidTranscoding(); 0x90aaccc3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; CheckDataExceedsLimit(); 0xae7235df
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; ConfigDigestMismatch(); 0xdfdcf8e7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; DuplicateSigners(); 0xc103be2e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; IncorrectNumberOfFaultyOracles(); 0xe77dba56
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; IncorrectNumberOfSignatures(); 0x0244f71a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; IncorrectNumberOfSigners(); 0x1d2d1c58
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InsufficientBalance(uint256 available, uint256 requested); 0xcf479181
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InsufficientLinkLiquidity(); 0x981bb6a0
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidFeed(); 0x1f86e170
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidTrigger(); 0xa768d7fd
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidReport(); 0xb55ac754
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidSigner(); 0x815e1d64
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidToken(); 0xc1ab6dc1
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidTransmitter(); 0x58a70a0a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; InvalidTriggerType(); 0xf2b2d412
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; MustSettleOffchain(); 0x4a3578fb
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; MustSettleOnchain(); 0xe0262d74
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyActiveSigners(); 0x0f4c0737
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyActiveTransmitters(); 0x1099ed75
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyCallableByProposedAdmin(); 0x6352a853
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyCallableByUpkeepPrivilegeManager(); 0x77c35992
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyFinanceAdmin(); 0xb6dfb7a6
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyPausedUpkeep(); 0x1b88a784
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlySimulatedBackend(); 0xb60ac5db
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; OnlyUnpausedUpkeep(); 0x514b6c24
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; ReentrantCall(); 0x37ed32e8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; RegistryPaused(); 0x24522f34
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; RepeatedSigner(); 0x77cea0fa
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; RepeatedTransmitter(); 0x6a7281ad
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; TooManyOracles(); 0x25d0209c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; TransferFailed(); 0x90b8ec18
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; UpkeepAlreadyExists(); 0x6e3b930b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; UpkeepCancelled(); 0x9c0083a2
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_3/AutomationRegistryBase2_3.sol; ZeroAddressNotAllowed(); 0x8579befe
+node_modules/@chainlink/contracts/src/v0.8/automation/mocks/MockUpkeep.sol; CheckRevert(); 0x33c37e1a
+node_modules/@chainlink/contracts/src/v0.8/automation/mocks/MockUpkeep.sol; PerformRevert(); 0xb85446c7
+node_modules/@chainlink/contracts/src/v0.8/automation/dev/MercuryRegistryBatchUpkeep.sol; BatchSizeTooLarge(uint256 batchsize, uint256 maxBatchSize); 0x01df19f6
+node_modules/@chainlink/contracts/src/v0.8/automation/dev/MercuryRegistry.sol; DuplicateFeed(string feedId); 0x84da80d3
+node_modules/@chainlink/contracts/src/v0.8/automation/dev/MercuryRegistry.sol; FeedNotActive(string feedId); 0x716a11d8
+node_modules/@chainlink/contracts/src/v0.8/automation/dev/MercuryRegistry.sol; StaleReport(string feedId, uint32 currentTimestamp, uint32 incomingTimestamp); 0x4041aa91
+node_modules/@chainlink/contracts/src/v0.8/automation/dev/MercuryRegistry.sol; InvalidFeeds(); 0x51a7f879
+node_modules/@chainlink/contracts/src/v0.8/automation/HeartbeatRequester.sol; HeartbeatNotPermitted(); 0xa4e06367
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; ArrayHasNoEntries(); 0x2c2fc941
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; CannotCancel(); 0xfbc03578
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; CheckDataExceedsLimit(); 0xae7235df
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; ConfigDigestMismatch(); 0xdfdcf8e7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; DuplicateEntry(); 0x357d0cc4
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; DuplicateSigners(); 0xc103be2e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; GasLimitCanOnlyIncrease(); 0x39abc104
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; GasLimitOutsideRange(); 0x14c237fb
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; IncorrectNumberOfFaultyOracles(); 0xe77dba56
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; IncorrectNumberOfSignatures(); 0x0244f71a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; IncorrectNumberOfSigners(); 0x1d2d1c58
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; IndexOutOfRange(); 0x1390f2a1
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InsufficientFunds(); 0x356680b7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InvalidTrigger(); 0xa768d7fd
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InvalidPayee(); 0xb387a238
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InvalidRecipient(); 0x9c8d2cd2
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InvalidReport(); 0xb55ac754
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InvalidSigner(); 0x815e1d64
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InvalidTransmitter(); 0x58a70a0a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; InvalidTriggerType(); 0xf2b2d412
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; MaxCheckDataSizeCanOnlyIncrease(); 0x1fa9bdcb
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; MaxPerformDataSizeCanOnlyIncrease(); 0xd1d5faa8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; MigrationNotPermitted(); 0x0ebeec3c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; NotAContract(); 0x09ee12d5
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyActiveSigners(); 0x0f4c0737
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyActiveTransmitters(); 0x1099ed75
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyCallableByAdmin(); 0xa47c1706
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyCallableByLINKToken(); 0xc8bad78d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyCallableByOwnerOrAdmin(); 0xfbdb8e56
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyCallableByOwnerOrRegistrar(); 0xd48b678b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyCallableByPayee(); 0xcebf515b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyCallableByProposedAdmin(); 0x6352a853
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyCallableByProposedPayee(); 0x6752e7aa
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyCallableByUpkeepPrivilegeManager(); 0x77c35992
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyPausedUpkeep(); 0x1b88a784
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; OnlyUnpausedUpkeep(); 0x514b6c24
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; ParameterLengthError(); 0xcf54c06a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; PaymentGreaterThanAllLINK(); 0x2ad7547a
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; ReentrantCall(); 0x37ed32e8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; RegistryPaused(); 0x24522f34
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; RepeatedSigner(); 0x77cea0fa
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; RepeatedTransmitter(); 0x6a7281ad
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; TargetCheckReverted(bytes reason); 0x96c36235
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; TooManyOracles(); 0x25d0209c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; TranscoderNotSet(); 0xd12d7d8d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; UpkeepAlreadyExists(); 0x6e3b930b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; UpkeepCancelled(); 0x9c0083a2
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; UpkeepNotCanceled(); 0xff84e5dd
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; UpkeepNotNeeded(); 0x865676e3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/KeeperRegistryBase2_1.sol; ValueNotChanged(); 0x8c8728c7
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/UpkeepTranscoder4_0.sol; InvalidTranscoding(); 0x90aaccc3
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; InvalidAdminAddress(); 0x05bb467c
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; RequestNotFound(); 0x4b13b31e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; HashMismatch(); 0x3f4d6053
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; OnlyAdminOrOwner(); 0x61685c2b
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; InsufficientPayment(); 0xcd1c8867
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; RegistrationRequestFailed(); 0x649bf810
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; OnlyLink(); 0x018d10be
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; AmountMismatch(); 0x55e97b0d
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; SenderMismatch(); 0xf8c5638e
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; FunctionNotPermitted(); 0xe3d67921
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; LinkTransferFailed(address to); 0xc2e4dce8
+node_modules/@chainlink/contracts/src/v0.8/automation/v2_1/AutomationRegistrar2_1.sol; InvalidDataLength(); 0xdfe93090
+node_modules/@chainlink/contracts/src/v0.8/automation/ExecutionPrevention.sol; OnlySimulatedBackend(); 0xb60ac5db
+node_modules/@chainlink/contracts/src/v0.8/vendor/entrypoint/interfaces/IEntryPoint.sol; FailedOp(uint256 opIndex, string reason); 0x220266b6
+node_modules/@chainlink/contracts/src/v0.8/vendor/entrypoint/interfaces/IEntryPoint.sol; SignatureValidationFailed(address aggregator); 0x86a9f750
+node_modules/@chainlink/contracts/src/v0.8/vendor/entrypoint/interfaces/IEntryPoint.sol; SenderAddressResult(address sender); 0x6ca7b806
+node_modules/@chainlink/contracts/src/v0.8/vendor/entrypoint/interfaces/IEntryPoint.sol; ExecutionResult(uint256 preOpGas, uint256 paid, uint48 validAfter, uint48 validUntil, bool targetSuccess, bytes targetResult); 0x8b7ac980
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed); 0xe450d38c
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC20InvalidSender(address sender); 0x96c6fd1e
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC20InvalidReceiver(address receiver); 0xec442f05
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed); 0xfb8f41b2
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC20InvalidApprover(address approver); 0xe602df05
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC20InvalidSpender(address spender); 0x94280d62
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC721InvalidOwner(address owner); 0x89c62b64
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC721NonexistentToken(uint256 tokenId); 0x7e273289
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC721IncorrectOwner(address sender, uint256 tokenId, address owner); 0x64283d7b
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC721InvalidSender(address sender); 0x73c6ac6e
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC721InvalidReceiver(address receiver); 0x64a0ae92
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC721InsufficientApproval(address operator, uint256 tokenId); 0x177e802f
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC721InvalidApprover(address approver); 0xa9fbf51f
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC721InvalidOperator(address operator); 0x5b08ba18
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC1155InsufficientBalance(address sender, uint256 balance, uint256 needed, uint256 tokenId); 0x03dee4c5
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC1155InvalidSender(address sender); 0x01a83514
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC1155InvalidReceiver(address receiver); 0x57f447ce
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC1155MissingApprovalForAll(address operator, address owner); 0xe237d922
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC1155InvalidApprover(address approver); 0x3e31884e
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC1155InvalidOperator(address operator); 0xced3e100
+node_modules/@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/interfaces/draft-IERC20Permit.sol; ERC1155InvalidArrayLength(uint256 idsLength, uint256 valuesLength); 0x5b059991
+node_modules/@chainlink/contracts/src/v0.8/vendor/@eth-optimism/contracts-bedrock/v0.17.3/src/libraries/L1BlockErrors.sol; NotDepositor(); 0x3cc50b45
+node_modules/@chainlink/contracts/src/v0.8/vendor/@eth-optimism/contracts-bedrock/v0.17.3/src/libraries/L1BlockErrors.sol; NotDependency(); 0x5894c29b
+node_modules/@chainlink/contracts/src/v0.8/vendor/@eth-optimism/contracts-bedrock/v0.17.3/src/libraries/L1BlockErrors.sol; DependencySetSizeTooLarge(); 0x04892cf7
+node_modules/@chainlink/contracts/src/v0.8/vendor/@eth-optimism/contracts-bedrock/v0.17.3/src/libraries/L1BlockErrors.sol; AlreadyDependency(); 0xf3cef931
+node_modules/@chainlink/contracts/src/v0.8/vendor/@eth-optimism/contracts-bedrock/v0.17.3/src/libraries/L1BlockErrors.sol; CantRemovedDependency(); 0x70aed6af
+node_modules/@openzeppelin/contracts/metatx/ERC2771Forwarder.sol; ERC2771ForwarderInvalidSigner(address signer, address from); 0xc845a056
+node_modules/@openzeppelin/contracts/metatx/ERC2771Forwarder.sol; ERC2771ForwarderMismatchedValue(uint256 requestedValue, uint256 msgValue); 0x70647f79
+node_modules/@openzeppelin/contracts/metatx/ERC2771Forwarder.sol; ERC2771ForwarderExpiredRequest(uint48 deadline); 0x94eef58a
+node_modules/@openzeppelin/contracts/metatx/ERC2771Forwarder.sol; ERC2771UntrustfulTarget(address target, address forwarder); 0xd2650cd1
+node_modules/@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol; SafeERC20FailedOperation(address token); 0x5274afe7
+node_modules/@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol; SafeERC20FailedDecreaseAllowance(address spender, uint256 currentAllowance, uint256 requestedDecrease); 0xe570110f
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol; ERC4626ExceededMaxDeposit(address receiver, uint256 assets, uint256 max); 0x79012fb2
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol; ERC4626ExceededMaxMint(address receiver, uint256 shares, uint256 max); 0x284ff667
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol; ERC4626ExceededMaxWithdraw(address owner, uint256 assets, uint256 max); 0xfe9cceec
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol; ERC4626ExceededMaxRedeem(address owner, uint256 shares, uint256 max); 0xb94abeec
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20FlashMint.sol; ERC3156UnsupportedToken(address token); 0xb5a7db92
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20FlashMint.sol; ERC3156ExceededMaxLoan(uint256 maxLoan); 0xfd9a7609
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20FlashMint.sol; ERC3156InvalidReceiver(address receiver); 0x678c5b00
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol; ERC20ExceededSafeSupply(uint256 increasedSupply, uint256 cap); 0x1cb15d26
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol; ERC20ExceededCap(uint256 increasedSupply, uint256 cap); 0x9e79f854
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol; ERC20InvalidCap(uint256 cap); 0x392e1e27
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol; ERC2612ExpiredSignature(uint256 deadline); 0x62791302
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol; ERC2612InvalidSigner(address signer, address owner); 0x4b800e46
+node_modules/@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol; ERC20InvalidUnderlying(address token); 0x438d6fe3
+node_modules/@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol; ERC721OutOfBoundsIndex(address owner, uint256 index); 0xa57d13dc
+node_modules/@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol; ERC721EnumerableForbiddenBatchMint(); 0x59171fc1
+node_modules/@openzeppelin/contracts/token/ERC721/extensions/ERC721Consecutive.sol; ERC721ForbiddenBatchMint(); 0x539f9062
+node_modules/@openzeppelin/contracts/token/ERC721/extensions/ERC721Consecutive.sol; ERC721ExceededMaxBatchMint(uint256 batchSize, uint256 maxBatch); 0x8f58e570
+node_modules/@openzeppelin/contracts/token/ERC721/extensions/ERC721Consecutive.sol; ERC721ForbiddenMint(); 0xad895052
+node_modules/@openzeppelin/contracts/token/ERC721/extensions/ERC721Consecutive.sol; ERC721ForbiddenBatchBurn(); 0x1d089165
+node_modules/@openzeppelin/contracts/token/ERC721/extensions/ERC721Wrapper.sol; ERC721UnsupportedToken(address token); 0xc7d837c6
+node_modules/@openzeppelin/contracts/token/common/ERC2981.sol; ERC2981InvalidDefaultRoyalty(uint256 numerator, uint256 denominator); 0x6f483d09
+node_modules/@openzeppelin/contracts/token/common/ERC2981.sol; ERC2981InvalidDefaultRoyaltyReceiver(address receiver); 0xb6d9900a
+node_modules/@openzeppelin/contracts/token/common/ERC2981.sol; ERC2981InvalidTokenRoyalty(uint256 tokenId, uint256 numerator, uint256 denominator); 0xdfd1fc1b
+node_modules/@openzeppelin/contracts/token/common/ERC2981.sol; ERC2981InvalidTokenRoyaltyReceiver(uint256 tokenId, address receiver); 0x969f0852
+node_modules/@openzeppelin/contracts/access/Ownable.sol; OwnableUnauthorizedAccount(address account); 0x118cdaa7
+node_modules/@openzeppelin/contracts/access/Ownable.sol; OwnableInvalidOwner(address owner); 0x1e4fbdf7
+node_modules/@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol; AccessControlInvalidDefaultAdmin(address defaultAdmin); 0xc22c8022
+node_modules/@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol; AccessControlEnforcedDefaultAdminRules(); 0x3fc3c27a
+node_modules/@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol; AccessControlEnforcedDefaultAdminDelay(uint48 schedule); 0x19ca5ebb
+node_modules/@openzeppelin/contracts/access/IAccessControl.sol; AccessControlUnauthorizedAccount(address account, bytes32 neededRole); 0xe2517d3f
+node_modules/@openzeppelin/contracts/access/IAccessControl.sol; AccessControlBadConfirmation(); 0x6697b232
+node_modules/@openzeppelin/contracts/access/manager/IAccessManaged.sol; AccessManagedUnauthorized(address caller); 0x068ca9d8
+node_modules/@openzeppelin/contracts/access/manager/IAccessManaged.sol; AccessManagedRequiredDelay(address caller, uint32 delay); 0xaf77169d
+node_modules/@openzeppelin/contracts/access/manager/IAccessManaged.sol; AccessManagedInvalidAuthority(address authority); 0xc2f31e5e
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerAlreadyScheduled(bytes32 operationId); 0x813e9459
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerNotScheduled(bytes32 operationId); 0x60a299b0
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerNotReady(bytes32 operationId); 0x18cb6b7a
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerExpired(bytes32 operationId); 0x78a5d6e4
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerLockedAccount(address account); 0x5a068bc8
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerLockedRole(uint64 roleId); 0x1871a90c
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerBadConfirmation(); 0x5f159e63
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerUnauthorizedAccount(address msgsender, uint64 roleId); 0xf07e038f
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerUnauthorizedCall(address caller, address target, bytes4 selector); 0x81c6f24b
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerUnauthorizedConsume(address target); 0x320ff748
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerUnauthorizedCancel(address msgsender, address caller, address target, bytes4 selector); 0x3fe2751c
+node_modules/@openzeppelin/contracts/access/manager/IAccessManager.sol; AccessManagerInvalidInitialAdmin(address initialAdmin); 0x0813ada2
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorInvalidProposalLength(uint256 targets, uint256 calldatas, uint256 values); 0x447b05d0
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorAlreadyCastVote(address voter); 0x71c6af49
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorDisabledDeposit(); 0xe90a651e
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorOnlyProposer(address account); 0x233d98e3
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorOnlyExecutor(address account); 0x47096e47
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorNonexistentProposal(uint256 proposalId); 0x6ad06075
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorUnexpectedProposalState(uint256 proposalId, ProposalState current, bytes32 expectedStates); 0x415949a4
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorInvalidVotingPeriod(uint256 votingPeriod); 0xf1cfbf05
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorInsufficientProposerVotes(address proposer, uint256 votes, uint256 threshold); 0xc242ee16
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorRestrictedProposer(address proposer); 0xd9b39557
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorInvalidVoteType(); 0x06b337c2
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorQueueNotImplemented(); 0x90884a46
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorNotQueuedProposal(uint256 proposalId); 0xd5ddb825
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorAlreadyQueuedProposal(uint256 proposalId); 0xf20e7d37
+node_modules/@openzeppelin/contracts/governance/IGovernor.sol; GovernorInvalidSignature(address voter); 0x94ab6c07
+node_modules/@openzeppelin/contracts/governance/utils/IVotes.sol; VotesExpiredSignature(uint256 expiry); 0x4683af0e
+node_modules/@openzeppelin/contracts/governance/utils/Votes.sol; ERC6372InconsistentClock(); 0x6ff07140
+node_modules/@openzeppelin/contracts/governance/utils/Votes.sol; ERC5805FutureLookup(uint256 timepoint, uint48 clock); 0xecd3f81e
+node_modules/@openzeppelin/contracts/governance/extensions/GovernorTimelockAccess.sol; GovernorUnmetDelay(uint256 proposalId, uint256 neededTimestamp); 0xfe589f3f
+node_modules/@openzeppelin/contracts/governance/extensions/GovernorTimelockAccess.sol; GovernorMismatchedNonce(uint256 proposalId, uint256 expectedNonce, uint256 actualNonce); 0x18ee8bef
+node_modules/@openzeppelin/contracts/governance/extensions/GovernorTimelockAccess.sol; GovernorLockedIgnore(); 0xe547fc11
+node_modules/@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol; GovernorInvalidQuorumFraction(uint256 quorumNumerator, uint256 quorumDenominator); 0x243e5445
+node_modules/@openzeppelin/contracts/governance/TimelockController.sol; TimelockInvalidOperationLength(uint256 targets, uint256 payloads, uint256 values); 0xffb03211
+node_modules/@openzeppelin/contracts/governance/TimelockController.sol; TimelockInsufficientDelay(uint256 delay, uint256 minDelay); 0x54336609
+node_modules/@openzeppelin/contracts/governance/TimelockController.sol; TimelockUnexpectedOperationState(bytes32 operationId, bytes32 expectedStates); 0x5ead8eb5
+node_modules/@openzeppelin/contracts/governance/TimelockController.sol; TimelockUnexecutedPredecessor(bytes32 predecessorId); 0x90a9a618
+node_modules/@openzeppelin/contracts/governance/TimelockController.sol; TimelockUnauthorizedCaller(address caller); 0xe2850c59
+node_modules/@openzeppelin/contracts/utils/ReentrancyGuard.sol; ReentrancyGuardReentrantCall(); 0x3ee5aeb5
+node_modules/@openzeppelin/contracts/utils/ShortStrings.sol; StringTooLong(string str); 0x305a27a9
+node_modules/@openzeppelin/contracts/utils/ShortStrings.sol; InvalidShortString(); 0xb3512b0c
+node_modules/@openzeppelin/contracts/utils/Pausable.sol; EnforcedPause(); 0xd93c0665
+node_modules/@openzeppelin/contracts/utils/Pausable.sol; ExpectedPause(); 0x8dfc202b
+node_modules/@openzeppelin/contracts/utils/Create2.sol; Create2InsufficientBalance(uint256 balance, uint256 needed); 0xe4bbecac
+node_modules/@openzeppelin/contracts/utils/Create2.sol; Create2EmptyBytecode(); 0x4ca249dc
+node_modules/@openzeppelin/contracts/utils/Create2.sol; Create2FailedDeployment(); 0x741752c2
+node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol; ECDSAInvalidSignature(); 0xf645eedf
+node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol; ECDSAInvalidSignatureLength(uint256 length); 0xfce698f7
+node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol; ECDSAInvalidSignatureS(bytes32 s); 0xd78bce0c
+node_modules/@openzeppelin/contracts/utils/cryptography/MerkleProof.sol; MerkleProofInvalidMultiproof(); 0x35140492
+node_modules/@openzeppelin/contracts/utils/Strings.sol; StringsInsufficientHexLength(uint256 value, uint256 length); 0xe22e27eb
+node_modules/@openzeppelin/contracts/utils/math/Math.sol; MathOverflowedMulDiv(); 0x227bc153
+node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol; SafeCastOverflowedUintDowncast(uint8 bits, uint256 value); 0x6dfcc650
+node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol; SafeCastOverflowedIntToUint(int256 value); 0xa8ce4432
+node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol; SafeCastOverflowedIntDowncast(uint8 bits, int256 value); 0x327269a7
+node_modules/@openzeppelin/contracts/utils/math/SafeCast.sol; SafeCastOverflowedUintToInt(uint256 value); 0x24775e06
+node_modules/@openzeppelin/contracts/utils/Address.sol; AddressInsufficientBalance(address account); 0xcd786059
+node_modules/@openzeppelin/contracts/utils/Address.sol; AddressEmptyCode(address target); 0x9996b315
+node_modules/@openzeppelin/contracts/utils/Address.sol; FailedInnerCall(); 0x1425ea42
+node_modules/@openzeppelin/contracts/utils/structs/EnumerableMap.sol; EnumerableMapNonexistentKey(bytes32 key); 0x02b56686
+node_modules/@openzeppelin/contracts/utils/structs/DoubleEndedQueue.sol; QueueEmpty(); 0x75e52f4f
+node_modules/@openzeppelin/contracts/utils/structs/DoubleEndedQueue.sol; QueueFull(); 0x8acb5f27
+node_modules/@openzeppelin/contracts/utils/structs/DoubleEndedQueue.sol; QueueOutOfBounds(); 0x580821e7
+node_modules/@openzeppelin/contracts/utils/structs/Checkpoints.sol; CheckpointUnorderedInsertion(); 0x2520601d
+node_modules/@openzeppelin/contracts/utils/Nonces.sol; InvalidAccountNonce(address account, uint256 currentNonce); 0x752d88c0
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed); 0xe450d38c
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC20InvalidSender(address sender); 0x96c6fd1e
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC20InvalidReceiver(address receiver); 0xec442f05
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed); 0xfb8f41b2
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC20InvalidApprover(address approver); 0xe602df05
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC20InvalidSpender(address spender); 0x94280d62
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC721InvalidOwner(address owner); 0x89c62b64
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC721NonexistentToken(uint256 tokenId); 0x7e273289
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC721IncorrectOwner(address sender, uint256 tokenId, address owner); 0x64283d7b
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC721InvalidSender(address sender); 0x73c6ac6e
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC721InvalidReceiver(address receiver); 0x64a0ae92
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC721InsufficientApproval(address operator, uint256 tokenId); 0x177e802f
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC721InvalidApprover(address approver); 0xa9fbf51f
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC721InvalidOperator(address operator); 0x5b08ba18
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC1155InsufficientBalance(address sender, uint256 balance, uint256 needed, uint256 tokenId); 0x03dee4c5
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC1155InvalidSender(address sender); 0x01a83514
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC1155InvalidReceiver(address receiver); 0x57f447ce
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC1155MissingApprovalForAll(address operator, address owner); 0xe237d922
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC1155InvalidApprover(address approver); 0x3e31884e
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC1155InvalidOperator(address operator); 0xced3e100
+node_modules/@openzeppelin/contracts/interfaces/draft-IERC6093.sol; ERC1155InvalidArrayLength(uint256 idsLength, uint256 valuesLength); 0x5b059991
+node_modules/@openzeppelin/contracts/proxy/Clones.sol; ERC1167FailedCreateClone(); 0xc2f868f4
+node_modules/@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol; ERC1967InvalidImplementation(address implementation); 0x4c9c8ce3
+node_modules/@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol; ERC1967InvalidAdmin(address admin); 0x62e77ba2
+node_modules/@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol; ERC1967InvalidBeacon(address beacon); 0x64ced0ec
+node_modules/@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol; ERC1967NonPayable(); 0xb398979f
+node_modules/@openzeppelin/contracts/proxy/utils/Initializable.sol; InvalidInitialization(); 0xf92ee8a9
+node_modules/@openzeppelin/contracts/proxy/utils/Initializable.sol; NotInitializing(); 0xd7e6bcf8
+node_modules/@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol; UUPSUnauthorizedCallContext(); 0xe07c8dba
+node_modules/@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol; UUPSUnsupportedProxiableUUID(bytes32 slot); 0xaa1d49a4
+node_modules/@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol; BeaconInvalidImplementation(address implementation); 0x847ac564
+node_modules/@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol; ProxyDeniedAdminAccess(); 0xd2b576ec
+node_modules/@openzeppelin/contracts-upgradeable/metatx/ERC2771ForwarderUpgradeable.sol; ERC2771ForwarderInvalidSigner(address signer, address from); 0xc845a056
+node_modules/@openzeppelin/contracts-upgradeable/metatx/ERC2771ForwarderUpgradeable.sol; ERC2771ForwarderMismatchedValue(uint256 requestedValue, uint256 msgValue); 0x70647f79
+node_modules/@openzeppelin/contracts-upgradeable/metatx/ERC2771ForwarderUpgradeable.sol; ERC2771ForwarderExpiredRequest(uint48 deadline); 0x94eef58a
+node_modules/@openzeppelin/contracts-upgradeable/metatx/ERC2771ForwarderUpgradeable.sol; ERC2771UntrustfulTarget(address target, address forwarder); 0xd2650cd1
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol; ERC2612ExpiredSignature(uint256 deadline); 0x62791302
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol; ERC2612InvalidSigner(address signer, address owner); 0x4b800e46
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20CappedUpgradeable.sol; ERC20ExceededCap(uint256 increasedSupply, uint256 cap); 0x9e79f854
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20CappedUpgradeable.sol; ERC20InvalidCap(uint256 cap); 0x392e1e27
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol; ERC4626ExceededMaxDeposit(address receiver, uint256 assets, uint256 max); 0x79012fb2
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol; ERC4626ExceededMaxMint(address receiver, uint256 shares, uint256 max); 0x284ff667
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol; ERC4626ExceededMaxWithdraw(address owner, uint256 assets, uint256 max); 0xfe9cceec
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol; ERC4626ExceededMaxRedeem(address owner, uint256 shares, uint256 max); 0xb94abeec
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20FlashMintUpgradeable.sol; ERC3156UnsupportedToken(address token); 0xb5a7db92
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20FlashMintUpgradeable.sol; ERC3156ExceededMaxLoan(uint256 maxLoan); 0xfd9a7609
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20FlashMintUpgradeable.sol; ERC3156InvalidReceiver(address receiver); 0x678c5b00
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20WrapperUpgradeable.sol; ERC20InvalidUnderlying(address token); 0x438d6fe3
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol; ERC20ExceededSafeSupply(uint256 increasedSupply, uint256 cap); 0x1cb15d26
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol; ERC721OutOfBoundsIndex(address owner, uint256 index); 0xa57d13dc
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol; ERC721EnumerableForbiddenBatchMint(); 0x59171fc1
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721ConsecutiveUpgradeable.sol; ERC721ForbiddenBatchMint(); 0x539f9062
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721ConsecutiveUpgradeable.sol; ERC721ExceededMaxBatchMint(uint256 batchSize, uint256 maxBatch); 0x8f58e570
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721ConsecutiveUpgradeable.sol; ERC721ForbiddenMint(); 0xad895052
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721ConsecutiveUpgradeable.sol; ERC721ForbiddenBatchBurn(); 0x1d089165
+node_modules/@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721WrapperUpgradeable.sol; ERC721UnsupportedToken(address token); 0xc7d837c6
+node_modules/@openzeppelin/contracts-upgradeable/token/common/ERC2981Upgradeable.sol; ERC2981InvalidDefaultRoyalty(uint256 numerator, uint256 denominator); 0x6f483d09
+node_modules/@openzeppelin/contracts-upgradeable/token/common/ERC2981Upgradeable.sol; ERC2981InvalidDefaultRoyaltyReceiver(address receiver); 0xb6d9900a
+node_modules/@openzeppelin/contracts-upgradeable/token/common/ERC2981Upgradeable.sol; ERC2981InvalidTokenRoyalty(uint256 tokenId, uint256 numerator, uint256 denominator); 0xdfd1fc1b
+node_modules/@openzeppelin/contracts-upgradeable/token/common/ERC2981Upgradeable.sol; ERC2981InvalidTokenRoyaltyReceiver(uint256 tokenId, address receiver); 0x969f0852
+node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol; OwnableUnauthorizedAccount(address account); 0x118cdaa7
+node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol; OwnableInvalidOwner(address owner); 0x1e4fbdf7
+node_modules/@openzeppelin/contracts-upgradeable/governance/utils/VotesUpgradeable.sol; ERC6372InconsistentClock(); 0x6ff07140
+node_modules/@openzeppelin/contracts-upgradeable/governance/utils/VotesUpgradeable.sol; ERC5805FutureLookup(uint256 timepoint, uint48 clock); 0xecd3f81e
+node_modules/@openzeppelin/contracts-upgradeable/governance/extensions/GovernorTimelockAccessUpgradeable.sol; GovernorUnmetDelay(uint256 proposalId, uint256 neededTimestamp); 0xfe589f3f
+node_modules/@openzeppelin/contracts-upgradeable/governance/extensions/GovernorTimelockAccessUpgradeable.sol; GovernorMismatchedNonce(uint256 proposalId, uint256 expectedNonce, uint256 actualNonce); 0x18ee8bef
+node_modules/@openzeppelin/contracts-upgradeable/governance/extensions/GovernorTimelockAccessUpgradeable.sol; GovernorLockedIgnore(); 0xe547fc11
+node_modules/@openzeppelin/contracts-upgradeable/governance/extensions/GovernorVotesQuorumFractionUpgradeable.sol; GovernorInvalidQuorumFraction(uint256 quorumNumerator, uint256 quorumDenominator); 0x243e5445
+node_modules/@openzeppelin/contracts-upgradeable/governance/TimelockControllerUpgradeable.sol; TimelockInvalidOperationLength(uint256 targets, uint256 payloads, uint256 values); 0xffb03211
+node_modules/@openzeppelin/contracts-upgradeable/governance/TimelockControllerUpgradeable.sol; TimelockInsufficientDelay(uint256 delay, uint256 minDelay); 0x54336609
+node_modules/@openzeppelin/contracts-upgradeable/governance/TimelockControllerUpgradeable.sol; TimelockUnexpectedOperationState(bytes32 operationId, bytes32 expectedStates); 0x5ead8eb5
+node_modules/@openzeppelin/contracts-upgradeable/governance/TimelockControllerUpgradeable.sol; TimelockUnexecutedPredecessor(bytes32 predecessorId); 0x90a9a618
+node_modules/@openzeppelin/contracts-upgradeable/governance/TimelockControllerUpgradeable.sol; TimelockUnauthorizedCaller(address caller); 0xe2850c59
+node_modules/@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol; EnforcedPause(); 0xd93c0665
+node_modules/@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol; ExpectedPause(); 0x8dfc202b
+node_modules/@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol; ReentrancyGuardReentrantCall(); 0x3ee5aeb5
+node_modules/@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol; InvalidAccountNonce(address account, uint256 currentNonce); 0x752d88c0
+node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol; InvalidInitialization(); 0xf92ee8a9
+node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol; NotInitializing(); 0xd7e6bcf8
+node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol; UUPSUnauthorizedCallContext(); 0xe07c8dba
+node_modules/@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol; UUPSUnsupportedProxiableUUID(bytes32 slot); 0xaa1d49a4
