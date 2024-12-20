@@ -1,6 +1,8 @@
 from typing import List
 
+from eth_abi import decode
 from web3 import Web3
+from web3.types import TxReceipt
 
 from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
@@ -11,6 +13,32 @@ from ipor_fusion.fuse.RamsesV2ClaimFuse import RamsesV2ClaimFuse
 from ipor_fusion.fuse.RamsesV2CollectFuse import RamsesV2CollectFuse
 from ipor_fusion.fuse.RamsesV2ModifyPositionFuse import RamsesV2ModifyPositionFuse
 from ipor_fusion.fuse.RamsesV2NewPositionFuse import RamsesV2NewPositionFuse
+
+
+class RamsesV2NewPositionEvent:
+    def __init__(
+        self,
+        version,
+        token_id,
+        liquidity,
+        amount0,
+        amount1,
+        sender,
+        recipient,
+        fee,
+        tick_lower,
+        tick_upper,
+    ):
+        self.version = version
+        self.token_id = token_id
+        self.liquidity = liquidity
+        self.amount0 = amount0
+        self.amount1 = amount1
+        self.sender = sender
+        self.recipient = recipient
+        self.fee = fee
+        self.tick_lower = tick_lower
+        self.tick_upper = tick_upper
 
 
 class RamsesV2Market:
@@ -187,3 +215,56 @@ class RamsesV2Market:
 
     def x_ram(self):
         return ERC20(self._transaction_executor, self.RAMSES_V2_X_RAM_TOKEN)
+
+    def extract_new_position_enter_events(
+        self, receipt: TxReceipt
+    ) -> List[RamsesV2NewPositionEvent]:
+        event_signature_hash = Web3.keccak(
+            text="RamsesV2NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
+        )
+
+        result = []
+        for evnet_log in receipt.logs:
+            if evnet_log.topics[0] == event_signature_hash:
+                decoded_data = decode(
+                    [
+                        "address",
+                        "uint256",
+                        "uint128",
+                        "uint256",
+                        "uint256",
+                        "address",
+                        "address",
+                        "uint24",
+                        "int24",
+                        "int24",
+                    ],
+                    evnet_log["data"],
+                )
+                (
+                    version,
+                    token_id,
+                    liquidity,
+                    amount0,
+                    amount1,
+                    sender,
+                    recipient,
+                    fee,
+                    tick_lower,
+                    tick_upper,
+                ) = decoded_data
+                result.append(
+                    RamsesV2NewPositionEvent(
+                        version=version,
+                        token_id=token_id,
+                        liquidity=liquidity,
+                        amount0=amount0,
+                        amount1=amount1,
+                        sender=sender,
+                        recipient=recipient,
+                        fee=fee,
+                        tick_lower=tick_lower,
+                        tick_upper=tick_upper,
+                    )
+                )
+        return result

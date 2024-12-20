@@ -84,6 +84,12 @@ class PlasmaVault:
         (result,) = decode(["uint256"], read)
         return result
 
+    def get_price_oracle_middleware(self) -> str:
+        sig = function_signature_to_4byte_selector("getPriceOracleMiddleware()")
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
+        (result,) = decode(["address"], read)
+        return result
+
     def total_assets(self) -> int:
         sig = function_signature_to_4byte_selector("totalAssets()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
@@ -94,7 +100,7 @@ class PlasmaVault:
         sig = function_signature_to_4byte_selector("asset()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
-        return result
+        return Web3.to_checksum_address(result)
 
     def convert_to_assets(self, amount: int) -> int:
         sig = function_signature_to_4byte_selector("convertToAssets(uint256)")
@@ -121,7 +127,7 @@ class PlasmaVault:
         sig = function_signature_to_4byte_selector("getFuses()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address[]"], read)
-        return result
+        return list(result)
 
     def withdraw_manager_address(self) -> Union[str, None]:
         events = self.get_withdraw_manager_changed_events()
@@ -199,4 +205,4 @@ class PlasmaVault:
         logs = self._transaction_executor.get_logs(
             contract_address=self._plasma_vault_address, topics=[event_signature_hash]
         )
-        return logs
+        return list(logs)
