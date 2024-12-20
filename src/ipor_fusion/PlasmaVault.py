@@ -100,7 +100,7 @@ class PlasmaVault:
         sig = function_signature_to_4byte_selector("asset()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
-        return result
+        return Web3.to_checksum_address(result)
 
     def convert_to_assets(self, amount: int) -> int:
         sig = function_signature_to_4byte_selector("convertToAssets(uint256)")

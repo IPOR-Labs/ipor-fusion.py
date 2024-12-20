@@ -1,7 +1,18 @@
+from typing import List
+
 from eth_abi import encode, decode
 from eth_utils import function_signature_to_4byte_selector
+from hexbytes import HexBytes
+from web3 import Web3
+from web3.types import LogReceipt
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
+
+
+class AssetPriceSource:
+    def __init__(self, asset: str, source: str):
+        self.asset = asset
+        self.source = source
 
 
 class PriceOracleMiddleware:
@@ -35,3 +46,27 @@ class PriceOracleMiddleware:
         )
         (chainlink_feed_registry,) = decode(["address"], read)
         return chainlink_feed_registry
+
+    def get_assets_price_sources(self) -> (int, int):
+        events = self.get_asset_price_source_updated_events()
+
+        assets_price_sources = []
+        for event in events:
+            (asset, source) = decode(["address", "address"], event["data"])
+            assets_price_sources.append(
+                AssetPriceSource(
+                    Web3.to_checksum_address(asset), Web3.to_checksum_address(source)
+                )
+            )
+
+        return assets_price_sources
+
+    def get_asset_price_source_updated_events(self) -> List[LogReceipt]:
+        event_signature_hash = HexBytes(
+            Web3.keccak(text="AssetPriceSourceUpdated(address,address)")
+        ).to_0x_hex()
+        logs = self._transaction_executor.get_logs(
+            contract_address=self._price_oracle_middleware_address,
+            topics=[event_signature_hash],
+        )
+        return logs
