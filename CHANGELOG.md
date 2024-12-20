@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.6.0 (2024-12-20)
+
+### Features
+
+* feat: release funds ([`a8f6cfd`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a8f6cfd63011c21f8e73219235857e45b7d3a91f))
+
+### Unknown
+
+* Merge pull request #48 from IPOR-Labs/develop
+
+feat: release funds ([`373eb00`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/373eb00d25611fa3e66203bd46bcf1f12669558e))
+
+
 ## v0.5.0 (2024-12-10)
 
 ### Features
