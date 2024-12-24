@@ -7,6 +7,7 @@ from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.ExternalSystemsDataProvider import ExternalSystemsData
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.PlasmaVaultDataReader import PlasmaVaultData
+from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.WithdrawManager import WithdrawManager
@@ -53,6 +54,10 @@ class PlasmaSystem:
         self._rewards_claim_manager = RewardsClaimManager(
             transaction_executor=transaction_executor,
             rewards_claim_manager_address=plasma_vault_data.rewards_claim_manager_address,
+        )
+        self._price_oracle_middleware = PriceOracleMiddleware(
+            transaction_executor=transaction_executor,
+            price_oracle_middleware_address=plasma_vault_data.price_oracle_middleware_address,
         )
         self._usdc = ERC20(
             transaction_executor=transaction_executor,
@@ -116,6 +121,9 @@ class PlasmaSystem:
 
     def rewards_claim_manager(self) -> RewardsClaimManager:
         return self._rewards_claim_manager
+
+    def price_oracle_middleware(self) -> PriceOracleMiddleware:
+        return self._price_oracle_middleware
 
     def usdc(self) -> ERC20:
         return self._usdc

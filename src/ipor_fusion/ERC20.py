@@ -39,3 +39,9 @@ class ERC20:
         read = self._transaction_executor.read(self._asset_address, decimals)
         (result,) = decode(["uint256"], read)
         return result
+
+    def symbol(self) -> str:
+        sig = function_signature_to_4byte_selector("symbol()")
+        read = self._transaction_executor.read(self._asset_address, sig)
+        (result,) = decode(["string"], read)
+        return result
