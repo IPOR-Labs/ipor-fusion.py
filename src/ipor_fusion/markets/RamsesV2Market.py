@@ -6,7 +6,7 @@ from web3.types import TxReceipt
 
 from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.ERC20 import ERC20
-from ipor_fusion.FuseMappingLoader import FuseMappingLoader
+from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
@@ -58,34 +58,28 @@ class RamsesV2Market:
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMappingLoader.load(
-                chain_id, "RamsesV2NewPositionFuse"
-            ):
+            if checksum_fuse in FuseMapper.load(chain_id, "RamsesV2NewPositionFuse"):
                 self._ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(
                     checksum_fuse
                 )
                 self._any_fuse_supported = True
-            if checksum_fuse in FuseMappingLoader.load(
-                chain_id, "RamsesV2ModifyPositionFuse"
-            ):
+            if checksum_fuse in FuseMapper.load(chain_id, "RamsesV2ModifyPositionFuse"):
                 self._ramses_v2_modify_position_fuse = RamsesV2ModifyPositionFuse(
                     checksum_fuse
                 )
                 self._any_fuse_supported = True
-            if checksum_fuse in FuseMappingLoader.load(chain_id, "RamsesV2CollectFuse"):
+            if checksum_fuse in FuseMapper.load(chain_id, "RamsesV2CollectFuse"):
                 self._ramses_v2_collect_fuse = RamsesV2CollectFuse(checksum_fuse)
                 self._any_fuse_supported = True
 
         for rewards_fuse in rewards_fuses:
             checksum_rewards_fuse = Web3.to_checksum_address(rewards_fuse)
-            if checksum_rewards_fuse in FuseMappingLoader.load(
-                chain_id, "RamsesClaimFuse"
-            ):
+            if checksum_rewards_fuse in FuseMapper.load(chain_id, "RamsesClaimFuse"):
                 self._ramses_v2_claim_fuse = RamsesClaimFuse(checksum_rewards_fuse)
                 self._any_fuse_supported = True
 
         if not rewards_fuses:
-            for rewards_fuse in FuseMappingLoader.load(chain_id, "RamsesClaimFuse"):
+            for rewards_fuse in FuseMapper.load(chain_id, "RamsesClaimFuse"):
                 if rewards_claim_manager.is_reward_fuse_supported(rewards_fuse):
                     self._ramses_v2_claim_fuse = RamsesClaimFuse(rewards_fuse)
                     self._any_fuse_supported = True

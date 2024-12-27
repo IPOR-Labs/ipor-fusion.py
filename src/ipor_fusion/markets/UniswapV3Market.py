@@ -8,7 +8,7 @@ from ipor_fusion.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
 from ipor_fusion.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
 from ipor_fusion.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
 from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
-from ipor_fusion.FuseMappingLoader import FuseMappingLoader
+from ipor_fusion.FuseMapper import FuseMapper
 
 
 class UniswapV3Market:
@@ -18,26 +18,22 @@ class UniswapV3Market:
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMappingLoader.load(chain_id, "UniswapV3SwapFuse"):
+            if checksum_fuse in FuseMapper.load(chain_id, "UniswapV3SwapFuse"):
                 self._uniswap_v3_swap_fuse = UniswapV3SwapFuse(checksum_fuse)
                 self._any_fuse_supported = True
-            if checksum_fuse in FuseMappingLoader.load(
-                chain_id, "UniswapV3NewPositionFuse"
-            ):
+            if checksum_fuse in FuseMapper.load(chain_id, "UniswapV3NewPositionFuse"):
                 self._uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
                     checksum_fuse
                 )
                 self._any_fuse_supported = True
-            if checksum_fuse in FuseMappingLoader.load(
+            if checksum_fuse in FuseMapper.load(
                 chain_id=chain_id, fuse_name="UniswapV3ModifyPositionFuse"
             ):
                 self._uniswap_v3_modify_position_fuse = UniswapV3ModifyPositionFuse(
                     checksum_fuse
                 )
                 self._any_fuse_supported = True
-            if checksum_fuse in FuseMappingLoader.load(
-                chain_id, "UniswapV3CollectFuse"
-            ):
+            if checksum_fuse in FuseMapper.load(chain_id, "UniswapV3CollectFuse"):
                 self._uniswap_v3_collect_fuse = UniswapV3CollectFuse(checksum_fuse)
                 self._any_fuse_supported = True
 

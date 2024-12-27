@@ -80,7 +80,7 @@ mapping = {
 }
 
 
-class FuseMappingLoader:
+class FuseMapper:
 
     @staticmethod
     def load(chain_id: int, fuse_name: str):

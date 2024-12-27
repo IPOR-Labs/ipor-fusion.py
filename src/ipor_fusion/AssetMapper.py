@@ -14,7 +14,7 @@ asset_mapping = {
         {"address": "0x1a996cb54bb95462040408c06122d45d6cdb6096", "symbol": "fUSDC"},
         {
             "address": "0x48f89d731C5e3b5BeE8235162FC2C639Ba62DB7d",
-            "symbol": "FluidLendingStakingRewards",
+            "symbol": "FluidLendingStakingRewardsUsdc",
         },
         {"address": "0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418", "symbol": "RAM"},
         {"address": "0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7", "symbol": "xRAM"},

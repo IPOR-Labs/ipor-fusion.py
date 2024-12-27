@@ -8,7 +8,7 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.GearboxSupplyFuse import GearboxSupplyFuse
-from ipor_fusion.FuseMappingLoader import FuseMappingLoader
+from ipor_fusion.FuseMapper import FuseMapper
 
 
 class GearboxV3Market:
@@ -43,9 +43,7 @@ class GearboxV3Market:
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMappingLoader.load(
-                chain_id, "GearboxV3FarmSupplyFuse"
-            ):
+            if checksum_fuse in FuseMapper.load(chain_id, "GearboxV3FarmSupplyFuse"):
                 self._gearbox_supply_fuse = GearboxSupplyFuse(
                     self.GEARBOX_V3_POOL_USDC,
                     self.GEARBOX_POOL_FUSE,

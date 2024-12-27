@@ -4,7 +4,7 @@ from web3 import Web3
 
 from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.ERC20 import ERC20
-from ipor_fusion.FuseMappingLoader import FuseMappingLoader
+from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
@@ -30,7 +30,7 @@ class AaveV3Market:
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMappingLoader.load(chain_id, "AaveV3SupplyFuse"):
+            if checksum_fuse in FuseMapper.load(chain_id, "AaveV3SupplyFuse"):
                 self._aave_v3_supply_fuse = AaveV3SupplyFuse(
                     checksum_fuse,
                     AssetMapper.map(chain_id=chain_id, asset_symbol="USDC"),
