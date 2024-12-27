@@ -1,8 +1,10 @@
 from typing import List
 
 from eth_abi import decode
+from web3 import Web3
 from web3.types import TxReceipt
 
+from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.FuseMappingLoader import FuseMappingLoader
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
@@ -13,7 +15,6 @@ from ipor_fusion.fuse.RamsesClaimFuse import RamsesClaimFuse
 from ipor_fusion.fuse.RamsesV2CollectFuse import RamsesV2CollectFuse
 from ipor_fusion.fuse.RamsesV2ModifyPositionFuse import RamsesV2ModifyPositionFuse
 from ipor_fusion.fuse.RamsesV2NewPositionFuse import RamsesV2NewPositionFuse
-from web3 import Web3
 
 
 class RamsesV2NewPositionEvent:
@@ -43,12 +44,6 @@ class RamsesV2NewPositionEvent:
 
 
 class RamsesV2Market:
-    RAMSES_V2_RAM_TOKEN = Web3.to_checksum_address(
-        "0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418"
-    )
-    RAMSES_V2_X_RAM_TOKEN = Web3.to_checksum_address(
-        "0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7"
-    )
 
     def __init__(
         self,
@@ -204,10 +199,12 @@ class RamsesV2Market:
         return self._ramses_v2_claim_fuse.claim(token_ids, token_rewards)
 
     def ram(self):
-        return ERC20(self._transaction_executor, self.RAMSES_V2_RAM_TOKEN)
+        return ERC20(self._transaction_executor, AssetMapper.map(self._chain_id, "RAM"))
 
     def x_ram(self):
-        return ERC20(self._transaction_executor, self.RAMSES_V2_X_RAM_TOKEN)
+        return ERC20(
+            self._transaction_executor, AssetMapper.map(self._chain_id, "xRAM")
+        )
 
     def extract_new_position_enter_events(
         self, receipt: TxReceipt

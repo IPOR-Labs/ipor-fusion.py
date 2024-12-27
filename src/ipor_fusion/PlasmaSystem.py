@@ -3,8 +3,8 @@ import logging
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.AccessManager import AccessManager
+from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.ERC20 import ERC20
-from ipor_fusion.ExternalSystemsDataProvider import ExternalSystemsData
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.PlasmaVaultDataReader import PlasmaVaultData
 from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
@@ -32,12 +32,10 @@ class PlasmaSystem:
         transaction_executor: TransactionExecutor,
         chain_id: int,
         plasma_vault_data: PlasmaVaultData,
-        external_systems_data: ExternalSystemsData,
     ):
         self._transaction_executor = transaction_executor
         self._chain_id = chain_id
         self._plasma_vault_data = plasma_vault_data
-        self._external_systems_data = external_systems_data
 
         self._plasma_vault = PlasmaVault(
             transaction_executor=transaction_executor,
@@ -61,11 +59,11 @@ class PlasmaSystem:
         )
         self._usdc = ERC20(
             transaction_executor=transaction_executor,
-            asset_address=external_systems_data.usdc_address,
+            asset_address=AssetMapper.map(chain_id=chain_id, asset_symbol="USDC"),
         )
         self._usdt = ERC20(
             transaction_executor=transaction_executor,
-            asset_address=external_systems_data.usdt_address,
+            asset_address=AssetMapper.map(chain_id=chain_id, asset_symbol="USDT"),
         )
         self._fuses = self._plasma_vault.get_fuses()
         self._uniswap_v3_market = UniswapV3Market(chain_id=chain_id, fuses=self._fuses)
@@ -73,7 +71,7 @@ class PlasmaSystem:
         try:
             self._rewards_fuses = self._rewards_claim_manager.get_rewards_fuses()
         except ContractLogicError as e:
-            log.warning(f"Failed to get rewards fuses: {e}")
+            log.warning("Failed to get rewards fuses: %s", e)
         self._ramses_v2_market = RamsesV2Market(
             chain_id=chain_id,
             transaction_executor=self._transaction_executor,
@@ -104,7 +102,7 @@ class PlasmaSystem:
         )
         self._weth = ERC20(
             transaction_executor=transaction_executor,
-            asset_address=external_systems_data.weth_address,
+            asset_address=AssetMapper.map(chain_id=chain_id, asset_symbol="WETH"),
         )
 
     def transaction_executor(self) -> TransactionExecutor:

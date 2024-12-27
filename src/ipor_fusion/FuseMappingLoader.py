@@ -2,6 +2,8 @@ import logging
 
 from web3 import Web3
 
+from ipor_fusion.error.UnsupportedChainId import UnsupportedChainId
+
 mapping = {
     "42161": {
         "UniversalTokenSwapperFuse": ["0xb052b0d983e493b4d40dec75a03d21b70b83c2ca"],
@@ -73,6 +75,8 @@ mapping = {
 
 
 class FuseMappingLoader:
+
+    @staticmethod
     def load(chain_id: int, fuse_name: str):
         if not mapping[str(chain_id)]:
             raise UnsupportedChainId(chain_id)

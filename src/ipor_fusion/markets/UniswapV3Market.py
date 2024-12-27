@@ -1,6 +1,5 @@
 from typing import List
 
-from ipor_fusion.FuseMappingLoader import FuseMappingLoader
 from web3 import Web3
 
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
@@ -30,7 +29,7 @@ class UniswapV3Market:
                 )
                 self._any_fuse_supported = True
             if checksum_fuse in FuseMappingLoader.load(
-                chain_id, "UniswapV3ModifyPositionFuse"
+                chain_id=chain_id, fuse_name="UniswapV3ModifyPositionFuse"
             ):
                 self._uniswap_v3_modify_position_fuse = UniswapV3ModifyPositionFuse(
                     checksum_fuse

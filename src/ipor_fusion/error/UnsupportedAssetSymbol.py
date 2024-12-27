@@ -1,0 +1,2 @@
+class UnsupportedAssetSymbol(Exception):
+    pass

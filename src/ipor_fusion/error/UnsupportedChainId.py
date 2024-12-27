@@ -1,2 +1,2 @@
-class UnsupportedMarketError(Exception):
+class UnsupportedChainId(Exception):
     pass

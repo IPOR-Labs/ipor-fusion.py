@@ -1,10 +1,11 @@
 from typing import List
 
+from web3 import Web3
+
+from ipor_fusion.FuseMappingLoader import FuseMappingLoader
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.UniversalTokenSwapperFuse import UniversalTokenSwapperFuse
-from ipor_fusion.FuseMappingLoader import FuseMappingLoader
-from web3 import Web3
 
 
 class UniversalMarket:
@@ -15,7 +16,7 @@ class UniversalMarket:
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse in FuseMappingLoader.load(
-                chain_id, "UniversalTokenSwapperFuse"
+                chain_id=chain_id, fuse_name="UniversalTokenSwapperFuse"
             ):
                 self._universal_token_swapper_fuse = UniversalTokenSwapperFuse(
                     checksum_fuse
