@@ -18,12 +18,6 @@ mapping = {
             "0xb0b3dc1b27c6c8007c9b01a768d6717f6813fe94",
             "0x34bcbc3f10ce46894bb39de0c667257efb35c079",
         ],
-        "Erc4626SupplyFuse": [
-            "0x07cd27531ee9df28292b26eeba3f457609deae07",
-            "0x4ae8640b3a6b71fa1a05372a59946e66beb05f9f",
-            "0xeb58e3adb9e537c06ebe2dee6565b248ec758a93",
-            "0x0ea739e6218f67df51d1748ee153ae7b9dcd9a25",
-        ],
         "GearboxV3FarmSupplyFuse": [
             "0xb0fbf6b7d0586c0a5bc1c3b8a98773f4ed02c983",
             "0x50fbc3e2eb2ec49204a41ea47946016703ba358d",
@@ -41,10 +35,21 @@ mapping = {
         ],
         "UniswapV3ModifyPositionFuse": ["0xba503b6f2b95a4a47ee9884bbbcd80cace2d2eb3"],
         "UniswapV3CollectFuse": ["0x75781ab6cdce9c505dbd0848f4ad8a97c68f53c1"],
-        "FluidInstadappClaimFuse": ["0x5c7e10c4d6f65b89c026fc8df69891e6b90a8434"],
+        "FluidInstadappClaimFuse": [
+            "0x5c7e10c4d6f65b89c026fc8df69891e6b90a8434",
+            "0x12F86cE5a2B95328c882e6A106dE775b04a131bA",
+        ],
         "RamsesClaimFuse": ["0x6f292d12a2966c9b796642cafd67549bbbe3d066"],
         "GearboxV3FarmDTokenClaimFuse": ["0xfa209140bba92a64b1038649e7385fa860405099"],
         "CompoundV3ClaimFuse": ["0xfa27f28934d3478f65bcfa158e3096045bfdb1bd"],
+        "Erc4626SupplyFuseMarketId3": [
+            "0x07cd27531ee9df28292b26eeba3f457609deae07",
+            "0xeb58e3adb9e537c06ebe2dee6565b248ec758a93",
+        ],
+        "Erc4626SupplyFuseMarketId5": [
+            "0x4ae8640b3a6b71fa1a05372a59946e66beb05f9f",
+            "0x0eA739e6218F67dF51d1748Ee153ae7B9DCD9a25",
+        ],
     },
     "8453": {
         "MoonwellEnableMarketFuse": ["0xd62542ef1abff0ac71a1b5666cb76801e81104ef"],
@@ -60,16 +65,17 @@ mapping = {
             "0x00a220f09c1cf5f549c98fa37c837aed54aba26c",
             "0x4f35094b049e4aa0ea98cfa00fa55f30b12aaf29",
         ],
-        "Erc4626SupplyFuse": [
-            "0x95acdf1c8f4447e655a097aea3f92fb15035485d",
-            "0xe49207496bb2cf8c3d4fdadcad8e5f72e780b4ae",
-        ],
         "GearboxV3FarmSupplyFuse": ["0xf6016a183745c86dd584488c9e75c00bbd61c34e"],
         "FluidInstadappStakingSupplyFuse": [
             "0xa613249ef6d0c3df83d0593abb63e0638d1d590f"
         ],
         "MorphoSupplyFuse": ["0xd08cb606cee700628e55b0b0159ad65421e6c8df"],
         "SparkSupplyFuse": ["0xb48cf802c2d648c46ac7f752c81e29fa2c955e9b"],
+        "Erc4626SupplyFuseMarketId3": ["0x95acdf1c8f4447e655a097aea3f92fb15035485d"],
+        "Erc4626SupplyFuseMarketId5": ["0xe49207496bb2cf8c3d4fdadcad8e5f72e780b4ae"],
+        "Erc4626SupplyFuseMarketId200001": [
+            "0x5e58d1f3c9155c74fc43dbbd0157ef49bafa6a88"
+        ],
     },
 }
 
