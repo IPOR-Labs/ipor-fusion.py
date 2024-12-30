@@ -1,14 +1,18 @@
+import logging
+from typing import Optional
+
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.AccessManager import AccessManager
+from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.ERC20 import ERC20
-from ipor_fusion.ExternalSystemsDataProvider import ExternalSystemsData
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.PlasmaVaultDataReader import PlasmaVaultData
 from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.WithdrawManager import WithdrawManager
+from ipor_fusion.error.UnsupportedAsset import UnsupportedAsset
 from ipor_fusion.error.UnsupportedMarketError import UnsupportedMarketError
 from ipor_fusion.markets.AaveV3Market import AaveV3Market
 from ipor_fusion.markets.CompoundV3Market import CompoundV3Market
@@ -17,6 +21,9 @@ from ipor_fusion.markets.GearboxV3Market import GearboxV3Market
 from ipor_fusion.markets.RamsesV2Market import RamsesV2Market
 from ipor_fusion.markets.UniswapV3Market import UniswapV3Market
 from ipor_fusion.markets.UniversalMarket import UniversalMarket
+
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger(__name__)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -27,12 +34,10 @@ class PlasmaSystem:
         transaction_executor: TransactionExecutor,
         chain_id: int,
         plasma_vault_data: PlasmaVaultData,
-        external_systems_data: ExternalSystemsData,
     ):
         self._transaction_executor = transaction_executor
         self._chain_id = chain_id
         self._plasma_vault_data = plasma_vault_data
-        self._external_systems_data = external_systems_data
 
         self._plasma_vault = PlasmaVault(
             transaction_executor=transaction_executor,
@@ -54,48 +59,45 @@ class PlasmaSystem:
             transaction_executor=transaction_executor,
             price_oracle_middleware_address=plasma_vault_data.price_oracle_middleware_address,
         )
-        self._usdc = ERC20(
-            transaction_executor=transaction_executor,
-            asset_address=external_systems_data.usdc_address,
-        )
-        self._usdt = ERC20(
-            transaction_executor=transaction_executor,
-            asset_address=external_systems_data.usdt_address,
-        )
         self._fuses = self._plasma_vault.get_fuses()
-        self._uniswap_v3_market = UniswapV3Market(fuses=self._fuses)
+        self._uniswap_v3_market = UniswapV3Market(chain_id=chain_id, fuses=self._fuses)
         self._rewards_fuses = []
         try:
             self._rewards_fuses = self._rewards_claim_manager.get_rewards_fuses()
         except ContractLogicError as e:
-            print(f"Failed to get rewards fuses: {e}")
+            log.warning("Failed to get rewards fuses: %s", e)
         self._ramses_v2_market = RamsesV2Market(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             rewards_claim_manager=self._rewards_claim_manager,
             fuses=self._fuses,
             rewards_fuses=self._rewards_fuses,
         )
-        self._universal_market = UniversalMarket(fuses=self._fuses)
+        self._universal_market = UniversalMarket(chain_id=chain_id, fuses=self._fuses)
         self._gearbox_v3_market = GearboxV3Market(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
         self._fluid_instadapp_market = FluidInstadappMarket(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
         self._aave_v3_market = AaveV3Market(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
         self._compound_v3_market = CompoundV3Market(
+            chain_id=chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
-        self._weth = ERC20(
-            transaction_executor=transaction_executor,
-            asset_address=external_systems_data.weth_address,
-        )
+        self._usdc = self._initialize_asset(asset_symbol="USDC")
+        self._usdt = self._initialize_asset(asset_symbol="USDT")
+        self._weth = self._initialize_asset(asset_symbol="WETH")
+        self._cbBTC = self._initialize_asset(asset_symbol="cbBTC")
 
     def transaction_executor(self) -> TransactionExecutor:
         return self._transaction_executor
@@ -116,12 +118,23 @@ class PlasmaSystem:
         return self._price_oracle_middleware
 
     def usdc(self) -> ERC20:
+        if not self._usdc:
+            raise UnsupportedAsset()
         return self._usdc
 
+    def cbBTC(self) -> ERC20:
+        if not self._cbBTC:
+            raise UnsupportedAsset()
+        return self._cbBTC
+
     def usdt(self) -> ERC20:
+        if not self._usdt:
+            raise UnsupportedAsset()
         return self._usdt
 
     def weth(self) -> ERC20:
+        if not self._weth:
+            raise UnsupportedAsset()
         return self._weth
 
     def alpha(self) -> str:
@@ -181,3 +194,24 @@ class PlasmaSystem:
 
     def chain_id(self):
         return self._chain_id
+
+    def _initialize_asset(self, asset_symbol: str) -> Optional[ERC20]:
+        try:
+            asset_address = AssetMapper.map(
+                chain_id=self._chain_id, asset_symbol=asset_symbol
+            )
+            if asset_address:
+                return ERC20(
+                    transaction_executor=self._transaction_executor,
+                    asset_address=asset_address,
+                )
+        except UnsupportedAsset:
+            log.debug("Unsupported asset: %s", asset_symbol)
+
+        return None
+
+    def _initialize_rewards_fuses(self) -> list:
+        try:
+            return self._rewards_claim_manager.get_rewards_fuses()
+        except ContractLogicError:
+            return []

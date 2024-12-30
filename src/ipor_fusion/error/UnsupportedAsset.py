@@ -1,0 +1,2 @@
+class UnsupportedAsset(Exception):
+    pass

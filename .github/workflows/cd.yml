@@ -16,7 +16,9 @@ jobs:
     needs: notify
     uses: ./.github/workflows/python-build.yml
     secrets:
+      ETHEREUM_PROVIDER_URL: ${{ secrets.ETHEREUM_PROVIDER_URL }}
       ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
+      BASE_PROVIDER_URL: ${{ secrets.BASE_PROVIDER_URL }}
 
   report:
     if: ${{ always() }}
