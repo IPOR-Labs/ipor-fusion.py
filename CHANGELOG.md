@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.7.0 (2024-12-30)
+
+### Features
+
+* feat: multichain support ([`89abd54`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/89abd5414d7d0ff126662f285f8d90545983fc8b))
+
+### Unknown
+
+* Merge pull request #50 from IPOR-Labs/develop
+
+feat: multichain support ([`3f3192b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3f3192bd05c40cc0089193e245738155c25c5509))
+
+
 ## v0.6.0 (2024-12-20)
 
 ### Features
