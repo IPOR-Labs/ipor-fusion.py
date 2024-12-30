@@ -21,6 +21,11 @@ asset_mapping = {
         {"address": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", "symbol": "USDT"},
         {"address": "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1", "symbol": "DAI"},
         {"address": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", "symbol": "WETH"},
+        {"address": "0x890A69EF363C9c7BdD5E36eb95Ceb569F63ACbF6", "symbol": "dUSDCV3"},
+        {
+            "address": "0xD0181a36B0566a8645B7eECFf2148adE7Ecf2BE9",
+            "symbol": "farmdUSDCV3",
+        },
     ]
 }
 
