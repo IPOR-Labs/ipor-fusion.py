@@ -22,17 +22,19 @@ class CompoundV3Market:
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
-        self._compound_v3_usdc_c_token = ERC20(
-            transaction_executor,
-            AssetMapper.map(chain_id=chain_id, asset_symbol="cUSDCv3"),
-        )
 
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.load(chain_id, "CompoundV3SupplyFuse"):
+            if checksum_fuse in FuseMapper.map(chain_id, "CompoundV3SupplyFuse"):
                 self._compound_v3_supply_fuse = CompoundV3SupplyFuse(checksum_fuse)
                 self._any_fuse_supported = True
+
+        if self._any_fuse_supported:
+            self._compound_v3_usdc_c_token = ERC20(
+                transaction_executor,
+                AssetMapper.map(chain_id=chain_id, asset_symbol="cUSDCv3"),
+            )
 
     def is_market_supported(self) -> bool:
         return self._any_fuse_supported

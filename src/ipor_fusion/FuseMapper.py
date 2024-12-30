@@ -1,5 +1,6 @@
-import logging
+from typing import List
 
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.error.UnsupportedChainId import UnsupportedChainId
@@ -83,15 +84,28 @@ mapping = {
 class FuseMapper:
 
     @staticmethod
-    def load(chain_id: int, fuse_name: str):
-        if not mapping[str(chain_id)]:
-            raise UnsupportedChainId(chain_id)
-        if not mapping[str(chain_id)][fuse_name]:
-            logging.warning("Unknown fuse address")
-        if len(mapping[str(chain_id)][fuse_name]) == 0:
-            logging.warning("Unknown fuse address")
+    def map(chain_id: int, fuse_name: str) -> List[ChecksumAddress]:
+        """
+        Load fuse addresses for a given chain_id and fuse_name.
 
-        return [
-            Web3.to_checksum_address(address)
-            for address in mapping[str(chain_id)][fuse_name]
-        ]
+        Args:
+            chain_id (int): The blockchain ID.
+            fuse_name (str): The name of the fuse.
+
+        Returns:
+            List[str]: List of checksum addresses.
+
+        Raises:
+            UnsupportedChainId: If the chain_id is not supported.
+        """
+        chain_id_str = str(chain_id)
+
+        if chain_id_str not in mapping:
+            raise UnsupportedChainId(chain_id)
+
+        fuse_addresses = mapping.get(chain_id_str, {}).get(fuse_name)
+
+        if not fuse_addresses:
+            return []
+
+        return [Web3.to_checksum_address(address) for address in fuse_addresses]

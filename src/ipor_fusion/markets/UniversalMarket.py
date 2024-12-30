@@ -15,7 +15,7 @@ class UniversalMarket:
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.load(
+            if checksum_fuse in FuseMapper.map(
                 chain_id=chain_id, fuse_name="UniversalTokenSwapperFuse"
             ):
                 self._universal_token_swapper_fuse = UniversalTokenSwapperFuse(

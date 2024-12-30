@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from web3.exceptions import ContractLogicError
 
@@ -11,6 +12,7 @@ from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.WithdrawManager import WithdrawManager
+from ipor_fusion.error.UnsupportedAsset import UnsupportedAsset
 from ipor_fusion.error.UnsupportedMarketError import UnsupportedMarketError
 from ipor_fusion.markets.AaveV3Market import AaveV3Market
 from ipor_fusion.markets.CompoundV3Market import CompoundV3Market
@@ -57,14 +59,6 @@ class PlasmaSystem:
             transaction_executor=transaction_executor,
             price_oracle_middleware_address=plasma_vault_data.price_oracle_middleware_address,
         )
-        self._usdc = ERC20(
-            transaction_executor=transaction_executor,
-            asset_address=AssetMapper.map(chain_id=chain_id, asset_symbol="USDC"),
-        )
-        self._usdt = ERC20(
-            transaction_executor=transaction_executor,
-            asset_address=AssetMapper.map(chain_id=chain_id, asset_symbol="USDT"),
-        )
         self._fuses = self._plasma_vault.get_fuses()
         self._uniswap_v3_market = UniswapV3Market(chain_id=chain_id, fuses=self._fuses)
         self._rewards_fuses = []
@@ -100,10 +94,10 @@ class PlasmaSystem:
             transaction_executor=self._transaction_executor,
             fuses=self._fuses,
         )
-        self._weth = ERC20(
-            transaction_executor=transaction_executor,
-            asset_address=AssetMapper.map(chain_id=chain_id, asset_symbol="WETH"),
-        )
+        self._usdc = self._initialize_asset(asset_symbol="USDC")
+        self._usdt = self._initialize_asset(asset_symbol="USDT")
+        self._weth = self._initialize_asset(asset_symbol="WETH")
+        self._cbBTC = self._initialize_asset(asset_symbol="cbBTC")
 
     def transaction_executor(self) -> TransactionExecutor:
         return self._transaction_executor
@@ -124,12 +118,23 @@ class PlasmaSystem:
         return self._price_oracle_middleware
 
     def usdc(self) -> ERC20:
+        if not self._usdc:
+            raise UnsupportedAsset()
         return self._usdc
 
+    def cbBTC(self) -> ERC20:
+        if not self._cbBTC:
+            raise UnsupportedAsset()
+        return self._cbBTC
+
     def usdt(self) -> ERC20:
+        if not self._usdt:
+            raise UnsupportedAsset()
         return self._usdt
 
     def weth(self) -> ERC20:
+        if not self._weth:
+            raise UnsupportedAsset()
         return self._weth
 
     def alpha(self) -> str:
@@ -189,3 +194,24 @@ class PlasmaSystem:
 
     def chain_id(self):
         return self._chain_id
+
+    def _initialize_asset(self, asset_symbol: str) -> Optional[ERC20]:
+        try:
+            asset_address = AssetMapper.map(
+                chain_id=self._chain_id, asset_symbol=asset_symbol
+            )
+            if asset_address:
+                return ERC20(
+                    transaction_executor=self._transaction_executor,
+                    asset_address=asset_address,
+                )
+        except UnsupportedAsset:
+            log.debug("Unsupported asset: %s", asset_symbol)
+
+        return None
+
+    def _initialize_rewards_fuses(self) -> list:
+        try:
+            return self._rewards_claim_manager.get_rewards_fuses()
+        except ContractLogicError:
+            return []

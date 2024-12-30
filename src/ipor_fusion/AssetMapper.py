@@ -1,6 +1,8 @@
+from typing import Optional
+
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
-from ipor_fusion.error.UnsupportedAssetSymbol import UnsupportedAssetSymbol
 from ipor_fusion.error.UnsupportedChainId import UnsupportedChainId
 
 asset_mapping = {
@@ -26,13 +28,22 @@ asset_mapping = {
             "address": "0xD0181a36B0566a8645B7eECFf2148adE7Ecf2BE9",
             "symbol": "farmdUSDCV3",
         },
-    ]
+        {"address": "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", "symbol": "WBTC"},
+    ],
+    "1": [{"address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "symbol": "USDC"}],
+    "8453": [
+        {"address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", "symbol": "cbBTC"},
+        {"address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "symbol": "USDC"},
+        {"address": "0x4200000000000000000000000000000000000006", "symbol": "WETH"},
+        {"address": "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22", "symbol": "cbETH"},
+        {"address": "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452", "symbol": "wstETH"},
+    ],
 }
 
 
 class AssetMapper:
     @staticmethod
-    def map(chain_id: int, asset_symbol: str):
+    def map(chain_id: int, asset_symbol: str) -> Optional[ChecksumAddress]:
         if not asset_mapping[str(chain_id)]:
             raise UnsupportedChainId(chain_id)
 
@@ -40,4 +51,4 @@ class AssetMapper:
             if asset.get("symbol") == asset_symbol:
                 return Web3.to_checksum_address(asset.get("address"))
 
-        raise UnsupportedAssetSymbol()
+        return None

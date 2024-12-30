@@ -1,6 +1,7 @@
-from typing import List, Union
+from typing import List, Optional
 
 from eth_abi import encode, decode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
@@ -18,8 +19,8 @@ class PlasmaVault:
         self._transaction_executor = transaction_executor
         self._plasma_vault_address = plasma_vault_address
 
-    def address(self) -> str:
-        return self._plasma_vault_address
+    def address(self) -> ChecksumAddress:
+        return Web3.to_checksum_address(self._plasma_vault_address)
 
     def execute(self, actions: List[FuseAction]) -> TxReceipt:
         function = self.__execute(actions)
@@ -111,17 +112,17 @@ class PlasmaVault:
         (result,) = decode(["uint256"], read)
         return result
 
-    def get_access_manager_address(self) -> str:
+    def get_access_manager_address(self) -> ChecksumAddress:
         sig = function_signature_to_4byte_selector("getAccessManagerAddress()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
-        return result
+        return Web3.to_checksum_address(result)
 
-    def get_rewards_claim_manager_address(self) -> str:
+    def get_rewards_claim_manager_address(self) -> ChecksumAddress:
         sig = function_signature_to_4byte_selector("getRewardsClaimManagerAddress()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
-        return result
+        return Web3.to_checksum_address(result)
 
     def get_fuses(self) -> List[str]:
         sig = function_signature_to_4byte_selector("getFuses()")
@@ -129,14 +130,14 @@ class PlasmaVault:
         (result,) = decode(["address[]"], read)
         return list(result)
 
-    def withdraw_manager_address(self) -> Union[str, None]:
+    def withdraw_manager_address(self) -> Optional[ChecksumAddress]:
         events = self.get_withdraw_manager_changed_events()
         sorted_events = sorted(
             events, key=lambda event: event["blockNumber"], reverse=True
         )
         if sorted_events:
             (decoded_address,) = decode(["address"], sorted_events[0]["data"])
-            return decoded_address
+            return Web3.to_checksum_address(decoded_address)
         return None
 
     @staticmethod

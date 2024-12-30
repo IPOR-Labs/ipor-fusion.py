@@ -19,21 +19,11 @@ class FluidInstadappMarket:
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
-        self._pool = ERC20(
-            transaction_executor,
-            AssetMapper.map(chain_id=chain_id, asset_symbol="fUSDC"),
-        )
-        self._staking_pool = ERC20(
-            transaction_executor,
-            AssetMapper.map(
-                chain_id=chain_id, asset_symbol="FluidLendingStakingRewardsUsdc"
-            ),
-        )
 
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.load(
+            if checksum_fuse in FuseMapper.map(
                 chain_id=chain_id, fuse_name="Erc4626SupplyFuseMarketId5"
             ):
                 self._fluid_instadapp_pool_fuse = FluidInstadappSupplyFuse(
@@ -42,13 +32,23 @@ class FluidInstadappMarket:
                     AssetMapper.map(
                         chain_id=chain_id, asset_symbol="FluidLendingStakingRewardsUsdc"
                     ),
-                    FuseMapper.load(
+                    FuseMapper.map(
                         chain_id=chain_id, fuse_name="FluidInstadappStakingSupplyFuse"
-                    )[
-                        1
-                    ],  # TODO
+                    )[1],
                 )
                 self._any_fuse_supported = True
+
+        if self._any_fuse_supported:
+            self._pool = ERC20(
+                transaction_executor,
+                AssetMapper.map(chain_id=chain_id, asset_symbol="fUSDC"),
+            )
+            self._staking_pool = ERC20(
+                transaction_executor,
+                AssetMapper.map(
+                    chain_id=chain_id, asset_symbol="FluidLendingStakingRewardsUsdc"
+                ),
+            )
 
     def is_market_supported(self) -> bool:
         return self._any_fuse_supported

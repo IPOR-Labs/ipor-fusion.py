@@ -22,20 +22,22 @@ class AaveV3Market:
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
-        self._usdc_a_token_arb_usdc_n = ERC20(
-            transaction_executor,
-            AssetMapper.map(chain_id=chain_id, asset_symbol="aArbUSDCn"),
-        )
 
         self._any_fuse_supported = False
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.load(chain_id, "AaveV3SupplyFuse"):
+            if checksum_fuse in FuseMapper.map(chain_id, "AaveV3SupplyFuse"):
                 self._aave_v3_supply_fuse = AaveV3SupplyFuse(
                     checksum_fuse,
                     AssetMapper.map(chain_id=chain_id, asset_symbol="USDC"),
                 )
                 self._any_fuse_supported = True
+
+        if self._any_fuse_supported:
+            self._usdc_a_token_arb_usdc_n = ERC20(
+                transaction_executor,
+                AssetMapper.map(chain_id=chain_id, asset_symbol="aArbUSDCn"),
+            )
 
     def is_market_supported(self) -> bool:
         return self._any_fuse_supported
