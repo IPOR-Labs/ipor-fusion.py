@@ -6,6 +6,10 @@ on:
     secrets:
       ARBITRUM_PROVIDER_URL:
         required: true
+      BASE_PROVIDER_URL:
+        required: true
+      ETHEREUM_PROVIDER_URL:
+        required: true
       GH_TOKEN:
         required: true
       SSH_SIGN_KEY_PRIVATE:
@@ -124,7 +128,9 @@ jobs:
         run: |
           poetry run pytest ${{ inputs.test-options }}
         env:
+          ETHEREUM_PROVIDER_URL: ${{ secrets.ETHEREUM_PROVIDER_URL }}
           ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
+          BASE_PROVIDER_URL: ${{ secrets.BASE_PROVIDER_URL }}
         id: tests
 
       - name: Format code
