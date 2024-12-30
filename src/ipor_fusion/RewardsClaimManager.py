@@ -61,7 +61,7 @@ class RewardsClaimManager:
             self._rewards_claim_manager_address, signature
         )
         (result,) = decode(["address[]"], read)
-        return result
+        return list(result)
 
     def is_reward_fuse_supported(self, fuse) -> bool:
         signature = function_signature_to_4byte_selector(

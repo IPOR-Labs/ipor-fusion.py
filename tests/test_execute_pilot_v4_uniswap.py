@@ -19,33 +19,42 @@ from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.Roles import Roles
 
+# Initialize Anvil test environment with Arbitrum fork
 fork_url = os.getenv("ARBITRUM_PROVIDER_URL")
 anvil = AnvilTestContainerStarter(fork_url, 254084008)
 anvil.start()
 
+# Define Uniswap V3 router address for swap operations
 uniswap_v_3_universal_router_address = Web3.to_checksum_address(
     "0x5E325eDA8064b456f4781070C0738d849c824258"
 )
 
 
 def test_should_swap_when_one_hop_uniswap_v3():
-    # Setup: Reset state and grant necessary roles
+    """
+    Test single-hop swap functionality using Uniswap V3.
+    Swaps USDC for USDT through a direct pair.
+    """
+    # Reset fork and setup test environment
     anvil.reset_fork(254084008)
 
+    # Initialize system with proper permissions
     system = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
+    # Setup cheating system for role manipulation
     cheating = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.V4.PLASMA_VAULT)
 
+    # Grant necessary roles
     cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
-    # Record initial balances before swap
+    # Record initial balances
     vault_usdc_balance_before_swap = system.usdc().balance_of(
         ARBITRUM.PILOT.V4.PLASMA_VAULT
     )
@@ -53,10 +62,10 @@ def test_should_swap_when_one_hop_uniswap_v3():
         ARBITRUM.PILOT.V4.PLASMA_VAULT
     )
 
-    # Define swap targets
+    # Configure swap parameters
     targets = [system.usdc().address(), uniswap_v_3_universal_router_address]
 
-    # Create the first function call to transfer USDC to the universal router
+    # Prepare transfer function call
     function_selector_0 = function_signature_to_4byte_selector(
         "transfer(address,uint256)"
     )
@@ -65,43 +74,43 @@ def test_should_swap_when_one_hop_uniswap_v3():
     )
     function_call_0 = function_selector_0 + function_args_0
 
-    # Encode the path for the swap (USDC to USDT)
+    # Configure swap path with 0.1% fee tier
     path = encode_packed(
         ["address", "uint24", "address"],
         [system.usdc().address(), 100, system.usdt().address()],
     )
 
-    # Prepare inputs for the execute function call
+    # Prepare swap execution parameters
     inputs = [
         encode(
             ["address", "uint256", "uint256", "bytes", "bool"],
             [
-                "0x0000000000000000000000000000000000000001",
-                (int(100e6)),
-                (int(99e6)),
-                path,
-                False,
+                "0x0000000000000000000000000000000000000001",  # Recipient (placeholder)
+                (int(100e6)),  # Amount to swap
+                (int(99e6)),  # Minimum amount out
+                path,  # Swap path
+                False,  # Don't unwrap WETH
             ],
         )
     ]
 
-    # Create the second function call to execute the swap
+    # Prepare execute function call
     function_selector_1 = function_signature_to_4byte_selector("execute(bytes,bytes[])")
     function_args_1 = encode(
         ["bytes", "bytes[]"], [encode_packed(["bytes1"], [bytes.fromhex("00")]), inputs]
     )
     function_call_1 = function_selector_1 + function_args_1
 
-    # Combine both function calls into the swap transaction
+    # Combine function calls and create swap instruction
     data = [function_call_0, function_call_1]
     swap = system.universal().swap(
         system.usdc().address(), system.usdt().address(), int(100e6), targets, data
     )
 
-    # Execute the swap transaction
+    # Execute swap
     system.plasma_vault().execute([swap])
 
-    # Record balances after the swap
+    # Record post-swap balances
     vault_usdc_balance_after_swap = system.usdc().balance_of(
         ARBITRUM.PILOT.V4.PLASMA_VAULT
     )
@@ -109,7 +118,7 @@ def test_should_swap_when_one_hop_uniswap_v3():
         ARBITRUM.PILOT.V4.PLASMA_VAULT
     )
 
-    # Calculate balance changes
+    # Calculate and verify balance changes
     vault_usdc_balance_change = (
         vault_usdc_balance_after_swap - vault_usdc_balance_before_swap
     )
@@ -117,13 +126,13 @@ def test_should_swap_when_one_hop_uniswap_v3():
         vault_usdt_balance_after_swap - vault_usdt_balance_before_swap
     )
 
-    # Assertions to verify the results of the swap
+    # Assert expected outcomes
     assert vault_usdc_balance_change == -int(
         100e6
-    ), "USDC balance should decrease by the deposit amount"
+    ), "USDC balance should decrease by the swap amount"
     assert (
         98e6 < vault_usdt_balance_change < 100e6
-    ), "USDT balance change should be between 98e6 and 100e6"
+    ), "USDT balance change should be within expected slippage range"
 
 
 def test_should_swap_when_multiple_hop():

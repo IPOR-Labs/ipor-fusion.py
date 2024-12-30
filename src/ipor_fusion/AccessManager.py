@@ -58,6 +58,12 @@ class AccessManager:
             for role_account in self.get_accounts_with_role(Roles.OWNER_ROLE)
         ]
 
+    def atomists(self) -> List[ChecksumAddress]:
+        return [
+            role_account.account
+            for role_account in self.get_accounts_with_role(Roles.ATOMIST_ROLE)
+        ]
+
     def get_accounts_with_role(self, role_id: int) -> List[RoleAccount]:
         events = self.get_grant_role_events()
         role_accounts = []

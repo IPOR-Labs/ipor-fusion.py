@@ -6,7 +6,7 @@ from eth_utils import function_signature_to_4byte_selector
 from ipor_fusion.fuse.FuseAction import FuseAction
 
 
-class RamsesV2ClaimFuseData:
+class RamsesClaimFuseData:
     _args_signature = "uint256[],address[][]"
     _function_signature = f"claim({_args_signature})"
     _function_selector = function_signature_to_4byte_selector(_function_signature)
@@ -23,11 +23,11 @@ class RamsesV2ClaimFuseData:
         return self._function_selector + self.encode()
 
 
-class RamsesV2ClaimFuse:
+class RamsesClaimFuse:
 
     def __init__(self, ramses_claim_fuse_address: str):
         self._ramses_claim_fuse_address = ramses_claim_fuse_address
 
     def claim(self, token_ids: List[int], token_rewards: List[List[str]]) -> FuseAction:
-        data = RamsesV2ClaimFuseData(token_ids, token_rewards)
+        data = RamsesClaimFuseData(token_ids, token_rewards)
         return FuseAction(self._ramses_claim_fuse_address, data.function_call())
