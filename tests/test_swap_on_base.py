@@ -143,6 +143,7 @@ def test_should_swap_on_base():
         usdc_balance_after > 45000_000000
     ), "Should have received at least 45k USDC from swap"
 
+
 def test_should_swap_on_base_2():
     """
     Test to verify the swapping functionality on Base network.
