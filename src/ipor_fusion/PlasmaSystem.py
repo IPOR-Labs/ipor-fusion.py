@@ -98,6 +98,7 @@ class PlasmaSystem:
         self._usdt = self._initialize_asset(asset_symbol="USDT")
         self._weth = self._initialize_asset(asset_symbol="WETH")
         self._cbBTC = self._initialize_asset(asset_symbol="cbBTC")
+        self._pepe = self._initialize_asset(asset_symbol="PEPE")
 
     def transaction_executor(self) -> TransactionExecutor:
         return self._transaction_executor
@@ -136,6 +137,11 @@ class PlasmaSystem:
         if not self._weth:
             raise UnsupportedAsset()
         return self._weth
+
+    def pepe(self) -> ERC20:
+        if not self._pepe:
+            raise UnsupportedAsset()
+        return self._pepe
 
     def alpha(self) -> str:
         return self._transaction_executor.get_account_address()
