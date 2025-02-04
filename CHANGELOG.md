@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.8.0 (2025-02-04)
+
+### Features
+
+* feat: update base fuses ([`23976da`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/23976daedd5ebbcddc2e7c96e0131e956c72917f))
+
+### Unknown
+
+* Merge pull request #52 from IPOR-Labs/develop
+
+feat: update base fuses ([`8ec0439`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8ec04399ebd32390af4c6490dd9aca0c6ec64b23))
+
+
 ## v0.7.0 (2024-12-30)
 
 ### Features
