@@ -142,3 +142,91 @@ def test_should_swap_on_base():
     assert (
         usdc_balance_after > 45000_000000
     ), "Should have received at least 45k USDC from swap"
+
+
+def test_should_swap_weth_to_pepe_on_base():
+    """
+    Test to verify the swapping functionality on Base network.
+    This test simulates swapping wETH for PEPE using Uniswap V3 router.
+    """
+    # Reset fork to a specific block for consistent test environment
+    anvil.reset_fork(25894923)
+
+    vault_address = "0x85b7927B6d721638b575972111F4CE6DaCb7D33C"
+    alpha_address = "0x9D2a639039859a5E4011c41E0764cfd08830b560"
+
+    # Set up cheating system for role manipulation
+    cheating_system_factory = CheatingPlasmaVaultSystemFactory(
+        provider_url=anvil.get_anvil_http_url(),
+        private_key=ANVIL_WALLET_PRIVATE_KEY,
+    )
+    alpha = cheating_system_factory.get(vault_address)
+    alpha.prank(alpha_address)
+
+    amount = alpha.weth().balance_of(vault_address)
+
+    # SWAP CONFIGURATION
+    # Define Uniswap V3 router address for swap execution
+    uniswap_v_3_universal_router_address = "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"
+    targets = [alpha.weth().address(), uniswap_v_3_universal_router_address]
+
+    # Prepare first transaction: Transfer WETH to router
+    function_selector_0 = function_signature_to_4byte_selector(
+        "transfer(address,uint256)"
+    )
+    function_args_0 = encode(
+        ["address", "uint256"],
+        [uniswap_v_3_universal_router_address, amount],
+    )
+    function_call_0 = function_selector_0 + function_args_0
+
+    # Configure swap path: WETH -> PEPE with 0.5% fee tier
+    path = encode_packed(
+        ["address", "uint24", "address"],
+        [alpha.weth().address(), 10000, alpha.pepe().address()],
+    )
+
+    # Prepare swap parameters
+    inputs = [
+        encode(
+            ["address", "uint256", "uint256", "bytes", "bool"],
+            [
+                "0x0000000000000000000000000000000000000001",  # Recipient address (placeholder)
+                amount,  # Amount to swap
+                0,  # Minimum amount out (set to 0 for test)
+                path,  # Swap path
+                False,  # Whether to unwrap WETH
+            ],
+        )
+    ]
+
+    # Prepare second transaction: Execute swap via router
+    function_selector_1 = function_signature_to_4byte_selector("execute(bytes,bytes[])")
+    function_args_1 = encode(
+        ["bytes", "bytes[]"], [encode_packed(["bytes1"], [bytes.fromhex("00")]), inputs]
+    )
+    function_call_1 = function_selector_1 + function_args_1
+
+    # Combine transactions and create swap instruction
+    data = [function_call_0, function_call_1]
+    swap = alpha.universal().swap(
+        alpha.weth().address(), alpha.pepe().address(), amount, targets, data
+    )
+
+    # EXECUTION AND VERIFICATION
+    # Record balances before swap
+    weth_balance_before = alpha.weth().balance_of(alpha.plasma_vault().address())
+    pepe_balance_before = alpha.pepe().balance_of(alpha.plasma_vault().address())
+
+    # Execute the swap
+    alpha.prank(alpha_address)
+    alpha.plasma_vault().execute([swap])
+
+    # Record balances after swap
+    weth_balance_after = alpha.weth().balance_of(alpha.plasma_vault().address())
+    pepe_balance_after = alpha.pepe().balance_of(alpha.plasma_vault().address())
+
+    assert weth_balance_before == 5000000000000000
+    assert weth_balance_after == 0
+    assert pepe_balance_before == 0
+    assert pepe_balance_after == int(174743647_876992680486051295)
