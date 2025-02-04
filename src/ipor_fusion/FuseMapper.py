@@ -5,6 +5,7 @@ from web3 import Web3
 
 from ipor_fusion.error.UnsupportedChainId import UnsupportedChainId
 
+# pylint: disable=consider-using-namedtuple-or-dataclass
 mapping = {
     "42161": {
         "UniversalTokenSwapperFuse": ["0xb052b0d983e493b4d40dec75a03d21b70b83c2ca"],
@@ -59,6 +60,15 @@ mapping = {
         "MoonwellBorrowFuse": ["0x8f6951795193c5ae825397ba35e940c5586e7b7d"],
         "UniversalTokenSwapperFuse": ["0xdbc5f9962ce85749f1b3c51ba0473909229e3807"],
         "MoonwellClaimFuse": ["0xd253c5c54248433c7879ac14fb03201e008c5a1e"],
+        "AaveV3SupplyFuse": ["0x44dcb8a4c40fa9941d99f409b2948fe91b6c15d5"],
+        "CompoundV3SupplyFuse": ["0x42fbd4d8f578b902ed9030bf9035a606ddeca26f"],
+        "MorphoSupplyFuse": ["0xae93ef3cf337b9599f0dfc12520c3c281637410f"],
+        "Erc4626SupplyFuseMarketId5": ["0x15a1e2950da9ec0da69a704b8940f01bddde86ab"],
+        "FluidInstadappStakingSupplyFuse": [
+            "0x977e318676158a7695ccfeb00ec18a68c29bf0ef"
+        ],
+        "FluidInstadappClaimFuse": ["0x4e3139528eba9b85addf1b7e5c36002b7be8c9b2"],
+        "CompoundV3ClaimFuse": ["0x10de4b8aa7c363999769f8a8295f4f091a77df4f"],
     },
     "1": {
         "AaveV3SupplyFuse": ["0x465d639eb964158bee11f35e8fc23f704ec936a2"],

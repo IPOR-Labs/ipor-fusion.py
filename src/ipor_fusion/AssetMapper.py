@@ -34,6 +34,10 @@ asset_mapping = {
         {"address": "0x5979D7b546E38E414F7E9822514be443A4800529", "symbol": "wstETH"},
         {"address": "0x35751007a407ca6FEFfE80b3cB397736D2cf4dbe", "symbol": "weETH"},
         {"address": "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8", "symbol": "USDC.e"},
+        {
+            "address": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+            "symbol": "USD\u20ae0",
+        },
     ],
     "1": [
         {"address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "symbol": "USDC"},
@@ -53,6 +57,10 @@ asset_mapping = {
             "address": "0x5BaE9a5D67d1CA5b09B14c91935f635CFBF3b685",
             "symbol": "PT-USD0++-27MAR2025",
         },
+        {
+            "address": "0x386AE941D4262B0Ee96354499dF2ab8442734EC0",
+            "symbol": "PT-sUSDE-27FEB2025",
+        },
     ],
     "8453": [
         {"address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", "symbol": "cbBTC"},
@@ -60,6 +68,10 @@ asset_mapping = {
         {"address": "0x4200000000000000000000000000000000000006", "symbol": "WETH"},
         {"address": "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22", "symbol": "cbETH"},
         {"address": "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452", "symbol": "wstETH"},
+        {"address": "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", "symbol": "EURC"},
+        {"address": "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed", "symbol": "DEGEN"},
+        {"address": "0x940181a94A35A4569E4529A3CDfB74e38FD98631", "symbol": "AERO"},
+        {"address": "0x52b492a33E447Cdb854c7FC19F1e57E8BfA1777D", "symbol": "PEPE"},
     ],
 }
 
