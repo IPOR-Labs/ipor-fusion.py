@@ -3,6 +3,7 @@ from typing import List
 from web3 import Web3
 
 from ipor_fusion.FuseMapper import FuseMapper
+from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.UniversalTokenSwapperFuse import UniversalTokenSwapperFuse
@@ -38,6 +39,8 @@ class UniversalMarket:
             raise UnsupportedFuseError(
                 "UniversalTokenSwapperFuse is not supported by PlasmaVault"
             )
+
+        # Add check that amount_in is not greater than balance of token_in on plasma vault. AI!
 
         return self._universal_token_swapper_fuse.swap(
             token_in=token_in,
