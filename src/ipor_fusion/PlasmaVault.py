@@ -11,6 +11,7 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.fuse.FuseAction import FuseAction
 
 
+# pylint: disable=too-many-public-methods
 class PlasmaVault:
 
     def __init__(
@@ -130,6 +131,16 @@ class PlasmaVault:
         (result,) = decode(["address[]"], read)
         return list(result)
 
+    def get_balance_fuses(self) -> List[tuple[int, str]]:
+        events = self.get_balance_fuse_added_events()
+        result = []
+        print("events", events)
+        for event in events:
+            print("event", event)
+            (market_id, fuse) = decode(["uint256", "address"], event["data"])
+            result.append((market_id, fuse))
+        return result
+
     def withdraw_manager_address(self) -> Optional[ChecksumAddress]:
         events = self.get_withdraw_manager_changed_events()
         sorted_events = sorted(
@@ -202,6 +213,15 @@ class PlasmaVault:
     def get_withdraw_manager_changed_events(self) -> List[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="WithdrawManagerChanged(address)")
+        ).to_0x_hex()
+        logs = self._transaction_executor.get_logs(
+            contract_address=self._plasma_vault_address, topics=[event_signature_hash]
+        )
+        return list(logs)
+
+    def get_balance_fuse_added_events(self) -> List[LogReceipt]:
+        event_signature_hash = HexBytes(
+            Web3.keccak(text="BalanceFuseAdded(uint256,address)")
         ).to_0x_hex()
         logs = self._transaction_executor.get_logs(
             contract_address=self._plasma_vault_address, topics=[event_signature_hash]
