@@ -3,7 +3,7 @@ from typing import List
 from web3 import Web3
 
 from ipor_fusion.FuseMapper import FuseMapper
-from ipor_fusion.PlasmaVault import PlasmaVault
+from ipor_fusion.PlasmaVault import PlasmaVault 
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.UniversalTokenSwapperFuse import UniversalTokenSwapperFuse
@@ -11,9 +11,10 @@ from ipor_fusion.fuse.UniversalTokenSwapperFuse import UniversalTokenSwapperFuse
 
 class UniversalMarket:
 
-    def __init__(self, chain_id: int, fuses: List[str]):
+    def __init__(self, chain_id: int, fuses: List[str], plasma_vault: PlasmaVault):
         self._chain_id = chain_id
         self._any_fuse_supported = False
+        self._plasma_vault = plasma_vault
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse in FuseMapper.map(
@@ -40,7 +41,9 @@ class UniversalMarket:
                 "UniversalTokenSwapperFuse is not supported by PlasmaVault"
             )
 
-        # Add check that amount_in is not greater than balance of token_in on plasma vault. AI!
+        balance = self._plasma_vault.get_balance(token_in)
+        if amount_in > balance:
+            raise ValueError(f"Insufficient balance of {token_in} in plasma vault")
 
         return self._universal_token_swapper_fuse.swap(
             token_in=token_in,
