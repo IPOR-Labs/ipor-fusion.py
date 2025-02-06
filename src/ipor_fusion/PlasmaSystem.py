@@ -73,7 +73,12 @@ class PlasmaSystem:
             fuses=self._fuses,
             rewards_fuses=self._rewards_fuses,
         )
-        self._universal_market = UniversalMarket(chain_id=chain_id, fuses=self._fuses)
+        self._universal_market = UniversalMarket(
+            chain_id=chain_id,
+            plasma_vault=self._plasma_vault,
+            fuses=self._fuses,
+            transaction_executor=self._transaction_executor,
+        )
         self._gearbox_v3_market = GearboxV3Market(
             chain_id=chain_id,
             transaction_executor=self._transaction_executor,
