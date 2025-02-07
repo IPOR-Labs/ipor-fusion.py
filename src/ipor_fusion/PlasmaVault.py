@@ -134,9 +134,7 @@ class PlasmaVault:
     def get_balance_fuses(self) -> List[tuple[int, str]]:
         events = self.get_balance_fuse_added_events()
         result = []
-        print("events", events)
         for event in events:
-            print("event", event)
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
             result.append((market_id, fuse))
         return result

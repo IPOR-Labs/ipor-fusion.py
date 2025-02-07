@@ -22,8 +22,8 @@ class UniversalMarket:
     ):
         self._chain_id = chain_id
         self._any_fuse_supported = False
-        self._plasma_vault = plasma_vault
         self._transaction_executor = transaction_executor
+        self._plasma_vault = plasma_vault
         for fuse in fuses:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse in FuseMapper.map(
