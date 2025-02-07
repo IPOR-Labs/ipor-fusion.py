@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.10.0 (2025-02-07)
+
+### Features
+
+* feat: optional withdraw manager ([`06081a1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/06081a1a7cd1b7829611fe5d1c68b8b7c6e74b14))
+
+### Unknown
+
+* Merge pull request #58 from IPOR-Labs/develop
+
+Develop ([`f37a803`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f37a80343297358adbc9795e6811e72574165099))
+
+* Merge pull request #57 from IPOR-Labs/optional-withdraw-manager
+
+feat: optional withdraw manager ([`cea5cda`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cea5cda7431a6380adfb04447a1043cb051f3245))
+
+
 ## v0.9.0 (2025-02-07)
 
 ### Features
