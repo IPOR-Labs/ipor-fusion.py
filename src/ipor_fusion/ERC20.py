@@ -1,4 +1,5 @@
 from eth_abi import encode, decode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
@@ -6,7 +7,9 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 
 class ERC20:
 
-    def __init__(self, transaction_executor: TransactionExecutor, asset_address: str):
+    def __init__(
+        self, transaction_executor: TransactionExecutor, asset_address: ChecksumAddress
+    ):
         self._transaction_executor = transaction_executor
         self._asset_address = asset_address
 

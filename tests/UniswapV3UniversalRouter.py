@@ -1,5 +1,6 @@
 from eth_abi import encode
 from eth_abi.packed import encode_packed
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
@@ -8,7 +9,9 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 class UniswapV3UniversalRouter:
 
     def __init__(
-        self, transaction_executor: TransactionExecutor, universal_router_address: str
+        self,
+        transaction_executor: TransactionExecutor,
+        universal_router_address: ChecksumAddress,
     ):
         self._transaction_executor = transaction_executor
         self._universal_router_address = universal_router_address

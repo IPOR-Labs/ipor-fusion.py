@@ -1,6 +1,7 @@
 from typing import List
 
 from eth_abi import encode, decode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3.types import TxReceipt
 
@@ -13,7 +14,7 @@ class RewardsClaimManager:
     def __init__(
         self,
         transaction_executor: TransactionExecutor,
-        rewards_claim_manager_address: str,
+        rewards_claim_manager_address: ChecksumAddress,
     ):
         self._transaction_executor = transaction_executor
         self._rewards_claim_manager_address = rewards_claim_manager_address

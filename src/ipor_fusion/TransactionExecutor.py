@@ -1,5 +1,6 @@
 from typing import List
 
+from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3.types import TxReceipt, LogReceipt
 
@@ -16,7 +17,7 @@ class TransactionExecutor:
     def get_account_address(self):
         return self._account.address
 
-    def execute(self, contract_address: str, function: bytes) -> TxReceipt:
+    def execute(self, contract_address: ChecksumAddress, function: bytes) -> TxReceipt:
         transaction = self.prepare_transaction(contract_address, function)
         signed_tx = self._web3.eth.account.sign_transaction(
             transaction, self._account.key
@@ -66,7 +67,11 @@ class TransactionExecutor:
         return value * percentage // 100
 
     def get_logs(
-        self, contract_address: str, topics: List[str], from_block=0, to_block="latest"
+        self,
+        contract_address: ChecksumAddress,
+        topics: List[str],
+        from_block=0,
+        to_block="latest",
     ) -> List[LogReceipt]:
         event_filter = self._web3.eth.filter(
             {

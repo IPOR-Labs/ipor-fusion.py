@@ -23,7 +23,9 @@ class RoleAccount:
 class AccessManager:
 
     def __init__(
-        self, transaction_executor: TransactionExecutor, access_manager_address: str
+        self,
+        transaction_executor: TransactionExecutor,
+        access_manager_address: ChecksumAddress,
     ):
         self._transaction_executor = transaction_executor
         self._access_manager_address = access_manager_address

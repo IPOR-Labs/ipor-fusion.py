@@ -1,4 +1,5 @@
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.MarketId import MarketId
@@ -11,7 +12,7 @@ class AaveV3SupplyFuse:
     ENTER = "enter"
     EXIT = "exit"
 
-    def __init__(self, fuse_address: str, asset_address: str):
+    def __init__(self, fuse_address: ChecksumAddress, asset_address: ChecksumAddress):
         if fuse_address is None:
             raise ValueError("fuseAddress is required")
         if asset_address is None:

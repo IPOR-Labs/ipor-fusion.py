@@ -1,5 +1,6 @@
 from typing import List
 
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
@@ -42,8 +43,8 @@ class UniswapV3Market:
 
     def swap(
         self,
-        token_in_address: str,
-        token_out_address: str,
+        token_in_address: ChecksumAddress,
+        token_out_address: ChecksumAddress,
         fee: int,
         token_in_amount: int,
         min_out_amount: int,

@@ -1,6 +1,7 @@
 from typing import List
 
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -11,7 +12,12 @@ class Erc4626SupplyFuse:
     ENTER = "enter"
     EXIT = "exit"
 
-    def __init__(self, fuse_address: str, protocol_id: str, erc4626_address: str):
+    def __init__(
+        self,
+        fuse_address: ChecksumAddress,
+        protocol_id: str,
+        erc4626_address: ChecksumAddress,
+    ):
         if not fuse_address:
             raise ValueError("fuseAddress is required")
         if not protocol_id:

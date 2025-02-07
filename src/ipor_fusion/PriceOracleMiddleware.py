@@ -1,6 +1,7 @@
 from typing import List
 
 from eth_abi import encode, decode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
@@ -20,7 +21,7 @@ class PriceOracleMiddleware:
     def __init__(
         self,
         transaction_executor: TransactionExecutor,
-        price_oracle_middleware_address: str,
+        price_oracle_middleware_address: ChecksumAddress,
     ):
         self._transaction_executor = transaction_executor
         self._price_oracle_middleware_address = price_oracle_middleware_address

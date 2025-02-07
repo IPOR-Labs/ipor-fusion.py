@@ -1,4 +1,5 @@
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -94,7 +95,7 @@ class RamsesV2ModifyPositionFuseExitData:
 class RamsesV2ModifyPositionFuse:
     PROTOCOL_ID = "ramses-v2"
 
-    def __init__(self, ramses_v2_modify_position_fuse_address: str):
+    def __init__(self, ramses_v2_modify_position_fuse_address: ChecksumAddress):
         self.ramses_v2_modify_position_fuse_address = self._require_non_null(
             ramses_v2_modify_position_fuse_address,
             "ramses_v2_modify_position_fuse_address is required",

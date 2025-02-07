@@ -1,4 +1,5 @@
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -94,7 +95,7 @@ class UniswapV3ModifyPositionFuseExitData:
 class UniswapV3ModifyPositionFuse:
     PROTOCOL_ID = "uniswap-v3"
 
-    def __init__(self, uniswap_v3_modify_position_fuse_address: str):
+    def __init__(self, uniswap_v3_modify_position_fuse_address: ChecksumAddress):
         self.uniswap_v3_modify_position_fuse_address = self._require_non_null(
             uniswap_v3_modify_position_fuse_address,
             "uniswap_v3_modify_position_fuse_address is required",

@@ -1,3 +1,4 @@
+from eth_typing import ChecksumAddress
 from web3.types import TxReceipt
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
@@ -12,7 +13,7 @@ class CheatingTransactionExecutor(TransactionExecutor):
     def prank(self, account: str):
         self._account_address = account
 
-    def execute(self, contract_address: str, function: bytes) -> TxReceipt:
+    def execute(self, contract_address: ChecksumAddress, function: bytes) -> TxReceipt:
         nonce = self._web3.eth.get_transaction_count(self._account_address)
         gas_price = self._web3.eth.gas_price
         max_fee_per_gas = self.calculate_max_fee_per_gas(gas_price)

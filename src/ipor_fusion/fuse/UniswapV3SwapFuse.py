@@ -1,12 +1,18 @@
 from eth_abi import encode
 from eth_abi.packed import encode_packed
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.FuseAction import FuseAction
 
 
 class UniswapV3SwapPathFuseEnterData:
-    def __init__(self, token_in_address: str, token_out_address: str, fee: int):
+    def __init__(
+        self,
+        token_in_address: ChecksumAddress,
+        token_out_address: ChecksumAddress,
+        fee: int,
+    ):
         self.token_in_address = token_in_address
         self.token_out_address = token_out_address
         self.fee = fee
@@ -41,13 +47,13 @@ class UniswapV3SwapFuseEnterData:
 class UniswapV3SwapFuse:
     PROTOCOL_ID = "uniswap-v3"
 
-    def __init__(self, uniswap_v_3_swap_fuse_address: str):
+    def __init__(self, uniswap_v_3_swap_fuse_address: ChecksumAddress):
         self.uniswap_v_3_swap_fuse_address = uniswap_v_3_swap_fuse_address
 
     def swap(
         self,
-        token_in_address: str,
-        token_out_address: str,
+        token_in_address: ChecksumAddress,
+        token_out_address: ChecksumAddress,
         fee: int,
         token_in_amount: int,
         min_out_amount: int,

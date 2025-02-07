@@ -1,6 +1,7 @@
 from typing import List
 
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -67,7 +68,7 @@ class UniversalTokenSwapperEnterData:
 class UniversalTokenSwapperFuse:
     PROTOCOL_ID = "universal-token-swapper"
 
-    def __init__(self, universal_token_swapper_fuse_address: str):
+    def __init__(self, universal_token_swapper_fuse_address: ChecksumAddress):
         self._universal_token_swapper_fuse_address = (
             universal_token_swapper_fuse_address
         )
