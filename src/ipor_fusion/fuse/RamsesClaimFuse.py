@@ -1,6 +1,7 @@
 from typing import List
 
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -25,7 +26,7 @@ class RamsesClaimFuseData:
 
 class RamsesClaimFuse:
 
-    def __init__(self, ramses_claim_fuse_address: str):
+    def __init__(self, ramses_claim_fuse_address: ChecksumAddress):
         self._ramses_claim_fuse_address = ramses_claim_fuse_address
 
     def claim(self, token_ids: List[int], token_rewards: List[List[str]]) -> FuseAction:

@@ -1,6 +1,7 @@
 from typing import List
 
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.Erc4626SupplyFuse import (
@@ -25,10 +26,10 @@ class FluidInstadappSupplyFuse:
 
     def __init__(
         self,
-        fluid_instadapp_pool_token_address: str,
-        erc4626_fuse_address: str,
-        fluid_instadapp_staking_contract_address: str,
-        fluid_instadapp_staking_fuse_address: str,
+        fluid_instadapp_pool_token_address: ChecksumAddress,
+        erc4626_fuse_address: ChecksumAddress,
+        fluid_instadapp_staking_contract_address: ChecksumAddress,
+        fluid_instadapp_staking_fuse_address: ChecksumAddress,
     ):
         self.fluid_instadapp_pool_token_address = self._require_non_null(
             fluid_instadapp_pool_token_address,
@@ -94,7 +95,7 @@ class FluidInstadappSupplyFuse:
 
 
 class FluidInstadappStakingSupplyFuseEnterData:
-    def __init__(self, fluid_token_amount: int, staking_pool_address: str):
+    def __init__(self, fluid_token_amount: int, staking_pool_address: ChecksumAddress):
         self.fluid_token_amount = fluid_token_amount
         self.staking_pool_address = staking_pool_address
 
@@ -112,7 +113,7 @@ class FluidInstadappStakingSupplyFuseEnterData:
 
 
 class FluidInstadappStakingSupplyFuseExitData:
-    def __init__(self, fluid_token_amount: int, staking_pool_address: str):
+    def __init__(self, fluid_token_amount: int, staking_pool_address: ChecksumAddress):
         self.fluid_token_amount = fluid_token_amount
         self.staking_pool_address = staking_pool_address
 

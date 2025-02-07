@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from eth_typing import ChecksumAddress
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.AccessManager import AccessManager
@@ -31,11 +32,13 @@ class PlasmaSystem:
         self,
         transaction_executor: TransactionExecutor,
         chain_id: int,
-        plasma_vault_address: str,
+        plasma_vault_address: ChecksumAddress,
+        withdraw_manager_address: ChecksumAddress = None,
     ):
         self._transaction_executor = transaction_executor
         self._chain_id = chain_id
         self._plasma_vault_address = plasma_vault_address
+        self._withdraw_manager_address = withdraw_manager_address
 
     def transaction_executor(self) -> TransactionExecutor:
         return self._transaction_executor
@@ -53,9 +56,14 @@ class PlasmaSystem:
         )
 
     def withdraw_manager(self) -> WithdrawManager:
+        if not self._withdraw_manager_address:
+            self._withdraw_manager_address = (
+                self.plasma_vault().withdraw_manager_address()
+            )
+
         return WithdrawManager(
             transaction_executor=self._transaction_executor,
-            withdraw_manager_address=self.plasma_vault().withdraw_manager_address(),
+            withdraw_manager_address=self._withdraw_manager_address,
         )
 
     def rewards_claim_manager(self) -> RewardsClaimManager:

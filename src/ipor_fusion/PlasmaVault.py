@@ -15,7 +15,9 @@ from ipor_fusion.fuse.FuseAction import FuseAction
 class PlasmaVault:
 
     def __init__(
-        self, transaction_executor: TransactionExecutor, plasma_vault_address: str
+        self,
+        transaction_executor: TransactionExecutor,
+        plasma_vault_address: ChecksumAddress,
     ):
         self._transaction_executor = transaction_executor
         self._plasma_vault_address = plasma_vault_address

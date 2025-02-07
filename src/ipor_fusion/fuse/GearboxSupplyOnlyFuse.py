@@ -1,3 +1,5 @@
+from eth_typing import ChecksumAddress
+
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.fuse.Erc4626SupplyFuse import (
     Erc4626SupplyFuseExitData,
@@ -9,7 +11,9 @@ from ipor_fusion.fuse.FuseAction import FuseAction
 class GearboxSupplyOnlyFuse:
     MAX_UINT256 = (1 << 256) - 1
 
-    def __init__(self, d_token_address: str, erc4626_fuse_address: str):
+    def __init__(
+        self, d_token_address: ChecksumAddress, erc4626_fuse_address: ChecksumAddress
+    ):
         self.d_token_address = d_token_address
         self.erc4626_fuse_address = erc4626_fuse_address
 

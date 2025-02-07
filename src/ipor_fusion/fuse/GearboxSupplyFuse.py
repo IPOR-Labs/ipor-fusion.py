@@ -1,6 +1,7 @@
 from typing import List
 
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.MarketId import MarketId
@@ -19,10 +20,10 @@ class GearboxSupplyFuse:
 
     def __init__(
         self,
-        d_token_address: str,
-        erc4626_fuse_address: str,
-        farmd_token_address: str,
-        farm_fuse_address: str,
+        d_token_address: ChecksumAddress,
+        erc4626_fuse_address: ChecksumAddress,
+        farmd_token_address: ChecksumAddress,
+        farm_fuse_address: ChecksumAddress,
     ):
         self.d_token_address = self._require_non_null(
             d_token_address, "dTokenAddress is required"
