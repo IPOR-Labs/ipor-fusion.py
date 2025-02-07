@@ -153,7 +153,7 @@ def test_should_swap_weth_to_pepe_on_base():
     anvil.reset_fork(25894923)
 
     vault_address = "0x85b7927B6d721638b575972111F4CE6DaCb7D33C"
-    alpha_address = "0x9D2a639039859a5E4011c41E0764cfd08830b560"
+    alpha_address = "0xd16A8D5bD6B2cD5499bD55239bc980F09991b5fd"
 
     # Set up cheating system for role manipulation
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
