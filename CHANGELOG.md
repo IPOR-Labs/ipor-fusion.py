@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v0.9.0 (2025-02-07)
+
+### Features
+
+* feat: Lazy loading ([`ab39cee`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ab39cee15283d5ae6d46533efe5ce339c690331d))
+
+### Unknown
+
+* Merge pull request #56 from IPOR-Labs/develop
+
+feat: Lazy loading ([`1dabcb0`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1dabcb0475a7dcbe2fd67f10b37b20f6be7efcc7))
+
+* Merge pull request #54 from IPOR-Labs/develop
+
+Websocket (#53) ([`1c8f2ec`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1c8f2ec6da7c110d87550b688976db13059f4b46))
+
+* Websocket (#53) ([`9d28178`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9d28178a18339e57e09023693ccb54bfa8f38024))
+
+
 ## v0.8.0 (2025-02-04)
 
 ### Features
