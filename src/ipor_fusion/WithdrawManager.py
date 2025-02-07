@@ -1,6 +1,7 @@
 from typing import List
 
 from eth_abi import encode, decode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
@@ -12,7 +13,9 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 class WithdrawManager:
 
     def __init__(
-        self, transaction_executor: TransactionExecutor, withdraw_manager_address: str
+        self,
+        transaction_executor: TransactionExecutor,
+        withdraw_manager_address: ChecksumAddress,
     ):
         self._transaction_executor = transaction_executor
         self._withdraw_manager_address = withdraw_manager_address

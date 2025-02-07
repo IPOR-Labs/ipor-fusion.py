@@ -1,4 +1,5 @@
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -7,7 +8,9 @@ from ipor_fusion.fuse.FuseAction import FuseAction
 class GearboxStakeFuse:
     MAX_UINT256 = (1 << 256) - 1
 
-    def __init__(self, farmd_token_address: str, farm_fuse_address: str):
+    def __init__(
+        self, farmd_token_address: ChecksumAddress, farm_fuse_address: ChecksumAddress
+    ):
         self.farmd_token_address = farmd_token_address
         self.farm_fuse_address = farm_fuse_address
 

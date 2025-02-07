@@ -1,4 +1,5 @@
 from eth_abi import encode
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.MarketId import MarketId
@@ -8,7 +9,7 @@ from ipor_fusion.fuse.FuseAction import FuseAction
 class CompoundV3SupplyFuse:
     PROTOCOL_ID = "compound-v3"
 
-    def __init__(self, fuse_address: str):
+    def __init__(self, fuse_address: ChecksumAddress):
         if not fuse_address:
             raise ValueError("fuseAddress is required")
         self.fuse_address = fuse_address
