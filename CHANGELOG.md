@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.11.0 (2025-02-19)
+
+### Features
+
+* feat: checksum addresses ([`f0beec3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f0beec3889b07bac0a172c22a34dfaaf8d247e36))
+
+### Unknown
+
+* Merge pull request #60 from IPOR-Labs/develop
+
+feat: checksum addresses ([`2d0bff4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2d0bff4da1f7bc8ec21605aae64da489d7928e49))
+
+
 ## v0.10.0 (2025-02-07)
 
 ### Features
