@@ -20,7 +20,7 @@ class WithdrawManager:
         self._transaction_executor = transaction_executor
         self._withdraw_manager_address = withdraw_manager_address
 
-    def address(self) -> str:
+    def address(self) -> ChecksumAddress:
         return self._withdraw_manager_address
 
     def request(self, to_withdraw: int) -> TxReceipt:

@@ -2,6 +2,7 @@ from typing import List
 
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
+from web3 import Web3
 from web3.types import TxReceipt, LogReceipt
 
 
@@ -14,8 +15,8 @@ class TransactionExecutor:
         self._account = account
         self._gas_multiplier = gas_multiplier
 
-    def get_account_address(self):
-        return self._account.address
+    def get_account_address(self) -> ChecksumAddress:
+        return Web3.to_checksum_address(self._account.address)
 
     def execute(self, contract_address: ChecksumAddress, function: bytes) -> TxReceipt:
         transaction = self.prepare_transaction(contract_address, function)

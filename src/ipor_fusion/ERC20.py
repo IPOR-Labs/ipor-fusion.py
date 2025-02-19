@@ -13,10 +13,10 @@ class ERC20:
         self._transaction_executor = transaction_executor
         self._asset_address = asset_address
 
-    def address(self) -> str:
+    def address(self) -> ChecksumAddress:
         return self._asset_address
 
-    def transfer(self, to: str, amount: int):
+    def transfer(self, to: ChecksumAddress, amount: int):
         sig = function_signature_to_4byte_selector("transfer(address,uint256)")
         encoded_args = encode(["address", "uint256"], [to, amount])
         return self._transaction_executor.execute(
@@ -30,7 +30,7 @@ class ERC20:
             self._asset_address, sig + encoded_args
         )
 
-    def balance_of(self, account: str) -> int:
+    def balance_of(self, account: ChecksumAddress) -> int:
         sig = function_signature_to_4byte_selector("balanceOf(address)")
         encoded_args = encode(["address"], [account])
         read = self._transaction_executor.read(self._asset_address, sig + encoded_args)
