@@ -3,6 +3,7 @@ from typing import List
 from eth_abi import encode, decode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
+from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
@@ -19,7 +20,7 @@ class RewardsClaimManager:
         self._transaction_executor = transaction_executor
         self._rewards_claim_manager_address = rewards_claim_manager_address
 
-    def address(self) -> str:
+    def address(self) -> ChecksumAddress:
         return self._rewards_claim_manager_address
 
     def transfer(self, asset: str, to: str, amount: int) -> TxReceipt:
@@ -62,7 +63,7 @@ class RewardsClaimManager:
             self._rewards_claim_manager_address, signature
         )
         (result,) = decode(["address[]"], read)
-        return list(result)
+        return [Web3.to_checksum_address(item) for item in list(result)]
 
     def is_reward_fuse_supported(self, fuse) -> bool:
         signature = function_signature_to_4byte_selector(

@@ -30,7 +30,7 @@ class AccessManager:
         self._transaction_executor = transaction_executor
         self._access_manager_address = access_manager_address
 
-    def address(self) -> str:
+    def address(self) -> ChecksumAddress:
         return self._access_manager_address
 
     def grant_role(self, role_id: int, account: str, execution_delay) -> TxReceipt:

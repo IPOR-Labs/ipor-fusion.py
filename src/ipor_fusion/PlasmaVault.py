@@ -88,11 +88,11 @@ class PlasmaVault:
         (result,) = decode(["uint256"], read)
         return result
 
-    def get_price_oracle_middleware(self) -> str:
+    def get_price_oracle_middleware(self) -> ChecksumAddress:
         sig = function_signature_to_4byte_selector("getPriceOracleMiddleware()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
-        return result
+        return Web3.to_checksum_address(result)
 
     def total_assets(self) -> int:
         sig = function_signature_to_4byte_selector("totalAssets()")
@@ -100,7 +100,7 @@ class PlasmaVault:
         (result,) = decode(["uint256"], read)
         return result
 
-    def underlying_asset_address(self) -> str:
+    def underlying_asset_address(self) -> ChecksumAddress:
         sig = function_signature_to_4byte_selector("asset()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
@@ -131,7 +131,7 @@ class PlasmaVault:
         sig = function_signature_to_4byte_selector("getFuses()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address[]"], read)
-        return list(result)
+        return [Web3.to_checksum_address(item) for item in list(result)]
 
     def get_balance_fuses(self) -> List[tuple[int, str]]:
         events = self.get_balance_fuse_added_events()
@@ -180,12 +180,14 @@ class PlasmaVault:
             self._plasma_vault_address, sig + encoded_args
         )
 
-    def get_market_substrates(self, market_id: int) -> bytes:
+    def get_market_substrates(self, market_id: int) -> List[bytes]:
         sig = function_signature_to_4byte_selector("getMarketSubstrates(uint256)")
         encoded_args = encode(["uint256"], [market_id])
-        return self._transaction_executor.read(
+        read = self._transaction_executor.read(
             self._plasma_vault_address, sig + encoded_args
         )
+        (result,) = decode(["bytes32[]"], read)
+        return result
 
     def transfer(self, to: str, value):
         sig = function_signature_to_4byte_selector("transfer(address,uint256)")
