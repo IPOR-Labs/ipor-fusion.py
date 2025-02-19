@@ -26,10 +26,10 @@ class PriceOracleMiddleware:
         self._transaction_executor = transaction_executor
         self._price_oracle_middleware_address = price_oracle_middleware_address
 
-    def address(self) -> str:
+    def address(self) -> ChecksumAddress:
         return self._price_oracle_middleware_address
 
-    def get_source_of_asset_price(self, asset: str) -> str:
+    def get_source_of_asset_price(self, asset: ChecksumAddress) -> ChecksumAddress:
         signature = function_signature_to_4byte_selector(
             "getSourceOfAssetPrice(address)"
         )
@@ -38,15 +38,15 @@ class PriceOracleMiddleware:
             signature + encode(["address"], [asset]),
         )
         (source_of_asset_price,) = decode(["address"], read)
-        return source_of_asset_price
+        return Web3.to_checksum_address(source_of_asset_price)
 
-    def CHAINLINK_FEED_REGISTRY(self) -> str:
+    def CHAINLINK_FEED_REGISTRY(self) -> ChecksumAddress:
         signature = function_signature_to_4byte_selector("CHAINLINK_FEED_REGISTRY()")
         read = self._transaction_executor.read(
             self._price_oracle_middleware_address, signature
         )
         (chainlink_feed_registry,) = decode(["address"], read)
-        return chainlink_feed_registry
+        return Web3.to_checksum_address(chainlink_feed_registry)
 
     def get_assets_price_sources(self) -> (int, int):
         events = self.get_asset_price_source_updated_events()

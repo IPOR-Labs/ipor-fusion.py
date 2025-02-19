@@ -93,7 +93,7 @@ class PlasmaSystem:
     def pepe(self) -> ERC20:
         return self._initialize_asset(asset_symbol="PEPE")
 
-    def alpha(self) -> str:
+    def alpha(self) -> ChecksumAddress:
         return self._transaction_executor.get_account_address()
 
     def uniswap_v3(self) -> UniswapV3Market:
