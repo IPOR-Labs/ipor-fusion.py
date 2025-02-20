@@ -151,6 +151,20 @@ class PlasmaVault:
             return Web3.to_checksum_address(decoded_address)
         return None
 
+    def get_instant_withdrawal_fuses(self) -> List[str]:
+        sig = function_signature_to_4byte_selector("getInstantWithdrawalFuses()")
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
+        (result,) = decode(["address[]"], read)
+        return result
+
+    def get_instant_withdrawal_fuses_params(self) -> List[str]:
+        sig = function_signature_to_4byte_selector(
+            "getInstantWithdrawalFusesParams(address,uint256)"
+        )
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
+        (result,) = decode(["bytes32[]"], read)
+        return result
+
     @staticmethod
     def __execute(actions: List[FuseAction]) -> bytes:
         bytes_data = []
