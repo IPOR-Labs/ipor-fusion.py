@@ -26,6 +26,7 @@ class FluidInstadappMarket:
             if checksum_fuse in FuseMapper.map(
                 chain_id=chain_id, fuse_name="Erc4626SupplyFuseMarketId5"
             ):
+                
                 self._fluid_instadapp_pool_fuse = FluidInstadappSupplyFuse(
                     AssetMapper.map(chain_id=chain_id, asset_symbol="fUSDC"),
                     checksum_fuse,
@@ -34,7 +35,7 @@ class FluidInstadappMarket:
                     ),
                     FuseMapper.map(
                         chain_id=chain_id, fuse_name="FluidInstadappStakingSupplyFuse"
-                    )[1],
+                    )[0],
                 )
                 self._any_fuse_supported = True
 
