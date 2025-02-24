@@ -157,11 +157,16 @@ class PlasmaVault:
         (result,) = decode(["address[]"], read)
         return result
 
-    def get_instant_withdrawal_fuses_params(self) -> List[str]:
+    def get_instant_withdrawal_fuses_params(
+        self, fuse: ChecksumAddress, index: int
+    ) -> List[str]:
         sig = function_signature_to_4byte_selector(
             "getInstantWithdrawalFusesParams(address,uint256)"
         )
-        read = self._transaction_executor.read(self._plasma_vault_address, sig)
+        encoded_args = encode(["address", "uint256"], [fuse, index])
+        read = self._transaction_executor.read(
+            self._plasma_vault_address, sig + encoded_args
+        )
         (result,) = decode(["bytes32[]"], read)
         return result
 
