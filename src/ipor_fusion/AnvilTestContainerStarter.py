@@ -6,6 +6,7 @@ from typing import Union, List
 import requests
 from docker.models.containers import ExecResult
 from dotenv import load_dotenv
+from eth_typing import ChecksumAddress
 from testcontainers.core.container import DockerContainer
 from web3 import Web3, HTTPProvider
 from web3.types import RPCEndpoint
@@ -108,7 +109,7 @@ class AnvilTestContainerStarter:
         self.log.info("[CONTAINER] [ANVIL] Anvil evm increaseTime")
 
     def grant_market_substrates(
-        self, _from: str, plasma_vault, market_id: int, substrates: List[str]
+        self, _from: ChecksumAddress, plasma_vault, market_id: int, substrates: List[str]
     ):
         join = ",".join(substrates)
         cmd = [

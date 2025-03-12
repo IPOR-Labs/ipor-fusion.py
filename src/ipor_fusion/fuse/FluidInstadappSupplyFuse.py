@@ -38,8 +38,9 @@ class FluidInstadappSupplyFuse:
         self.erc4626_fuse_address = self._require_non_null(
             erc4626_fuse_address, "erc4626FuseAddress is required"
         )
-        self.fluid_instadapp_staking_contract_address = (
+        self.fluid_instadapp_staking_contract_address = self._require_non_null(
             fluid_instadapp_staking_contract_address,
+            "fluid_instadapp_staking_contract_address is required",
         )
         self.fluid_staking_fuse_address = self._require_non_null(
             fluid_instadapp_staking_fuse_address,
