@@ -109,7 +109,11 @@ class AnvilTestContainerStarter:
         self.log.info("[CONTAINER] [ANVIL] Anvil evm increaseTime")
 
     def grant_market_substrates(
-        self, _from: ChecksumAddress, plasma_vault, market_id: int, substrates: List[str]
+        self,
+        _from: ChecksumAddress,
+        plasma_vault,
+        market_id: int,
+        substrates: List[str],
     ):
         join = ",".join(substrates)
         cmd = [

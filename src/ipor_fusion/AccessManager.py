@@ -33,7 +33,9 @@ class AccessManager:
     def address(self) -> ChecksumAddress:
         return self._access_manager_address
 
-    def grant_role(self, role_id: int, account: ChecksumAddress, execution_delay) -> TxReceipt:
+    def grant_role(
+        self, role_id: int, account: ChecksumAddress, execution_delay
+    ) -> TxReceipt:
         selector = function_signature_to_4byte_selector(
             "grantRole(uint64,address,uint32)"
         )

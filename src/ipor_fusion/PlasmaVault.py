@@ -191,7 +191,9 @@ class PlasmaVault:
         selector = function_signature_to_4byte_selector(function_signature)
         return selector + encode(args, [assets, receiver])
 
-    def withdraw(self, assets: Amount, receiver: ChecksumAddress, owner: ChecksumAddress) -> TxReceipt:
+    def withdraw(
+        self, assets: Amount, receiver: ChecksumAddress, owner: ChecksumAddress
+    ) -> TxReceipt:
         sig = function_signature_to_4byte_selector("withdraw(uint256,address,address)")
         encoded_args = encode(
             ["uint256", "address", "address"], [assets, receiver, owner]
@@ -223,7 +225,9 @@ class PlasmaVault:
             self._plasma_vault_address, sig + encoded_args
         )
 
-    def transfer_from(self, _from: ChecksumAddress, to: ChecksumAddress, amount: Amount):
+    def transfer_from(
+        self, _from: ChecksumAddress, to: ChecksumAddress, amount: Amount
+    ):
         sig = function_signature_to_4byte_selector(
             "transferFrom(address,address,uint256)"
         )
