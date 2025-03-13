@@ -72,6 +72,11 @@ asset_mapping = {
         {"address": "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed", "symbol": "DEGEN"},
         {"address": "0x940181a94A35A4569E4529A3CDfB74e38FD98631", "symbol": "AERO"},
         {"address": "0x52b492a33E447Cdb854c7FC19F1e57E8BfA1777D", "symbol": "PEPE"},
+        {"address": "0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169", "symbol": "fUSDC"},
+        {
+            "address": "0x48f89d731C5e3b5BeE8235162FC2C639Ba62DB7d",
+            "symbol": "FluidLendingStakingRewardsUsdc",
+        },
     ],
 }
 

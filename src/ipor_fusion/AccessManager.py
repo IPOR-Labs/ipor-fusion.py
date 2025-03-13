@@ -33,7 +33,9 @@ class AccessManager:
     def address(self) -> ChecksumAddress:
         return self._access_manager_address
 
-    def grant_role(self, role_id: int, account: str, execution_delay) -> TxReceipt:
+    def grant_role(
+        self, role_id: int, account: ChecksumAddress, execution_delay
+    ) -> TxReceipt:
         selector = function_signature_to_4byte_selector(
             "grantRole(uint64,address,uint32)"
         )
@@ -44,7 +46,7 @@ class AccessManager:
             self._access_manager_address, function
         )
 
-    def has_role(self, role_id: int, account: str) -> (bool, int):
+    def has_role(self, role_id: int, account: ChecksumAddress) -> (bool, int):
         selector = function_signature_to_4byte_selector("hasRole(uint64,address)")
         function = selector + encode(["uint64", "address"], [role_id, account])
         read = self._transaction_executor.read(self._access_manager_address, function)
