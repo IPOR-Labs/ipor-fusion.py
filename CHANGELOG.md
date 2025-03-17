@@ -1,6 +1,35 @@
 # CHANGELOG
 
 
+## v0.12.0 (2025-03-17)
+
+### Features
+
+* feat: SDK - add support for Morpho blue ([`97a3b0d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/97a3b0d001fd793385e5655d6dd782d3ba3e7b2a))
+
+* feat: Modify SDK to handle the new scheduled withdraw ([`dc9e4a6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dc9e4a643745dfa0697a0682944f3f6168964929))
+
+* feat: get_instant_withdrawal_fuses ([`9bb73e9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9bb73e9f6a0a9ca9ac5888e386daebf961283e66))
+
+### Unknown
+
+* Merge pull request #66 from IPOR-Labs/develop
+
+Merge develop -> main ([`fd7e44c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fd7e44c60321e7875dd2ea04c68cbfd44486b405))
+
+* Merge pull request #65 from IPOR-Labs/feature/IL-5540
+
+feat: SDK - add support for Morpho blue ([`532a497`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/532a4979010f05a4c5de6431592d69310f47e332))
+
+* Merge pull request #64 from IPOR-Labs/develop
+
+Merge develop -> main ([`56bbec9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/56bbec9c60cca69fef27f088f0ef73c81d87aa05))
+
+* Merge pull request #63 from IPOR-Labs/feature/IL-5537
+
+feat: Modify SDK to handle the new scheduled withdraw ([`d608f57`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d608f57eb66612a6bb7b69e7f83a9922b38d1626))
+
+
 ## v0.11.0 (2025-02-19)
 
 ### Features
