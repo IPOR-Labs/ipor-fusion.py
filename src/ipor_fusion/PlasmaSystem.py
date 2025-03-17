@@ -194,7 +194,7 @@ class PlasmaSystem:
             )
         return universal_market
 
-    def prank(self, address: str):
+    def prank(self, address: ChecksumAddress):
         self._transaction_executor.prank(address)
 
     def chain_id(self):

@@ -1,5 +1,6 @@
 from typing import List
 
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.AssetMapper import AssetMapper
@@ -15,7 +16,10 @@ from ipor_fusion.fuse.FuseAction import FuseAction
 class FluidInstadappMarket:
 
     def __init__(
-        self, chain_id: int, transaction_executor: TransactionExecutor, fuses: List[str]
+        self,
+        chain_id: int,
+        transaction_executor: TransactionExecutor,
+        fuses: List[ChecksumAddress],
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
@@ -32,9 +36,9 @@ class FluidInstadappMarket:
                     AssetMapper.map(
                         chain_id=chain_id, asset_symbol="FluidLendingStakingRewardsUsdc"
                     ),
-                    FuseMapper.map(
-                        chain_id=chain_id, fuse_name="FluidInstadappStakingSupplyFuse"
-                    )[1],
+                    self.get_safe_fuse_address(
+                        chain_id, fuses, "FluidInstadappStakingSupplyFuse"
+                    ),
                 )
                 self._any_fuse_supported = True
 
@@ -49,6 +53,22 @@ class FluidInstadappMarket:
                     chain_id=chain_id, asset_symbol="FluidLendingStakingRewardsUsdc"
                 ),
             )
+
+    @staticmethod
+    def get_safe_fuse_address(
+        chain_id: int, vault_fuses: List[ChecksumAddress], fuse_name: str
+    ) -> ChecksumAddress:
+        fuses_from_mapper = FuseMapper.map(chain_id=chain_id, fuse_name=fuse_name)
+        fuse = None
+        for f in vault_fuses:
+            for x in fuses_from_mapper:
+                if f.lower() == x.lower():
+                    fuse = f
+
+        if not fuse:
+            raise UnsupportedFuseError()
+
+        return Web3.to_checksum_address(fuse)
 
     def is_market_supported(self) -> bool:
         return self._any_fuse_supported
