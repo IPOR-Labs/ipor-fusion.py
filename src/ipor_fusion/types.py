@@ -4,6 +4,7 @@ Amount = NewType("Amount", int)
 Shares = NewType("Shares", int)
 Decimals = NewType("Decimals", int)
 MarketId = NewType("MarketId", int)
+MorphoBlueMarketId = NewType("MorphoBlueMarketId", str)
 
 
 class Period(int):
