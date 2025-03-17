@@ -36,19 +36,34 @@ class PlasmaVault:
             self._plasma_vault_address, function
         )
 
-    def deposit(self, assets: int, receiver: str) -> TxReceipt:
+    def deposit(self, assets: Amount, receiver: ChecksumAddress) -> TxReceipt:
         function = self.__deposit(assets, receiver)
         return self._transaction_executor.execute(self._plasma_vault_address, function)
 
-    def mint(self, shares: int, receiver: str) -> TxReceipt:
+    def mint(self, shares: Shares, receiver: ChecksumAddress) -> TxReceipt:
         sig = function_signature_to_4byte_selector("mint(uint256,address)")
         encoded_args = encode(["uint256", "address"], [shares, receiver])
         return self._transaction_executor.execute(
             self._plasma_vault_address, sig + encoded_args
         )
 
-    def redeem(self, shares: int, receiver: str, owner: str) -> TxReceipt:
+    def redeem(
+        self, shares: Shares, receiver: ChecksumAddress, owner: ChecksumAddress
+    ) -> TxReceipt:
         sig = function_signature_to_4byte_selector("redeem(uint256,address,address)")
+        encoded_args = encode(
+            ["uint256", "address", "address"], [shares, receiver, owner]
+        )
+        return self._transaction_executor.execute(
+            self._plasma_vault_address, sig + encoded_args
+        )
+
+    def redeem_from_request(
+        self, shares: Shares, receiver: ChecksumAddress, owner: ChecksumAddress
+    ) -> TxReceipt:
+        sig = function_signature_to_4byte_selector(
+            "redeemFromRequest(uint256,address,address)"
+        )
         encoded_args = encode(
             ["uint256", "address", "address"], [shares, receiver, owner]
         )
@@ -68,6 +83,15 @@ class PlasmaVault:
     def max_withdraw(self, account: ChecksumAddress) -> Amount:
         sig = function_signature_to_4byte_selector("maxWithdraw(address)")
         encoded_args = encode(["address"], [account])
+        read = self._transaction_executor.read(
+            self._plasma_vault_address, sig + encoded_args
+        )
+        (result,) = decode(["uint256"], read)
+        return result
+
+    def convert_to_shares(self, amount: Amount) -> Shares:
+        sig = function_signature_to_4byte_selector("convertToShares(uint256)")
+        encoded_args = encode(["uint256"], [amount])
         read = self._transaction_executor.read(
             self._plasma_vault_address, sig + encoded_args
         )

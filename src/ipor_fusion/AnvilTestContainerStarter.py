@@ -6,10 +6,12 @@ from typing import Union, List
 import requests
 from docker.models.containers import ExecResult
 from dotenv import load_dotenv
-from eth_typing import ChecksumAddress
+from eth_typing import ChecksumAddress, BlockNumber
 from testcontainers.core.container import DockerContainer
 from web3 import Web3, HTTPProvider
-from web3.types import RPCEndpoint
+from web3.types import RPCEndpoint, Timestamp
+
+from ipor_fusion.types import Period
 
 load_dotenv(verbose=True)
 
@@ -76,7 +78,7 @@ class AnvilTestContainerStarter:
         self.wait_for_endpoint_ready()
         self.log.info("[CONTAINER] [ANVIL] Anvil container started")
 
-    def reset_fork(self, block_number: int):
+    def reset_fork(self, block_number: BlockNumber):
         self.log.info("[CONTAINER] [ANVIL] Anvil fork reset")
         w3 = self.get_client()
         params = [
@@ -97,7 +99,15 @@ class AnvilTestContainerStarter:
 
         self.log.info("[CONTAINER] [ANVIL] Anvil fork reset")
 
-    def move_time(self, delta_time_argument: int):
+    def current_block_number(self) -> BlockNumber:
+        w3 = self.get_client()
+        return w3.eth.block_number
+
+    def current_block_timestamp(self) -> Timestamp:
+        w3 = self.get_client()
+        return w3.eth.get_block(self.current_block_number()).timestamp
+
+    def move_time(self, delta_time_argument: Period):
         self.log.info("[CONTAINER] [ANVIL] Anvil evm increaseTime")
         w3 = self.get_client()
 

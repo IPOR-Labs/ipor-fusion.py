@@ -6,8 +6,23 @@ from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractPanicError
-from web3.types import TxReceipt, LogReceipt
+from web3.types import TxReceipt, LogReceipt, Timestamp
 from ipor_fusion.TransactionExecutor import TransactionExecutor
+from ipor_fusion.types import Shares, Amount, Period
+
+
+class WithdrawRequestInfo:
+    def __init__(
+        self,
+        shares: Shares,
+        end_withdraw_window_timestamp: Timestamp,
+        can_withdraw: bool,
+        withdraw_window_in_seconds: Period,
+    ):
+        self.shares = shares
+        self.end_withdraw_window_timestamp = end_withdraw_window_timestamp
+        self.can_withdraw = can_withdraw
+        self.withdraw_window_in_seconds = withdraw_window_in_seconds
 
 
 class WithdrawManager:
@@ -23,25 +38,49 @@ class WithdrawManager:
     def address(self) -> ChecksumAddress:
         return self._withdraw_manager_address
 
-    def request(self, to_withdraw: int) -> TxReceipt:
-        function = self.__request(to_withdraw)
+    def request(self, to_withdraw: Amount) -> TxReceipt:
+        selector = function_signature_to_4byte_selector("request(uint256)")
+        function = selector + encode(["uint256"], [to_withdraw])
         return self._transaction_executor.execute(
             self._withdraw_manager_address, function
         )
 
-    def update_withdraw_window(self, window: int):
+    def request_shares(self, shares: Shares) -> TxReceipt:
+        selector = function_signature_to_4byte_selector("requestShares(uint256)")
+        function = selector + encode(["uint256"], [shares])
+        return self._transaction_executor.execute(
+            self._withdraw_manager_address, function
+        )
+
+    def update_withdraw_window(self, window: Period):
         selector = function_signature_to_4byte_selector("updateWithdrawWindow(uint256)")
         function = selector + encode(["uint256"], [window])
         return self._transaction_executor.execute(
             self._withdraw_manager_address, function
         )
 
-    @staticmethod
-    def __request(to_withdraw: int) -> bytes:
-        selector = function_signature_to_4byte_selector("request(uint256)")
-        return selector + encode(["uint256"], [to_withdraw])
+    def update_plasma_vault_address(self, window: ChecksumAddress):
+        selector = function_signature_to_4byte_selector(
+            "updatePlasmaVaultAddress(address)"
+        )
+        function = selector + encode(["address"], [window])
+        return self._transaction_executor.execute(
+            self._withdraw_manager_address, function
+        )
 
-    def release_funds(self, timestamp: int = None):
+    def release_funds(self, timestamp: Timestamp = None, shares: Shares = None):
+        if shares:
+            if not timestamp:
+                raise ValueError("No timestamp argument in release_founds method call")
+
+            selector = function_signature_to_4byte_selector(
+                "releaseFunds(uint256,uint256)"
+            )
+            return self._transaction_executor.execute(
+                self._withdraw_manager_address,
+                selector + encode(["uint256", "uint256"], [timestamp, shares]),
+            )
+
         if timestamp:
             selector = function_signature_to_4byte_selector("releaseFunds(uint256)")
             return self._transaction_executor.execute(
@@ -54,7 +93,7 @@ class WithdrawManager:
             self._withdraw_manager_address, selector
         )
 
-    def get_withdraw_window(self) -> int:
+    def get_withdraw_window(self) -> Period:
         signature = function_signature_to_4byte_selector("getWithdrawWindow()")
         read = self._transaction_executor.read(
             self._withdraw_manager_address, signature
@@ -62,7 +101,7 @@ class WithdrawManager:
         (result,) = decode(["uint256"], read)
         return result
 
-    def get_last_release_funds_timestamp(self) -> int:
+    def get_last_release_funds_timestamp(self) -> Timestamp:
         signature = function_signature_to_4byte_selector(
             "getLastReleaseFundsTimestamp()"
         )
@@ -72,7 +111,23 @@ class WithdrawManager:
         (result,) = decode(["uint256"], read)
         return result
 
-    def request_info(self, account: str) -> int:
+    def get_shares_to_release(self) -> Shares:
+        signature = function_signature_to_4byte_selector("getSharesToRelease()")
+        read = self._transaction_executor.read(
+            self._withdraw_manager_address, signature
+        )
+        (result,) = decode(["uint256"], read)
+        return result
+
+    def get_request_fee(self) -> int:
+        signature = function_signature_to_4byte_selector("getRequestFee()")
+        read = self._transaction_executor.read(
+            self._withdraw_manager_address, signature
+        )
+        (result,) = decode(["uint256"], read)
+        return result
+
+    def request_info(self, account: ChecksumAddress) -> WithdrawRequestInfo:
         signature = function_signature_to_4byte_selector("requestInfo(address)")
         read = self._transaction_executor.read(
             self._withdraw_manager_address,
@@ -84,7 +139,7 @@ class WithdrawManager:
             can_withdraw,
             withdraw_window_in_seconds,
         ) = decode(["uint256", "uint256", "bool", "uint256"], read)
-        return (
+        return WithdrawRequestInfo(
             amount,
             end_withdraw_window_timestamp,
             can_withdraw,
@@ -110,15 +165,10 @@ class WithdrawManager:
         requested_amount = 0
         for account in accounts:
             try:
-                (
-                    amount,
-                    end_withdraw_window_timestamp,
-                    _,
-                    _,
-                ) = self.request_info(account)
+                request_info = self.request_info(account)
 
-                if end_withdraw_window_timestamp > current_timestamp:
-                    requested_amount += amount
+                if request_info.end_withdraw_window_timestamp > current_timestamp:
+                    requested_amount += request_info.shares
             except ContractPanicError:
                 pass
 
