@@ -19,7 +19,7 @@ load_dotenv(verbose=True)
 class AnvilTestContainerStarter:
     ANVIL_IMAGE = os.getenv(
         "ANVIL_TEST_CONTAINER",
-        "ghcr.io/foundry-rs/foundry:nightly-be451fb93a0d0ec52152fb67cc6c36cd8fbd7ae1",
+        "ghcr.io/ipor-labs/foundry:nightly-aa69ed1e46dd61fbf9d73399396a4db4dd527431",
     )
 
     MAX_WAIT_SECONDS = 1201
