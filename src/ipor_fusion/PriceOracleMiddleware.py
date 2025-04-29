@@ -8,6 +8,7 @@ from web3 import Web3
 from web3.types import LogReceipt
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
+from ipor_fusion.types import Price
 
 
 class AssetPriceSource:
@@ -71,3 +72,19 @@ class PriceOracleMiddleware:
             topics=[event_signature_hash],
         )
         return logs
+
+    def get_asset_price(self, asset_address: ChecksumAddress) -> Price:
+        sig = function_signature_to_4byte_selector("getAssetPrice(address)")
+        encoded_args = encode(["address"], [asset_address])
+        read = self._transaction_executor.read(
+            self._price_oracle_middleware_address, sig + encoded_args
+        )
+        (
+            amount,
+            decimals,
+        ) = decode(["uint256", "uint256"], read)
+        return Price(
+            asset=asset_address,
+            amount=amount,
+            decimals=decimals,
+        )

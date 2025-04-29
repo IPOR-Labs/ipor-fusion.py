@@ -8,6 +8,7 @@ from web3 import Web3
 from web3.types import TxReceipt, LogReceipt
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
+from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.types import Amount, MarketId, Decimals, Shares
 
@@ -47,6 +48,13 @@ class PlasmaVault:
             self._plasma_vault_address, sig + encoded_args
         )
 
+    def add_fuses(self, fuses: List[ChecksumAddress]) -> TxReceipt:
+        sig = function_signature_to_4byte_selector("addFuses(address[])")
+        encoded_args = encode(["address[]"], [fuses])
+        return self._transaction_executor.execute(
+            self._plasma_vault_address, sig + encoded_args
+        )
+
     def redeem(
         self, shares: Shares, receiver: ChecksumAddress, owner: ChecksumAddress
     ) -> TxReceipt:
@@ -71,7 +79,7 @@ class PlasmaVault:
             self._plasma_vault_address, sig + encoded_args
         )
 
-    def balance_of(self, account: ChecksumAddress) -> int:
+    def balance_of(self, account: ChecksumAddress) -> Amount:
         sig = function_signature_to_4byte_selector("balanceOf(address)")
         encoded_args = encode(["address"], [account])
         read = self._transaction_executor.read(
@@ -113,11 +121,17 @@ class PlasmaVault:
         (result,) = decode(["uint256"], read)
         return result
 
-    def get_price_oracle_middleware(self) -> ChecksumAddress:
+    def get_price_oracle_middleware_address(self) -> ChecksumAddress:
         sig = function_signature_to_4byte_selector("getPriceOracleMiddleware()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["address"], read)
         return Web3.to_checksum_address(result)
+
+    def get_price_oracle_middleware(self) -> PriceOracleMiddleware:
+        return PriceOracleMiddleware(
+            transaction_executor=self._transaction_executor,
+            price_oracle_middleware_address=self.get_price_oracle_middleware_address(),
+        )
 
     def total_assets(self) -> Amount:
         sig = function_signature_to_4byte_selector("totalAssets()")

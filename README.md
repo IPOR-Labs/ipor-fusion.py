@@ -65,13 +65,16 @@ alt="Release">
 poetry install
 ```
 
-#### Setup ARBITRUM_PROVIDER_URL environment variable
+#### Setup environment variables
 
-Some node providers are not supported. It's working with QuickNode but not with Alchemy.
+Copy the `.env.example` file to `.env` and fill in the required provider URLs:
 
 ```bash
-export ARBITRUM_PROVIDER_URL="https://..."
+cp .env.example .env
 ```
+
+Then edit the `.env` file with your provider URLs for Ethereum, Arbitrum, and Base networks.
+
 
 #### Run tests
 
