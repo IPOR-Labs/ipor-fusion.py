@@ -201,7 +201,9 @@ def test_supply_and_withdraw_from_aave_v3():
     )
 
     supply = system.aave_v3().supply(
-        asset_address=AssetMapper.map("USDC"), amount=vault_balance_before, e_mode=300
+        asset_address=AssetMapper.map(chain_id=42161, asset_symbol="USDC"),
+        amount=vault_balance_before,
+        e_mode=300,
     )
 
     system.plasma_vault().execute([supply])
@@ -226,6 +228,7 @@ def test_supply_and_withdraw_from_aave_v3():
     )
 
     withdraw = system.aave_v3().withdraw(
+        asset_address=AssetMapper.map(chain_id=42161, asset_symbol="USDC"),
         amount=protocol_balance_before,
     )
 

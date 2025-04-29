@@ -25,9 +25,7 @@ class PriceOracleMiddleware:
         price_oracle_middleware_address: ChecksumAddress,
     ):
         self._transaction_executor = transaction_executor
-        self._price_oracle_middleware_address = Web3.to_checksum_address(
-            "0xD9b73Af0b29Cbaf88F01384EA1fB5ADcb608bed0"
-        )
+        self._price_oracle_middleware_address = price_oracle_middleware_address
 
     def address(self) -> ChecksumAddress:
         return self._price_oracle_middleware_address
