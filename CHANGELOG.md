@@ -1,6 +1,84 @@
 # CHANGELOG
 
 
+## v0.12.0 (2025-03-17)
+
+### Features
+
+* feat: SDK - add support for Morpho blue ([`97a3b0d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/97a3b0d001fd793385e5655d6dd782d3ba3e7b2a))
+
+* feat: Modify SDK to handle the new scheduled withdraw ([`dc9e4a6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dc9e4a643745dfa0697a0682944f3f6168964929))
+
+* feat: get_instant_withdrawal_fuses ([`9bb73e9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9bb73e9f6a0a9ca9ac5888e386daebf961283e66))
+
+### Unknown
+
+* Merge pull request #66 from IPOR-Labs/develop
+
+Merge develop -> main ([`fd7e44c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fd7e44c60321e7875dd2ea04c68cbfd44486b405))
+
+* Merge pull request #65 from IPOR-Labs/feature/IL-5540
+
+feat: SDK - add support for Morpho blue ([`532a497`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/532a4979010f05a4c5de6431592d69310f47e332))
+
+* Merge pull request #64 from IPOR-Labs/develop
+
+Merge develop -> main ([`56bbec9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/56bbec9c60cca69fef27f088f0ef73c81d87aa05))
+
+* Merge pull request #63 from IPOR-Labs/feature/IL-5537
+
+feat: Modify SDK to handle the new scheduled withdraw ([`d608f57`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d608f57eb66612a6bb7b69e7f83a9922b38d1626))
+
+
+## v0.11.0 (2025-02-19)
+
+### Features
+
+* feat: checksum addresses ([`f0beec3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f0beec3889b07bac0a172c22a34dfaaf8d247e36))
+
+### Unknown
+
+* Merge pull request #60 from IPOR-Labs/develop
+
+feat: checksum addresses ([`2d0bff4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2d0bff4da1f7bc8ec21605aae64da489d7928e49))
+
+
+## v0.10.0 (2025-02-07)
+
+### Features
+
+* feat: optional withdraw manager ([`06081a1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/06081a1a7cd1b7829611fe5d1c68b8b7c6e74b14))
+
+### Unknown
+
+* Merge pull request #58 from IPOR-Labs/develop
+
+Develop ([`f37a803`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f37a80343297358adbc9795e6811e72574165099))
+
+* Merge pull request #57 from IPOR-Labs/optional-withdraw-manager
+
+feat: optional withdraw manager ([`cea5cda`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cea5cda7431a6380adfb04447a1043cb051f3245))
+
+
+## v0.9.0 (2025-02-07)
+
+### Features
+
+* feat: Lazy loading ([`ab39cee`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ab39cee15283d5ae6d46533efe5ce339c690331d))
+
+### Unknown
+
+* Merge pull request #56 from IPOR-Labs/develop
+
+feat: Lazy loading ([`1dabcb0`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1dabcb0475a7dcbe2fd67f10b37b20f6be7efcc7))
+
+* Merge pull request #54 from IPOR-Labs/develop
+
+Websocket (#53) ([`1c8f2ec`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1c8f2ec6da7c110d87550b688976db13059f4b46))
+
+* Websocket (#53) ([`9d28178`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9d28178a18339e57e09023693ccb54bfa8f38024))
+
+
 ## v0.8.0 (2025-02-04)
 
 ### Features
