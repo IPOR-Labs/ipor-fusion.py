@@ -94,6 +94,12 @@ class PlasmaSystem:
     def pepe(self) -> ERC20:
         return self._initialize_asset(asset_symbol="PEPE")
 
+    def erc20(self, asset_address: ChecksumAddress) -> ERC20:
+        return ERC20(
+            transaction_executor=self._transaction_executor,
+            asset_address=asset_address,
+        )
+
     def alpha(self) -> ChecksumAddress:
         return self._transaction_executor.get_account_address()
 

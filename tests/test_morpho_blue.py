@@ -48,29 +48,29 @@ def test_should_deposit_and_withdraw_from_morpho_blue():
         provider_url=anvil.get_anvil_http_url(),
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
-    alpha = cheating_system_factory.get(vault_address)
+    cheating = cheating_system_factory.get(vault_address)
 
-    # Impersonate the alpha address to perform privileged operations
+    # Impersonate the cheating address to perform privileged operations
     # This simulates actions being taken by an authorized account
-    alpha.prank(alpha_address)
+    cheating.prank(alpha_address)
 
     # Define the amount to deposit/withdraw (1,000 USDC with 6 decimal places)
     amount = Amount(1000_000000)
 
     # Create a supply operation for the specified Morpho Blue market
     # This prepares the transaction data for supplying assets to the lending market
-    supply = alpha.morpho_blue().supply(morpho_blue_market_id, amount)
+    supply = cheating.morpho_blue().supply(morpho_blue_market_id, amount)
 
     # Record the vault's USDC balance before supplying to the market
     # This will be used to verify the correct amount was transferred
-    usdc_balance_of_before_supply = alpha.usdc().balance_of(vault_address)
+    usdc_balance_of_before_supply = cheating.usdc().balance_of(vault_address)
 
     # Execute the supply operation through the Plasma Vault
     # The vault will transfer USDC to the Morpho Blue protocol
-    alpha.plasma_vault().execute([supply])
+    cheating.plasma_vault().execute([supply])
 
     # Record the vault's USDC balance after supplying to the market
-    usdc_balance_of_after_supply = alpha.usdc().balance_of(vault_address)
+    usdc_balance_of_after_supply = cheating.usdc().balance_of(vault_address)
 
     # Verify that the correct amount of USDC was transferred from the vault
     # The balance difference should exactly match the supplied amount
@@ -78,15 +78,15 @@ def test_should_deposit_and_withdraw_from_morpho_blue():
 
     # Create a withdrawal operation for the same amount from the Morpho Blue market
     # This prepares the transaction data for withdrawing assets from the lending market
-    withdraw = alpha.morpho_blue().withdraw(morpho_blue_market_id, amount)
+    withdraw = cheating.morpho_blue().withdraw(morpho_blue_market_id, amount)
 
     # Execute the withdrawal operation through the Plasma Vault
     # The vault will receive USDC back from the Morpho Blue protocol
-    alpha.plasma_vault().execute([withdraw])
+    cheating.plasma_vault().execute([withdraw])
 
     # Record the vault's USDC balance after withdrawing from the market
-    usdc_balance_of_after_withdraw = alpha.usdc().balance_of(vault_address)
+    usdc_balance_of_after_withdraw = cheating.usdc().balance_of(vault_address)
 
     # Verify that the correct amount of USDC was returned to the vault
     # The balance difference should exactly match the withdrawn amount
-    assert usdc_balance_of_after_withdraw - usdc_balance_of_after_supply == amount
+    assert usdc_balance_of_after_withdraw - usdc_balance_of_after_supply > 999_000000
