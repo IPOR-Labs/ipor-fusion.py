@@ -6,6 +6,7 @@ from constants import (
     ANVIL_WALLET_PRIVATE_KEY,
 )
 from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
+from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
     CheatingPlasmaVaultSystemFactory,
 )
@@ -200,7 +201,7 @@ def test_supply_and_withdraw_from_aave_v3():
     )
 
     supply = system.aave_v3().supply(
-        amount=vault_balance_before,
+        asset_address=AssetMapper.map("USDC"), amount=vault_balance_before, e_mode=300
     )
 
     system.plasma_vault().execute([supply])
