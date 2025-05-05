@@ -63,14 +63,15 @@ def test_should_deposit_and_withdraw_from_morpho_blue():
 
     # Record the vault's USDC balance before supplying to the market
     # This will be used to verify the correct amount was transferred
-    usdc_balance_of_before_supply = cheating.usdc().balance_of(vault_address)
+    usdc = cheating.erc20("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    usdc_balance_of_before_supply = usdc.balance_of(vault_address)
 
     # Execute the supply operation through the Plasma Vault
     # The vault will transfer USDC to the Morpho Blue protocol
     cheating.plasma_vault().execute([supply])
 
     # Record the vault's USDC balance after supplying to the market
-    usdc_balance_of_after_supply = cheating.usdc().balance_of(vault_address)
+    usdc_balance_of_after_supply = usdc.balance_of(vault_address)
 
     # Verify that the correct amount of USDC was transferred from the vault
     # The balance difference should exactly match the supplied amount
@@ -85,7 +86,7 @@ def test_should_deposit_and_withdraw_from_morpho_blue():
     cheating.plasma_vault().execute([withdraw])
 
     # Record the vault's USDC balance after withdrawing from the market
-    usdc_balance_of_after_withdraw = cheating.usdc().balance_of(vault_address)
+    usdc_balance_of_after_withdraw = usdc.balance_of(vault_address)
 
     # Verify that the correct amount of USDC was returned to the vault
     # The balance difference should exactly match the withdrawn amount

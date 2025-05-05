@@ -46,9 +46,11 @@ def test_should_open_new_position_ramses_v2():
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
     # given
+    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    usdt = system.erc20("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9")
     swap = system.uniswap_v3().swap(
-        token_in_address=system.usdc().address(),
-        token_out_address=system.usdt().address(),
+        token_in_address=usdc.address(),
+        token_out_address=usdt.address(),
         fee=100,
         token_in_amount=int(500e6),
         min_out_amount=0,
@@ -56,16 +58,12 @@ def test_should_open_new_position_ramses_v2():
 
     system.plasma_vault().execute([swap])
 
-    vault_usdc_balance_after_swap = system.usdc().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
-    vault_usdt_balance_after_swap = system.usdt().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
+    vault_usdc_balance_after_swap = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_after_swap = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     new_position = system.ramses_v2().new_position(
-        token0=system.usdc().address(),
-        token1=system.usdt().address(),
+        token0=usdc.address(),
+        token1=usdt.address(),
         fee=50,
         tick_lower=-100,
         tick_upper=100,
@@ -81,10 +79,10 @@ def test_should_open_new_position_ramses_v2():
     system.plasma_vault().execute([new_position])
 
     # then
-    vault_usdc_balance_after_new_position = system.usdc().balance_of(
+    vault_usdc_balance_after_new_position = usdc.balance_of(
         ARBITRUM.PILOT.V5.PLASMA_VAULT
     )
-    vault_usdt_balance_after_new_position = system.usdt().balance_of(
+    vault_usdt_balance_after_new_position = usdt.balance_of(
         ARBITRUM.PILOT.V5.PLASMA_VAULT
     )
 
@@ -105,17 +103,20 @@ def test_should_collect_all_after_decrease_liquidity():
     cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
+    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    usdt = system.erc20("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9")
+
     swap_action = system.uniswap_v3().swap(
-        token_in_address=system.usdc().address(),
-        token_out_address=system.usdt().address(),
+        token_in_address=usdc.address(),
+        token_out_address=usdt.address(),
         fee=100,
         token_in_amount=int(500e6),
         min_out_amount=0,
     )
 
     new_position = system.ramses_v2().new_position(
-        token0=system.usdc().address(),
-        token1=system.usdt().address(),
+        token0=usdc.address(),
+        token1=usdt.address(),
         fee=50,
         tick_lower=-100,
         tick_upper=100,
@@ -145,12 +146,8 @@ def test_should_collect_all_after_decrease_liquidity():
 
     system.plasma_vault().execute([decrease_action])
 
-    vault_usdc_balance_before_collect = system.usdc().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
-    vault_usdt_balance_before_collect = system.usdt().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
+    vault_usdc_balance_before_collect = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_before_collect = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     collect_action = system.ramses_v2().collect(
         token_ids=[new_token_id],
@@ -159,12 +156,8 @@ def test_should_collect_all_after_decrease_liquidity():
     system.plasma_vault().execute([collect_action])
 
     # then
-    vault_usdc_balance_after_collect = system.usdc().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
-    vault_usdt_balance_after_collect = system.usdt().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
+    vault_usdc_balance_after_collect = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_after_collect = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     assert (
         vault_usdc_balance_after_collect - vault_usdc_balance_before_collect
@@ -190,17 +183,20 @@ def test_should_increase_liquidity():
     cheating.prank(system.access_manager().owner())
     cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
 
+    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    usdt = system.erc20("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9")
+
     swap = system.uniswap_v3().swap(
-        token_in_address=system.usdc().address(),
-        token_out_address=system.usdt().address(),
+        token_in_address=usdc.address(),
+        token_out_address=usdt.address(),
         fee=100,
         token_in_amount=(int(500e6)),
         min_out_amount=0,
     )
 
     new_position = system.ramses_v2().new_position(
-        token0=system.usdc().address(),
-        token1=system.usdt().address(),
+        token0=usdc.address(),
+        token1=usdt.address(),
         fee=50,
         tick_lower=-100,
         tick_upper=100,
@@ -218,8 +214,8 @@ def test_should_increase_liquidity():
 
     # Increase position
     increase_action = system.ramses_v2().increase_position(
-        token0=system.usdc().address(),
-        token1=system.usdt().address(),
+        token0=usdc.address(),
+        token1=usdt.address(),
         token_id=new_token_id,
         amount0_desired=int(99e6),
         amount1_desired=int(99e6),
@@ -228,23 +224,15 @@ def test_should_increase_liquidity():
         deadline=int(time.time()) + 100,
     )
 
-    vault_usdc_balance_before_increase = system.usdc().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
-    vault_usdt_balance_before_increase = system.usdt().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
+    vault_usdc_balance_before_increase = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_before_increase = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     # when
     system.plasma_vault().execute([increase_action])
 
     # then
-    vault_usdc_balance_after_increase = system.usdc().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
-    vault_usdt_balance_after_increase = system.usdt().balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
+    vault_usdc_balance_after_increase = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdt_balance_after_increase = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
 
     assert (
         vault_usdc_balance_after_increase - vault_usdc_balance_before_increase
@@ -266,17 +254,20 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
     cheating.access_manager().grant_role(Roles.CLAIM_REWARDS_ROLE, system.alpha(), 0)
     cheating.access_manager().grant_role(Roles.TRANSFER_REWARDS_ROLE, system.alpha(), 0)
 
+    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    usdt = system.erc20("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9")
+
     swap = system.uniswap_v3().swap(
-        token_in_address=system.usdc().address(),
-        token_out_address=system.usdt().address(),
+        token_in_address=usdc.address(),
+        token_out_address=usdt.address(),
         fee=100,
         token_in_amount=int(500e6),
         min_out_amount=0,
     )
 
     new_position = system.ramses_v2().new_position(
-        token0=system.usdc().address(),
-        token1=system.usdt().address(),
+        token0=usdc.address(),
+        token1=usdt.address(),
         fee=50,
         tick_lower=-100,
         tick_upper=100,
@@ -319,36 +310,36 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
     ram_after_transfer = system.ramses_v2().ram().balance_of(system.alpha())
     assert ram_after_transfer > 0
 
-    usdc_before_swap_ram = system.usdc().balance_of(system.alpha())
+    usdc_before_swap_ram = usdc.balance_of(system.alpha())
+
+    weth = cheating.erc20("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1")
 
     # swap RAM -> USDC
     path = [
         system.ramses_v2().ram().address(),
         10000,
-        system.weth().address(),
+        weth.address(),
         500,
-        system.usdc().address(),
+        usdc.address(),
     ]
     uniswap_v3_universal_router.swap(
         system.ramses_v2().ram().address(), path, ram_after_transfer
     )
 
-    usdc_after_swap_ram = system.usdc().balance_of(system.alpha())
+    usdc_after_swap_ram = usdc.balance_of(system.alpha())
 
     rewards_in_usdc = usdc_after_swap_ram - usdc_before_swap_ram
     assert rewards_in_usdc > 0
 
     # Transfer USDC to rewards_claim_manager
-    system.usdc().transfer(
-        to=system.rewards_claim_manager().address(), amount=rewards_in_usdc
-    )
+    usdc.transfer(to=system.rewards_claim_manager().address(), amount=rewards_in_usdc)
 
-    usdc_after_transfer = system.usdc().balance_of(system.alpha())
+    usdc_after_transfer = usdc.balance_of(system.alpha())
     assert usdc_after_transfer == 0
 
     # Update balance on rewards_claim_manager
     system.rewards_claim_manager().update_balance()
-    rewards_claim_manager_balance_before_vesting = system.usdc().balance_of(
+    rewards_claim_manager_balance_before_vesting = usdc.balance_of(
         system.rewards_claim_manager().address()
     )
     assert rewards_claim_manager_balance_before_vesting > 0
@@ -359,7 +350,7 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
     anvil.move_time(DAY)
     system.rewards_claim_manager().update_balance()
 
-    rewards_claim_manager_balance_after_vesting = system.usdc().balance_of(
+    rewards_claim_manager_balance_after_vesting = usdc.balance_of(
         system.rewards_claim_manager().address()
     )
 

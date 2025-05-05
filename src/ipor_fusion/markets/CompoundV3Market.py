@@ -2,8 +2,6 @@ from typing import List
 
 from web3 import Web3
 
-from ipor_fusion.AssetMapper import AssetMapper
-from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.TransactionExecutor import TransactionExecutor
@@ -30,16 +28,10 @@ class CompoundV3Market:
                 self._compound_v3_supply_fuse = CompoundV3SupplyFuse(checksum_fuse)
                 self._any_fuse_supported = True
 
-        if self._any_fuse_supported:
-            self._compound_v3_usdc_c_token = ERC20(
-                transaction_executor,
-                AssetMapper.map(chain_id=chain_id, asset_symbol="cUSDCv3"),
-            )
-
     def is_market_supported(self) -> bool:
         return self._any_fuse_supported
 
-    def supply(self, amount: int) -> FuseAction:
+    def supply(self, asset_address: str, amount: int) -> FuseAction:
         if not hasattr(self, "_compound_v3_supply_fuse"):
             raise UnsupportedFuseError(
                 "CompoundV3SupplyFuse is not supported by PlasmaVault"
@@ -47,11 +39,11 @@ class CompoundV3Market:
 
         market_id = MarketId(
             CompoundV3SupplyFuse.PROTOCOL_ID,
-            AssetMapper.map(chain_id=self._chain_id, asset_symbol="USDC"),
+            asset_address,
         )
         return self._compound_v3_supply_fuse.supply(market_id, amount)
 
-    def withdraw(self, amount: int) -> FuseAction:
+    def withdraw(self, asset_address: str, amount: int) -> FuseAction:
         if not hasattr(self, "_compound_v3_supply_fuse"):
             raise UnsupportedFuseError(
                 "CompoundV3SupplyFuse is not supported by PlasmaVault"
@@ -59,9 +51,6 @@ class CompoundV3Market:
 
         market_id = MarketId(
             CompoundV3SupplyFuse.PROTOCOL_ID,
-            AssetMapper.map(chain_id=self._chain_id, asset_symbol="USDC"),
+            asset_address,
         )
         return self._compound_v3_supply_fuse.withdraw(market_id, amount)
-
-    def usdc_c_token(self) -> ERC20:
-        return self._compound_v3_usdc_c_token

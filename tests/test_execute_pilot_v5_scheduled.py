@@ -10,6 +10,8 @@ from ipor_fusion.IporFusionMarkets import IporFusionMarkets
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.Roles import Roles
 
+USDC_ADDRESS = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ def test_should_deposit():
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     ).get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
-    usdc = system.usdc()
+    usdc = system.erc20(USDC_ADDRESS)
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
@@ -46,7 +48,7 @@ def test_should_deposit():
 
     # Set the account for the transaction executor to the whitelisted account
     cheating.prank(whale_account)
-    cheating.usdc().transfer(system.alpha(), amount)
+    cheating.erc20(USDC_ADDRESS).transfer(system.alpha(), amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
 
     vault_total_assets_before = vault.total_assets()
@@ -82,6 +84,7 @@ def test_should_mint():
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
+    usdc = system.erc20(USDC_ADDRESS)
 
     cheating = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(), private_key=ANVIL_WALLET_PRIVATE_KEY
@@ -98,12 +101,13 @@ def test_should_mint():
 
     # Transfer USDC to system.alpha()
     cheating.prank(whale_account)
-    cheating.usdc().transfer(system.alpha(), amount)
-    system.usdc().approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
+    cheating_usdc = cheating.erc20(USDC_ADDRESS)
+    cheating_usdc.transfer(system.alpha(), amount)
+    usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
 
     vault_total_assets_before = vault.total_assets()
     user_vault_balance_before = vault.balance_of(system.alpha())
-    plasma_vault_underlying_balance_before = system.usdc().balance_of(
+    plasma_vault_underlying_balance_before = usdc.balance_of(
         ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT
     )
 
@@ -131,7 +135,7 @@ def test_should_mint():
         abs(
             plasma_vault_underlying_balance_before
             + user_vault_underlying_balance_after
-            - system.usdc().balance_of(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
+            - cheating_usdc.balance_of(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
         )
         < 5000
     ), "ERC20(USDC).balanceOf(address(plasmaVault))"
@@ -158,7 +162,7 @@ def test_should_redeem():
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
     withdraw_manager = system.withdraw_manager()
-    usdc = system.usdc()
+    usdc = system.erc20(USDC_ADDRESS)
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
@@ -175,7 +179,8 @@ def test_should_redeem():
 
     # Set the account for the transaction executor to the whitelisted account
     cheating.prank(whale_account)
-    cheating.usdc().transfer(system.alpha(), amount)
+    cheating_usdc = cheating.erc20(USDC_ADDRESS)
+    cheating_usdc.transfer(system.alpha(), amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
 
     vault_total_assets_before = vault.total_assets()
@@ -241,7 +246,7 @@ def test_should_withdraw():
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
     withdraw_manager = system.withdraw_manager()
-    usdc = system.usdc()
+    usdc = system.erc20(USDC_ADDRESS)
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
@@ -260,7 +265,8 @@ def test_should_withdraw():
 
     # Transfer USDC to user_one
     cheating.prank(whale_account)
-    cheating.usdc().transfer(system.alpha(), amount)
+    cheating_usdc = cheating.erc20(USDC_ADDRESS)
+    cheating_usdc.transfer(system.alpha(), amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, amount)
 
     vault.deposit(amount, system.alpha())
@@ -319,7 +325,7 @@ def test_should_transfer():
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
-    usdc = system.usdc()
+    usdc = system.erc20(USDC_ADDRESS)
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
@@ -338,7 +344,8 @@ def test_should_transfer():
 
     # Transfer USDC to user_one
     cheating.prank(whale_account)
-    cheating.usdc().transfer(user_one, amount)
+    cheating_usdc = cheating.erc20(USDC_ADDRESS)
+    cheating_usdc.transfer(user_one, amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, 3 * amount)
 
     vault.deposit(amount, user_one)
@@ -363,7 +370,7 @@ def test_should_transfer_from():
     )
     system = system_factory.get(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT)
     vault = system.plasma_vault()
-    usdc = system.usdc()
+    usdc = system.erc20(USDC_ADDRESS)
 
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
@@ -382,7 +389,8 @@ def test_should_transfer_from():
 
     # Transfer USDC to user_one
     cheating.prank(whale_account)
-    cheating.usdc().transfer(user_one, amount)
+    cheating_usdc = cheating.erc20(USDC_ADDRESS)
+    cheating_usdc.transfer(user_one, amount)
     usdc.approve(ARBITRUM.PILOT.SCHEDULED.PLASMA_VAULT, 3 * amount)
 
     vault.deposit(amount, user_one)

@@ -25,6 +25,7 @@ anvil = AnvilTestContainerStarter(fork_url)
 anvil.start()
 
 
+# pylint: disable=too-many-locals
 def test_should_swap_on_base():
     """
     Test to verify the swapping functionality on Base network.
@@ -52,27 +53,29 @@ def test_should_swap_on_base():
         provider_url=anvil.get_anvil_http_url(),
         private_key=ANVIL_WALLET_PRIVATE_KEY,
     )
-    user = cheating_system_factory.get(alpha.plasma_vault().address())
+    cheating = cheating_system_factory.get(alpha.plasma_vault().address())
 
     # Grant necessary roles to enable vault interaction
     # First, impersonate an atomist to grant roles
-    user.prank(alpha.access_manager().atomists()[0])
-    user.access_manager().grant_role(Roles.ALPHA_ROLE, alpha.alpha(), 0)
-    user.access_manager().grant_role(Roles.WHITELIST_ROLE, user_account, 0)
+    cheating.prank(alpha.access_manager().atomists()[0])
+    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, alpha.alpha(), 0)
+    cheating.access_manager().grant_role(Roles.WHITELIST_ROLE, user_account, 0)
 
     # DEPOSIT PHASE
     # Setup initial deposit of 1 cbBTC
     amount = 1_00000000  # 1 cbBTC with proper decimals
 
     # Approve and deposit cbBTC to the Plasma Vault
-    user.prank(user_account)
-    user.cbBTC().approve(alpha.plasma_vault().address(), amount)
-    user.plasma_vault().deposit(amount, user_account)
+    cheating.prank(user_account)
+    user_cbBTC = cheating.erc20("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf")
+    user_cbBTC.approve(alpha.plasma_vault().address(), amount)
+    cheating.plasma_vault().deposit(amount, user_account)
 
     # SWAP CONFIGURATION
     # Define Uniswap V3 router address for swap execution
+    alpha_cbBTC = alpha.erc20("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf")
     uniswap_v_3_universal_router_address = "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"
-    targets = [alpha.cbBTC().address(), uniswap_v_3_universal_router_address]
+    targets = [alpha_cbBTC.address(), uniswap_v_3_universal_router_address]
 
     # Prepare first transaction: Transfer cbBTC to router
     function_selector_0 = function_signature_to_4byte_selector(
@@ -85,9 +88,10 @@ def test_should_swap_on_base():
     function_call_0 = function_selector_0 + function_args_0
 
     # Configure swap path: cbBTC -> USDC with 0.5% fee tier
+    alpha_USDC = alpha.erc20("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
     path = encode_packed(
         ["address", "uint24", "address"],
-        [alpha.cbBTC().address(), 500, alpha.usdc().address()],
+        [alpha_cbBTC.address(), 500, alpha_USDC.address()],
     )
 
     # Prepare swap parameters
@@ -114,20 +118,20 @@ def test_should_swap_on_base():
     # Combine transactions and create swap instruction
     data = [function_call_0, function_call_1]
     swap = alpha.universal().swap(
-        alpha.cbBTC().address(), alpha.usdc().address(), int(amount / 2), targets, data
+        alpha_cbBTC.address(), alpha_USDC.address(), int(amount / 2), targets, data
     )
 
     # EXECUTION AND VERIFICATION
     # Record balances before swap
-    cbBTC_balance_before = alpha.cbBTC().balance_of(alpha.plasma_vault().address())
-    usdc_balance_before = alpha.usdc().balance_of(alpha.plasma_vault().address())
+    cbBTC_balance_before = alpha_cbBTC.balance_of(alpha.plasma_vault().address())
+    usdc_balance_before = alpha_USDC.balance_of(alpha.plasma_vault().address())
 
     # Execute the swap
     alpha.plasma_vault().execute([swap])
 
     # Record balances after swap
-    cbBTC_balance_after = alpha.cbBTC().balance_of(alpha.plasma_vault().address())
-    usdc_balance_after = alpha.usdc().balance_of(alpha.plasma_vault().address())
+    cbBTC_balance_after = alpha_cbBTC.balance_of(alpha.plasma_vault().address())
+    usdc_balance_after = alpha_USDC.balance_of(alpha.plasma_vault().address())
 
     # Verify the swap was successful
     assert (
@@ -163,12 +167,14 @@ def test_should_swap_weth_to_pepe_on_base():
     alpha = cheating_system_factory.get(vault_address)
     alpha.prank(alpha_address)
 
-    amount = alpha.weth().balance_of(vault_address)
+    alpha_weth = alpha.erc20("0x4200000000000000000000000000000000000006")
+    alpha_pepe = alpha.erc20("0x52b492a33E447Cdb854c7FC19F1e57E8BfA1777D")
+    amount = alpha_weth.balance_of(vault_address)
 
     # SWAP CONFIGURATION
     # Define Uniswap V3 router address for swap execution
     uniswap_v_3_universal_router_address = "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"
-    targets = [alpha.weth().address(), uniswap_v_3_universal_router_address]
+    targets = [alpha_weth.address(), uniswap_v_3_universal_router_address]
 
     # Prepare first transaction: Transfer WETH to router
     function_selector_0 = function_signature_to_4byte_selector(
@@ -183,7 +189,7 @@ def test_should_swap_weth_to_pepe_on_base():
     # Configure swap path: WETH -> PEPE with 0.5% fee tier
     path = encode_packed(
         ["address", "uint24", "address"],
-        [alpha.weth().address(), 10000, alpha.pepe().address()],
+        [alpha_weth.address(), 10000, alpha_pepe.address()],
     )
 
     # Prepare swap parameters
@@ -210,21 +216,21 @@ def test_should_swap_weth_to_pepe_on_base():
     # Combine transactions and create swap instruction
     data = [function_call_0, function_call_1]
     swap = alpha.universal().swap(
-        alpha.weth().address(), alpha.pepe().address(), amount, targets, data
+        alpha_weth.address(), alpha_pepe.address(), amount, targets, data
     )
 
     # EXECUTION AND VERIFICATION
     # Record balances before swap
-    weth_balance_before = alpha.weth().balance_of(alpha.plasma_vault().address())
-    pepe_balance_before = alpha.pepe().balance_of(alpha.plasma_vault().address())
+    weth_balance_before = alpha_weth.balance_of(alpha.plasma_vault().address())
+    pepe_balance_before = alpha_pepe.balance_of(alpha.plasma_vault().address())
 
     # Execute the swap
     alpha.prank(alpha_address)
     alpha.plasma_vault().execute([swap])
 
     # Record balances after swap
-    weth_balance_after = alpha.weth().balance_of(alpha.plasma_vault().address())
-    pepe_balance_after = alpha.pepe().balance_of(alpha.plasma_vault().address())
+    weth_balance_after = alpha_weth.balance_of(alpha.plasma_vault().address())
+    pepe_balance_after = alpha_pepe.balance_of(alpha.plasma_vault().address())
 
     assert weth_balance_before == 5000000000000000
     assert weth_balance_after == 0

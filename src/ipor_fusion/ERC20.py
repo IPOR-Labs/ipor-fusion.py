@@ -1,6 +1,7 @@
 from eth_abi import encode, decode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
+from web3 import Web3
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.types import Amount, Decimals
@@ -8,11 +9,9 @@ from ipor_fusion.types import Amount, Decimals
 
 class ERC20:
 
-    def __init__(
-        self, transaction_executor: TransactionExecutor, asset_address: ChecksumAddress
-    ):
+    def __init__(self, transaction_executor: TransactionExecutor, asset_address: str):
         self._transaction_executor = transaction_executor
-        self._asset_address = asset_address
+        self._asset_address = Web3.to_checksum_address(asset_address)
 
     def address(self) -> ChecksumAddress:
         return self._asset_address
