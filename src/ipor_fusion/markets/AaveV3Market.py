@@ -3,8 +3,6 @@ from typing import List
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
-from ipor_fusion.AssetMapper import AssetMapper
-from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.TransactionExecutor import TransactionExecutor
@@ -30,12 +28,6 @@ class AaveV3Market:
             if checksum_fuse in FuseMapper.map(chain_id, "AaveV3SupplyFuse"):
                 self._aave_v3_supply_fuse = AaveV3SupplyFuse(checksum_fuse)
                 self._any_fuse_supported = True
-
-        if self._any_fuse_supported:
-            self._usdc_a_token_arb_usdc_n = ERC20(
-                transaction_executor,
-                AssetMapper.map(chain_id=chain_id, asset_symbol="aArbUSDCn"),
-            )
 
     def is_market_supported(self) -> bool:
         return self._any_fuse_supported
@@ -63,6 +55,3 @@ class AaveV3Market:
 
         market_id = MarketId(AaveV3SupplyFuse.PROTOCOL_ID, asset_address)
         return self._aave_v3_supply_fuse.withdraw(market_id, amount)
-
-    def usdc_a_token_arb_usdc_n(self):
-        return self._usdc_a_token_arb_usdc_n
