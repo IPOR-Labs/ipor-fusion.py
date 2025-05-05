@@ -1,10 +1,10 @@
 from typing import List
 
 from eth_abi import decode
+from eth_typing import ChecksumAddress
 from web3 import Web3
 from web3.types import TxReceipt
 
-from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
@@ -193,12 +193,10 @@ class RamsesV2Market:
         return self._ramses_v2_claim_fuse.claim(token_ids, token_rewards)
 
     def ram(self):
-        return ERC20(self._transaction_executor, AssetMapper.map(self._chain_id, "RAM"))
+        return ERC20(self._transaction_executor, self.get_RAM())
 
     def x_ram(self):
-        return ERC20(
-            self._transaction_executor, AssetMapper.map(self._chain_id, "xRAM")
-        )
+        return ERC20(self._transaction_executor, self.get_xRAM())
 
     def extract_new_position_enter_events(
         self, receipt: TxReceipt
@@ -252,3 +250,19 @@ class RamsesV2Market:
                     )
                 )
         return result
+
+    def get_RAM(self) -> ChecksumAddress:
+        if self._chain_id == 42161:
+            return Web3.to_checksum_address(
+                "0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418"
+            )
+
+        raise BaseException("Chain ID not supported")
+
+    def get_xRAM(self) -> ChecksumAddress:
+        if self._chain_id == 42161:
+            return Web3.to_checksum_address(
+                "0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7"
+            )
+
+        raise BaseException("Chain ID not supported")

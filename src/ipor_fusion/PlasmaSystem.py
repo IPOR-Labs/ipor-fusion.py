@@ -1,18 +1,15 @@
 import logging
-from typing import Optional
 
 from eth_typing import ChecksumAddress
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.AccessManager import AccessManager
-from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.WithdrawManager import WithdrawManager
-from ipor_fusion.error.UnsupportedAsset import UnsupportedAsset
 from ipor_fusion.error.UnsupportedMarketError import UnsupportedMarketError
 from ipor_fusion.markets.AaveV3Market import AaveV3Market
 from ipor_fusion.markets.CompoundV3Market import CompoundV3Market
@@ -76,25 +73,10 @@ class PlasmaSystem:
     def price_oracle_middleware(self) -> PriceOracleMiddleware:
         return PriceOracleMiddleware(
             transaction_executor=self._transaction_executor,
-            price_oracle_middleware_address=self.plasma_vault().get_price_oracle_middleware(),
+            price_oracle_middleware_address=self.plasma_vault().get_price_oracle_middleware_address(),
         )
 
-    def usdc(self) -> ERC20:
-        return self._initialize_asset(asset_symbol="USDC")
-
-    def cbBTC(self) -> ERC20:
-        return self._initialize_asset(asset_symbol="cbBTC")
-
-    def usdt(self) -> ERC20:
-        return self._initialize_asset(asset_symbol="USDT")
-
-    def weth(self) -> ERC20:
-        return self._initialize_asset(asset_symbol="WETH")
-
-    def pepe(self) -> ERC20:
-        return self._initialize_asset(asset_symbol="PEPE")
-
-    def erc20(self, asset_address: ChecksumAddress) -> ERC20:
+    def erc20(self, asset_address: str) -> ERC20:
         return ERC20(
             transaction_executor=self._transaction_executor,
             asset_address=asset_address,
@@ -219,18 +201,3 @@ class PlasmaSystem:
 
     def chain_id(self):
         return self._chain_id
-
-    def _initialize_asset(self, asset_symbol: str) -> Optional[ERC20]:
-        try:
-            asset_address = AssetMapper.map(
-                chain_id=self._chain_id, asset_symbol=asset_symbol
-            )
-            if asset_address:
-                return ERC20(
-                    transaction_executor=self._transaction_executor,
-                    asset_address=asset_address,
-                )
-        except UnsupportedAsset:
-            log.debug("Unsupported asset: %s", asset_symbol)
-
-        return None

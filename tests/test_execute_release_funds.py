@@ -53,6 +53,8 @@ def test_should_release_funds():
     # Create an alpha instance from the system factory
     alpha = system_factory.get(vault_address)
 
+    usdc = alpha.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+
     # Set up the Cheating Plasma Vault System to manipulate roles
     cheating_system_factory = CheatingPlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),
@@ -71,8 +73,9 @@ def test_should_release_funds():
     amount = Amount(1000_000000)  # Equivalent to 100 * 1e6 in USDC
 
     # Approve and deposit USDC to the Plasma Vault for the specified user account
+    user_usdc = user.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
     user.prank(user_account)
-    user.usdc().approve(alpha.plasma_vault().address(), amount)
+    user_usdc.approve(alpha.plasma_vault().address(), amount)
     user.plasma_vault().deposit(amount, user_account)
 
     # Calculate the maximum amount the user can withdraw from the vault
@@ -100,7 +103,7 @@ def test_should_release_funds():
     anvil.move_time(Period.HOUR)
 
     # Capture user's balance before withdrawal
-    user_balance_before = alpha.usdc().balance_of(user_account)
+    user_balance_before = usdc.balance_of(user_account)
 
     # Determine the current max withdrawal amount again
     to_withdraw = alpha.plasma_vault().max_withdraw(user_account)
@@ -111,7 +114,7 @@ def test_should_release_funds():
     )
 
     # Verify that the user's balance has increased by the correct amount after withdrawal
-    user_balance_after = alpha.usdc().balance_of(user_account)
+    user_balance_after = usdc.balance_of(user_account)
     user_balance_change = user_balance_after - user_balance_before
     assert user_balance_change == to_withdraw
 
@@ -145,7 +148,7 @@ def test_should_release_funds_shares():
     # Get references to key contracts in the vault system
     vault = cheating.plasma_vault()
     withdraw_manager = cheating.withdraw_manager()
-    usdc = cheating.usdc()
+    usdc = cheating.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
 
     # Set up the roles and permissions required for the test
     # First, impersonate the access manager's owner to grant roles
@@ -197,7 +200,7 @@ def test_should_release_funds_shares():
     anvil.move_time(Period.HOUR)
 
     # Record user's USDC balance before completing the withdrawal
-    user_balance_before = cheating.usdc().balance_of(user_account)
+    user_balance_before = usdc.balance_of(user_account)
 
     # Complete the withdrawal process:
     # 1. Impersonate the user again

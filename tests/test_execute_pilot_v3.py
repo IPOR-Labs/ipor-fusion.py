@@ -1,12 +1,13 @@
 import os
 
+from web3 import Web3
+
 from constants import (
     ARBITRUM,
     ANVIL_WALLET,
     ANVIL_WALLET_PRIVATE_KEY,
 )
 from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
-from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
     CheatingPlasmaVaultSystemFactory,
 )
@@ -51,7 +52,8 @@ def test_supply_and_withdraw_from_gearbox():
     withdraw_from_fluid(system)
 
     # given for supply
-    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    vault_balance_before = usdc.balance_of(system.plasma_vault().address())
     gearbox_farm_balance_before = (
         system.gearbox_v3().farm_pool().balance_of(system.plasma_vault().address())
     )
@@ -62,7 +64,7 @@ def test_supply_and_withdraw_from_gearbox():
 
     system.plasma_vault().execute(supply_and_stake)
 
-    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    vault_balance_after = usdc.balance_of(system.plasma_vault().address())
     gearbox_farm_balance_after = (
         system.gearbox_v3().farm_pool().balance_of(system.plasma_vault().address())
     )
@@ -75,7 +77,7 @@ def test_supply_and_withdraw_from_gearbox():
     ), "gearbox_farm_balance_after > 11_000e6"
 
     # given for withdraw
-    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    vault_balance_before = usdc.balance_of(system.plasma_vault().address())
     gearbox_farm_balance_before = (
         system.gearbox_v3().farm_pool().balance_of(system.plasma_vault().address())
     )
@@ -87,7 +89,7 @@ def test_supply_and_withdraw_from_gearbox():
     system.plasma_vault().execute(unstake_and_withdraw)
 
     # then after withdraw
-    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    vault_balance_after = usdc.balance_of(system.plasma_vault().address())
     gearbox_farm_balance_after = (
         system.gearbox_v3().farm_pool().balance_of(system.plasma_vault().address())
     )
@@ -118,7 +120,8 @@ def test_supply_and_withdraw_from_fluid():
 
     withdraw_from_fluid(system)
 
-    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    vault_balance_before = usdc.balance_of(system.plasma_vault().address())
     fluid_staking_balance_before = (
         system.fluid_instadapp()
         .staking_pool()
@@ -131,7 +134,7 @@ def test_supply_and_withdraw_from_fluid():
 
     system.plasma_vault().execute(supply_and_stake)
 
-    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    vault_balance_after = usdc.balance_of(system.plasma_vault().address())
     fluid_staking_balance_after = (
         system.fluid_instadapp()
         .staking_pool()
@@ -146,7 +149,7 @@ def test_supply_and_withdraw_from_fluid():
     ), "fluid_staking_balance_after > 11_000e6"
 
     # given for withdraw
-    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
+    vault_balance_before = usdc.balance_of(system.plasma_vault().address())
     fluid_staking_balance_before = (
         system.fluid_instadapp()
         .staking_pool()
@@ -160,7 +163,7 @@ def test_supply_and_withdraw_from_fluid():
     system.plasma_vault().execute(unstake_and_withdraw)
 
     # then after withdraw
-    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
+    vault_balance_after = usdc.balance_of(system.plasma_vault().address())
     fluid_staking_balance_after = (
         system.fluid_instadapp()
         .staking_pool()
@@ -193,26 +196,29 @@ def test_supply_and_withdraw_from_aave_v3():
 
     withdraw_from_fluid(system)
 
-    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
-    protocol_balance_before = (
-        system.aave_v3()
-        .usdc_a_token_arb_usdc_n()
-        .balance_of(system.plasma_vault().address())
+    usdc_a_token_arb_usdc_n = system.erc20(
+        Web3.to_checksum_address("0x724dc807b04555b71ed48a6896b6f41593b8c637")
+    )
+
+    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    vault_balance_before = usdc.balance_of(system.plasma_vault().address())
+    protocol_balance_before = usdc_a_token_arb_usdc_n.balance_of(
+        system.plasma_vault().address()
     )
 
     supply = system.aave_v3().supply(
-        asset_address=AssetMapper.map(chain_id=42161, asset_symbol="USDC"),
+        asset_address=Web3.to_checksum_address(
+            "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+        ),
         amount=vault_balance_before,
         e_mode=300,
     )
 
     system.plasma_vault().execute([supply])
 
-    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
-    protocol_balance_after = (
-        system.aave_v3()
-        .usdc_a_token_arb_usdc_n()
-        .balance_of(system.plasma_vault().address())
+    vault_balance_after = usdc.balance_of(system.plasma_vault().address())
+    protocol_balance_after = usdc_a_token_arb_usdc_n.balance_of(
+        system.plasma_vault().address()
     )
 
     assert vault_balance_before > 11_000e6, "vault_balance_before > 11_000e6"
@@ -220,26 +226,24 @@ def test_supply_and_withdraw_from_aave_v3():
     assert protocol_balance_before == 0, "protocol_balance_before == 0"
     assert protocol_balance_after > 11_000e6, "protocol_balance_after > 11_000e6"
 
-    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
-    protocol_balance_before = (
-        system.aave_v3()
-        .usdc_a_token_arb_usdc_n()
-        .balance_of(system.plasma_vault().address())
+    vault_balance_before = usdc.balance_of(system.plasma_vault().address())
+    protocol_balance_before = usdc_a_token_arb_usdc_n.balance_of(
+        system.plasma_vault().address()
     )
 
     withdraw = system.aave_v3().withdraw(
-        asset_address=AssetMapper.map(chain_id=42161, asset_symbol="USDC"),
+        asset_address=Web3.to_checksum_address(
+            "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+        ),
         amount=protocol_balance_before,
     )
 
     system.plasma_vault().execute([withdraw])
 
     # then after withdraw
-    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
-    protocol_balance_after = (
-        system.aave_v3()
-        .usdc_a_token_arb_usdc_n()
-        .balance_of(system.plasma_vault().address())
+    vault_balance_after = usdc.balance_of(system.plasma_vault().address())
+    protocol_balance_after = usdc_a_token_arb_usdc_n.balance_of(
+        system.plasma_vault().address()
     )
 
     assert vault_balance_before == 0, "vault_balance_before == 0"
@@ -266,21 +270,25 @@ def test_supply_and_withdraw_from_compound_v3():
 
     withdraw_from_fluid(system)
 
-    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
-    protocol_balance_before = (
-        system.compound_v3().usdc_c_token().balance_of(system.plasma_vault().address())
+    usdc_c_token = system.erc20(
+        asset_address=Web3.to_checksum_address(
+            "0x9c4ec768c28520b50860ea7a15bd7213a9ff58bf"
+        )
     )
 
+    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+    vault_balance_before = usdc.balance_of(system.plasma_vault().address())
+    protocol_balance_before = usdc_c_token.balance_of(system.plasma_vault().address())
+
     supply = system.compound_v3().supply(
+        asset_address=usdc.address(),
         amount=vault_balance_before,
     )
 
     system.plasma_vault().execute([supply])
 
-    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
-    protocol_balance_after = (
-        system.compound_v3().usdc_c_token().balance_of(system.plasma_vault().address())
-    )
+    vault_balance_after = usdc.balance_of(system.plasma_vault().address())
+    protocol_balance_after = usdc_c_token.balance_of(system.plasma_vault().address())
 
     assert vault_balance_before > 11_000e6, "vault_balance_before > 11_000e6"
     assert vault_balance_after == 0, "vault_balance_after == 0"
@@ -288,22 +296,19 @@ def test_supply_and_withdraw_from_compound_v3():
     assert protocol_balance_after > 11_000e6, "protocol_balance_after > 11_000e6"
 
     # given for withdraw
-    vault_balance_before = system.usdc().balance_of(system.plasma_vault().address())
-    protocol_balance_before = (
-        system.compound_v3().usdc_c_token().balance_of(system.plasma_vault().address())
-    )
+    vault_balance_before = usdc.balance_of(system.plasma_vault().address())
+    protocol_balance_before = usdc_c_token.balance_of(system.plasma_vault().address())
 
     withdraw = system.compound_v3().withdraw(
+        asset_address=usdc.address(),
         amount=protocol_balance_before,
     )
 
     system.plasma_vault().execute([withdraw])
 
     # then after withdraw
-    vault_balance_after = system.usdc().balance_of(system.plasma_vault().address())
-    protocol_balance_after = (
-        system.compound_v3().usdc_c_token().balance_of(system.plasma_vault().address())
-    )
+    vault_balance_after = usdc.balance_of(system.plasma_vault().address())
+    protocol_balance_after = usdc_c_token.balance_of(system.plasma_vault().address())
 
     assert vault_balance_before == 0, "vault_balance_before == 0"
     assert vault_balance_after > 11_000e6, "vault_balance_after > 11_000e6"

@@ -3,7 +3,6 @@ from typing import List
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
-from ipor_fusion.AssetMapper import AssetMapper
 from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.MarketId import MarketId
@@ -31,11 +30,9 @@ class FluidInstadappMarket:
                 chain_id=chain_id, fuse_name="Erc4626SupplyFuseMarketId5"
             ):
                 self._fluid_instadapp_pool_fuse = FluidInstadappSupplyFuse(
-                    AssetMapper.map(chain_id=chain_id, asset_symbol="fUSDC"),
+                    self.get_fUSDC(),
                     checksum_fuse,
-                    AssetMapper.map(
-                        chain_id=chain_id, asset_symbol="FluidLendingStakingRewardsUsdc"
-                    ),
+                    self.get_FluidLendingStakingRewardsUsdc(),
                     self.get_safe_fuse_address(
                         chain_id, fuses, "FluidInstadappStakingSupplyFuse"
                     ),
@@ -45,13 +42,11 @@ class FluidInstadappMarket:
         if self._any_fuse_supported:
             self._pool = ERC20(
                 transaction_executor,
-                AssetMapper.map(chain_id=chain_id, asset_symbol="fUSDC"),
+                self.get_fUSDC(),
             )
             self._staking_pool = ERC20(
                 transaction_executor,
-                AssetMapper.map(
-                    chain_id=chain_id, asset_symbol="FluidLendingStakingRewardsUsdc"
-                ),
+                self.get_FluidLendingStakingRewardsUsdc(),
             )
 
     @staticmethod
@@ -87,7 +82,7 @@ class FluidInstadappMarket:
 
         market_id = MarketId(
             FluidInstadappSupplyFuse.PROTOCOL_ID,
-            AssetMapper.map(chain_id=self._chain_id, asset_symbol="fUSDC"),
+            self.get_fUSDC(),
         )
         return self._fluid_instadapp_pool_fuse.supply_and_stake(market_id, amount)
 
@@ -99,6 +94,30 @@ class FluidInstadappMarket:
 
         market_id = MarketId(
             FluidInstadappSupplyFuse.PROTOCOL_ID,
-            AssetMapper.map(chain_id=self._chain_id, asset_symbol="fUSDC"),
+            self.get_fUSDC(),
         )
         return self._fluid_instadapp_pool_fuse.unstake_and_withdraw(market_id, amount)
+
+    def get_fUSDC(self) -> ChecksumAddress:
+        if self._chain_id == 42161:
+            return Web3.to_checksum_address(
+                "0x1a996cb54bb95462040408c06122d45d6cdb6096"
+            )
+        if self._chain_id == 8453:
+            return Web3.to_checksum_address(
+                "0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169"
+            )
+
+        raise BaseException("Chain ID not supported")
+
+    def get_FluidLendingStakingRewardsUsdc(self) -> ChecksumAddress:
+        if self._chain_id == 42161:
+            return Web3.to_checksum_address(
+                "0x48f89d731C5e3b5BeE8235162FC2C639Ba62DB7d"
+            )
+        if self._chain_id == 8453:
+            return Web3.to_checksum_address(
+                "0x48f89d731C5e3b5BeE8235162FC2C639Ba62DB7d"
+            )
+
+        raise BaseException("Chain ID not supported")
