@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.14.0 (2025-05-05)
+
+### Features
+
+* feat: refactor (#72)
+
+feat: refactor ([`eb215da`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/eb215da5faae09d3054105a76b68ca708e0ceb6b))
+
+* feat: refactor
+
+feat: refactor ([`6b26f0b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6b26f0b9294d9d87ccaace2c47061b4faad80aee))
+
+
 ## v0.13.0 (2025-04-29)
 
 ### Chores

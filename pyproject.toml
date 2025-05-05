@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ipor_fusion"
-version = "0.13.0"
+version = "0.14.0"
 description = "The IPOR Fusion SDK for Python"
 authors = ["Adam Mydlarz <amydlarz@gmail.com>", "rav <rav@ipor.io>"]
 readme = "README.md"
