@@ -15,6 +15,9 @@ class TransactionExecutor:
         self._account = account
         self._gas_multiplier = gas_multiplier
 
+    def get_web3(self) -> Web3:
+        return self._web3
+
     def get_account_address(self) -> ChecksumAddress:
         return Web3.to_checksum_address(self._account.address)
 
