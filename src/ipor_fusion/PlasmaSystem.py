@@ -4,6 +4,7 @@ from eth_typing import ChecksumAddress
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.AccessManager import AccessManager
+from ipor_fusion.CheatingTransactionExecutor import CheatingTransactionExecutor
 from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
@@ -37,6 +38,18 @@ class PlasmaSystem:
         self._chain_id = chain_id
         self._plasma_vault_address = plasma_vault_address
         self._withdraw_manager_address = withdraw_manager_address
+
+    def cheater(self, cheating_address: ChecksumAddress):
+        web3 = self._transaction_executor.get_web3()
+        cheating_transaction_executor = CheatingTransactionExecutor(
+            web3, cheating_address
+        )
+        return PlasmaSystem(
+            transaction_executor=cheating_transaction_executor,
+            chain_id=self._chain_id,
+            plasma_vault_address=self._plasma_vault_address,
+            withdraw_manager_address=self._withdraw_manager_address,
+        )
 
     def transaction_executor(self) -> TransactionExecutor:
         return self._transaction_executor

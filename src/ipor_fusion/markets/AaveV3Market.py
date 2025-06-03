@@ -7,6 +7,7 @@ from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
+from ipor_fusion.fuse.AaveV3BorrowFuse import AaveV3BorrowFuse
 from ipor_fusion.fuse.AaveV3SupplyFuse import AaveV3SupplyFuse
 from ipor_fusion.fuse.FuseAction import FuseAction
 
@@ -28,6 +29,9 @@ class AaveV3Market:
             if checksum_fuse in FuseMapper.map(chain_id, "AaveV3SupplyFuse"):
                 self._aave_v3_supply_fuse = AaveV3SupplyFuse(checksum_fuse)
                 self._any_fuse_supported = True
+            if checksum_fuse in FuseMapper.map(chain_id, "AaveV3BorrowFuse"):
+                self._aave_v3_borrow_fuse = AaveV3BorrowFuse(checksum_fuse)
+                self._any_fuse_supported = True
 
     def is_market_supported(self) -> bool:
         return self._any_fuse_supported
@@ -44,8 +48,9 @@ class AaveV3Market:
             AaveV3SupplyFuse.PROTOCOL_ID,
             asset_address,
         )
-
-        return self._aave_v3_supply_fuse.supply(market_id, amount, e_mode)
+        return self._aave_v3_supply_fuse.supply(
+            market_id=market_id, amount=amount, e_mode=e_mode
+        )
 
     def withdraw(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
         if not hasattr(self, "_aave_v3_supply_fuse"):
@@ -55,3 +60,29 @@ class AaveV3Market:
 
         market_id = MarketId(AaveV3SupplyFuse.PROTOCOL_ID, asset_address)
         return self._aave_v3_supply_fuse.withdraw(market_id, amount)
+
+    def borrow(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
+        if not hasattr(self, "_aave_v3_borrow_fuse"):
+            raise UnsupportedFuseError(
+                "AaveV3BorrowFuse is not supported by PlasmaVault"
+            )
+
+        market_id = MarketId(
+            AaveV3BorrowFuse.PROTOCOL_ID,
+            asset_address,
+        )
+
+        return self._aave_v3_borrow_fuse.borrow(market_id, amount)
+
+    def repay(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
+        if not hasattr(self, "_aave_v3_borrow_fuse"):
+            raise UnsupportedFuseError(
+                "AaveV3BorrowFuse is not supported by PlasmaVault"
+            )
+
+        market_id = MarketId(
+            AaveV3BorrowFuse.PROTOCOL_ID,
+            asset_address,
+        )
+
+        return self._aave_v3_borrow_fuse.repay(market_id, amount)

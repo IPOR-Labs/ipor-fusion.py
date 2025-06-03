@@ -1,4 +1,5 @@
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.TransactionExecutor import TransactionExecutor
@@ -6,9 +7,11 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 
 class CheatingTransactionExecutor(TransactionExecutor):
 
-    def __init__(self, web3, account, gas_multiplier=1.25):
-        self._account_address = account.address
-        super().__init__(web3, account, gas_multiplier)
+    def __init__(
+        self, web3: Web3, account_address: ChecksumAddress, gas_multiplier=1.25
+    ):
+        self._account_address = account_address
+        super().__init__(web3, account_address, gas_multiplier)
 
     def prank(self, account: str):
         self._account_address = account

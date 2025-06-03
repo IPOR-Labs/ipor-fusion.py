@@ -78,6 +78,7 @@ mapping = {
             "0x0f0f43b3559be3319a63082755ad05c158d3b011",
             "0x43f3ca257b7e2d6bbe088b85ef2c2c57e2a3142c",
             "0x7ceae29f467db23210c6fdb95247355c87026ed0",
+            "0xf8a9e4d0899d6268421fc1af952d91782728b8e5",
         ],
         "UniswapV3Balance": [
             "0xf5f05a86e4fe84033940fc7faeea5e17c6614945",
@@ -85,7 +86,10 @@ mapping = {
         ],
         "ERC20BalanceFuse": ["0x1a047137f2d4dae60853f87dc13ae92c0db2c123"],
         "RamsesV2Balance": ["0xd9fd7d42848a97f946f42c62ec3150d24c0a3835"],
-        "BurnRequestFeeFuse": ["0x292711bc63184318294593c38ad914acfcd1797b"],
+        "BurnRequestFeeFuse": [
+            "0x292711bc63184318294593c38ad914acfcd1797b",
+            "0xee322e49268760878924d18a645278ab08ae245c",
+        ],
     },
     "8453": {
         "MoonwellEnableMarketFuse": ["0xd62542ef1abff0ac71a1b5666cb76801e81104ef"],
@@ -156,7 +160,12 @@ mapping = {
         ],
         "GearboxV3FarmBalanceFuse": ["0xe88982097ecdf1dcfc4d500e3392ee0eb70b45f2"],
         "SparkBalanceFuse": ["0xb3ca07c9c10374d51046f94e5547a2c501da0ab4"],
-        "Erc4626BalanceFuse": ["0xcb6bb5ab51cdc6efb3b81c84f252cfe6bfba6566"],
+        "Erc4626BalanceFuse": [
+            "0xcb6bb5ab51cdc6efb3b81c84f252cfe6bfba6566",
+            "0x2c10c36028c430f445a4ba9f7dd096a5dcc75d5e",
+            "0x933bff1078ff1a0ca3b53dad00d7b1850af8749b",
+            "0x318dc5d24bcc71ba0127a45e009b64bdba0c2edf",
+        ],
         "MorphoBalanceFuse": ["0x0ad1776b9319a03216a44aba0242cc0bc7e3cac3"],
         "CompoundV3BalanceFuse": [
             "0x7070d0a706bf79a1e6d12706b9a429b9d8099c8b",
@@ -165,6 +174,36 @@ mapping = {
         "FluidInstadappStakingBalanceFuse": [
             "0xe9d0e294a0524962c43eedfa935f1e8112a16aba"
         ],
+        "BurnRequestFeeFuse": ["0x79e8b115bd41baee318c1940f42f1a2d94d29ab4"],
+        "Erc4626SupplyFuseMarketId100001": [
+            "0x12fd0ee183c85940caedd4877f5d3fc637515870"
+        ],
+        "Erc4626SupplyFuseMarketId100002": [
+            "0x83be46881aaeba80b3d647e08a47301db2e4e754"
+        ],
+        "ZeroBalanceFuse": [
+            "0xbc2907d76964510a4232878e7ac6e2b18c474efb",
+            "0xe9562d7bd06b43e6391c5be4b3c5f5c2bc1e06bf",
+            "0xb1b74e885349cd9d1f0effb2e1ce0fb79959d7cf",
+            "0x48bd852d83f6e58af59255abc708e3ddecb1d1e6",
+        ],
+        "UniversalTokenSwapperFuse": ["0x08dfdbb6ecf19f1fc974e0675783e1150b2b650f"],
+        "MorphoCollateralFuse": ["0xe1aa89eb42c23f292cda1544566f6ebee3a67eed"],
+        "MorphoBorrowFuse": ["0x9981e75b7254fd268c9182631bf89c86101359d6"],
+        "MorphoFlashLoanFuse": ["0x9185033e24db36407b9b1a1886cb47b9533433de"],
+        "ERC20BalanceFuse": ["0x6cebf3e3392d0860ed174402884b941dcbb30654"],
+        "PlasmaVaultRequestSharesFuse": ["0x7130383298822097531cf5cc5e3414dda1e09542"],
+        "PlasmaVaultRedeemFromRequestFuse": [
+            "0x906af6a42079adaf1abd92f924a5d4263653af0d"
+        ],
+        "Erc4626SupplyFuseMarketId100003": [
+            "0x53ecc250d70c9f8b88edb817a9097c6caac81a6b"
+        ],
+        "PendleRedeemPTAfterMaturityFuse": [
+            "0x40430a509188b71bda9a0c06b132e978ea2015be"
+        ],
+        "PendleSwapPTFuse": ["0xeea3812b60ca4c6d0e2672a865bf7217ecd49f95"],
+        "AaveV3BorrowFuse": ["0x820d879ef89356b93a7c71addbf45c40a0dde453"],
     },
 }
 
