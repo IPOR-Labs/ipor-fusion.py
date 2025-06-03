@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.15.0 (2025-06-03)
+
+### Features
+
+* feat: Add Aave V3 Borrow ([`1229c0c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1229c0c9f7ff7b83610b13eff93ac4dcbbe67691))
+
+### Unknown
+
+* Merge pull request #74 from IPOR-Labs/develop
+
+Merge develop -> main ([`54f8f50`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/54f8f502e14998d874a938f3fb46330f60e80b14))
+
+* Merge pull request #73 from IPOR-Labs/feature/IL-5845
+
+feat: Add Aave V3 Borrow ([`50b311c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/50b311c3a14a42caa9d3f01d284e48f3ce28336b))
+
+
 ## v0.14.0 (2025-05-05)
 
 ### Features
