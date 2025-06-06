@@ -59,7 +59,7 @@ def test_should_deposit_and_withdraw_from_morpho_blue():
 
     # Create a supply operation for the specified Morpho Blue market
     # This prepares the transaction data for supplying assets to the lending market
-    supply = cheating.morpho_blue().supply(morpho_blue_market_id, amount)
+    supply = cheating.morpho().supply(morpho_blue_market_id, amount)
 
     # Record the vault's USDC balance before supplying to the market
     # This will be used to verify the correct amount was transferred
@@ -79,7 +79,7 @@ def test_should_deposit_and_withdraw_from_morpho_blue():
 
     # Create a withdrawal operation for the same amount from the Morpho Blue market
     # This prepares the transaction data for withdrawing assets from the lending market
-    withdraw = cheating.morpho_blue().withdraw(morpho_blue_market_id, amount)
+    withdraw = cheating.morpho().withdraw(morpho_blue_market_id, amount)
 
     # Execute the withdrawal operation through the Plasma Vault
     # The vault will receive USDC back from the Morpho Blue protocol
