@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.16.0 (2025-06-06)
+
+### Features
+
+* feat: Morpho Flash Loan ([`cb061d4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cb061d446b2e58b013d7549debaf6d0b0b39a32c))
+
+### Unknown
+
+* Merge pull request #76 from IPOR-Labs/develop
+
+feat: Morpho Flash Loan ([`535d928`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/535d928039ab09a84690c2c49058440f1903cf13))
+
+
 ## v0.15.0 (2025-06-03)
 
 ### Features
