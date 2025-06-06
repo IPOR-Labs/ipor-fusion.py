@@ -16,7 +16,7 @@ from ipor_fusion.markets.AaveV3Market import AaveV3Market
 from ipor_fusion.markets.CompoundV3Market import CompoundV3Market
 from ipor_fusion.markets.FluidInstadappMarket import FluidInstadappMarket
 from ipor_fusion.markets.GearboxV3Market import GearboxV3Market
-from ipor_fusion.markets.MorphoBlueMarket import MorphoBlueMarket
+from ipor_fusion.markets.MorphoMarket import MorphoMarket
 from ipor_fusion.markets.RamsesV2Market import RamsesV2Market
 from ipor_fusion.markets.UniswapV3Market import UniswapV3Market
 from ipor_fusion.markets.UniversalMarket import UniversalMarket
@@ -169,18 +169,18 @@ class PlasmaSystem:
             )
         return aave_v3_market
 
-    def morpho_blue(self) -> MorphoBlueMarket:
-        morpho_blue_market = MorphoBlueMarket(
+    def morpho(self) -> MorphoMarket:
+        morpho_market = MorphoMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self.plasma_vault().get_fuses(),
         )
 
-        if not morpho_blue_market.is_market_supported():
+        if not morpho_market.is_market_supported():
             raise UnsupportedMarketError(
                 "Morpho Blue Market is not supported by PlasmaVault"
             )
-        return morpho_blue_market
+        return morpho_market
 
     def compound_v3(self) -> CompoundV3Market:
         compound_v3_market = CompoundV3Market(

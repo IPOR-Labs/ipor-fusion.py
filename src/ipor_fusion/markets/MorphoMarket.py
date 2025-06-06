@@ -1,5 +1,6 @@
 from typing import List
 
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.FuseMapper import FuseMapper
@@ -7,10 +8,11 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.MorphoBlueSupplyFuse import MorphoBlueSupplyFuse
+from ipor_fusion.fuse.MorphoFlashLoanFuse import MorphoFlashLoanFuse
 from ipor_fusion.types import Amount, MorphoBlueMarketId
 
 
-class MorphoBlueMarket:
+class MorphoMarket:
 
     def __init__(
         self,
@@ -26,6 +28,9 @@ class MorphoBlueMarket:
             checksum_fuse = Web3.to_checksum_address(fuse)
             if checksum_fuse in FuseMapper.map(chain_id, "MorphoSupplyFuse"):
                 self._morpho_blue_supply_fuse = MorphoBlueSupplyFuse(checksum_fuse)
+                self._any_fuse_supported = True
+            if checksum_fuse in FuseMapper.map(chain_id, "MorphoFlashLoanFuse"):
+                self._morpho_flash_loan_fuse = MorphoFlashLoanFuse(checksum_fuse)
                 self._any_fuse_supported = True
 
     def is_market_supported(self) -> bool:
@@ -44,3 +49,12 @@ class MorphoBlueMarket:
                 "MorphoBlueSupplyFuse is not supported by PlasmaVault"
             )
         return self._morpho_blue_supply_fuse.withdraw(market_id, amount)
+
+    def flash_loan(
+        self, asset_address: ChecksumAddress, amount: Amount, actions: List[FuseAction]
+    ) -> FuseAction:
+        if not hasattr(self, "_morpho_flash_loan_fuse"):
+            raise UnsupportedFuseError(
+                "MorphoFlashLoanFuse is not supported by PlasmaVault"
+            )
+        return self._morpho_flash_loan_fuse.flash_loan(asset_address, amount, actions)

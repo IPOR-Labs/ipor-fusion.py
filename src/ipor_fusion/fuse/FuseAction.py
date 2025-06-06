@@ -8,7 +8,7 @@ class FuseAction:
         self.fuse = fuse
         self.data = data
 
-    def encode(self) -> List:
+    def encode(self) -> List[bytes]:
         """
         Convert the structure to a format suitable for ABI encoding.
         """
