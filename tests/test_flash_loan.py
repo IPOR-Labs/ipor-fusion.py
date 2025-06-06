@@ -24,7 +24,7 @@ anvil.start()
 def test_supply_borrow_in_flash_loan():
     """
     Test a flash loan operation that supplies WStETH as collateral to Aave V3 and borrows WETH.
-    
+
     This test demonstrates how Plasma Vault can execute complex DeFi operations atomically
     using flash loans for capital efficiency.
     """
@@ -57,7 +57,7 @@ def test_supply_borrow_in_flash_loan():
     # This provides access to all system components and interfaces
     system = PlasmaVaultSystemFactory(
         provider_url=anvil.get_anvil_http_url(),  # Connect to local Anvil node
-        private_key=ANVIL_WALLET_PRIVATE_KEY,     # Use test wallet for transactions
+        private_key=ANVIL_WALLET_PRIVATE_KEY,  # Use test wallet for transactions
     ).get(vault_address)
 
     # Configure access permissions for test participants
@@ -74,25 +74,25 @@ def test_supply_borrow_in_flash_loan():
     # Set up initial deposit of 1 WStETH (1e18 in wei denomination)
     # Wei is the smallest unit of Ethereum (1 ETH = 10^18 wei)
     initial_deposit = int(1e18)
-    
+
     # Approve the vault to transfer WStETH from the holder's account
     # ERC20 tokens require explicit approval before transferring
     system.cheater(wsteth_holder).erc20(wsteth_address).approve(
         spender=system.plasma_vault().address(),  # Authorize the vault contract
-        amount=initial_deposit                    # Amount to approve for transfer
+        amount=initial_deposit,  # Amount to approve for transfer
     )
 
     # Deposit WStETH into the Plasma Vault to initialize testing state
     # This simulates a user depositing funds into the vault
     system.cheater(wsteth_holder).plasma_vault().deposit(
-        assets=initial_deposit,     # Amount of assets to deposit
-        receiver=wsteth_holder      # Recipient of shares representing the deposit
+        assets=initial_deposit,  # Amount of assets to deposit
+        receiver=wsteth_holder,  # Recipient of shares representing the deposit
     )
 
     # Verify the deposit was successful by checking vault balance
     # This assertion confirms the tokens were transferred correctly
     assert system.erc20(wsteth_address).balance_of(vault_address) == 1e18
-    
+
     # Store current WStETH balance for use in subsequent operations
     wsteth_balance = system.erc20(wsteth_address).balance_of(vault_address)
 
@@ -104,9 +104,9 @@ def test_supply_borrow_in_flash_loan():
     # E-mode=1 enables enhanced LTV for assets in the same risk category (ETH correlated assets)
     # This action will be executed during the flash loan
     supply = system.aave_v3().supply(
-        asset_address=wsteth_address,          # Token to supply as collateral
-        amount=wsteth_collateral_amount,       # Amount to supply
-        e_mode=1                               # Efficiency mode for higher borrowing capacity
+        asset_address=wsteth_address,  # Token to supply as collateral
+        amount=wsteth_collateral_amount,  # Amount to supply
+        e_mode=1,  # Efficiency mode for higher borrowing capacity
     )
 
     # Get current market prices to calculate maximum borrowing capacity
@@ -120,20 +120,22 @@ def test_supply_borrow_in_flash_loan():
     weth_borrow_amount = int(
         wsteth_collateral_amount * LTV * wsteth_price.readable() / weth_price.readable()
     )
-    
+
     # Create a borrow action for execution within the flash loan
     borrow = system.aave_v3().borrow(
-        asset_address=weth_address,    # Token to borrow
-        amount=weth_borrow_amount      # Amount to borrow based on collateral value
+        asset_address=weth_address,  # Token to borrow
+        amount=weth_borrow_amount,  # Amount to borrow based on collateral value
     )
 
     # STEP 3: Create flash loan transaction that executes both supply and borrow actions
     # The flash loan temporarily provides the needed WStETH, which is repaid within the same transaction
     # This allows executing the entire operation without needing the capital upfront
     flash_loan = system.morpho().flash_loan(
-        amount=int(wsteth_collateral_amount),   # Amount to flash loan (same as collateral)
-        asset_address=wsteth_address,           # Token to flash loan
-        actions=[supply, borrow]                # List of actions to execute during the flash loan
+        amount=int(
+            wsteth_collateral_amount
+        ),  # Amount to flash loan (same as collateral)
+        asset_address=wsteth_address,  # Token to flash loan
+        actions=[supply, borrow],  # List of actions to execute during the flash loan
     )
 
     # Execute the flash loan operation through the Plasma Vault
