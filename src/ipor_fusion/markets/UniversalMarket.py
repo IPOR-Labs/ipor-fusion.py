@@ -2,7 +2,6 @@ from typing import List
 
 from web3 import Web3
 
-from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.TransactionExecutor import TransactionExecutor
@@ -49,12 +48,6 @@ class UniversalMarket:
             raise UnsupportedFuseError(
                 "UniversalTokenSwapperFuse is not supported by PlasmaVault"
             )
-
-        balance = ERC20(
-            transaction_executor=self._transaction_executor, asset_address=token_in
-        ).balance_of(self._plasma_vault.address())
-        if amount_in > balance:
-            raise ValueError(f"Insufficient balance of {token_in} in plasma vault")
 
         return self._universal_token_swapper_fuse.swap(
             token_in=token_in,
