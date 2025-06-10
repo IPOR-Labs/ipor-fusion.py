@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.17.0 (2025-06-10)
+
+### Unknown
+
+* Merge pull request #78 from IPOR-Labs/develop
+
+Merge develop -> main ([`aa3d8ed`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/aa3d8ed57aac16aa9206c4b11cfe92e85d28db23))
+
+* Merge pull request #77 from IPOR-Labs/feature/IL-5942
+
+[feat] WStEth looping on Base example ([`c4bc2f2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c4bc2f2d8f13d65f60c1644646766decacff24f8))
+
+* [feat] WStEth looping on Base example - docs ([`374f1a8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/374f1a82fbe25de9caaaeaff6e97b6979d6c7fde))
+
+* [feat] WStEth looping on Base example ([`b599b67`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b599b673ff233783a600a0d363944c783cef854e))
+
+
 ## v0.16.0 (2025-06-06)
 
 ### Features
