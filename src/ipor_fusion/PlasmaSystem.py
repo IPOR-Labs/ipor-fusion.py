@@ -14,6 +14,7 @@ from ipor_fusion.WithdrawManager import WithdrawManager
 from ipor_fusion.error.UnsupportedMarketError import UnsupportedMarketError
 from ipor_fusion.markets.AaveV3Market import AaveV3Market
 from ipor_fusion.markets.CompoundV3Market import CompoundV3Market
+from ipor_fusion.markets.ERC4626Market import ERC4626Market
 from ipor_fusion.markets.FluidInstadappMarket import FluidInstadappMarket
 from ipor_fusion.markets.GearboxV3Market import GearboxV3Market
 from ipor_fusion.markets.MorphoMarket import MorphoMarket
@@ -34,6 +35,13 @@ class PlasmaSystem:
         plasma_vault_address: ChecksumAddress,
         withdraw_manager_address: ChecksumAddress = None,
     ):
+        if not transaction_executor:
+            raise ValueError("transaction_executor is required")
+        if not chain_id:
+            raise ValueError("chain_id is required")
+        if not plasma_vault_address:
+            raise ValueError("plasma_vault_address is required")
+
         self._transaction_executor = transaction_executor
         self._chain_id = chain_id
         self._plasma_vault_address = plasma_vault_address
@@ -208,6 +216,16 @@ class PlasmaSystem:
                 "Universal Market is not supported by PlasmaVault"
             )
         return universal_market
+
+    def erc4626(self, fuse_address: ChecksumAddress) -> ERC4626Market:
+        if not fuse_address:
+            raise ValueError("fuse_address is required")
+        erc4626_market = ERC4626Market(
+            chain_id=self._chain_id,
+            transaction_executor=self._transaction_executor,
+            fuse_address=fuse_address,
+        )
+        return erc4626_market
 
     def prank(self, address: ChecksumAddress):
         self._transaction_executor.prank(address)

@@ -1,40 +1,30 @@
-from typing import List
-
 from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuse.FuseAction import FuseAction
-from ipor_fusion.MarketId import MarketId
 
 
 class Erc4626SupplyFuse:
-    ENTER = "enter"
-    EXIT = "exit"
-
     def __init__(
         self,
         fuse_address: ChecksumAddress,
-        protocol_id: str,
         erc4626_address: ChecksumAddress,
     ):
         if not fuse_address:
             raise ValueError("fuseAddress is required")
-        if not protocol_id:
-            raise ValueError("protocolId is required")
         if not erc4626_address:
             raise ValueError("erc4626Address is required")
         self.fuse_address = fuse_address
-        self.protocol_id = protocol_id
         self.erc4626_address = erc4626_address
 
-    def supply(self, market_id: MarketId, amount: int) -> List[FuseAction]:
-        enter_data = Erc4626SupplyFuseEnterData(market_id.market_id, amount)
-        return [FuseAction(self.fuse_address, enter_data.function_call())]
+    def supply(self, vault_address: ChecksumAddress, amount: int) -> FuseAction:
+        enter_data = Erc4626SupplyFuseEnterData(vault_address, amount)
+        return FuseAction(self.fuse_address, enter_data.function_call())
 
-    def withdraw(self, market_id: MarketId, amount: int) -> List[FuseAction]:
-        exit_data = Erc4626SupplyFuseExitData(market_id.market_id, amount)
-        return [FuseAction(self.fuse_address, exit_data.function_selector())]
+    def withdraw(self, vault_address: ChecksumAddress, amount: int) -> FuseAction:
+        exit_data = Erc4626SupplyFuseExitData(vault_address, amount)
+        return FuseAction(self.fuse_address, exit_data.function_selector())
 
 
 class Erc4626SupplyFuseEnterData:
