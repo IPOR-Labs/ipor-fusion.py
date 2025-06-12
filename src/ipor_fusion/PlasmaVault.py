@@ -55,6 +55,13 @@ class PlasmaVault:
             self._plasma_vault_address, sig + encoded_args
         )
 
+    def set_total_supply_cap(self, cap: int) -> TxReceipt:
+        sig = function_signature_to_4byte_selector("setTotalSupplyCap(uint256)")
+        encoded_args = encode(["uint256"], [cap])
+        return self._transaction_executor.execute(
+            self._plasma_vault_address, sig + encoded_args
+        )
+
     def redeem(
         self, shares: Shares, receiver: ChecksumAddress, owner: ChecksumAddress
     ) -> TxReceipt:
@@ -85,6 +92,12 @@ class PlasmaVault:
         read = self._transaction_executor.read(
             self._plasma_vault_address, sig + encoded_args
         )
+        (result,) = decode(["uint256"], read)
+        return result
+
+    def get_total_supply_cap(self) -> Amount:
+        sig = function_signature_to_4byte_selector("getTotalSupplyCap()")
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["uint256"], read)
         return result
 

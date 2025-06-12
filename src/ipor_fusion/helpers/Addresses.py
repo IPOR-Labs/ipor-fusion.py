@@ -13,3 +13,10 @@ BASE_AAVE_V3_VARIABLE_DEBT_WETH = Web3.to_checksum_address(
 base_aBaswstETH = Web3.to_checksum_address(
     "0x99CBC45ea5bb7eF3a5BC08FB1B7E56bB2442Ef0D"
 )  # Aave V3 interest-bearing token representing supplied WStETH collateral
+
+ETHEREUM_WBTC_ADDRESS = Web3.to_checksum_address(
+    "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+)  # WBTC token address
+ETHEREUM_WETH_ADDRESS = Web3.to_checksum_address(
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+)  # WETH token address
