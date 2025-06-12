@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.18.0 (2025-06-12)
+
+### Unknown
+
+* Merge pull request #80 from IPOR-Labs/develop
+
+Merge develop -> main ([`702c6e2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/702c6e27516f91e29b9d963ff8f05a565e46aefe))
+
+* Merge pull request #79 from IPOR-Labs/feature/IL-5953
+
+Erc4626 support for deposit ([`18fb44c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/18fb44cf94333fa53c3e116d86600e6f0fd51f4e))
+
+* [feat] erc4626 support for deposit ([`e1eb833`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e1eb83315940ea8d07d33b0de6d461d8b61ad2e3))
+
+* [feat] extract helpers ([`2ecc40d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2ecc40d5a93c56c3d2c56a14736fee8aeb08ad03))
+
+
 ## v0.17.0 (2025-06-10)
 
 ### Unknown
