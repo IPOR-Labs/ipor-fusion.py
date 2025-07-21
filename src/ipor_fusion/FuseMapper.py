@@ -3,6 +3,7 @@ from typing import List
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
+from ipor_fusion.error.FuseMappingError import FuseMappingError
 from ipor_fusion.error.UnsupportedChainId import UnsupportedChainId
 
 # pylint: disable=consider-using-namedtuple-or-dataclass
@@ -226,6 +227,7 @@ class FuseMapper:
 
         Raises:
             UnsupportedChainId: If the chain_id is not supported.
+            FuseMappingError: If no fuse address is found for the given chain_id and fuse_name.
         """
         chain_id_str = str(chain_id)
 
@@ -235,6 +237,6 @@ class FuseMapper:
         fuse_addresses = mapping.get(chain_id_str, {}).get(fuse_name)
 
         if not fuse_addresses:
-            return []
+            raise FuseMappingError(f"No fuse address in FUseMapper for {fuse_name}")
 
         return [Web3.to_checksum_address(address) for address in fuse_addresses]
