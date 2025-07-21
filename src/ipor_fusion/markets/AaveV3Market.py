@@ -1,9 +1,5 @@
-from typing import List
-
 from eth_typing import ChecksumAddress
-from web3 import Web3
 
-from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
@@ -16,33 +12,21 @@ class AaveV3Market:
 
     def __init__(
         self,
-        chain_id: int,
         transaction_executor: TransactionExecutor,
-        fuses: List[str],
+        aave_v3_supply_fuse_address: ChecksumAddress = None,
+        aave_v3_borrow_fuse_address: ChecksumAddress = None,
     ):
-        self._chain_id = chain_id
         self._transaction_executor = transaction_executor
-
-        self._any_fuse_supported = False
-        for fuse in fuses:
-            checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.map(chain_id, "AaveV3SupplyFuse"):
-                self._aave_v3_supply_fuse = AaveV3SupplyFuse(checksum_fuse)
-                self._any_fuse_supported = True
-            if checksum_fuse in FuseMapper.map(chain_id, "AaveV3BorrowFuse"):
-                self._aave_v3_borrow_fuse = AaveV3BorrowFuse(checksum_fuse)
-                self._any_fuse_supported = True
-
-    def is_market_supported(self) -> bool:
-        return self._any_fuse_supported
+        if aave_v3_supply_fuse_address:
+            self._aave_v3_supply_fuse = AaveV3SupplyFuse(aave_v3_supply_fuse_address)
+        if aave_v3_borrow_fuse_address:
+            self._aave_v3_borrow_fuse = AaveV3BorrowFuse(aave_v3_borrow_fuse_address)
 
     def supply(
         self, asset_address: ChecksumAddress, amount: int, e_mode: int
     ) -> FuseAction:
         if not hasattr(self, "_aave_v3_supply_fuse"):
-            raise UnsupportedFuseError(
-                "AaveV3SupplyFuse is not supported by PlasmaVault"
-            )
+            raise UnsupportedFuseError("AaveV3SupplyFuse is not set up")
 
         market_id = MarketId(
             AaveV3SupplyFuse.PROTOCOL_ID,
@@ -54,18 +38,14 @@ class AaveV3Market:
 
     def withdraw(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
         if not hasattr(self, "_aave_v3_supply_fuse"):
-            raise UnsupportedFuseError(
-                "AaveV3SupplyFuse is not supported by PlasmaVault"
-            )
+            raise UnsupportedFuseError("AaveV3SupplyFuse is not set up")
 
         market_id = MarketId(AaveV3SupplyFuse.PROTOCOL_ID, asset_address)
         return self._aave_v3_supply_fuse.withdraw(market_id, amount)
 
     def borrow(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
         if not hasattr(self, "_aave_v3_borrow_fuse"):
-            raise UnsupportedFuseError(
-                "AaveV3BorrowFuse is not supported by PlasmaVault"
-            )
+            raise UnsupportedFuseError("AaveV3BorrowFuse is not set up")
 
         market_id = MarketId(
             AaveV3BorrowFuse.PROTOCOL_ID,
@@ -76,9 +56,7 @@ class AaveV3Market:
 
     def repay(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
         if not hasattr(self, "_aave_v3_borrow_fuse"):
-            raise UnsupportedFuseError(
-                "AaveV3BorrowFuse is not supported by PlasmaVault"
-            )
+            raise UnsupportedFuseError("AaveV3BorrowFuse is not set up")
 
         market_id = MarketId(
             AaveV3BorrowFuse.PROTOCOL_ID,

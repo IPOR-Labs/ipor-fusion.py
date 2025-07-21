@@ -6,6 +6,7 @@ from web3.exceptions import ContractLogicError
 from ipor_fusion.AccessManager import AccessManager
 from ipor_fusion.CheatingTransactionExecutor import CheatingTransactionExecutor
 from ipor_fusion.ERC20 import ERC20
+from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
@@ -164,18 +165,24 @@ class PlasmaSystem:
             )
         return fluid_instadapp_market
 
-    def aave_v3(self) -> AaveV3Market:
-        aave_v3_market = AaveV3Market(
-            chain_id=self._chain_id,
+    def aave_v3(
+        self,
+        aave_v3_supply_fuse_address: ChecksumAddress = None,
+        aave_v3_borrow_fuse_address: ChecksumAddress = None,
+    ) -> AaveV3Market:
+        if aave_v3_supply_fuse_address is None:
+            aave_v3_supply_fuse_address = FuseMapper.map(
+                self._chain_id, "AaveV3SupplyFuse"
+            )[0]
+        if aave_v3_borrow_fuse_address is None:
+            aave_v3_borrow_fuse_address = FuseMapper.map(
+                self._chain_id, "AaveV3BorrowFuse"
+            )[0]
+        return AaveV3Market(
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            aave_v3_supply_fuse_address=aave_v3_supply_fuse_address,
+            aave_v3_borrow_fuse_address=aave_v3_borrow_fuse_address,
         )
-
-        if not aave_v3_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Aave V3 Market is not supported by PlasmaVault"
-            )
-        return aave_v3_market
 
     def morpho(self) -> MorphoMarket:
         morpho_market = MorphoMarket(

@@ -14,15 +14,15 @@ class AaveV3SupplyFuse:
 
     def __init__(self, fuse_address: ChecksumAddress):
         if fuse_address is None:
-            raise ValueError("fuseAddress is required")
-        self.fuse_address = fuse_address
+            raise ValueError("fuse_address is required")
+        self._fuse_address = fuse_address
 
     def supply(self, market_id: MarketId, amount: int, e_mode: int) -> FuseAction:
         aave_v3_supply_fuse_enter_data = AaveV3SupplyFuseEnterData(
             market_id.market_id, amount, e_mode
         )
         return FuseAction(
-            self.fuse_address, aave_v3_supply_fuse_enter_data.function_call()
+            self._fuse_address, aave_v3_supply_fuse_enter_data.function_call()
         )
 
     def withdraw(self, market_id: MarketId, amount: int) -> FuseAction:
@@ -30,7 +30,7 @@ class AaveV3SupplyFuse:
             market_id.market_id, amount
         )
         return FuseAction(
-            self.fuse_address, aave_v3_supply_fuse_exit_data.function_call()
+            self._fuse_address, aave_v3_supply_fuse_exit_data.function_call()
         )
 
 
