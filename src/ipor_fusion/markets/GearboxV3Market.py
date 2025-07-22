@@ -9,7 +9,6 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.GearboxSupplyFuse import GearboxSupplyFuse
-from ipor_fusion.FuseMapper import FuseMapper
 
 
 class GearboxV3Market:
@@ -18,29 +17,33 @@ class GearboxV3Market:
         self,
         chain_id: int,
         transaction_executor: TransactionExecutor,
-        fuses: List[str],
+        d_usdcv_3_address: ChecksumAddress = None,
+        erc_4626_supply_fuse_market_id_3_address: ChecksumAddress = None,
+        gearbox_v3_farm_supply_fuse_address: ChecksumAddress = None,
+        farmd_usdcv_3_address: ChecksumAddress = None,
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
+        self._erc_4626_supply_fuse_market_id_3 = (
+            erc_4626_supply_fuse_market_id_3_address
+        )
+        self._gearbox_v3_farm_supply_fuse = gearbox_v3_farm_supply_fuse_address
 
-        self._any_fuse_supported = False
-        for fuse in fuses:
-            checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.map(chain_id, "GearboxV3FarmSupplyFuse"):
-                self._gearbox_supply_fuse = GearboxSupplyFuse(
-                    self.get_dUSDCV3(),
-                    FuseMapper.map(chain_id, "Erc4626SupplyFuseMarketId3")[1],
-                    self.get_farmdUSDCV3(),
-                    FuseMapper.map(chain_id, "GearboxV3FarmSupplyFuse")[1],
-                )
-                self._any_fuse_supported = True
+        if d_usdcv_3_address is None:
+            self._d_usdcv_3 = self.get_dUSDCV3()
 
-        if self._any_fuse_supported:
-            self._pool = ERC20(transaction_executor, self.get_dUSDCV3())
-            self._farm_pool = ERC20(transaction_executor, self.get_farmdUSDCV3())
+        if farmd_usdcv_3_address is None:
+            self._farmd_usdcv_3 = self.get_farmdUSDCV3()
 
-    def is_market_supported(self) -> bool:
-        return self._any_fuse_supported
+        self._gearbox_supply_fuse = GearboxSupplyFuse(
+            self._d_usdcv_3,
+            self._erc_4626_supply_fuse_market_id_3,
+            self._farmd_usdcv_3,
+            self._gearbox_v3_farm_supply_fuse,
+        )
+
+        self._pool = ERC20(transaction_executor, self._d_usdcv_3)
+        self._farm_pool = ERC20(transaction_executor, self._farmd_usdcv_3)
 
     def pool(self) -> ERC20:
         return self._pool

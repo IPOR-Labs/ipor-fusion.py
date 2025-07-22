@@ -139,18 +139,36 @@ class PlasmaSystem:
 
         return ramses_v2_market
 
-    def gearbox_v3(self) -> GearboxV3Market:
-        gearbox_v3_market = GearboxV3Market(
+    def gearbox_v3(
+        self,
+        d_usdcv_3_address: ChecksumAddress = None,
+        erc_4626_supply_fuse_market_id_3_address: ChecksumAddress = None,
+        gearbox_v3_farm_supply_fuse_address: ChecksumAddress = None,
+        farmd_usdcv_3_address: ChecksumAddress = None,
+    ) -> GearboxV3Market:
+
+        if erc_4626_supply_fuse_market_id_3_address is None:
+            erc_4626_supply_fuse_market_id_3_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="Erc4626SupplyFuseMarketId3",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if gearbox_v3_farm_supply_fuse_address is None:
+            gearbox_v3_farm_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="GearboxV3FarmSupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        return GearboxV3Market(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            d_usdcv_3_address=d_usdcv_3_address,
+            farmd_usdcv_3_address=farmd_usdcv_3_address,
+            erc_4626_supply_fuse_market_id_3_address=erc_4626_supply_fuse_market_id_3_address,
+            gearbox_v3_farm_supply_fuse_address=gearbox_v3_farm_supply_fuse_address,
         )
-
-        if not gearbox_v3_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Gearbox V3 Market is not supported by PlasmaVault"
-            )
-        return gearbox_v3_market
 
     def fluid_instadapp(
         self,
