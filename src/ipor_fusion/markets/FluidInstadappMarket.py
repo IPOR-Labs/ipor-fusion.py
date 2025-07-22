@@ -19,24 +19,31 @@ class FluidInstadappMarket:
         self,
         chain_id: int,
         transaction_executor: TransactionExecutor,
-        fuses: List[ChecksumAddress],
+        erc_4626_supply_fuse_market_id_5_address: ChecksumAddress,
+        fluid_instadapp_staking_supply_fuse_address: ChecksumAddress,
+        f_usdc_address: ChecksumAddress = None,
+        fluid_lending_staking_rewards_usdc_address: ChecksumAddress = None,
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
-        self._f_usdc_address = self.get_fUSDC()
+        self._erc_4626_supply_fuse_market_id_5_address = (
+            erc_4626_supply_fuse_market_id_5_address
+        )
+        self._fluid_instadapp_staking_supply_fuse_address = (
+            fluid_instadapp_staking_supply_fuse_address
+        )
+
+        self._f_usdc_address = f_usdc_address
+        if f_usdc_address is None:
+            self._f_usdc_address = self.get_fUSDC()
+
         self._fluid_lending_staking_rewards_usdc_address = (
-            self.get_FluidLendingStakingRewardsUsdc()
+            fluid_lending_staking_rewards_usdc_address
         )
-        self._erc_4626_supply_fuse_market_id_5_address = FuseMapper.find(
-            chain_id=self._chain_id,
-            fuse_name="Erc4626SupplyFuseMarketId5",
-            fuses=fuses,
-        )
-        self._fluid_instadapp_staking_supply_fuse_address = FuseMapper.find(
-            chain_id=self._chain_id,
-            fuse_name="FluidInstadappStakingSupplyFuse",
-            fuses=fuses,
-        )
+        if fluid_lending_staking_rewards_usdc_address is None:
+            self._fluid_lending_staking_rewards_usdc_address = (
+                self.get_FluidLendingStakingRewardsUsdc()
+            )
 
         self._fluid_instadapp_pool_fuse = FluidInstadappSupplyFuse(
             self._f_usdc_address,

@@ -152,11 +152,34 @@ class PlasmaSystem:
             )
         return gearbox_v3_market
 
-    def fluid_instadapp(self) -> FluidInstadappMarket:
+    def fluid_instadapp(
+        self,
+        f_usdc_address: ChecksumAddress = None,
+        fluid_lending_staking_rewards_usdc_address: ChecksumAddress = None,
+        erc_4626_supply_fuse_market_id_5_address: ChecksumAddress = None,
+        fluid_instadapp_staking_supply_fuse_address: ChecksumAddress = None,
+    ) -> FluidInstadappMarket:
+        if erc_4626_supply_fuse_market_id_5_address is None:
+            erc_4626_supply_fuse_market_id_5_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="Erc4626SupplyFuseMarketId5",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if fluid_instadapp_staking_supply_fuse_address is None:
+            fluid_instadapp_staking_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="FluidInstadappStakingSupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
         return FluidInstadappMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            f_usdc_address=f_usdc_address,
+            fluid_lending_staking_rewards_usdc_address=fluid_lending_staking_rewards_usdc_address,
+            erc_4626_supply_fuse_market_id_5_address=erc_4626_supply_fuse_market_id_5_address,
+            fluid_instadapp_staking_supply_fuse_address=fluid_instadapp_staking_supply_fuse_address,
         )
 
     def aave_v3(
