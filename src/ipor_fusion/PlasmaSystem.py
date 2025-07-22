@@ -153,17 +153,11 @@ class PlasmaSystem:
         return gearbox_v3_market
 
     def fluid_instadapp(self) -> FluidInstadappMarket:
-        fluid_instadapp_market = FluidInstadappMarket(
+        return FluidInstadappMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
             fuses=self.plasma_vault().get_fuses(),
         )
-
-        if not fluid_instadapp_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Fluid Instadapp Market is not supported by PlasmaVault"
-            )
-        return fluid_instadapp_market
 
     def aave_v3(
         self,
@@ -171,13 +165,17 @@ class PlasmaSystem:
         aave_v3_borrow_fuse_address: ChecksumAddress = None,
     ) -> AaveV3Market:
         if aave_v3_supply_fuse_address is None:
-            aave_v3_supply_fuse_address = FuseMapper.map(
-                self._chain_id, "AaveV3SupplyFuse"
-            )[0]
+            aave_v3_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="AaveV3SupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
         if aave_v3_borrow_fuse_address is None:
-            aave_v3_borrow_fuse_address = FuseMapper.map(
-                self._chain_id, "AaveV3BorrowFuse"
-            )[0]
+            aave_v3_borrow_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="AaveV3BorrowFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
         return AaveV3Market(
             transaction_executor=self._transaction_executor,
             aave_v3_supply_fuse_address=aave_v3_supply_fuse_address,
@@ -197,18 +195,19 @@ class PlasmaSystem:
             )
         return morpho_market
 
-    def compound_v3(self) -> CompoundV3Market:
-        compound_v3_market = CompoundV3Market(
-            chain_id=self._chain_id,
-            transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
-        )
-
-        if not compound_v3_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Compound V3 Market is not supported by PlasmaVault"
+    def compound_v3(
+        self, compound_v3_supply_fuse_address: ChecksumAddress = None
+    ) -> CompoundV3Market:
+        if compound_v3_supply_fuse_address is None:
+            compound_v3_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="CompoundV3SupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
             )
-        return compound_v3_market
+        return CompoundV3Market(
+            transaction_executor=self._transaction_executor,
+            compound_v3_supply_fuse_address=compound_v3_supply_fuse_address,
+        )
 
     def universal(self) -> UniversalMarket:
         universal_market = UniversalMarket(

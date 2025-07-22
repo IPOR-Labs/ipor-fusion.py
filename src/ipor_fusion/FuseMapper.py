@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
@@ -240,3 +240,27 @@ class FuseMapper:
             raise FuseMappingError(f"No fuse address in FUseMapper for {fuse_name}")
 
         return [Web3.to_checksum_address(address) for address in fuse_addresses]
+
+    @staticmethod
+    def find(
+        chain_id: int, fuse_name: str, fuses: List[ChecksumAddress]
+    ) -> Optional[ChecksumAddress]:
+        """
+        Find a fuse address from the provided list that matches the given chain ID and fuse name.
+
+        This method searches through the provided list of fuse addresses and returns the first
+        address that is found in the mapping for the specified chain ID and fuse name.
+
+        Args:
+            chain_id (int): The blockchain ID to search within.
+            fuse_name (str): The name of the fuse to search for.
+            fuses (List[ChecksumAddress]): List of fuse addresses to search through.
+
+        Returns:
+            Optional[ChecksumAddress]: The first matching fuse address if found, None otherwise.
+        """
+        for fuse in fuses:
+            if fuse in FuseMapper.map(chain_id, fuse_name):
+                return fuse
+
+        return None

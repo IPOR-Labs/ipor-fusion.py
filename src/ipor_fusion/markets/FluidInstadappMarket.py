@@ -23,31 +23,29 @@ class FluidInstadappMarket:
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
 
-        self._any_fuse_supported = False
-        for fuse in fuses:
-            checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.map(
-                chain_id=chain_id, fuse_name="Erc4626SupplyFuseMarketId5"
-            ):
-                self._fluid_instadapp_pool_fuse = FluidInstadappSupplyFuse(
-                    self.get_fUSDC(),
-                    checksum_fuse,
-                    self.get_FluidLendingStakingRewardsUsdc(),
-                    self.get_safe_fuse_address(
-                        chain_id, fuses, "FluidInstadappStakingSupplyFuse"
-                    ),
-                )
-                self._any_fuse_supported = True
+        self._fluid_instadapp_pool_fuse = FluidInstadappSupplyFuse(
+            self.get_fUSDC(),
+            FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="Erc4626SupplyFuseMarketId5",
+                fuses=fuses,
+            ),
+            self.get_FluidLendingStakingRewardsUsdc(),
+            FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="FluidInstadappStakingSupplyFuse",
+                fuses=fuses,
+            ),
+        )
 
-        if self._any_fuse_supported:
-            self._pool = ERC20(
-                transaction_executor,
-                self.get_fUSDC(),
-            )
-            self._staking_pool = ERC20(
-                transaction_executor,
-                self.get_FluidLendingStakingRewardsUsdc(),
-            )
+        self._pool = ERC20(
+            transaction_executor,
+            self.get_fUSDC(),
+        )
+        self._staking_pool = ERC20(
+            transaction_executor,
+            self.get_FluidLendingStakingRewardsUsdc(),
+        )
 
     @staticmethod
     def get_safe_fuse_address(
@@ -64,9 +62,6 @@ class FluidInstadappMarket:
             raise UnsupportedFuseError()
 
         return Web3.to_checksum_address(fuse)
-
-    def is_market_supported(self) -> bool:
-        return self._any_fuse_supported
 
     def staking_pool(self) -> ERC20:
         return self._staking_pool
