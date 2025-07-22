@@ -1,9 +1,7 @@
 from typing import List
 
 from eth_typing import ChecksumAddress
-from web3 import Web3
 
-from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -18,23 +16,18 @@ class MorphoMarket:
         self,
         chain_id: int,
         transaction_executor: TransactionExecutor,
-        fuses: List[str],
+        morpho_supply_fuse_address: ChecksumAddress,
+        morpho_flash_loan_fuse_address: ChecksumAddress,
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
 
-        self._any_fuse_supported = False
-        for fuse in fuses:
-            checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.map(chain_id, "MorphoSupplyFuse"):
-                self._morpho_blue_supply_fuse = MorphoBlueSupplyFuse(checksum_fuse)
-                self._any_fuse_supported = True
-            if checksum_fuse in FuseMapper.map(chain_id, "MorphoFlashLoanFuse"):
-                self._morpho_flash_loan_fuse = MorphoFlashLoanFuse(checksum_fuse)
-                self._any_fuse_supported = True
+        self._morpho_flash_loan_fuse = morpho_flash_loan_fuse_address
 
-    def is_market_supported(self) -> bool:
-        return self._any_fuse_supported
+        self._morpho_blue_supply_fuse = MorphoBlueSupplyFuse(morpho_supply_fuse_address)
+        self._morpho_flash_loan_fuse = MorphoFlashLoanFuse(
+            morpho_flash_loan_fuse_address
+        )
 
     def supply(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
         if not hasattr(self, "_morpho_blue_supply_fuse"):

@@ -205,18 +205,32 @@ class PlasmaSystem:
             aave_v3_borrow_fuse_address=aave_v3_borrow_fuse_address,
         )
 
-    def morpho(self) -> MorphoMarket:
-        morpho_market = MorphoMarket(
+    def morpho(
+        self,
+        morpho_supply_fuse_address: ChecksumAddress = None,
+        morpho_flash_loan_fuse_address: ChecksumAddress = None,
+    ) -> MorphoMarket:
+
+        if morpho_supply_fuse_address is None:
+            morpho_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="MorphoSupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if morpho_flash_loan_fuse_address is None:
+            morpho_flash_loan_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="MorphoFlashLoanFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        return MorphoMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            morpho_supply_fuse_address=morpho_supply_fuse_address,
+            morpho_flash_loan_fuse_address=morpho_flash_loan_fuse_address,
         )
-
-        if not morpho_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Morpho Blue Market is not supported by PlasmaVault"
-            )
-        return morpho_market
 
     def compound_v3(
         self, compound_v3_supply_fuse_address: ChecksumAddress = None

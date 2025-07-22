@@ -4,7 +4,6 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.ERC20 import ERC20
-from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedChainId import UnsupportedChainId
@@ -60,22 +59,6 @@ class FluidInstadappMarket:
             transaction_executor,
             self._fluid_lending_staking_rewards_usdc_address,
         )
-
-    @staticmethod
-    def get_safe_fuse_address(
-        chain_id: int, vault_fuses: List[ChecksumAddress], fuse_name: str
-    ) -> ChecksumAddress:
-        fuses_from_mapper = FuseMapper.map(chain_id=chain_id, fuse_name=fuse_name)
-        fuse = None
-        for f in vault_fuses:
-            for x in fuses_from_mapper:
-                if f.lower() == x.lower():
-                    fuse = f
-
-        if not fuse:
-            raise UnsupportedFuseError()
-
-        return Web3.to_checksum_address(fuse)
 
     def staking_pool(self) -> ERC20:
         return self._staking_pool
