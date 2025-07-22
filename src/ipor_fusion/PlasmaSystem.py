@@ -117,27 +117,61 @@ class PlasmaSystem:
             )
         return uniswap_v3_market
 
-    def ramses_v2(self) -> RamsesV2Market:
+    def ramses_v2(
+        self,
+        ramses_v_2_new_position_fuse_address: ChecksumAddress = None,
+        ramses_v_2_modify_position_fuse_address: ChecksumAddress = None,
+        ramses_v_2_collect_fuse_address: ChecksumAddress = None,
+        ramses_v_2_claim_fuse_address: ChecksumAddress = None,
+    ) -> RamsesV2Market:
+
+        if ramses_v_2_new_position_fuse_address is None:
+            ramses_v_2_new_position_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="RamsesV2NewPositionFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if ramses_v_2_modify_position_fuse_address is None:
+            ramses_v_2_modify_position_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="RamsesV2ModifyPositionFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if ramses_v_2_collect_fuse_address is None:
+            ramses_v_2_collect_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="RamsesV2CollectFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
         rewards_fuses = []
         try:
             rewards_fuses = self.rewards_claim_manager().get_rewards_fuses()
         except ContractLogicError as e:
             log.warning("Failed to get rewards fuses: %s", e)
 
-        ramses_v2_market = RamsesV2Market(
-            chain_id=self._chain_id,
-            transaction_executor=self._transaction_executor,
-            rewards_claim_manager=self.rewards_claim_manager(),
-            fuses=self.plasma_vault().get_fuses(),
-            rewards_fuses=rewards_fuses,
-        )
-
-        if not ramses_v2_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Ramses V2 Market is not supported by PlasmaVault"
+        if ramses_v_2_claim_fuse_address is None:
+            ramses_v_2_claim_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="RamsesClaimFuse",
+                fuses=rewards_fuses,
             )
 
-        return ramses_v2_market
+        if not rewards_fuses:
+            for rewards_fuse in FuseMapper.map(self._chain_id, "RamsesClaimFuse"):
+                if self.rewards_claim_manager().is_reward_fuse_supported(rewards_fuse):
+                    ramses_v_2_claim_fuse_address = rewards_fuse
+
+        return RamsesV2Market(
+            chain_id=self._chain_id,
+            transaction_executor=self._transaction_executor,
+            ramses_v_2_new_position_fuse_address=ramses_v_2_new_position_fuse_address,
+            ramses_v_2_modify_position_fuse_address=ramses_v_2_modify_position_fuse_address,
+            ramses_v_2_collect_fuse_address=ramses_v_2_collect_fuse_address,
+            ramses_v_2_claim_fuse_address=ramses_v_2_claim_fuse_address,
+        )
 
     def gearbox_v3(
         self,

@@ -6,8 +6,6 @@ from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.ERC20 import ERC20
-from ipor_fusion.FuseMapper import FuseMapper
-from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -49,43 +47,35 @@ class RamsesV2Market:
         self,
         chain_id: int,
         transaction_executor: TransactionExecutor,
-        fuses: List[str],
-        rewards_fuses: List[str],
-        rewards_claim_manager: RewardsClaimManager,
+        ramses_v_2_new_position_fuse_address: ChecksumAddress = None,
+        ramses_v_2_modify_position_fuse_address: ChecksumAddress = None,
+        ramses_v_2_collect_fuse_address: ChecksumAddress = None,
+        ramses_v_2_claim_fuse_address: ChecksumAddress = None,
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
-        self._any_fuse_supported = False
-        for fuse in fuses:
-            checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.map(chain_id, "RamsesV2NewPositionFuse"):
-                self._ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(
-                    checksum_fuse
-                )
-                self._any_fuse_supported = True
-            if checksum_fuse in FuseMapper.map(chain_id, "RamsesV2ModifyPositionFuse"):
-                self._ramses_v2_modify_position_fuse = RamsesV2ModifyPositionFuse(
-                    checksum_fuse
-                )
-                self._any_fuse_supported = True
-            if checksum_fuse in FuseMapper.map(chain_id, "RamsesV2CollectFuse"):
-                self._ramses_v2_collect_fuse = RamsesV2CollectFuse(checksum_fuse)
-                self._any_fuse_supported = True
 
-        for rewards_fuse in rewards_fuses:
-            checksum_rewards_fuse = Web3.to_checksum_address(rewards_fuse)
-            if checksum_rewards_fuse in FuseMapper.map(chain_id, "RamsesClaimFuse"):
-                self._ramses_v2_claim_fuse = RamsesClaimFuse(checksum_rewards_fuse)
-                self._any_fuse_supported = True
+        self._ramses_v_2_new_position_fuse_address = (
+            ramses_v_2_new_position_fuse_address
+        )
+        self._ramses_v_2_modify_position_fuse_address = (
+            ramses_v_2_modify_position_fuse_address
+        )
+        self._ramses_v_2_collect_fuse_address = ramses_v_2_collect_fuse_address
+        self._ramses_v_2_claim_fuse_address = ramses_v_2_claim_fuse_address
 
-        if not rewards_fuses:
-            for rewards_fuse in FuseMapper.map(chain_id, "RamsesClaimFuse"):
-                if rewards_claim_manager.is_reward_fuse_supported(rewards_fuse):
-                    self._ramses_v2_claim_fuse = RamsesClaimFuse(rewards_fuse)
-                    self._any_fuse_supported = True
-
-    def is_market_supported(self) -> bool:
-        return self._any_fuse_supported
+        self._ramses_v2_new_position_fuse = RamsesV2NewPositionFuse(
+            self._ramses_v_2_new_position_fuse_address
+        )
+        self._ramses_v2_modify_position_fuse = RamsesV2ModifyPositionFuse(
+            self._ramses_v_2_modify_position_fuse_address
+        )
+        self._ramses_v2_collect_fuse = RamsesV2CollectFuse(
+            self._ramses_v_2_collect_fuse_address
+        )
+        self._ramses_v2_claim_fuse = RamsesClaimFuse(
+            self._ramses_v_2_claim_fuse_address
+        )
 
     def new_position(
         self,
