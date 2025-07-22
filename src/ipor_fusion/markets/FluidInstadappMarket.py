@@ -7,6 +7,7 @@ from ipor_fusion.ERC20 import ERC20
 from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.MarketId import MarketId
 from ipor_fusion.TransactionExecutor import TransactionExecutor
+from ipor_fusion.error.UnsupportedChainId import UnsupportedChainId
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FluidInstadappSupplyFuse import FluidInstadappSupplyFuse
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -22,29 +23,35 @@ class FluidInstadappMarket:
     ):
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
+        self._f_usdc_address = self.get_fUSDC()
+        self._fluid_lending_staking_rewards_usdc_address = (
+            self.get_FluidLendingStakingRewardsUsdc()
+        )
+        self._erc_4626_supply_fuse_market_id_5_address = FuseMapper.find(
+            chain_id=self._chain_id,
+            fuse_name="Erc4626SupplyFuseMarketId5",
+            fuses=fuses,
+        )
+        self._fluid_instadapp_staking_supply_fuse_address = FuseMapper.find(
+            chain_id=self._chain_id,
+            fuse_name="FluidInstadappStakingSupplyFuse",
+            fuses=fuses,
+        )
 
         self._fluid_instadapp_pool_fuse = FluidInstadappSupplyFuse(
-            self.get_fUSDC(),
-            FuseMapper.find(
-                chain_id=self._chain_id,
-                fuse_name="Erc4626SupplyFuseMarketId5",
-                fuses=fuses,
-            ),
-            self.get_FluidLendingStakingRewardsUsdc(),
-            FuseMapper.find(
-                chain_id=self._chain_id,
-                fuse_name="FluidInstadappStakingSupplyFuse",
-                fuses=fuses,
-            ),
+            self._f_usdc_address,
+            self._erc_4626_supply_fuse_market_id_5_address,
+            self._fluid_lending_staking_rewards_usdc_address,
+            self._fluid_instadapp_staking_supply_fuse_address,
         )
 
         self._pool = ERC20(
             transaction_executor,
-            self.get_fUSDC(),
+            self._f_usdc_address,
         )
         self._staking_pool = ERC20(
             transaction_executor,
-            self.get_FluidLendingStakingRewardsUsdc(),
+            self._fluid_lending_staking_rewards_usdc_address,
         )
 
     @staticmethod
@@ -77,7 +84,7 @@ class FluidInstadappMarket:
 
         market_id = MarketId(
             FluidInstadappSupplyFuse.PROTOCOL_ID,
-            self.get_fUSDC(),
+            self._f_usdc_address,
         )
         return self._fluid_instadapp_pool_fuse.supply_and_stake(market_id, amount)
 
@@ -89,7 +96,7 @@ class FluidInstadappMarket:
 
         market_id = MarketId(
             FluidInstadappSupplyFuse.PROTOCOL_ID,
-            self.get_fUSDC(),
+            self._f_usdc_address,
         )
         return self._fluid_instadapp_pool_fuse.unstake_and_withdraw(market_id, amount)
 
@@ -103,7 +110,7 @@ class FluidInstadappMarket:
                 "0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169"
             )
 
-        raise BaseException("Chain ID not supported")
+        raise UnsupportedChainId("Chain ID not supported")
 
     def get_FluidLendingStakingRewardsUsdc(self) -> ChecksumAddress:
         if self._chain_id == 42161:
@@ -115,4 +122,4 @@ class FluidInstadappMarket:
                 "0x48f89d731C5e3b5BeE8235162FC2C639Ba62DB7d"
             )
 
-        raise BaseException("Chain ID not supported")
+        raise UnsupportedChainId("Chain ID not supported")
