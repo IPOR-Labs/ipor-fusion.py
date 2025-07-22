@@ -1,9 +1,7 @@
 from typing import List
 
-from web3 import Web3
+from eth_typing import ChecksumAddress
 
-from ipor_fusion.FuseMapper import FuseMapper
-from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -15,26 +13,14 @@ class UniversalMarket:
     def __init__(
         self,
         chain_id: int,
-        fuses: List[str],
         transaction_executor: TransactionExecutor,
-        plasma_vault: PlasmaVault,
+        universal_token_swapper_fuse_address: ChecksumAddress,
     ):
         self._chain_id = chain_id
-        self._any_fuse_supported = False
         self._transaction_executor = transaction_executor
-        self._plasma_vault = plasma_vault
-        for fuse in fuses:
-            checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.map(
-                chain_id=chain_id, fuse_name="UniversalTokenSwapperFuse"
-            ):
-                self._universal_token_swapper_fuse = UniversalTokenSwapperFuse(
-                    checksum_fuse
-                )
-                self._any_fuse_supported = True
-
-    def is_market_supported(self) -> bool:
-        return self._any_fuse_supported
+        self._universal_token_swapper_fuse = UniversalTokenSwapperFuse(
+            universal_token_swapper_fuse_address
+        )
 
     def swap(
         self,

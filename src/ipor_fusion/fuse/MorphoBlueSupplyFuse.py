@@ -11,24 +11,26 @@ class MorphoBlueSupplyFuse:
     EXIT = "exit"
 
     def __init__(self, fuse_address: ChecksumAddress):
-        if fuse_address is None:
-            raise ValueError("fuseAddress is required")
-        self.fuse_address = fuse_address
+        self._fuse_address = fuse_address
 
     def supply(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
+        if self._fuse_address is None:
+            raise ValueError("fuseAddress is required")
         morpho_blue_supply_fuse_enter_data = MorphoBlueSupplyFuseEnterData(
             market_id, amount
         )
         return FuseAction(
-            self.fuse_address, morpho_blue_supply_fuse_enter_data.function_call()
+            self._fuse_address, morpho_blue_supply_fuse_enter_data.function_call()
         )
 
     def withdraw(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
+        if self._fuse_address is None:
+            raise ValueError("fuseAddress is required")
         morpho_blue_supply_fuse_exit_data = MorphoBlueSupplyFuseExitData(
             market_id, amount
         )
         return FuseAction(
-            self.fuse_address, morpho_blue_supply_fuse_exit_data.function_call()
+            self._fuse_address, morpho_blue_supply_fuse_exit_data.function_call()
         )
 
 

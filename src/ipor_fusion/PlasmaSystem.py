@@ -246,19 +246,21 @@ class PlasmaSystem:
             compound_v3_supply_fuse_address=compound_v3_supply_fuse_address,
         )
 
-    def universal(self) -> UniversalMarket:
-        universal_market = UniversalMarket(
-            chain_id=self._chain_id,
-            fuses=self.plasma_vault().get_fuses(),
-            transaction_executor=self._transaction_executor,
-            plasma_vault=self.plasma_vault(),
-        )
-
-        if not universal_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Universal Market is not supported by PlasmaVault"
+    def universal(
+        self, universal_token_swapper_fuse_address: ChecksumAddress = None
+    ) -> UniversalMarket:
+        if universal_token_swapper_fuse_address is None:
+            universal_token_swapper_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniversalTokenSwapperFuse",
+                fuses=self.plasma_vault().get_fuses(),
             )
-        return universal_market
+
+        return UniversalMarket(
+            chain_id=self._chain_id,
+            transaction_executor=self._transaction_executor,
+            universal_token_swapper_fuse_address=universal_token_swapper_fuse_address,
+        )
 
     def erc4626(self, fuse_address: ChecksumAddress) -> ERC4626Market:
         if not fuse_address:
