@@ -1,7 +1,6 @@
 from typing import List
 
 from eth_typing import ChecksumAddress
-from web3 import Web3
 
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
@@ -9,37 +8,35 @@ from ipor_fusion.fuse.UniswapV3CollectFuse import UniswapV3CollectFuse
 from ipor_fusion.fuse.UniswapV3ModifyPositionFuse import UniswapV3ModifyPositionFuse
 from ipor_fusion.fuse.UniswapV3NewPositionFuse import UniswapV3NewPositionFuse
 from ipor_fusion.fuse.UniswapV3SwapFuse import UniswapV3SwapFuse
-from ipor_fusion.FuseMapper import FuseMapper
 
 
 class UniswapV3Market:
 
-    def __init__(self, chain_id: int, fuses: List[str]):
+    def __init__(
+        self,
+        chain_id: int,
+        uniswap_v_3_swap_fuse: ChecksumAddress = None,
+        uniswap_v_3_new_position_fuse: ChecksumAddress = None,
+        uniswap_v_3_modify_position_fuse: ChecksumAddress = None,
+        uniswap_v_3_collect_fuse: ChecksumAddress = None,
+    ):
         self._chain_id = chain_id
-        self._any_fuse_supported = False
-        for fuse in fuses:
-            checksum_fuse = Web3.to_checksum_address(fuse)
-            if checksum_fuse in FuseMapper.map(chain_id, "UniswapV3SwapFuse"):
-                self._uniswap_v3_swap_fuse = UniswapV3SwapFuse(checksum_fuse)
-                self._any_fuse_supported = True
-            if checksum_fuse in FuseMapper.map(chain_id, "UniswapV3NewPositionFuse"):
-                self._uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
-                    checksum_fuse
-                )
-                self._any_fuse_supported = True
-            if checksum_fuse in FuseMapper.map(
-                chain_id=chain_id, fuse_name="UniswapV3ModifyPositionFuse"
-            ):
-                self._uniswap_v3_modify_position_fuse = UniswapV3ModifyPositionFuse(
-                    checksum_fuse
-                )
-                self._any_fuse_supported = True
-            if checksum_fuse in FuseMapper.map(chain_id, "UniswapV3CollectFuse"):
-                self._uniswap_v3_collect_fuse = UniswapV3CollectFuse(checksum_fuse)
-                self._any_fuse_supported = True
 
-    def is_market_supported(self) -> bool:
-        return self._any_fuse_supported
+        self._uniswap_v3_swap_fuse = uniswap_v_3_swap_fuse
+        self._uniswap_v3_new_position_fuse = uniswap_v_3_new_position_fuse
+        self._uniswap_v3_modify_position_fuse = uniswap_v_3_modify_position_fuse
+        self._uniswap_v3_collect_fuse = uniswap_v_3_collect_fuse
+
+        self._uniswap_v3_swap_fuse = UniswapV3SwapFuse(self._uniswap_v3_swap_fuse)
+        self._uniswap_v3_new_position_fuse = UniswapV3NewPositionFuse(
+            self._uniswap_v3_new_position_fuse
+        )
+        self._uniswap_v3_modify_position_fuse = UniswapV3ModifyPositionFuse(
+            self._uniswap_v3_modify_position_fuse
+        )
+        self._uniswap_v3_collect_fuse = UniswapV3CollectFuse(
+            self._uniswap_v3_collect_fuse
+        )
 
     def swap(
         self,

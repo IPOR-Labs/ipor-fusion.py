@@ -12,7 +12,6 @@ from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.WithdrawManager import WithdrawManager
-from ipor_fusion.error.UnsupportedMarketError import UnsupportedMarketError
 from ipor_fusion.markets.AaveV3Market import AaveV3Market
 from ipor_fusion.markets.CompoundV3Market import CompoundV3Market
 from ipor_fusion.markets.ERC4626Market import ERC4626Market
@@ -107,15 +106,49 @@ class PlasmaSystem:
     def alpha(self) -> ChecksumAddress:
         return self._transaction_executor.get_account_address()
 
-    def uniswap_v3(self) -> UniswapV3Market:
-        uniswap_v3_market = UniswapV3Market(
-            chain_id=self._chain_id, fuses=self.plasma_vault().get_fuses()
-        )
-        if not uniswap_v3_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Uniswap V3 Market is not supported by PlasmaVault"
+    def uniswap_v3(
+        self,
+        uniswap_v_3_swap_fuse: ChecksumAddress = None,
+        uniswap_v_3_new_position_fuse: ChecksumAddress = None,
+        uniswap_v_3_modify_position_fuse: ChecksumAddress = None,
+        uniswap_v_3_collect_fuse: ChecksumAddress = None,
+    ) -> UniswapV3Market:
+
+        if uniswap_v_3_swap_fuse is None:
+            uniswap_v_3_swap_fuse = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniswapV3SwapFuse",
+                fuses=self.plasma_vault().get_fuses(),
             )
-        return uniswap_v3_market
+
+        if uniswap_v_3_new_position_fuse is None:
+            uniswap_v_3_new_position_fuse = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniswapV3NewPositionFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if uniswap_v_3_modify_position_fuse is None:
+            uniswap_v_3_modify_position_fuse = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniswapV3ModifyPositionFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if uniswap_v_3_collect_fuse is None:
+            uniswap_v_3_collect_fuse = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniswapV3CollectFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        return UniswapV3Market(
+            chain_id=self._chain_id,
+            uniswap_v_3_swap_fuse=uniswap_v_3_swap_fuse,
+            uniswap_v_3_new_position_fuse=uniswap_v_3_new_position_fuse,
+            uniswap_v_3_modify_position_fuse=uniswap_v_3_modify_position_fuse,
+            uniswap_v_3_collect_fuse=uniswap_v_3_collect_fuse,
+        )
 
     def ramses_v2(
         self,
