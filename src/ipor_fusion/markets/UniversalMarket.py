@@ -16,6 +16,9 @@ class UniversalMarket:
         transaction_executor: TransactionExecutor,
         universal_token_swapper_fuse_address: ChecksumAddress,
     ):
+        if transaction_executor is None:
+            raise ValueError("transaction_executor is required")
+
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
         self._universal_token_swapper_fuse = UniversalTokenSwapperFuse(
@@ -30,7 +33,7 @@ class UniversalMarket:
         targets: List[str],
         data: List[bytes],
     ) -> FuseAction:
-        if not hasattr(self, "_universal_token_swapper_fuse"):
+        if self._universal_token_swapper_fuse is None:
             raise UnsupportedFuseError(
                 "UniversalTokenSwapperFuse is not supported by PlasmaVault"
             )

@@ -19,6 +19,9 @@ class MorphoMarket:
         morpho_supply_fuse_address: ChecksumAddress,
         morpho_flash_loan_fuse_address: ChecksumAddress,
     ):
+        if transaction_executor is None:
+            raise ValueError("transaction_executor is required")
+
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
 
@@ -30,14 +33,14 @@ class MorphoMarket:
         )
 
     def supply(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
-        if not hasattr(self, "_morpho_blue_supply_fuse"):
+        if self._morpho_blue_supply_fuse is None:
             raise UnsupportedFuseError(
                 "MorphoBlueSupplyFuse is not supported by PlasmaVault"
             )
         return self._morpho_blue_supply_fuse.supply(market_id, amount)
 
     def withdraw(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
-        if not hasattr(self, "_morpho_blue_supply_fuse"):
+        if self._morpho_blue_supply_fuse is None:
             raise UnsupportedFuseError(
                 "MorphoBlueSupplyFuse is not supported by PlasmaVault"
             )
@@ -46,7 +49,7 @@ class MorphoMarket:
     def flash_loan(
         self, asset_address: ChecksumAddress, amount: Amount, actions: List[FuseAction]
     ) -> FuseAction:
-        if not hasattr(self, "_morpho_flash_loan_fuse"):
+        if self._morpho_flash_loan_fuse is None:
             raise UnsupportedFuseError(
                 "MorphoFlashLoanFuse is not supported by PlasmaVault"
             )

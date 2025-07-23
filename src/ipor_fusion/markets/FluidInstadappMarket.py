@@ -23,6 +23,9 @@ class FluidInstadappMarket:
         f_usdc_address: ChecksumAddress = None,
         fluid_lending_staking_rewards_usdc_address: ChecksumAddress = None,
     ):
+        if transaction_executor is None:
+            raise ValueError("transaction_executor is required")
+
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
         self._erc_4626_supply_fuse_market_id_5_address = (
@@ -67,7 +70,7 @@ class FluidInstadappMarket:
         return self._pool
 
     def supply_and_stake(self, amount: int) -> List[FuseAction]:
-        if not hasattr(self, "_fluid_instadapp_pool_fuse"):
+        if self._fluid_instadapp_pool_fuse is None:
             raise UnsupportedFuseError(
                 "FluidInstadappSupplyFuse is not supported by PlasmaVault"
             )
@@ -79,7 +82,7 @@ class FluidInstadappMarket:
         return self._fluid_instadapp_pool_fuse.supply_and_stake(market_id, amount)
 
     def unstake_and_withdraw(self, amount: int) -> List[FuseAction]:
-        if not hasattr(self, "_fluid_instadapp_pool_fuse"):
+        if self._fluid_instadapp_pool_fuse is None:
             raise UnsupportedFuseError(
                 "FluidInstadappSupplyFuse is not supported by PlasmaVault"
             )

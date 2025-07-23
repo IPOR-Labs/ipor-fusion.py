@@ -52,6 +52,9 @@ class RamsesV2Market:
         ramses_v_2_collect_fuse_address: ChecksumAddress = None,
         ramses_v_2_claim_fuse_address: ChecksumAddress = None,
     ):
+        if transaction_executor is None:
+            raise ValueError("transaction_executor is required")
+
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
 
@@ -91,7 +94,7 @@ class RamsesV2Market:
         deadline: int,
         ve_ram_token_id: int,
     ) -> FuseAction:
-        if not hasattr(self, "_ramses_v2_new_position_fuse"):
+        if self._ramses_v2_new_position_fuse is None:
             raise UnsupportedFuseError(
                 "RamsesV2NewPositionFuse is not supported by PlasmaVault"
             )
@@ -118,7 +121,7 @@ class RamsesV2Market:
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        if not hasattr(self, "_ramses_v2_modify_position_fuse"):
+        if self._ramses_v2_modify_position_fuse is None:
             raise UnsupportedFuseError(
                 "RamsesV2ModifyPositionFuse is not supported by PlasmaVault"
             )
@@ -132,7 +135,7 @@ class RamsesV2Market:
         )
 
     def collect(self, token_ids: List[int]) -> FuseAction:
-        if not hasattr(self, "_ramses_v2_collect_fuse"):
+        if self._ramses_v2_collect_fuse is None:
             raise UnsupportedFuseError(
                 "RamsesV2CollectFuse is not supported by PlasmaVault"
             )
@@ -140,7 +143,7 @@ class RamsesV2Market:
         return self._ramses_v2_collect_fuse.collect(token_ids)
 
     def close_position(self, token_ids: List[int]) -> FuseAction:
-        if not hasattr(self, "_ramses_v2_new_position_fuse"):
+        if self._ramses_v2_new_position_fuse is None:
             raise UnsupportedFuseError(
                 "RamsesV2NewPositionFuse is not supported by PlasmaVault"
             )
@@ -158,7 +161,7 @@ class RamsesV2Market:
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        if not hasattr(self, "_ramses_v2_modify_position_fuse"):
+        if self._ramses_v2_modify_position_fuse is None:
             raise UnsupportedFuseError(
                 "RamsesV2ModifyPositionFuse is not supported by PlasmaVault"
             )
@@ -175,7 +178,7 @@ class RamsesV2Market:
         )
 
     def claim(self, token_ids: List[int], token_rewards: List[List[str]]) -> FuseAction:
-        if not hasattr(self, "_ramses_v2_claim_fuse"):
+        if self._ramses_v2_claim_fuse is None:
             raise UnsupportedFuseError(
                 "RamsesClaimFuse is not supported by PlasmaVault"
             )

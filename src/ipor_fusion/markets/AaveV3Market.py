@@ -16,7 +16,12 @@ class AaveV3Market:
         aave_v3_supply_fuse_address: ChecksumAddress = None,
         aave_v3_borrow_fuse_address: ChecksumAddress = None,
     ):
+        if transaction_executor is None:
+            raise ValueError("transaction_executor is required")
+
         self._transaction_executor = transaction_executor
+        self._aave_v3_supply_fuse = None
+        self._aave_v3_borrow_fuse = None
         if aave_v3_supply_fuse_address:
             self._aave_v3_supply_fuse = AaveV3SupplyFuse(aave_v3_supply_fuse_address)
         if aave_v3_borrow_fuse_address:
@@ -25,7 +30,7 @@ class AaveV3Market:
     def supply(
         self, asset_address: ChecksumAddress, amount: int, e_mode: int
     ) -> FuseAction:
-        if not hasattr(self, "_aave_v3_supply_fuse"):
+        if self._aave_v3_supply_fuse is None:
             raise UnsupportedFuseError("AaveV3SupplyFuse is not set up")
 
         market_id = MarketId(
@@ -37,14 +42,14 @@ class AaveV3Market:
         )
 
     def withdraw(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
-        if not hasattr(self, "_aave_v3_supply_fuse"):
+        if self._aave_v3_supply_fuse is None:
             raise UnsupportedFuseError("AaveV3SupplyFuse is not set up")
 
         market_id = MarketId(AaveV3SupplyFuse.PROTOCOL_ID, asset_address)
         return self._aave_v3_supply_fuse.withdraw(market_id, amount)
 
     def borrow(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
-        if not hasattr(self, "_aave_v3_borrow_fuse"):
+        if self._aave_v3_borrow_fuse is None:
             raise UnsupportedFuseError("AaveV3BorrowFuse is not set up")
 
         market_id = MarketId(
@@ -55,7 +60,7 @@ class AaveV3Market:
         return self._aave_v3_borrow_fuse.borrow(market_id, amount)
 
     def repay(self, asset_address: ChecksumAddress, amount: int) -> FuseAction:
-        if not hasattr(self, "_aave_v3_borrow_fuse"):
+        if self._aave_v3_borrow_fuse is None:
             raise UnsupportedFuseError("AaveV3BorrowFuse is not set up")
 
         market_id = MarketId(

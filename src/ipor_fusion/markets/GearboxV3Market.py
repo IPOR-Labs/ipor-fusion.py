@@ -22,12 +22,15 @@ class GearboxV3Market:
         gearbox_v3_farm_supply_fuse_address: ChecksumAddress = None,
         farmd_usdcv_3_address: ChecksumAddress = None,
     ):
+        if transaction_executor is None:
+            raise ValueError("transaction_executor is required")
+
         self._chain_id = chain_id
         self._transaction_executor = transaction_executor
         self._erc_4626_supply_fuse_market_id_3 = (
             erc_4626_supply_fuse_market_id_3_address
         )
-        self._gearbox_v3_farm_supply_fuse = gearbox_v3_farm_supply_fuse_address
+        self._gearbox_v3_farm_supply_fuse_address = gearbox_v3_farm_supply_fuse_address
 
         if d_usdcv_3_address is None:
             self._d_usdcv_3 = self.get_dUSDCV3()
@@ -39,7 +42,7 @@ class GearboxV3Market:
             self._d_usdcv_3,
             self._erc_4626_supply_fuse_market_id_3,
             self._farmd_usdcv_3,
-            self._gearbox_v3_farm_supply_fuse,
+            self._gearbox_v3_farm_supply_fuse_address,
         )
 
         self._pool = ERC20(transaction_executor, self._d_usdcv_3)
@@ -52,7 +55,7 @@ class GearboxV3Market:
         return self._farm_pool
 
     def supply_and_stake(self, amount: int) -> List[FuseAction]:
-        if not hasattr(self, "_gearbox_supply_fuse"):
+        if self._gearbox_supply_fuse is None:
             raise UnsupportedFuseError(
                 "GearboxSupplyFuse is not supported by PlasmaVault"
             )
@@ -61,7 +64,7 @@ class GearboxV3Market:
         return self._gearbox_supply_fuse.supply_and_stake(market_id, amount)
 
     def unstake_and_withdraw(self, amount: int) -> List[FuseAction]:
-        if not hasattr(self, "_gearbox_supply_fuse"):
+        if self._gearbox_supply_fuse is None:
             raise UnsupportedFuseError(
                 "GearboxSupplyFuse is not supported by PlasmaVault"
             )

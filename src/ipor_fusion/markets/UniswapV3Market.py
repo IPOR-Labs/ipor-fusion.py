@@ -47,7 +47,7 @@ class UniswapV3Market:
         min_out_amount: int,
     ) -> FuseAction:
         # Check if _uniswap_v3_swap_fuse is set
-        if not hasattr(self, "_uniswap_v3_swap_fuse"):
+        if self._uniswap_v3_swap_fuse is None:
             raise UnsupportedFuseError(
                 "UniswapV3SwapFuse is not supported by PlasmaVault"
             )
@@ -73,7 +73,7 @@ class UniswapV3Market:
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        if not hasattr(self, "_uniswap_v3_new_position_fuse"):
+        if self._uniswap_v3_new_position_fuse is None:
             raise UnsupportedFuseError(
                 "UniswapV3NewPositionFuse is not supported by PlasmaVault"
             )
@@ -102,7 +102,7 @@ class UniswapV3Market:
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        if not hasattr(self, "_uniswap_v3_modify_position_fuse"):
+        if self._uniswap_v3_modify_position_fuse is None:
             raise UnsupportedFuseError(
                 "UniswapV3ModifyPositionFuse is not supported by PlasmaVault"
             )
@@ -126,7 +126,7 @@ class UniswapV3Market:
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        if not hasattr(self, "_uniswap_v3_modify_position_fuse"):
+        if self._uniswap_v3_modify_position_fuse is None:
             raise UnsupportedFuseError(
                 "UniswapV3ModifyPositionFuse is not supported by PlasmaVault"
             )
@@ -140,7 +140,7 @@ class UniswapV3Market:
         )
 
     def collect(self, token_ids: List[int]) -> FuseAction:
-        if not hasattr(self, "_uniswap_v3_collect_fuse"):
+        if self._uniswap_v3_collect_fuse is None:
             raise UnsupportedFuseError(
                 "UniswapV3CollectFuse is not supported by PlasmaVault"
             )
@@ -148,7 +148,7 @@ class UniswapV3Market:
         return self._uniswap_v3_collect_fuse.collect(token_ids)
 
     def close_position(self, token_ids: List[int]) -> FuseAction:
-        if not hasattr(self, "_uniswap_v3_new_position_fuse"):
+        if self._uniswap_v3_new_position_fuse is None:
             raise UnsupportedFuseError(
                 "UniswapV3NewPositionFuse is not supported by PlasmaVault"
             )
