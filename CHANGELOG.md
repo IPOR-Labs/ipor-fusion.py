@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.19.0 (2025-07-24)
+
+### Unknown
+
+* Merge pull request #82 from IPOR-Labs/develop
+
+ [refactor] dependency injection for fuses ([`b6f1e18`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b6f1e185b3e671d1977419ac8ffb64d2676dcd00))
+
+*  [refactor] dependency injection for fuses ([`7e18a2f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7e18a2f6e552afb34b2bccfd06e5488247537666))
+
+
 ## v0.18.0 (2025-06-12)
 
 ### Unknown
