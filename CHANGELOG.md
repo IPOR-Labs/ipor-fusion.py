@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.20.0 (2025-07-24)
+
+### Unknown
+
+* Merge pull request #84 from IPOR-Labs/develop
+
+Merge develop -> main ([`1902e08`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1902e08225482002ef10e797fbc1ed33c4733e38))
+
+* Merge pull request #83 from IPOR-Labs/feature/logging
+
+[refactor] logging improvements ([`8a4827d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8a4827d238c5898db65afa851ad86deed8b2f2e5))
+
+* [refactor] logging improvements ([`4585f9f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4585f9f3611d346976db1ff50b72f13726e948a7))
+
+
 ## v0.19.0 (2025-07-24)
 
 ### Unknown
