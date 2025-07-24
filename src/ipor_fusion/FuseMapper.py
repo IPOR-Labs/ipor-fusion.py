@@ -13,7 +13,10 @@ mapping = {
         "RamsesV2NewPositionFuse": ["0xb025cc5e73e2966e12e4d859360b51c1d0f45ea3"],
         "RamsesV2ModifyPositionFuse": ["0xd41501b46a68dea06a460fd79a7bcda9e3b92674"],
         "RamsesV2CollectFuse": ["0x859f5c9d5cb2800a9ff72c56d79323ea01cb30b9"],
-        "AaveV3SupplyFuse": ["0xd3c752ee5bb80de64f76861b800a8f3b464c50f9"],
+        "AaveV3SupplyFuse": [
+            "0xd3c752ee5bb80de64f76861b800a8f3b464c50f9",
+            "0x9339acd4e73c8a11109f77bc87221bdfc7b7a4fc",
+        ],
         "CompoundV3SupplyFuse": [
             "0xb0b3dc1b27c6c8007c9b01a768d6717f6813fe94",
             "0x34bcbc3f10ce46894bb39de0c667257efb35c079",
@@ -63,6 +66,9 @@ mapping = {
             "0x6b80b3dd68f908bb7e2e10127e6174d7d0584991",
             "0xd347f4bb96531b01c8fab953cf8e920419193a8c",
             "0xdb26af00177bfae4439eb881b7742ef47eddfaf6",
+            "0xfc938b178e37788cecb6925c9034f589a91783fb",
+            "0xd78c731597247883103682eaf51097fb35d819b4",
+            "0x5e31e0c31be569b0e8375b35b6354de755525ecc",
         ],
         "GearboxV3FarmBalanceFuse": [
             "0x635a02b828a5c830afbf1e21699a8862dca4f4c0",
@@ -88,6 +94,33 @@ mapping = {
             "0x292711bc63184318294593c38ad914acfcd1797b",
             "0xee322e49268760878924d18a645278ab08ae245c",
         ],
+        "Erc4626SupplyFuseMarketId100001": [
+            "0xe7d3a550f0ad32ccbef570c670b5ac004c276f24"
+        ],
+        "Erc4626SupplyFuseMarketId100002": [
+            "0xba4e51a46b562cbaef372c07bf191c7111a067aa"
+        ],
+        "Erc4626SupplyFuseMarketId100003": [
+            "0xf5c5e375d219e573b10f9c90a1815f93951ad275"
+        ],
+        "Erc4626SupplyFuseMarketId100004": [
+            "0x2f34f8566952b055f3cc32acb8b9c8203e91132a"
+        ],
+        "Erc4626SupplyFuseMarketId100005": [
+            "0x28ee4cd5e888f6331b6c6c38959bbbe05ef7d73a"
+        ],
+        "Erc4626SupplyFuseMarketId100006": [
+            "0x0de665bb75556ea407c23b513a5d521064245b3e"
+        ],
+        "Erc4626BalanceFuse": [
+            "0xa57ae6dd2551ede6ead278e47df9df3535935418",
+            "0xd3f1f690c9459c1cd7048725f420149668240b7b",
+            "0x37189a0f865abacc9445f5e44d2d35426d0f2cf7",
+            "0xa1cd5b1112e6700d98a4a4b39a7946fec3a4663b",
+        ],
+        "Erc4626SupplyFuseMarketId100007": [
+            "0x624e2ab4e17aa38b078674eec75dbadcc10e295b"
+        ],
     },
     "8453": {
         "MoonwellEnableMarketFuse": ["0xd62542ef1abff0ac71a1b5666cb76801e81104ef"],
@@ -100,7 +133,10 @@ mapping = {
         "UniversalTokenSwapperFuse": ["0xdbc5f9962ce85749f1b3c51ba0473909229e3807"],
         "MoonwellClaimFuse": ["0xd253c5c54248433c7879ac14fb03201e008c5a1e"],
         "AaveV3SupplyFuse": ["0x44dcb8a4c40fa9941d99f409b2948fe91b6c15d5"],
-        "CompoundV3SupplyFuse": ["0x42fbd4d8f578b902ed9030bf9035a606ddeca26f"],
+        "CompoundV3SupplyFuse": [
+            "0x42fbd4d8f578b902ed9030bf9035a606ddeca26f",
+            "0xd72dd19c04362488a4143f43e407ec87a849b72b",
+        ],
         "MorphoSupplyFuse": ["0xae93ef3cf337b9599f0dfc12520c3c281637410f"],
         "Erc4626SupplyFuseMarketId5": ["0x15a1e2950da9ec0da69a704b8940f01bddde86ab"],
         "FluidInstadappStakingSupplyFuse": [
@@ -113,6 +149,7 @@ mapping = {
             "0x706ca1ca4ece9cf23301d6ab35ce6fb7cf25da15",
             "0x2ce01779cfe56dc253d0ac1b47e3bb7e597bcaea",
             "0x341d2459606feb164a986767cb72ddd8230744fe",
+            "0xc8a552bf7279a932b9fca8f527ef292083c5b87f",
         ],
         "ERC20BalanceFuse": ["0x9ba147fc382dbf4d73512a45370ba0b70c25f6aa"],
         "MoonwellBalanceFuse": ["0x86417b0b3b03e8bc8b68377994363796b4ccd3bc"],
@@ -121,6 +158,33 @@ mapping = {
         "Erc4626BalanceFuse": [
             "0xc80e5a95540d6ebfe4970a0743e71c639df8c25e",
             "0xf760384518c9157b82cdc4ecb0f53799970728d9",
+            "0x7f4d9efde7efebbafbb506ca3f711764cbc96391",
+            "0x3dfe25f60191aaee4213080398d2fdf65ec3cf2f",
+            "0xfee84b6af26a481c1819655dade5f5588416e19f",
+            "0x903c1abb5a303cf717196e8d12ce87f46de56719",
+            "0xe017c7326d371828a6877727e46a203e915af0fd",
+            "0xc8c0498e36a4f26744e8222c8749cd0143f6e6eb",
+            "0xc5d840b15b8dce3f38989f4be9f42a9308ed8fce",
+            "0x684b5c8866aade4e21f8a30697a56a805b108a67",
+            "0x32b8389d5cc5e50221c9a127ae2b47968919fd74",
+            "0xe1725cc2af00941db5847a59b4aa8bf47ad35bdf",
+            "0x9332dafa9376b7e049755fd81b01b23fc772b8a6",
+            "0x5f565d142815eb430ab14bc9bda9d12c9fca3c6c",
+            "0x1536190e4f647e09198b049ada3e635d413a6fc8",
+            "0x22f3ffd6766ee32c63eb3b48439005895ee91d5e",
+            "0x03c245c9e611a8dadf26ff8d90fa0d9db1302ed4",
+            "0x44b13c4af19d97af4da32c46b533c3e632000bf8",
+            "0x4b69ac30feddd922eb26adb30713984d5fb0e972",
+            "0x1cb4eaf830874c6d6fcba455a058c55bb7e30591",
+            "0xb2713d276a771a8805e25ae539cef29585def021",
+            "0xcbd6b2e0c0c7ea4662f6e0d64d531f714c1d1321",
+            "0xa515a9a05b4f0011711cc6e3d25e8340697d0cbd",
+            "0xfba70e497cf3827152031adaa94c462275d8c087",
+            "0xaed326f23f4d93d8e548840eae5f7da463c2a536",
+            "0x6343a839a0e7eedfd7d5e820ec64b570e627cf7f",
+            "0x9d0376ce38044dfb46fb3ee0dbf17ea9dd788d24",
+            "0xf6006a1da8cd7a7d99fc608f3879df65fe06f281",
+            "0x0217013cf40b92b2f5841ebbc595ebfbce1f66f3",
         ],
         "FluidInstadappStakingBalanceFuse": [
             "0x29d294d3d8bb422dddc925cb95a903d34eeb208a"
@@ -133,6 +197,82 @@ mapping = {
         "BurnRequestFeeFuse": ["0x8aad082f04d04d1db2e92160baa630e31c22c073"],
         "MorphoBorrowFuse": ["0x35f44ad1d9f2773da05f4664bf574c760ba47bf6"],
         "MorphoCollateralFuse": ["0xde3fd3a25534471e92c5940d418b0582802b17b6"],
+        "Erc4626SupplyFuseMarketId100001": [
+            "0xbe8ab5217f4f251e4a667650fc34a63035c231a8"
+        ],
+        "Erc4626SupplyFuseMarketId100002": [
+            "0xed5ec535e6e6a3051105a8ea2e8bd178951a9eac"
+        ],
+        "Erc4626SupplyFuseMarketId100003": [
+            "0xda0711a0b1b1dd289c4d7c08704dd1e4ccea80c1"
+        ],
+        "Erc4626SupplyFuseMarketId100004": [
+            "0xb187050408857fc2a57be0a5618e39b331425e77"
+        ],
+        "Erc4626SupplyFuseMarketId100005": [
+            "0x633d78849fb91a336077ff25afc3c72c8f6a7045"
+        ],
+        "Erc4626SupplyFuseMarketId100006": [
+            "0xf3ce837d8eba7332ce16b698d8262247d6cb277d"
+        ],
+        "Erc4626SupplyFuseMarketId100007": [
+            "0x928c217e669d9f0f3fc08fb8ac322133a12e1f43",
+            "0xb355c889fc2b7e593730e396416e7ab75448d256",
+        ],
+        "Erc4626SupplyFuseMarketId100008": [
+            "0x5b36e95abff98a476fbaeb3e2434dee3eb463f48"
+        ],
+        "Erc4626SupplyFuseMarketId100009": [
+            "0xc3b44addfae29fd170196c324ba0c233c870c77a"
+        ],
+        "Erc4626SupplyFuseMarketId100010": [
+            "0xf4fb53b8831dd70b628f225ab8bbaadc0a93e2dc"
+        ],
+        "Erc4626SupplyFuseMarketId100011": [
+            "0x25c275cbffb6539d81e00afcdbfdbd962f5d3202"
+        ],
+        "Erc4626SupplyFuseMarketId100012": [
+            "0x32df46cff7e6cab610ed6113d7a57f242d061d68"
+        ],
+        "Erc4626SupplyFuseMarketId100013": [
+            "0x7f378328c91f6a4d1dc5dd08daecb6e983f18e61",
+            "0x8598432cda45fd6dc836728d6b12f325f78b62b6",
+        ],
+        "Erc4626SupplyFuseMarketId100014": [
+            "0x5cec9bfe577ed59ccd164ec9777093c0663b5170",
+            "0xe1cce1485f5a22d64b89d8e0ba2190ca4e8f1ea2",
+        ],
+        "Erc4626SupplyFuseMarketId100015": [
+            "0x55a3d0f6c2e9efe0462f8de232268275fe76e15b",
+            "0xddd2ea42b8bccada2dded9db3170ab2f533d1b73",
+        ],
+        "Erc4626SupplyFuseMarketId100016": [
+            "0x1016508d9bb2f546b7f07171311b9de1692576af"
+        ],
+        "Erc4626SupplyFuseMarketId100017": [
+            "0xea1b36c9c655470cbb6e171b9d025783b079da0e"
+        ],
+        "Erc4626SupplyFuseMarketId100018": [
+            "0xd61498ff21c11761b976e8a25d919decb6b42bc2"
+        ],
+        "Erc4626SupplyFuseMarketId100019": [
+            "0xb995c4ea64ed9da2f8ecc9eb6707b6c4dda2293e"
+        ],
+        "Erc4626SupplyFuseMarketId100020": [
+            "0xd76b9c813e5a17879f01d50cf5c90a2ed17a8dbb"
+        ],
+        "Erc4626SupplyFuseMarketId100021": [
+            "0x195f6d86ef29107dbf6270e7f9a7c01e7f03efff"
+        ],
+        "Erc4626SupplyFuseMarketId100022": [
+            "0xe0c43958a9a49a3290de54b4eff72ef7b324c2ee"
+        ],
+        "Erc4626SupplyFuseMarketId100023": [
+            "0xf5c604608df82eb527661ab669973de152eb1f6f"
+        ],
+        "FluidProofClaimFuse": ["0xb002337c59a4133e328d91ed82c5012472952c6f"],
+        "EulerV2SupplyFuse": ["0xfa00806c871558cef982dfc02d7a87e4ad0ec0fa"],
+        "PendleSwapPTFuse": ["0x3c715ee10c1cb2c565fd13e35d81df1c986eef76"],
     },
     "1": {
         "AaveV3SupplyFuse": ["0x465d639eb964158bee11f35e8fc23f704ec936a2"],
@@ -164,6 +304,15 @@ mapping = {
             "0x933bff1078ff1a0ca3b53dad00d7b1850af8749b",
             "0x318dc5d24bcc71ba0127a45e009b64bdba0c2edf",
             "0xa72f8391d7c9f1991769b76858b8ac54ccee92cf",
+            "0xf9a1f7147d04d569af9f9e1b6b713935ca1308fe",
+            "0x560c836581476a95b5adf65b1986fba3cf7772f0",
+            "0x8c8f2a5250d440bdf6ac21b097be04b07cce78af",
+            "0x32971e61678b0a77a07425f617f83c6d5aecf8e7",
+            "0x10e2c21205c180654b8eea5b75c3a51014cdb336",
+            "0x806b55f731b0bf5d32d9d14785743589ea23fb94",
+            "0x19e332aba9cd9387e9310c9645b0a4b03a6e7906",
+            "0xf3d20ca7e35687b159c2ea4c3876c89afa27bf11",
+            "0x2e3266358674c8a54ead81610c3c41033279e7dd",
         ],
         "MorphoBalanceFuse": ["0x0ad1776b9319a03216a44aba0242cc0bc7e3cac3"],
         "CompoundV3BalanceFuse": [
@@ -185,6 +334,7 @@ mapping = {
             "0xe9562d7bd06b43e6391c5be4b3c5f5c2bc1e06bf",
             "0xb1b74e885349cd9d1f0effb2e1ce0fb79959d7cf",
             "0x48bd852d83f6e58af59255abc708e3ddecb1d1e6",
+            "0x759ddf11e56d2915fe10ea8c4dbfc44a8d048e6e",
         ],
         "UniversalTokenSwapperFuse": ["0x08dfdbb6ecf19f1fc974e0675783e1150b2b650f"],
         "MorphoCollateralFuse": ["0xe1aa89eb42c23f292cda1544566f6ebee3a67eed"],
@@ -207,6 +357,39 @@ mapping = {
         "Erc4626SupplyFuseMarketId100013": [
             "0x970b4f5522685d4826eceb0377b3ddbf12836dfd"
         ],
+        "EulerV2SupplyFuse": [
+            "0xdd33b4b6b9a7aa6fcc5f1d1c8ebb649a796fd5b5",
+            "0x225d3e01d3ba0ddf904e1fbb46256f7d3a7e7bf0",
+        ],
+        "EulerV2BalanceFuse": ["0xae9a37dd9229687662834e6696e396e7837baabd"],
+        "Erc4626SupplyFuseMarketId100004": [
+            "0x06b53af012499d6429741b9d53e868fd89a5d3b2"
+        ],
+        "Erc4626SupplyFuseMarketId100005": [
+            "0x59e58d1a800426df9fddddbd248da0acc4d38f89"
+        ],
+        "Erc4626SupplyFuseMarketId100006": [
+            "0xf492e277d6d6e051f9871e66badfd089fb7bf5e7"
+        ],
+        "Erc4626SupplyFuseMarketId100007": [
+            "0x87e3b7c430368eb4684ef622bae0d4c8c0cd590b"
+        ],
+        "Erc4626SupplyFuseMarketId100008": [
+            "0xbd8a194d188bc27a050f271a923459cab847ca9f"
+        ],
+        "Erc4626SupplyFuseMarketId100009": [
+            "0x62679b25956d525703c810a6c13e2324312649e8"
+        ],
+        "Erc4626SupplyFuseMarketId100010": [
+            "0x01d4fa645f3b98fc9d870dd687de3665f0d45cdf"
+        ],
+        "Erc4626SupplyFuseMarketId100011": [
+            "0x6b9489369015233e049f548ce6c0dedcf17bfb90"
+        ],
+        "Erc4626SupplyFuseMarketId100012": [
+            "0xf16119e669c1fb8264dffd92ecb1ab592f73d8e3"
+        ],
+        "HarvestDoHardWorkFuse": ["0xda45fe8099358bba400554c9b640170246b43e50"],
     },
 }
 
