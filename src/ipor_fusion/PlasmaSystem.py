@@ -6,12 +6,12 @@ from web3.exceptions import ContractLogicError
 from ipor_fusion.AccessManager import AccessManager
 from ipor_fusion.CheatingTransactionExecutor import CheatingTransactionExecutor
 from ipor_fusion.ERC20 import ERC20
+from ipor_fusion.FuseMapper import FuseMapper
 from ipor_fusion.PlasmaVault import PlasmaVault
 from ipor_fusion.PriceOracleMiddleware import PriceOracleMiddleware
 from ipor_fusion.RewardsClaimManager import RewardsClaimManager
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.WithdrawManager import WithdrawManager
-from ipor_fusion.error.UnsupportedMarketError import UnsupportedMarketError
 from ipor_fusion.markets.AaveV3Market import AaveV3Market
 from ipor_fusion.markets.CompoundV3Market import CompoundV3Market
 from ipor_fusion.markets.ERC4626Market import ERC4626Market
@@ -106,116 +106,246 @@ class PlasmaSystem:
     def alpha(self) -> ChecksumAddress:
         return self._transaction_executor.get_account_address()
 
-    def uniswap_v3(self) -> UniswapV3Market:
-        uniswap_v3_market = UniswapV3Market(
-            chain_id=self._chain_id, fuses=self.plasma_vault().get_fuses()
-        )
-        if not uniswap_v3_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Uniswap V3 Market is not supported by PlasmaVault"
-            )
-        return uniswap_v3_market
+    def uniswap_v3(
+        self,
+        uniswap_v_3_swap_fuse: ChecksumAddress = None,
+        uniswap_v_3_new_position_fuse: ChecksumAddress = None,
+        uniswap_v_3_modify_position_fuse: ChecksumAddress = None,
+        uniswap_v_3_collect_fuse: ChecksumAddress = None,
+    ) -> UniswapV3Market:
 
-    def ramses_v2(self) -> RamsesV2Market:
+        if uniswap_v_3_swap_fuse is None:
+            uniswap_v_3_swap_fuse = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniswapV3SwapFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if uniswap_v_3_new_position_fuse is None:
+            uniswap_v_3_new_position_fuse = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniswapV3NewPositionFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if uniswap_v_3_modify_position_fuse is None:
+            uniswap_v_3_modify_position_fuse = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniswapV3ModifyPositionFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if uniswap_v_3_collect_fuse is None:
+            uniswap_v_3_collect_fuse = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniswapV3CollectFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        return UniswapV3Market(
+            chain_id=self._chain_id,
+            uniswap_v_3_swap_fuse=uniswap_v_3_swap_fuse,
+            uniswap_v_3_new_position_fuse=uniswap_v_3_new_position_fuse,
+            uniswap_v_3_modify_position_fuse=uniswap_v_3_modify_position_fuse,
+            uniswap_v_3_collect_fuse=uniswap_v_3_collect_fuse,
+        )
+
+    def ramses_v2(
+        self,
+        ramses_v_2_new_position_fuse_address: ChecksumAddress = None,
+        ramses_v_2_modify_position_fuse_address: ChecksumAddress = None,
+        ramses_v_2_collect_fuse_address: ChecksumAddress = None,
+        ramses_v_2_claim_fuse_address: ChecksumAddress = None,
+    ) -> RamsesV2Market:
+
+        if ramses_v_2_new_position_fuse_address is None:
+            ramses_v_2_new_position_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="RamsesV2NewPositionFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if ramses_v_2_modify_position_fuse_address is None:
+            ramses_v_2_modify_position_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="RamsesV2ModifyPositionFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if ramses_v_2_collect_fuse_address is None:
+            ramses_v_2_collect_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="RamsesV2CollectFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
         rewards_fuses = []
         try:
             rewards_fuses = self.rewards_claim_manager().get_rewards_fuses()
         except ContractLogicError as e:
             log.warning("Failed to get rewards fuses: %s", e)
 
-        ramses_v2_market = RamsesV2Market(
-            chain_id=self._chain_id,
-            transaction_executor=self._transaction_executor,
-            rewards_claim_manager=self.rewards_claim_manager(),
-            fuses=self.plasma_vault().get_fuses(),
-            rewards_fuses=rewards_fuses,
-        )
-
-        if not ramses_v2_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Ramses V2 Market is not supported by PlasmaVault"
+        if ramses_v_2_claim_fuse_address is None:
+            ramses_v_2_claim_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="RamsesClaimFuse",
+                fuses=rewards_fuses,
             )
 
-        return ramses_v2_market
+        if not rewards_fuses:
+            for rewards_fuse in FuseMapper.map(self._chain_id, "RamsesClaimFuse"):
+                if self.rewards_claim_manager().is_reward_fuse_supported(rewards_fuse):
+                    ramses_v_2_claim_fuse_address = rewards_fuse
 
-    def gearbox_v3(self) -> GearboxV3Market:
-        gearbox_v3_market = GearboxV3Market(
+        return RamsesV2Market(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            ramses_v_2_new_position_fuse_address=ramses_v_2_new_position_fuse_address,
+            ramses_v_2_modify_position_fuse_address=ramses_v_2_modify_position_fuse_address,
+            ramses_v_2_collect_fuse_address=ramses_v_2_collect_fuse_address,
+            ramses_v_2_claim_fuse_address=ramses_v_2_claim_fuse_address,
         )
 
-        if not gearbox_v3_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Gearbox V3 Market is not supported by PlasmaVault"
-            )
-        return gearbox_v3_market
+    def gearbox_v3(
+        self,
+        d_usdcv_3_address: ChecksumAddress = None,
+        erc_4626_supply_fuse_market_id_3_address: ChecksumAddress = None,
+        gearbox_v3_farm_supply_fuse_address: ChecksumAddress = None,
+        farmd_usdcv_3_address: ChecksumAddress = None,
+    ) -> GearboxV3Market:
 
-    def fluid_instadapp(self) -> FluidInstadappMarket:
-        fluid_instadapp_market = FluidInstadappMarket(
+        if erc_4626_supply_fuse_market_id_3_address is None:
+            erc_4626_supply_fuse_market_id_3_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="Erc4626SupplyFuseMarketId3",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if gearbox_v3_farm_supply_fuse_address is None:
+            gearbox_v3_farm_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="GearboxV3FarmSupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        return GearboxV3Market(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            d_usdcv_3_address=d_usdcv_3_address,
+            farmd_usdcv_3_address=farmd_usdcv_3_address,
+            erc_4626_supply_fuse_market_id_3_address=erc_4626_supply_fuse_market_id_3_address,
+            gearbox_v3_farm_supply_fuse_address=gearbox_v3_farm_supply_fuse_address,
         )
 
-        if not fluid_instadapp_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Fluid Instadapp Market is not supported by PlasmaVault"
+    def fluid_instadapp(
+        self,
+        f_usdc_address: ChecksumAddress = None,
+        fluid_lending_staking_rewards_usdc_address: ChecksumAddress = None,
+        erc_4626_supply_fuse_market_id_5_address: ChecksumAddress = None,
+        fluid_instadapp_staking_supply_fuse_address: ChecksumAddress = None,
+    ) -> FluidInstadappMarket:
+        if erc_4626_supply_fuse_market_id_5_address is None:
+            erc_4626_supply_fuse_market_id_5_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="Erc4626SupplyFuseMarketId5",
+                fuses=self.plasma_vault().get_fuses(),
             )
-        return fluid_instadapp_market
 
-    def aave_v3(self) -> AaveV3Market:
-        aave_v3_market = AaveV3Market(
+        if fluid_instadapp_staking_supply_fuse_address is None:
+            fluid_instadapp_staking_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="FluidInstadappStakingSupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        return FluidInstadappMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            f_usdc_address=f_usdc_address,
+            fluid_lending_staking_rewards_usdc_address=fluid_lending_staking_rewards_usdc_address,
+            erc_4626_supply_fuse_market_id_5_address=erc_4626_supply_fuse_market_id_5_address,
+            fluid_instadapp_staking_supply_fuse_address=fluid_instadapp_staking_supply_fuse_address,
         )
 
-        if not aave_v3_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Aave V3 Market is not supported by PlasmaVault"
+    def aave_v3(
+        self,
+        aave_v3_supply_fuse_address: ChecksumAddress = None,
+        aave_v3_borrow_fuse_address: ChecksumAddress = None,
+    ) -> AaveV3Market:
+        if aave_v3_supply_fuse_address is None:
+            aave_v3_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="AaveV3SupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
             )
-        return aave_v3_market
+        if aave_v3_borrow_fuse_address is None:
+            aave_v3_borrow_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="AaveV3BorrowFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+        return AaveV3Market(
+            transaction_executor=self._transaction_executor,
+            aave_v3_supply_fuse_address=aave_v3_supply_fuse_address,
+            aave_v3_borrow_fuse_address=aave_v3_borrow_fuse_address,
+        )
 
-    def morpho(self) -> MorphoMarket:
-        morpho_market = MorphoMarket(
+    def morpho(
+        self,
+        morpho_supply_fuse_address: ChecksumAddress = None,
+        morpho_flash_loan_fuse_address: ChecksumAddress = None,
+    ) -> MorphoMarket:
+
+        if morpho_supply_fuse_address is None:
+            morpho_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="MorphoSupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        if morpho_flash_loan_fuse_address is None:
+            morpho_flash_loan_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="MorphoFlashLoanFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        return MorphoMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            morpho_supply_fuse_address=morpho_supply_fuse_address,
+            morpho_flash_loan_fuse_address=morpho_flash_loan_fuse_address,
         )
 
-        if not morpho_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Morpho Blue Market is not supported by PlasmaVault"
+    def compound_v3(
+        self, compound_v3_supply_fuse_address: ChecksumAddress = None
+    ) -> CompoundV3Market:
+        if compound_v3_supply_fuse_address is None:
+            compound_v3_supply_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="CompoundV3SupplyFuse",
+                fuses=self.plasma_vault().get_fuses(),
             )
-        return morpho_market
+        return CompoundV3Market(
+            transaction_executor=self._transaction_executor,
+            compound_v3_supply_fuse_address=compound_v3_supply_fuse_address,
+        )
 
-    def compound_v3(self) -> CompoundV3Market:
-        compound_v3_market = CompoundV3Market(
+    def universal(
+        self, universal_token_swapper_fuse_address: ChecksumAddress = None
+    ) -> UniversalMarket:
+        if universal_token_swapper_fuse_address is None:
+            universal_token_swapper_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="UniversalTokenSwapperFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
+        return UniversalMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
-            fuses=self.plasma_vault().get_fuses(),
+            universal_token_swapper_fuse_address=universal_token_swapper_fuse_address,
         )
-
-        if not compound_v3_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Compound V3 Market is not supported by PlasmaVault"
-            )
-        return compound_v3_market
-
-    def universal(self) -> UniversalMarket:
-        universal_market = UniversalMarket(
-            chain_id=self._chain_id,
-            fuses=self.plasma_vault().get_fuses(),
-            transaction_executor=self._transaction_executor,
-            plasma_vault=self.plasma_vault(),
-        )
-
-        if not universal_market.is_market_supported():
-            raise UnsupportedMarketError(
-                "Universal Market is not supported by PlasmaVault"
-            )
-        return universal_market
 
     def erc4626(self, fuse_address: ChecksumAddress) -> ERC4626Market:
         if not fuse_address:

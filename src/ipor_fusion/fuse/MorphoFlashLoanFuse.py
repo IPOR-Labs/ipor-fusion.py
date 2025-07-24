@@ -10,13 +10,13 @@ from ipor_fusion.types import Amount
 
 class MorphoFlashLoanFuse:
     def __init__(self, fuse_address: ChecksumAddress):
-        if fuse_address is None:
-            raise ValueError("fuseAddress is required")
         self._fuse_address = fuse_address
 
     def flash_loan(
         self, asset: ChecksumAddress, amount: Amount, actions: List[FuseAction]
     ) -> FuseAction:
+        if self._fuse_address is None:
+            raise ValueError("fuseAddress is required")
         bytes_data = []
         for action in actions:
             bytes_data.append([action.fuse, action.data])

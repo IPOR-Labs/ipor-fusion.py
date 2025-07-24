@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Optional
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
+from ipor_fusion.error.FuseMappingError import FuseMappingError
 from ipor_fusion.error.UnsupportedChainId import UnsupportedChainId
 
 # pylint: disable=consider-using-namedtuple-or-dataclass
@@ -12,10 +13,7 @@ mapping = {
         "RamsesV2NewPositionFuse": ["0xb025cc5e73e2966e12e4d859360b51c1d0f45ea3"],
         "RamsesV2ModifyPositionFuse": ["0xd41501b46a68dea06a460fd79a7bcda9e3b92674"],
         "RamsesV2CollectFuse": ["0x859f5c9d5cb2800a9ff72c56d79323ea01cb30b9"],
-        "AaveV3SupplyFuse": [
-            "0x9339acd4e73c8a11109f77bc87221bdfc7b7a4fc",
-            "0xd3c752ee5bb80de64f76861b800a8f3b464c50f9",
-        ],
+        "AaveV3SupplyFuse": ["0xd3c752ee5bb80de64f76861b800a8f3b464c50f9"],
         "CompoundV3SupplyFuse": [
             "0xb0b3dc1b27c6c8007c9b01a768d6717f6813fe94",
             "0x34bcbc3f10ce46894bb39de0c667257efb35c079",
@@ -165,6 +163,7 @@ mapping = {
             "0x2c10c36028c430f445a4ba9f7dd096a5dcc75d5e",
             "0x933bff1078ff1a0ca3b53dad00d7b1850af8749b",
             "0x318dc5d24bcc71ba0127a45e009b64bdba0c2edf",
+            "0xa72f8391d7c9f1991769b76858b8ac54ccee92cf",
         ],
         "MorphoBalanceFuse": ["0x0ad1776b9319a03216a44aba0242cc0bc7e3cac3"],
         "CompoundV3BalanceFuse": [
@@ -204,6 +203,10 @@ mapping = {
         ],
         "PendleSwapPTFuse": ["0xeea3812b60ca4c6d0e2672a865bf7217ecd49f95"],
         "AaveV3BorrowFuse": ["0x820d879ef89356b93a7c71addbf45c40a0dde453"],
+        "MorphoClaimFuse": ["0x6820df665ba09fbbd3240aa303421928ef4c71a1"],
+        "Erc4626SupplyFuseMarketId100013": [
+            "0x970b4f5522685d4826eceb0377b3ddbf12836dfd"
+        ],
     },
 }
 
@@ -224,6 +227,7 @@ class FuseMapper:
 
         Raises:
             UnsupportedChainId: If the chain_id is not supported.
+            FuseMappingError: If no fuse address is found for the given chain_id and fuse_name.
         """
         chain_id_str = str(chain_id)
 
@@ -233,6 +237,30 @@ class FuseMapper:
         fuse_addresses = mapping.get(chain_id_str, {}).get(fuse_name)
 
         if not fuse_addresses:
-            return []
+            raise FuseMappingError(f"No fuse address in FUseMapper for {fuse_name}")
 
         return [Web3.to_checksum_address(address) for address in fuse_addresses]
+
+    @staticmethod
+    def find(
+        chain_id: int, fuse_name: str, fuses: List[ChecksumAddress]
+    ) -> Optional[ChecksumAddress]:
+        """
+        Find a fuse address from the provided list that matches the given chain ID and fuse name.
+
+        This method searches through the provided list of fuse addresses and returns the first
+        address that is found in the mapping for the specified chain ID and fuse name.
+
+        Args:
+            chain_id (int): The blockchain ID to search within.
+            fuse_name (str): The name of the fuse to search for.
+            fuses (List[ChecksumAddress]): List of fuse addresses to search through.
+
+        Returns:
+            Optional[ChecksumAddress]: The first matching fuse address if found, None otherwise.
+        """
+        for fuse in fuses:
+            if fuse in FuseMapper.map(chain_id, fuse_name):
+                return fuse
+
+        return None

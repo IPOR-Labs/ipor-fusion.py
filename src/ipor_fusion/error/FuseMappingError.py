@@ -1,0 +1,2 @@
+class FuseMappingError(Exception):
+    pass
