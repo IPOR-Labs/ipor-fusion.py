@@ -3,7 +3,6 @@ import logging
 from ipor_fusion.PlasmaSystem import PlasmaSystem
 from ipor_fusion.helpers import Addresses
 
-logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
