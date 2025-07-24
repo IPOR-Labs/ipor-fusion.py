@@ -22,7 +22,6 @@ from ipor_fusion.markets.RamsesV2Market import RamsesV2Market
 from ipor_fusion.markets.UniswapV3Market import UniswapV3Market
 from ipor_fusion.markets.UniversalMarket import UniversalMarket
 
-logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 
