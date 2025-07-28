@@ -94,5 +94,65 @@ poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
 poetry run black ./
 ```
 
+## CLI Usage
+
+The IPOR Fusion CLI provides commands for managing configuration files and interacting with Plasma Vaults.
+
+### Initializing Configuration
+
+Create a new configuration file:
+
+```bash
+# Basic initialization
+ipor-fusion init
+
+# With encryption for private key
+ipor-fusion init --encrypt-private-key
+```
+
+### Managing Encrypted Private Keys
+
+The CLI supports encryption of private keys for enhanced security:
+
+```bash
+# Encrypt an existing private key in config
+ipor-fusion encrypt
+
+# Show configuration (displays encryption status)
+ipor-fusion show
+```
+
+#### Encryption Features
+
+- **PBKDF2-HMAC-SHA256** key derivation with 100,000 iterations
+- **Fernet (AES-128-CBC)** encryption
+- **Salt-based** encryption for additional security
+- **Base64url** encoding for safe storage in YAML
+
+#### Security Best Practices
+
+1. **Always use encryption** for production environments
+2. **Store passwords securely** - never commit them to version control
+3. **Use strong passwords** with mixed case, numbers, and symbols
+4. **Regularly rotate** encryption passwords
+5. **Backup encrypted keys** safely
+
+### Configuration File Format
+
+The CLI uses YAML configuration files (`ipor-fusion-config.yaml`):
+
+```yaml
+plasma_vault_address: "0x1234567890123456789012345678901234567890"
+provider_url: "https://example.com/rpc"
+private_key: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"  # or encrypted
+network: "mainnet"
+gas_limit: "300000"
+gas_price: null
+max_priority_fee: null
+custom_field: ""
+description: ""
+notes: ""
+```
+
 ## Example of usage
 For example of usage patterns, check out our example repository at: [https://github.com/IPOR-Labs/ipor-fusion-alpha-example](https://github.com/IPOR-Labs/ipor-fusion-alpha-example)
