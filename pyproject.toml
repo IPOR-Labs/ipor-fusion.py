@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ipor_fusion"
-version = "0.12.0"
+version = "0.20.0"
 description = "The IPOR Fusion SDK for Python"
 authors = ["Adam Mydlarz <amydlarz@gmail.com>", "rav <rav@ipor.io>"]
 readme = "README.md"
@@ -40,6 +40,8 @@ eth-typing = "^5.0.0"
 eth-abi = "^5.1.0"
 web3 = "^7.7.0"
 python-dotenv = "^1.0.1"
+PyYAML = "^6.0.1"
+cryptography = "^42.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.3.3"
@@ -78,3 +80,6 @@ prerelease_token = "rc"
 [tool.semantic_release.remote]
 type = "github"
 token = { env = "GH_TOKEN" }
+
+[tool.poetry.scripts]
+ipor-fusion = "ipor_fusion.cli.ipor_fusion_cli:cli"
