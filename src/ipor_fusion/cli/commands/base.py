@@ -3,10 +3,10 @@
 Base command class for ipor-fusion CLI commands
 """
 
-import click
 from pathlib import Path
-from ipor_fusion.cli.config import ConfigManager, FusionConfig
 from typing import Optional
+import click
+from ipor_fusion.cli.config import ConfigManager, FusionConfig
 
 
 class BaseCommand:
@@ -15,7 +15,7 @@ class BaseCommand:
     @staticmethod
     def create_config_file(
         plasma_vault_address: str,
-        provider_url: str,
+        rpc_url: str,
         private_key: str,
         network: str = "mainnet",
         gas_limit: int = 300000,
@@ -29,7 +29,7 @@ class BaseCommand:
 
         Args:
             plasma_vault_address: The plasma vault address
-            provider_url: The RPC provider URL
+            rpc_url: The RPC provider URL
             private_key: The private key
             network: The network name (default: mainnet)
             gas_limit: Gas limit for transactions (default: 300000)
@@ -56,12 +56,12 @@ class BaseCommand:
                 encryption_password = click.prompt(
                     "Enter encryption password for private key",
                     hide_input=True,
-                    confirmation_prompt=True
+                    confirmation_prompt=True,
                 )
 
             config_path = ConfigManager.create_config(
                 plasma_vault_address=plasma_vault_address,
-                provider_url=provider_url,
+                rpc_url=rpc_url,
                 private_key=private_key,
                 network=network,
                 gas_limit=gas_limit,
@@ -74,7 +74,9 @@ class BaseCommand:
 
             click.secho(f"Configuration file created at {config_path}", fg="green")
             if encrypt_private_key:
-                click.secho("Private key has been encrypted with your password.", fg="green")
+                click.secho(
+                    "Private key has been encrypted with your password.", fg="green"
+                )
             click.secho("You can now run other ipor-fusion commands.", fg="green")
 
             return config_path
@@ -84,7 +86,9 @@ class BaseCommand:
             raise
 
     @staticmethod
-    def load_config(config_file: Optional[str] = None, password: Optional[str] = None) -> FusionConfig:
+    def load_config(
+        config_file: Optional[str] = None, password: Optional[str] = None
+    ) -> FusionConfig:
         """
         Load configuration from YAML file.
 
@@ -97,15 +101,14 @@ class BaseCommand:
         """
         try:
             config = ConfigManager.load_config(config_file)
-            
+
             # Handle encrypted private key
             if config.is_private_key_encrypted():
                 if not password:
                     password = click.prompt(
-                        "Enter password to decrypt private key",
-                        hide_input=True
+                        "Enter password to decrypt private key", hide_input=True
                     )
-                
+
                 try:
                     # Test decryption
                     config.get_decrypted_private_key(password)
@@ -113,7 +116,7 @@ class BaseCommand:
                 except ValueError as e:
                     click.secho(f"Failed to decrypt private key: {e}", fg="red")
                     raise
-            
+
             ConfigManager.validate_config(config)
             return config
         except Exception as e:
@@ -130,7 +133,7 @@ class BaseCommand:
                 help="Set plasma vault address",
             ),
             click.option(
-                "--provider-url",
+                "--rpc-url",
                 prompt="RPC provider url like alchemy (https://...)",
                 help="HTTP(S) endpoint for the chosen network",
             ),

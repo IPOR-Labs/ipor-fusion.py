@@ -3,8 +3,9 @@
 Simple tests for the IPOR Fusion CLI functionality
 """
 
-from click.testing import CliRunner
 from unittest.mock import patch
+import click
+from click.testing import CliRunner
 
 from ipor_fusion.cli.ipor_fusion_cli import cli
 from ipor_fusion.cli.commands.init import init
@@ -57,7 +58,7 @@ class TestInitCommand:
             [
                 "--plasma-vault-address",
                 "0x1234567890123456789012345678901234567890",
-                "--provider-url",
+                "--rpc-url",
                 "https://example.com/rpc",
                 "--private-key",
                 "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
@@ -75,9 +76,6 @@ class TestBaseCommand:
         options = BaseCommand.get_common_options()
         assert len(options) == 3
 
-        # Check that all options are click.option decorators
-        import click
-
         for option in options:
             assert isinstance(option, click.Option)
 
@@ -92,14 +90,12 @@ class TestBaseCommand:
             mock_file = mock_open.return_value.__enter__.return_value
 
             plasma_vault = "0x1234567890123456789012345678901234567890"
-            provider_url = "https://example.com/rpc"
+            rpc_url = "https://example.com/rpc"
             private_key = (
                 "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
             )
 
-            env_path = BaseCommand.create_config_file(
-                plasma_vault, provider_url, private_key
-            )
+            BaseCommand.create_config_file(plasma_vault, rpc_url, private_key)
 
             # Check that file was written with correct content
             mock_file.write.assert_called()
@@ -108,12 +104,12 @@ class TestBaseCommand:
             # Check that the expected content was written
             written_content = "".join([call[0][0] for call in calls])
             assert (
-                "PLASMA_VAULT_ADDRESS=0x1234567890123456789012345678901234567890"
+                "plasma_vault_address: '0x1234567890123456789012345678901234567890'"
                 in written_content
             )
-            assert "PROVIDER_URL=https://example.com/rpc" in written_content
+            assert "rpc_url: https://example.com/rpc" in written_content
             assert (
-                "PRIVATE_KEY=0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+                "private_key: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'"
                 in written_content
             )
 
@@ -139,7 +135,7 @@ class TestCLIIntegration:
                 "init",
                 "--plasma-vault-address",
                 "0x1234567890123456789012345678901234567890",
-                "--provider-url",
+                "--rpc-url",
                 "https://example.com/rpc",
                 "--private-key",
                 "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",

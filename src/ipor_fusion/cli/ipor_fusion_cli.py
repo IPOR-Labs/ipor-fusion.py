@@ -10,7 +10,6 @@ from ipor_fusion.cli.commands.registry import register_commands
 @click.group()
 def cli():
     """ipor-fusion CLI"""
-    pass
 
 
 # Automatically register all commands

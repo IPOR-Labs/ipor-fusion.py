@@ -14,7 +14,7 @@ from .base import BaseCommand
     help="Set plasma vault address",
 )
 @click.option(
-    "--provider-url",
+    "--rpc-url",
     prompt="RPC provider url like alchemy (https://...)",
     help="HTTP(S) endpoint for the chosen network",
 )
@@ -57,7 +57,7 @@ from .base import BaseCommand
 )
 def init(
     plasma_vault_address,
-    provider_url,
+    rpc_url,
     private_key,
     network,
     gas_limit,
@@ -71,7 +71,7 @@ def init(
     """
     BaseCommand.create_config_file(
         plasma_vault_address=plasma_vault_address,
-        provider_url=provider_url,
+        rpc_url=rpc_url,
         private_key=private_key,
         network=network,
         gas_limit=gas_limit,

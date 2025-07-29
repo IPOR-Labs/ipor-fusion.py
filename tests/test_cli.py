@@ -5,6 +5,7 @@ Tests for the IPOR Fusion CLI functionality
 
 import os
 import tempfile
+import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
@@ -28,7 +29,6 @@ class TestCLI:
     def teardown_method(self):
         """Clean up after tests"""
         os.chdir(self.original_cwd)
-        import shutil
 
         shutil.rmtree(self.temp_dir)
 
@@ -42,7 +42,7 @@ class TestCLI:
     def test_cli_no_args(self):
         """Test CLI without arguments shows help"""
         result = self.runner.invoke(cli, [])
-        assert result.exit_code ==2
+        assert result.exit_code == 2
         assert "ipor-fusion CLI" in result.output
 
     def test_cli_invalid_command(self):
@@ -65,7 +65,6 @@ class TestInitCommand:
     def teardown_method(self):
         """Clean up after tests"""
         os.chdir(self.original_cwd)
-        import shutil
 
         shutil.rmtree(self.temp_dir)
 
@@ -92,13 +91,13 @@ class TestInitCommand:
         assert config_file.exists()
 
         # Check file contents
-        with open(config_file, "r") as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             content = f.read()
             assert (
                 "plasma_vault_address: '0x1234567890123456789012345678901234567890'"
                 in content
             )
-            assert "provider_url: https://example.com/rpc" in content
+            assert "rpc_url: https://example.com/rpc" in content
             assert (
                 "private_key: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'"
                 in content
@@ -111,7 +110,7 @@ class TestInitCommand:
             [
                 "--plasma-vault-address",
                 "0x1234567890123456789012345678901234567890",
-                "--provider-url",
+                "--rpc-url",
                 "https://example.com/rpc",
                 "--private-key",
                 "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
@@ -123,10 +122,9 @@ class TestInitCommand:
     def test_init_command_overwrite_existing(self):
         """Test init command overwrites existing ipor-fusion-config.yaml file"""
         # Create existing ipor-fusion-config.yaml file
-        with open("ipor-fusion-config.yaml", "w") as f:
-            f.write("EXISTING: value\n")
+        with open("ipor-fusion-config.yaml", "w", encoding="utf-8") as f:
+            f.write("existing: value\n")
             f.close()
-
 
         # Run init command
         inputs = [
@@ -140,16 +138,16 @@ class TestInitCommand:
         assert result.exit_code == 0
 
         # Check that file was overwritten
-        with open("ipor-fusion-config.yaml", "r") as f:
+        with open("ipor-fusion-config.yaml", "r", encoding="utf-8") as f:
             content = f.read()
-            assert "EXISTING=value" not in content
-            assert "PLASMA_VAULT_ADDRESS" in content
+            assert "existing: value" not in content
+            assert "plasma_vault_address" in content
 
     def test_init_command_abort_overwrite(self):
         """Test init command aborts when user doesn't confirm overwrite"""
         # Create existing ipor-fusion-config.yaml file
-        with open("ipor-fusion-config.yaml", "w") as f:
-            f.write("EXISTING=value\n")
+        with open("ipor-fusion-config.yaml", "w", encoding="utf-8") as f:
+            f.write("existing: value\n")
 
         # Run init command
         inputs = [
@@ -163,9 +161,9 @@ class TestInitCommand:
         assert result.exit_code == 1  # Aborted
 
         # Check that file was not overwritten
-        with open("ipor-fusion-config.yaml", "r") as f:
+        with open("ipor-fusion-config.yaml", "r", encoding="utf-8") as f:
             content = f.read()
-            assert "EXISTING=value" in content
+            assert "existing: value" in content
 
 
 class TestBaseCommand:
@@ -180,54 +178,56 @@ class TestBaseCommand:
     def teardown_method(self):
         """Clean up after tests"""
         os.chdir(self.original_cwd)
-        import shutil
 
         shutil.rmtree(self.temp_dir)
 
     def test_create_config_file(self):
         """Test BaseCommand.create_config_file method"""
         plasma_vault = "0x1234567890123456789012345678901234567890"
-        provider_url = "https://example.com/rpc"
+        rpc_url = "https://example.com/rpc"
         private_key = (
             "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
         )
 
-        env_path = BaseCommand.create_config_file(plasma_vault, provider_url, private_key)
+        env_path = BaseCommand.create_config_file(plasma_vault, rpc_url, private_key)
 
         assert env_path.exists()
         assert env_path.name == "ipor-fusion-config.yaml"
 
-        with open(env_path, "r") as f:
+        with open(env_path, "r", encoding="utf-8") as f:
             content = f.read()
             assert f"plasma_vault_address: '{plasma_vault}'" in content
-            assert f"provider_url: {provider_url}" in content
+            assert f"rpc_url: {rpc_url}" in content
             assert f"private_key: '{private_key}'" in content
 
     def test_create_config_file_custom_path(self):
         """Test BaseCommand.create_config_file with custom path"""
-        custom_path = Path("customipor-fusion-config.yaml")
-        plasma_vault = "0x1234567890123456789012345678901234567890"
-        provider_url = "https://example.com/rpc"
+        custom_config_file = "customipor-fusion-config.yaml"
+        plasma_vault_address = "0x1234567890123456789012345678901234567890"
+        rpc_url = "https://example.com/rpc"
         private_key = (
             "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
         )
 
-        env_path = BaseCommand.create_config_file(
-            plasma_vault, provider_url, private_key, custom_path
+        config_path = BaseCommand.create_config_file(
+            plasma_vault_address=plasma_vault_address,
+            rpc_url=rpc_url,
+            private_key=private_key,
+            config_file=custom_config_file,
         )
 
-        assert env_path == custom_path
-        assert custom_path.exists()
+        assert custom_config_file == config_path.name
+        assert config_path.exists()
 
     def test_create_config_file_overwrite_existing(self):
         """Test BaseCommand.create_config_file overwrites existing file"""
         # Create existing file
         existing_file = Path("ipor-fusion-config.yaml")
-        with open(existing_file, "w") as f:
-            f.write("EXISTING=value\n")
+        with open(existing_file, "w", encoding="utf-8") as f:
+            f.write("existing: value\n")
 
         plasma_vault = "0x1234567890123456789012345678901234567890"
-        provider_url = "https://example.com/rpc"
+        rpc_url = "https://example.com/rpc"
         private_key = (
             "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
         )
@@ -235,25 +235,14 @@ class TestBaseCommand:
         # Mock click.confirm to return True (confirm overwrite)
         with patch("click.confirm", return_value=True):
             env_path = BaseCommand.create_config_file(
-                plasma_vault, provider_url, private_key
+                plasma_vault, rpc_url, private_key
             )
 
             assert env_path.exists()
-            with open(env_path, "r") as f:
+            with open(env_path, "r", encoding="utf-8") as f:
                 content = f.read()
-                assert "EXISTING=value" not in content
-                assert "PLASMA_VAULT_ADDRESS" in content
-
-    def test_get_common_options(self):
-        """Test BaseCommand.get_common_options method"""
-        options = BaseCommand.get_common_options()
-        assert len(options) == 3
-
-        # Check that all options are click.option decorators
-        import click
-
-        for option in options:
-            assert isinstance(option, click.Option)
+                assert "existing: value" not in content
+                assert "plasma_vault_address" in content
 
 
 class TestCommandRegistry:
@@ -293,7 +282,6 @@ class TestCLIIntegration:
     def teardown_method(self):
         """Clean up after tests"""
         os.chdir(self.original_cwd)
-        import shutil
 
         shutil.rmtree(self.temp_dir)
 
@@ -332,7 +320,7 @@ class TestCLIIntegration:
                 "init",
                 "--plasma-vault-address",
                 "0x1234567890123456789012345678901234567890",
-                "--provider-url",
+                "--rpc-url",
                 "https://example.com/rpc",
                 "--private-key",
                 "invalid-key",
@@ -349,11 +337,11 @@ class TestCLIIntegration:
                 "init",
                 "--plasma-vault-address",
                 "invalid-address",
-                "--provider-url",
+                "--rpc-url",
                 "https://example.com/rpc",
                 "--private-key",
                 "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
             ],
         )
-        # Should still work as validation is not implemented in the current version
-        assert result.exit_code == 0
+        assert result.exit_code != 0
+        assert "it must be a hex string" in result.output
