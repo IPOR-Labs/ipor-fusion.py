@@ -5,21 +5,23 @@ YAML configuration manager for IPOR Fusion CLI
 
 import os
 
-import click
-import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass, asdict
-
-from .encryption import EncryptionManager
+import click
+import yaml
+from eth_typing import ChecksumAddress
+from web3 import Web3
+from dotenv import load_dotenv
+from ipor_fusion.cli.encryption import EncryptionManager
 
 
 @dataclass
 class FusionConfig:
     """Configuration data class for IPOR Fusion"""
 
-    plasma_vault_address: str
-    provider_url: str
+    plasma_vault_address: ChecksumAddress
+    rpc_url: str
     private_key: str
     network: Optional[str] = None
     gas_limit: Optional[Union[int, str]] = None
@@ -48,8 +50,8 @@ class FusionConfig:
         if isinstance(self.gas_limit, str):
             try:
                 return int(self.gas_limit)
-            except ValueError:
-                raise ValueError(f"Invalid gas_limit value: {self.gas_limit}")
+            except ValueError as e:
+                raise ValueError(f"Invalid gas_limit value: {self.gas_limit}") from e
         raise ValueError(f"Unexpected gas_limit type: {type(self.gas_limit)}")
 
     def get_gas_price_int(self) -> Optional[int]:
@@ -61,8 +63,8 @@ class FusionConfig:
         if isinstance(self.gas_price, str):
             try:
                 return int(self.gas_price)
-            except ValueError:
-                raise ValueError(f"Invalid gas_price value: {self.gas_price}")
+            except ValueError as e:
+                raise ValueError(f"Invalid gas_price value: {self.gas_price}") from e
         raise ValueError(f"Unexpected gas_price type: {type(self.gas_price)}")
 
     def get_max_priority_fee_int(self) -> Optional[int]:
@@ -74,9 +76,13 @@ class FusionConfig:
         if isinstance(self.max_priority_fee, str):
             try:
                 return int(self.max_priority_fee)
-            except ValueError:
-                raise ValueError(f"Invalid max_priority_fee value: {self.max_priority_fee}")
-        raise ValueError(f"Unexpected max_priority_fee type: {type(self.max_priority_fee)}")
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid max_priority_fee value: {self.max_priority_fee}"
+                ) from e
+        raise ValueError(
+            f"Unexpected max_priority_fee type: {type(self.max_priority_fee)}"
+        )
 
     def is_private_key_encrypted(self) -> bool:
         """Check if the private key is encrypted"""
@@ -85,37 +91,39 @@ class FusionConfig:
     def decrypt_private_key(self, password: str) -> str:
         """
         Decrypt the private key if it's encrypted.
-        
+
         Args:
             password: The password used for encryption
-            
+
         Returns:
             Decrypted private key
-            
+
         Raises:
             ValueError: If decryption fails or private key is not encrypted
         """
         if not self.is_private_key_encrypted():
             raise ValueError("Private key is not encrypted")
-        
+
         return EncryptionManager.decrypt_private_key(self.private_key, password)
 
     def get_decrypted_private_key(self, password: Optional[str] = None) -> str:
         """
         Get the private key, decrypting if necessary.
-        
+
         Args:
             password: The password for decryption (required if private key is encrypted)
-            
+
         Returns:
             Decrypted private key
-            
+
         Raises:
             ValueError: If private key is encrypted but no password provided
         """
         if self.is_private_key_encrypted():
             if password is None:
-                raise ValueError("Private key is encrypted. Password required for decryption.")
+                raise ValueError(
+                    "Private key is encrypted. Password required for decryption."
+                )
             return self.decrypt_private_key(password)
         return self.private_key
 
@@ -126,7 +134,7 @@ class ConfigManager:
     DEFAULT_CONFIG_FILE = "ipor-fusion-config.yaml"
     DEFAULT_CONFIG_TEMPLATE = {
         "plasma_vault_address": "",
-        "provider_url": "",
+        "rpc_url": "",
         "private_key": "",
         "network": "mainnet",
         "gas_limit": "300000",  # String format
@@ -147,7 +155,7 @@ class ConfigManager:
     @staticmethod
     def create_config(
         plasma_vault_address: str,
-        provider_url: str,
+        rpc_url: str,
         private_key: str,
         network: str = "mainnet",
         gas_limit: Union[int, str] = "300000",
@@ -165,7 +173,7 @@ class ConfigManager:
 
         Args:
             plasma_vault_address: The plasma vault address
-            provider_url: The RPC provider URL
+            rpc_url: The RPC provider URL
             private_key: The private key
             network: The network name (default: mainnet)
             gas_limit: Gas limit for transactions (default: "300000" as string)
@@ -183,21 +191,22 @@ class ConfigManager:
         """
         config_path = ConfigManager.get_config_path(config_file)
 
-        if config_path.exists():
-            raise FileExistsError(f"Configuration file already exists at {config_path}")
+        plasma_vault_checksum_address = Web3.to_checksum_address(plasma_vault_address)
 
         # Handle private key encryption
         final_private_key = private_key
         if encrypt_private_key:
             if not encryption_password:
-                raise ValueError("Encryption password is required when encrypt_private_key is True")
+                raise ValueError(
+                    "Encryption password is required when encrypt_private_key is True"
+                )
             final_private_key = EncryptionManager.encrypt_private_key(
                 private_key, encryption_password
             )
 
         config = FusionConfig(
-            plasma_vault_address=plasma_vault_address,
-            provider_url=provider_url,
+            plasma_vault_address=plasma_vault_checksum_address,
+            rpc_url=rpc_url,
             private_key=final_private_key,
             network=network,
             gas_limit=gas_limit,
@@ -225,6 +234,7 @@ class ConfigManager:
         Raises:
             FileNotFoundError: If config file doesn't exist
             yaml.YAMLError: If config file is invalid
+            ValueError: If config file is empty
         """
         config_path = ConfigManager.get_config_path(config_file)
 
@@ -241,10 +251,10 @@ class ConfigManager:
 
     @staticmethod
     def update_config(
-        config_file: Optional[str] = None, 
+        config_file: Optional[str] = None,
         encrypt_private_key: bool = False,
         encryption_password: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> Path:
         """
         Update existing configuration file with new values.
@@ -269,7 +279,9 @@ class ConfigManager:
         # Handle private key encryption if updating private_key
         if "private_key" in kwargs and encrypt_private_key:
             if not encryption_password:
-                raise ValueError("Encryption password is required when encrypt_private_key is True")
+                raise ValueError(
+                    "Encryption password is required when encrypt_private_key is True"
+                )
             kwargs["private_key"] = EncryptionManager.encrypt_private_key(
                 kwargs["private_key"], encryption_password
             )
@@ -284,6 +296,7 @@ class ConfigManager:
         return config_path
 
     @staticmethod
+    # pylint: disable=too-complex
     def validate_config(config: FusionConfig) -> bool:
         """
         Validate configuration values.
@@ -298,8 +311,8 @@ class ConfigManager:
         if not config.plasma_vault_address:
             raise ValueError("plasma_vault_address is required")
 
-        if not config.provider_url:
-            raise ValueError("provider_url is required")
+        if not config.rpc_url:
+            raise ValueError("rpc_url is required")
 
         if not config.private_key:
             raise ValueError("private_key is required")
@@ -312,7 +325,7 @@ class ConfigManager:
             if config.gas_limit is not None:
                 config.get_gas_limit_int()
         except ValueError as e:
-            raise ValueError(f"gas_limit validation failed: {e}")
+            raise ValueError(f"gas_limit validation failed: {e}") from e
 
         try:
             if config.gas_price is not None:
@@ -320,7 +333,7 @@ class ConfigManager:
                 if gas_price_int is not None and gas_price_int < 0:
                     raise ValueError("gas_price must be non-negative")
         except ValueError as e:
-            raise ValueError(f"gas_price validation failed: {e}")
+            raise ValueError(f"gas_price validation failed: {e}") from e
 
         try:
             if config.max_priority_fee is not None:
@@ -328,7 +341,7 @@ class ConfigManager:
                 if max_priority_fee_int is not None and max_priority_fee_int < 0:
                     raise ValueError("max_priority_fee must be non-negative")
         except ValueError as e:
-            raise ValueError(f"max_priority_fee validation failed: {e}")
+            raise ValueError(f"max_priority_fee validation failed: {e}") from e
 
         return True
 
@@ -347,47 +360,44 @@ class ConfigManager:
 
     @staticmethod
     def encrypt_existing_private_key(
-        config_file: Optional[str] = None,
-        password: Optional[str] = None
+        config_file: Optional[str] = None, password: Optional[str] = None
     ) -> Path:
         """
         Encrypt the private key in an existing configuration file.
-        
+
         Args:
             config_file: Optional path to the configuration file
             password: Password for encryption (will prompt if not provided)
-            
+
         Returns:
             Path to the updated configuration file
         """
         config_path = ConfigManager.get_config_path(config_file)
-        
+
         if not config_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
-        
+
         # Load existing config
         config = ConfigManager.load_config(config_file)
-        
+
         # Check if private key is already encrypted
         if config.is_private_key_encrypted():
             raise ValueError("Private key is already encrypted")
-        
+
         # Prompt for password if not provided
         if not password:
             password = click.prompt(
-                "Enter encryption password",
-                hide_input=True,
-                confirmation_prompt=True
+                "Enter encryption password", hide_input=True, confirmation_prompt=True
             )
-        
+
         # Encrypt the private key
         encrypted_private_key = EncryptionManager.encrypt_private_key(
             config.private_key, password
         )
-        
+
         # Update the config
         config.private_key = encrypted_private_key
-        
+
         # Write updated config
         ConfigManager._write_config(config_path, config)
         return config_path
@@ -407,22 +417,20 @@ class ConfigManager:
         if not env_path.exists():
             raise FileNotFoundError(f".env file not found: {env_path}")
 
-        # Load .env file
-        from dotenv import load_dotenv
         load_dotenv(env_path)
 
         # Extract values
-        plasma_vault = os.getenv("PLASMA_VAULT_ADDRESS", "")
-        provider_url = os.getenv("PROVIDER_URL", "")
+        plasma_vault = os.getenv("plasma_vault_address", "")
+        rpc_url = os.getenv("rpc_url", "")
         private_key = os.getenv("PRIVATE_KEY", "")
 
-        if not all([plasma_vault, provider_url, private_key]):
+        if not all([plasma_vault, rpc_url, private_key]):
             raise ValueError("Missing required environment variables in .env file")
 
         # Create YAML config
         return ConfigManager.create_config(
             plasma_vault_address=plasma_vault,
-            provider_url=provider_url,
+            rpc_url=rpc_url,
             private_key=private_key,
         )
 
@@ -430,33 +438,28 @@ class ConfigManager:
     def create_example_config() -> Dict[str, Any]:
         """
         Create an example configuration showing different ways to write config fields as strings.
-        
+
         Returns:
             Example configuration dictionary
         """
         return {
             # Required fields (always strings)
             "plasma_vault_address": "0x1234567890123456789012345678901234567890",
-            "provider_url": "https://example.com/rpc",
+            "rpc_url": "https://example.com/rpc",
             "private_key": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-            
             # Optional fields with different string formats
             "network": "mainnet",
             "gas_limit": "300000",  # String format for gas limit
             "gas_price": "2000000000",  # String format for gas price (2 gwei)
             "max_priority_fee": "1500000000",  # String format for priority fee (1.5 gwei)
-            
             # Additional string fields
             "custom_field": "This is a custom string field",
             "description": "Configuration for IPOR Fusion deployment",
             "notes": "This configuration is for testing purposes only",
-            
             # Example with quotes for clarity
             "quoted_string": '"This is a quoted string"',
-            
             # Example with special characters
             "special_chars": "Line 1\nLine 2\nLine 3",  # Multi-line string
-            
             # Example with YAML block scalar
             "block_text": "This is a block of text\nthat spans multiple lines\nand preserves formatting",
         }

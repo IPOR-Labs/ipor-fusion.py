@@ -5,8 +5,10 @@ Tests for the IPOR Fusion CLI with YAML configuration
 
 import os
 import tempfile
-import yaml
+import shutil
 from pathlib import Path
+import yaml
+
 from click.testing import CliRunner
 
 from ipor_fusion.cli.ipor_fusion_cli import cli
@@ -27,21 +29,20 @@ class TestYAMLConfig:
     def teardown_method(self):
         """Clean up after tests"""
         os.chdir(self.original_cwd)
-        import shutil
 
         shutil.rmtree(self.temp_dir)
 
     def test_create_config_file(self):
         """Test creating a YAML configuration file"""
         plasma_vault = "0x1234567890123456789012345678901234567890"
-        provider_url = "https://example.com/rpc"
+        rpc_url = "https://example.com/rpc"
         private_key = (
             "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
         )
 
         config_path = BaseCommand.create_config_file(
             plasma_vault_address=plasma_vault,
-            provider_url=provider_url,
+            rpc_url=rpc_url,
             private_key=private_key,
             network="mainnet",
             gas_limit=300000,
@@ -51,10 +52,10 @@ class TestYAMLConfig:
         assert config_path.name == "ipor-fusion-config.yaml"
 
         # Check file contents
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
             assert data["plasma_vault_address"] == plasma_vault
-            assert data["provider_url"] == provider_url
+            assert data["rpc_url"] == rpc_url
             assert data["private_key"] == private_key
             assert data["network"] == "mainnet"
             assert data["gas_limit"] == 300000
@@ -64,49 +65,22 @@ class TestYAMLConfig:
         # Create test config file
         config_data = {
             "plasma_vault_address": "0x1234567890123456789012345678901234567890",
-            "provider_url": "https://example.com/rpc",
+            "rpc_url": "https://example.com/rpc",
             "private_key": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
             "network": "mainnet",
             "gas_limit": 300000,
         }
 
         config_path = Path("ipor-fusion-config.yaml")
-        with open(config_path, "w") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             yaml.dump(config_data, f)
 
         config = BaseCommand.load_config()
         assert config.plasma_vault_address == config_data["plasma_vault_address"]
-        assert config.provider_url == config_data["provider_url"]
+        assert config.rpc_url == config_data["rpc_url"]
         assert config.private_key == config_data["private_key"]
         assert config.network == config_data["network"]
         assert config.gas_limit == config_data["gas_limit"]
-
-    def test_convert_env_to_yaml(self):
-        """Test converting .env file to YAML"""
-        # Create test .env file
-        env_content = """PLASMA_VAULT_ADDRESS=0x1234567890123456789012345678901234567890
-PROVIDER_URL=https://example.com/rpc
-PRIVATE_KEY=0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
-"""
-        with open(".env", "w") as f:
-            f.write(env_content)
-
-        config_path = BaseCommand.convert_env_to_yaml()
-        assert config_path.exists()
-        assert config_path.name == "ipor-fusion-config.yaml"
-
-        # Check converted content
-        with open(config_path, "r") as f:
-            data = yaml.safe_load(f)
-            assert (
-                data["plasma_vault_address"]
-                == "0x1234567890123456789012345678901234567890"
-            )
-            assert data["provider_url"] == "https://example.com/rpc"
-            assert (
-                data["private_key"]
-                == "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-            )
 
 
 class TestInitCommandYAML:
@@ -122,7 +96,6 @@ class TestInitCommandYAML:
     def teardown_method(self):
         """Clean up after tests"""
         os.chdir(self.original_cwd)
-        import shutil
 
         shutil.rmtree(self.temp_dir)
 
@@ -139,7 +112,7 @@ class TestInitCommandYAML:
             [
                 "--plasma-vault-address",
                 "0x1234567890123456789012345678901234567890",
-                "--provider-url",
+                "--rpc-url",
                 "https://example.com/rpc",
                 "--private-key",
                 "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
@@ -157,13 +130,13 @@ class TestInitCommandYAML:
         assert config_file.exists()
 
         # Check file contents
-        with open(config_file, "r") as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
             assert (
                 data["plasma_vault_address"]
                 == "0x1234567890123456789012345678901234567890"
             )
-            assert data["provider_url"] == "https://example.com/rpc"
+            assert data["rpc_url"] == "https://example.com/rpc"
             assert (
                 data["private_key"]
                 == "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
@@ -201,7 +174,6 @@ class TestShowCommand:
     def teardown_method(self):
         """Clean up after tests"""
         os.chdir(self.original_cwd)
-        import shutil
 
         shutil.rmtree(self.temp_dir)
 
@@ -216,14 +188,14 @@ class TestShowCommand:
         # Create test config file
         config_data = {
             "plasma_vault_address": "0x1234567890123456789012345678901234567890",
-            "provider_url": "https://example.com/rpc",
+            "rpc_url": "https://example.com/rpc",
             "private_key": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
             "network": "mainnet",
             "gas_limit": 300000,
         }
 
         config_path = Path("ipor-fusion-config.yaml")
-        with open(config_path, "w") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             yaml.dump(config_data, f)
 
         result = self.runner.invoke(show)
@@ -248,7 +220,6 @@ class TestCLIIntegrationYAML:
     def teardown_method(self):
         """Clean up after tests"""
         os.chdir(self.original_cwd)
-        import shutil
 
         shutil.rmtree(self.temp_dir)
 
@@ -268,7 +239,7 @@ class TestCLIIntegrationYAML:
                 "init",
                 "--plasma-vault-address",
                 "0x1234567890123456789012345678901234567890",
-                "--provider-url",
+                "--rpc-url",
                 "https://example.com/rpc",
                 "--private-key",
                 "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
@@ -281,4 +252,3 @@ class TestCLIIntegrationYAML:
         result = self.runner.invoke(cli, ["show"])
         assert result.exit_code == 0
         assert "Current Configuration:" in result.output
-

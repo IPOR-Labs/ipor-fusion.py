@@ -21,8 +21,8 @@ def show(config_file):
 
         click.secho("Current Configuration:", fg="green", bold=True)
         click.echo(f"  Plasma Vault Address: {config.plasma_vault_address}")
-        click.echo(f"  Provider URL: {config.provider_url}")
-        
+        click.echo(f"  Provider URL: {config.rpc_url}")
+
         # Handle private key display
         if config.is_private_key_encrypted():
             click.echo(f"  Private Key: [ENCRYPTED] {'*' * 10}")
@@ -30,7 +30,7 @@ def show(config_file):
         else:
             click.echo(f"  Private Key: {'*' * 10}{config.private_key[-4:]}")
             click.secho("  ⚠️  Private key is not encrypted", fg="yellow")
-        
+
         click.echo(f"  Network: {config.network}")
         click.echo(f"  Gas Limit: {config.gas_limit}")
 

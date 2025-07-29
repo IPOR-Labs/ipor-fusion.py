@@ -3,10 +3,11 @@
 Command registry for automatically loading CLI commands
 """
 
+from typing import List
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import List, Type
+
 import click
 
 
