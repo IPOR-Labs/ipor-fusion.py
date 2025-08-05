@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.21.0 (2025-08-05)
+
+### Unknown
+
+* Merge pull request #87 from IPOR-Labs/develop
+
+Develop ([`7d8991f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7d8991f6d13351218bf9816d142b6427ed4e5cc4))
+
+* Merge pull request #86 from IPOR-Labs/fix/get-logs
+
+[fix] get logs issue ([`6938e75`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6938e75a79f04bc4c4535a345b101da7f27c96c7))
+
+* [fix] get logs issue ([`31faaaf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/31faaafe842247237d3cc4bcfd6ed215339980be))
+
+* Merge pull request #85 from IPOR-Labs/feature/update-fuses
+
+[feat] update fuses list in fuse mapper ([`a81bca1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a81bca1dbbf973d42e40b1acbb68b9d94c97015d))
+
+* [feat] update fuses list in fuse mapper ([`8319a06`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8319a06a9459864ddf7532308ff78b70e30b924f))
+
+
 ## v0.20.0 (2025-07-24)
 
 ### Unknown
