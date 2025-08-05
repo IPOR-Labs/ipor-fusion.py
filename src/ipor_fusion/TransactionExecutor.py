@@ -77,7 +77,7 @@ class TransactionExecutor:
         from_block=0,
         to_block="latest",
     ) -> List[LogReceipt]:
-        event_filter = self._web3.eth.filter(
+        return self._web3.eth.get_logs(
             {
                 "fromBlock": from_block,
                 "toBlock": to_block,
@@ -85,7 +85,6 @@ class TransactionExecutor:
                 "topics": topics,
             }
         )
-        return event_filter.get_all_entries()
 
     def get_block(self, block="latest"):
         return self._web3.eth.get_block(block)
