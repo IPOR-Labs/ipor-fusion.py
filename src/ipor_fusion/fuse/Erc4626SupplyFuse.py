@@ -24,7 +24,7 @@ class Erc4626SupplyFuse:
 
     def withdraw(self, vault_address: ChecksumAddress, amount: int) -> FuseAction:
         exit_data = Erc4626SupplyFuseExitData(vault_address, amount)
-        return FuseAction(self.fuse_address, exit_data.function_selector())
+        return FuseAction(self.fuse_address, exit_data.function_call())
 
 
 class Erc4626SupplyFuseEnterData:
