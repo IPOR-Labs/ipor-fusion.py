@@ -300,5 +300,22 @@ def test_should_deposit_to_plasma_vault():
     system.plasma_vault().execute([supply_erc4626])
 
     # Verify final state: WETH has been successfully transferred to the WETH vault
-    # WBTC vault should have no WETH remaining
+    # WBTC vault should have no WETH remaining after the deposit operation
     assert system.erc20(Addresses.ETHEREUM_WETH_ADDRESS).balance_of(vault_address) == 0
+
+    # STEP 5: Prepare to withdraw WETH from the WETH Plasma Vault via ERC4626 fuse
+    # This demonstrates the ability to retrieve assets from cross-vault deposits
+    withdraw_erc4626 = system.erc4626(fuse_address=erc4626_fuse_address).withdraw(
+        vault_address=weth_vault_address, amount=weth_borrow_amount
+    )
+
+    # Advance blockchain time by 60 seconds to simulate realistic conditions
+    # Some protocols may have time-based restrictions or cooldown periods
+    anvil.move_time(60)
+
+    # STEP 6: Execute the withdrawal - transfer WETH back from the WETH vault to WBTC vault
+    system.plasma_vault().execute([withdraw_erc4626])
+
+    # Verify final state: WETH has been successfully withdrawn back to the original vault
+    # WBTC vault should now have WETH balance greater than 0
+    assert system.erc20(Addresses.ETHEREUM_WETH_ADDRESS).balance_of(vault_address) > 0
