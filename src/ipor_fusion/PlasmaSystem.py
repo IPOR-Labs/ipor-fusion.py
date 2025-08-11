@@ -181,8 +181,8 @@ class PlasmaSystem:
         rewards_fuses = []
         try:
             rewards_fuses = self.rewards_claim_manager().get_rewards_fuses()
-        except ContractLogicError as e:
-            log.warning("Failed to get rewards fuses: %s", e)
+        except ContractLogicError:
+            log.warning("Failed to get rewards fuses")
 
         if ramses_v_2_claim_fuse_address is None:
             ramses_v_2_claim_fuse_address = FuseMapper.find(
