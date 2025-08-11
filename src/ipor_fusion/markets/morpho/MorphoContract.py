@@ -7,7 +7,7 @@ from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.types import MorphoBlueMarketId, Amount, Shares
 
 
-class Morpho:
+class MorphoContract:
 
     def __init__(
         self, transaction_executor: TransactionExecutor, address: ChecksumAddress
@@ -29,7 +29,7 @@ class Morpho:
                 lltv,
             ),
         ) = decode(["(address,address,address,address,uint256)"], read)
-        return Morpho.MarketParams(
+        return MorphoContract.MarketParams(
             loan_token,
             collateral_token,
             oracle,
@@ -53,7 +53,7 @@ class Morpho:
                 collateral,
             ),
         ) = decode(["(uint256,uint128,uint128)"], read)
-        return Morpho.Position(
+        return MorphoContract.Position(
             supply_shares,
             borrow_shares,
             collateral,
@@ -74,7 +74,7 @@ class Morpho:
                 fee,
             ),
         ) = decode(["(uint128,uint128,uint128,uint128,uint128,uint128)"], read)
-        return Morpho.Market(
+        return MorphoContract.Market(
             total_supply_assets,
             total_supply_shares,
             total_borrow_assets,

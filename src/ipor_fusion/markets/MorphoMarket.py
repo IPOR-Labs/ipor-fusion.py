@@ -8,7 +8,7 @@ from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
 from ipor_fusion.fuse.MorphoBlueSupplyFuse import MorphoBlueSupplyFuse
 from ipor_fusion.fuse.MorphoFlashLoanFuse import MorphoFlashLoanFuse
-from ipor_fusion.markets.morpho.Morpho import Morpho
+from ipor_fusion.markets.morpho.MorphoContract import MorphoContract
 from ipor_fusion.types import Amount, MorphoBlueMarketId
 
 
@@ -61,7 +61,7 @@ class MorphoMarket:
     def position(
         self, chain_id: ChainId, morpho_blue_market_id: MorphoBlueMarketId
     ) -> MorphoPosition:
-        morpho = Morpho(
+        morpho = MorphoContract(
             transaction_executor=self._transaction_executor,
             address=MorphoMarket.get_morpho(chain_id),
         )
