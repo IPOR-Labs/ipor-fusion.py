@@ -312,6 +312,7 @@ class PlasmaSystem:
         return MorphoMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
+            plasma_vault_address=self._plasma_vault_address,
             morpho_supply_fuse_address=morpho_supply_fuse_address,
             morpho_flash_loan_fuse_address=morpho_flash_loan_fuse_address,
         )

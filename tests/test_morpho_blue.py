@@ -70,6 +70,18 @@ def test_should_deposit_and_withdraw_from_morpho_blue():
     # The vault will transfer USDC to the Morpho Blue protocol
     cheating.plasma_vault().execute([supply])
 
+    # Query the current position data from Morpho Blue protocol
+    # This retrieves detailed information about the vault's position in the specified market
+    morpho_position = cheating.morpho().position(
+        chain_id=cheating.chain_id(),  # Current blockchain network identifier
+        morpho_blue_market_id=morpho_blue_market_id,  # Specific Morpho Blue market to query
+    )
+
+    # Verify that the vault has supplied at least the expected amount to the market
+    # This assertion ensures the supply operation was successful and the position reflects
+    # the correct supplied amount before proceeding with further operations
+    assert morpho_position.supply_amount >= amount
+
     # Record the vault's USDC balance after supplying to the market
     usdc_balance_of_after_supply = usdc.balance_of(vault_address)
 
