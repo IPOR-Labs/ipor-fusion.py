@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v0.22.0 (2025-08-11)
+
+### Unknown
+
+* Merge pull request #90 from IPOR-Labs/develop
+
+Develop ([`ea595c8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ea595c81ef18fe2574f16bd8f38426840ce0b0d2))
+
+* Merge pull request #89 from IPOR-Labs/read-morpho-blue-position
+
+[feat] Read morpho blue balance ([`30e5b8d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/30e5b8d1fa8aecb9cb46e9873eb46c02fb169cc8))
+
+* [doc] Read morpho blue balance ([`ea85376`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ea853765c5473c7ca27087e11936fb5bbcb9be2d))
+
+* [feat] Read morpho blue balance - rename ([`641e361`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/641e3612e51e6666d68ec26de9f3e60988192a4f))
+
+* [feat] Read morpho blue balance ([`fd52629`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fd52629c9a654cddf1ef94d732c275fc2ea519f7))
+
+* Merge pull request #88 from IPOR-Labs/erc4626-withdraw-fix
+
+[fix] Withdraw from erc4626 ([`795b024`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/795b0241c3f464bc3b0a4534b655d6f711da0dc2))
+
+* [fix] Withdraw from erc4626 ([`957aa74`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/957aa74f2adf497de9009397edc658a872b0ebed))
+
+
 ## v0.21.0 (2025-08-05)
 
 ### Unknown
