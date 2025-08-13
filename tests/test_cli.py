@@ -189,7 +189,7 @@ class TestBaseCommand:
             "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
         )
 
-        env_path = BaseCommand.create_config_file(plasma_vault, rpc_url, private_key)
+        env_path = BaseCommand.add_new_plasma_vault(plasma_vault, rpc_url, private_key)
 
         assert env_path.exists()
         assert env_path.name == "ipor-fusion-config.yaml"
@@ -209,7 +209,7 @@ class TestBaseCommand:
             "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
         )
 
-        config_path = BaseCommand.create_config_file(
+        config_path = BaseCommand.add_new_plasma_vault(
             plasma_vault_address=plasma_vault_address,
             rpc_url=rpc_url,
             private_key=private_key,
@@ -234,7 +234,7 @@ class TestBaseCommand:
 
         # Mock click.confirm to return True (confirm overwrite)
         with patch("click.confirm", return_value=True):
-            env_path = BaseCommand.create_config_file(
+            env_path = BaseCommand.add_new_plasma_vault(
                 plasma_vault, rpc_url, private_key
             )
 

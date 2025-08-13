@@ -82,4 +82,4 @@ type = "github"
 token = { env = "GH_TOKEN" }
 
 [tool.poetry.scripts]
-ipor-fusion = "ipor_fusion.cli.ipor_fusion_cli:cli"
+fusion = "ipor_fusion.cli.ipor_fusion_cli:cli"

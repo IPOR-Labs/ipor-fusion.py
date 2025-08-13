@@ -13,14 +13,11 @@ class BaseCommand:
     """Base class for CLI commands with common functionality"""
 
     @staticmethod
-    def create_config_file(
+    def add_new_plasma_vault(
         plasma_vault_address: str,
         rpc_url: str,
         private_key: str,
-        network: str = "mainnet",
-        gas_limit: int = 300000,
-        gas_price: Optional[int] = None,
-        max_priority_fee: Optional[int] = None,
+        name: str,
         config_file: Optional[str] = None,
         encrypt_private_key: bool = False,
     ) -> Path:
@@ -31,10 +28,6 @@ class BaseCommand:
             plasma_vault_address: The plasma vault address
             rpc_url: The RPC provider URL
             private_key: The private key
-            network: The network name (default: mainnet)
-            gas_limit: Gas limit for transactions (default: 300000)
-            gas_price: Gas price for transactions (optional)
-            max_priority_fee: Max priority fee for transactions (optional)
             config_file: Optional path for the config file (defaults to ipor-fusion-config.yaml)
             encrypt_private_key: Whether to encrypt the private key (default: False)
 
@@ -63,10 +56,7 @@ class BaseCommand:
                 plasma_vault_address=plasma_vault_address,
                 rpc_url=rpc_url,
                 private_key=private_key,
-                network=network,
-                gas_limit=gas_limit,
-                gas_price=gas_price,
-                max_priority_fee=max_priority_fee,
+                name=name,
                 config_file=config_file,
                 encrypt_private_key=encrypt_private_key,
                 encryption_password=encryption_password,

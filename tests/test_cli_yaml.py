@@ -40,7 +40,7 @@ class TestYAMLConfig:
             "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
         )
 
-        config_path = BaseCommand.create_config_file(
+        config_path = BaseCommand.add_new_plasma_vault(
             plasma_vault_address=plasma_vault,
             rpc_url=rpc_url,
             private_key=private_key,

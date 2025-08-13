@@ -95,7 +95,7 @@ class TestBaseCommand:
                 "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
             )
 
-            BaseCommand.create_config_file(plasma_vault, rpc_url, private_key)
+            BaseCommand.add_new_plasma_vault(plasma_vault, rpc_url, private_key)
 
             # Check that file was written with correct content
             mock_file.write.assert_called()

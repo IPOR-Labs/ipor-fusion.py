@@ -95,6 +95,22 @@ class PlasmaVault:
         (result,) = decode(["uint256"], read)
         return result
 
+    def symbol(self) -> str:
+        sig = function_signature_to_4byte_selector("symbol()")
+        read = self._transaction_executor.read(
+            self._plasma_vault_address, sig
+        )
+        (result,) = decode(["string"], read)
+        return result
+
+    def name(self) -> str:
+        sig = function_signature_to_4byte_selector("name()")
+        read = self._transaction_executor.read(
+            self._plasma_vault_address, sig
+        )
+        (result,) = decode(["string"], read)
+        return result
+
     def get_total_supply_cap(self) -> Amount:
         sig = function_signature_to_4byte_selector("getTotalSupplyCap()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
