@@ -4,15 +4,16 @@ YAML configuration manager for IPOR Fusion CLI
 """
 
 import os
-
-from pathlib import Path
-from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass, asdict
+from pathlib import Path
+from typing import Dict, Any, Optional
+
 import click
 import yaml
+from dotenv import load_dotenv
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from dotenv import load_dotenv
+
 from ipor_fusion.cli.encryption import EncryptionManager
 
 
@@ -23,14 +24,7 @@ class FusionConfig:
     plasma_vault_address: ChecksumAddress
     rpc_url: str
     private_key: str
-    network: Optional[str] = None
-    gas_limit: Optional[Union[int, str]] = None
-    gas_price: Optional[Union[int, str]] = None
-    max_priority_fee: Optional[Union[int, str]] = None
-    # Additional string fields for flexibility
-    custom_field: Optional[str] = None
-    description: Optional[str] = None
-    notes: Optional[str] = None
+    name: str
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary"""
@@ -40,49 +34,6 @@ class FusionConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "FusionConfig":
         """Create config from dictionary"""
         return cls(**data)
-
-    def get_gas_limit_int(self) -> Optional[int]:
-        """Get gas_limit as integer, handling string conversion"""
-        if self.gas_limit is None:
-            return None
-        if isinstance(self.gas_limit, int):
-            return self.gas_limit
-        if isinstance(self.gas_limit, str):
-            try:
-                return int(self.gas_limit)
-            except ValueError as e:
-                raise ValueError(f"Invalid gas_limit value: {self.gas_limit}") from e
-        raise ValueError(f"Unexpected gas_limit type: {type(self.gas_limit)}")
-
-    def get_gas_price_int(self) -> Optional[int]:
-        """Get gas_price as integer, handling string conversion"""
-        if self.gas_price is None:
-            return None
-        if isinstance(self.gas_price, int):
-            return self.gas_price
-        if isinstance(self.gas_price, str):
-            try:
-                return int(self.gas_price)
-            except ValueError as e:
-                raise ValueError(f"Invalid gas_price value: {self.gas_price}") from e
-        raise ValueError(f"Unexpected gas_price type: {type(self.gas_price)}")
-
-    def get_max_priority_fee_int(self) -> Optional[int]:
-        """Get max_priority_fee as integer, handling string conversion"""
-        if self.max_priority_fee is None:
-            return None
-        if isinstance(self.max_priority_fee, int):
-            return self.max_priority_fee
-        if isinstance(self.max_priority_fee, str):
-            try:
-                return int(self.max_priority_fee)
-            except ValueError as e:
-                raise ValueError(
-                    f"Invalid max_priority_fee value: {self.max_priority_fee}"
-                ) from e
-        raise ValueError(
-            f"Unexpected max_priority_fee type: {type(self.max_priority_fee)}"
-        )
 
     def is_private_key_encrypted(self) -> bool:
         """Check if the private key is encrypted"""
@@ -136,13 +87,7 @@ class ConfigManager:
         "plasma_vault_address": "",
         "rpc_url": "",
         "private_key": "",
-        "network": "mainnet",
-        "gas_limit": "300000",  # String format
-        "gas_price": None,
-        "max_priority_fee": None,
-        "custom_field": "",
-        "description": "",
-        "notes": "",
+        "name": "",
     }
 
     @staticmethod
@@ -154,19 +99,13 @@ class ConfigManager:
 
     @staticmethod
     def create_config(
-        plasma_vault_address: str,
-        rpc_url: str,
-        private_key: str,
-        network: str = "mainnet",
-        gas_limit: Union[int, str] = "300000",
-        gas_price: Optional[Union[int, str]] = None,
-        max_priority_fee: Optional[Union[int, str]] = None,
-        config_file: Optional[str] = None,
-        custom_field: Optional[str] = None,
-        description: Optional[str] = None,
-        notes: Optional[str] = None,
-        encrypt_private_key: bool = False,
-        encryption_password: Optional[str] = None,
+            plasma_vault_address: str,
+            rpc_url: str,
+            private_key: str,
+            name: str,
+            encrypt_private_key: bool = False,
+            config_file: Optional[str] = None,
+            encryption_password: Optional[str] = None,
     ) -> Path:
         """
         Create a YAML configuration file with the provided settings.
@@ -175,14 +114,7 @@ class ConfigManager:
             plasma_vault_address: The plasma vault address
             rpc_url: The RPC provider URL
             private_key: The private key
-            network: The network name (default: mainnet)
-            gas_limit: Gas limit for transactions (default: "300000" as string)
-            gas_price: Gas price for transactions (optional, can be int or string)
-            max_priority_fee: Max priority fee for transactions (optional, can be int or string)
             config_file: Optional path for the config file
-            custom_field: Optional custom string field
-            description: Optional description string
-            notes: Optional notes string
             encrypt_private_key: Whether to encrypt the private key (default: False)
             encryption_password: Password for encryption (required if encrypt_private_key is True)
 
@@ -208,13 +140,7 @@ class ConfigManager:
             plasma_vault_address=plasma_vault_checksum_address,
             rpc_url=rpc_url,
             private_key=final_private_key,
-            network=network,
-            gas_limit=gas_limit,
-            gas_price=gas_price,
-            max_priority_fee=max_priority_fee,
-            custom_field=custom_field,
-            description=description,
-            notes=notes,
+            name=name
         )
 
         ConfigManager._write_config(config_path, config)
@@ -251,10 +177,10 @@ class ConfigManager:
 
     @staticmethod
     def update_config(
-        config_file: Optional[str] = None,
-        encrypt_private_key: bool = False,
-        encryption_password: Optional[str] = None,
-        **kwargs,
+            config_file: Optional[str] = None,
+            encrypt_private_key: bool = False,
+            encryption_password: Optional[str] = None,
+            **kwargs,
     ) -> Path:
         """
         Update existing configuration file with new values.
@@ -296,7 +222,6 @@ class ConfigManager:
         return config_path
 
     @staticmethod
-    # pylint: disable=too-complex
     def validate_config(config: FusionConfig) -> bool:
         """
         Validate configuration values.
@@ -320,29 +245,6 @@ class ConfigManager:
         if not config.plasma_vault_address.startswith("0x"):
             raise ValueError("plasma_vault_address must be a valid Ethereum address")
 
-        # Validate numeric fields (can be strings or integers)
-        try:
-            if config.gas_limit is not None:
-                config.get_gas_limit_int()
-        except ValueError as e:
-            raise ValueError(f"gas_limit validation failed: {e}") from e
-
-        try:
-            if config.gas_price is not None:
-                gas_price_int = config.get_gas_price_int()
-                if gas_price_int is not None and gas_price_int < 0:
-                    raise ValueError("gas_price must be non-negative")
-        except ValueError as e:
-            raise ValueError(f"gas_price validation failed: {e}") from e
-
-        try:
-            if config.max_priority_fee is not None:
-                max_priority_fee_int = config.get_max_priority_fee_int()
-                if max_priority_fee_int is not None and max_priority_fee_int < 0:
-                    raise ValueError("max_priority_fee must be non-negative")
-        except ValueError as e:
-            raise ValueError(f"max_priority_fee validation failed: {e}") from e
-
         return True
 
     @staticmethod
@@ -360,7 +262,7 @@ class ConfigManager:
 
     @staticmethod
     def encrypt_existing_private_key(
-        config_file: Optional[str] = None, password: Optional[str] = None
+            config_file: Optional[str] = None, password: Optional[str] = None
     ) -> Path:
         """
         Encrypt the private key in an existing configuration file.
