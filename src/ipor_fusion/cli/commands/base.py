@@ -5,35 +5,28 @@ Base command class for ipor-fusion CLI commands
 
 from pathlib import Path
 from typing import Optional
+
 import click
-from ipor_fusion.cli.config import ConfigManager, FusionConfig
+from eth_typing import ChecksumAddress
+from eth_utils import network_from_chain_id
+
+from ipor_fusion.cli.config import ConfigManager, GeneralConfig, ChainConfig, PlasmaVaultConfig
+from ipor_fusion.cli.encryption import EncryptionManager
 
 
 class BaseCommand:
     """Base class for CLI commands with common functionality"""
 
     @staticmethod
-    def add_new_plasma_vault(
-        plasma_vault_address: str,
-        rpc_url: str,
-        private_key: str,
-        name: str,
-        config_file: Optional[str] = None,
-        encrypt_private_key: bool = False,
+    def init_config(
+            chain_id: int,
+            plasma_vault_address: ChecksumAddress,
+            rpc_url: str,
+            private_key: str,
+            name: str,
+            config_file: Optional[str] = None,
+            encrypt_private_key: bool = False,
     ) -> Path:
-        """
-        Create a YAML configuration file with the provided configuration.
-
-        Args:
-            plasma_vault_address: The plasma vault address
-            rpc_url: The RPC provider URL
-            private_key: The private key
-            config_file: Optional path for the config file (defaults to ipor-fusion-config.yaml)
-            encrypt_private_key: Whether to encrypt the private key (default: False)
-
-        Returns:
-            Path to the created configuration file
-        """
         config_path = ConfigManager.get_config_path(config_file)
 
         if config_path.exists():
@@ -52,14 +45,27 @@ class BaseCommand:
                     confirmation_prompt=True,
                 )
 
-            config_path = ConfigManager.create_config(
-                plasma_vault_address=plasma_vault_address,
-                rpc_url=rpc_url,
-                private_key=private_key,
-                name=name,
+            final_private_key = private_key
+            if encrypt_private_key:
+                if not encryption_password:
+                    click.secho("Encryption password is required when encrypt_private_key is True", fg="red", err=True)
+
+                final_private_key = EncryptionManager.encrypt_private_key(
+                    private_key, encryption_password
+                )
+
+            plasma_vault_config = PlasmaVaultConfig(plasma_vault_address=plasma_vault_address, name=name,
+                                                    private_key=final_private_key)
+            chain_network = network_from_chain_id(chain_id)
+            chain_config = ChainConfig(chain_id=chain_id, chain_name=chain_network.name,
+                                       chain_short_name=chain_network.shortName,
+                                       rpc_url=rpc_url,
+                                       plasma_vaults=[plasma_vault_config])
+
+            general_config = GeneralConfig(default_plasma_vault_name=plasma_vault_config.name, chain_configs=[chain_config])
+            config_path = ConfigManager.create_config_file(
+                general_config=general_config,
                 config_file=config_file,
-                encrypt_private_key=encrypt_private_key,
-                encryption_password=encryption_password,
             )
 
             click.secho(f"Configuration file created at {config_path}", fg="green")
@@ -77,88 +83,17 @@ class BaseCommand:
 
     @staticmethod
     def load_config(
-        config_file: Optional[str] = None, password: Optional[str] = None
-    ) -> FusionConfig:
-        """
-        Load configuration from YAML file.
-
-        Args:
-            config_file: Optional path to the configuration file
-            password: Password for decrypting private key (if encrypted)
-
-        Returns:
-            FusionConfig object
-        """
+            config_file: Optional[str] = None
+    ) -> GeneralConfig:
+        config = None
         try:
             config = ConfigManager.load_config(config_file)
-
-            # Handle encrypted private key
-            if config.is_private_key_encrypted():
-                if not password:
-                    password = click.prompt(
-                        "Enter password to decrypt private key", hide_input=True
-                    )
-
-                try:
-                    # Test decryption
-                    config.get_decrypted_private_key(password)
-                    click.secho("Private key decrypted successfully.", fg="green")
-                except ValueError as e:
-                    click.secho(f"Failed to decrypt private key: {e}", fg="red")
-                    raise
-
-            ConfigManager.validate_config(config)
-            return config
         except Exception as e:
             click.secho(f"Error loading configuration: {e}", fg="red")
             raise
 
-    @staticmethod
-    def get_common_options():
-        """Get common click options for plasma vault, provider URL, and private key"""
-        return [
-            click.option(
-                "--plasma-vault-address",
-                prompt="Set plasma vault address",
-                help="Set plasma vault address",
-            ),
-            click.option(
-                "--rpc-url",
-                prompt="RPC provider url like alchemy (https://...)",
-                help="HTTP(S) endpoint for the chosen network",
-            ),
-            click.option(
-                "--private-key",
-                prompt="Private key",
-                hide_input=True,
-                confirmation_prompt=True,
-                help="Your Ethereum account private key",
-            ),
-        ]
-
-    @staticmethod
-    def get_advanced_options():
-        """Get advanced click options for network and gas settings"""
-        return [
-            click.option(
-                "--network",
-                default="mainnet",
-                help="Network name (default: mainnet)",
-            ),
-            click.option(
-                "--gas-limit",
-                default=300000,
-                type=int,
-                help="Gas limit for transactions (default: 300000)",
-            ),
-            click.option(
-                "--gas-price",
-                type=int,
-                help="Gas price for transactions (optional)",
-            ),
-            click.option(
-                "--max-priority-fee",
-                type=int,
-                help="Max priority fee for transactions (optional)",
-            ),
-        ]
+        try:
+            ConfigManager.validate_config(config)
+        except Exception as e:
+            click.secho(f"Error validate configuration: {e}", fg="red")
+            raise

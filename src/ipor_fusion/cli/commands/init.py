@@ -5,10 +5,10 @@ Init command for ipor-fusion CLI
 import re
 
 import click
-from web3 import Web3
+from web3 import Web3, HTTPProvider
 
-from .base import BaseCommand
-from ...PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
+from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
+from ipor_fusion.cli.commands.base import BaseCommand
 
 
 @click.command()
@@ -24,7 +24,6 @@ from ...PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 )
 @click.option(
     "--config-file",
-    prompt="Set config file",
     help="Set config file path. Default: ipor-fusion-config.yaml.",
 )
 def init(
@@ -36,9 +35,15 @@ def init(
     Initialize a YAML configuration file with network, provider URL, and private key.
     """
 
+    if not is_valid_http_url(rpc_url):
+        click.secho("Invalid RPC URL!", fg="red", err=True)
+
+    chain_id = get_chain_id(rpc_url)
+
+    plasma_vault_address_checksum = Web3.to_checksum_address(plasma_vault_address)
     system = PlasmaVaultSystemFactory(
         provider_url=rpc_url,
-    ).get(Web3.to_checksum_address(plasma_vault_address))
+    ).get(plasma_vault_address_checksum)
 
     name = system.plasma_vault().name()
     name = re.sub(r'\s+', '-', name)
@@ -62,11 +67,29 @@ def init(
 
         encrypt_private_key = click.confirm('Do you want to encrypt private key?')
 
-    BaseCommand.add_new_plasma_vault(
-        plasma_vault_address=plasma_vault_address,
+    BaseCommand.init_config(
+        chain_id=chain_id,
+        plasma_vault_address=plasma_vault_address_checksum,
         rpc_url=rpc_url,
         name=name,
         private_key=private_key,
         encrypt_private_key=encrypt_private_key,
         config_file=config_file
+    )
+
+
+def get_chain_id(rpc_url: str) -> int:
+    try:
+        web3 = Web3(HTTPProvider(rpc_url))
+        return web3.eth.chain_id
+    except Exception as e:
+        click.secho(f"Error connecting to RPC provider: {e}", fg="red")
+        raise
+
+def is_valid_http_url(url):
+    return (
+        isinstance(url, str) and
+        url.startswith(('http://', 'https://')) and
+        len(url) > 8 and  # Minimum valid URL length
+        '.' in url  # Must contain domain
     )
