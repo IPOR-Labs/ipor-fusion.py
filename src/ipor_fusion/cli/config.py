@@ -3,37 +3,28 @@
 YAML configuration manager for IPOR Fusion CLI
 """
 
-import os
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import click
 import yaml
-from dotenv import load_dotenv
 from eth_typing import ChecksumAddress
-from web3 import Web3
 
 from ipor_fusion.cli.encryption import EncryptionManager
 
 
-@dataclass
-class FusionConfig:
-    """Configuration data class for IPOR Fusion"""
-
+class PlasmaVaultConfig:
+    """Plasma Vault configuration"""
     plasma_vault_address: ChecksumAddress
-    rpc_url: str
     private_key: str
     name: str
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert config to dictionary"""
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "FusionConfig":
-        """Create config from dictionary"""
-        return cls(**data)
+    def __init__(self, plasma_vault_address: ChecksumAddress, name: str,
+                 private_key: str = None):
+        self.plasma_vault_address = plasma_vault_address
+        self.name = name
+        self.private_key = private_key
 
     def is_private_key_encrypted(self) -> bool:
         """Check if the private key is encrypted"""
@@ -78,6 +69,108 @@ class FusionConfig:
             return self.decrypt_private_key(password)
         return self.private_key
 
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'plasma_vault_address': self.plasma_vault_address,
+            'private_key': self.private_key,
+        }
+
+    @classmethod
+    def from_dict(cls, vault_data: Dict[str, Any]) -> Any:
+        return PlasmaVaultConfig(
+            plasma_vault_address=vault_data['plasma_vault_address'],
+            name=vault_data['name'],
+            private_key=vault_data['private_key']
+        )
+
+    def validate(self):
+        pass
+
+
+class ChainConfig:
+    """Chain configuration"""
+    chain_id: int
+    chain_name: str
+    chain_short_name: str
+    rpc_url: str
+    plasma_vaults: List[PlasmaVaultConfig]
+
+    def __init__(self, chain_id: int, chain_name: str, chain_short_name: str, rpc_url: str,
+                 plasma_vaults: List[PlasmaVaultConfig]):
+        self.chain_id = chain_id
+        self.chain_name = chain_name
+        self.chain_short_name = chain_short_name
+        self.rpc_url = rpc_url
+        self.plasma_vaults = plasma_vaults
+
+    def to_dict(self):
+        return {
+            'chain_id': self.chain_id,
+            'chain_name': self.chain_name,
+            'chain_short_name': self.chain_short_name,
+            'rpc_url': self.rpc_url,
+            'plasma_vaults': [vault.to_dict() for vault in self.plasma_vaults]
+        }
+
+    @classmethod
+    def from_dict(cls, chain_data: Dict[str, Any]) -> Any:
+        plasma_vaults = []
+        for vault_data in chain_data.get('plasma_vaults', []):
+            plasma_vaults.append(PlasmaVaultConfig.from_dict(vault_data))
+
+        return ChainConfig(
+            chain_id=chain_data['chain_id'],
+            chain_name=chain_data['chain_name'],
+            chain_short_name=chain_data['chain_short_name'],
+            rpc_url=chain_data['rpc_url'],
+            plasma_vaults=plasma_vaults
+        )
+
+    def validate(self):
+        pass
+
+
+@dataclass
+class GeneralConfig:
+    """Configuration data class for IPOR Fusion"""
+
+    default_plasma_vault_name: str
+    chain_configs: List[ChainConfig]
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert config to dictionary"""
+        return {
+            'default_plasma_vault_name' : self.default_plasma_vault_name,
+            'chain_configs': [chain.to_dict() for chain in self.chain_configs]
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GeneralConfig":
+        """Create config from dictionary"""
+        chain_configs = []
+        for chain_data in data.get('chain_configs', []):
+            plasma_vaults = []
+            for vault_data in chain_data.get('plasma_vaults', []):
+                plasma_vaults.append(PlasmaVaultConfig(
+                    plasma_vault_address=vault_data['plasma_vault_address'],
+                    name=vault_data['name'],
+                    private_key=vault_data['private_key']
+                ))
+
+            chain_configs.append(ChainConfig(
+                chain_id=chain_data['chain_id'],
+                chain_name=chain_data['chain_name'],
+                chain_short_name=chain_data['chain_short_name'],
+                rpc_url=chain_data['rpc_url'],
+                plasma_vaults=plasma_vaults
+            ))
+
+        return cls(default_plasma_vault_name=data.get('default_plasma_vault_name'), chain_configs=chain_configs)
+
+    def validate(self):
+        pass
+
 
 class ConfigManager:
     """Manages YAML configuration files for IPOR Fusion"""
@@ -98,56 +191,51 @@ class ConfigManager:
         return Path.cwd() / ConfigManager.DEFAULT_CONFIG_FILE
 
     @staticmethod
-    def create_config(
-            plasma_vault_address: str,
-            rpc_url: str,
-            private_key: str,
-            name: str,
-            encrypt_private_key: bool = False,
+    def create_config_file(
+            general_config: GeneralConfig,
             config_file: Optional[str] = None,
-            encryption_password: Optional[str] = None,
     ) -> Path:
         """
         Create a YAML configuration file with the provided settings.
 
         Args:
-            plasma_vault_address: The plasma vault address
-            rpc_url: The RPC provider URL
-            private_key: The private key
             config_file: Optional path for the config file
-            encrypt_private_key: Whether to encrypt the private key (default: False)
-            encryption_password: Password for encryption (required if encrypt_private_key is True)
 
         Returns:
             Path to the created configuration file
         """
         config_path = ConfigManager.get_config_path(config_file)
 
-        plasma_vault_checksum_address = Web3.to_checksum_address(plasma_vault_address)
-
         # Handle private key encryption
-        final_private_key = private_key
-        if encrypt_private_key:
-            if not encryption_password:
-                raise ValueError(
-                    "Encryption password is required when encrypt_private_key is True"
-                )
-            final_private_key = EncryptionManager.encrypt_private_key(
-                private_key, encryption_password
-            )
+        ConfigManager._write_config(config_path, general_config)
+        return config_path
 
-        config = FusionConfig(
-            plasma_vault_address=plasma_vault_checksum_address,
+    @staticmethod
+    def set_rpc_url(
+            rpc_url: str,
+            config_file: Optional[str] = None,
+    ) -> Path:
+        """
+        Create a YAML configuration file with the provided settings.
+
+        Args:
+            rpc_url: The RPC provider URL
+            config_file: Optional path for the config file
+
+        Returns:
+            Path to the created configuration file
+        """
+        config_path = ConfigManager.get_config_path(config_file)
+
+        config = GeneralConfig(
             rpc_url=rpc_url,
-            private_key=final_private_key,
-            name=name
         )
 
         ConfigManager._write_config(config_path, config)
         return config_path
 
     @staticmethod
-    def load_config(config_file: Optional[str] = None) -> FusionConfig:
+    def load_config(config_file: Optional[str] = None) -> GeneralConfig:
         """
         Load configuration from YAML file.
 
@@ -173,7 +261,7 @@ class ConfigManager:
         if not data:
             raise ValueError("Configuration file is empty")
 
-        return FusionConfig.from_dict(data)
+        return GeneralConfig.from_dict(data)
 
     @staticmethod
     def update_config(
@@ -222,43 +310,21 @@ class ConfigManager:
         return config_path
 
     @staticmethod
-    def validate_config(config: FusionConfig) -> bool:
-        """
-        Validate configuration values.
+    def validate_config(config: GeneralConfig) -> bool:
+        try:
+            config.validate()
+            return True
+        except Exception as e:
+            click.secho(f"Error validating configuration: {e}", fg="red", err=True)
 
-        Args:
-            config: FusionConfig object to validate
-
-        Returns:
-            True if valid, raises ValueError if invalid
-        """
-        click.echo(config)
-        if not config.plasma_vault_address:
-            raise ValueError("plasma_vault_address is required")
-
-        if not config.rpc_url:
-            raise ValueError("rpc_url is required")
-
-        if not config.private_key:
-            raise ValueError("private_key is required")
-
-        if not config.plasma_vault_address.startswith("0x"):
-            raise ValueError("plasma_vault_address must be a valid Ethereum address")
-
-        return True
 
     @staticmethod
-    def _write_config(config_path: Path, config: FusionConfig) -> None:
+    def _write_config(config_path: Path, config: GeneralConfig) -> None:
         """Write configuration to YAML file"""
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.dump(config.to_dict(), f, default_flow_style=False, indent=2)
-
-    @staticmethod
-    def get_template() -> Dict[str, Any]:
-        """Get configuration template"""
-        return ConfigManager.DEFAULT_CONFIG_TEMPLATE.copy()
 
     @staticmethod
     def encrypt_existing_private_key(
@@ -303,65 +369,3 @@ class ConfigManager:
         # Write updated config
         ConfigManager._write_config(config_path, config)
         return config_path
-
-    @staticmethod
-    def convert_from_env(config_file: str = ".env") -> Path:
-        """
-        Convert existing .env file to YAML configuration.
-
-        Args:
-            config_file: Path to the .env file
-
-        Returns:
-            Path to the created YAML configuration file
-        """
-        env_path = Path(config_file)
-        if not env_path.exists():
-            raise FileNotFoundError(f".env file not found: {env_path}")
-
-        load_dotenv(env_path)
-
-        # Extract values
-        plasma_vault = os.getenv("plasma_vault_address", "")
-        rpc_url = os.getenv("rpc_url", "")
-        private_key = os.getenv("PRIVATE_KEY", "")
-
-        if not all([plasma_vault, rpc_url, private_key]):
-            raise ValueError("Missing required environment variables in .env file")
-
-        # Create YAML config
-        return ConfigManager.create_config(
-            plasma_vault_address=plasma_vault,
-            rpc_url=rpc_url,
-            private_key=private_key,
-        )
-
-    @staticmethod
-    def create_example_config() -> Dict[str, Any]:
-        """
-        Create an example configuration showing different ways to write config fields as strings.
-
-        Returns:
-            Example configuration dictionary
-        """
-        return {
-            # Required fields (always strings)
-            "plasma_vault_address": "0x1234567890123456789012345678901234567890",
-            "rpc_url": "https://example.com/rpc",
-            "private_key": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-            # Optional fields with different string formats
-            "network": "mainnet",
-            "gas_limit": "300000",  # String format for gas limit
-            "gas_price": "2000000000",  # String format for gas price (2 gwei)
-            "max_priority_fee": "1500000000",  # String format for priority fee (1.5 gwei)
-            # Additional string fields
-            "custom_field": "This is a custom string field",
-            "description": "Configuration for IPOR Fusion deployment",
-            "notes": "This configuration is for testing purposes only",
-            # Example with quotes for clarity
-            "quoted_string": '"This is a quoted string"',
-            # Example with special characters
-            "special_chars": "Line 1\nLine 2\nLine 3",  # Multi-line string
-            # Example with YAML block scalar
-            "block_text": "This is a block of text\nthat spans multiple lines\nand preserves formatting",
-        }
