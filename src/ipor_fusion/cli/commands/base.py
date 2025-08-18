@@ -85,7 +85,6 @@ class BaseCommand:
     def load_config(
             config_file: Optional[str] = None
     ) -> GeneralConfig:
-        config = None
         try:
             config = ConfigManager.load_config(config_file)
         except Exception as e:
@@ -97,3 +96,5 @@ class BaseCommand:
         except Exception as e:
             click.secho(f"Error validate configuration: {e}", fg="red")
             raise
+
+        return config

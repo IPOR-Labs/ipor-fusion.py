@@ -4,17 +4,16 @@ Simple CLI for ipor-fusion init
 """
 
 import click
-from ipor_fusion.cli.commands.registry import register_commands
+
+from ipor_fusion.cli.commands.config import config
 
 
 @click.group()
 def cli():
     """ipor-fusion CLI"""
 
-
-# Automatically register all commands
-register_commands(cli)
-
+# cli.add_command(init)
+cli.add_command(config)
 
 if __name__ == "__main__":
     cli()

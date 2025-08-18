@@ -3,7 +3,7 @@ import os
 import yaml
 from click.testing import CliRunner
 
-from ipor_fusion.cli.commands.init import init
+from ipor_fusion.cli.commands.config import show, init, update
 
 
 class TestInitCommand:
@@ -43,7 +43,8 @@ class TestInitCommand:
         assert config_data['chain_configs'][0]["rpc_url"] == self.rpc_url
         assert config_data['chain_configs'][0]['plasma_vaults'][0][
                    "plasma_vault_address"] == self.PLASMA_VAULT_ADDRESS
-        assert "private_key" in config_data['chain_configs'][0]['plasma_vaults'][0]
+        assert config_data['chain_configs'][0]['plasma_vaults'][0][
+                   "private_key"] == self.PRIVATE_KEY
 
     def test_init_with_prompts_overwrite_config(self, tmp_path):
         self.test_init_with_prompts(tmp_path)
@@ -60,6 +61,35 @@ class TestInitCommand:
         result = self.runner.invoke(init, input="\n".join(inputs), args=["--config-file", str(config_path)])
         assert result.exit_code == 0
         assert "Configuration file already exists at" in result.output
+
+    def test_config_show(self, tmp_path):
+        self.test_init_with_prompts(tmp_path)
+
+        config_path = tmp_path / "ipor-fusion-config.yaml"
+
+        result = self.runner.invoke(show, args=["--config-file", str(config_path)])
+        assert result.exit_code == 0
+
+
+    def test_config_pull(self, tmp_path):
+        """Test init command with interactive prompts"""
+        inputs = [
+            self.rpc_url,
+            self.PLASMA_VAULT_ADDRESS,
+            "y", # name
+            "n", # set a private key
+        ]
+
+        config_path = tmp_path / "ipor-fusion-config.yaml"
+
+        result = self.runner.invoke(init, input="\n".join(inputs), args=["--config-file", str(config_path)])
+        assert result.exit_code == 0
+        assert "Configuration file created" in result.output
+
+        config_path = tmp_path / "ipor-fusion-config.yaml"
+
+        result = self.runner.invoke(update, args=["--config-file", str(config_path)])
+        assert result.exit_code == 0
 
 
     def test_init_with_prompts_priv_key_not_match(self, tmp_path):
