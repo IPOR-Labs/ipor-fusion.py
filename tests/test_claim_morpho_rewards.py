@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import List, Any, Generator
+from typing import List
 from unittest.mock import patch
 
 from eth_typing import BlockNumber, ChecksumAddress
@@ -24,13 +24,26 @@ fork_url = os.getenv("ETHEREUM_PROVIDER_URL")
 anvil = AnvilTestContainerStarter(fork_url)
 anvil.start()
 
+
 class MorphoBlueRewardsDistribution:
+    """
+    Data class representing a single rewards distribution from Morpho Blue.
+    Contains information about claimable rewards including the asset, distributor,
+    amount, and merkle proof required for claiming.
+    """
+
     asset_address: ChecksumAddress
     distributor_address: ChecksumAddress
     claimable: int
     proof: List[str]
 
     def __init__(self, distribution: dict):
+        """
+        Initialize rewards distribution from API response data.
+
+        Args:
+            distribution: Dictionary containing distribution data from Morpho API
+        """
         self.rewards_token_address = Web3.to_checksum_address(
             distribution["asset"]["address"]
         )
@@ -42,51 +55,105 @@ class MorphoBlueRewardsDistribution:
 
 
 class MorphoBlueRewardsClient:
+    """
+    Client for interacting with the Morpho Blue rewards API.
+    Provides methods to fetch rewards distribution data for users.
+    """
 
     @staticmethod
     def get_url(user_address: str) -> str:
+        """
+        Generate the API URL for fetching user rewards distributions.
+
+        Args:
+            user_address: Ethereum address of the user
+
+        Returns:
+            Complete URL for the Morpho rewards API endpoint
+        """
         return f"https://rewards.morpho.org/v1/users/{user_address}/distributions"
 
     @staticmethod
     def get_rewards_distribution(
         user_address: str,
-    ) -> Generator[MorphoBlueRewardsDistribution, Any, None]:
+    ) -> List[MorphoBlueRewardsDistribution]:
+        """
+        Fetch and parse rewards distributions for a given user address.
+
+        Args:
+            user_address: Ethereum address to fetch rewards for
+
+        Returns:
+
+        """
+        # Make HTTP request to Morpho rewards API
         response = requests.get(
             url=MorphoBlueRewardsClient.get_url(user_address),
             timeout=10,
         )
+        # Extract distributions data from API response
         distributions = response.json()["data"]
 
+        result = []
         for distribution in distributions:
-            yield MorphoBlueRewardsDistribution(distribution)
+            result.append(MorphoBlueRewardsDistribution(distribution))
+
+        return result
 
 
 class TestMorphoBlueRewards:
+    """
+    Test class for validating Morpho Blue rewards claiming functionality.
+    Tests the complete flow from fetching rewards data to claiming rewards
+    through the Plasma Vault system.
+    """
 
     def test_should_claim_morpho_rewards(self):
+        """
+        Test the complete Morpho Blue rewards claiming process.
+
+        This test demonstrates:
+        1. Setting up a test environment with a specific blockchain state
+        2. Mocking the Morpho rewards API response
+        3. Processing rewards distribution data
+        4. Executing rewards claiming through the Plasma Vault system
+        5. Verifying that rewards were successfully claimed and transferred
+        """
+        # Reset fork to a specific block number for consistent testing state
+        # This ensures the test runs against a known blockchain state
         anvil.reset_fork(BlockNumber(23168096))
 
+        # Define key addresses for the test
         vault_address = Web3.to_checksum_address(
             "0xe9385eFf3F937FcB0f0085Da9A3F53D6C2B4fB5F"
-        )
+        )  # Plasma Vault contract address
         alpha_address = Web3.to_checksum_address(
             "0x6d3BE3f86FB1139d0c9668BD552f05fcB643E6e6"
-        )
+        )  # Alpha role address with execution permissions
 
+        # Initialize the Plasma Vault system using the cheating factory
+        # This allows for privileged operations during testing
         system = CheatingPlasmaVaultSystemFactory(
             provider_url=anvil.get_anvil_http_url(),
             private_key=ANVIL_WALLET_PRIVATE_KEY,
         ).get(vault_address)
 
+        # Set up execution permissions by pranking as the alpha address
+        # This allows the test to execute actions on behalf of the alpha role
         system.prank(alpha_address)
 
+        # Initialize the Morpho Blue integration with the claim fuse address
+        # The fuse enables the vault to interact with Morpho's rewards system
         morpho = system.morpho(
             morpho_blue_claim_fuse_address=Web3.to_checksum_address(
                 "0x6820dF665BA09FBbd3240aA303421928EF4C71a1"
             )
         )
 
+        # Mock the Morpho rewards API to return test data
+        # This prevents the test from making actual HTTP requests and ensures consistent results
         with patch("requests.get") as mock_get:
+            # Configure mock response with realistic rewards distribution data
             mock_get.return_value.json.return_value = {
                 "timestamp": "1755521728",
                 "data": [
@@ -95,7 +162,7 @@ class TestMorphoBlueRewards:
                         "asset": {
                             "id": "0x58d97b57bb95320f9a05dc918aef65434969c2b2-1",
                             "address": "0x58D97B57BB95320F9a05dC918Aef65434969c2B2",
-                            "chain_id": 1,
+                            "chain_id": 1,  # Ethereum mainnet
                         },
                         "distributor": {
                             "id": "0x330eefa8a787552dc5cad3c3ca644844b1e61ddb-1",
@@ -103,6 +170,7 @@ class TestMorphoBlueRewards:
                             "chain_id": 1,
                         },
                         "claimable": "4670003019411856706671",
+                        # Merkle proof required to verify the claim
                         "proof": [
                             "0xbcc36476d3972818e27089a34d24c81d4cd58b3947d7049cf6590217c44ed65a",
                             "0xb36697e61d8849901a805bfba05bf99141c73dcabe2b3eb7ad0cd7f3c1f71a15",
@@ -123,27 +191,47 @@ class TestMorphoBlueRewards:
                     }
                 ],
             }
+            # Set successful HTTP status code
             mock_get.return_value.status_code = 200
 
+            # Fetch rewards distributions using the mocked API response
             distributions = MorphoBlueRewardsClient.get_rewards_distribution(
                 vault_address
             )
 
-        for dist in distributions:
-            claim_action = morpho.claim_rewards(
-                universal_rewards_distributor=dist.distributor_address,
-                rewards_token=dist.rewards_token_address,
-                claimable=dist.claimable,
-                proof=dist.proof,
-            )
+            assert len(distributions) > 0, "No distributions found in API response"
 
-            before = system.erc20(asset_address=dist.rewards_token_address).balance_of(
-                system.rewards_claim_manager().address()
-            )
-            system.rewards_claim_manager().claim_rewards([claim_action])
-            after = system.erc20(asset_address=dist.rewards_token_address).balance_of(
-                system.rewards_claim_manager().address()
-            )
+            # Process each rewards distribution and execute the claim
+            for dist in distributions:
+                # Create a claim action for the current distribution
+                # This prepares the transaction data needed to claim rewards
+                claim_action = morpho.claim_rewards(
+                    universal_rewards_distributor=dist.distributor_address,
+                    rewards_token=dist.rewards_token_address,
+                    claimable=dist.claimable,
+                    proof=dist.proof,
+                )
 
-            diff = after - before
-            assert diff > 0
+                # Record the rewards token balance before claiming
+                # This allows us to verify that rewards were successfully transferred
+                before = system.erc20(
+                    asset_address=dist.rewards_token_address
+                ).balance_of(system.rewards_claim_manager().address())
+
+                # Execute the claim through the rewards claim manager
+                # This performs the actual on-chain transaction to claim rewards
+                system.rewards_claim_manager().claim_rewards([claim_action])
+
+                # Record the rewards token balance after claiming
+                after = system.erc20(
+                    asset_address=dist.rewards_token_address
+                ).balance_of(system.rewards_claim_manager().address())
+
+                # Calculate the difference to verify rewards were received
+                diff = after - before
+
+                # Assert that rewards were successfully claimed and transferred
+                # The balance should increase, indicating successful reward distribution
+                assert (
+                    diff > 0
+                ), "Rewards claiming failed - no token balance increase detected"
