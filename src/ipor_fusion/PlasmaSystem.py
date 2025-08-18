@@ -293,6 +293,7 @@ class PlasmaSystem:
         self,
         morpho_supply_fuse_address: ChecksumAddress = None,
         morpho_flash_loan_fuse_address: ChecksumAddress = None,
+        morpho_blue_claim_fuse_address: ChecksumAddress = None,
     ) -> MorphoMarket:
 
         if morpho_supply_fuse_address is None:
@@ -309,12 +310,20 @@ class PlasmaSystem:
                 fuses=self.plasma_vault().get_fuses(),
             )
 
+        if morpho_blue_claim_fuse_address is None:
+            morpho_blue_claim_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="MorphoClaimFuse",
+                fuses=self.plasma_vault().get_fuses(),
+            )
+
         return MorphoMarket(
             chain_id=self._chain_id,
             transaction_executor=self._transaction_executor,
             plasma_vault_address=self._plasma_vault_address,
             morpho_supply_fuse_address=morpho_supply_fuse_address,
             morpho_flash_loan_fuse_address=morpho_flash_loan_fuse_address,
+            morpho_blue_claim_fuse_address=morpho_blue_claim_fuse_address,
         )
 
     def compound_v3(
