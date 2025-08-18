@@ -9,6 +9,8 @@ from ipor_fusion.fuse.FuseAction import FuseAction
 
 class MorphoBlueClaimFuse:
 
+    _fuse_address: ChecksumAddress
+
     def __init__(self, fuse_address: ChecksumAddress):
         self._fuse_address = fuse_address
 
@@ -24,10 +26,10 @@ class MorphoBlueClaimFuse:
 
 
 class MorphoBlueClaimData:
-    universal_rewards_distributor: ChecksumAddress
-    rewards_token: ChecksumAddress
-    claimable: int
-    proof: List[str]
+    _universal_rewards_distributor: ChecksumAddress
+    _rewards_token: ChecksumAddress
+    _claimable: int
+    _proof: List[str]
 
     def __init__(
         self,
@@ -36,19 +38,19 @@ class MorphoBlueClaimData:
         claimable: int,
         proof: List[str],
     ):
-        self.universal_rewards_distributor = universal_rewards_distributor
-        self.rewards_token = rewards_token
-        self.claimable = claimable
-        self.proof = proof
+        self._universal_rewards_distributor = universal_rewards_distributor
+        self._rewards_token = rewards_token
+        self._claimable = claimable
+        self._proof = proof
 
     def encode(self) -> bytes:
-        proofs = [bytes.fromhex(hash.replace("0x", "")) for hash in self.proof]
+        proofs = [bytes.fromhex(hash.replace("0x", "")) for hash in self._proof]
         return encode(
             ["address", "address", "uint256", "bytes32[]"],
             [
-                self.universal_rewards_distributor,
-                self.rewards_token,
-                self.claimable,
+                self._universal_rewards_distributor,
+                self._rewards_token,
+                self._claimable,
                 proofs,
             ],
         )
