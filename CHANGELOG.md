@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.23.0 (2025-08-19)
+
+### Unknown
+
+* [feat] Support claiming rewards on Morpho Blue (#92) ([`bb83296`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bb8329632e726f76182834f58606208732a9709d))
+
+* [feat] Support claiming rewards on Morpho Blue ([`06c4f0f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/06c4f0f792eeb2987e627af92b2058cac06fefc2))
+
+
 ## v0.22.0 (2025-08-11)
 
 ### Unknown
