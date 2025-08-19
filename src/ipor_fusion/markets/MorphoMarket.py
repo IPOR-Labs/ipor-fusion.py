@@ -6,6 +6,7 @@ from web3 import Web3
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
+from ipor_fusion.fuse.MorphoBlueClaimFuse import MorphoBlueClaimFuse
 from ipor_fusion.fuse.MorphoBlueSupplyFuse import MorphoBlueSupplyFuse
 from ipor_fusion.fuse.MorphoFlashLoanFuse import MorphoFlashLoanFuse
 from ipor_fusion.markets.morpho.MorphoContract import MorphoContract
@@ -36,6 +37,7 @@ class MorphoMarket:
         plasma_vault_address: ChecksumAddress,
         morpho_supply_fuse_address: ChecksumAddress,
         morpho_flash_loan_fuse_address: ChecksumAddress,
+        morpho_blue_claim_fuse_address: ChecksumAddress,
     ):
         if transaction_executor is None:
             raise ValueError("transaction_executor is required")
@@ -49,6 +51,9 @@ class MorphoMarket:
         self._morpho_blue_supply_fuse = MorphoBlueSupplyFuse(morpho_supply_fuse_address)
         self._morpho_flash_loan_fuse = MorphoFlashLoanFuse(
             morpho_flash_loan_fuse_address
+        )
+        self._morpho_blue_claim_fuse = MorphoBlueClaimFuse(
+            morpho_blue_claim_fuse_address
         )
 
     def supply(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
@@ -130,3 +135,14 @@ class MorphoMarket:
             )
 
         raise ValueError(f"Morpho address not found for chain id: {chain_id}")
+
+    def claim_rewards(
+        self, universal_rewards_distributor, rewards_token, claimable: int, proof
+    ) -> FuseAction:
+        if self._morpho_blue_claim_fuse is None:
+            raise UnsupportedFuseError(
+                "MorphoBlueClaimFuse is not supported by PlasmaVault"
+            )
+        return self._morpho_blue_claim_fuse.claim(
+            universal_rewards_distributor, rewards_token, claimable, proof
+        )
