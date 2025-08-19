@@ -15,7 +15,11 @@ class MorphoBlueClaimFuse:
         self._fuse_address = fuse_address
 
     def claim(
-        self, universal_rewards_distributor, rewards_token, claimable: int, proof
+        self,
+        universal_rewards_distributor: ChecksumAddress,
+        rewards_token: ChecksumAddress,
+        claimable: int,
+        proof: List[str],
     ) -> FuseAction:
         if self._fuse_address is None:
             raise ValueError("fuseAddress is required")
@@ -38,6 +42,17 @@ class MorphoBlueClaimData:
         claimable: int,
         proof: List[str],
     ):
+        if universal_rewards_distributor is None:
+            raise ValueError("universal_rewards_distributor cannot be None")
+        if rewards_token is None:
+            raise ValueError("rewards_token cannot be None")
+        if claimable is None:
+            raise ValueError("claimable cannot be None")
+        if proof is None:
+            raise ValueError("proof cannot be None")
+        if not len(proof) > 0:
+            raise ValueError("proof list cannot be empty")
+
         self._universal_rewards_distributor = universal_rewards_distributor
         self._rewards_token = rewards_token
         self._claimable = claimable
