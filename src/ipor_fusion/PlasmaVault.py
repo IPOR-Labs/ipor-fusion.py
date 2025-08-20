@@ -97,17 +97,13 @@ class PlasmaVault:
 
     def symbol(self) -> str:
         sig = function_signature_to_4byte_selector("symbol()")
-        read = self._transaction_executor.read(
-            self._plasma_vault_address, sig
-        )
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["string"], read)
         return result
 
     def name(self) -> str:
         sig = function_signature_to_4byte_selector("name()")
-        read = self._transaction_executor.read(
-            self._plasma_vault_address, sig
-        )
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
         (result,) = decode(["string"], read)
         return result
 

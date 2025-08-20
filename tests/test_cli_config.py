@@ -22,16 +22,18 @@ class TestInitCommand:
         inputs = [
             self.rpc_url,
             self.PLASMA_VAULT_ADDRESS,
-            "y", # name
-            "y", # set a private key
+            "y",  # name
+            "y",  # set a private key
             self.PRIVATE_KEY,
             self.PRIVATE_KEY,
-            "n" # encrypt private key
+            "n",  # encrypt private key
         ]
 
         config_path = tmp_path / "ipor-fusion-config.yaml"
 
-        result = self.runner.invoke(init, input="\n".join(inputs), args=["--config-file", str(config_path)])
+        result = self.runner.invoke(
+            init, input="\n".join(inputs), args=["--config-file", str(config_path)]
+        )
         assert result.exit_code == 0
         assert "Configuration file created" in result.output
 
@@ -40,25 +42,31 @@ class TestInitCommand:
         content = config_path.read_text()
         config_data = yaml.safe_load(content)
 
-        assert config_data['chain_configs'][0]["rpc_url"] == self.rpc_url
-        assert config_data['chain_configs'][0]['plasma_vaults'][0][
-                   "plasma_vault_address"] == self.PLASMA_VAULT_ADDRESS
-        assert config_data['chain_configs'][0]['plasma_vaults'][0][
-                   "private_key"] == self.PRIVATE_KEY
+        assert config_data["chain_configs"][0]["rpc_url"] == self.rpc_url
+        assert (
+            config_data["chain_configs"][0]["plasma_vaults"][0]["plasma_vault_address"]
+            == self.PLASMA_VAULT_ADDRESS
+        )
+        assert (
+            config_data["chain_configs"][0]["plasma_vaults"][0]["private_key"]
+            == self.PRIVATE_KEY
+        )
 
     def test_init_with_prompts_overwrite_config(self, tmp_path):
         self.test_init_with_prompts(tmp_path)
         inputs = [
             self.rpc_url,
             self.PLASMA_VAULT_ADDRESS,
-            "y", # use the default vault name
-            "n", # set a private key
-            "y" # overwrite
+            "y",  # use the default vault name
+            "n",  # set a private key
+            "y",  # overwrite
         ]
 
         config_path = tmp_path / "ipor-fusion-config.yaml"
 
-        result = self.runner.invoke(init, input="\n".join(inputs), args=["--config-file", str(config_path)])
+        result = self.runner.invoke(
+            init, input="\n".join(inputs), args=["--config-file", str(config_path)]
+        )
         assert result.exit_code == 0
         assert "Configuration file already exists at" in result.output
 
@@ -70,19 +78,20 @@ class TestInitCommand:
         result = self.runner.invoke(show, args=["--config-file", str(config_path)])
         assert result.exit_code == 0
 
-
     def test_config_pull(self, tmp_path):
         """Test init command with interactive prompts"""
         inputs = [
             self.rpc_url,
             self.PLASMA_VAULT_ADDRESS,
-            "y", # name
-            "n", # set a private key
+            "y",  # name
+            "n",  # set a private key
         ]
 
         config_path = tmp_path / "ipor-fusion-config.yaml"
 
-        result = self.runner.invoke(init, input="\n".join(inputs), args=["--config-file", str(config_path)])
+        result = self.runner.invoke(
+            init, input="\n".join(inputs), args=["--config-file", str(config_path)]
+        )
         assert result.exit_code == 0
         assert "Configuration file created" in result.output
 
@@ -91,21 +100,22 @@ class TestInitCommand:
         result = self.runner.invoke(update, args=["--config-file", str(config_path)])
         assert result.exit_code == 0
 
-
     def test_init_with_prompts_priv_key_not_match(self, tmp_path):
         """Test init command with interactive prompts"""
         inputs = [
             self.rpc_url,
             self.PLASMA_VAULT_ADDRESS,
-            "y", # name
-            "y", # set a private key
+            "y",  # name
+            "y",  # set a private key
             self.PRIVATE_KEY,
-            "wrong_private_key"
+            "wrong_private_key",
         ]
 
         config_path = tmp_path / "ipor-fusion-config.yaml"
 
-        result = self.runner.invoke(init, input="\n".join(inputs), args=["--config-file", str(config_path)])
+        result = self.runner.invoke(
+            init, input="\n".join(inputs), args=["--config-file", str(config_path)]
+        )
         assert result.exit_code == 1
         assert "Private keys do not match!" in result.output
 

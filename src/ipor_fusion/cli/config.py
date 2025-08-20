@@ -16,6 +16,7 @@ from ipor_fusion.cli.encryption import EncryptionManager
 
 class FuseConfig:
     """Fuse configuration"""
+
     fuse_address: ChecksumAddress
     fuse_name: str
 
@@ -26,32 +27,41 @@ class FuseConfig:
     @classmethod
     def from_dict(cls, fuse_data: Dict[str, Any]) -> Any:
         return FuseConfig(
-            fuse_address=fuse_data['fuse_address'],
-            fuse_name=fuse_data.get('fuse_name'),
+            fuse_address=fuse_data["fuse_address"],
+            fuse_name=fuse_data.get("fuse_name"),
         )
 
     def to_dict(self):
         result = {}
         if self.fuse_address:
-            result['fuse_address'] = self.fuse_address
+            result["fuse_address"] = self.fuse_address
         if self.fuse_name:
-            result['fuse_name'] = self.fuse_name
+            result["fuse_name"] = self.fuse_name
         return result
 
 
 class PlasmaVaultConfig:
     """Plasma Vault configuration"""
+
     plasma_vault_address: ChecksumAddress
     private_key: str
     name: str
     fuses: List[FuseConfig] = []
+    rewards_fuses: List[FuseConfig] = []
 
-    def __init__(self, plasma_vault_address: ChecksumAddress, name: str,
-                 private_key: str = None, fuses: List[FuseConfig] = None):
+    def __init__(
+        self,
+        plasma_vault_address: ChecksumAddress,
+        name: str,
+        private_key: str = None,
+        fuses: List[FuseConfig] = None,
+        rewards_fuses: List[FuseConfig] = None,
+    ):
         self.plasma_vault_address = plasma_vault_address
         self.name = name
         self.private_key = private_key
         self.fuses = fuses
+        self.rewards_fuses = rewards_fuses
 
     def is_private_key_encrypted(self) -> bool:
         return EncryptionManager.is_encrypted_private_key(self.private_key)
@@ -74,26 +84,39 @@ class PlasmaVaultConfig:
     def to_dict(self):
         result = {}
         if self.name:
-            result['name'] = self.name
+            result["name"] = self.name
         if self.plasma_vault_address:
-            result['plasma_vault_address'] = self.plasma_vault_address
+            result["plasma_vault_address"] = self.plasma_vault_address
         if self.private_key:
-            result['private_key'] = self.private_key
+            result["private_key"] = self.private_key
         if self.fuses:
-            result['fuses'] = [fuse.to_dict() for fuse in self.fuses]
+            result["fuses"] = [fuse.to_dict() for fuse in self.fuses]
+        if self.fuses:
+            result["rewards_fuses"] = [
+                rewards_fuse.to_dict() for rewards_fuse in self.rewards_fuses
+            ]
         return result
-
 
     @classmethod
     def from_dict(cls, vault_data: Dict[str, Any]) -> Any:
         fuses = []
-        if vault_data.get('fuses'):
-            fuses = [FuseConfig.from_dict(fuse_data) for fuse_data in vault_data.get('fuses')]
+        if vault_data.get("fuses"):
+            fuses = [
+                FuseConfig.from_dict(fuse_data) for fuse_data in vault_data.get("fuses")
+            ]
+
+        rewards_fuses = []
+        if vault_data.get("rewards_fuses"):
+            rewards_fuses = [
+                FuseConfig.from_dict(fuse_data)
+                for fuse_data in vault_data.get("rewards_fuses")
+            ]
         return PlasmaVaultConfig(
-            plasma_vault_address=vault_data['plasma_vault_address'],
-            name=vault_data['name'],
-            private_key=vault_data.get('private_key'),
-            fuses=fuses
+            plasma_vault_address=vault_data["plasma_vault_address"],
+            name=vault_data["name"],
+            private_key=vault_data.get("private_key"),
+            fuses=fuses,
+            rewards_fuses=rewards_fuses,
         )
 
     def validate(self):
@@ -102,14 +125,21 @@ class PlasmaVaultConfig:
 
 class ChainConfig:
     """Chain configuration"""
+
     chain_id: int
     chain_name: str
     chain_short_name: str
     rpc_url: str
     plasma_vaults: List[PlasmaVaultConfig]
 
-    def __init__(self, chain_id: int, chain_name: str, chain_short_name: str, rpc_url: str,
-                 plasma_vaults: List[PlasmaVaultConfig]):
+    def __init__(
+        self,
+        chain_id: int,
+        chain_name: str,
+        chain_short_name: str,
+        rpc_url: str,
+        plasma_vaults: List[PlasmaVaultConfig],
+    ):
         self.chain_id = chain_id
         self.chain_name = chain_name
         self.chain_short_name = chain_short_name
@@ -119,30 +149,29 @@ class ChainConfig:
     def to_dict(self):
         result = {}
         if self.chain_id:
-            result['chain_id'] = self.chain_id
+            result["chain_id"] = self.chain_id
         if self.chain_name:
-            result['chain_name'] = self.chain_name
+            result["chain_name"] = self.chain_name
         if self.chain_short_name:
-            result['chain_short_name'] = self.chain_short_name
+            result["chain_short_name"] = self.chain_short_name
         if self.rpc_url:
-            result['rpc_url'] = self.rpc_url
+            result["rpc_url"] = self.rpc_url
         if self.plasma_vaults:
-            result['plasma_vaults'] = [vault.to_dict() for vault in self.plasma_vaults]
+            result["plasma_vaults"] = [vault.to_dict() for vault in self.plasma_vaults]
         return result
-
 
     @classmethod
     def from_dict(cls, chain_data: Dict[str, Any]) -> Any:
         plasma_vaults = []
-        for vault_data in chain_data.get('plasma_vaults', []):
+        for vault_data in chain_data.get("plasma_vaults", []):
             plasma_vaults.append(PlasmaVaultConfig.from_dict(vault_data))
 
         return ChainConfig(
-            chain_id=chain_data['chain_id'],
-            chain_name=chain_data['chain_name'],
-            chain_short_name=chain_data['chain_short_name'],
-            rpc_url=chain_data['rpc_url'],
-            plasma_vaults=plasma_vaults
+            chain_id=chain_data["chain_id"],
+            chain_name=chain_data["chain_name"],
+            chain_short_name=chain_data["chain_short_name"],
+            rpc_url=chain_data["rpc_url"],
+            plasma_vaults=plasma_vaults,
         )
 
     def validate(self):
@@ -160,20 +189,22 @@ class GeneralConfig:
         """Convert config to dictionary"""
         result = {}
         if self.default_plasma_vault_name:
-            result['default_plasma_vault_name'] = self.default_plasma_vault_name
+            result["default_plasma_vault_name"] = self.default_plasma_vault_name
         if self.chain_configs:
-            result['chain_configs'] = [chain.to_dict() for chain in self.chain_configs]
+            result["chain_configs"] = [chain.to_dict() for chain in self.chain_configs]
         return result
-
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "GeneralConfig":
         """Create config from dictionary"""
         chain_configs = []
-        for chain_data in data.get('chain_configs', []):
+        for chain_data in data.get("chain_configs", []):
             chain_configs.append(ChainConfig.from_dict(chain_data))
 
-        return cls(default_plasma_vault_name=data.get('default_plasma_vault_name'), chain_configs=chain_configs)
+        return cls(
+            default_plasma_vault_name=data.get("default_plasma_vault_name"),
+            chain_configs=chain_configs,
+        )
 
     def validate(self):
         pass
@@ -199,8 +230,8 @@ class ConfigManager:
 
     @staticmethod
     def create_config_file(
-            general_config: GeneralConfig,
-            config_file: Optional[str] = None,
+        general_config: GeneralConfig,
+        config_file: Optional[str] = None,
     ) -> Path:
         """
         Create a YAML configuration file with the provided settings.
@@ -216,7 +247,6 @@ class ConfigManager:
         # Handle private key encryption
         ConfigManager._write_config(config_path, general_config)
         return config_path
-
 
     @staticmethod
     def load_config(config_file: Optional[str] = None) -> GeneralConfig:
@@ -237,16 +267,20 @@ class ConfigManager:
         config_path = ConfigManager.get_config_path(config_file)
 
         if not config_path.exists():
-            click.secho(f"Configuration file not found: {config_path}. Try \"fusion init\" command.", fg="red",
-                        err=True)
+            click.secho(
+                f'Configuration file not found: {config_path}. Try "fusion config init" command.',
+                fg="red",
+                err=True,
+            )
             sys.exit(1)
 
         with open(config_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         if not data:
-            click.secho(f"Configuration file is empty: {config_path}", fg="red",
-                        err=True)
+            click.secho(
+                f"Configuration file is empty: {config_path}", fg="red", err=True
+            )
             sys.exit(1)
 
         try:
@@ -257,8 +291,8 @@ class ConfigManager:
 
     @staticmethod
     def update_config(
-            config: GeneralConfig,
-            config_file: Optional[str] = None,
+        config: GeneralConfig,
+        config_file: Optional[str] = None,
     ):
         """
         Update existing configuration file with new values.
@@ -275,7 +309,9 @@ class ConfigManager:
         config_path = ConfigManager.get_config_path(config_file)
 
         if not config_path.exists():
-            click.secho(f"Configuration file not found: {config_path}", fg="red", err=True)
+            click.secho(
+                f"Configuration file not found: {config_path}", fg="red", err=True
+            )
             sys.exit(1)
 
         # Write updated config
@@ -299,7 +335,7 @@ class ConfigManager:
 
     @staticmethod
     def encrypt_existing_private_key(
-            config_file: Optional[str] = None, password: Optional[str] = None
+        config_file: Optional[str] = None, password: Optional[str] = None
     ) -> Path:
         """
         Encrypt the private key in an existing configuration file.

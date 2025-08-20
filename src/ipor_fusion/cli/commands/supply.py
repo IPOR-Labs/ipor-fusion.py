@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Show command for ipor-fusion CLI
+Show command for fusion CLI
 """
-import logging
 from typing import Optional
 
 import click

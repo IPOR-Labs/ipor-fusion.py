@@ -1,10 +1,15 @@
 import re
 import sys
+import time
+from pathlib import Path
 
 import click
-import yaml
+import requests
+from eth_abi import decode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import HTTPProvider, Web3
 
+from ipor_fusion.PlasmaSystem import PlasmaSystem
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
 from ipor_fusion.cli.commands.base import BaseCommand
 from ipor_fusion.cli.config import ConfigManager, PlasmaVaultConfig, FuseConfig
@@ -32,10 +37,20 @@ def validate(config_file):
     help="Set config file path. Default: ipor-fusion-config.yaml.",
 )
 def show(config_file):
-    config = BaseCommand.load_config(config_file=config_file)
     config_path = ConfigManager.get_config_path(config_file)
-    click.echo(f"Configuration file path: {config_path}")
-    click.echo(yaml.dump(config.to_dict(), default_flow_style=True, indent=2))
+
+    if not Path(config_path).exists():
+        click.secho(
+            f'Configuration file {config_path} not found! Use "fusion config init" command',
+            fg="red",
+            err=True,
+        )
+        exit(1)
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = f.read()
+        click.echo(f"Configuration file path: {config_path}\n")
+        click.echo(data)
 
 
 def get_rpc_url_by_plasma_vault_name(config, name):
@@ -43,10 +58,6 @@ def get_rpc_url_by_plasma_vault_name(config, name):
         for vault in chain.plasma_vaults:
             if vault.name == name:
                 return chain.rpc_url
-    return None
-
-
-def get_fuse_name(fuse_address):
     return None
 
 
@@ -78,23 +89,35 @@ def update(config_file, name):
     for chain in config.chain_configs:
         for vault in chain.plasma_vaults:
             if vault.name == name:
-                vault.fuses = [FuseConfig(fuse_address=fuse_address, fuse_name=get_fuse_name(fuse_address)) for fuse_address in fuse_addresses]
+                vault.fuses = [
+                    FuseConfig(
+                        fuse_address=fuse_address,
+                        fuse_name=get_contract_name(
+                            system=system, address=fuse_address
+                        ),
+                    )
+                    for fuse_address in fuse_addresses
+                ]
                 ConfigManager.update_config(config_file=config_file, config=config)
-                click.secho(
-                    f"OK", fg="green"
-                )
+                click.secho(f"OK", fg="green")
                 break
 
     click.echo("Getting reward fuses...  ", nl=False)
-    fuse_addresses = system.plasma_vault().get_fuses()
+    rewards_fuses = system.rewards_claim_manager().get_rewards_fuses()
     for chain in config.chain_configs:
         for vault in chain.plasma_vaults:
             if vault.name == name:
-                vault.fuses = [FuseConfig(fuse_address=fuse_address, fuse_name=get_fuse_name(fuse_address)) for fuse_address in fuse_addresses]
+                vault.rewards_fuses = [
+                    FuseConfig(
+                        fuse_address=rewards_fuse,
+                        fuse_name=get_contract_name(
+                            system=system, address=rewards_fuse
+                        ),
+                    )
+                    for rewards_fuse in rewards_fuses
+                ]
                 ConfigManager.update_config(config_file=config_file, config=config)
-                click.secho(
-                    f"OK", fg="green"
-                )
+                click.secho(f"OK", fg="green")
                 break
 
 
@@ -106,7 +129,9 @@ def get_plasma_vault_by_name(config, name) -> PlasmaVaultConfig:
     return None
 
 
-@config.command(help="Initialize a YAML configuration file with provider URL, plasma vault address, and private key.")
+@config.command(
+    help="Initialize a YAML configuration file with provider URL, plasma vault address, and private key."
+)
 @click.option(
     "--rpc-url",
     prompt="RPC provider url like alchemy (https://...)",
@@ -122,9 +147,9 @@ def get_plasma_vault_by_name(config, name) -> PlasmaVaultConfig:
     help="Set config file path. Default: ipor-fusion-config.yaml.",
 )
 def init(
-        rpc_url,
-        plasma_vault_address,
-        config_file,
+    rpc_url,
+    plasma_vault_address,
+    config_file,
 ):
     """
     Initialize a YAML configuration file with network, provider URL, and private key.
@@ -138,24 +163,26 @@ def init(
     chain_id = get_chain_id(rpc_url)
     name = get_vault_name(plasma_vault_address_checksum, rpc_url)
 
-    use_default_name = click.confirm(f'Do you want to use \"{name}\" as the vault name in vaults list?')
+    use_default_name = click.confirm(
+        f'Do you want to use "{name}" as the vault name in vaults list?'
+    )
     if not use_default_name:
-        name = click.prompt('Enter your vault name:').replace(' ', '-')
-        name = re.sub(r'\s+', '-', name)
+        name = click.prompt("Enter your vault name:").replace(" ", "-")
+        name = re.sub(r"\s+", "-", name)
 
     private_key = None
     encrypt_private_key = False
-    if click.confirm('Do you want to set private key? '):
+    if click.confirm("Do you want to set private key? "):
         while True:
-            private_key = click.prompt('Enter private key:', hide_input=True)
-            repeated_private_key = click.prompt('Repeat private key:', hide_input=True)
+            private_key = click.prompt("Enter private key:", hide_input=True)
+            repeated_private_key = click.prompt("Repeat private key:", hide_input=True)
 
             if private_key == repeated_private_key:
                 break
 
             click.secho("Private keys do not match!", fg="red")
 
-        encrypt_private_key = click.confirm('Do you want to encrypt private key?')
+        encrypt_private_key = click.confirm("Do you want to encrypt private key?")
 
     BaseCommand.init_config(
         chain_id=chain_id,
@@ -164,7 +191,7 @@ def init(
         name=name,
         private_key=private_key,
         encrypt_private_key=encrypt_private_key,
-        config_file=config_file
+        config_file=config_file,
     )
 
 
@@ -182,7 +209,7 @@ def get_vault_name(plasma_vault_address_checksum, rpc_url):
             provider_url=rpc_url,
         ).get(plasma_vault_address_checksum)
         name = system.plasma_vault().name()
-        return re.sub(r'\s+', '-', name)
+        return re.sub(r"\s+", "-", name)
     except Exception as e:
         click.secho(f"Error getting vault name: {e}", fg="red", err=True)
         sys.exit(1)
@@ -198,6 +225,41 @@ def get_chain_id(rpc_url: str) -> int:
 
 
 def is_valid_http_url(url):
-    return (
-            isinstance(url, str) and url.startswith(('http://', 'https://'))
-    )
+    return isinstance(url, str) and url.startswith(("http://", "https://"))
+
+
+def get_scan_api_url(chain_id: int):
+    if chain_id == 1:
+        return "https://api.etherscan.io/api"
+    else:
+        pass
+
+
+def get_contract_name(system: PlasmaSystem, address: str):
+
+    params = {
+        "module": "contract",
+        "action": "getsourcecode",
+        "address": address,
+        "apikey": "",
+    }
+
+    try:
+        response = requests.get(get_scan_api_url(1), params=params)
+        time.sleep(1)
+        data = response.json()
+        if data["status"] == "1" and data["result"]:
+            contract_name = data["result"][0]["ContractName"]
+            if contract_name:
+                if contract_name == "Erc4626SupplyFuse":
+                    sig = function_signature_to_4byte_selector("MARKET_ID()")
+                    read = system.transaction_executor().read(
+                        Web3.to_checksum_address(address), sig
+                    )
+                    (market_id,) = decode(["uint256"], read)
+                    contract_name = contract_name + f"MarketId{market_id}"
+
+                return contract_name
+    except Exception as e:
+        click.secho(f"Error fetching contract name: {e}", fg="red", err=True)
+    return None

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Encrypt command for ipor-fusion CLI
+Encrypt command for fusion CLI
 """
 
 import click

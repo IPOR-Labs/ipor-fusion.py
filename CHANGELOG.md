@@ -233,7 +233,7 @@ Develop ([`b6d3be9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b6d3be9a
 
 * ramses ([`7726a3a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7726a3aa4e80a21722fccbddaee0bd3ee0714d56))
 
-* IL-4911 Project rename from ipor-fusion-sdk into ipor-fusion (#18) ([`080eaa1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/080eaa1c1e0baa245f615233cb8b443fa04526c1))
+* IL-4911 Project rename from ipor-fusion-sdk into fusion (#18) ([`080eaa1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/080eaa1c1e0baa245f615233cb8b443fa04526c1))
 
 * Ramses ([`5635fc5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5635fc537eee77e03876db2c85746bb5b302a663))
 

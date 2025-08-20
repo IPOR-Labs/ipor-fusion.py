@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple CLI for ipor-fusion init
+Simple CLI for fusion config init
 """
 
 import click
@@ -10,7 +10,8 @@ from ipor_fusion.cli.commands.config import config
 
 @click.group()
 def cli():
-    """ipor-fusion CLI"""
+    """fusion CLI"""
+
 
 # cli.add_command(init)
 cli.add_command(config)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Base command class for ipor-fusion CLI commands
+Base command class for fusion CLI commands
 """
 
 from pathlib import Path
@@ -10,7 +10,12 @@ import click
 from eth_typing import ChecksumAddress
 from eth_utils import network_from_chain_id
 
-from ipor_fusion.cli.config import ConfigManager, GeneralConfig, ChainConfig, PlasmaVaultConfig
+from ipor_fusion.cli.config import (
+    ConfigManager,
+    GeneralConfig,
+    ChainConfig,
+    PlasmaVaultConfig,
+)
 from ipor_fusion.cli.encryption import EncryptionManager
 
 
@@ -19,13 +24,13 @@ class BaseCommand:
 
     @staticmethod
     def init_config(
-            chain_id: int,
-            plasma_vault_address: ChecksumAddress,
-            rpc_url: str,
-            private_key: str,
-            name: str,
-            config_file: Optional[str] = None,
-            encrypt_private_key: bool = False,
+        chain_id: int,
+        plasma_vault_address: ChecksumAddress,
+        rpc_url: str,
+        private_key: str,
+        name: str,
+        config_file: Optional[str] = None,
+        encrypt_private_key: bool = False,
     ) -> Path:
         config_path = ConfigManager.get_config_path(config_file)
 
@@ -48,21 +53,34 @@ class BaseCommand:
             final_private_key = private_key
             if encrypt_private_key:
                 if not encryption_password:
-                    click.secho("Encryption password is required when encrypt_private_key is True", fg="red", err=True)
+                    click.secho(
+                        "Encryption password is required when encrypt_private_key is True",
+                        fg="red",
+                        err=True,
+                    )
 
                 final_private_key = EncryptionManager.encrypt_private_key(
                     private_key, encryption_password
                 )
 
-            plasma_vault_config = PlasmaVaultConfig(plasma_vault_address=plasma_vault_address, name=name,
-                                                    private_key=final_private_key)
+            plasma_vault_config = PlasmaVaultConfig(
+                plasma_vault_address=plasma_vault_address,
+                name=name,
+                private_key=final_private_key,
+            )
             chain_network = network_from_chain_id(chain_id)
-            chain_config = ChainConfig(chain_id=chain_id, chain_name=chain_network.name,
-                                       chain_short_name=chain_network.shortName,
-                                       rpc_url=rpc_url,
-                                       plasma_vaults=[plasma_vault_config])
+            chain_config = ChainConfig(
+                chain_id=chain_id,
+                chain_name=chain_network.name,
+                chain_short_name=chain_network.shortName,
+                rpc_url=rpc_url,
+                plasma_vaults=[plasma_vault_config],
+            )
 
-            general_config = GeneralConfig(default_plasma_vault_name=plasma_vault_config.name, chain_configs=[chain_config])
+            general_config = GeneralConfig(
+                default_plasma_vault_name=plasma_vault_config.name,
+                chain_configs=[chain_config],
+            )
             config_path = ConfigManager.create_config_file(
                 general_config=general_config,
                 config_file=config_file,
@@ -73,7 +91,7 @@ class BaseCommand:
                 click.secho(
                     "Private key has been encrypted with your password.", fg="green"
                 )
-            click.secho("You can now run other ipor-fusion commands.", fg="green")
+            click.secho("You can now run other fusion commands.", fg="green")
 
             return config_path
 
@@ -82,9 +100,7 @@ class BaseCommand:
             raise
 
     @staticmethod
-    def load_config(
-            config_file: Optional[str] = None
-    ) -> GeneralConfig:
+    def load_config(config_file: Optional[str] = None) -> GeneralConfig:
         try:
             config = ConfigManager.load_config(config_file)
         except Exception as e:

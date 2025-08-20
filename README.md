@@ -104,10 +104,10 @@ Create a new configuration file:
 
 ```bash
 # Basic initialization
-ipor-fusion init
+fusion config init
 
 # With encryption for private key
-ipor-fusion init --encrypt-private-key
+fusion config init --encrypt-private-key
 ```
 
 ### Managing Encrypted Private Keys
@@ -116,10 +116,10 @@ The CLI supports encryption of private keys for enhanced security:
 
 ```bash
 # Encrypt an existing private key in config
-ipor-fusion encrypt
+fusion encrypt
 
 # Show configuration (displays encryption status)
-ipor-fusion show
+fusion show
 ```
 
 #### Encryption Features
