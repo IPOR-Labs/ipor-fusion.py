@@ -125,6 +125,28 @@ def update(config_file, name):
                 click.secho(f"OK", fg="green")
                 break
 
+    click.echo("Getting balance fuses... ", nl=False)
+    balance_fuses = system.plasma_vault().get_balance_fuses()
+    click.secho(balance_fuses)
+    for chain in config.chain_configs:
+        for vault in chain.plasma_vaults:
+            if vault.name == name:
+                vault.balance_fuses = [
+                    FuseConfig(
+                        market_id=market_id,
+                        fuse_address=balance_fuse,
+                        fuse_name=get_contract_name(
+                            system=system,
+                            address=balance_fuse,
+                            scan_api_access_token=chain.scan_api_access_token,
+                        ),
+                    )
+                    for (market_id, balance_fuse) in balance_fuses
+                ]
+                ConfigManager.update_config(config_file=config_file, config=config)
+                click.secho(f"OK", fg="green")
+                break
+
 
 def get_plasma_vault_by_name(config, name) -> PlasmaVaultConfig:
     for chain in config.chain_configs:

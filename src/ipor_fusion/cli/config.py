@@ -21,23 +21,27 @@ class FuseConfig:
     fuse_address: ChecksumAddress
     fuse_name: str
 
-    def __init__(self, fuse_address: ChecksumAddress, fuse_name: str = None):
+    def __init__(self, fuse_address: ChecksumAddress, fuse_name: str = None, market_id: int = None):
         self.fuse_address = fuse_address
         self.fuse_name = fuse_name
+        self.market_id = market_id
 
     @classmethod
     def from_dict(cls, fuse_data: Dict[str, Any]) -> Any:
         return FuseConfig(
             fuse_address=fuse_data["fuse_address"],
             fuse_name=fuse_data.get("fuse_name"),
+            market_id=fuse_data.get("market_id"),
         )
 
     def to_dict(self) -> OrderedDict:
         result = OrderedDict()
-        if self.fuse_address:
-            result["fuse_address"] = self.fuse_address
         if self.fuse_name:
             result["fuse_name"] = self.fuse_name
+        if self.fuse_address:
+            result["fuse_address"] = self.fuse_address
+        if self.market_id:
+            result["market_id"] = self.market_id
         return result
 
 
@@ -49,6 +53,7 @@ class PlasmaVaultConfig:
     name: str
     fuses: List[FuseConfig] = []
     rewards_fuses: List[FuseConfig] = []
+    balance_fuses: List[FuseConfig] = []
 
     def __init__(
         self,
@@ -57,12 +62,14 @@ class PlasmaVaultConfig:
         private_key: str = None,
         fuses: List[FuseConfig] = None,
         rewards_fuses: List[FuseConfig] = None,
+        balance_fuses: List[FuseConfig] = None,
     ):
         self.plasma_vault_address = plasma_vault_address
         self.name = name
         self.private_key = private_key
         self.fuses = fuses
         self.rewards_fuses = rewards_fuses
+        self.balance_fuses = balance_fuses
 
     def is_private_key_encrypted(self) -> bool:
         return EncryptionManager.is_encrypted_private_key(self.private_key)
@@ -96,6 +103,10 @@ class PlasmaVaultConfig:
             result["rewards_fuses"] = [
                 rewards_fuse.to_dict() for rewards_fuse in self.rewards_fuses
             ]
+        if self.balance_fuses:
+            result["balance_fuses"] = [
+                balance_fuse.to_dict() for balance_fuse in self.balance_fuses
+            ]
         return result
 
     @classmethod
@@ -112,12 +123,21 @@ class PlasmaVaultConfig:
                 FuseConfig.from_dict(fuse_data)
                 for fuse_data in vault_data.get("rewards_fuses")
             ]
+
+        balance_fuses = []
+        if vault_data.get("balance_fuses"):
+            balance_fuses = [
+                FuseConfig.from_dict(fuse_data)
+                for fuse_data in vault_data.get("balance_fuses")
+            ]
+
         return PlasmaVaultConfig(
             plasma_vault_address=vault_data["plasma_vault_address"],
             name=vault_data["name"],
             private_key=vault_data.get("private_key"),
             fuses=fuses,
             rewards_fuses=rewards_fuses,
+            balance_fuses=balance_fuses,
         )
 
     def validate(self):
