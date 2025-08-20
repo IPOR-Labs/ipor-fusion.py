@@ -138,13 +138,15 @@ class ChainConfig:
         chain_id: int,
         chain_name: str,
         chain_short_name: str,
-        rpc_url: str,
+        rpc_url: Optional[str],
         plasma_vaults: List[PlasmaVaultConfig],
+        scan_api_access_token: Optional[str] = None,
     ):
         self.chain_id = chain_id
         self.chain_name = chain_name
         self.chain_short_name = chain_short_name
         self.rpc_url = rpc_url
+        self.scan_api_access_token = scan_api_access_token
         self.plasma_vaults = plasma_vaults
 
     def to_dict(self) -> OrderedDict:
@@ -157,6 +159,8 @@ class ChainConfig:
             result["chain_short_name"] = self.chain_short_name
         if self.rpc_url:
             result["rpc_url"] = self.rpc_url
+        if self.scan_api_access_token:
+            result["scan_api_access_token"] = self.scan_api_access_token
         if self.plasma_vaults:
             result["plasma_vaults"] = [vault.to_dict() for vault in self.plasma_vaults]
         return result
@@ -173,6 +177,7 @@ class ChainConfig:
             chain_short_name=chain_data["chain_short_name"],
             rpc_url=chain_data["rpc_url"],
             plasma_vaults=plasma_vaults,
+            scan_api_access_token=chain_data.get("scan_api_access_token"),
         )
 
     def validate(self):
@@ -333,13 +338,21 @@ class ConfigManager:
 
         # Add custom representer for OrderedDict
         def ordered_dict_presenter(dumper, data):
-            return dumper.represent_mapping('tag:yaml.org,2002:map', data.items())
+            return dumper.represent_mapping("tag:yaml.org,2002:map", data.items())
 
         # Add representer for OrderedDict
-        yaml.add_representer(OrderedDict, ordered_dict_presenter, Dumper=yaml.SafeDumper)
+        yaml.add_representer(
+            OrderedDict, ordered_dict_presenter, Dumper=yaml.SafeDumper
+        )
 
         with open(config_path, "w", encoding="utf-8") as f:
-            yaml.dump(general_config.to_dict(), f, Dumper=yaml.SafeDumper, default_flow_style=False, indent=2)
+            yaml.dump(
+                general_config.to_dict(),
+                f,
+                Dumper=yaml.SafeDumper,
+                default_flow_style=False,
+                indent=2,
+            )
 
     @staticmethod
     def encrypt_existing_private_key(

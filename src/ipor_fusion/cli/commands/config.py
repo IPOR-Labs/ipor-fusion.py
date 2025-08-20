@@ -1,13 +1,11 @@
 import re
 import sys
-import time
 from pathlib import Path
 
 import click
-import requests
-from eth_abi import decode
-from eth_utils import function_signature_to_4byte_selector
 from web3 import HTTPProvider, Web3
+
+from ipor_fusion.contract_name_resolver import ContractNameResolver
 
 from ipor_fusion.PlasmaSystem import PlasmaSystem
 from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
@@ -89,17 +87,22 @@ def update(config_file, name):
     for chain in config.chain_configs:
         for vault in chain.plasma_vaults:
             if vault.name == name:
-                vault.fuses = [
-                    FuseConfig(
-                        fuse_address=fuse_address,
-                        fuse_name=get_contract_name(
-                            system=system, address=fuse_address
-                        ),
-                    )
-                    for fuse_address in fuse_addresses
-                ]
-                ConfigManager.update_config(config_file=config_file, config=config)
-                click.secho(f"OK", fg="green")
+                try:
+                    vault.fuses = [
+                        FuseConfig(
+                            fuse_address=fuse_address,
+                            fuse_name=get_contract_name(
+                                scan_api_access_token=chain.scan_api_access_token,
+                                system=system,
+                                address=fuse_address,
+                            ),
+                        )
+                        for fuse_address in fuse_addresses
+                    ]
+                    ConfigManager.update_config(config_file=config_file, config=config)
+                    click.secho(f"OK", fg="green")
+                except Exception as e:
+                    click.secho(f"Error getting fuses: {e}", fg="red")
                 break
 
     click.echo("Getting reward fuses...  ", nl=False)
@@ -111,7 +114,9 @@ def update(config_file, name):
                     FuseConfig(
                         fuse_address=rewards_fuse,
                         fuse_name=get_contract_name(
-                            system=system, address=rewards_fuse
+                            system=system,
+                            address=rewards_fuse,
+                            scan_api_access_token=chain.scan_api_access_token,
                         ),
                     )
                     for rewards_fuse in rewards_fuses
@@ -229,37 +234,16 @@ def is_valid_http_url(url):
 
 
 def get_scan_api_url(chain_id: int):
-    if chain_id == 1:
+    if chain_id == 42161:
+        return "https://api.arbiscan.io/api"
+    elif chain_id == 8453:
+        return "https://api.basescan.org/api"
+    elif chain_id == 1:
         return "https://api.etherscan.io/api"
     else:
-        pass
+        raise ValueError(f"Unsupported chain id: {chain_id}")
 
 
-def get_contract_name(system: PlasmaSystem, address: str):
-
-    params = {
-        "module": "contract",
-        "action": "getsourcecode",
-        "address": address,
-        "apikey": "",
-    }
-
-    try:
-        response = requests.get(get_scan_api_url(1), params=params)
-        time.sleep(1)
-        data = response.json()
-        if data["status"] == "1" and data["result"]:
-            contract_name = data["result"][0]["ContractName"]
-            if contract_name:
-                if contract_name == "Erc4626SupplyFuse":
-                    sig = function_signature_to_4byte_selector("MARKET_ID()")
-                    read = system.transaction_executor().read(
-                        Web3.to_checksum_address(address), sig
-                    )
-                    (market_id,) = decode(["uint256"], read)
-                    contract_name = contract_name + f"MarketId{market_id}"
-
-                return contract_name
-    except Exception as e:
-        click.secho(f"Error fetching contract name: {e}", fg="red", err=True)
-    return None
+def get_contract_name(scan_api_access_token: str, system: PlasmaSystem, address: str):
+    resolver = ContractNameResolver()
+    return resolver.get_contract_name(scan_api_access_token, system, address)

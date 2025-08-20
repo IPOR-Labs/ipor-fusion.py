@@ -78,7 +78,7 @@ class TestInitCommand:
         result = self.runner.invoke(show, args=["--config-file", str(config_path)])
         assert result.exit_code == 0
 
-    def test_config_pull(self, tmp_path):
+    def test_config_update(self, tmp_path):
         """Test init command with interactive prompts"""
         inputs = [
             self.rpc_url,

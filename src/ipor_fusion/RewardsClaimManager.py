@@ -57,7 +57,7 @@ class RewardsClaimManager:
             last_update_balance,
         )
 
-    def get_rewards_fuses(self) -> List[str]:
+    def get_rewards_fuses(self) -> List[ChecksumAddress]:
         signature = function_signature_to_4byte_selector("getRewardsFuses()")
         read = self._transaction_executor.read(
             self._rewards_claim_manager_address, signature
