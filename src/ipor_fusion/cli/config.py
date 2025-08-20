@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, List
 
 import click
 import yaml
+from collections import OrderedDict
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.cli.encryption import EncryptionManager
@@ -31,8 +32,8 @@ class FuseConfig:
             fuse_name=fuse_data.get("fuse_name"),
         )
 
-    def to_dict(self):
-        result = {}
+    def to_dict(self) -> OrderedDict:
+        result = OrderedDict()
         if self.fuse_address:
             result["fuse_address"] = self.fuse_address
         if self.fuse_name:
@@ -81,8 +82,8 @@ class PlasmaVaultConfig:
             return self.decrypt_private_key(password)
         return self.private_key
 
-    def to_dict(self):
-        result = {}
+    def to_dict(self) -> OrderedDict:
+        result = OrderedDict()
         if self.name:
             result["name"] = self.name
         if self.plasma_vault_address:
@@ -91,7 +92,7 @@ class PlasmaVaultConfig:
             result["private_key"] = self.private_key
         if self.fuses:
             result["fuses"] = [fuse.to_dict() for fuse in self.fuses]
-        if self.fuses:
+        if self.rewards_fuses:
             result["rewards_fuses"] = [
                 rewards_fuse.to_dict() for rewards_fuse in self.rewards_fuses
             ]
@@ -146,8 +147,8 @@ class ChainConfig:
         self.rpc_url = rpc_url
         self.plasma_vaults = plasma_vaults
 
-    def to_dict(self):
-        result = {}
+    def to_dict(self) -> OrderedDict:
+        result = OrderedDict()
         if self.chain_id:
             result["chain_id"] = self.chain_id
         if self.chain_name:
@@ -185,9 +186,9 @@ class GeneralConfig:
     default_plasma_vault_name: str
     chain_configs: List[ChainConfig]
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert config to dictionary"""
-        result = {}
+    def to_dict(self) -> OrderedDict:
+        """Convert config to ordered dictionary"""
+        result = OrderedDict()
         if self.default_plasma_vault_name:
             result["default_plasma_vault_name"] = self.default_plasma_vault_name
         if self.chain_configs:
@@ -330,8 +331,15 @@ class ConfigManager:
         """Write configuration to YAML file"""
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Add custom representer for OrderedDict
+        def ordered_dict_presenter(dumper, data):
+            return dumper.represent_mapping('tag:yaml.org,2002:map', data.items())
+
+        # Add representer for OrderedDict
+        yaml.add_representer(OrderedDict, ordered_dict_presenter, Dumper=yaml.SafeDumper)
+
         with open(config_path, "w", encoding="utf-8") as f:
-            yaml.dump(general_config.to_dict(), f, default_flow_style=False, indent=2)
+            yaml.dump(general_config.to_dict(), f, Dumper=yaml.SafeDumper, default_flow_style=False, indent=2)
 
     @staticmethod
     def encrypt_existing_private_key(
