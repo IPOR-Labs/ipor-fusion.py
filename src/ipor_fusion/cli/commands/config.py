@@ -82,12 +82,14 @@ def update(config_file, name):
         provider_url=rpc_url,
     ).get(plasma_vault.plasma_vault_address)
 
-    click.echo("Getting fuses...         ", nl=False)
-    fuse_addresses = system.plasma_vault().get_fuses()
+    padding_width = 45
+
     for chain in config.chain_configs:
         for vault in chain.plasma_vaults:
             if vault.name == name:
                 try:
+                    click.echo(f"{"Getting execution fuses...":{padding_width}}", nl=False)
+                    fuse_addresses = system.plasma_vault().get_fuses()
                     vault.fuses = [
                         FuseConfig(
                             fuse_address=fuse_address,
@@ -100,16 +102,13 @@ def update(config_file, name):
                         for fuse_address in fuse_addresses
                     ]
                     ConfigManager.update_config(config_file=config_file, config=config)
-                    click.secho(f"OK", fg="green")
+                    raise ValueError
                 except Exception as e:
-                    click.secho(f"Error getting fuses: {e}", fg="red")
-                break
+                    click.secho(f"FAIL {e}", fg="red")
 
-    click.echo("Getting reward fuses...  ", nl=False)
-    rewards_fuses = system.rewards_claim_manager().get_rewards_fuses()
-    for chain in config.chain_configs:
-        for vault in chain.plasma_vaults:
-            if vault.name == name:
+                click.echo(f"{"Getting reward fuses...":{padding_width}}", nl=False)
+                rewards_fuses = system.rewards_claim_manager().get_rewards_fuses()
+
                 vault.rewards_fuses = [
                     FuseConfig(
                         fuse_address=rewards_fuse,
@@ -122,15 +121,11 @@ def update(config_file, name):
                     for rewards_fuse in rewards_fuses
                 ]
                 ConfigManager.update_config(config_file=config_file, config=config)
-                click.secho(f"OK", fg="green")
-                break
+                click.secho("OK", fg="green")
 
-    click.echo("Getting balance fuses... ", nl=False)
-    balance_fuses = system.plasma_vault().get_balance_fuses()
-    click.secho(balance_fuses)
-    for chain in config.chain_configs:
-        for vault in chain.plasma_vaults:
-            if vault.name == name:
+                click.echo(f"{"Getting balance fuses...":{padding_width}}", nl=False)
+                balance_fuses = system.plasma_vault().get_balance_fuses()
+
                 vault.balance_fuses = [
                     FuseConfig(
                         market_id=market_id,
@@ -144,7 +139,25 @@ def update(config_file, name):
                     for (market_id, balance_fuse) in balance_fuses
                 ]
                 ConfigManager.update_config(config_file=config_file, config=config)
-                click.secho(f"OK", fg="green")
+                click.secho("OK", fg="green")
+
+                click.echo(f"{"Getting access manager address...":{padding_width}}", nl=False)
+                access_manager_address = system.plasma_vault().get_access_manager_address()
+                vault.access_manager_address = access_manager_address
+                ConfigManager.update_config(config_file=config_file, config=config)
+                click.secho("OK", fg="green")
+
+                click.echo(f"{"Getting rewards claim manager address... ":{padding_width}}", nl=False)
+                rewards_claim_manager_address = system.rewards_claim_manager().address()
+                vault.rewards_claim_manager_address = rewards_claim_manager_address
+                ConfigManager.update_config(config_file=config_file, config=config)
+                click.secho("OK", fg="green")
+
+                click.echo(f"{"Getting withdraw manager address...":{padding_width}}", nl=False)
+                withdraw_manager_address = system.withdraw_manager().address()
+                vault.withdraw_manager_address = withdraw_manager_address
+                ConfigManager.update_config(config_file=config_file, config=config)
+                click.secho("OK", fg="green")
                 break
 
 
