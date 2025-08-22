@@ -87,6 +87,7 @@ def update(config_file, name):
     for chain in config.chain_configs:
         for vault in chain.plasma_vaults:
             if vault.name == name:
+                click.echo(f"Updating config for {vault.plasma_vault_address} / {name}")
                 try:
                     click.echo(f"{"Getting execution fuses...":{padding_width}}", nl=False)
                     fuse_addresses = system.plasma_vault().get_fuses()
@@ -102,7 +103,7 @@ def update(config_file, name):
                         for fuse_address in fuse_addresses
                     ]
                     ConfigManager.update_config(config_file=config_file, config=config)
-                    raise ValueError
+                    click.secho("OK", fg="green")
                 except Exception as e:
                     click.secho(f"FAIL {e}", fg="red")
 
@@ -156,6 +157,12 @@ def update(config_file, name):
                 click.echo(f"{"Getting withdraw manager address...":{padding_width}}", nl=False)
                 withdraw_manager_address = system.withdraw_manager().address()
                 vault.withdraw_manager_address = withdraw_manager_address
+                ConfigManager.update_config(config_file=config_file, config=config)
+                click.secho("OK", fg="green")
+
+                click.echo(f"{"Getting authority address...":{padding_width}}", nl=False)
+                authority_address = system.plasma_vault().authority()
+                vault.authority_address = authority_address
                 ConfigManager.update_config(config_file=config_file, config=config)
                 click.secho("OK", fg="green")
                 break

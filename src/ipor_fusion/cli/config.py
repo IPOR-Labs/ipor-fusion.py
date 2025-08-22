@@ -50,6 +50,8 @@ class PlasmaVaultConfig:
 
     plasma_vault_address: ChecksumAddress
     access_manager_address: ChecksumAddress
+    rewards_claim_manager_address: ChecksumAddress
+    authority: ChecksumAddress
     private_key: str
     name: str
     fuses: List[FuseConfig] = []
@@ -62,6 +64,7 @@ class PlasmaVaultConfig:
             access_manager_address: ChecksumAddress,
             withdraw_manager_address: ChecksumAddress,
             rewards_claim_manager_address: ChecksumAddress,
+            authority: ChecksumAddress,
         name: str,
         private_key: str = None,
         fuses: List[FuseConfig] = None,
@@ -72,6 +75,7 @@ class PlasmaVaultConfig:
         self.access_manager_address = access_manager_address
         self.withdraw_manager_address = withdraw_manager_address
         self.rewards_claim_manager_address = rewards_claim_manager_address
+        self.authority = authority
         self.name = name
         self.private_key = private_key
         self.fuses = fuses
@@ -102,6 +106,8 @@ class PlasmaVaultConfig:
             result["name"] = self.name
         if self.plasma_vault_address:
             result["plasma_vault_address"] = self.plasma_vault_address
+        if self.plasma_vault_address:
+            result["authority"] = self.authority
         if self.plasma_vault_address:
             result["access_manager_address"] = self.access_manager_address
         if self.plasma_vault_address:
@@ -149,6 +155,7 @@ class PlasmaVaultConfig:
             access_manager_address=vault_data.get("access_manager_address"),
             withdraw_manager_address=vault_data.get("withdraw_manager_address"),
             rewards_claim_manager_address=vault_data.get("rewards_claim_manager_address"),
+            authority=vault_data.get("authority"),
             name=vault_data["name"],
             private_key=vault_data.get("private_key"),
             fuses=fuses,

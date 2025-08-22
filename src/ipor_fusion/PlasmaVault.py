@@ -185,6 +185,12 @@ class PlasmaVault:
         (result,) = decode(["address"], read)
         return Web3.to_checksum_address(result)
 
+    def authority(self) -> ChecksumAddress:
+        sig = function_signature_to_4byte_selector("authority()")
+        read = self._transaction_executor.read(self._plasma_vault_address, sig)
+        (result,) = decode(["address"], read)
+        return Web3.to_checksum_address(result)
+
     def get_rewards_claim_manager_address(self) -> ChecksumAddress:
         sig = function_signature_to_4byte_selector("getRewardsClaimManagerAddress()")
         read = self._transaction_executor.read(self._plasma_vault_address, sig)
