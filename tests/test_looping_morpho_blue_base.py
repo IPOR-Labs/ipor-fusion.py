@@ -32,7 +32,7 @@ def _deal_erc20(web3, token, to, amount):
     The storage slot for balances[to] is keccak256(abi.encode(to, slot_index)).
     We try slot indices 0 through 5, which covers most ERC20 implementations.
     """
-    from eth_abi import encode as abi_encode
+    from eth_abi import encode as abi_encode  # pylint: disable=import-outside-toplevel
 
     for slot in range(6):
         storage_key = Web3.keccak(abi_encode(["address", "uint256"], [to, slot]))
@@ -105,9 +105,7 @@ def test_looping_morpho_blue():
       4. Swap borrowed WETH -> WStETH via Aerodrome to repay the flash loan
 
     Note: The vault may already have an existing leveraged Morpho position at the
-    current block. We use conservative parameters (2x leverage, 0.7 LTV) to ensure
-    the additional borrow stays within the market's 94.5% LLTV when combined with
-    the existing position.
+    current block. The 90% LTV used here stays within the market's 94.5% LLTV limit.
     """
     system, vault_address = _setup_system(deposit_amount=int(50e18))
 
@@ -117,8 +115,9 @@ def test_looping_morpho_blue():
         morpho_blue_market_id=MORPHO_BLUE_MARKET_ID,
     )
     log.info(
-        f"Existing position - collateral: {existing_position.collateral_amount / 1e18:.2f} WStETH, "
-        f"borrow: {existing_position.borrow_amount / 1e18:.2f} WETH"
+        "Existing position - collateral: %.2f WStETH, borrow: %.2f WETH",
+        existing_position.collateral_amount / 1e18,
+        existing_position.borrow_amount / 1e18,
     )
 
     # 10x leverage, LTV = 90% — market LLTV is 94.5%
@@ -183,8 +182,9 @@ def test_looping_morpho_blue():
     )
 
     log.info(
-        f"Final position - collateral: {morpho_position.collateral_amount / 1e18:.2f} WStETH, "
-        f"borrow: {morpho_position.borrow_amount / 1e18:.2f} WETH"
+        "Final position - collateral: %.2f WStETH, borrow: %.2f WETH",
+        morpho_position.collateral_amount / 1e18,
+        morpho_position.borrow_amount / 1e18,
     )
 
     assert (
