@@ -6,7 +6,9 @@ from web3 import Web3
 from ipor_fusion.TransactionExecutor import TransactionExecutor
 from ipor_fusion.error.UnsupportedFuseError import UnsupportedFuseError
 from ipor_fusion.fuse.FuseAction import FuseAction
+from ipor_fusion.fuse.MorphoBlueBorrowFuse import MorphoBlueBorrowFuse
 from ipor_fusion.fuse.MorphoBlueClaimFuse import MorphoBlueClaimFuse
+from ipor_fusion.fuse.MorphoBlueCollateralFuse import MorphoBlueCollateralFuse
 from ipor_fusion.fuse.MorphoBlueSupplyFuse import MorphoBlueSupplyFuse
 from ipor_fusion.fuse.MorphoFlashLoanFuse import MorphoFlashLoanFuse
 from ipor_fusion.markets.morpho.MorphoContract import MorphoContract
@@ -38,6 +40,8 @@ class MorphoMarket:
         morpho_supply_fuse_address: ChecksumAddress,
         morpho_flash_loan_fuse_address: ChecksumAddress,
         morpho_blue_claim_fuse_address: ChecksumAddress,
+        morpho_collateral_fuse_address: ChecksumAddress = None,
+        morpho_borrow_fuse_address: ChecksumAddress = None,
     ):
         if transaction_executor is None:
             raise ValueError("transaction_executor is required")
@@ -46,8 +50,6 @@ class MorphoMarket:
         self._transaction_executor = transaction_executor
         self._plasma_vault_address = plasma_vault_address
 
-        self._morpho_flash_loan_fuse = morpho_flash_loan_fuse_address
-
         self._morpho_blue_supply_fuse = MorphoBlueSupplyFuse(morpho_supply_fuse_address)
         self._morpho_flash_loan_fuse = MorphoFlashLoanFuse(
             morpho_flash_loan_fuse_address
@@ -55,6 +57,17 @@ class MorphoMarket:
         self._morpho_blue_claim_fuse = MorphoBlueClaimFuse(
             morpho_blue_claim_fuse_address
         )
+
+        self._morpho_blue_collateral_fuse = None
+        self._morpho_blue_borrow_fuse = None
+        if morpho_collateral_fuse_address:
+            self._morpho_blue_collateral_fuse = MorphoBlueCollateralFuse(
+                morpho_collateral_fuse_address
+            )
+        if morpho_borrow_fuse_address:
+            self._morpho_blue_borrow_fuse = MorphoBlueBorrowFuse(
+                morpho_borrow_fuse_address
+            )
 
     def supply(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
         if self._morpho_blue_supply_fuse is None:
@@ -100,6 +113,38 @@ class MorphoMarket:
                 "MorphoBlueSupplyFuse is not supported by PlasmaVault"
             )
         return self._morpho_blue_supply_fuse.withdraw(market_id, amount)
+
+    def supply_collateral(
+        self, market_id: MorphoBlueMarketId, amount: Amount
+    ) -> FuseAction:
+        if self._morpho_blue_collateral_fuse is None:
+            raise UnsupportedFuseError(
+                "MorphoBlueCollateralFuse is not supported by PlasmaVault"
+            )
+        return self._morpho_blue_collateral_fuse.supply_collateral(market_id, amount)
+
+    def withdraw_collateral(
+        self, market_id: MorphoBlueMarketId, amount: Amount
+    ) -> FuseAction:
+        if self._morpho_blue_collateral_fuse is None:
+            raise UnsupportedFuseError(
+                "MorphoBlueCollateralFuse is not supported by PlasmaVault"
+            )
+        return self._morpho_blue_collateral_fuse.withdraw_collateral(market_id, amount)
+
+    def borrow(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
+        if self._morpho_blue_borrow_fuse is None:
+            raise UnsupportedFuseError(
+                "MorphoBlueBorrowFuse is not supported by PlasmaVault"
+            )
+        return self._morpho_blue_borrow_fuse.borrow(market_id, amount)
+
+    def repay(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
+        if self._morpho_blue_borrow_fuse is None:
+            raise UnsupportedFuseError(
+                "MorphoBlueBorrowFuse is not supported by PlasmaVault"
+            )
+        return self._morpho_blue_borrow_fuse.repay(market_id, amount)
 
     def flash_loan(
         self, asset_address: ChecksumAddress, amount: Amount, actions: List[FuseAction]
