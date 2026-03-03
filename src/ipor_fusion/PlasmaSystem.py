@@ -294,27 +294,45 @@ class PlasmaSystem:
         morpho_supply_fuse_address: ChecksumAddress = None,
         morpho_flash_loan_fuse_address: ChecksumAddress = None,
         morpho_blue_claim_fuse_address: ChecksumAddress = None,
+        morpho_collateral_fuse_address: ChecksumAddress = None,
+        morpho_borrow_fuse_address: ChecksumAddress = None,
     ) -> MorphoMarket:
+
+        fuses = self.plasma_vault().get_fuses()
 
         if morpho_supply_fuse_address is None:
             morpho_supply_fuse_address = FuseMapper.find(
                 chain_id=self._chain_id,
                 fuse_name="MorphoSupplyFuse",
-                fuses=self.plasma_vault().get_fuses(),
+                fuses=fuses,
             )
 
         if morpho_flash_loan_fuse_address is None:
             morpho_flash_loan_fuse_address = FuseMapper.find(
                 chain_id=self._chain_id,
                 fuse_name="MorphoFlashLoanFuse",
-                fuses=self.plasma_vault().get_fuses(),
+                fuses=fuses,
             )
 
         if morpho_blue_claim_fuse_address is None:
             morpho_blue_claim_fuse_address = FuseMapper.find(
                 chain_id=self._chain_id,
                 fuse_name="MorphoClaimFuse",
-                fuses=self.plasma_vault().get_fuses(),
+                fuses=fuses,
+            )
+
+        if morpho_collateral_fuse_address is None:
+            morpho_collateral_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="MorphoCollateralFuse",
+                fuses=fuses,
+            )
+
+        if morpho_borrow_fuse_address is None:
+            morpho_borrow_fuse_address = FuseMapper.find(
+                chain_id=self._chain_id,
+                fuse_name="MorphoBorrowFuse",
+                fuses=fuses,
             )
 
         return MorphoMarket(
@@ -324,6 +342,8 @@ class PlasmaSystem:
             morpho_supply_fuse_address=morpho_supply_fuse_address,
             morpho_flash_loan_fuse_address=morpho_flash_loan_fuse_address,
             morpho_blue_claim_fuse_address=morpho_blue_claim_fuse_address,
+            morpho_collateral_fuse_address=morpho_collateral_fuse_address,
+            morpho_borrow_fuse_address=morpho_borrow_fuse_address,
         )
 
     def compound_v3(
