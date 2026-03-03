@@ -1,6 +1,13 @@
 # CHANGELOG
 
 
+## v0.24.0 (2026-03-03)
+
+### Unknown
+
+* [feat] Morpho looping on base ([`34a0adb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/34a0adb1438bc6602ea8631a457667ad429d2973))
+
+
 ## v0.23.0 (2025-08-19)
 
 ### Unknown
