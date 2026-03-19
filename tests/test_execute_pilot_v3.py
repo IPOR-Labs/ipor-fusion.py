@@ -21,8 +21,10 @@ from ipor_fusion.fuses import (
     CompoundV3SupplyFuse,
     GearboxSupplyFuse,
     FluidInstadappSupplyFuse,
+    FluidInstadappStakingFuse,
 )
 from ipor_fusion.addresses import ARBITRUM_USDC
+from ipor_fusion.types import MAX_UINT256
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
 
@@ -63,18 +65,21 @@ def setup_vault(anvil):
 
 
 def withdraw_from_fluid(forked_ctx, plasma_vault, vault_address):
-    fluid_staking = ERC20(forked_ctx, FLUID_STAKING_CONTRACT)
-    if (fluid_staking_balance := fluid_staking.balance_of(vault_address)) > 0:
-        fluid = FluidInstadappSupplyFuse(
-            erc4626_fuse_address=ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5,
+    fluid_staking_token = ERC20(forked_ctx, FLUID_STAKING_CONTRACT)
+    if (fluid_staking_balance := fluid_staking_token.balance_of(vault_address)) > 0:
+        staking_fuse = FluidInstadappStakingFuse(
             staking_fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
-            pool_token_address=FLUID_POOL_TOKEN,
             staking_contract_address=FLUID_STAKING_CONTRACT,
         )
-        unstake_and_withdraw = fluid.unstake_and_withdraw(
-            FLUID_POOL_TOKEN, fluid_staking_balance
+        supply_fuse = FluidInstadappSupplyFuse(
+            ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5,
         )
-        plasma_vault.execute(unstake_and_withdraw)
+        plasma_vault.execute(
+            [
+                staking_fuse.unstake(fluid_staking_balance),
+                supply_fuse.withdraw(FLUID_POOL_TOKEN, MAX_UINT256),
+            ]
+        )
 
 
 def test_supply_and_withdraw_from_gearbox(anvil):
@@ -151,15 +156,19 @@ def test_supply_and_withdraw_from_fluid(anvil):
     vault_balance_before = usdc.balance_of(vault_address)
     fluid_staking_balance_before = fluid_staking.balance_of(vault_address)
 
-    fluid = FluidInstadappSupplyFuse(
-        erc4626_fuse_address=ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5,
+    supply_fuse = FluidInstadappSupplyFuse(
+        ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5,
+    )
+    staking_fuse = FluidInstadappStakingFuse(
         staking_fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
-        pool_token_address=FLUID_POOL_TOKEN,
         staking_contract_address=FLUID_STAKING_CONTRACT,
     )
-    supply_and_stake = fluid.supply_and_stake(FLUID_POOL_TOKEN, vault_balance_before)
-
-    plasma_vault.execute(supply_and_stake)
+    plasma_vault.execute(
+        [
+            supply_fuse.supply(FLUID_POOL_TOKEN, vault_balance_before),
+            staking_fuse.stake(),
+        ]
+    )
 
     vault_balance_after = usdc.balance_of(vault_address)
     fluid_staking_balance_after = fluid_staking.balance_of(vault_address)
@@ -175,11 +184,12 @@ def test_supply_and_withdraw_from_fluid(anvil):
     vault_balance_before = usdc.balance_of(vault_address)
     fluid_staking_balance_before = fluid_staking.balance_of(vault_address)
 
-    unstake_and_withdraw = fluid.unstake_and_withdraw(
-        FLUID_POOL_TOKEN, fluid_staking_balance_before
+    plasma_vault.execute(
+        [
+            staking_fuse.unstake(fluid_staking_balance_before),
+            supply_fuse.withdraw(FLUID_POOL_TOKEN, MAX_UINT256),
+        ]
     )
-
-    plasma_vault.execute(unstake_and_withdraw)
 
     # then after withdraw
     vault_balance_after = usdc.balance_of(vault_address)

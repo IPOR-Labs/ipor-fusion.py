@@ -25,7 +25,10 @@ from ipor_fusion.fuses.ramses_v2 import (
 from ipor_fusion.fuses.gearbox_v3 import GearboxSupplyFuse, GearboxStakeFuse
 from ipor_fusion.fuses.erc4626 import Erc4626SupplyFuse
 from ipor_fusion.fuses.universal import UniversalTokenSwapperFuse
-from ipor_fusion.fuses.fluid_instadapp import FluidInstadappSupplyFuse
+from ipor_fusion.fuses.fluid_instadapp import (
+    FluidInstadappSupplyFuse,
+    FluidInstadappStakingFuse,
+)
 
 __all__ = [
     "FuseAction",
@@ -53,4 +56,5 @@ __all__ = [
     "Erc4626SupplyFuse",
     "UniversalTokenSwapperFuse",
     "FluidInstadappSupplyFuse",
+    "FluidInstadappStakingFuse",
 ]

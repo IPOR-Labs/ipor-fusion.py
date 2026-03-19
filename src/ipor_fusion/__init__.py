@@ -32,6 +32,7 @@ from ipor_fusion.fuses import (
     Erc4626SupplyFuse,
     UniversalTokenSwapperFuse,
     FluidInstadappSupplyFuse,
+    FluidInstadappStakingFuse,
 )
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.market_ids import Markets
@@ -93,6 +94,7 @@ __all__ = [
     "Erc4626SupplyFuse",
     "UniversalTokenSwapperFuse",
     "FluidInstadappSupplyFuse",
+    "FluidInstadappStakingFuse",
     "Roles",
     "Markets",
     "IporFusionError",

@@ -35,10 +35,12 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["BASE_PROVIDER_URL"]
 
+
 @pytest.fixture(scope="module")
 def anvil():
     with AnvilTestContainerStarter(fork_url) as a:
         yield a
+
 
 AERODROME_ROUTER_ADDRESS = Web3.to_checksum_address(
     "0xBE6D8F0D05cC4bE24d5167a3eF062215bE6D18a5"

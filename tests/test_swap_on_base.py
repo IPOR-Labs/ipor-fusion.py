@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["BASE_PROVIDER_URL"]
 
+
 @pytest.fixture(scope="module")
 def anvil():
     with AnvilTestContainerStarter(fork_url) as a:

@@ -10,7 +10,10 @@ from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
 from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import Erc4626SupplyFuse
-from ipor_fusion.fuses.fluid_instadapp import FluidInstadappSupplyFuse
+from ipor_fusion.fuses.fluid_instadapp import (
+    FluidInstadappStakingFuse,
+    FluidInstadappSupplyFuse,
+)
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
 from ipor_fusion.fuses.morpho import (
     MorphoBorrowFuse,
@@ -494,42 +497,43 @@ class TestGearboxStakeFuse:
 
 class TestFluidInstadappSupplyFuse:
     def setup_method(self):
-        self.fuse = FluidInstadappSupplyFuse(
-            erc4626_fuse_address=FUSE_ADDR,
+        self.fuse = FluidInstadappSupplyFuse(FUSE_ADDR)
+
+    def test_supply_encoding(self):
+        action = self.fuse.supply(VAULT_ADDR, 2000)
+        assert action.fuse == FUSE_ADDR
+        (addr, amount) = decode(["address", "uint256"], action.data[4:])
+        assert addr.lower() == VAULT_ADDR_LOW
+        assert amount == 2000
+
+    def test_withdraw_encoding(self):
+        action = self.fuse.withdraw(VAULT_ADDR, 1000)
+        assert action.fuse == FUSE_ADDR
+        (addr, amount) = decode(["address", "uint256"], action.data[4:])
+        assert addr.lower() == VAULT_ADDR_LOW
+        assert amount == 1000
+
+
+class TestFluidInstadappStakingFuse:
+    def setup_method(self):
+        self.fuse = FluidInstadappStakingFuse(
             staking_fuse_address=STAKING_FUSE,
-            pool_token_address=TOKEN_A,
             staking_contract_address=STAKING_CONTRACT,
         )
 
-    def test_supply_and_stake_returns_two_actions(self):
-        actions = self.fuse.supply_and_stake(VAULT_ADDR, 2000)
-        assert len(actions) == 2
-        assert actions[0].fuse == FUSE_ADDR
-        assert actions[1].fuse == STAKING_FUSE
-
-    def test_supply_and_stake_encoding(self):
-        actions = self.fuse.supply_and_stake(VAULT_ADDR, 2000)
-        (addr, amount) = decode(["address", "uint256"], actions[0].data[4:])
-        assert addr.lower() == VAULT_ADDR_LOW
-        assert amount == 2000
-        (amount, contract) = decode(["uint256", "address"], actions[1].data[4:])
+    def test_stake_encoding(self):
+        action = self.fuse.stake()
+        assert action.fuse == STAKING_FUSE
+        (amount, contract) = decode(["uint256", "address"], action.data[4:])
         assert amount == MAX_UINT256
         assert contract.lower() == STAKING_CONTRACT_LOW
 
-    def test_unstake_and_withdraw_order(self):
-        actions = self.fuse.unstake_and_withdraw(VAULT_ADDR, 1000)
-        assert len(actions) == 2
-        assert actions[0].fuse == STAKING_FUSE  # unstake first
-        assert actions[1].fuse == FUSE_ADDR  # withdraw second
-
-    def test_unstake_and_withdraw_encoding(self):
-        actions = self.fuse.unstake_and_withdraw(VAULT_ADDR, 1000)
-        (amount, contract) = decode(["uint256", "address"], actions[0].data[4:])
+    def test_unstake_encoding(self):
+        action = self.fuse.unstake(1000)
+        assert action.fuse == STAKING_FUSE
+        (amount, contract) = decode(["uint256", "address"], action.data[4:])
         assert amount == 1000
         assert contract.lower() == STAKING_CONTRACT_LOW
-        (addr, amount) = decode(["address", "uint256"], actions[1].data[4:])
-        assert addr.lower() == VAULT_ADDR_LOW
-        assert amount == MAX_UINT256
 
 
 # ── UniversalTokenSwapper ──────────────────────────────────────────────

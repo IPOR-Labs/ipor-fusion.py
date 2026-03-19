@@ -293,7 +293,9 @@ def test_should_increase_liquidity(anvil):
     ), "increase_position_change_usdt == -90_509683"
 
 
-def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manager(anvil):
+def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manager(
+    anvil,
+):
     # given
     anvil.reset_fork(261946538)
 
