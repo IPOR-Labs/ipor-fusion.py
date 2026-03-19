@@ -39,11 +39,7 @@ from ipor_fusion.config.roles import Roles
 from ipor_fusion.market_ids import Markets
 from ipor_fusion.errors import (
     IporFusionError,
-    UnsupportedFuseError,
-    UnsupportedAssetError,
-    UnsupportedMarketError,
     TransactionError,
-    ConfigurationError,
 )
 from ipor_fusion.types import (
     Amount,
@@ -100,11 +96,7 @@ __all__ = [
     "Roles",
     "Markets",
     "IporFusionError",
-    "UnsupportedFuseError",
-    "UnsupportedAssetError",
-    "UnsupportedMarketError",
     "TransactionError",
-    "ConfigurationError",
     "Amount",
     "Shares",
     "Decimals",
