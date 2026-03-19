@@ -19,6 +19,7 @@ from ipor_fusion import Roles, PlasmaVault, AccessManager, ERC20
 from ipor_fusion.fuses import (
     AaveV3SupplyFuse,
     CompoundV3SupplyFuse,
+    GearboxStakeFuse,
     GearboxSupplyFuse,
     FluidInstadappSupplyFuse,
     FluidInstadappStakingFuse,
@@ -101,15 +102,18 @@ def test_supply_and_withdraw_from_gearbox(anvil):
     vault_balance_before = usdc.balance_of(vault_address)
     gearbox_farm_balance_before = gearbox_farm.balance_of(vault_address)
 
-    gearbox = GearboxSupplyFuse(
-        erc4626_fuse_address=ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_3,
+    gearbox_supply = GearboxSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_3)
+    gearbox_stake = GearboxStakeFuse(
         farm_fuse_address=ARBITRUM_V3_GEARBOX_V3_FARM_FUSE,
-        d_token_address=GEARBOX_D_TOKEN,
         farmd_token_address=GEARBOX_FARMD_TOKEN,
     )
-    supply_and_stake = gearbox.supply_and_stake(GEARBOX_D_TOKEN, vault_balance_before)
 
-    plasma_vault.execute(supply_and_stake)
+    plasma_vault.execute(
+        [
+            gearbox_supply.supply(GEARBOX_D_TOKEN, vault_balance_before),
+            gearbox_stake.stake(),
+        ]
+    )
 
     vault_balance_after = usdc.balance_of(vault_address)
     gearbox_farm_balance_after = gearbox_farm.balance_of(vault_address)
@@ -125,11 +129,12 @@ def test_supply_and_withdraw_from_gearbox(anvil):
     vault_balance_before = usdc.balance_of(vault_address)
     gearbox_farm_balance_before = gearbox_farm.balance_of(vault_address)
 
-    unstake_and_withdraw = gearbox.unstake_and_withdraw(
-        GEARBOX_D_TOKEN, gearbox_farm_balance_before
+    plasma_vault.execute(
+        [
+            gearbox_stake.unstake(gearbox_farm_balance_before),
+            gearbox_supply.withdraw(GEARBOX_D_TOKEN, MAX_UINT256),
+        ]
     )
-
-    plasma_vault.execute(unstake_and_withdraw)
 
     # then after withdraw
     vault_balance_after = usdc.balance_of(vault_address)

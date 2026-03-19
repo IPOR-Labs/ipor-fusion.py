@@ -429,49 +429,29 @@ STAKING_CONTRACT_LOW = str(STAKING_CONTRACT).lower()
 
 class TestGearboxSupplyFuse:
     def setup_method(self):
-        self.fuse = GearboxSupplyFuse(
-            erc4626_fuse_address=FUSE_ADDR,
-            farm_fuse_address=FUSE_ADDR_2,
-            d_token_address=TOKEN_A,
-            farmd_token_address=TOKEN_B,
-        )
+        self.fuse = GearboxSupplyFuse(FUSE_ADDR)
 
-    def test_supply_and_stake_returns_two_actions(self):
-        actions = self.fuse.supply_and_stake(VAULT_ADDR, 5000)
-        assert len(actions) == 2
-        assert actions[0].fuse == FUSE_ADDR  # erc4626 fuse
-        assert actions[1].fuse == FUSE_ADDR_2  # farm fuse
+    def test_supply_returns_single_action(self):
+        action = self.fuse.supply(VAULT_ADDR, 5000)
+        assert action.fuse == FUSE_ADDR
 
-    def test_supply_action_encoding(self):
-        actions = self.fuse.supply_and_stake(VAULT_ADDR, 5000)
-        assert actions[0].data[:4] == _selector("enter((address,uint256))")
-        (addr, amount) = decode(["address", "uint256"], actions[0].data[4:])
+    def test_supply_encoding(self):
+        action = self.fuse.supply(VAULT_ADDR, 5000)
+        assert action.data[:4] == _selector("enter((address,uint256))")
+        (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == VAULT_ADDR_LOW
         assert amount == 5000
 
-    def test_stake_action_uses_max_uint256(self):
-        actions = self.fuse.supply_and_stake(VAULT_ADDR, 5000)
-        assert actions[1].data[:4] == _selector("enter((uint256,address))")
-        (amount, token) = decode(["uint256", "address"], actions[1].data[4:])
-        assert amount == MAX_UINT256
-        assert token.lower() == TOKEN_B_LOW  # farmd_token_address
+    def test_withdraw_returns_single_action(self):
+        action = self.fuse.withdraw(VAULT_ADDR, 3000)
+        assert action.fuse == FUSE_ADDR
 
-    def test_unstake_and_withdraw_returns_two_actions(self):
-        actions = self.fuse.unstake_and_withdraw(VAULT_ADDR, 3000)
-        assert len(actions) == 2
-        assert actions[0].fuse == FUSE_ADDR_2  # farm fuse first
-        assert actions[1].fuse == FUSE_ADDR  # erc4626 fuse second
-
-    def test_unstake_and_withdraw_encoding(self):
-        actions = self.fuse.unstake_and_withdraw(VAULT_ADDR, 3000)
-        # unstake
-        (amount, token) = decode(["uint256", "address"], actions[0].data[4:])
-        assert amount == 3000
-        assert token.lower() == TOKEN_B_LOW
-        # withdraw uses MAX_UINT256
-        (addr, amount) = decode(["address", "uint256"], actions[1].data[4:])
+    def test_withdraw_encoding(self):
+        action = self.fuse.withdraw(VAULT_ADDR, 3000)
+        assert action.data[:4] == _selector("exit((address,uint256))")
+        (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == VAULT_ADDR_LOW
-        assert amount == MAX_UINT256
+        assert amount == 3000
 
 
 class TestGearboxStakeFuse:
