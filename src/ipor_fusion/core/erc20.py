@@ -7,6 +7,7 @@ from ipor_fusion.types import Amount, Decimals
 
 
 class ERC20(ContractWrapper):
+    """Standard ERC-20 token interface wrapper."""
 
     def transfer(self, to: ChecksumAddress, amount: Amount) -> TxReceipt:
         return self._send("transfer(address,uint256)", to, amount)

@@ -10,6 +10,8 @@ from ipor_fusion.types import MorphoBlueMarketId
 
 @dataclass
 class MorphoMarket:
+    """On-chain state of a Morpho Blue lending market."""
+
     total_supply_assets: int
     total_supply_shares: int
     total_borrow_assets: int
@@ -20,6 +22,8 @@ class MorphoMarket:
 
 @dataclass
 class MorphoPosition:
+    """User position within a Morpho Blue market."""
+
     supply_shares: int
     borrow_shares: int
     collateral: int
@@ -27,6 +31,8 @@ class MorphoPosition:
 
 @dataclass
 class MorphoMarketParams:
+    """Configuration parameters defining a Morpho Blue market."""
+
     loan_token: ChecksumAddress
     collateral_token: ChecksumAddress
     oracle: ChecksumAddress
@@ -35,6 +41,7 @@ class MorphoMarketParams:
 
 
 class MorphoReader(ContractWrapper):
+    """Reader for Morpho Blue protocol on-chain state."""
 
     def market(self, market_id: MorphoBlueMarketId) -> MorphoMarket:
         raw = self._call("market(bytes32)", bytes.fromhex(market_id))

@@ -6,6 +6,8 @@ from ipor_fusion.types import Amount, MorphoBlueMarketId
 
 
 class MorphoSupplyFuse(Fuse):
+    """Fuse for supplying and withdrawing assets on Morpho Blue markets."""
+
     def supply(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
@@ -24,6 +26,8 @@ class MorphoSupplyFuse(Fuse):
 
 
 class MorphoFlashLoanFuse(Fuse):
+    """Fuse for executing flash loans through Morpho Blue."""
+
     def flash_loan(
         self, asset: ChecksumAddress, amount: Amount, actions: list[FuseAction]
     ) -> FuseAction:

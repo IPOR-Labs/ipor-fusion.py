@@ -11,6 +11,8 @@ from ipor_fusion.config.roles import Roles
 
 @dataclass
 class RoleAccount:
+    """Account-role membership record returned by AccessManager queries."""
+
     account: ChecksumAddress
     role_id: int
     is_member: bool
@@ -18,6 +20,7 @@ class RoleAccount:
 
 
 class AccessManager(ContractWrapper):
+    """Manages role-based access control for PlasmaVault operations."""
 
     def grant_role(
         self, role_id: int, account: ChecksumAddress, execution_delay: int

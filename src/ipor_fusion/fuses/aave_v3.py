@@ -5,6 +5,8 @@ from ipor_fusion.types import Amount
 
 
 class AaveV3SupplyFuse(Fuse):
+    """Fuse for supplying and withdrawing assets on Aave V3."""
+
     def supply(
         self, asset: ChecksumAddress, amount: Amount, e_mode: int = 0
     ) -> FuseAction:
@@ -25,6 +27,8 @@ class AaveV3SupplyFuse(Fuse):
 
 
 class AaveV3BorrowFuse(Fuse):
+    """Fuse for borrowing and repaying assets on Aave V3."""
+
     def borrow(self, asset: ChecksumAddress, amount: Amount) -> FuseAction:
         self._validate_address(asset, "asset")
         self._validate_amount(amount, "amount")

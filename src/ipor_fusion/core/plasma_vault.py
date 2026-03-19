@@ -13,6 +13,7 @@ from ipor_fusion.types import Amount, MarketId, Decimals, Shares
 
 
 class PlasmaVault(ContractWrapper):
+    """ERC-4626 vault that batches and executes FuseAction sequences on-chain."""
 
     def execute(self, actions: list[FuseAction]) -> TxReceipt:
         data = self._encode_execute(actions)

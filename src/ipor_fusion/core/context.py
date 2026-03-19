@@ -10,6 +10,8 @@ from ipor_fusion.errors import TransactionError, _get_revert_reason
 
 
 class Web3Context:
+    """Manages Web3 connection, signing, and transaction dispatch."""
+
     DEFAULT_TRANSACTION_MAX_PRIORITY_FEE = 2_000_000_000
     GAS_PRICE_MARGIN = 25
 

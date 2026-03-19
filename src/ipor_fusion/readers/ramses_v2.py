@@ -9,6 +9,8 @@ from ipor_fusion.core.contract import ContractWrapper
 
 @dataclass
 class RamsesV2Position:
+    """Liquidity position data from the Ramses V2 NonfungiblePositionManager."""
+
     nonce: int
     operator: ChecksumAddress
     token0: ChecksumAddress
@@ -24,6 +26,7 @@ class RamsesV2Position:
 
 
 class RamsesV2Reader(ContractWrapper):
+    """Reader for Ramses V2 NonfungiblePositionManager on-chain state."""
 
     def positions(self, token_id: int) -> RamsesV2Position:
         raw = self._call("positions(uint256)", token_id)

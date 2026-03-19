@@ -6,6 +6,7 @@ from ipor_fusion.types import Amount
 
 
 class CompoundV3Reader(ContractWrapper):
+    """Reader for Compound V3 (Comet) on-chain state."""
 
     def balance_of(self, account: ChecksumAddress) -> Amount:
         raw = self._call("balanceOf(address)", account)

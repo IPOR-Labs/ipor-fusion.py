@@ -15,6 +15,8 @@ MAX_UINT256 = (1 << 256) - 1
 
 @dataclass
 class Price:
+    """USD-denominated price of an on-chain asset."""
+
     asset: ChecksumAddress
     amount: Amount
     decimals: Decimals
@@ -30,6 +32,8 @@ class Price:
 
 
 class Period(int):
+    """Time duration in seconds with common unit constants."""
+
     SECOND: "Period"
     MINUTE: "Period"
     HOUR: "Period"

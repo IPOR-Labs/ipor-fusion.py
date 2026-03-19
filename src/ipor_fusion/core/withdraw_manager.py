@@ -15,6 +15,8 @@ from ipor_fusion.types import Shares, Amount, Period
 
 @dataclass
 class WithdrawRequestInfo:
+    """Snapshot of a pending withdrawal request for a single account."""
+
     shares: Shares
     end_withdraw_window_timestamp: Timestamp
     can_withdraw: bool

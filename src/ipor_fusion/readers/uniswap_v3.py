@@ -9,6 +9,8 @@ from ipor_fusion.core.contract import ContractWrapper
 
 @dataclass
 class UniswapV3Position:
+    """Liquidity position data from the Uniswap V3 NonfungiblePositionManager."""
+
     nonce: int
     operator: ChecksumAddress
     token0: ChecksumAddress
@@ -24,6 +26,7 @@ class UniswapV3Position:
 
 
 class UniswapV3Reader(ContractWrapper):
+    """Reader for Uniswap V3 NonfungiblePositionManager on-chain state."""
 
     def positions(self, token_id: int) -> UniswapV3Position:
         raw = self._call("positions(uint256)", token_id)

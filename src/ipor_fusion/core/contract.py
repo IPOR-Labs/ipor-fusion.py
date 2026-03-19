@@ -8,6 +8,7 @@ from ipor_fusion.core.context import Web3Context
 
 
 class ContractWrapper:
+    """Base wrapper for encoding and dispatching Solidity function calls."""
 
     def __init__(self, ctx: Web3Context, address: ChecksumAddress):
         self._ctx = ctx

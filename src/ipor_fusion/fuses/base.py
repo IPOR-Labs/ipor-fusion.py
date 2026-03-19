@@ -11,6 +11,8 @@ ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 @dataclass(frozen=True)
 class FuseAction:
+    """Immutable calldata payload targeting a specific fuse contract."""
+
     fuse: ChecksumAddress
     data: bytes
 
@@ -25,6 +27,8 @@ class FuseAction:
 
 
 class Fuse(ABC):
+    """Abstract base class for all protocol fuse adapters."""
+
     def __init__(self, address: ChecksumAddress):
         if not address or address == ZERO_ADDRESS:
             raise ValueError("Fuse address is required and must not be zero address")
@@ -63,6 +67,8 @@ class Fuse(ABC):
 
 
 class StakeFuse(Fuse):
+    """Base fuse for stake/unstake operations on a staking contract."""
+
     def __init__(self, fuse_address: ChecksumAddress, staking_address: ChecksumAddress):
         super().__init__(fuse_address)
         self._staking_address = staking_address

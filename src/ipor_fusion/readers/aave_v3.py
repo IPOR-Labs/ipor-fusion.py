@@ -8,6 +8,8 @@ from ipor_fusion.core.contract import ContractWrapper
 
 @dataclass
 class AaveV3UserAccountData:
+    """Aggregated account data for an Aave V3 user."""
+
     total_collateral_base: int
     total_debt_base: int
     available_borrows_base: int
@@ -17,6 +19,7 @@ class AaveV3UserAccountData:
 
 
 class AaveV3Reader(ContractWrapper):
+    """Reader for Aave V3 lending pool on-chain state."""
 
     def get_user_account_data(self, user: ChecksumAddress) -> AaveV3UserAccountData:
         raw = self._call("getUserAccountData(address)", user)
