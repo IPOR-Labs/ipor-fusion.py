@@ -41,9 +41,7 @@ class RewardsManager(ContractWrapper):
         return [Web3.to_checksum_address(item) for item in list(value)]
 
     def is_reward_fuse_supported(self, fuse: ChecksumAddress) -> bool:
-        (value,) = decode(
-            ["bool"], self._call("isRewardFuseSupported(address)", fuse)
-        )
+        (value,) = decode(["bool"], self._call("isRewardFuseSupported(address)", fuse))
         return value
 
     def claim_rewards(self, claims: list[FuseAction]) -> TxReceipt:
