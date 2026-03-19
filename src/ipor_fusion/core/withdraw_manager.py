@@ -54,7 +54,7 @@ class WithdrawManager(ContractWrapper):
 
     def get_withdraw_window(self) -> Period:
         (value,) = decode(["uint256"], self._call("getWithdrawWindow()"))
-        return value
+        return Period(value)
 
     def get_last_release_funds_timestamp(self) -> Timestamp:
         (value,) = decode(["uint256"], self._call("getLastReleaseFundsTimestamp()"))
@@ -62,7 +62,7 @@ class WithdrawManager(ContractWrapper):
 
     def get_shares_to_release(self) -> Shares:
         (value,) = decode(["uint256"], self._call("getSharesToRelease()"))
-        return value
+        return Shares(value)
 
     def get_request_fee(self) -> int:
         (value,) = decode(["uint256"], self._call("getRequestFee()"))

@@ -66,14 +66,14 @@ class MorphoBorrowFuse(Fuse):
         self._validate_amount(amount, "amount")
         return self._action_raw(
             "enter((bytes32,uint256,uint256))",
-            [[bytes.fromhex(market_id), amount, 0]],
+            [[bytes.fromhex(market_id), amount, 0]],  # 0 = assets mode (not shares)
         )
 
     def repay(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
             "exit((bytes32,uint256,uint256))",
-            [[bytes.fromhex(market_id), amount, 0]],
+            [[bytes.fromhex(market_id), amount, 0]],  # 0 = assets mode (not shares)
         )
 
 

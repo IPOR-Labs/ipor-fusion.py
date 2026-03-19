@@ -35,7 +35,7 @@ from ipor_fusion.fuses import (
     RamsesV2ModifyPositionFuse,
     RamsesV2CollectFuse,
     RamsesClaimFuse,
-    extract_ramses_new_position_events,
+    RamsesEvents,
 )
 
 provider_url = os.environ["ARBITRUM_PROVIDER_URL"]
@@ -169,7 +169,7 @@ def test_should_collect_all_after_decrease_liquidity(anvil):
 
     receipt = plasma_vault.execute([swap_action, new_position])
 
-    new_position_event = extract_ramses_new_position_events(receipt)[0]
+    new_position_event = RamsesEvents.extract_new_position_events(receipt)[0]
 
     new_token_id = new_position_event.token_id
 

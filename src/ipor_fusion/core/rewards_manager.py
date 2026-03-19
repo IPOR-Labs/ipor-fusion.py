@@ -5,6 +5,7 @@ from web3.types import TxReceipt
 
 from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
+from ipor_fusion.types import Amount
 
 
 class RewardsManager(ContractWrapper):
@@ -14,9 +15,9 @@ class RewardsManager(ContractWrapper):
     ) -> TxReceipt:
         return self._send("transfer(address,address,uint256)", asset, to, amount)
 
-    def balance_of(self) -> int:
+    def balance_of(self) -> Amount:
         (value,) = decode(["uint256"], self._call("balanceOf()"))
-        return value
+        return Amount(value)
 
     def get_vesting_data(self) -> tuple[int, int, int, int]:
         result = self._call("getVestingData()")

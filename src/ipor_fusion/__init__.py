@@ -1,7 +1,6 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.access import AccessManager, RoleAccount
 from ipor_fusion.core.rewards_manager import RewardsManager
@@ -39,8 +38,6 @@ from ipor_fusion.fuses import (
     UniswapV3NewPositionEvent,
     UniswapV3ClosePositionEvent,
     UniswapV3Events,
-    extract_uniswap_v3_new_position_events,
-    extract_uniswap_v3_close_position_events,
     CompoundV3SupplyFuse,
     RamsesV2NewPositionFuse,
     RamsesV2ModifyPositionFuse,
@@ -48,7 +45,6 @@ from ipor_fusion.fuses import (
     RamsesClaimFuse,
     RamsesNewPositionEvent,
     RamsesEvents,
-    extract_ramses_new_position_events,
     GearboxSupplyFuse,
     GearboxStakeFuse,
     ERC4626SupplyFuse,
@@ -83,7 +79,6 @@ except PackageNotFoundError:
 __all__ = [
     "__version__",
     "Web3Context",
-    "ContractWrapper",
     "PlasmaVault",
     "AccessManager",
     "RoleAccount",
@@ -110,8 +105,6 @@ __all__ = [
     "UniswapV3NewPositionEvent",
     "UniswapV3ClosePositionEvent",
     "UniswapV3Events",
-    "extract_uniswap_v3_new_position_events",
-    "extract_uniswap_v3_close_position_events",
     "CompoundV3SupplyFuse",
     "RamsesV2NewPositionFuse",
     "RamsesV2ModifyPositionFuse",
@@ -119,7 +112,6 @@ __all__ = [
     "RamsesClaimFuse",
     "RamsesNewPositionEvent",
     "RamsesEvents",
-    "extract_ramses_new_position_events",
     "GearboxSupplyFuse",
     "GearboxStakeFuse",
     "ERC4626SupplyFuse",

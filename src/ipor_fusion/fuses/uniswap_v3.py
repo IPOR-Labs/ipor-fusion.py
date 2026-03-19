@@ -13,6 +13,7 @@ from ipor_fusion.types import Amount, Fee, Tick, TokenId
 class UniswapV3SwapFuse(Fuse):
     def swap(
         self,
+        *,
         token_in: ChecksumAddress,
         token_out: ChecksumAddress,
         fee: Fee,
@@ -216,15 +217,3 @@ class UniswapV3Events:
                     )
                 )
         return events
-
-
-def extract_uniswap_v3_new_position_events(
-    receipt: TxReceipt,
-) -> list[UniswapV3NewPositionEvent]:
-    return UniswapV3Events.extract_new_position_events(receipt)
-
-
-def extract_uniswap_v3_close_position_events(
-    receipt: TxReceipt,
-) -> list[UniswapV3ClosePositionEvent]:
-    return UniswapV3Events.extract_close_position_events(receipt)

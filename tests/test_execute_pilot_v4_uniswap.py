@@ -26,8 +26,7 @@ from ipor_fusion.fuses import (
     UniswapV3ModifyPositionFuse,
     UniswapV3CollectFuse,
     UniversalTokenSwapperFuse,
-    extract_uniswap_v3_new_position_events,
-    extract_uniswap_v3_close_position_events,
+    UniswapV3Events,
 )
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
@@ -316,7 +315,7 @@ def test_should_collect_all_after_decrease_liquidity(anvil):
     )
     tx = plasma_vault.execute([new_position])
 
-    enter_events = extract_uniswap_v3_new_position_events(tx)
+    enter_events = UniswapV3Events.extract_new_position_events(tx)
     new_token_id = enter_events[0].token_id
     liquidity = enter_events[0].liquidity
 
@@ -350,7 +349,7 @@ def test_should_collect_all_after_decrease_liquidity(anvil):
     close = uniswap_new_pos.close_position([new_token_id])
     receipt = plasma_vault.execute([close])
 
-    close_events = extract_uniswap_v3_close_position_events(receipt)
+    close_events = UniswapV3Events.extract_close_position_events(receipt)
     close_token_id = close_events[0].token_id
 
     assert new_token_id == close_token_id
@@ -406,7 +405,7 @@ def test_should_increase_liquidity(anvil):
     )
     receipt = plasma_vault.execute([new_position])
 
-    enter_events = extract_uniswap_v3_new_position_events(receipt)
+    enter_events = UniswapV3Events.extract_new_position_events(receipt)
     new_token_id = enter_events[0].token_id
 
     vault_usdc_before_increase = usdc.balance_of(vault_address)

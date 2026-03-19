@@ -17,11 +17,11 @@ class ERC20(ContractWrapper):
 
     def balance_of(self, account: ChecksumAddress) -> Amount:
         (value,) = decode(["uint256"], self._call("balanceOf(address)", account))
-        return value
+        return Amount(value)
 
     def decimals(self) -> Decimals:
         (value,) = decode(["uint256"], self._call("decimals()"))
-        return value
+        return Decimals(value)
 
     def symbol(self) -> str:
         (value,) = decode(["string"], self._call("symbol()"))
@@ -33,10 +33,10 @@ class ERC20(ContractWrapper):
 
     def total_supply(self) -> Amount:
         (value,) = decode(["uint256"], self._call("totalSupply()"))
-        return value
+        return Amount(value)
 
     def allowance(self, owner: ChecksumAddress, spender: ChecksumAddress) -> Amount:
         (value,) = decode(
             ["uint256"], self._call("allowance(address,address)", owner, spender)
         )
-        return value
+        return Amount(value)

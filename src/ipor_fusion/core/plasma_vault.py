@@ -60,37 +60,37 @@ class PlasmaVault(ContractWrapper):
 
     def balance_of(self, account: ChecksumAddress) -> Amount:
         (value,) = decode(["uint256"], self._call("balanceOf(address)", account))
-        return value
+        return Amount(value)
 
     def get_total_supply_cap(self) -> Amount:
         (value,) = decode(["uint256"], self._call("getTotalSupplyCap()"))
-        return value
+        return Amount(value)
 
     def max_withdraw(self, account: ChecksumAddress) -> Amount:
         (value,) = decode(["uint256"], self._call("maxWithdraw(address)", account))
-        return value
+        return Amount(value)
 
     def convert_to_shares(self, amount: Amount) -> Shares:
         (value,) = decode(["uint256"], self._call("convertToShares(uint256)", amount))
-        return value
+        return Shares(value)
 
     def convert_to_assets(self, shares: Shares) -> Amount:
         (value,) = decode(["uint256"], self._call("convertToAssets(uint256)", shares))
-        return value
+        return Amount(value)
 
     def total_assets_in_market(self, market: MarketId) -> Amount:
         (value,) = decode(
             ["uint256"], self._call("totalAssetsInMarket(uint256)", market)
         )
-        return value
+        return Amount(value)
 
     def decimals(self) -> Decimals:
         (value,) = decode(["uint256"], self._call("decimals()"))
-        return value
+        return Decimals(value)
 
     def total_assets(self) -> Amount:
         (value,) = decode(["uint256"], self._call("totalAssets()"))
-        return value
+        return Amount(value)
 
     def underlying_asset_address(self) -> ChecksumAddress:
         (value,) = decode(["address"], self._call("asset()"))

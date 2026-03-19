@@ -285,7 +285,11 @@ class TestERC4626SupplyFuse:
 class TestUniswapV3SwapFuse:
     def test_swap_encodes_packed_path(self):
         action = UniswapV3SwapFuse(FUSE_ADDR).swap(
-            TOKEN_A, TOKEN_B, fee=3000, amount_in=10_000, min_amount_out=9_000
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            fee=3000,
+            amount_in=10_000,
+            min_amount_out=9_000,
         )
         assert action.data[:4] == _selector("enter((uint256,uint256,bytes))")
         (decoded_tuple,) = decode(["(uint256,uint256,bytes)"], action.data[4:])
@@ -449,6 +453,18 @@ class TestRamsesClaimFuse:
         (ids, token_rewards) = decode(["uint256[]", "address[][]"], action.data[4:])
         assert list(ids) == [1, 2]
         assert len(token_rewards) == 2
+
+    def test_claim_rejects_empty_token_ids(self):
+        with pytest.raises(ValueError, match="token_ids"):
+            RamsesClaimFuse(FUSE_ADDR).claim([], [[str(TOKEN_A)]])
+
+    def test_claim_rejects_empty_token_rewards(self):
+        with pytest.raises(ValueError, match="token_rewards"):
+            RamsesClaimFuse(FUSE_ADDR).claim([1], [])
+
+    def test_claim_rejects_mismatched_lengths(self):
+        with pytest.raises(ValueError, match="same length"):
+            RamsesClaimFuse(FUSE_ADDR).claim([1, 2], [[str(TOKEN_A)]])
 
 
 # ── Gearbox V3 ─────────────────────────────────────────────────────────
@@ -620,7 +636,13 @@ class TestAmountValidation:
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_uniswap_swap_rejects_bad_amount(self, bad_amount):
         with pytest.raises(ValueError, match="amount_in"):
-            UniswapV3SwapFuse(FUSE_ADDR).swap(TOKEN_A, TOKEN_B, 3000, bad_amount, 0)
+            UniswapV3SwapFuse(FUSE_ADDR).swap(
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                fee=3000,
+                amount_in=bad_amount,
+                min_amount_out=0,
+            )
 
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_unstake_rejects_bad_amount(self, bad_amount):
@@ -661,11 +683,23 @@ class TestAddressValidation:
 
     def test_uniswap_swap_rejects_zero_token_in(self):
         with pytest.raises(ValueError, match="token_in"):
-            UniswapV3SwapFuse(FUSE_ADDR).swap(ZERO_ADDR, TOKEN_B, 3000, 100, 0)
+            UniswapV3SwapFuse(FUSE_ADDR).swap(
+                token_in=ZERO_ADDR,
+                token_out=TOKEN_B,
+                fee=3000,
+                amount_in=100,
+                min_amount_out=0,
+            )
 
     def test_uniswap_swap_rejects_zero_token_out(self):
         with pytest.raises(ValueError, match="token_out"):
-            UniswapV3SwapFuse(FUSE_ADDR).swap(TOKEN_A, ZERO_ADDR, 3000, 100, 0)
+            UniswapV3SwapFuse(FUSE_ADDR).swap(
+                token_in=TOKEN_A,
+                token_out=ZERO_ADDR,
+                fee=3000,
+                amount_in=100,
+                min_amount_out=0,
+            )
 
     def test_universal_swap_rejects_zero_token_in(self):
         with pytest.raises(ValueError, match="token_in"):
@@ -693,7 +727,11 @@ class TestSlippageParamsAllowZero:
 
     def test_uniswap_swap_allows_zero_min_amount_out(self):
         action = UniswapV3SwapFuse(FUSE_ADDR).swap(
-            TOKEN_A, TOKEN_B, 3000, 100, min_amount_out=0
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            fee=3000,
+            amount_in=100,
+            min_amount_out=0,
         )
         assert action.fuse == FUSE_ADDR
 

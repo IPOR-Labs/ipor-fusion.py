@@ -111,6 +111,13 @@ class RamsesV2CollectFuse(Fuse):
 
 class RamsesClaimFuse(Fuse):
     def claim(self, token_ids: list[int], token_rewards: list[list[str]]) -> FuseAction:
+        self._validate_non_empty_list(token_ids, "token_ids")
+        self._validate_non_empty_list(token_rewards, "token_rewards")
+        if len(token_ids) != len(token_rewards):
+            raise ValueError(
+                f"token_ids and token_rewards must have the same length, "
+                f"got {len(token_ids)} and {len(token_rewards)}"
+            )
         return self._action_raw(
             "claim(uint256[],address[][])",
             [token_ids, token_rewards],
@@ -174,9 +181,3 @@ class RamsesEvents:
                     )
                 )
         return events
-
-
-def extract_ramses_new_position_events(
-    receipt: TxReceipt,
-) -> list[RamsesNewPositionEvent]:
-    return RamsesEvents.extract_new_position_events(receipt)
