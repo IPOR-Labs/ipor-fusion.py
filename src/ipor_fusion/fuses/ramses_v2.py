@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
-from eth_abi import decode, encode
+from eth_abi import decode
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
@@ -24,7 +23,8 @@ class RamsesV2NewPositionFuse(Fuse):
         deadline: int,
         ve_ram_token_id: int,
     ) -> FuseAction:
-        data = encode(
+        return self._action_raw(
+            "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256,uint256))",
             [
                 "(address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256,uint256)"
             ],
@@ -44,15 +44,9 @@ class RamsesV2NewPositionFuse(Fuse):
                 ]
             ],
         )
-        selector = function_signature_to_4byte_selector(
-            "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256,uint256))"
-        )
-        return FuseAction(fuse=self._address, data=selector + data)
 
     def close_position(self, token_ids: list[int]) -> FuseAction:
-        data = encode(["(uint256[])"], [[token_ids]])
-        selector = function_signature_to_4byte_selector("exit((uint256[]))")
-        return FuseAction(fuse=self._address, data=selector + data)
+        return self._action_raw("exit((uint256[]))", ["(uint256[])"], [[token_ids]])
 
 
 class RamsesV2ModifyPositionFuse(Fuse):
@@ -67,7 +61,8 @@ class RamsesV2ModifyPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        data = encode(
+        return self._action_raw(
+            "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))",
             ["(address,address,uint256,uint256,uint256,uint256,uint256,uint256)"],
             [
                 [
@@ -82,10 +77,6 @@ class RamsesV2ModifyPositionFuse(Fuse):
                 ]
             ],
         )
-        selector = function_signature_to_4byte_selector(
-            "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))"
-        )
-        return FuseAction(fuse=self._address, data=selector + data)
 
     def decrease_liquidity(
         self,
@@ -95,28 +86,25 @@ class RamsesV2ModifyPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        data = encode(
+        return self._action_raw(
+            "exit((uint256,uint128,uint256,uint256,uint256))",
             ["(uint256,uint128,uint256,uint256,uint256)"],
             [[token_id, liquidity, amount0_min, amount1_min, deadline]],
         )
-        selector = function_signature_to_4byte_selector(
-            "exit((uint256,uint128,uint256,uint256,uint256))"
-        )
-        return FuseAction(fuse=self._address, data=selector + data)
 
 
 class RamsesV2CollectFuse(Fuse):
     def collect(self, token_ids: list[int]) -> FuseAction:
-        data = encode(["(uint256[])"], [[token_ids]])
-        selector = function_signature_to_4byte_selector("enter((uint256[]))")
-        return FuseAction(fuse=self._address, data=selector + data)
+        return self._action_raw("enter((uint256[]))", ["(uint256[])"], [[token_ids]])
 
 
 class RamsesClaimFuse(Fuse):
     def claim(self, token_ids: list[int], token_rewards: list[list[str]]) -> FuseAction:
-        data = encode(["uint256[]", "address[][]"], [token_ids, token_rewards])
-        selector = function_signature_to_4byte_selector("claim(uint256[],address[][])")
-        return FuseAction(fuse=self._address, data=selector + data)
+        return self._action_raw(
+            "claim(uint256[],address[][])",
+            ["uint256[]", "address[][]"],
+            [token_ids, token_rewards],
+        )
 
 
 @dataclass

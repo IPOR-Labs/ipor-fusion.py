@@ -1,7 +1,5 @@
-from eth_abi import encode
 from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
 
@@ -18,11 +16,11 @@ class UniswapV3SwapFuse(Fuse):
         path = encode_packed(
             ["address", "uint24", "address"], [token_in, fee, token_out]
         )
-        data = encode(["(uint256,uint256,bytes)"], [[amount_in, min_amount_out, path]])
-        selector = function_signature_to_4byte_selector(
-            "enter((uint256,uint256,bytes))"
+        return self._action_raw(
+            "enter((uint256,uint256,bytes))",
+            ["(uint256,uint256,bytes)"],
+            [[amount_in, min_amount_out, path]],
         )
-        return FuseAction(fuse=self._address, data=selector + data)
 
 
 class UniswapV3NewPositionFuse(Fuse):
@@ -39,7 +37,8 @@ class UniswapV3NewPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        data = encode(
+        return self._action_raw(
+            "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256))",
             [
                 "(address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256)"
             ],
@@ -58,15 +57,9 @@ class UniswapV3NewPositionFuse(Fuse):
                 ]
             ],
         )
-        selector = function_signature_to_4byte_selector(
-            "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256))"
-        )
-        return FuseAction(fuse=self._address, data=selector + data)
 
     def close_position(self, token_ids: list[int]) -> FuseAction:
-        data = encode(["(uint256[])"], [[token_ids]])
-        selector = function_signature_to_4byte_selector("exit((uint256[]))")
-        return FuseAction(fuse=self._address, data=selector + data)
+        return self._action_raw("exit((uint256[]))", ["(uint256[])"], [[token_ids]])
 
 
 class UniswapV3ModifyPositionFuse(Fuse):
@@ -81,7 +74,8 @@ class UniswapV3ModifyPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        data = encode(
+        return self._action_raw(
+            "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))",
             ["(address,address,uint256,uint256,uint256,uint256,uint256,uint256)"],
             [
                 [
@@ -96,10 +90,6 @@ class UniswapV3ModifyPositionFuse(Fuse):
                 ]
             ],
         )
-        selector = function_signature_to_4byte_selector(
-            "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))"
-        )
-        return FuseAction(fuse=self._address, data=selector + data)
 
     def decrease_liquidity(
         self,
@@ -109,18 +99,13 @@ class UniswapV3ModifyPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
-        data = encode(
+        return self._action_raw(
+            "exit((uint256,uint128,uint256,uint256,uint256))",
             ["(uint256,uint128,uint256,uint256,uint256)"],
             [[token_id, liquidity, amount0_min, amount1_min, deadline]],
         )
-        selector = function_signature_to_4byte_selector(
-            "exit((uint256,uint128,uint256,uint256,uint256))"
-        )
-        return FuseAction(fuse=self._address, data=selector + data)
 
 
 class UniswapV3CollectFuse(Fuse):
     def collect(self, token_ids: list[int]) -> FuseAction:
-        data = encode(["(uint256[])"], [[token_ids]])
-        selector = function_signature_to_4byte_selector("enter((uint256[]))")
-        return FuseAction(fuse=self._address, data=selector + data)
+        return self._action_raw("enter((uint256[]))", ["(uint256[])"], [[token_ids]])
