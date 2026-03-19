@@ -5,6 +5,7 @@ from eth_abi import decode, encode
 from eth_abi.packed import encode_packed
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from eth_typing import BlockNumber
 from web3.types import TxReceipt
 
 from constants import (
@@ -28,7 +29,7 @@ from ipor_fusion.fuses import (
 from ipor_fusion.addresses import ARBITRUM_USDC, ARBITRUM_USDT, ARBITRUM_WETH
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
-anvil = AnvilTestContainerStarter(fork_url, 254084008)
+anvil = AnvilTestContainerStarter(fork_url, BlockNumber(254084008))
 anvil.start()
 
 uniswap_v3_universal_router = Web3.to_checksum_address(

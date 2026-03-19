@@ -1,5 +1,6 @@
 import os
 
+from eth_typing import BlockNumber
 from web3 import Web3
 
 from constants import (
@@ -23,7 +24,7 @@ from ipor_fusion.fuses import (
 from ipor_fusion.addresses import ARBITRUM_USDC
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
-anvil = AnvilTestContainerStarter(fork_url, 250690377)
+anvil = AnvilTestContainerStarter(fork_url, BlockNumber(250690377))
 anvil.start()
 
 # Gearbox V3 addresses on Arbitrum

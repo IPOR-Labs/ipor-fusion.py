@@ -1,6 +1,8 @@
 import logging
 import os
 
+from eth_typing import BlockNumber
+
 from constants import ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT, ANVIL_WALLET
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
 from ipor_fusion import (
@@ -19,7 +21,7 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
-anvil = AnvilTestContainerStarter(fork_url, 250690377)
+anvil = AnvilTestContainerStarter(fork_url, BlockNumber(250690377))
 anvil.start()
 
 

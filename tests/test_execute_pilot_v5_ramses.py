@@ -4,6 +4,7 @@ import time
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from eth_typing import BlockNumber
 from web3.types import TxReceipt
 
 from constants import (
@@ -38,7 +39,7 @@ from ipor_fusion.addresses import (
 
 provider_url = os.environ["ARBITRUM_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(provider_url, 261946538)
+anvil = AnvilTestContainerStarter(provider_url, BlockNumber(261946538))
 anvil.start()
 
 uniswap_v_3_universal_router_address = Web3.to_checksum_address(
