@@ -6,6 +6,19 @@ from ipor_fusion.core.rewards_manager import RewardsManager
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.withdraw_manager import WithdrawManager, WithdrawRequestInfo
 from ipor_fusion.core.oracle import PriceOracleMiddleware, AssetPriceSource
+from ipor_fusion.readers import (
+    MorphoReader,
+    MorphoMarket,
+    MorphoPosition,
+    MorphoMarketParams,
+    AaveV3Reader,
+    AaveV3UserAccountData,
+    CompoundV3Reader,
+    UniswapV3Reader,
+    UniswapV3Position,
+    RamsesV2Reader,
+    RamsesV2Position,
+)
 from ipor_fusion.fuses import (
     FuseAction,
     Fuse,
@@ -104,4 +117,15 @@ __all__ = [
     "MorphoBlueMarketId",
     "Price",
     "Period",
+    "MorphoReader",
+    "MorphoMarket",
+    "MorphoPosition",
+    "MorphoMarketParams",
+    "AaveV3Reader",
+    "AaveV3UserAccountData",
+    "CompoundV3Reader",
+    "UniswapV3Reader",
+    "UniswapV3Position",
+    "RamsesV2Reader",
+    "RamsesV2Position",
 ]
