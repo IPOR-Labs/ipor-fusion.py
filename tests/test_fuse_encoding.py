@@ -9,7 +9,7 @@ from web3 import Web3
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
 from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
-from ipor_fusion.fuses.erc4626 import Erc4626SupplyFuse
+from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
 from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappStakingFuse,
     FluidInstadappSupplyFuse,
@@ -265,16 +265,16 @@ class TestCompoundV3SupplyFuse:
 # ── ERC4626 ─────────────────────────────────────────────────────────────
 
 
-class TestErc4626SupplyFuse:
+class TestERC4626SupplyFuse:
     def test_supply(self):
-        action = Erc4626SupplyFuse(FUSE_ADDR).supply(VAULT_ADDR, 8000)
+        action = ERC4626SupplyFuse(FUSE_ADDR).supply(VAULT_ADDR, 8000)
         assert action.data[:4] == _selector("enter((address,uint256))")
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == VAULT_ADDR_LOW
         assert amount == 8000
 
     def test_withdraw(self):
-        action = Erc4626SupplyFuse(FUSE_ADDR).withdraw(VAULT_ADDR, 6000)
+        action = ERC4626SupplyFuse(FUSE_ADDR).withdraw(VAULT_ADDR, 6000)
         assert action.data[:4] == _selector("exit((address,uint256))")
 
 

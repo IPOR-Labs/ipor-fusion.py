@@ -11,7 +11,7 @@ from constants import (
 )
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
 from ipor_fusion import Roles, Markets, PlasmaVault, AccessManager, ERC20
-from ipor_fusion.fuses import AaveV3SupplyFuse, AaveV3BorrowFuse, Erc4626SupplyFuse
+from ipor_fusion.fuses import AaveV3SupplyFuse, AaveV3BorrowFuse, ERC4626SupplyFuse
 from ipor_fusion.addresses import ETHEREUM_WBTC, ETHEREUM_WETH
 from ipor_fusion.types import Amount
 
@@ -143,7 +143,7 @@ def test_should_deposit_to_plasma_vault(anvil):
 
     aave_supply = AaveV3SupplyFuse(ETHEREUM_AAVE_V3_SUPPLY_FUSE)
     aave_borrow = AaveV3BorrowFuse(ETHEREUM_AAVE_V3_BORROW_FUSE)
-    erc4626 = Erc4626SupplyFuse(erc4626_fuse_address)
+    erc4626 = ERC4626SupplyFuse(erc4626_fuse_address)
 
     # Grant market substrates for ERC4626
     anvil.grant_market_substrates(
