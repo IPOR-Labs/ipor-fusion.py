@@ -6,6 +6,7 @@ from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
+from ipor_fusion.types import Amount
 
 
 class RamsesV2NewPositionFuse(Fuse):
@@ -16,10 +17,10 @@ class RamsesV2NewPositionFuse(Fuse):
         fee: int,
         tick_lower: int,
         tick_upper: int,
-        amount0_desired: int,
-        amount1_desired: int,
-        amount0_min: int,
-        amount1_min: int,
+        amount0_desired: Amount,
+        amount1_desired: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
         deadline: int,
         ve_ram_token_id: int,
     ) -> FuseAction:
@@ -59,10 +60,10 @@ class RamsesV2ModifyPositionFuse(Fuse):
         token0: ChecksumAddress,
         token1: ChecksumAddress,
         token_id: int,
-        amount0_desired: int,
-        amount1_desired: int,
-        amount0_min: int,
-        amount1_min: int,
+        amount0_desired: Amount,
+        amount1_desired: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
         deadline: int,
     ) -> FuseAction:
         self._validate_address(token0, "token0")
@@ -89,9 +90,9 @@ class RamsesV2ModifyPositionFuse(Fuse):
     def decrease_liquidity(
         self,
         token_id: int,
-        liquidity: int,
-        amount0_min: int,
-        amount1_min: int,
+        liquidity: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
         deadline: int,
     ) -> FuseAction:
         self._validate_amount(liquidity, "liquidity")

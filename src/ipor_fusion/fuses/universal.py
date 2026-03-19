@@ -1,6 +1,7 @@
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
+from ipor_fusion.types import Amount
 
 
 class UniversalTokenSwapperFuse(Fuse):
@@ -8,7 +9,7 @@ class UniversalTokenSwapperFuse(Fuse):
         self,
         token_in: ChecksumAddress,
         token_out: ChecksumAddress,
-        amount_in: int,
+        amount_in: Amount,
         targets: list[ChecksumAddress],
         data: list[bytes],
     ) -> FuseAction:

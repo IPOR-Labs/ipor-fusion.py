@@ -4,7 +4,7 @@ from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion.types import MAX_UINT256
+from ipor_fusion.types import Amount, MAX_UINT256
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -35,7 +35,7 @@ class Fuse(ABC):
         return self._address
 
     @staticmethod
-    def _validate_amount(value: int, name: str) -> None:
+    def _validate_amount(value: Amount, name: str) -> None:
         if value <= 0:
             raise ValueError(f"{name} must be greater than zero, got {value}")
 
@@ -64,7 +64,7 @@ class StakeFuse(Fuse):
             [MAX_UINT256, self._staking_address],
         )
 
-    def unstake(self, amount: int) -> FuseAction:
+    def unstake(self, amount: Amount) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
             "exit((uint256,address))",

@@ -2,6 +2,7 @@ from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
+from ipor_fusion.types import Amount
 
 
 class UniswapV3SwapFuse(Fuse):
@@ -10,8 +11,8 @@ class UniswapV3SwapFuse(Fuse):
         token_in: ChecksumAddress,
         token_out: ChecksumAddress,
         fee: int,
-        amount_in: int,
-        min_amount_out: int,
+        amount_in: Amount,
+        min_amount_out: Amount,
     ) -> FuseAction:
         self._validate_address(token_in, "token_in")
         self._validate_address(token_out, "token_out")
@@ -34,10 +35,10 @@ class UniswapV3NewPositionFuse(Fuse):
         fee: int,
         tick_lower: int,
         tick_upper: int,
-        amount0_desired: int,
-        amount1_desired: int,
-        amount0_min: int,
-        amount1_min: int,
+        amount0_desired: Amount,
+        amount1_desired: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
         deadline: int,
     ) -> FuseAction:
         self._validate_address(token0, "token0")
@@ -75,10 +76,10 @@ class UniswapV3ModifyPositionFuse(Fuse):
         token0: ChecksumAddress,
         token1: ChecksumAddress,
         token_id: int,
-        amount0_desired: int,
-        amount1_desired: int,
-        amount0_min: int,
-        amount1_min: int,
+        amount0_desired: Amount,
+        amount1_desired: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
         deadline: int,
     ) -> FuseAction:
         self._validate_address(token0, "token0")
@@ -105,9 +106,9 @@ class UniswapV3ModifyPositionFuse(Fuse):
     def decrease_liquidity(
         self,
         token_id: int,
-        liquidity: int,
-        amount0_min: int,
-        amount1_min: int,
+        liquidity: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
         deadline: int,
     ) -> FuseAction:
         self._validate_amount(liquidity, "liquidity")

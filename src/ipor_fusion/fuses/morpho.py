@@ -2,11 +2,11 @@ from eth_abi import encode
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
-from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.types import Amount, MorphoBlueMarketId
 
 
 class MorphoSupplyFuse(Fuse):
-    def supply(self, market_id: MorphoBlueMarketId, amount: int) -> FuseAction:
+    def supply(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
             "enter((bytes32,uint256))",
@@ -14,7 +14,7 @@ class MorphoSupplyFuse(Fuse):
             [bytes.fromhex(market_id), amount],
         )
 
-    def withdraw(self, market_id: MorphoBlueMarketId, amount: int) -> FuseAction:
+    def withdraw(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
             "exit((bytes32,uint256))",
@@ -25,7 +25,7 @@ class MorphoSupplyFuse(Fuse):
 
 class MorphoFlashLoanFuse(Fuse):
     def flash_loan(
-        self, asset: ChecksumAddress, amount: int, actions: list[FuseAction]
+        self, asset: ChecksumAddress, amount: Amount, actions: list[FuseAction]
     ) -> FuseAction:
         self._validate_address(asset, "asset")
         self._validate_amount(amount, "amount")
@@ -40,7 +40,7 @@ class MorphoFlashLoanFuse(Fuse):
 
 class MorphoCollateralFuse(Fuse):
     def supply_collateral(
-        self, market_id: MorphoBlueMarketId, amount: int
+        self, market_id: MorphoBlueMarketId, amount: Amount
     ) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
@@ -50,7 +50,7 @@ class MorphoCollateralFuse(Fuse):
         )
 
     def withdraw_collateral(
-        self, market_id: MorphoBlueMarketId, amount: int
+        self, market_id: MorphoBlueMarketId, amount: Amount
     ) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
@@ -61,7 +61,7 @@ class MorphoCollateralFuse(Fuse):
 
 
 class MorphoBorrowFuse(Fuse):
-    def borrow(self, market_id: MorphoBlueMarketId, amount: int) -> FuseAction:
+    def borrow(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
             "enter((bytes32,uint256,uint256))",
@@ -69,7 +69,7 @@ class MorphoBorrowFuse(Fuse):
             [bytes.fromhex(market_id), amount, 0],
         )
 
-    def repay(self, market_id: MorphoBlueMarketId, amount: int) -> FuseAction:
+    def repay(self, market_id: MorphoBlueMarketId, amount: Amount) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
             "exit((bytes32,uint256,uint256))",
@@ -83,7 +83,7 @@ class MorphoClaimFuse(Fuse):
         self,
         universal_rewards_distributor: ChecksumAddress,
         rewards_token: ChecksumAddress,
-        claimable: int,
+        claimable: Amount,
         proof: list[str],
     ) -> FuseAction:
         self._validate_address(
