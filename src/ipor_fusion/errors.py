@@ -89,7 +89,7 @@ def _get_revert_reason(web3: Web3, tx_hash: bytes, receipt: TxReceipt) -> str | 
 
 
 class IporFusionError(Exception):
-    pass
+    """Base exception for all IPOR Fusion SDK errors."""
 
 
 class TransactionError(IporFusionError):

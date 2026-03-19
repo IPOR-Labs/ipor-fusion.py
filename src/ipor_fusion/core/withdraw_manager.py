@@ -24,6 +24,7 @@ class WithdrawRequestInfo:
 
 
 class WithdrawManager(ContractWrapper):
+    """Handles time-windowed withdrawal requests and fund releases."""
 
     def request(self, to_withdraw: Amount) -> TxReceipt:
         return self._send("request(uint256)", to_withdraw)

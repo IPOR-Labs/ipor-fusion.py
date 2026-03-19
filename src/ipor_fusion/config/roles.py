@@ -2,6 +2,8 @@ from enum import IntEnum
 
 
 class Roles(IntEnum):
+    """AccessManager role identifiers for PlasmaVault permissions."""
+
     ADMIN_ROLE = 0
     OWNER_ROLE = 1
     GUARDIAN_ROLE = 2

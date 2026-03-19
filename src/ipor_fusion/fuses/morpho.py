@@ -43,6 +43,8 @@ class MorphoFlashLoanFuse(Fuse):
 
 
 class MorphoCollateralFuse(Fuse):
+    """Fuse for supplying and withdrawing collateral on Morpho Blue markets."""
+
     def supply_collateral(
         self, market_id: MorphoBlueMarketId, amount: Amount
     ) -> FuseAction:

@@ -1,4 +1,6 @@
 class Markets:
+    """Numeric market identifiers used by PlasmaVault for protocol routing."""
+
     AAVE_V3 = 1
     COMPOUND_V3_USDC = 2
     GEARBOX_POOL_V3 = 3
