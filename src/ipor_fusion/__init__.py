@@ -1,3 +1,5 @@
+from importlib.metadata import PackageNotFoundError, version
+
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.core.plasma_vault import PlasmaVault
@@ -68,7 +70,10 @@ from ipor_fusion.types import (
     Period,
 )
 
-__version__ = "0.25.0"
+try:
+    __version__ = version("ipor_fusion")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 
 __all__ = [
     "__version__",

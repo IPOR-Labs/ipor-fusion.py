@@ -69,7 +69,6 @@ build_command = "rm -rf dist/* && pip install poetry && poetry build"
 logging_use_named_masks = true
 commit_parser = "angular"
 major_on_zero = true
-#version_variables = ["semantic_release/__init__.py:__version__"]
 version_toml = ["pyproject.toml:tool.poetry.version"]
 
 [tool.semantic_release.branches.main]
