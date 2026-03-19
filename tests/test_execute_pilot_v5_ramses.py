@@ -5,36 +5,43 @@ from eth_abi import decode
 from web3 import Web3
 from web3.types import TxReceipt
 
-from constants import ARBITRUM, ANVIL_WALLET_PRIVATE_KEY, DAY, MONTH
-from UniswapV3UniversalRouter import UniswapV3UniversalRouter
-from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
-from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
-    CheatingPlasmaVaultSystemFactory,
+from constants import (
+    ARBITRUM_PILOT_V5_PLASMA_VAULT,
+    ANVIL_WALLET,
+    DAY,
+    MONTH,
+    ARBITRUM_UNISWAP_V3_SWAP_FUSE,
+    ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE,
+    ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE,
+    ARBITRUM_RAMSES_V2_COLLECT_FUSE,
+    ARBITRUM_RAMSES_CLAIM_FUSE,
 )
-from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
-from ipor_fusion.Roles import Roles
+from UniswapV3UniversalRouter import UniswapV3UniversalRouter
+from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
+from ipor_fusion import Roles, PlasmaVault, AccessManager, ERC20, RewardsManager
+from ipor_fusion.fuses import (
+    UniswapV3SwapFuse,
+    RamsesV2NewPositionFuse,
+    RamsesV2ModifyPositionFuse,
+    RamsesV2CollectFuse,
+    RamsesClaimFuse,
+    extract_ramses_new_position_events,
+)
+from ipor_fusion.addresses import (
+    ARBITRUM_USDC,
+    ARBITRUM_USDT,
+    ARBITRUM_WETH,
+    ARBITRUM_RAM_TOKEN,
+    ARBITRUM_XRAM_TOKEN,
+)
 
 provider_url = os.getenv("ARBITRUM_PROVIDER_URL")
 
 anvil = AnvilTestContainerStarter(provider_url, 261946538)
 anvil.start()
 
-system = PlasmaVaultSystemFactory(
-    provider_url=anvil.get_anvil_http_url(),
-    private_key=ANVIL_WALLET_PRIVATE_KEY,
-).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
-
-cheating = CheatingPlasmaVaultSystemFactory(
-    provider_url=anvil.get_anvil_http_url(),
-    private_key=ANVIL_WALLET_PRIVATE_KEY,
-).get(ARBITRUM.PILOT.V5.PLASMA_VAULT)
-
 uniswap_v_3_universal_router_address = Web3.to_checksum_address(
     "0x5E325eDA8064b456f4781070C0738d849c824258"
-)
-uniswap_v3_universal_router = UniswapV3UniversalRouter(
-    transaction_executor=system.transaction_executor(),
-    universal_router_address=uniswap_v_3_universal_router_address,
 )
 
 
@@ -42,28 +49,45 @@ def test_should_open_new_position_ramses_v2():
     # setup
     anvil.reset_fork(261946538)
 
-    cheating.prank(system.access_manager().owner())
-    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
-
-    # given
-    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
-    usdt = system.erc20("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9")
-    swap = system.uniswap_v3().swap(
-        token_in_address=usdc.address(),
-        token_out_address=usdt.address(),
-        fee=100,
-        token_in_amount=int(500e6),
-        min_out_amount=0,
+    vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
+    forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
+    plasma_vault = PlasmaVault(forked_ctx, vault_address)
+    access_manager = AccessManager(
+        forked_ctx, plasma_vault.get_access_manager_address()
     )
 
-    system.plasma_vault().execute([swap])
+    owner = access_manager.owner()
+    forked_ctx.prank(owner)
+    access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
 
-    vault_usdc_balance_after_swap = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
-    vault_usdt_balance_after_swap = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    forked_ctx.prank(ANVIL_WALLET)
 
-    new_position = system.ramses_v2().new_position(
-        token0=usdc.address(),
-        token1=usdt.address(),
+    # given
+    usdc = ERC20(forked_ctx, ARBITRUM_USDC)
+    usdt = ERC20(forked_ctx, ARBITRUM_USDT)
+
+    uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
+    ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
+    ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
+    ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
+    ramses_claim = RamsesClaimFuse(ARBITRUM_RAMSES_CLAIM_FUSE)
+
+    swap = uniswap_swap.swap(
+        token_in=ARBITRUM_USDC,
+        token_out=ARBITRUM_USDT,
+        fee=100,
+        amount_in=int(500e6),
+        min_amount_out=0,
+    )
+
+    plasma_vault.execute([swap])
+
+    vault_usdc_balance_after_swap = usdc.balance_of(vault_address)
+    vault_usdt_balance_after_swap = usdt.balance_of(vault_address)
+
+    new_position = ramses_new_pos.new_position(
+        token0=ARBITRUM_USDC,
+        token1=ARBITRUM_USDT,
         fee=50,
         tick_lower=-100,
         tick_upper=100,
@@ -76,15 +100,11 @@ def test_should_open_new_position_ramses_v2():
     )
 
     # when
-    system.plasma_vault().execute([new_position])
+    plasma_vault.execute([new_position])
 
     # then
-    vault_usdc_balance_after_new_position = usdc.balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
-    vault_usdt_balance_after_new_position = usdt.balance_of(
-        ARBITRUM.PILOT.V5.PLASMA_VAULT
-    )
+    vault_usdc_balance_after_new_position = usdc.balance_of(vault_address)
+    vault_usdt_balance_after_new_position = usdt.balance_of(vault_address)
 
     assert (
         vault_usdc_balance_after_new_position - vault_usdc_balance_after_swap
@@ -100,23 +120,39 @@ def test_should_collect_all_after_decrease_liquidity():
     # given
     anvil.reset_fork(261946538)
 
-    cheating.prank(system.access_manager().owner())
-    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
-
-    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
-    usdt = system.erc20("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9")
-
-    swap_action = system.uniswap_v3().swap(
-        token_in_address=usdc.address(),
-        token_out_address=usdt.address(),
-        fee=100,
-        token_in_amount=int(500e6),
-        min_out_amount=0,
+    vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
+    forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
+    plasma_vault = PlasmaVault(forked_ctx, vault_address)
+    access_manager = AccessManager(
+        forked_ctx, plasma_vault.get_access_manager_address()
     )
 
-    new_position = system.ramses_v2().new_position(
-        token0=usdc.address(),
-        token1=usdt.address(),
+    owner = access_manager.owner()
+    forked_ctx.prank(owner)
+    access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
+    forked_ctx.prank(ANVIL_WALLET)
+
+    usdc = ERC20(forked_ctx, ARBITRUM_USDC)
+    usdt = ERC20(forked_ctx, ARBITRUM_USDT)
+
+    uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
+    ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
+    ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
+    ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
+    ramses_claim = RamsesClaimFuse(ARBITRUM_RAMSES_CLAIM_FUSE)
+
+    swap_action = uniswap_swap.swap(
+        token_in=ARBITRUM_USDC,
+        token_out=ARBITRUM_USDT,
+        fee=100,
+        amount_in=int(500e6),
+        min_amount_out=0,
+    )
+
+    new_position = ramses_new_pos.new_position(
+        token0=ARBITRUM_USDC,
+        token1=ARBITRUM_USDT,
         fee=50,
         tick_lower=-100,
         tick_upper=100,
@@ -128,15 +164,13 @@ def test_should_collect_all_after_decrease_liquidity():
         ve_ram_token_id=0,
     )
 
-    receipt = system.plasma_vault().execute([swap_action, new_position])
+    receipt = plasma_vault.execute([swap_action, new_position])
 
-    new_position_event = system.ramses_v2().extract_new_position_enter_events(receipt)[
-        0
-    ]
+    new_position_event = extract_ramses_new_position_events(receipt)[0]
 
     new_token_id = new_position_event.token_id
 
-    decrease_action = system.ramses_v2().decrease_position(
+    decrease_action = ramses_modify.decrease_liquidity(
         token_id=new_token_id,
         liquidity=new_position_event.liquidity,
         amount0_min=0,
@@ -144,20 +178,18 @@ def test_should_collect_all_after_decrease_liquidity():
         deadline=int(time.time()) + 100000,
     )
 
-    system.plasma_vault().execute([decrease_action])
+    plasma_vault.execute([decrease_action])
 
-    vault_usdc_balance_before_collect = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
-    vault_usdt_balance_before_collect = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdc_balance_before_collect = usdc.balance_of(vault_address)
+    vault_usdt_balance_before_collect = usdt.balance_of(vault_address)
 
-    collect_action = system.ramses_v2().collect(
-        token_ids=[new_token_id],
-    )
+    collect_action = ramses_collect.collect([new_token_id])
 
-    system.plasma_vault().execute([collect_action])
+    plasma_vault.execute([collect_action])
 
     # then
-    vault_usdc_balance_after_collect = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
-    vault_usdt_balance_after_collect = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdc_balance_after_collect = usdc.balance_of(vault_address)
+    vault_usdt_balance_after_collect = usdt.balance_of(vault_address)
 
     assert (
         vault_usdc_balance_after_collect - vault_usdc_balance_before_collect
@@ -168,9 +200,9 @@ def test_should_collect_all_after_decrease_liquidity():
         == 498999999
     ), "collect_usdt_change == 456205367"
 
-    close_position_action = system.ramses_v2().close_position(token_ids=[new_token_id])
+    close_position_action = ramses_new_pos.close_position([new_token_id])
 
-    receipt = system.plasma_vault().execute([close_position_action])
+    receipt = plasma_vault.execute([close_position_action])
     _, close_token_id = extract_data_form_new_position_exit_event(receipt)
 
     assert new_token_id == close_token_id, "new_token_id == close_token_id"
@@ -180,23 +212,38 @@ def test_should_increase_liquidity():
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
 
-    cheating.prank(system.access_manager().owner())
-    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
-
-    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
-    usdt = system.erc20("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9")
-
-    swap = system.uniswap_v3().swap(
-        token_in_address=usdc.address(),
-        token_out_address=usdt.address(),
-        fee=100,
-        token_in_amount=(int(500e6)),
-        min_out_amount=0,
+    vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
+    forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
+    plasma_vault = PlasmaVault(forked_ctx, vault_address)
+    access_manager = AccessManager(
+        forked_ctx, plasma_vault.get_access_manager_address()
     )
 
-    new_position = system.ramses_v2().new_position(
-        token0=usdc.address(),
-        token1=usdt.address(),
+    owner = access_manager.owner()
+    forked_ctx.prank(owner)
+    access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+
+    forked_ctx.prank(ANVIL_WALLET)
+
+    usdc = ERC20(forked_ctx, ARBITRUM_USDC)
+    usdt = ERC20(forked_ctx, ARBITRUM_USDT)
+
+    uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
+    ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
+    ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
+    ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
+
+    swap = uniswap_swap.swap(
+        token_in=ARBITRUM_USDC,
+        token_out=ARBITRUM_USDT,
+        fee=100,
+        amount_in=(int(500e6)),
+        min_amount_out=0,
+    )
+
+    new_position = ramses_new_pos.new_position(
+        token0=ARBITRUM_USDC,
+        token1=ARBITRUM_USDT,
         fee=50,
         tick_lower=-100,
         tick_upper=100,
@@ -208,14 +255,14 @@ def test_should_increase_liquidity():
         ve_ram_token_id=0,
     )
 
-    receipt = system.plasma_vault().execute([swap, new_position])
+    receipt = plasma_vault.execute([swap, new_position])
 
     _, new_token_id, *_ = extract_data_form_new_position_enter_event(receipt)
 
     # Increase position
-    increase_action = system.ramses_v2().increase_position(
-        token0=usdc.address(),
-        token1=usdt.address(),
+    increase_action = ramses_modify.increase_liquidity(
+        token0=ARBITRUM_USDC,
+        token1=ARBITRUM_USDT,
         token_id=new_token_id,
         amount0_desired=int(99e6),
         amount1_desired=int(99e6),
@@ -224,15 +271,15 @@ def test_should_increase_liquidity():
         deadline=int(time.time()) + 100,
     )
 
-    vault_usdc_balance_before_increase = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
-    vault_usdt_balance_before_increase = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdc_balance_before_increase = usdc.balance_of(vault_address)
+    vault_usdt_balance_before_increase = usdt.balance_of(vault_address)
 
     # when
-    system.plasma_vault().execute([increase_action])
+    plasma_vault.execute([increase_action])
 
     # then
-    vault_usdc_balance_after_increase = usdc.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
-    vault_usdt_balance_after_increase = usdt.balance_of(ARBITRUM.PILOT.V5.PLASMA_VAULT)
+    vault_usdc_balance_after_increase = usdc.balance_of(vault_address)
+    vault_usdt_balance_after_increase = usdt.balance_of(vault_address)
 
     assert (
         vault_usdc_balance_after_increase - vault_usdc_balance_before_increase
@@ -248,26 +295,44 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
     # given
     anvil.reset_fork(261946538)
 
-    cheating.prank(system.access_manager().owner())
-    cheating.access_manager().grant_role(Roles.ATOMIST_ROLE, system.alpha(), 0)
-    cheating.access_manager().grant_role(Roles.ALPHA_ROLE, system.alpha(), 0)
-    cheating.access_manager().grant_role(Roles.CLAIM_REWARDS_ROLE, system.alpha(), 0)
-    cheating.access_manager().grant_role(Roles.TRANSFER_REWARDS_ROLE, system.alpha(), 0)
-
-    usdc = system.erc20("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
-    usdt = system.erc20("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9")
-
-    swap = system.uniswap_v3().swap(
-        token_in_address=usdc.address(),
-        token_out_address=usdt.address(),
-        fee=100,
-        token_in_amount=int(500e6),
-        min_out_amount=0,
+    vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
+    forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
+    plasma_vault = PlasmaVault(forked_ctx, vault_address)
+    access_manager = AccessManager(
+        forked_ctx, plasma_vault.get_access_manager_address()
+    )
+    rewards = RewardsManager(
+        forked_ctx, plasma_vault.get_rewards_claim_manager_address()
     )
 
-    new_position = system.ramses_v2().new_position(
-        token0=usdc.address(),
-        token1=usdt.address(),
+    owner = access_manager.owner()
+    forked_ctx.prank(owner)
+    access_manager.grant_role(Roles.ATOMIST_ROLE, ANVIL_WALLET, 0)
+    access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+    access_manager.grant_role(Roles.CLAIM_REWARDS_ROLE, ANVIL_WALLET, 0)
+    access_manager.grant_role(Roles.TRANSFER_REWARDS_ROLE, ANVIL_WALLET, 0)
+
+    forked_ctx.prank(ANVIL_WALLET)
+
+    usdc = ERC20(forked_ctx, ARBITRUM_USDC)
+
+    uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
+    ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
+    ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
+    ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
+    ramses_claim = RamsesClaimFuse(ARBITRUM_RAMSES_CLAIM_FUSE)
+
+    swap = uniswap_swap.swap(
+        token_in=ARBITRUM_USDC,
+        token_out=ARBITRUM_USDT,
+        fee=100,
+        amount_in=int(500e6),
+        min_amount_out=0,
+    )
+
+    new_position = ramses_new_pos.new_position(
+        token0=ARBITRUM_USDC,
+        token1=ARBITRUM_USDT,
         fee=50,
         tick_lower=-100,
         tick_upper=100,
@@ -279,82 +344,92 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
         ve_ram_token_id=0,
     )
 
-    tx_result = system.plasma_vault().execute([swap, new_position])
+    tx_result = plasma_vault.execute([swap, new_position])
 
     _, new_token_id, *_ = extract_data_form_new_position_enter_event(tx_result)
 
     # One month later
     anvil.move_time(MONTH)
 
-    claim_action = system.ramses_v2().claim(
+    claim_action = ramses_claim.claim(
         token_ids=[new_token_id],
         token_rewards=[
-            [system.ramses_v2().ram().address(), system.ramses_v2().x_ram().address()]
+            [
+                ARBITRUM_RAM_TOKEN,
+                ARBITRUM_XRAM_TOKEN,
+            ]
         ],
     )
 
     # Claim RAM rewards
-    system.rewards_claim_manager().claim_rewards([claim_action])
+    rewards.claim_rewards([claim_action])
 
-    ram_after_claim = (
-        system.ramses_v2().ram().balance_of(system.rewards_claim_manager().address())
-    )
+    ram_after_claim = ERC20(forked_ctx, ARBITRUM_RAM_TOKEN).balance_of(rewards.address)
 
     assert ram_after_claim > 0
 
-    # Transfer REM to ALPHA wallet
-    system.rewards_claim_manager().transfer(
-        system.ramses_v2().ram().address(), system.alpha(), ram_after_claim
-    )
+    # Transfer RAM to ALPHA wallet
+    rewards.transfer(ARBITRUM_RAM_TOKEN, ANVIL_WALLET, ram_after_claim)
 
-    ram_after_transfer = system.ramses_v2().ram().balance_of(system.alpha())
+    ram_after_transfer = ERC20(forked_ctx, ARBITRUM_RAM_TOKEN).balance_of(ANVIL_WALLET)
     assert ram_after_transfer > 0
 
-    usdc_before_swap_ram = usdc.balance_of(system.alpha())
+    usdc_before_swap_ram = usdc.balance_of(ANVIL_WALLET)
 
-    weth = cheating.erc20("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1")
+    weth = ERC20(forked_ctx, ARBITRUM_WETH)
+
+    # Create context for uniswap router (needs signer)
+    uniswap_v3_universal_router = UniswapV3UniversalRouter(
+        ctx=forked_ctx,
+        universal_router_address=uniswap_v_3_universal_router_address,
+    )
 
     # swap RAM -> USDC
     path = [
-        system.ramses_v2().ram().address(),
+        ARBITRUM_RAM_TOKEN,
         10000,
-        weth.address(),
+        weth.address,
         500,
-        usdc.address(),
+        ARBITRUM_USDC,
     ]
-    uniswap_v3_universal_router.swap(
-        system.ramses_v2().ram().address(), path, ram_after_transfer
-    )
+    uniswap_v3_universal_router.swap(ARBITRUM_RAM_TOKEN, path, ram_after_transfer)
 
-    usdc_after_swap_ram = usdc.balance_of(system.alpha())
+    usdc_after_swap_ram = usdc.balance_of(ANVIL_WALLET)
 
     rewards_in_usdc = usdc_after_swap_ram - usdc_before_swap_ram
     assert rewards_in_usdc > 0
 
     # Transfer USDC to rewards_claim_manager
-    usdc.transfer(to=system.rewards_claim_manager().address(), amount=rewards_in_usdc)
+    forked_ctx.send(
+        ARBITRUM_USDC,
+        function_signature_to_4byte_selector_transfer(rewards.address, rewards_in_usdc),
+    )
 
-    usdc_after_transfer = usdc.balance_of(system.alpha())
+    usdc_after_transfer = usdc.balance_of(ANVIL_WALLET)
     assert usdc_after_transfer == 0
 
     # Update balance on rewards_claim_manager
-    system.rewards_claim_manager().update_balance()
-    rewards_claim_manager_balance_before_vesting = usdc.balance_of(
-        system.rewards_claim_manager().address()
-    )
+    rewards.update_balance()
+    rewards_claim_manager_balance_before_vesting = usdc.balance_of(rewards.address)
     assert rewards_claim_manager_balance_before_vesting > 0
 
-    system.rewards_claim_manager().update_balance()
+    rewards.update_balance()
 
     # One month later
     anvil.move_time(DAY)
-    system.rewards_claim_manager().update_balance()
+    rewards.update_balance()
 
-    rewards_claim_manager_balance_after_vesting = usdc.balance_of(
-        system.rewards_claim_manager().address()
-    )
+    rewards_claim_manager_balance_after_vesting = usdc.balance_of(rewards.address)
 
     assert rewards_claim_manager_balance_after_vesting == 0
+
+
+def function_signature_to_4byte_selector_transfer(to, amount):
+    from eth_abi import encode
+    from eth_utils import function_signature_to_4byte_selector
+
+    sig = function_signature_to_4byte_selector("transfer(address,uint256)")
+    return sig + encode(["address", "uint256"], [to, amount])
 
 
 def extract_data_form_new_position_enter_event(

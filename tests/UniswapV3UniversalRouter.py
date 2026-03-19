@@ -3,17 +3,17 @@ from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion.TransactionExecutor import TransactionExecutor
+from ipor_fusion.core.context import Web3Context
 
 
 class UniswapV3UniversalRouter:
 
     def __init__(
         self,
-        transaction_executor: TransactionExecutor,
+        ctx: Web3Context,
         universal_router_address: ChecksumAddress,
     ):
-        self._transaction_executor = transaction_executor
+        self._ctx = ctx
         self._universal_router_address = universal_router_address
 
     def swap(self, token_in, path, amount_in):
@@ -25,7 +25,7 @@ class UniswapV3UniversalRouter:
             [self._universal_router_address, amount_in],
         )
         function_call_0 = function_selector_0 + function_args_0
-        self._transaction_executor.execute(token_in, function_call_0)
+        self._ctx.send(token_in, function_call_0)
         path = encode_packed(
             self.generate_types_by_length(len(path)),
             path,
@@ -50,9 +50,7 @@ class UniswapV3UniversalRouter:
             [encode_packed(["bytes1"], [bytes.fromhex("00")]), inputs],
         )
         function_call_1 = function_selector_1 + function_args_1
-        self._transaction_executor.execute(
-            self._universal_router_address, function_call_1
-        )
+        self._ctx.send(self._universal_router_address, function_call_1)
 
     @staticmethod
     def generate_types_by_length(length):

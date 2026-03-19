@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+from eth_account import Account
+from eth_typing import ChecksumAddress
+from hexbytes import HexBytes
+from web3 import Web3
+from web3.types import TxReceipt, LogReceipt, BlockIdentifier, FilterParams
+
+from ipor_fusion.errors import TransactionError
+
+
+class Web3Context:
+    DEFAULT_TRANSACTION_MAX_PRIORITY_FEE = 2_000_000_000
+    GAS_PRICE_MARGIN = 25
+
+    def __init__(
+        self,
+        web3: Web3,
+        chain_id: int,
+        signer: ChecksumAddress | None = None,
+        private_key: str | None = None,
+        gas_multiplier: float = 1.25,
+    ):
+        self.web3 = web3
+        self.chain_id = chain_id
+        self.signer = signer
+        self.private_key = private_key
+        self.gas_multiplier = gas_multiplier
+
+    @classmethod
+    def from_url(
+        cls,
+        url: str,
+        private_key: str | None = None,
+        gas_multiplier: float = 1.25,
+    ) -> "Web3Context":
+        web3 = Web3(Web3.HTTPProvider(url))
+        chain_id = web3.eth.chain_id
+
+        signer = None
+        if private_key:
+            account = Account.from_key(private_key)
+            signer = Web3.to_checksum_address(account.address)
+
+        return cls(
+            web3=web3,
+            chain_id=chain_id,
+            signer=signer,
+            private_key=private_key,
+            gas_multiplier=gas_multiplier,
+        )
+
+    def call(self, to: ChecksumAddress, data: bytes) -> HexBytes:
+        return self.web3.eth.call({"to": to, "data": data})
+
+    def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
+        if not self.private_key:
+            raise ValueError("Private key required for sending transactions")
+
+        account = Account.from_key(self.private_key)
+        nonce = self.web3.eth.get_transaction_count(account.address)
+        gas_price = self.web3.eth.gas_price
+        max_fee_per_gas = self._calculate_max_fee_per_gas(gas_price)
+        max_priority_fee_per_gas = self._get_max_priority_fee(gas_price)
+
+        data_hex = f"0x{data.hex()}"
+        estimated_gas = self._estimate_gas(to, data_hex, account.address)
+
+        transaction = {
+            "chainId": self.chain_id,
+            "gas": estimated_gas,
+            "maxFeePerGas": max_fee_per_gas,
+            "maxPriorityFeePerGas": max_priority_fee_per_gas,
+            "to": to,
+            "from": account.address,
+            "nonce": nonce,
+            "data": data_hex,
+        }
+
+        signed_tx = self.web3.eth.account.sign_transaction(
+            transaction, self.private_key
+        )
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+        if receipt["status"] != 1:
+            raise TransactionError("Transaction failed", tx_hash=tx_hash.hex())
+        return receipt
+
+    def get_logs(
+        self,
+        contract_address: ChecksumAddress,
+        topics: list[str],
+        from_block: BlockIdentifier = 0,
+        to_block: BlockIdentifier = "latest",
+    ) -> list[LogReceipt]:
+        filter_params: FilterParams = {
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": contract_address,
+            "topics": topics,  # type: ignore[typeddict-item]
+        }
+        return self.web3.eth.get_logs(filter_params)
+
+    def get_block(self, block: BlockIdentifier = "latest"):
+        return self.web3.eth.get_block(block)
+
+    def _estimate_gas(self, to: ChecksumAddress, data: str, from_address: str) -> int:
+        estimated = self.web3.eth.estimate_gas(
+            {"to": to, "from": from_address, "data": data}  # type: ignore[typeddict-item]
+        )
+        return int(self.gas_multiplier * estimated)
+
+    def _calculate_max_fee_per_gas(self, gas_price: int) -> int:
+        return gas_price + self._percent_of(gas_price, self.GAS_PRICE_MARGIN)
+
+    def _get_max_priority_fee(self, gas_price: int) -> int:
+        return min(self.DEFAULT_TRANSACTION_MAX_PRIORITY_FEE, gas_price // 10)
+
+    @staticmethod
+    def _percent_of(value: int, percentage: int) -> int:
+        return value * percentage // 100
