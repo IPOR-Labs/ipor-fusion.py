@@ -1,15 +1,16 @@
 from dataclasses import dataclass
 
-from eth_abi import decode
 from eth_typing import ChecksumAddress
-from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
+from ipor_fusion.fuses.events import extract_events
 from ipor_fusion.types import Amount, Fee, Tick, TokenId
 
 
 class RamsesV2NewPositionFuse(Fuse):
+    """Fuse for minting and closing liquidity positions on Ramses V2."""
+
     def new_position(
         self,
         *,
@@ -54,6 +55,8 @@ class RamsesV2NewPositionFuse(Fuse):
 
 
 class RamsesV2ModifyPositionFuse(Fuse):
+    """Fuse for increasing and decreasing liquidity on Ramses V2 positions."""
+
     def increase_liquidity(
         self,
         *,
@@ -89,6 +92,7 @@ class RamsesV2ModifyPositionFuse(Fuse):
 
     def decrease_liquidity(
         self,
+        *,
         token_id: TokenId,
         liquidity: Amount,
         amount0_min: Amount,
@@ -104,13 +108,19 @@ class RamsesV2ModifyPositionFuse(Fuse):
 
 
 class RamsesV2CollectFuse(Fuse):
+    """Fuse for collecting accrued fees from Ramses V2 positions."""
+
     def collect(self, token_ids: list[TokenId]) -> FuseAction:
         self._validate_non_empty_list(token_ids, "token_ids")
         return self._action_raw("enter((uint256[]))", [[token_ids]])
 
 
 class RamsesClaimFuse(Fuse):
-    def claim(self, token_ids: list[int], token_rewards: list[list[str]]) -> FuseAction:
+    """Fuse for claiming veRAM reward tokens from Ramses V2 gauges."""
+
+    def claim(
+        self, *, token_ids: list[int], token_rewards: list[list[str]]
+    ) -> FuseAction:
         self._validate_non_empty_list(token_ids, "token_ids")
         self._validate_non_empty_list(token_rewards, "token_rewards")
         if len(token_ids) != len(token_rewards):
@@ -139,45 +149,26 @@ class RamsesNewPositionEvent:
 
 
 class RamsesEvents:
+    """Decoder for Ramses V2 fuse events emitted in transaction receipts."""
+
     @staticmethod
     def extract_new_position_events(
         receipt: TxReceipt,
     ) -> list[RamsesNewPositionEvent]:
-        event_signature_hash = Web3.keccak(
-            text="RamsesV2NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
+        return extract_events(
+            receipt,
+            "RamsesV2NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)",
+            [
+                "address",
+                "uint256",
+                "uint128",
+                "uint256",
+                "uint256",
+                "address",
+                "address",
+                "uint24",
+                "int24",
+                "int24",
+            ],
+            RamsesNewPositionEvent,
         )
-        events = []
-        for log in receipt["logs"]:
-            if log["topics"][0] == event_signature_hash:
-                decoded = tuple(
-                    decode(
-                        [
-                            "address",
-                            "uint256",
-                            "uint128",
-                            "uint256",
-                            "uint256",
-                            "address",
-                            "address",
-                            "uint24",
-                            "int24",
-                            "int24",
-                        ],
-                        log["data"],
-                    )
-                )
-                events.append(
-                    RamsesNewPositionEvent(
-                        version=decoded[0],
-                        token_id=decoded[1],
-                        liquidity=decoded[2],
-                        amount0=decoded[3],
-                        amount1=decoded[4],
-                        sender=decoded[5],
-                        recipient=decoded[6],
-                        fee=decoded[7],
-                        tick_lower=decoded[8],
-                        tick_upper=decoded[9],
-                    )
-                )
-        return events

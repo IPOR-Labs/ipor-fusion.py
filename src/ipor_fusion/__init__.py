@@ -69,6 +69,7 @@ from ipor_fusion.types import (
     MorphoBlueMarketId,
     Price,
     Period,
+    MAX_UINT256,
 )
 
 try:
@@ -132,6 +133,7 @@ __all__ = [
     "MorphoBlueMarketId",
     "Price",
     "Period",
+    "MAX_UINT256",
     "MorphoReader",
     "MorphoMarket",
     "MorphoPosition",

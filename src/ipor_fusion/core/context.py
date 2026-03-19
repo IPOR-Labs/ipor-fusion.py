@@ -6,7 +6,7 @@ from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import TxReceipt, LogReceipt, BlockIdentifier, FilterParams
 
-from ipor_fusion.errors import TransactionError, _get_revert_reason
+from ipor_fusion.errors import TransactionError, get_revert_reason
 
 
 class Web3Context:
@@ -67,42 +67,45 @@ class Web3Context:
     def call(self, to: ChecksumAddress, data: bytes) -> HexBytes:
         return self.web3.eth.call({"to": to, "data": data})
 
-    def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
-        if not self._private_key or not self._signer:
-            raise ValueError("Private key required for sending transactions")
-
-        nonce = self.web3.eth.get_transaction_count(self._signer)
+    def _build_transaction(self, to: ChecksumAddress, data: bytes) -> dict:
+        assert self.signer is not None
+        nonce = self.web3.eth.get_transaction_count(self.signer)
         gas_price = self.web3.eth.gas_price
         max_fee_per_gas = self._calculate_max_fee_per_gas(gas_price)
         max_priority_fee_per_gas = self._get_max_priority_fee(gas_price)
-
         data_hex = f"0x{data.hex()}"
-        estimated_gas = self._estimate_gas(to, data_hex, self._signer)
-
-        transaction = {
+        estimated_gas = self._estimate_gas(to, data_hex, self.signer)
+        return {
             "chainId": self.chain_id,
             "gas": estimated_gas,
             "maxFeePerGas": max_fee_per_gas,
             "maxPriorityFeePerGas": max_priority_fee_per_gas,
             "to": to,
-            "from": self._signer,
+            "from": self.signer,
             "nonce": nonce,
             "data": data_hex,
         }
 
-        signed_tx = self.web3.eth.account.sign_transaction(
-            transaction, self._private_key
-        )
-        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+    def _handle_receipt(self, tx_hash, receipt) -> TxReceipt:
         if receipt["status"] != 1:
-            reason = _get_revert_reason(self.web3, tx_hash, receipt)
+            reason = get_revert_reason(self.web3, tx_hash, receipt)
             raise TransactionError(
                 "Transaction failed",
                 tx_hash=tx_hash.hex(),
                 revert_reason=reason,
             )
         return receipt
+
+    def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
+        if not self._private_key or not self._signer:
+            raise ValueError("Private key required for sending transactions")
+        transaction = self._build_transaction(to, data)
+        signed_tx = self.web3.eth.account.sign_transaction(
+            transaction, self._private_key
+        )
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+        return self._handle_receipt(tx_hash, receipt)
 
     def get_logs(
         self,

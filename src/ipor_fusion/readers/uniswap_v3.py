@@ -5,6 +5,7 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.contract import ContractWrapper
+from ipor_fusion.types import Amount, Fee, Tick
 
 
 @dataclass
@@ -15,14 +16,14 @@ class UniswapV3Position:
     operator: ChecksumAddress
     token0: ChecksumAddress
     token1: ChecksumAddress
-    fee: int
-    tick_lower: int
-    tick_upper: int
-    liquidity: int
+    fee: Fee
+    tick_lower: Tick
+    tick_upper: Tick
+    liquidity: Amount
     fee_growth_inside0_last_x128: int
     fee_growth_inside1_last_x128: int
-    tokens_owed0: int
-    tokens_owed1: int
+    tokens_owed0: Amount
+    tokens_owed1: Amount
 
 
 class UniswapV3Reader(ContractWrapper):

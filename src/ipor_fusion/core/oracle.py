@@ -16,6 +16,7 @@ class AssetPriceSource:
 
 
 class PriceOracleMiddleware(ContractWrapper):
+    """Middleware for querying on-chain asset prices."""
 
     def get_source_of_asset_price(self, asset: ChecksumAddress) -> ChecksumAddress:
         (value,) = decode(

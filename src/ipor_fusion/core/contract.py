@@ -18,17 +18,16 @@ class ContractWrapper:
     def address(self) -> ChecksumAddress:
         return self._address
 
-    def _call(self, signature: str, *args) -> bytes:
+    def _encode(self, signature: str, *args) -> bytes:
         selector = function_signature_to_4byte_selector(signature)
         types = _parse_param_types(signature)
-        data = selector + encode(types, list(args)) if types else selector
-        return self._ctx.call(self._address, data)
+        return selector + encode(types, list(args)) if types else selector
+
+    def _call(self, signature: str, *args) -> bytes:
+        return self._ctx.call(self._address, self._encode(signature, *args))
 
     def _send(self, signature: str, *args) -> TxReceipt:
-        selector = function_signature_to_4byte_selector(signature)
-        types = _parse_param_types(signature)
-        data = selector + encode(types, list(args)) if types else selector
-        return self._ctx.send(self._address, data)
+        return self._ctx.send(self._address, self._encode(signature, *args))
 
 
 def _parse_param_types(signature: str) -> list[str]:

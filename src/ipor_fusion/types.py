@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import NewType
+from typing import ClassVar, NewType
 
 from eth_typing import ChecksumAddress
 
@@ -37,10 +37,10 @@ class Price:
 class Period(int):
     """Time duration in seconds with common unit constants."""
 
-    SECOND: "Period"
-    MINUTE: "Period"
-    HOUR: "Period"
-    DAY: "Period"
+    SECOND: ClassVar["Period"]
+    MINUTE: ClassVar["Period"]
+    HOUR: ClassVar["Period"]
+    DAY: ClassVar["Period"]
 
 
 Period.SECOND = Period(1)

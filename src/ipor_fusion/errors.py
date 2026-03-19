@@ -57,7 +57,7 @@ def _decode_revert_reason(data: bytes) -> str:
     return hex_str
 
 
-def _get_revert_reason(web3: Web3, tx_hash: bytes, receipt: TxReceipt) -> str | None:
+def get_revert_reason(web3: Web3, tx_hash: bytes, receipt: TxReceipt) -> str | None:
     """Replay a failed tx as eth_call to capture revert data."""
     try:
         tx = web3.eth.get_transaction(tx_hash)  # type: ignore[arg-type]

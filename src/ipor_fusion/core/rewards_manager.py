@@ -9,6 +9,7 @@ from ipor_fusion.types import Amount
 
 
 class RewardsManager(ContractWrapper):
+    """Manager for claiming and transferring rewards from PlasmaVault."""
 
     def transfer(
         self, asset: ChecksumAddress, to: ChecksumAddress, amount: int

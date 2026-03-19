@@ -5,8 +5,11 @@ from ipor_fusion.types import Amount
 
 
 class UniversalTokenSwapperFuse(Fuse):
+    """Fuse for executing arbitrary token swaps through whitelisted DEX targets."""
+
     def swap(
         self,
+        *,
         token_in: ChecksumAddress,
         token_out: ChecksumAddress,
         amount_in: Amount,

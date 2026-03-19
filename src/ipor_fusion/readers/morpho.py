@@ -5,17 +5,17 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.contract import ContractWrapper
-from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.types import Amount, MorphoBlueMarketId, Shares
 
 
 @dataclass
 class MorphoMarket:
     """On-chain state of a Morpho Blue lending market."""
 
-    total_supply_assets: int
-    total_supply_shares: int
-    total_borrow_assets: int
-    total_borrow_shares: int
+    total_supply_assets: Amount
+    total_supply_shares: Shares
+    total_borrow_assets: Amount
+    total_borrow_shares: Shares
     last_update: int
     fee: int
 
@@ -24,9 +24,9 @@ class MorphoMarket:
 class MorphoPosition:
     """User position within a Morpho Blue market."""
 
-    supply_shares: int
-    borrow_shares: int
-    collateral: int
+    supply_shares: Shares
+    borrow_shares: Shares
+    collateral: Amount
 
 
 @dataclass
@@ -44,7 +44,7 @@ class MorphoReader(ContractWrapper):
     """Reader for Morpho Blue protocol on-chain state."""
 
     def market(self, market_id: MorphoBlueMarketId) -> MorphoMarket:
-        raw = self._call("market(bytes32)", bytes.fromhex(market_id))
+        raw = self._call("market(bytes32)", bytes.fromhex(market_id.removeprefix("0x")))
         values = decode(
             ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
             raw,
@@ -54,12 +54,18 @@ class MorphoReader(ContractWrapper):
     def position(
         self, market_id: MorphoBlueMarketId, user: ChecksumAddress
     ) -> MorphoPosition:
-        raw = self._call("position(bytes32,address)", bytes.fromhex(market_id), user)
+        raw = self._call(
+            "position(bytes32,address)",
+            bytes.fromhex(market_id.removeprefix("0x")),
+            user,
+        )
         values = decode(["uint256", "uint128", "uint128"], raw)
         return MorphoPosition(*values)
 
     def market_params(self, market_id: MorphoBlueMarketId) -> MorphoMarketParams:
-        raw = self._call("idToMarketParams(bytes32)", bytes.fromhex(market_id))
+        raw = self._call(
+            "idToMarketParams(bytes32)", bytes.fromhex(market_id.removeprefix("0x"))
+        )
         loan, collateral, oracle, irm, lltv = decode(
             ["address", "address", "address", "address", "uint256"], raw
         )
