@@ -26,8 +26,8 @@ class FuseAction:
 
 class Fuse(ABC):
     def __init__(self, address: ChecksumAddress):
-        if not address:
-            raise ValueError("Fuse address is required")
+        if not address or address == ZERO_ADDRESS:
+            raise ValueError("Fuse address is required and must not be zero address")
         self._address = address
 
     @property
@@ -43,6 +43,16 @@ class Fuse(ABC):
     def _validate_address(value: str, name: str) -> None:
         if not value or value == ZERO_ADDRESS:
             raise ValueError(f"{name} must not be zero address")
+
+    @staticmethod
+    def _validate_non_empty_list(value: list, name: str) -> None:
+        if not value:
+            raise ValueError(f"{name} must not be empty")
+
+    @staticmethod
+    def _validate_token_id(value: int, name: str) -> None:
+        if value < 0:
+            raise ValueError(f"{name} must not be negative, got {value}")
 
     def _action_raw(
         self, signature: str, abi_types: list[str], values: list

@@ -16,6 +16,10 @@ class UniversalTokenSwapperFuse(Fuse):
         self._validate_address(token_in, "token_in")
         self._validate_address(token_out, "token_out")
         self._validate_amount(amount_in, "amount_in")
+        if len(targets) != len(data):
+            raise ValueError(
+                f"targets and data must have the same length, got {len(targets)} and {len(data)}"
+            )
         return self._action_raw(
             "enter((address,address,uint256,(address[],bytes[])))",
             ["(address,address,uint256,(address[],bytes[]))"],

@@ -649,6 +649,10 @@ class TestAddressValidation:
         with pytest.raises(ValueError, match="rewards_token"):
             MorphoClaimFuse(FUSE_ADDR).claim(TOKEN_A, ZERO_ADDR, 100, [])
 
+    def test_aave_borrow_rejects_zero_asset(self):
+        with pytest.raises(ValueError, match="asset"):
+            AaveV3BorrowFuse(FUSE_ADDR).borrow(ZERO_ADDR, 1000)
+
 
 class TestSlippageParamsAllowZero:
     """min_amount_out and amount_min params must accept zero (slippage tolerance)."""
@@ -679,3 +683,85 @@ class TestSlippageParamsAllowZero:
             token_id=1, liquidity=500, amount0_min=0, amount1_min=0, deadline=99
         )
         assert action.fuse == FUSE_ADDR
+
+
+class TestFuseConstructorValidation:
+    """Fuse constructor must reject zero and empty addresses."""
+
+    def test_zero_address_rejected(self):
+        with pytest.raises(ValueError, match="zero address"):
+            AaveV3SupplyFuse(ZERO_ADDR)
+
+    def test_none_address_rejected(self):
+        with pytest.raises(ValueError):
+            AaveV3SupplyFuse(None)  # type: ignore[arg-type]
+
+
+class TestListParameterValidation:
+    """Empty token_ids lists must raise ValueError."""
+
+    def test_uniswap_close_position_rejects_empty_list(self):
+        with pytest.raises(ValueError, match="token_ids"):
+            UniswapV3NewPositionFuse(FUSE_ADDR).close_position([])
+
+    def test_uniswap_collect_rejects_empty_list(self):
+        with pytest.raises(ValueError, match="token_ids"):
+            UniswapV3CollectFuse(FUSE_ADDR).collect([])
+
+    def test_ramses_close_position_rejects_empty_list(self):
+        with pytest.raises(ValueError, match="token_ids"):
+            RamsesV2NewPositionFuse(FUSE_ADDR).close_position([])
+
+    def test_ramses_collect_rejects_empty_list(self):
+        with pytest.raises(ValueError, match="token_ids"):
+            RamsesV2CollectFuse(FUSE_ADDR).collect([])
+
+
+class TestTokenIdValidation:
+    """Negative token_id must raise ValueError."""
+
+    def test_uniswap_decrease_liquidity_rejects_negative_token_id(self):
+        with pytest.raises(ValueError, match="token_id"):
+            UniswapV3ModifyPositionFuse(FUSE_ADDR).decrease_liquidity(
+                token_id=-1, liquidity=500, amount0_min=0, amount1_min=0, deadline=99
+            )
+
+    def test_uniswap_increase_liquidity_rejects_negative_token_id(self):
+        with pytest.raises(ValueError, match="token_id"):
+            UniswapV3ModifyPositionFuse(FUSE_ADDR).increase_liquidity(
+                TOKEN_A, TOKEN_B, -1, 1000, 2000, 0, 0, 99999
+            )
+
+    def test_ramses_decrease_liquidity_rejects_negative_token_id(self):
+        with pytest.raises(ValueError, match="token_id"):
+            RamsesV2ModifyPositionFuse(FUSE_ADDR).decrease_liquidity(
+                token_id=-1, liquidity=400, amount0_min=0, amount1_min=0, deadline=99
+            )
+
+    def test_ramses_increase_liquidity_rejects_negative_token_id(self):
+        with pytest.raises(ValueError, match="token_id"):
+            RamsesV2ModifyPositionFuse(FUSE_ADDR).increase_liquidity(
+                TOKEN_A, TOKEN_B, -1, 1000, 2000, 0, 0, 99999
+            )
+
+    def test_uniswap_decrease_liquidity_allows_zero_token_id(self):
+        action = UniswapV3ModifyPositionFuse(FUSE_ADDR).decrease_liquidity(
+            token_id=0, liquidity=500, amount0_min=0, amount1_min=0, deadline=99
+        )
+        assert action.fuse == FUSE_ADDR
+
+
+class TestUniversalSwapEdgeCases:
+    """Mismatched targets/data lengths must raise ValueError."""
+
+    def test_mismatched_targets_data_lengths(self):
+        with pytest.raises(ValueError, match="same length"):
+            UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+                TOKEN_A, TOKEN_B, 100, [TOKEN_A], []
+            )
+
+    def test_mismatched_data_longer_than_targets(self):
+        with pytest.raises(ValueError, match="same length"):
+            UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+                TOKEN_A, TOKEN_B, 100, [], [b"\xaa"]
+            )

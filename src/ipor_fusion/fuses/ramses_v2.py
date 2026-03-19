@@ -51,6 +51,7 @@ class RamsesV2NewPositionFuse(Fuse):
         )
 
     def close_position(self, token_ids: list[int]) -> FuseAction:
+        self._validate_non_empty_list(token_ids, "token_ids")
         return self._action_raw("exit((uint256[]))", ["(uint256[])"], [[token_ids]])
 
 
@@ -68,6 +69,7 @@ class RamsesV2ModifyPositionFuse(Fuse):
     ) -> FuseAction:
         self._validate_address(token0, "token0")
         self._validate_address(token1, "token1")
+        self._validate_token_id(token_id, "token_id")
         self._validate_amount(amount0_desired, "amount0_desired")
         self._validate_amount(amount1_desired, "amount1_desired")
         return self._action_raw(
@@ -95,6 +97,7 @@ class RamsesV2ModifyPositionFuse(Fuse):
         amount1_min: Amount,
         deadline: int,
     ) -> FuseAction:
+        self._validate_token_id(token_id, "token_id")
         self._validate_amount(liquidity, "liquidity")
         return self._action_raw(
             "exit((uint256,uint128,uint256,uint256,uint256))",
@@ -105,6 +108,7 @@ class RamsesV2ModifyPositionFuse(Fuse):
 
 class RamsesV2CollectFuse(Fuse):
     def collect(self, token_ids: list[int]) -> FuseAction:
+        self._validate_non_empty_list(token_ids, "token_ids")
         return self._action_raw("enter((uint256[]))", ["(uint256[])"], [[token_ids]])
 
 
