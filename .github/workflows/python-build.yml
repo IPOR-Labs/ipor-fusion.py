@@ -95,6 +95,11 @@ jobs:
         run: poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
         id: static-code-analyze
 
+      - name: Type check
+        if: inputs.static-code-analysis-enabled
+        run: poetry run mypy .
+        id: type-check
+
       - name: Build
         if: inputs.build-enabled
         run: poetry build

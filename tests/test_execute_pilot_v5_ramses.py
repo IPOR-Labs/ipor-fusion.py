@@ -426,13 +426,13 @@ def function_signature_to_4byte_selector_transfer(to, amount):
 
 def extract_data_form_new_position_enter_event(
     receipt: TxReceipt,
-) -> (str, int, int, int, int, str, str, int, int, int):
+) -> tuple[str, int, int, int, int, str, str, int, int, int] | tuple[None, ...]:
     event_signature_hash = Web3.keccak(
         text="RamsesV2NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
     )
 
-    for evnet_log in receipt.logs:
-        if evnet_log.topics[0] == event_signature_hash:
+    for evnet_log in receipt["logs"]:
+        if evnet_log["topics"][0] == event_signature_hash:
             decoded_data = decode(
                 [
                     "address",
@@ -475,13 +475,15 @@ def extract_data_form_new_position_enter_event(
     return None, None, None, None, None, None, None, None, None, None
 
 
-def extract_data_form_new_position_exit_event(receipt: TxReceipt) -> (str, int):
+def extract_data_form_new_position_exit_event(
+    receipt: TxReceipt,
+) -> tuple[str, int] | tuple[None, None]:
     event_signature_hash = Web3.keccak(
         text="RamsesV2NewPositionFuseExit(address,uint256)"
     )
 
-    for event_log in receipt.logs:
-        if event_log.topics[0] == event_signature_hash:
+    for event_log in receipt["logs"]:
+        if event_log["topics"][0] == event_signature_hash:
             decoded_data = decode(
                 [
                     "address",

@@ -429,8 +429,8 @@ def extract_enter_data_from_new_position_event(receipt: TxReceipt):
         text="UniswapV3NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
     )
 
-    for log in receipt.logs:
-        if log.topics[0] == event_signature:
+    for log in receipt["logs"]:
+        if log["topics"][0] == event_signature:
             decoded = decode(
                 [
                     "address",
@@ -453,8 +453,8 @@ def extract_enter_data_from_new_position_event(receipt: TxReceipt):
 def extract_exit_data_from_new_position_event(receipt: TxReceipt):
     event_signature = Web3.keccak(text="UniswapV3NewPositionFuseExit(address,uint256)")
 
-    for log in receipt.logs:
-        if log.topics[0] == event_signature:
+    for log in receipt["logs"]:
+        if log["topics"][0] == event_signature:
             decoded = decode(["address", "uint256"], log["data"])
             return decoded
     return None, None
