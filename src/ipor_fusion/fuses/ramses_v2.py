@@ -23,6 +23,10 @@ class RamsesV2NewPositionFuse(Fuse):
         deadline: int,
         ve_ram_token_id: int,
     ) -> FuseAction:
+        self._validate_address(token0, "token0")
+        self._validate_address(token1, "token1")
+        self._validate_amount(amount0_desired, "amount0_desired")
+        self._validate_amount(amount1_desired, "amount1_desired")
         return self._action_raw(
             "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256,uint256))",
             [
@@ -61,6 +65,10 @@ class RamsesV2ModifyPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
+        self._validate_address(token0, "token0")
+        self._validate_address(token1, "token1")
+        self._validate_amount(amount0_desired, "amount0_desired")
+        self._validate_amount(amount1_desired, "amount1_desired")
         return self._action_raw(
             "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))",
             ["(address,address,uint256,uint256,uint256,uint256,uint256,uint256)"],
@@ -86,6 +94,7 @@ class RamsesV2ModifyPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
+        self._validate_amount(liquidity, "liquidity")
         return self._action_raw(
             "exit((uint256,uint128,uint256,uint256,uint256))",
             ["(uint256,uint128,uint256,uint256,uint256)"],

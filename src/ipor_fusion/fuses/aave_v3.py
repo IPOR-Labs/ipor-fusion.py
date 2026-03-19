@@ -7,6 +7,8 @@ class AaveV3SupplyFuse(Fuse):
     def supply(
         self, asset: ChecksumAddress, amount: int, e_mode: int = 0
     ) -> FuseAction:
+        self._validate_address(asset, "asset")
+        self._validate_amount(amount, "amount")
         return self._action_raw(
             "enter((address,uint256,uint256))",
             ["address", "uint256", "uint256"],
@@ -14,6 +16,8 @@ class AaveV3SupplyFuse(Fuse):
         )
 
     def withdraw(self, asset: ChecksumAddress, amount: int) -> FuseAction:
+        self._validate_address(asset, "asset")
+        self._validate_amount(amount, "amount")
         return self._action_raw(
             "exit((address,uint256))", ["address", "uint256"], [asset, amount]
         )
@@ -21,11 +25,15 @@ class AaveV3SupplyFuse(Fuse):
 
 class AaveV3BorrowFuse(Fuse):
     def borrow(self, asset: ChecksumAddress, amount: int) -> FuseAction:
+        self._validate_address(asset, "asset")
+        self._validate_amount(amount, "amount")
         return self._action_raw(
             "enter((address,uint256))", ["address", "uint256"], [asset, amount]
         )
 
     def repay(self, asset: ChecksumAddress, amount: int) -> FuseAction:
+        self._validate_address(asset, "asset")
+        self._validate_amount(amount, "amount")
         return self._action_raw(
             "exit((address,uint256))", ["address", "uint256"], [asset, amount]
         )

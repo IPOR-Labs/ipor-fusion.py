@@ -7,7 +7,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
-from ipor_fusion.fuses.base import FuseAction
+from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
 from ipor_fusion.fuses.fluid_instadapp import (
@@ -548,3 +548,134 @@ class TestUniversalTokenSwapperFuse:
         )
         assert len(decoded_tuple[3][0]) == 0
         assert len(decoded_tuple[3][1]) == 0
+
+
+# ── Input Validation ──────────────────────────────────────────────────
+
+ZERO_ADDR = Web3.to_checksum_address(ZERO_ADDRESS)
+
+
+class TestAmountValidation:
+    """Amount=0 and amount<0 must raise ValueError across fuse types."""
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_aave_supply_rejects_bad_amount(self, bad_amount):
+        with pytest.raises(ValueError, match="amount"):
+            AaveV3SupplyFuse(FUSE_ADDR).supply(TOKEN_A, bad_amount)
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_aave_borrow_rejects_bad_amount(self, bad_amount):
+        with pytest.raises(ValueError, match="amount"):
+            AaveV3BorrowFuse(FUSE_ADDR).borrow(TOKEN_A, bad_amount)
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_morpho_supply_rejects_bad_amount(self, bad_amount):
+        with pytest.raises(ValueError, match="amount"):
+            MorphoSupplyFuse(FUSE_ADDR).supply(MARKET_ID, bad_amount)
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_compound_supply_rejects_bad_amount(self, bad_amount):
+        with pytest.raises(ValueError, match="amount"):
+            CompoundV3SupplyFuse(FUSE_ADDR).supply(TOKEN_A, bad_amount)
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_erc4626_supply_rejects_bad_amount(self, bad_amount):
+        with pytest.raises(ValueError, match="amount"):
+            ERC4626SupplyFuse(FUSE_ADDR).supply(VAULT_ADDR, bad_amount)
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_uniswap_swap_rejects_bad_amount(self, bad_amount):
+        with pytest.raises(ValueError, match="amount_in"):
+            UniswapV3SwapFuse(FUSE_ADDR).swap(TOKEN_A, TOKEN_B, 3000, bad_amount, 0)
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_unstake_rejects_bad_amount(self, bad_amount):
+        with pytest.raises(ValueError, match="amount"):
+            GearboxStakeFuse(FUSE_ADDR, TOKEN_A).unstake(bad_amount)
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_decrease_liquidity_rejects_bad_liquidity(self, bad_amount):
+        with pytest.raises(ValueError, match="liquidity"):
+            UniswapV3ModifyPositionFuse(FUSE_ADDR).decrease_liquidity(
+                token_id=1,
+                liquidity=bad_amount,
+                amount0_min=0,
+                amount1_min=0,
+                deadline=99,
+            )
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_morpho_claim_rejects_bad_claimable(self, bad_amount):
+        with pytest.raises(ValueError, match="claimable"):
+            MorphoClaimFuse(FUSE_ADDR).claim(TOKEN_A, TOKEN_B, bad_amount, [])
+
+
+class TestAddressValidation:
+    """Zero address must raise ValueError across fuse types."""
+
+    def test_aave_supply_rejects_zero_address(self):
+        with pytest.raises(ValueError, match="asset"):
+            AaveV3SupplyFuse(FUSE_ADDR).supply(ZERO_ADDR, 1000)
+
+    def test_compound_supply_rejects_zero_address(self):
+        with pytest.raises(ValueError, match="asset"):
+            CompoundV3SupplyFuse(FUSE_ADDR).supply(ZERO_ADDR, 1000)
+
+    def test_erc4626_supply_rejects_zero_address(self):
+        with pytest.raises(ValueError, match="vault_address"):
+            ERC4626SupplyFuse(FUSE_ADDR).supply(ZERO_ADDR, 1000)
+
+    def test_uniswap_swap_rejects_zero_token_in(self):
+        with pytest.raises(ValueError, match="token_in"):
+            UniswapV3SwapFuse(FUSE_ADDR).swap(ZERO_ADDR, TOKEN_B, 3000, 100, 0)
+
+    def test_uniswap_swap_rejects_zero_token_out(self):
+        with pytest.raises(ValueError, match="token_out"):
+            UniswapV3SwapFuse(FUSE_ADDR).swap(TOKEN_A, ZERO_ADDR, 3000, 100, 0)
+
+    def test_universal_swap_rejects_zero_token_in(self):
+        with pytest.raises(ValueError, match="token_in"):
+            UniversalTokenSwapperFuse(FUSE_ADDR).swap(ZERO_ADDR, TOKEN_B, 100, [], [])
+
+    def test_morpho_flash_loan_rejects_zero_asset(self):
+        with pytest.raises(ValueError, match="asset"):
+            MorphoFlashLoanFuse(FUSE_ADDR).flash_loan(ZERO_ADDR, 100, [])
+
+    def test_morpho_claim_rejects_zero_distributor(self):
+        with pytest.raises(ValueError, match="universal_rewards_distributor"):
+            MorphoClaimFuse(FUSE_ADDR).claim(ZERO_ADDR, TOKEN_B, 100, [])
+
+    def test_morpho_claim_rejects_zero_rewards_token(self):
+        with pytest.raises(ValueError, match="rewards_token"):
+            MorphoClaimFuse(FUSE_ADDR).claim(TOKEN_A, ZERO_ADDR, 100, [])
+
+
+class TestSlippageParamsAllowZero:
+    """min_amount_out and amount_min params must accept zero (slippage tolerance)."""
+
+    def test_uniswap_swap_allows_zero_min_amount_out(self):
+        action = UniswapV3SwapFuse(FUSE_ADDR).swap(
+            TOKEN_A, TOKEN_B, 3000, 100, min_amount_out=0
+        )
+        assert action.fuse == FUSE_ADDR
+
+    def test_new_position_allows_zero_amount_min(self):
+        action = UniswapV3NewPositionFuse(FUSE_ADDR).new_position(
+            TOKEN_A,
+            TOKEN_B,
+            500,
+            -100,
+            100,
+            1000,
+            2000,
+            amount0_min=0,
+            amount1_min=0,
+            deadline=99999,
+        )
+        assert action.fuse == FUSE_ADDR
+
+    def test_decrease_liquidity_allows_zero_amount_min(self):
+        action = UniswapV3ModifyPositionFuse(FUSE_ADDR).decrease_liquidity(
+            token_id=1, liquidity=500, amount0_min=0, amount1_min=0, deadline=99
+        )
+        assert action.fuse == FUSE_ADDR

@@ -13,6 +13,9 @@ class UniswapV3SwapFuse(Fuse):
         amount_in: int,
         min_amount_out: int,
     ) -> FuseAction:
+        self._validate_address(token_in, "token_in")
+        self._validate_address(token_out, "token_out")
+        self._validate_amount(amount_in, "amount_in")
         path = encode_packed(
             ["address", "uint24", "address"], [token_in, fee, token_out]
         )
@@ -37,6 +40,10 @@ class UniswapV3NewPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
+        self._validate_address(token0, "token0")
+        self._validate_address(token1, "token1")
+        self._validate_amount(amount0_desired, "amount0_desired")
+        self._validate_amount(amount1_desired, "amount1_desired")
         return self._action_raw(
             "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256))",
             [
@@ -74,6 +81,10 @@ class UniswapV3ModifyPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
+        self._validate_address(token0, "token0")
+        self._validate_address(token1, "token1")
+        self._validate_amount(amount0_desired, "amount0_desired")
+        self._validate_amount(amount1_desired, "amount1_desired")
         return self._action_raw(
             "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))",
             ["(address,address,uint256,uint256,uint256,uint256,uint256,uint256)"],
@@ -99,6 +110,7 @@ class UniswapV3ModifyPositionFuse(Fuse):
         amount1_min: int,
         deadline: int,
     ) -> FuseAction:
+        self._validate_amount(liquidity, "liquidity")
         return self._action_raw(
             "exit((uint256,uint128,uint256,uint256,uint256))",
             ["(uint256,uint128,uint256,uint256,uint256)"],
