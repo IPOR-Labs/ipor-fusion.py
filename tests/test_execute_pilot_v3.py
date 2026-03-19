@@ -57,9 +57,7 @@ def setup_vault():
 
 def withdraw_from_fluid(forked_ctx, plasma_vault, vault_address):
     fluid_staking = ERC20(forked_ctx, FLUID_STAKING_CONTRACT)
-    fluid_staking_balance = fluid_staking.balance_of(vault_address)
-
-    if fluid_staking_balance > 0:
+    if (fluid_staking_balance := fluid_staking.balance_of(vault_address)) > 0:
         fluid = FluidInstadappSupplyFuse(
             erc4626_fuse_address=ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5,
             staking_fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,

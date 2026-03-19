@@ -86,8 +86,7 @@ def _aerodrome_swap(
 
 def _log_balances(forked_ctx, vault_address, msg):
     log.info("[%s]", msg)
-    wsteth = ERC20(forked_ctx, BASE_WSTETH).balance_of(vault_address)
-    if wsteth > 0:
+    if (wsteth := ERC20(forked_ctx, BASE_WSTETH).balance_of(vault_address)) > 0:
         log.info("    wsteth balance: %s WStETH", wsteth / 1e18)
     log.info(
         "      weth balance: %s WETH",

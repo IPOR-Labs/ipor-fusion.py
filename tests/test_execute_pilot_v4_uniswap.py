@@ -217,10 +217,6 @@ def test_should_open_new_position_uniswap_v3():
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
     uniswap_new_pos = UniswapV3NewPositionFuse(ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE)
-    uniswap_modify = UniswapV3ModifyPositionFuse(
-        ARBITRUM_UNISWAP_V3_MODIFY_POSITION_FUSE
-    )
-    uniswap_collect = UniswapV3CollectFuse(ARBITRUM_UNISWAP_V3_COLLECT_FUSE)
 
     # Swap USDC to USDT first
     swap = uniswap_swap.swap(
@@ -373,7 +369,6 @@ def test_should_increase_liquidity():
     uniswap_modify = UniswapV3ModifyPositionFuse(
         ARBITRUM_UNISWAP_V3_MODIFY_POSITION_FUSE
     )
-    uniswap_collect = UniswapV3CollectFuse(ARBITRUM_UNISWAP_V3_COLLECT_FUSE)
 
     # Swap USDC to USDT
     swap = uniswap_swap.swap(

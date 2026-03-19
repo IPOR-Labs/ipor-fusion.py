@@ -1,7 +1,8 @@
 import os
 import time
 
-from eth_abi import decode
+from eth_abi import decode, encode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
@@ -68,9 +69,6 @@ def test_should_open_new_position_ramses_v2():
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
     ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
-    ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
-    ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
-    ramses_claim = RamsesClaimFuse(ARBITRUM_RAMSES_CLAIM_FUSE)
 
     swap = uniswap_swap.swap(
         token_in=ARBITRUM_USDC,
@@ -140,7 +138,6 @@ def test_should_collect_all_after_decrease_liquidity():
     ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
     ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
     ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
-    ramses_claim = RamsesClaimFuse(ARBITRUM_RAMSES_CLAIM_FUSE)
 
     swap_action = uniswap_swap.swap(
         token_in=ARBITRUM_USDC,
@@ -231,7 +228,6 @@ def test_should_increase_liquidity():
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
     ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
     ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
-    ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
 
     swap = uniswap_swap.swap(
         token_in=ARBITRUM_USDC,
@@ -318,8 +314,6 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
     ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
-    ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
-    ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
     ramses_claim = RamsesClaimFuse(ARBITRUM_RAMSES_CLAIM_FUSE)
 
     swap = uniswap_swap.swap(
@@ -425,9 +419,6 @@ def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manage
 
 
 def function_signature_to_4byte_selector_transfer(to, amount):
-    from eth_abi import encode
-    from eth_utils import function_signature_to_4byte_selector
-
     sig = function_signature_to_4byte_selector("transfer(address,uint256)")
     return sig + encode(["address", "uint256"], [to, amount])
 

@@ -57,8 +57,7 @@ class AnvilTestContainerStarter:
         while True:
             try:
                 web3 = self.get_web3()
-                block_number = web3.eth.block_number
-                if block_number > 0:
+                if web3.eth.block_number > 0:
                     self.log.info("[CONTAINER] [ANVIL] Anvil endpoint is ready")
                     return
             except requests.ConnectionError:
@@ -93,8 +92,7 @@ class AnvilTestContainerStarter:
 
         w3.manager.request_blocking(RPCEndpoint("anvil_reset"), params)
 
-        current_block_number = w3.eth.block_number
-        if current_block_number != block_number:
+        if (current_block_number := w3.eth.block_number) != block_number:
             raise RuntimeError(
                 f"Current block number is {current_block_number}, expected {block_number}"
             )

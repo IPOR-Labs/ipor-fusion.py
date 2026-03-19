@@ -25,11 +25,20 @@ class ForkedWeb3Context(Web3Context):
 
     @classmethod
     def from_url(  # type: ignore[override]
-        cls, url: str, impersonate: ChecksumAddress | None = None
+        cls,
+        url: str,
+        private_key: str | None = None,
+        gas_multiplier: float = 1.25,
+        impersonate: ChecksumAddress | None = None,
     ) -> ForkedWeb3Context:
         web3 = Web3(Web3.HTTPProvider(url))
         chain_id = web3.eth.chain_id
-        return cls(web3=web3, chain_id=chain_id, impersonated_address=impersonate)
+        return cls(
+            web3=web3,
+            chain_id=chain_id,
+            impersonated_address=impersonate,
+            gas_multiplier=gas_multiplier,
+        )
 
     def prank(self, address: ChecksumAddress):
         self.signer = Web3.to_checksum_address(address)
