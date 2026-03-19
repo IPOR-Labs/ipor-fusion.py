@@ -5,7 +5,7 @@ from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.errors import TransactionError
+from ipor_fusion.errors import TransactionError, _get_revert_reason
 
 
 class ForkedWeb3Context(Web3Context):
@@ -69,5 +69,10 @@ class ForkedWeb3Context(Web3Context):
         tx_hash = self.web3.eth.send_transaction(transaction)  # type: ignore[arg-type]
         receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
         if receipt["status"] != 1:
-            raise TransactionError("Transaction failed", tx_hash=tx_hash.hex())
+            reason = _get_revert_reason(self.web3, tx_hash, receipt)
+            raise TransactionError(
+                "Transaction failed",
+                tx_hash=tx_hash.hex(),
+                revert_reason=reason,
+            )
         return receipt
