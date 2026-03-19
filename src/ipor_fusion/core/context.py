@@ -21,11 +21,23 @@ class Web3Context:
         private_key: str | None = None,
         gas_multiplier: float = 1.25,
     ):
-        self.web3 = web3
-        self.chain_id = chain_id
-        self.signer = signer
+        self._web3 = web3
+        self._chain_id = chain_id
+        self._signer = signer
         self._private_key = private_key
         self.gas_multiplier = gas_multiplier
+
+    @property
+    def web3(self) -> Web3:
+        return self._web3
+
+    @property
+    def chain_id(self) -> int:
+        return self._chain_id
+
+    @property
+    def signer(self) -> ChecksumAddress | None:
+        return self._signer
 
     @classmethod
     def from_url(

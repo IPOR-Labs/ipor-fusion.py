@@ -41,7 +41,7 @@ class ForkedWeb3Context(Web3Context):
         )
 
     def prank(self, address: ChecksumAddress):
-        self.signer = Web3.to_checksum_address(address)
+        self._signer = Web3.to_checksum_address(address)
 
     def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
         if not self.signer:
