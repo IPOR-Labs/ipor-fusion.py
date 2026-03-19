@@ -7,7 +7,7 @@ import time
 import requests
 from docker.models.containers import ExecResult  # type: ignore[import-untyped]
 from eth_typing import ChecksumAddress, BlockNumber
-from testcontainers.core.container import DockerContainer  # type: ignore[import-untyped]
+from testcontainers.core.container import DockerContainer  # type: ignore[import-untyped,import-not-found]
 from web3 import Web3, HTTPProvider
 from web3.types import RPCEndpoint, Timestamp
 
