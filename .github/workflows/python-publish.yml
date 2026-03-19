@@ -115,7 +115,7 @@ jobs:
           key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
 
       - name: Install
-        run: poetry install
+        run: poetry install --all-extras
         id: install
 
       - name: Build
