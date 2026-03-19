@@ -45,7 +45,7 @@ def test_should_deposit_and_withdraw_from_morpho_blue(anvil):
 
     amount = Amount(1000_000000)
 
-    supply = morpho.supply(morpho_blue_market_id, amount)
+    supply = morpho.supply(market_id=morpho_blue_market_id, amount=amount)
 
     usdc = ERC20(forked_ctx, ETHEREUM_USDC)
     usdc_balance_of_before_supply = usdc.balance_of(vault_address)
@@ -56,7 +56,7 @@ def test_should_deposit_and_withdraw_from_morpho_blue(anvil):
 
     assert usdc_balance_of_before_supply - usdc_balance_of_after_supply == amount
 
-    withdraw = morpho.withdraw(morpho_blue_market_id, amount)
+    withdraw = morpho.withdraw(market_id=morpho_blue_market_id, amount=amount)
 
     plasma_vault.execute([withdraw])
 

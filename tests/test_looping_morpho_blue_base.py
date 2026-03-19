@@ -167,8 +167,8 @@ def test_looping_morpho_blue(anvil):
     )
 
     borrow = morpho_borrow.borrow(
-        MORPHO_BLUE_MARKET_ID,
-        weth_borrow_amount,
+        market_id=MORPHO_BLUE_MARKET_ID,
+        amount=weth_borrow_amount,
     )
 
     # Step 3: Swap WETH -> WStETH via Aerodrome to repay the flash loan

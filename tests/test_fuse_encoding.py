@@ -101,7 +101,7 @@ class TestFuseBase:
 class TestAaveV3SupplyFuse:
     def test_supply_selector_and_payload(self):
         fuse = AaveV3SupplyFuse(FUSE_ADDR)
-        action = fuse.supply(TOKEN_A, 1000, e_mode=1)
+        action = fuse.supply(asset=TOKEN_A, amount=1000, e_mode=1)
 
         assert action.fuse == FUSE_ADDR
         assert action.data[:4] == _selector("enter((address,uint256,uint256))")
@@ -113,12 +113,12 @@ class TestAaveV3SupplyFuse:
         assert e_mode == 1
 
     def test_supply_default_emode(self):
-        action = AaveV3SupplyFuse(FUSE_ADDR).supply(TOKEN_A, 500)
+        action = AaveV3SupplyFuse(FUSE_ADDR).supply(asset=TOKEN_A, amount=500)
         (_, _, e_mode) = decode(["address", "uint256", "uint256"], action.data[4:])
         assert e_mode == 0
 
     def test_withdraw(self):
-        action = AaveV3SupplyFuse(FUSE_ADDR).withdraw(TOKEN_A, 999)
+        action = AaveV3SupplyFuse(FUSE_ADDR).withdraw(asset=TOKEN_A, amount=999)
         assert action.data[:4] == _selector("exit((address,uint256))")
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == TOKEN_A_LOW
@@ -127,14 +127,14 @@ class TestAaveV3SupplyFuse:
 
 class TestAaveV3BorrowFuse:
     def test_borrow(self):
-        action = AaveV3BorrowFuse(FUSE_ADDR).borrow(TOKEN_A, 5000)
+        action = AaveV3BorrowFuse(FUSE_ADDR).borrow(asset=TOKEN_A, amount=5000)
         assert action.data[:4] == _selector("enter((address,uint256))")
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == TOKEN_A_LOW
         assert amount == 5000
 
     def test_repay(self):
-        action = AaveV3BorrowFuse(FUSE_ADDR).repay(TOKEN_B, 3000)
+        action = AaveV3BorrowFuse(FUSE_ADDR).repay(asset=TOKEN_B, amount=3000)
         assert action.data[:4] == _selector("exit((address,uint256))")
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == TOKEN_B_LOW
@@ -146,14 +146,14 @@ class TestAaveV3BorrowFuse:
 
 class TestMorphoSupplyFuse:
     def test_supply(self):
-        action = MorphoSupplyFuse(FUSE_ADDR).supply(MARKET_ID, 10_000)
+        action = MorphoSupplyFuse(FUSE_ADDR).supply(market_id=MARKET_ID, amount=10_000)
         assert action.data[:4] == _selector("enter((bytes32,uint256))")
         (mid, amount) = decode(["bytes32", "uint256"], action.data[4:])
         assert mid == bytes.fromhex(MARKET_ID)
         assert amount == 10_000
 
     def test_withdraw(self):
-        action = MorphoSupplyFuse(FUSE_ADDR).withdraw(MARKET_ID, 7_000)
+        action = MorphoSupplyFuse(FUSE_ADDR).withdraw(market_id=MARKET_ID, amount=7_000)
         assert action.data[:4] == _selector("exit((bytes32,uint256))")
         (mid, amount) = decode(["bytes32", "uint256"], action.data[4:])
         assert mid == bytes.fromhex(MARKET_ID)
@@ -162,20 +162,24 @@ class TestMorphoSupplyFuse:
 
 class TestMorphoCollateralFuse:
     def test_supply_collateral(self):
-        action = MorphoCollateralFuse(FUSE_ADDR).supply_collateral(MARKET_ID, 500)
+        action = MorphoCollateralFuse(FUSE_ADDR).supply_collateral(
+            market_id=MARKET_ID, amount=500
+        )
         assert action.data[:4] == _selector("enter((bytes32,uint256))")
         (mid, amount) = decode(["bytes32", "uint256"], action.data[4:])
         assert mid == bytes.fromhex(MARKET_ID)
         assert amount == 500
 
     def test_withdraw_collateral(self):
-        action = MorphoCollateralFuse(FUSE_ADDR).withdraw_collateral(MARKET_ID, 300)
+        action = MorphoCollateralFuse(FUSE_ADDR).withdraw_collateral(
+            market_id=MARKET_ID, amount=300
+        )
         assert action.data[:4] == _selector("exit((bytes32,uint256))")
 
 
 class TestMorphoBorrowFuse:
     def test_borrow_appends_zero(self):
-        action = MorphoBorrowFuse(FUSE_ADDR).borrow(MARKET_ID, 2000)
+        action = MorphoBorrowFuse(FUSE_ADDR).borrow(market_id=MARKET_ID, amount=2000)
         assert action.data[:4] == _selector("enter((bytes32,uint256,uint256))")
         (mid, amount, zero) = decode(["bytes32", "uint256", "uint256"], action.data[4:])
         assert mid == bytes.fromhex(MARKET_ID)
@@ -183,7 +187,7 @@ class TestMorphoBorrowFuse:
         assert zero == 0
 
     def test_repay_appends_zero(self):
-        action = MorphoBorrowFuse(FUSE_ADDR).repay(MARKET_ID, 1500)
+        action = MorphoBorrowFuse(FUSE_ADDR).repay(market_id=MARKET_ID, amount=1500)
         assert action.data[:4] == _selector("exit((bytes32,uint256,uint256))")
         (_, _, zero) = decode(["bytes32", "uint256", "uint256"], action.data[4:])
         assert zero == 0
@@ -226,7 +230,12 @@ class TestMorphoClaimFuse:
             "0x" + "ab" * 32,
             "0x" + "cd" * 32,
         ]
-        action = MorphoClaimFuse(FUSE_ADDR).claim(TOKEN_A, TOKEN_B, 9999, proof)
+        action = MorphoClaimFuse(FUSE_ADDR).claim(
+            universal_rewards_distributor=TOKEN_A,
+            rewards_token=TOKEN_B,
+            claimable=9999,
+            proof=proof,
+        )
         assert action.data[:4] == _selector("claim(address,address,uint256,bytes32[])")
         (dist, token, claimable, proofs) = decode(
             ["address", "address", "uint256", "bytes32[]"], action.data[4:]
@@ -240,7 +249,12 @@ class TestMorphoClaimFuse:
 
     def test_claim_proof_without_0x_prefix(self):
         proof = ["ab" * 32]
-        action = MorphoClaimFuse(FUSE_ADDR).claim(TOKEN_A, TOKEN_B, 1, proof)
+        action = MorphoClaimFuse(FUSE_ADDR).claim(
+            universal_rewards_distributor=TOKEN_A,
+            rewards_token=TOKEN_B,
+            claimable=1,
+            proof=proof,
+        )
         (_, _, _, proofs) = decode(
             ["address", "address", "uint256", "bytes32[]"], action.data[4:]
         )
@@ -252,14 +266,14 @@ class TestMorphoClaimFuse:
 
 class TestCompoundV3SupplyFuse:
     def test_supply(self):
-        action = CompoundV3SupplyFuse(FUSE_ADDR).supply(TOKEN_A, 4000)
+        action = CompoundV3SupplyFuse(FUSE_ADDR).supply(asset=TOKEN_A, amount=4000)
         assert action.data[:4] == _selector("enter((address,uint256))")
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == TOKEN_A_LOW
         assert amount == 4000
 
     def test_withdraw(self):
-        action = CompoundV3SupplyFuse(FUSE_ADDR).withdraw(TOKEN_B, 2000)
+        action = CompoundV3SupplyFuse(FUSE_ADDR).withdraw(asset=TOKEN_B, amount=2000)
         assert action.data[:4] == _selector("exit((address,uint256))")
 
 
@@ -268,14 +282,18 @@ class TestCompoundV3SupplyFuse:
 
 class TestERC4626SupplyFuse:
     def test_supply(self):
-        action = ERC4626SupplyFuse(FUSE_ADDR).supply(VAULT_ADDR, 8000)
+        action = ERC4626SupplyFuse(FUSE_ADDR).supply(
+            vault_address=VAULT_ADDR, amount=8000
+        )
         assert action.data[:4] == _selector("enter((address,uint256))")
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == VAULT_ADDR_LOW
         assert amount == 8000
 
     def test_withdraw(self):
-        action = ERC4626SupplyFuse(FUSE_ADDR).withdraw(VAULT_ADDR, 6000)
+        action = ERC4626SupplyFuse(FUSE_ADDR).withdraw(
+            vault_address=VAULT_ADDR, amount=6000
+        )
         assert action.data[:4] == _selector("exit((address,uint256))")
 
 
@@ -448,7 +466,9 @@ class TestRamsesV2CollectFuse:
 class TestRamsesClaimFuse:
     def test_claim(self):
         rewards = [[str(TOKEN_A), str(TOKEN_B)], [str(TOKEN_A)]]
-        action = RamsesClaimFuse(FUSE_ADDR).claim([1, 2], rewards)
+        action = RamsesClaimFuse(FUSE_ADDR).claim(
+            token_ids=[1, 2], token_rewards=rewards
+        )
         assert action.data[:4] == _selector("claim(uint256[],address[][])")
         (ids, token_rewards) = decode(["uint256[]", "address[][]"], action.data[4:])
         assert list(ids) == [1, 2]
@@ -456,15 +476,19 @@ class TestRamsesClaimFuse:
 
     def test_claim_rejects_empty_token_ids(self):
         with pytest.raises(ValueError, match="token_ids"):
-            RamsesClaimFuse(FUSE_ADDR).claim([], [[str(TOKEN_A)]])
+            RamsesClaimFuse(FUSE_ADDR).claim(
+                token_ids=[], token_rewards=[[str(TOKEN_A)]]
+            )
 
     def test_claim_rejects_empty_token_rewards(self):
         with pytest.raises(ValueError, match="token_rewards"):
-            RamsesClaimFuse(FUSE_ADDR).claim([1], [])
+            RamsesClaimFuse(FUSE_ADDR).claim(token_ids=[1], token_rewards=[])
 
     def test_claim_rejects_mismatched_lengths(self):
         with pytest.raises(ValueError, match="same length"):
-            RamsesClaimFuse(FUSE_ADDR).claim([1, 2], [[str(TOKEN_A)]])
+            RamsesClaimFuse(FUSE_ADDR).claim(
+                token_ids=[1, 2], token_rewards=[[str(TOKEN_A)]]
+            )
 
 
 # ── Gearbox V3 ─────────────────────────────────────────────────────────
@@ -482,22 +506,22 @@ class TestGearboxSupplyFuse:
         self.fuse = GearboxSupplyFuse(FUSE_ADDR)
 
     def test_supply_returns_single_action(self):
-        action = self.fuse.supply(VAULT_ADDR, 5000)
+        action = self.fuse.supply(vault_address=VAULT_ADDR, amount=5000)
         assert action.fuse == FUSE_ADDR
 
     def test_supply_encoding(self):
-        action = self.fuse.supply(VAULT_ADDR, 5000)
+        action = self.fuse.supply(vault_address=VAULT_ADDR, amount=5000)
         assert action.data[:4] == _selector("enter((address,uint256))")
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == VAULT_ADDR_LOW
         assert amount == 5000
 
     def test_withdraw_returns_single_action(self):
-        action = self.fuse.withdraw(VAULT_ADDR, 3000)
+        action = self.fuse.withdraw(vault_address=VAULT_ADDR, amount=3000)
         assert action.fuse == FUSE_ADDR
 
     def test_withdraw_encoding(self):
-        action = self.fuse.withdraw(VAULT_ADDR, 3000)
+        action = self.fuse.withdraw(vault_address=VAULT_ADDR, amount=3000)
         assert action.data[:4] == _selector("exit((address,uint256))")
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == VAULT_ADDR_LOW
@@ -530,14 +554,14 @@ class TestFluidInstadappSupplyFuse:
         self.fuse = FluidInstadappSupplyFuse(FUSE_ADDR)
 
     def test_supply_encoding(self):
-        action = self.fuse.supply(VAULT_ADDR, 2000)
+        action = self.fuse.supply(vault_address=VAULT_ADDR, amount=2000)
         assert action.fuse == FUSE_ADDR
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == VAULT_ADDR_LOW
         assert amount == 2000
 
     def test_withdraw_encoding(self):
-        action = self.fuse.withdraw(VAULT_ADDR, 1000)
+        action = self.fuse.withdraw(vault_address=VAULT_ADDR, amount=1000)
         assert action.fuse == FUSE_ADDR
         (addr, amount) = decode(["address", "uint256"], action.data[4:])
         assert addr.lower() == VAULT_ADDR_LOW
@@ -574,7 +598,11 @@ class TestUniversalTokenSwapperFuse:
         targets = [TOKEN_A, TOKEN_B]
         data = [b"\xaa\xbb", b"\xcc\xdd"]
         action = UniversalTokenSwapperFuse(FUSE_ADDR).swap(
-            TOKEN_A, TOKEN_B, 5000, targets, data
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            amount_in=5000,
+            targets=targets,
+            data=data,
         )
         assert action.data[:4] == _selector(
             "enter((address,address,uint256,(address[],bytes[])))"
@@ -591,7 +619,7 @@ class TestUniversalTokenSwapperFuse:
 
     def test_swap_empty_targets(self):
         action = UniversalTokenSwapperFuse(FUSE_ADDR).swap(
-            TOKEN_A, TOKEN_B, 100, [], []
+            token_in=TOKEN_A, token_out=TOKEN_B, amount_in=100, targets=[], data=[]
         )
         (decoded_tuple,) = decode(
             ["(address,address,uint256,(address[],bytes[]))"], action.data[4:]
@@ -611,27 +639,29 @@ class TestAmountValidation:
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_aave_supply_rejects_bad_amount(self, bad_amount):
         with pytest.raises(ValueError, match="amount"):
-            AaveV3SupplyFuse(FUSE_ADDR).supply(TOKEN_A, bad_amount)
+            AaveV3SupplyFuse(FUSE_ADDR).supply(asset=TOKEN_A, amount=bad_amount)
 
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_aave_borrow_rejects_bad_amount(self, bad_amount):
         with pytest.raises(ValueError, match="amount"):
-            AaveV3BorrowFuse(FUSE_ADDR).borrow(TOKEN_A, bad_amount)
+            AaveV3BorrowFuse(FUSE_ADDR).borrow(asset=TOKEN_A, amount=bad_amount)
 
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_morpho_supply_rejects_bad_amount(self, bad_amount):
         with pytest.raises(ValueError, match="amount"):
-            MorphoSupplyFuse(FUSE_ADDR).supply(MARKET_ID, bad_amount)
+            MorphoSupplyFuse(FUSE_ADDR).supply(market_id=MARKET_ID, amount=bad_amount)
 
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_compound_supply_rejects_bad_amount(self, bad_amount):
         with pytest.raises(ValueError, match="amount"):
-            CompoundV3SupplyFuse(FUSE_ADDR).supply(TOKEN_A, bad_amount)
+            CompoundV3SupplyFuse(FUSE_ADDR).supply(asset=TOKEN_A, amount=bad_amount)
 
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_erc4626_supply_rejects_bad_amount(self, bad_amount):
         with pytest.raises(ValueError, match="amount"):
-            ERC4626SupplyFuse(FUSE_ADDR).supply(VAULT_ADDR, bad_amount)
+            ERC4626SupplyFuse(FUSE_ADDR).supply(
+                vault_address=VAULT_ADDR, amount=bad_amount
+            )
 
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_uniswap_swap_rejects_bad_amount(self, bad_amount):
@@ -663,7 +693,12 @@ class TestAmountValidation:
     @pytest.mark.parametrize("bad_amount", [0, -1])
     def test_morpho_claim_rejects_bad_claimable(self, bad_amount):
         with pytest.raises(ValueError, match="claimable"):
-            MorphoClaimFuse(FUSE_ADDR).claim(TOKEN_A, TOKEN_B, bad_amount, [])
+            MorphoClaimFuse(FUSE_ADDR).claim(
+                universal_rewards_distributor=TOKEN_A,
+                rewards_token=TOKEN_B,
+                claimable=bad_amount,
+                proof=[],
+            )
 
 
 class TestAddressValidation:
@@ -671,15 +706,15 @@ class TestAddressValidation:
 
     def test_aave_supply_rejects_zero_address(self):
         with pytest.raises(ValueError, match="asset"):
-            AaveV3SupplyFuse(FUSE_ADDR).supply(ZERO_ADDR, 1000)
+            AaveV3SupplyFuse(FUSE_ADDR).supply(asset=ZERO_ADDR, amount=1000)
 
     def test_compound_supply_rejects_zero_address(self):
         with pytest.raises(ValueError, match="asset"):
-            CompoundV3SupplyFuse(FUSE_ADDR).supply(ZERO_ADDR, 1000)
+            CompoundV3SupplyFuse(FUSE_ADDR).supply(asset=ZERO_ADDR, amount=1000)
 
     def test_erc4626_supply_rejects_zero_address(self):
         with pytest.raises(ValueError, match="vault_address"):
-            ERC4626SupplyFuse(FUSE_ADDR).supply(ZERO_ADDR, 1000)
+            ERC4626SupplyFuse(FUSE_ADDR).supply(vault_address=ZERO_ADDR, amount=1000)
 
     def test_uniswap_swap_rejects_zero_token_in(self):
         with pytest.raises(ValueError, match="token_in"):
@@ -703,7 +738,13 @@ class TestAddressValidation:
 
     def test_universal_swap_rejects_zero_token_in(self):
         with pytest.raises(ValueError, match="token_in"):
-            UniversalTokenSwapperFuse(FUSE_ADDR).swap(ZERO_ADDR, TOKEN_B, 100, [], [])
+            UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+                token_in=ZERO_ADDR,
+                token_out=TOKEN_B,
+                amount_in=100,
+                targets=[],
+                data=[],
+            )
 
     def test_morpho_flash_loan_rejects_zero_asset(self):
         with pytest.raises(ValueError, match="asset"):
@@ -711,15 +752,25 @@ class TestAddressValidation:
 
     def test_morpho_claim_rejects_zero_distributor(self):
         with pytest.raises(ValueError, match="universal_rewards_distributor"):
-            MorphoClaimFuse(FUSE_ADDR).claim(ZERO_ADDR, TOKEN_B, 100, [])
+            MorphoClaimFuse(FUSE_ADDR).claim(
+                universal_rewards_distributor=ZERO_ADDR,
+                rewards_token=TOKEN_B,
+                claimable=100,
+                proof=[],
+            )
 
     def test_morpho_claim_rejects_zero_rewards_token(self):
         with pytest.raises(ValueError, match="rewards_token"):
-            MorphoClaimFuse(FUSE_ADDR).claim(TOKEN_A, ZERO_ADDR, 100, [])
+            MorphoClaimFuse(FUSE_ADDR).claim(
+                universal_rewards_distributor=TOKEN_A,
+                rewards_token=ZERO_ADDR,
+                claimable=100,
+                proof=[],
+            )
 
     def test_aave_borrow_rejects_zero_asset(self):
         with pytest.raises(ValueError, match="asset"):
-            AaveV3BorrowFuse(FUSE_ADDR).borrow(ZERO_ADDR, 1000)
+            AaveV3BorrowFuse(FUSE_ADDR).borrow(asset=ZERO_ADDR, amount=1000)
 
 
 class TestSlippageParamsAllowZero:
@@ -843,13 +894,21 @@ class TestUniversalSwapEdgeCases:
     def test_mismatched_targets_data_lengths(self):
         with pytest.raises(ValueError, match="same length"):
             UniversalTokenSwapperFuse(FUSE_ADDR).swap(
-                TOKEN_A, TOKEN_B, 100, [TOKEN_A], []
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=100,
+                targets=[TOKEN_A],
+                data=[],
             )
 
     def test_mismatched_data_longer_than_targets(self):
         with pytest.raises(ValueError, match="same length"):
             UniversalTokenSwapperFuse(FUSE_ADDR).swap(
-                TOKEN_A, TOKEN_B, 100, [], [b"\xaa"]
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=100,
+                targets=[],
+                data=[b"\xaa"],
             )
 
 

@@ -78,7 +78,9 @@ def withdraw_from_fluid(forked_ctx, plasma_vault, vault_address):
         plasma_vault.execute(
             [
                 staking_fuse.unstake(fluid_staking_balance),
-                supply_fuse.withdraw(FLUID_POOL_TOKEN, MAX_UINT256),
+                supply_fuse.withdraw(
+                    vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256
+                ),
             ]
         )
 
@@ -110,7 +112,9 @@ def test_supply_and_withdraw_from_gearbox(anvil):
 
     plasma_vault.execute(
         [
-            gearbox_supply.supply(GEARBOX_D_TOKEN, vault_balance_before),
+            gearbox_supply.supply(
+                vault_address=GEARBOX_D_TOKEN, amount=vault_balance_before
+            ),
             gearbox_stake.stake(),
         ]
     )
@@ -132,7 +136,7 @@ def test_supply_and_withdraw_from_gearbox(anvil):
     plasma_vault.execute(
         [
             gearbox_stake.unstake(gearbox_farm_balance_before),
-            gearbox_supply.withdraw(GEARBOX_D_TOKEN, MAX_UINT256),
+            gearbox_supply.withdraw(vault_address=GEARBOX_D_TOKEN, amount=MAX_UINT256),
         ]
     )
 
@@ -170,7 +174,9 @@ def test_supply_and_withdraw_from_fluid(anvil):
     )
     plasma_vault.execute(
         [
-            supply_fuse.supply(FLUID_POOL_TOKEN, vault_balance_before),
+            supply_fuse.supply(
+                vault_address=FLUID_POOL_TOKEN, amount=vault_balance_before
+            ),
             staking_fuse.stake(),
         ]
     )
@@ -192,7 +198,7 @@ def test_supply_and_withdraw_from_fluid(anvil):
     plasma_vault.execute(
         [
             staking_fuse.unstake(fluid_staking_balance_before),
-            supply_fuse.withdraw(FLUID_POOL_TOKEN, MAX_UINT256),
+            supply_fuse.withdraw(vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256),
         ]
     )
 
@@ -245,8 +251,8 @@ def test_supply_and_withdraw_from_aave_v3(anvil):
     protocol_balance_before = usdc_a_token_arb_usdc_n.balance_of(vault_address)
 
     withdraw = aave.withdraw(
-        ARBITRUM_USDC,
-        protocol_balance_before,
+        asset=ARBITRUM_USDC,
+        amount=protocol_balance_before,
     )
 
     plasma_vault.execute([withdraw])
@@ -279,8 +285,8 @@ def test_supply_and_withdraw_from_compound_v3(anvil):
 
     compound = CompoundV3SupplyFuse(ARBITRUM_V3_COMPOUND_V3_SUPPLY_FUSE)
     supply = compound.supply(
-        ARBITRUM_USDC,
-        vault_balance_before,
+        asset=ARBITRUM_USDC,
+        amount=vault_balance_before,
     )
 
     plasma_vault.execute([supply])
@@ -298,8 +304,8 @@ def test_supply_and_withdraw_from_compound_v3(anvil):
     protocol_balance_before = usdc_c_token.balance_of(vault_address)
 
     withdraw = compound.withdraw(
-        ARBITRUM_USDC,
-        protocol_balance_before,
+        asset=ARBITRUM_USDC,
+        amount=protocol_balance_before,
     )
 
     plasma_vault.execute([withdraw])

@@ -103,8 +103,8 @@ def test_should_borrow_aave_v3(anvil):
 
     # Withdraw
     withdraw = aave_supply.withdraw(
-        ETHEREUM_WBTC,
-        int(wbtc_collateral_amount * 0.99999),
+        asset=ETHEREUM_WBTC,
+        amount=int(wbtc_collateral_amount * 0.99999),
     )
     plasma_vault.execute([withdraw])
 
@@ -216,7 +216,9 @@ def test_should_deposit_to_plasma_vault(anvil):
     log.info("weth_borrow_amount: %s", weth_borrow_amount / 1e18)
 
     # Supply to ERC4626 vault
-    supply_erc4626 = erc4626.supply(weth_vault_address, weth_borrow_amount)
+    supply_erc4626 = erc4626.supply(
+        vault_address=weth_vault_address, amount=weth_borrow_amount
+    )
 
     assert (
         ERC20(forked_ctx, ETHEREUM_WETH).balance_of(vault_address) == weth_borrow_amount
@@ -227,7 +229,9 @@ def test_should_deposit_to_plasma_vault(anvil):
     assert ERC20(forked_ctx, ETHEREUM_WETH).balance_of(vault_address) == 0
 
     # Withdraw from ERC4626 vault
-    withdraw_erc4626 = erc4626.withdraw(weth_vault_address, weth_borrow_amount)
+    withdraw_erc4626 = erc4626.withdraw(
+        vault_address=weth_vault_address, amount=weth_borrow_amount
+    )
 
     anvil.move_time(60)
 
