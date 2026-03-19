@@ -12,7 +12,7 @@ from ipor_fusion.addresses import ARBITRUM_USDC
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-fork_url = os.getenv("ARBITRUM_PROVIDER_URL")
+fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
 
 anvil = AnvilTestContainerStarter(fork_url)
 anvil.start()

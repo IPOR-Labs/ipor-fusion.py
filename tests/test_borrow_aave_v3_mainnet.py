@@ -17,7 +17,7 @@ from ipor_fusion.types import Amount
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-fork_url = os.getenv("ETHEREUM_PROVIDER_URL")
+fork_url = os.environ["ETHEREUM_PROVIDER_URL"]
 
 anvil = AnvilTestContainerStarter(fork_url)
 anvil.start()

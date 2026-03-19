@@ -36,7 +36,7 @@ from ipor_fusion.addresses import (
     ARBITRUM_XRAM_TOKEN,
 )
 
-provider_url = os.getenv("ARBITRUM_PROVIDER_URL")
+provider_url = os.environ["ARBITRUM_PROVIDER_URL"]
 
 anvil = AnvilTestContainerStarter(provider_url, 261946538)
 anvil.start()

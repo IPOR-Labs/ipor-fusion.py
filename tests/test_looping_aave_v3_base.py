@@ -32,7 +32,7 @@ from ipor_fusion.addresses import (
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-fork_url = os.getenv("BASE_PROVIDER_URL")
+fork_url = os.environ["BASE_PROVIDER_URL"]
 
 anvil = AnvilTestContainerStarter(fork_url)
 anvil.start()

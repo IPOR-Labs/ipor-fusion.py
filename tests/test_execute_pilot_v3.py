@@ -22,7 +22,7 @@ from ipor_fusion.fuses import (
 )
 from ipor_fusion.addresses import ARBITRUM_USDC
 
-fork_url = os.getenv("ARBITRUM_PROVIDER_URL")
+fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
 anvil = AnvilTestContainerStarter(fork_url, 250690377)
 anvil.start()
 

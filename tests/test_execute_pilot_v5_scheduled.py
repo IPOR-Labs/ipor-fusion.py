@@ -18,7 +18,7 @@ USDC_ADDRESS = ARBITRUM_USDC
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-fork_url = os.getenv("ARBITRUM_PROVIDER_URL")
+fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
 anvil = AnvilTestContainerStarter(fork_url, 250690377)
 anvil.start()
 
