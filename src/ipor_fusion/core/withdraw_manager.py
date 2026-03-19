@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from eth_abi import decode
@@ -11,6 +12,8 @@ from web3.types import TxReceipt, LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.types import Shares, Amount, Period
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -103,7 +106,7 @@ class WithdrawManager(ContractWrapper):
                 if req_info.end_withdraw_window_timestamp > current_timestamp:
                     requested_amount += req_info.shares
             except ContractPanicError:
-                pass
+                logger.warning("ContractPanicError for account %s", account)
 
         return requested_amount, current_timestamp - 1
 

@@ -1,6 +1,5 @@
-from eth_abi import encode, decode
+from eth_abi import decode
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
@@ -45,11 +44,8 @@ class RewardsManager(ContractWrapper):
         return value
 
     def claim_rewards(self, claims: list[FuseAction]) -> TxReceipt:
-        bytes_data = [[action.fuse, action.data] for action in claims]
-        encoded = encode(["(address,bytes)[]"], [bytes_data])
-        data = (
-            function_signature_to_4byte_selector("claimRewards((address,bytes)[])")
-            + encoded
+        data = FuseAction.encode_execute_payload(
+            claims, "claimRewards((address,bytes)[])"
         )
         return self._ctx.send(self._address, data)
 

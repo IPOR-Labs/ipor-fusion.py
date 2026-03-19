@@ -6,6 +6,7 @@ from eth_abi.packed import encode_packed
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
+from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
@@ -302,7 +303,16 @@ class TestUniswapV3NewPositionFuse:
     def test_new_position(self):
         fuse = UniswapV3NewPositionFuse(FUSE_ADDR)
         action = fuse.new_position(
-            TOKEN_A, TOKEN_B, 500, -100, 100, 1000, 2000, 900, 1800, 99999
+            token0=TOKEN_A,
+            token1=TOKEN_B,
+            fee=500,
+            tick_lower=-100,
+            tick_upper=100,
+            amount0_desired=1000,
+            amount1_desired=2000,
+            amount0_min=900,
+            amount1_min=1800,
+            deadline=99999,
         )
         assert action.data[:4] == _selector(
             "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256))"
@@ -330,7 +340,14 @@ class TestUniswapV3NewPositionFuse:
 class TestUniswapV3ModifyPositionFuse:
     def test_increase_liquidity(self):
         action = UniswapV3ModifyPositionFuse(FUSE_ADDR).increase_liquidity(
-            TOKEN_A, TOKEN_B, 7, 1000, 2000, 900, 1800, 99999
+            token0=TOKEN_A,
+            token1=TOKEN_B,
+            token_id=7,
+            amount0_desired=1000,
+            amount1_desired=2000,
+            amount0_min=900,
+            amount1_min=1800,
+            deadline=99999,
         )
         assert action.data[:4] == _selector(
             "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))"
@@ -365,7 +382,17 @@ class TestUniswapV3CollectFuse:
 class TestRamsesV2NewPositionFuse:
     def test_new_position_has_ve_ram_token_id(self):
         action = RamsesV2NewPositionFuse(FUSE_ADDR).new_position(
-            TOKEN_A, TOKEN_B, 500, -100, 100, 1000, 2000, 900, 1800, 99999, 42
+            token0=TOKEN_A,
+            token1=TOKEN_B,
+            fee=500,
+            tick_lower=-100,
+            tick_upper=100,
+            amount0_desired=1000,
+            amount1_desired=2000,
+            amount0_min=900,
+            amount1_min=1800,
+            deadline=99999,
+            ve_ram_token_id=42,
         )
         assert action.data[:4] == _selector(
             "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256,uint256))"
@@ -386,7 +413,14 @@ class TestRamsesV2NewPositionFuse:
 class TestRamsesV2ModifyPositionFuse:
     def test_increase_liquidity(self):
         action = RamsesV2ModifyPositionFuse(FUSE_ADDR).increase_liquidity(
-            TOKEN_A, TOKEN_B, 7, 1000, 2000, 900, 1800, 99999
+            token0=TOKEN_A,
+            token1=TOKEN_B,
+            token_id=7,
+            amount0_desired=1000,
+            amount1_desired=2000,
+            amount0_min=900,
+            amount1_min=1800,
+            deadline=99999,
         )
         assert action.data[:4] == _selector(
             "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))"
@@ -665,13 +699,13 @@ class TestSlippageParamsAllowZero:
 
     def test_new_position_allows_zero_amount_min(self):
         action = UniswapV3NewPositionFuse(FUSE_ADDR).new_position(
-            TOKEN_A,
-            TOKEN_B,
-            500,
-            -100,
-            100,
-            1000,
-            2000,
+            token0=TOKEN_A,
+            token1=TOKEN_B,
+            fee=500,
+            tick_lower=-100,
+            tick_upper=100,
+            amount0_desired=1000,
+            amount1_desired=2000,
             amount0_min=0,
             amount1_min=0,
             deadline=99999,
@@ -729,7 +763,14 @@ class TestTokenIdValidation:
     def test_uniswap_increase_liquidity_rejects_negative_token_id(self):
         with pytest.raises(ValueError, match="token_id"):
             UniswapV3ModifyPositionFuse(FUSE_ADDR).increase_liquidity(
-                TOKEN_A, TOKEN_B, -1, 1000, 2000, 0, 0, 99999
+                token0=TOKEN_A,
+                token1=TOKEN_B,
+                token_id=-1,
+                amount0_desired=1000,
+                amount1_desired=2000,
+                amount0_min=0,
+                amount1_min=0,
+                deadline=99999,
             )
 
     def test_ramses_decrease_liquidity_rejects_negative_token_id(self):
@@ -741,7 +782,14 @@ class TestTokenIdValidation:
     def test_ramses_increase_liquidity_rejects_negative_token_id(self):
         with pytest.raises(ValueError, match="token_id"):
             RamsesV2ModifyPositionFuse(FUSE_ADDR).increase_liquidity(
-                TOKEN_A, TOKEN_B, -1, 1000, 2000, 0, 0, 99999
+                token0=TOKEN_A,
+                token1=TOKEN_B,
+                token_id=-1,
+                amount0_desired=1000,
+                amount1_desired=2000,
+                amount0_min=0,
+                amount1_min=0,
+                deadline=99999,
             )
 
     def test_uniswap_decrease_liquidity_allows_zero_token_id(self):
@@ -765,3 +813,44 @@ class TestUniversalSwapEdgeCases:
             UniversalTokenSwapperFuse(FUSE_ADDR).swap(
                 TOKEN_A, TOKEN_B, 100, [], [b"\xaa"]
             )
+
+
+# ── _parse_param_types ────────────────────────────────────────────────
+
+
+class TestParseParamTypes:
+    def test_simple_types(self):
+        assert _parse_param_types("transfer(address,uint256)") == [
+            "address",
+            "uint256",
+        ]
+
+    def test_empty_params(self):
+        assert not _parse_param_types("doSomething()")
+
+    def test_single_param(self):
+        assert _parse_param_types("foo(uint256)") == ["uint256"]
+
+    def test_nested_tuple(self):
+        assert _parse_param_types("enter((address,uint256))") == ["(address,uint256)"]
+
+    def test_tuple_array(self):
+        assert _parse_param_types("execute((address,bytes)[])") == ["(address,bytes)[]"]
+
+    def test_multiple_params_with_tuple(self):
+        assert _parse_param_types("foo(uint256,(address,uint256),bool)") == [
+            "uint256",
+            "(address,uint256)",
+            "bool",
+        ]
+
+    def test_deeply_nested_tuple(self):
+        assert _parse_param_types("enter((address,uint256,(uint256,address)))") == [
+            "(address,uint256,(uint256,address))"
+        ]
+
+    def test_multiple_tuples(self):
+        assert _parse_param_types("foo((uint256,address),(bool,bytes))") == [
+            "(uint256,address)",
+            "(bool,bytes)",
+        ]

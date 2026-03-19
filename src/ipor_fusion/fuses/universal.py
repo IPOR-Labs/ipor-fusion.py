@@ -22,6 +22,5 @@ class UniversalTokenSwapperFuse(Fuse):
             )
         return self._action_raw(
             "enter((address,address,uint256,(address[],bytes[])))",
-            ["(address,address,uint256,(address[],bytes[]))"],
             [[token_in, token_out, amount_in, [targets, data]]],
         )

@@ -25,9 +25,15 @@ class Web3Context:
     ):
         self._web3 = web3
         self._chain_id = chain_id
-        self._signer = signer
         self._private_key = private_key
-        self.gas_multiplier = gas_multiplier
+        self._gas_multiplier = gas_multiplier
+        self._signer: ChecksumAddress | None = None
+
+        if signer:
+            self._signer = signer
+        elif private_key:
+            account = Account.from_key(private_key)
+            self._signer = Web3.to_checksum_address(account.address)
 
     @property
     def web3(self) -> Web3:
@@ -51,15 +57,9 @@ class Web3Context:
         web3 = Web3(Web3.HTTPProvider(url))
         chain_id = web3.eth.chain_id
 
-        signer = None
-        if private_key:
-            account = Account.from_key(private_key)
-            signer = Web3.to_checksum_address(account.address)
-
         return cls(
             web3=web3,
             chain_id=chain_id,
-            signer=signer,
             private_key=private_key,
             gas_multiplier=gas_multiplier,
         )
@@ -68,17 +68,16 @@ class Web3Context:
         return self.web3.eth.call({"to": to, "data": data})
 
     def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
-        if not self._private_key:
+        if not self._private_key or not self._signer:
             raise ValueError("Private key required for sending transactions")
 
-        account = Account.from_key(self._private_key)
-        nonce = self.web3.eth.get_transaction_count(account.address)
+        nonce = self.web3.eth.get_transaction_count(self._signer)
         gas_price = self.web3.eth.gas_price
         max_fee_per_gas = self._calculate_max_fee_per_gas(gas_price)
         max_priority_fee_per_gas = self._get_max_priority_fee(gas_price)
 
         data_hex = f"0x{data.hex()}"
-        estimated_gas = self._estimate_gas(to, data_hex, account.address)
+        estimated_gas = self._estimate_gas(to, data_hex, self._signer)
 
         transaction = {
             "chainId": self.chain_id,
@@ -86,7 +85,7 @@ class Web3Context:
             "maxFeePerGas": max_fee_per_gas,
             "maxPriorityFeePerGas": max_priority_fee_per_gas,
             "to": to,
-            "from": account.address,
+            "from": self._signer,
             "nonce": nonce,
             "data": data_hex,
         }
@@ -127,7 +126,7 @@ class Web3Context:
         estimated = self.web3.eth.estimate_gas(
             {"to": to, "from": from_address, "data": data}  # type: ignore[typeddict-item]
         )
-        return int(self.gas_multiplier * estimated)
+        return int(self._gas_multiplier * estimated)
 
     def _calculate_max_fee_per_gas(self, gas_price: int) -> int:
         return gas_price + self._percent_of(gas_price, self.GAS_PRICE_MARGIN)

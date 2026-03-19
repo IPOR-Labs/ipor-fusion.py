@@ -32,5 +32,23 @@ class ContractWrapper:
 
 
 def _parse_param_types(signature: str) -> list[str]:
-    params = signature[signature.index("(") + 1 : signature.rindex(")")]
-    return [p.strip() for p in params.split(",") if p.strip()] if params else []
+    if not (params := signature[signature.index("(") + 1 : signature.rindex(")")]):
+        return []
+    result = []
+    depth = 0
+    current: list[str] = []
+    for char in params:
+        if char == "(":
+            depth += 1
+            current.append(char)
+        elif char == ")":
+            depth -= 1
+            current.append(char)
+        elif char == "," and depth == 0:
+            result.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    if last := "".join(current).strip():
+        result.append(last)
+    return result

@@ -8,13 +8,9 @@ class CompoundV3SupplyFuse(Fuse):
     def supply(self, asset: ChecksumAddress, amount: Amount) -> FuseAction:
         self._validate_address(asset, "asset")
         self._validate_amount(amount, "amount")
-        return self._action_raw(
-            "enter((address,uint256))", ["address", "uint256"], [asset, amount]
-        )
+        return self._action_raw("enter((address,uint256))", [[asset, amount]])
 
     def withdraw(self, asset: ChecksumAddress, amount: Amount) -> FuseAction:
         self._validate_address(asset, "asset")
         self._validate_amount(amount, "amount")
-        return self._action_raw(
-            "exit((address,uint256))", ["address", "uint256"], [asset, amount]
-        )
+        return self._action_raw("exit((address,uint256))", [[asset, amount]])

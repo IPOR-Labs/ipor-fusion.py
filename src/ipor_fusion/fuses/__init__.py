@@ -14,6 +14,7 @@ from ipor_fusion.fuses.uniswap_v3 import (
     UniswapV3CollectFuse,
     UniswapV3NewPositionEvent,
     UniswapV3ClosePositionEvent,
+    UniswapV3Events,
     extract_uniswap_v3_new_position_events,
     extract_uniswap_v3_close_position_events,
 )
@@ -24,6 +25,7 @@ from ipor_fusion.fuses.ramses_v2 import (
     RamsesV2CollectFuse,
     RamsesClaimFuse,
     RamsesNewPositionEvent,
+    RamsesEvents,
     extract_ramses_new_position_events,
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxSupplyFuse, GearboxStakeFuse
@@ -52,6 +54,7 @@ __all__ = [
     "UniswapV3NewPositionEvent",
     "UniswapV3ClosePositionEvent",
     "extract_uniswap_v3_new_position_events",
+    "UniswapV3Events",
     "extract_uniswap_v3_close_position_events",
     "CompoundV3SupplyFuse",
     "RamsesV2NewPositionFuse",
@@ -59,6 +62,7 @@ __all__ = [
     "RamsesV2CollectFuse",
     "RamsesClaimFuse",
     "RamsesNewPositionEvent",
+    "RamsesEvents",
     "extract_ramses_new_position_events",
     "GearboxSupplyFuse",
     "GearboxStakeFuse",

@@ -4,7 +4,8 @@ from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
-from ipor_fusion.types import Amount, MAX_UINT256
+from ipor_fusion.core.contract import _parse_param_types
+from ipor_fusion.types import Amount, TokenId, MAX_UINT256
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -24,6 +25,12 @@ class FuseAction:
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    @staticmethod
+    def encode_execute_payload(actions: list["FuseAction"], signature: str) -> bytes:
+        bytes_data = [[action.fuse, action.data] for action in actions]
+        encoded = encode(["(address,bytes)[]"], [bytes_data])
+        return function_signature_to_4byte_selector(signature) + encoded
 
 
 class Fuse(ABC):
@@ -54,14 +61,13 @@ class Fuse(ABC):
             raise ValueError(f"{name} must not be empty")
 
     @staticmethod
-    def _validate_token_id(value: int, name: str) -> None:
+    def _validate_token_id(value: TokenId, name: str) -> None:
         if value < 0:
             raise ValueError(f"{name} must not be negative, got {value}")
 
-    def _action_raw(
-        self, signature: str, abi_types: list[str], values: list
-    ) -> FuseAction:
+    def _action_raw(self, signature: str, values: list) -> FuseAction:
         selector = function_signature_to_4byte_selector(signature)
+        abi_types = _parse_param_types(signature)
         data = selector + encode(abi_types, values)
         return FuseAction(fuse=self._address, data=data)
 
@@ -76,14 +82,12 @@ class StakeFuse(Fuse):
     def stake(self) -> FuseAction:
         return self._action_raw(
             "enter((uint256,address))",
-            ["uint256", "address"],
-            [MAX_UINT256, self._staking_address],
+            [[MAX_UINT256, self._staking_address]],
         )
 
     def unstake(self, amount: Amount) -> FuseAction:
         self._validate_amount(amount, "amount")
         return self._action_raw(
             "exit((uint256,address))",
-            ["uint256", "address"],
-            [amount, self._staking_address],
+            [[amount, self._staking_address]],
         )

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from eth_abi import encode, decode
+from eth_abi import decode
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import TxReceipt, LogReceipt
@@ -150,12 +149,9 @@ class PlasmaVault(ContractWrapper):
         )
         return list(value)
 
-    def _encode_execute(self, actions: list[FuseAction]) -> bytes:
-        bytes_data = [[action.fuse, action.data] for action in actions]
-        encoded = encode(["(address,bytes)[]"], [bytes_data])
-        return (
-            function_signature_to_4byte_selector("execute((address,bytes)[])") + encoded
-        )
+    @staticmethod
+    def _encode_execute(actions: list[FuseAction]) -> bytes:
+        return FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
 
     def _get_withdraw_manager_changed_events(self) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
