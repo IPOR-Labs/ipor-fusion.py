@@ -1,4 +1,5 @@
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.access import AccessManager, RoleAccount
 from ipor_fusion.core.rewards_manager import RewardsManager
@@ -57,6 +58,7 @@ __version__ = "0.25.0"
 __all__ = [
     "__version__",
     "Web3Context",
+    "ContractWrapper",
     "PlasmaVault",
     "AccessManager",
     "RoleAccount",

@@ -1,12 +1,11 @@
 from dataclasses import dataclass
-from eth_abi import encode, decode
+from eth_abi import decode
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import TxReceipt, LogReceipt
 
-from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.config.roles import Roles
 
 
@@ -18,30 +17,17 @@ class RoleAccount:
     execution_delay: int
 
 
-class AccessManager:
-
-    def __init__(self, ctx: Web3Context, address: ChecksumAddress):
-        self._ctx = ctx
-        self._address = Web3.to_checksum_address(address)
-
-    @property
-    def address(self) -> ChecksumAddress:
-        return self._address
+class AccessManager(ContractWrapper):
 
     def grant_role(
         self, role_id: int, account: ChecksumAddress, execution_delay: int
     ) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("grantRole(uint64,address,uint32)")
-        data = sig + encode(
-            ["uint64", "address", "uint32"], [role_id, account, execution_delay]
+        return self._send(
+            "grantRole(uint64,address,uint32)", role_id, account, execution_delay
         )
-        return self._ctx.send(self._address, data)
 
     def has_role(self, role_id: int, account: ChecksumAddress) -> tuple[bool, int]:
-        sig = function_signature_to_4byte_selector("hasRole(uint64,address)")
-        result = self._ctx.call(
-            self._address, sig + encode(["uint64", "address"], [role_id, account])
-        )
+        result = self._call("hasRole(uint64,address)", role_id, account)
         is_member, execution_delay = decode(["bool", "uint32"], result)
         return is_member, execution_delay
 

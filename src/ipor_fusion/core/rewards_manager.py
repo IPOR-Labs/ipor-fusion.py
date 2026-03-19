@@ -4,36 +4,23 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
-from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
 
 
-class RewardsManager:
-
-    def __init__(self, ctx: Web3Context, address: ChecksumAddress):
-        self._ctx = ctx
-        self._address = Web3.to_checksum_address(address)
-
-    @property
-    def address(self) -> ChecksumAddress:
-        return self._address
+class RewardsManager(ContractWrapper):
 
     def transfer(
         self, asset: ChecksumAddress, to: ChecksumAddress, amount: int
     ) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("transfer(address,address,uint256)")
-        data = sig + encode(["address", "address", "uint256"], [asset, to, amount])
-        return self._ctx.send(self._address, data)
+        return self._send("transfer(address,address,uint256)", asset, to, amount)
 
     def balance_of(self) -> int:
-        sig = function_signature_to_4byte_selector("balanceOf()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("balanceOf()"))
         return value
 
     def get_vesting_data(self) -> tuple[int, int, int, int]:
-        sig = function_signature_to_4byte_selector("getVestingData()")
-        result = self._ctx.call(self._address, sig)
+        result = self._call("getVestingData()")
         (
             (
                 vesting_time,
@@ -50,15 +37,13 @@ class RewardsManager:
         )
 
     def get_rewards_fuses(self) -> list[ChecksumAddress]:
-        sig = function_signature_to_4byte_selector("getRewardsFuses()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["address[]"], result)
+        (value,) = decode(["address[]"], self._call("getRewardsFuses()"))
         return [Web3.to_checksum_address(item) for item in list(value)]
 
     def is_reward_fuse_supported(self, fuse: ChecksumAddress) -> bool:
-        sig = function_signature_to_4byte_selector("isRewardFuseSupported(address)")
-        result = self._ctx.call(self._address, sig + encode(["address"], [fuse]))
-        (value,) = decode(["bool"], result)
+        (value,) = decode(
+            ["bool"], self._call("isRewardFuseSupported(address)", fuse)
+        )
         return value
 
     def claim_rewards(self, claims: list[FuseAction]) -> TxReceipt:
@@ -71,5 +56,4 @@ class RewardsManager:
         return self._ctx.send(self._address, data)
 
     def update_balance(self) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("updateBalance()")
-        return self._ctx.send(self._address, sig)
+        return self._send("updateBalance()")

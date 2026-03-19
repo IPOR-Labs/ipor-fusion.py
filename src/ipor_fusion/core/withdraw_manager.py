@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from eth_abi import encode, decode
+from eth_abi import decode
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractPanicError
 from web3.types import TxReceipt, LogReceipt, Timestamp
 
-from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.types import Shares, Amount, Period
 
 
@@ -22,35 +21,19 @@ class WithdrawRequestInfo:
     withdraw_window_in_seconds: Period
 
 
-class WithdrawManager:
-
-    def __init__(self, ctx: Web3Context, address: ChecksumAddress):
-        self._ctx = ctx
-        self._address = Web3.to_checksum_address(address)
-
-    @property
-    def address(self) -> ChecksumAddress:
-        return self._address
+class WithdrawManager(ContractWrapper):
 
     def request(self, to_withdraw: Amount) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("request(uint256)")
-        data = sig + encode(["uint256"], [to_withdraw])
-        return self._ctx.send(self._address, data)
+        return self._send("request(uint256)", to_withdraw)
 
     def request_shares(self, shares: Shares) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("requestShares(uint256)")
-        data = sig + encode(["uint256"], [shares])
-        return self._ctx.send(self._address, data)
+        return self._send("requestShares(uint256)", shares)
 
     def update_withdraw_window(self, window: Period) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("updateWithdrawWindow(uint256)")
-        data = sig + encode(["uint256"], [window])
-        return self._ctx.send(self._address, data)
+        return self._send("updateWithdrawWindow(uint256)", window)
 
     def update_plasma_vault_address(self, vault: ChecksumAddress) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("updatePlasmaVaultAddress(address)")
-        data = sig + encode(["address"], [vault])
-        return self._ctx.send(self._address, data)
+        return self._send("updatePlasmaVaultAddress(address)", vault)
 
     def release_funds(
         self, timestamp: Timestamp | None = None, shares: Shares | None = None
@@ -58,44 +41,29 @@ class WithdrawManager:
         if shares is not None:
             if timestamp is None:
                 raise ValueError("timestamp is required when shares is provided")
-            sig = function_signature_to_4byte_selector("releaseFunds(uint256,uint256)")
-            data = sig + encode(["uint256", "uint256"], [timestamp, shares])
-        elif timestamp is not None:
-            sig = function_signature_to_4byte_selector("releaseFunds(uint256)")
-            data = sig + encode(["uint256"], [timestamp])
-        else:
-            sig = function_signature_to_4byte_selector("releaseFunds()")
-            data = sig
-
-        return self._ctx.send(self._address, data)
+            return self._send("releaseFunds(uint256,uint256)", timestamp, shares)
+        if timestamp is not None:
+            return self._send("releaseFunds(uint256)", timestamp)
+        return self._send("releaseFunds()")
 
     def get_withdraw_window(self) -> Period:
-        sig = function_signature_to_4byte_selector("getWithdrawWindow()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("getWithdrawWindow()"))
         return value
 
     def get_last_release_funds_timestamp(self) -> Timestamp:
-        sig = function_signature_to_4byte_selector("getLastReleaseFundsTimestamp()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("getLastReleaseFundsTimestamp()"))
         return value
 
     def get_shares_to_release(self) -> Shares:
-        sig = function_signature_to_4byte_selector("getSharesToRelease()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("getSharesToRelease()"))
         return value
 
     def get_request_fee(self) -> int:
-        sig = function_signature_to_4byte_selector("getRequestFee()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("getRequestFee()"))
         return value
 
     def request_info(self, account: ChecksumAddress) -> WithdrawRequestInfo:
-        sig = function_signature_to_4byte_selector("requestInfo(address)")
-        result = self._ctx.call(self._address, sig + encode(["address"], [account]))
+        result = self._call("requestInfo(address)", account)
         (
             amount,
             end_withdraw_window_timestamp,

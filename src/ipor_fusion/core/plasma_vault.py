@@ -7,169 +7,109 @@ from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import TxReceipt, LogReceipt
 
-from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.types import Amount, MarketId, Decimals, Shares
 
 
-class PlasmaVault:
-
-    def __init__(self, ctx: Web3Context, address: ChecksumAddress):
-        self._ctx = ctx
-        self._address = Web3.to_checksum_address(address)
-
-    @property
-    def address(self) -> ChecksumAddress:
-        return self._address
+class PlasmaVault(ContractWrapper):
 
     def execute(self, actions: list[FuseAction]) -> TxReceipt:
         data = self._encode_execute(actions)
         return self._ctx.send(self._address, data)
 
     def deposit(self, assets: Amount, receiver: ChecksumAddress) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("deposit(uint256,address)")
-        data = sig + encode(["uint256", "address"], [assets, receiver])
-        return self._ctx.send(self._address, data)
+        return self._send("deposit(uint256,address)", assets, receiver)
 
     def mint(self, shares: Shares, receiver: ChecksumAddress) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("mint(uint256,address)")
-        data = sig + encode(["uint256", "address"], [shares, receiver])
-        return self._ctx.send(self._address, data)
+        return self._send("mint(uint256,address)", shares, receiver)
 
     def withdraw(
         self, assets: Amount, receiver: ChecksumAddress, owner: ChecksumAddress
     ) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("withdraw(uint256,address,address)")
-        data = sig + encode(
-            ["uint256", "address", "address"], [assets, receiver, owner]
-        )
-        return self._ctx.send(self._address, data)
+        return self._send("withdraw(uint256,address,address)", assets, receiver, owner)
 
     def redeem(
         self, shares: Shares, receiver: ChecksumAddress, owner: ChecksumAddress
     ) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("redeem(uint256,address,address)")
-        data = sig + encode(
-            ["uint256", "address", "address"], [shares, receiver, owner]
-        )
-        return self._ctx.send(self._address, data)
+        return self._send("redeem(uint256,address,address)", shares, receiver, owner)
 
     def redeem_from_request(
         self, shares: Shares, receiver: ChecksumAddress, owner: ChecksumAddress
     ) -> TxReceipt:
-        sig = function_signature_to_4byte_selector(
-            "redeemFromRequest(uint256,address,address)"
+        return self._send(
+            "redeemFromRequest(uint256,address,address)", shares, receiver, owner
         )
-        data = sig + encode(
-            ["uint256", "address", "address"], [shares, receiver, owner]
-        )
-        return self._ctx.send(self._address, data)
 
     def add_fuses(self, fuses: list[ChecksumAddress]) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("addFuses(address[])")
-        data = sig + encode(["address[]"], [fuses])
-        return self._ctx.send(self._address, data)
+        return self._send("addFuses(address[])", fuses)
 
     def set_total_supply_cap(self, cap: int) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("setTotalSupplyCap(uint256)")
-        data = sig + encode(["uint256"], [cap])
-        return self._ctx.send(self._address, data)
+        return self._send("setTotalSupplyCap(uint256)", cap)
 
     def transfer(self, to: ChecksumAddress, value: Amount) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("transfer(address,uint256)")
-        data = sig + encode(["address", "uint256"], [to, value])
-        return self._ctx.send(self._address, data)
+        return self._send("transfer(address,uint256)", to, value)
 
     def approve(self, account: ChecksumAddress, amount: Amount) -> TxReceipt:
-        sig = function_signature_to_4byte_selector("approve(address,uint256)")
-        data = sig + encode(["address", "uint256"], [account, amount])
-        return self._ctx.send(self._address, data)
+        return self._send("approve(address,uint256)", account, amount)
 
     def transfer_from(
         self, _from: ChecksumAddress, to: ChecksumAddress, amount: Amount
     ) -> TxReceipt:
-        sig = function_signature_to_4byte_selector(
-            "transferFrom(address,address,uint256)"
-        )
-        data = sig + encode(["address", "address", "uint256"], [_from, to, amount])
-        return self._ctx.send(self._address, data)
+        return self._send("transferFrom(address,address,uint256)", _from, to, amount)
 
     def balance_of(self, account: ChecksumAddress) -> Amount:
-        sig = function_signature_to_4byte_selector("balanceOf(address)")
-        result = self._ctx.call(self._address, sig + encode(["address"], [account]))
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("balanceOf(address)", account))
         return value
 
     def get_total_supply_cap(self) -> Amount:
-        sig = function_signature_to_4byte_selector("getTotalSupplyCap()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("getTotalSupplyCap()"))
         return value
 
     def max_withdraw(self, account: ChecksumAddress) -> Amount:
-        sig = function_signature_to_4byte_selector("maxWithdraw(address)")
-        result = self._ctx.call(self._address, sig + encode(["address"], [account]))
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("maxWithdraw(address)", account))
         return value
 
     def convert_to_shares(self, amount: Amount) -> Shares:
-        sig = function_signature_to_4byte_selector("convertToShares(uint256)")
-        result = self._ctx.call(self._address, sig + encode(["uint256"], [amount]))
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("convertToShares(uint256)", amount))
         return value
 
     def convert_to_assets(self, shares: Shares) -> Amount:
-        sig = function_signature_to_4byte_selector("convertToAssets(uint256)")
-        result = self._ctx.call(self._address, sig + encode(["uint256"], [shares]))
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("convertToAssets(uint256)", shares))
         return value
 
     def total_assets_in_market(self, market: MarketId) -> Amount:
-        sig = function_signature_to_4byte_selector("totalAssetsInMarket(uint256)")
-        result = self._ctx.call(self._address, sig + encode(["uint256"], [market]))
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(
+            ["uint256"], self._call("totalAssetsInMarket(uint256)", market)
+        )
         return value
 
     def decimals(self) -> Decimals:
-        sig = function_signature_to_4byte_selector("decimals()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("decimals()"))
         return value
 
     def total_assets(self) -> Amount:
-        sig = function_signature_to_4byte_selector("totalAssets()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["uint256"], result)
+        (value,) = decode(["uint256"], self._call("totalAssets()"))
         return value
 
     def underlying_asset_address(self) -> ChecksumAddress:
-        sig = function_signature_to_4byte_selector("asset()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["address"], result)
+        (value,) = decode(["address"], self._call("asset()"))
         return Web3.to_checksum_address(value)
 
     def get_access_manager_address(self) -> ChecksumAddress:
-        sig = function_signature_to_4byte_selector("getAccessManagerAddress()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["address"], result)
+        (value,) = decode(["address"], self._call("getAccessManagerAddress()"))
         return Web3.to_checksum_address(value)
 
     def get_rewards_claim_manager_address(self) -> ChecksumAddress:
-        sig = function_signature_to_4byte_selector("getRewardsClaimManagerAddress()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["address"], result)
+        (value,) = decode(["address"], self._call("getRewardsClaimManagerAddress()"))
         return Web3.to_checksum_address(value)
 
     def get_price_oracle_middleware_address(self) -> ChecksumAddress:
-        sig = function_signature_to_4byte_selector("getPriceOracleMiddleware()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["address"], result)
+        (value,) = decode(["address"], self._call("getPriceOracleMiddleware()"))
         return Web3.to_checksum_address(value)
 
     def get_fuses(self) -> list[ChecksumAddress]:
-        sig = function_signature_to_4byte_selector("getFuses()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["address[]"], result)
+        (value,) = decode(["address[]"], self._call("getFuses()"))
         return [Web3.to_checksum_address(item) for item in list(value)]
 
     def get_balance_fuses(self) -> list[tuple[MarketId, ChecksumAddress]]:
@@ -191,27 +131,22 @@ class PlasmaVault:
         return None
 
     def get_instant_withdrawal_fuses(self) -> list[ChecksumAddress]:
-        sig = function_signature_to_4byte_selector("getInstantWithdrawalFuses()")
-        result = self._ctx.call(self._address, sig)
-        (value,) = decode(["address[]"], result)
+        (value,) = decode(["address[]"], self._call("getInstantWithdrawalFuses()"))
         return [Web3.to_checksum_address(item) for item in list(value)]
 
     def get_instant_withdrawal_fuses_params(
         self, fuse: ChecksumAddress, index: int
     ) -> list[bytes]:
-        sig = function_signature_to_4byte_selector(
-            "getInstantWithdrawalFusesParams(address,uint256)"
+        (value,) = decode(
+            ["bytes32[]"],
+            self._call("getInstantWithdrawalFusesParams(address,uint256)", fuse, index),
         )
-        result = self._ctx.call(
-            self._address, sig + encode(["address", "uint256"], [fuse, index])
-        )
-        (value,) = decode(["bytes32[]"], result)
         return list(value)
 
     def get_market_substrates(self, market_id: MarketId) -> list[bytes]:
-        sig = function_signature_to_4byte_selector("getMarketSubstrates(uint256)")
-        result = self._ctx.call(self._address, sig + encode(["uint256"], [market_id]))
-        (value,) = decode(["bytes32[]"], result)
+        (value,) = decode(
+            ["bytes32[]"], self._call("getMarketSubstrates(uint256)", market_id)
+        )
         return list(value)
 
     def _encode_execute(self, actions: list[FuseAction]) -> bytes:
