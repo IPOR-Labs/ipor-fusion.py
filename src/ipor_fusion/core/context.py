@@ -24,7 +24,7 @@ class Web3Context:
         self.web3 = web3
         self.chain_id = chain_id
         self.signer = signer
-        self.private_key = private_key
+        self._private_key = private_key
         self.gas_multiplier = gas_multiplier
 
     @classmethod
@@ -54,10 +54,10 @@ class Web3Context:
         return self.web3.eth.call({"to": to, "data": data})
 
     def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
-        if not self.private_key:
+        if not self._private_key:
             raise ValueError("Private key required for sending transactions")
 
-        account = Account.from_key(self.private_key)
+        account = Account.from_key(self._private_key)
         nonce = self.web3.eth.get_transaction_count(account.address)
         gas_price = self.web3.eth.gas_price
         max_fee_per_gas = self._calculate_max_fee_per_gas(gas_price)
@@ -78,7 +78,7 @@ class Web3Context:
         }
 
         signed_tx = self.web3.eth.account.sign_transaction(
-            transaction, self.private_key
+            transaction, self._private_key
         )
         tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
         receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
