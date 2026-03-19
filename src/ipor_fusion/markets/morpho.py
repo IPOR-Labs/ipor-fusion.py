@@ -14,9 +14,9 @@ from ipor_fusion.types import MorphoBlueMarketId
 class MorphoMarket(LendingProtocol):
     def __init__(
         self,
-        supply_fuse: ChecksumAddress = None,
-        flash_loan_fuse: ChecksumAddress = None,
-        claim_fuse: ChecksumAddress = None,
+        supply_fuse: ChecksumAddress | None = None,
+        flash_loan_fuse: ChecksumAddress | None = None,
+        claim_fuse: ChecksumAddress | None = None,
     ):
         self._supply_fuse = MorphoSupplyFuse(supply_fuse) if supply_fuse else None
         self._flash_loan_fuse = (

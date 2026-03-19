@@ -34,10 +34,10 @@ class RamsesNewPositionEvent:
 class RamsesV2Market(LiquidityProtocol):
     def __init__(
         self,
-        new_position_fuse: ChecksumAddress = None,
-        modify_position_fuse: ChecksumAddress = None,
-        collect_fuse: ChecksumAddress = None,
-        claim_fuse: ChecksumAddress = None,
+        new_position_fuse: ChecksumAddress | None = None,
+        modify_position_fuse: ChecksumAddress | None = None,
+        collect_fuse: ChecksumAddress | None = None,
+        claim_fuse: ChecksumAddress | None = None,
     ):
         self._new_position_fuse = (
             RamsesV2NewPositionFuse(new_position_fuse) if new_position_fuse else None
@@ -94,8 +94,8 @@ class RamsesV2Market(LiquidityProtocol):
         amount0_min: int,
         amount1_min: int,
         deadline: int,
-        token0: ChecksumAddress = None,
-        token1: ChecksumAddress = None,
+        token0: ChecksumAddress | None = None,
+        token1: ChecksumAddress | None = None,
         **kwargs,
     ) -> FuseAction:
         if not self._modify_position_fuse:
@@ -128,8 +128,8 @@ class RamsesV2Market(LiquidityProtocol):
 
     def collect(
         self,
-        token_ids: list[int] = None,
-        token_id: int = None,
+        token_ids: list[int] | None = None,
+        token_id: int | None = None,
         amount0_max: int = 0,
         amount1_max: int = 0,
         **kwargs,

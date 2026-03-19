@@ -14,10 +14,10 @@ from ipor_fusion.markets.base import SwapProtocol, LiquidityProtocol
 class UniswapV3Market(SwapProtocol, LiquidityProtocol):
     def __init__(
         self,
-        swap_fuse: ChecksumAddress = None,
-        new_position_fuse: ChecksumAddress = None,
-        modify_position_fuse: ChecksumAddress = None,
-        collect_fuse: ChecksumAddress = None,
+        swap_fuse: ChecksumAddress | None = None,
+        new_position_fuse: ChecksumAddress | None = None,
+        modify_position_fuse: ChecksumAddress | None = None,
+        collect_fuse: ChecksumAddress | None = None,
     ):
         self._swap_fuse = UniswapV3SwapFuse(swap_fuse) if swap_fuse else None
         self._new_position_fuse = (
@@ -34,8 +34,8 @@ class UniswapV3Market(SwapProtocol, LiquidityProtocol):
 
     def swap(
         self,
-        token_in: ChecksumAddress = None,
-        token_out: ChecksumAddress = None,
+        token_in: ChecksumAddress | None = None,
+        token_out: ChecksumAddress | None = None,
         fee: int = 3000,
         amount_in: int = 0,
         min_amount_out: int = 0,
@@ -87,8 +87,8 @@ class UniswapV3Market(SwapProtocol, LiquidityProtocol):
         amount0_min: int,
         amount1_min: int,
         deadline: int,
-        token0: ChecksumAddress = None,
-        token1: ChecksumAddress = None,
+        token0: ChecksumAddress | None = None,
+        token1: ChecksumAddress | None = None,
         **kwargs,
     ) -> FuseAction:
         if not self._modify_position_fuse:
@@ -121,8 +121,8 @@ class UniswapV3Market(SwapProtocol, LiquidityProtocol):
 
     def collect(
         self,
-        token_ids: list[int] = None,
-        token_id: int = None,
+        token_ids: list[int] | None = None,
+        token_id: int | None = None,
         amount0_max: int = 0,
         amount1_max: int = 0,
         **kwargs,

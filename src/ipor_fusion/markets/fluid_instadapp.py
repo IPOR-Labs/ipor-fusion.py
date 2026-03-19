@@ -8,10 +8,10 @@ from ipor_fusion.markets.base import LendingProtocol
 class FluidInstadappMarket(LendingProtocol):
     def __init__(
         self,
-        erc4626_fuse: ChecksumAddress = None,
-        staking_fuse: ChecksumAddress = None,
-        pool_token: ChecksumAddress = None,
-        staking_contract: ChecksumAddress = None,
+        erc4626_fuse: ChecksumAddress | None = None,
+        staking_fuse: ChecksumAddress | None = None,
+        pool_token: ChecksumAddress | None = None,
+        staking_contract: ChecksumAddress | None = None,
     ):
         self._pool_token = pool_token
         self._staking_contract = staking_contract

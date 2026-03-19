@@ -15,8 +15,8 @@ class UniversalMarket(SwapProtocol):
         token_out: ChecksumAddress,
         amount_in: int,
         min_amount_out: int = 0,
-        targets: list[ChecksumAddress] = None,
-        data: list[bytes] = None,
+        targets: list[ChecksumAddress] | None = None,
+        data: list[bytes] | None = None,
         **kwargs,
     ) -> FuseAction:
         if targets is None:

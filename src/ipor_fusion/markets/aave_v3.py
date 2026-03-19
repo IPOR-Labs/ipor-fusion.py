@@ -10,14 +10,14 @@ class AaveV3Market(BorrowingProtocol):
     def __init__(
         self,
         supply_fuse: ChecksumAddress,
-        borrow_fuse: ChecksumAddress = None,
+        borrow_fuse: ChecksumAddress | None = None,
     ):
         self._supply_fuse = AaveV3SupplyFuse(supply_fuse)
         self._borrow_fuse = AaveV3BorrowFuse(borrow_fuse) if borrow_fuse else None
 
     def supply(
         self,
-        asset: ChecksumAddress = None,
+        asset: ChecksumAddress | None = None,
         amount: int = 0,
         e_mode: int = 0,
         **kwargs,
@@ -26,7 +26,7 @@ class AaveV3Market(BorrowingProtocol):
 
     def withdraw(
         self,
-        asset: ChecksumAddress = None,
+        asset: ChecksumAddress | None = None,
         amount: int = 0,
         **kwargs,
     ) -> FuseAction:

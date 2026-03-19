@@ -8,10 +8,10 @@ from ipor_fusion.markets.base import LendingProtocol
 class GearboxV3Market(LendingProtocol):
     def __init__(
         self,
-        erc4626_fuse: ChecksumAddress = None,
-        farm_fuse: ChecksumAddress = None,
-        d_token: ChecksumAddress = None,
-        farmd_token: ChecksumAddress = None,
+        erc4626_fuse: ChecksumAddress | None = None,
+        farm_fuse: ChecksumAddress | None = None,
+        d_token: ChecksumAddress | None = None,
+        farmd_token: ChecksumAddress | None = None,
     ):
         self._d_token = d_token
         self._farmd_token = farmd_token

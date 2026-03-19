@@ -11,7 +11,7 @@ class CompoundV3Market(LendingProtocol):
 
     def supply(
         self,
-        asset: ChecksumAddress = None,
+        asset: ChecksumAddress | None = None,
         amount: int = 0,
         **kwargs,
     ) -> FuseAction:
@@ -19,7 +19,7 @@ class CompoundV3Market(LendingProtocol):
 
     def withdraw(
         self,
-        asset: ChecksumAddress = None,
+        asset: ChecksumAddress | None = None,
         amount: int = 0,
         **kwargs,
     ) -> FuseAction:
