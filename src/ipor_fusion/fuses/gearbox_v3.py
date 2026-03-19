@@ -22,6 +22,6 @@ class GearboxStakeFuse(StakeFuse):
     """Fuse for staking and unstaking dTokens on Gearbox V3."""
 
     def __init__(  # pylint: disable=useless-parent-delegation
-        self, farm_fuse_address: ChecksumAddress, farmd_token_address: ChecksumAddress
+        self, fuse_address: ChecksumAddress, staking_address: ChecksumAddress
     ):
-        super().__init__(farm_fuse_address, farmd_token_address)
+        super().__init__(fuse_address, staking_address)

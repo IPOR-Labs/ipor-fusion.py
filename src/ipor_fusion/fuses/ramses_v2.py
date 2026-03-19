@@ -134,7 +134,7 @@ class RamsesClaimFuse(Fuse):
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class RamsesNewPositionEvent:
     version: str
     token_id: int

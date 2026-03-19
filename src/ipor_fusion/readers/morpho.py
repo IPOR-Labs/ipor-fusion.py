@@ -8,7 +8,7 @@ from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.types import Amount, MorphoBlueMarketId, Shares
 
 
-@dataclass
+@dataclass(slots=True)
 class MorphoMarket:
     """On-chain state of a Morpho Blue lending market."""
 
@@ -20,7 +20,7 @@ class MorphoMarket:
     fee: int
 
 
-@dataclass
+@dataclass(slots=True)
 class MorphoPosition:
     """User position within a Morpho Blue market."""
 
@@ -29,7 +29,7 @@ class MorphoPosition:
     collateral: Amount
 
 
-@dataclass
+@dataclass(slots=True)
 class MorphoMarketParams:
     """Configuration parameters defining a Morpho Blue market."""
 

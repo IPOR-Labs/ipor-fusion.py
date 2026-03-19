@@ -16,7 +16,7 @@ from ipor_fusion.types import Shares, Amount, Period
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(slots=True)
 class WithdrawRequestInfo:
     """Snapshot of a pending withdrawal request for a single account."""
 
@@ -83,9 +83,9 @@ class WithdrawManager(ContractWrapper):
             withdraw_window_in_seconds=withdraw_window_in_seconds,
         )
 
-    def get_pending_requests_info(self) -> tuple[int, int]:
+    def get_pending_requests_info(self, from_block: int = 0) -> tuple[int, int]:
         current_timestamp = self._ctx.get_block()["timestamp"]
-        events = self._get_withdraw_request_updated_events()
+        events = self._get_withdraw_request_updated_events(from_block=from_block)
 
         accounts = []
         for event in events:
@@ -110,12 +110,16 @@ class WithdrawManager(ContractWrapper):
 
         return requested_amount, current_timestamp - 1
 
-    def _get_withdraw_request_updated_events(self) -> list[LogReceipt]:
+    def _get_withdraw_request_updated_events(
+        self, from_block: int = 0
+    ) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="WithdrawRequestUpdated(address,uint256,uint32)")
         ).to_0x_hex()
         return list(
             self._ctx.get_logs(
-                contract_address=self._address, topics=[event_signature_hash]
+                contract_address=self._address,
+                topics=[event_signature_hash],
+                from_block=from_block,
             )
         )

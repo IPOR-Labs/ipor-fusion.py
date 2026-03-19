@@ -69,8 +69,8 @@ def withdraw_from_fluid(forked_ctx, plasma_vault, vault_address):
     fluid_staking_token = ERC20(forked_ctx, FLUID_STAKING_CONTRACT)
     if (fluid_staking_balance := fluid_staking_token.balance_of(vault_address)) > 0:
         staking_fuse = FluidInstadappStakingFuse(
-            staking_fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
-            staking_contract_address=FLUID_STAKING_CONTRACT,
+            fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
+            staking_address=FLUID_STAKING_CONTRACT,
         )
         supply_fuse = FluidInstadappSupplyFuse(
             ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5,
@@ -106,8 +106,8 @@ def test_supply_and_withdraw_from_gearbox(anvil):
 
     gearbox_supply = GearboxSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_3)
     gearbox_stake = GearboxStakeFuse(
-        farm_fuse_address=ARBITRUM_V3_GEARBOX_V3_FARM_FUSE,
-        farmd_token_address=GEARBOX_FARMD_TOKEN,
+        fuse_address=ARBITRUM_V3_GEARBOX_V3_FARM_FUSE,
+        staking_address=GEARBOX_FARMD_TOKEN,
     )
 
     plasma_vault.execute(
@@ -169,8 +169,8 @@ def test_supply_and_withdraw_from_fluid(anvil):
         ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5,
     )
     staking_fuse = FluidInstadappStakingFuse(
-        staking_fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
-        staking_contract_address=FLUID_STAKING_CONTRACT,
+        fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
+        staking_address=FLUID_STAKING_CONTRACT,
     )
     plasma_vault.execute(
         [

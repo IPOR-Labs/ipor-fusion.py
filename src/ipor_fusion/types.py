@@ -16,13 +16,17 @@ MorphoBlueMarketId = NewType("MorphoBlueMarketId", str)
 MAX_UINT256 = (1 << 256) - 1
 
 
-@dataclass
+@dataclass(slots=True)
 class Price:
     """USD-denominated price of an on-chain asset."""
 
     asset: ChecksumAddress
     amount: Amount
     decimals: Decimals
+
+    def __post_init__(self):
+        if self.decimals < 0:
+            raise ValueError(f"decimals must be non-negative, got {self.decimals}")
 
     def readable(self) -> float:
         return self.amount / (10**self.decimals)
@@ -41,9 +45,11 @@ class Period(int):
     MINUTE: ClassVar["Period"]
     HOUR: ClassVar["Period"]
     DAY: ClassVar["Period"]
+    WEEK: ClassVar["Period"]
 
 
 Period.SECOND = Period(1)
 Period.MINUTE = Period(60 * Period.SECOND)
 Period.HOUR = Period(60 * Period.MINUTE)
 Period.DAY = Period(24 * Period.HOUR)
+Period.WEEK = Period(7 * Period.DAY)

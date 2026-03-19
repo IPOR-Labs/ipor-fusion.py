@@ -1,14 +1,12 @@
 from dataclasses import dataclass
 
-from eth_abi import decode
 from eth_typing import ChecksumAddress
-from web3 import Web3
 
-from ipor_fusion.core.contract import ContractWrapper
+from ipor_fusion.readers.position_manager import PositionManagerReader
 from ipor_fusion.types import Amount, Fee, Tick
 
 
-@dataclass
+@dataclass(slots=True)
 class UniswapV3Position:
     """Liquidity position data from the Uniswap V3 NonfungiblePositionManager."""
 
@@ -26,52 +24,8 @@ class UniswapV3Position:
     tokens_owed1: Amount
 
 
-class UniswapV3Reader(ContractWrapper):
+class UniswapV3Reader(PositionManagerReader):
     """Reader for Uniswap V3 NonfungiblePositionManager on-chain state."""
 
     def positions(self, token_id: int) -> UniswapV3Position:
-        raw = self._call("positions(uint256)", token_id)
-        (
-            nonce,
-            operator,
-            token0,
-            token1,
-            fee,
-            tick_lower,
-            tick_upper,
-            liquidity,
-            fg0,
-            fg1,
-            owed0,
-            owed1,
-        ) = decode(
-            [
-                "uint96",
-                "address",
-                "address",
-                "address",
-                "uint24",
-                "int24",
-                "int24",
-                "uint128",
-                "uint256",
-                "uint256",
-                "uint128",
-                "uint128",
-            ],
-            raw,
-        )
-        return UniswapV3Position(
-            nonce=nonce,
-            operator=Web3.to_checksum_address(operator),
-            token0=Web3.to_checksum_address(token0),
-            token1=Web3.to_checksum_address(token1),
-            fee=fee,
-            tick_lower=tick_lower,
-            tick_upper=tick_upper,
-            liquidity=liquidity,
-            fee_growth_inside0_last_x128=fg0,
-            fee_growth_inside1_last_x128=fg1,
-            tokens_owed0=owed0,
-            tokens_owed1=owed1,
-        )
+        return UniswapV3Position(**self._decode_position(token_id))

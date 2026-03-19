@@ -10,7 +10,7 @@ from ipor_fusion.types import Amount, TokenId, MAX_UINT256
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FuseAction:
     """Immutable calldata payload targeting a specific fuse contract."""
 
@@ -64,6 +64,12 @@ class Fuse(ABC):
     def _validate_token_id(value: TokenId, name: str) -> None:
         if value < 0:
             raise ValueError(f"{name} must not be negative, got {value}")
+
+    def __eq__(self, other: object) -> bool:
+        return type(self) is type(other) and self._address == other._address  # type: ignore[attr-defined]
+
+    def __hash__(self) -> int:
+        return hash((type(self), self._address))
 
     def _action_raw(self, signature: str, values: list) -> FuseAction:
         selector = function_signature_to_4byte_selector(signature)

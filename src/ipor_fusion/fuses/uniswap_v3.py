@@ -138,7 +138,7 @@ class UniswapV3CollectFuse(Fuse):
         return self._action_raw("enter((uint256[]))", [[token_ids]])
 
 
-@dataclass
+@dataclass(slots=True)
 class UniswapV3NewPositionEvent:
     version: str
     token_id: int
@@ -152,7 +152,7 @@ class UniswapV3NewPositionEvent:
     tick_upper: int
 
 
-@dataclass
+@dataclass(slots=True)
 class UniswapV3ClosePositionEvent:
     version: str
     token_id: int

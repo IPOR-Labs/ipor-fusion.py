@@ -27,7 +27,7 @@ class MorphoFlashLoanFuse(Fuse):
     """Fuse for executing flash loans through Morpho Blue."""
 
     def flash_loan(
-        self, asset: ChecksumAddress, amount: Amount, actions: list[FuseAction]
+        self, *, asset: ChecksumAddress, amount: Amount, actions: list[FuseAction]
     ) -> FuseAction:
         self._validate_address(asset, "asset")
         self._validate_amount(amount, "amount")

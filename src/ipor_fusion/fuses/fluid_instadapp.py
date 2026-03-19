@@ -23,7 +23,7 @@ class FluidInstadappStakingFuse(StakeFuse):
 
     def __init__(  # pylint: disable=useless-parent-delegation
         self,
-        staking_fuse_address: ChecksumAddress,
-        staking_contract_address: ChecksumAddress,
+        fuse_address: ChecksumAddress,
+        staking_address: ChecksumAddress,
     ):
-        super().__init__(staking_fuse_address, staking_contract_address)
+        super().__init__(fuse_address, staking_address)

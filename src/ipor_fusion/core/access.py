@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from dataclasses import dataclass
+
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
@@ -9,7 +11,7 @@ from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.config.roles import Roles
 
 
-@dataclass
+@dataclass(slots=True)
 class RoleAccount:
     """Account-role membership record returned by AccessManager queries."""
 
@@ -50,38 +52,40 @@ class AccessManager(ContractWrapper):
         ]
 
     def get_accounts_with_role(self, role_id: int) -> list[RoleAccount]:
-        events = self._get_grant_role_events()
-        role_accounts = []
-        for event in events:
-            (_role_id,) = decode(["uint64"], event["topics"][1])
-            (_account,) = decode(["address"], event["topics"][2])
-            if _role_id == role_id:
-                is_member, execution_delay = self.has_role(_role_id, _account)
-                if is_member:
-                    role_account = RoleAccount(
-                        account=Web3.to_checksum_address(_account),
-                        role_id=_role_id,
-                        is_member=is_member,
-                        execution_delay=execution_delay,
-                    )
-                    role_accounts.append(role_account)
-        return role_accounts
+        return self._resolve_role_accounts(
+            self._get_grant_role_events(),
+            predicate=lambda rid, _: rid == role_id,
+        )
 
     def get_all_role_accounts(self) -> list[RoleAccount]:
-        events = self._get_grant_role_events()
-        role_accounts = []
+        return self._resolve_role_accounts(
+            self._get_grant_role_events(),
+            predicate=lambda _rid, _acc: True,
+        )
+
+    def _resolve_role_accounts(
+        self,
+        events: list[LogReceipt],
+        predicate: "Callable[[int, str], bool]",
+    ) -> list[RoleAccount]:
+        # N+1 RPC: each candidate requires a has_role() call; multicall would fix
+        # this but is out of scope.
+        role_accounts: list[RoleAccount] = []
         for event in events:
             (role_id,) = decode(["uint64"], event["topics"][1])
             (account,) = decode(["address"], event["topics"][2])
+            if not predicate(role_id, account):
+                continue
             is_member, execution_delay = self.has_role(role_id, account)
             if is_member:
-                role_account = RoleAccount(
-                    account=Web3.to_checksum_address(account),
-                    role_id=role_id,
-                    is_member=is_member,
-                    execution_delay=execution_delay,
+                role_accounts.append(
+                    RoleAccount(
+                        account=Web3.to_checksum_address(account),
+                        role_id=role_id,
+                        is_member=is_member,
+                        execution_delay=execution_delay,
+                    )
                 )
-                role_accounts.append(role_account)
         return role_accounts
 
     def _get_grant_role_events(self) -> list[LogReceipt]:

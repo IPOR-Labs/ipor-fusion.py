@@ -198,7 +198,7 @@ class TestMorphoFlashLoanFuse:
         inner1 = FuseAction(fuse=FUSE_ADDR, data=b"\x01\x02")
         inner2 = FuseAction(fuse=FUSE_ADDR_2, data=b"\x03\x04")
         action = MorphoFlashLoanFuse(FUSE_ADDR).flash_loan(
-            TOKEN_A, 50_000, [inner1, inner2]
+            asset=TOKEN_A, amount=50_000, actions=[inner1, inner2]
         )
 
         assert action.fuse == FUSE_ADDR
@@ -218,7 +218,9 @@ class TestMorphoFlashLoanFuse:
         assert decoded_actions[1][1] == b"\x03\x04"
 
     def test_flash_loan_empty_actions(self):
-        action = MorphoFlashLoanFuse(FUSE_ADDR).flash_loan(TOKEN_A, 100, [])
+        action = MorphoFlashLoanFuse(FUSE_ADDR).flash_loan(
+            asset=TOKEN_A, amount=100, actions=[]
+        )
         (decoded_tuple,) = decode(["(address,uint256,bytes)"], action.data[4:])
         (decoded_actions,) = decode(["(address,bytes)[]"], decoded_tuple[2])
         assert len(decoded_actions) == 0
@@ -571,8 +573,8 @@ class TestFluidInstadappSupplyFuse:
 class TestFluidInstadappStakingFuse:
     def setup_method(self):
         self.fuse = FluidInstadappStakingFuse(
-            staking_fuse_address=STAKING_FUSE,
-            staking_contract_address=STAKING_CONTRACT,
+            fuse_address=STAKING_FUSE,
+            staking_address=STAKING_CONTRACT,
         )
 
     def test_stake_encoding(self):
@@ -748,7 +750,9 @@ class TestAddressValidation:
 
     def test_morpho_flash_loan_rejects_zero_asset(self):
         with pytest.raises(ValueError, match="asset"):
-            MorphoFlashLoanFuse(FUSE_ADDR).flash_loan(ZERO_ADDR, 100, [])
+            MorphoFlashLoanFuse(FUSE_ADDR).flash_loan(
+                asset=ZERO_ADDR, amount=100, actions=[]
+            )
 
     def test_morpho_claim_rejects_zero_distributor(self):
         with pytest.raises(ValueError, match="universal_rewards_distributor"):

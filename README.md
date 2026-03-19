@@ -82,7 +82,7 @@ vault = PlasmaVault(ctx, Web3.to_checksum_address("0xVAULT_ADDRESS"))
 # 3. Build a fuse action (e.g. supply USDC to Aave V3)
 fuse = AaveV3SupplyFuse(Web3.to_checksum_address("0xFUSE_ADDRESS"))
 action = fuse.supply(
-    Web3.to_checksum_address("0xUSDC_ADDRESS"),
+    asset=Web3.to_checksum_address("0xUSDC_ADDRESS"),
     amount=1_000_000,  # 1 USDC (6 decimals)
 )
 

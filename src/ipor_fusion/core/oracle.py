@@ -9,7 +9,7 @@ from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.types import Price
 
 
-@dataclass
+@dataclass(slots=True)
 class AssetPriceSource:
     asset: ChecksumAddress
     source: ChecksumAddress
