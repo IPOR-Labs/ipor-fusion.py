@@ -1,6 +1,7 @@
 import logging
 import os
 
+import pytest
 from eth_abi import encode
 from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
@@ -29,8 +30,12 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["BASE_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
+
 
 # WStETH/WETH market on Morpho Blue (Base), LLTV = 94.5%
 MORPHO_BLUE_MARKET_ID = (
@@ -84,7 +89,7 @@ def _aerodrome_swap(
     )
 
 
-def test_looping_morpho_blue():
+def test_looping_morpho_blue(anvil):
     """Leveraged looping strategy on Morpho Blue via flash loan.
 
     Strategy (executed atomically inside a Morpho flash loan):

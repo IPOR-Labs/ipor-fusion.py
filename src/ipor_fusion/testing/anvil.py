@@ -67,6 +67,13 @@ class AnvilTestContainerStarter:
                 raise TimeoutError("Anvil endpoint did not become ready in time")
             time.sleep(1)
 
+    def __enter__(self) -> AnvilTestContainerStarter:
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.stop()
+
     def start(self):
         self.log.info("[CONTAINER] [ANVIL] Anvil container is starting")
         self._docker_container.start()

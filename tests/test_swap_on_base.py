@@ -1,6 +1,7 @@
 import logging
 import os
 
+import pytest
 from eth_abi import encode
 from eth_abi.packed import encode_packed
 from eth_utils import function_signature_to_4byte_selector
@@ -17,11 +18,13 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["BASE_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
 
 
-def test_should_swap_on_base():
+def test_should_swap_on_base(anvil):
     anvil.reset_fork(24383840)
 
     user_account = Web3.to_checksum_address(
@@ -123,7 +126,7 @@ def test_should_swap_on_base():
     assert usdc_balance_after > 45000_000000
 
 
-def test_should_swap_weth_to_pepe_on_base():
+def test_should_swap_weth_to_pepe_on_base(anvil):
     anvil.reset_fork(25894923)
 
     vault_address = Web3.to_checksum_address(

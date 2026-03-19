@@ -1,6 +1,7 @@
 import logging
 import os
 
+import pytest
 from eth_typing import BlockNumber
 from web3 import Web3
 
@@ -14,11 +15,14 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
 
 
-def test_should_release_funds():
+def test_should_release_funds(anvil):
     """
     Test that funds can be released appropriately from a Plasma Vault.
     """
@@ -80,7 +84,7 @@ def test_should_release_funds():
     assert user_balance_change == to_withdraw
 
 
-def test_should_release_funds_shares():
+def test_should_release_funds_shares(anvil):
     anvil.reset_fork(BlockNumber(315570373))
 
     user_account = Web3.to_checksum_address(

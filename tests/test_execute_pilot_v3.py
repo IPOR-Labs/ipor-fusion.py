@@ -1,5 +1,6 @@
 import os
 
+import pytest
 from eth_typing import BlockNumber
 from web3 import Web3
 
@@ -24,8 +25,13 @@ from ipor_fusion.fuses import (
 from ipor_fusion.addresses import ARBITRUM_USDC
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
-anvil = AnvilTestContainerStarter(fork_url, BlockNumber(250690377))
-anvil.start()
+
+
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url, BlockNumber(250690377)) as a:
+        yield a
+
 
 # Gearbox V3 addresses on Arbitrum
 GEARBOX_D_TOKEN = Web3.to_checksum_address("0x890A69EF363C9c7BdD5E36eb95Ceb569F63ACbF6")
@@ -42,7 +48,7 @@ FLUID_STAKING_CONTRACT = Web3.to_checksum_address(
 )
 
 
-def setup_vault():
+def setup_vault(anvil):
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
     plasma_vault = PlasmaVault(forked_ctx, vault_address)
@@ -71,10 +77,10 @@ def withdraw_from_fluid(forked_ctx, plasma_vault, vault_address):
         plasma_vault.execute(unstake_and_withdraw)
 
 
-def test_supply_and_withdraw_from_gearbox():
+def test_supply_and_withdraw_from_gearbox(anvil):
     anvil.reset_fork(250690377)
 
-    forked_ctx, plasma_vault, access_manager = setup_vault()
+    forked_ctx, plasma_vault, access_manager = setup_vault(anvil)
     vault_address = plasma_vault.address
 
     owner = access_manager.owner()
@@ -132,10 +138,10 @@ def test_supply_and_withdraw_from_gearbox():
     assert gearbox_farm_balance_after == 0, "gearbox_farm_balance_after == 0"
 
 
-def test_supply_and_withdraw_from_fluid():
+def test_supply_and_withdraw_from_fluid(anvil):
     anvil.reset_fork(250690377)
 
-    forked_ctx, plasma_vault, _ = setup_vault()
+    forked_ctx, plasma_vault, _ = setup_vault(anvil)
     vault_address = plasma_vault.address
     withdraw_from_fluid(forked_ctx, plasma_vault, vault_address)
 
@@ -187,10 +193,10 @@ def test_supply_and_withdraw_from_fluid():
     assert fluid_staking_balance_after == 0, "fluid_staking_balance_after == 0"
 
 
-def test_supply_and_withdraw_from_aave_v3():
+def test_supply_and_withdraw_from_aave_v3(anvil):
     anvil.reset_fork(250690377)
 
-    forked_ctx, plasma_vault, _ = setup_vault()
+    forked_ctx, plasma_vault, _ = setup_vault(anvil)
     vault_address = plasma_vault.address
     withdraw_from_fluid(forked_ctx, plasma_vault, vault_address)
 
@@ -240,10 +246,10 @@ def test_supply_and_withdraw_from_aave_v3():
     assert protocol_balance_after < 1e6, "protocol_balance_after < 1e6"
 
 
-def test_supply_and_withdraw_from_compound_v3():
+def test_supply_and_withdraw_from_compound_v3(anvil):
     anvil.reset_fork(250690377)
 
-    forked_ctx, plasma_vault, _ = setup_vault()
+    forked_ctx, plasma_vault, _ = setup_vault(anvil)
     vault_address = plasma_vault.address
     withdraw_from_fluid(forked_ctx, plasma_vault, vault_address)
 

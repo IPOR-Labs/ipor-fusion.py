@@ -4,6 +4,7 @@ import logging
 import os
 from unittest.mock import patch
 
+import pytest
 from eth_typing import BlockNumber, ChecksumAddress
 from web3 import Web3
 import requests
@@ -18,8 +19,11 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["ETHEREUM_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
 
 
 class MorphoBlueRewardsDistribution:
@@ -74,7 +78,7 @@ class TestMorphoBlueRewards:
     Test class for validating Morpho Blue rewards claiming functionality.
     """
 
-    def test_should_claim_morpho_rewards(self):
+    def test_should_claim_morpho_rewards(self, anvil):
         anvil.reset_fork(BlockNumber(23168096))
 
         vault_address = Web3.to_checksum_address(

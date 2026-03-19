@@ -1,6 +1,7 @@
 import logging
 import os
 
+import pytest
 from web3 import Web3
 
 from constants import (
@@ -19,11 +20,14 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["ETHEREUM_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
 
 
-def test_should_borrow_aave_v3():
+def test_should_borrow_aave_v3(anvil):
     anvil.reset_fork(22616438)
 
     atomist = Web3.to_checksum_address("0x46B48240f61C831B85fCf4c198C98028Ab8EE68d")
@@ -109,7 +113,7 @@ def test_should_borrow_aave_v3():
     )
 
 
-def test_should_deposit_to_plasma_vault():
+def test_should_deposit_to_plasma_vault(anvil):
     anvil.reset_fork(22687555)
 
     atomist = Web3.to_checksum_address("0x46B48240f61C831B85fCf4c198C98028Ab8EE68d")

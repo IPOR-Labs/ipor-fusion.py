@@ -1,6 +1,7 @@
 import logging
 import os
 
+import pytest
 from eth_typing import BlockNumber
 
 from constants import ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT, ANVIL_WALLET
@@ -21,11 +22,15 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
-anvil = AnvilTestContainerStarter(fork_url, BlockNumber(250690377))
-anvil.start()
 
 
-def setup_vault_basic():
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url, BlockNumber(250690377)) as a:
+        yield a
+
+
+def setup_vault_basic(anvil):
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
     plasma_vault = PlasmaVault(forked_ctx, vault_address)
@@ -42,8 +47,8 @@ def setup_vault_basic():
     return forked_ctx, plasma_vault, access_manager
 
 
-def setup_vault_with_atomist():
-    forked_ctx, plasma_vault, access_manager = setup_vault_basic()
+def setup_vault_with_atomist(anvil):
+    forked_ctx, plasma_vault, access_manager = setup_vault_basic(anvil)
     owner = access_manager.owner()
     forked_ctx.prank(owner)
     access_manager.grant_role(Roles.ATOMIST_ROLE, ANVIL_WALLET, 0)
@@ -51,11 +56,11 @@ def setup_vault_with_atomist():
     return forked_ctx, plasma_vault, access_manager
 
 
-def test_should_deposit():
+def test_should_deposit(anvil):
     """Test depositing USDC into the plasma vault."""
     anvil.reset_fork(268934406)
 
-    forked_ctx, plasma_vault, _ = setup_vault_basic()
+    forked_ctx, plasma_vault, _ = setup_vault_basic(anvil)
     vault_address = plasma_vault.address
 
     usdc = ERC20(forked_ctx, USDC_ADDRESS)
@@ -88,11 +93,11 @@ def test_should_deposit():
     assert plasma_vault.total_assets_in_market(Markets.AAVE_V3) == 0
 
 
-def test_should_mint():
+def test_should_mint(anvil):
     """Test minting shares in the plasma vault."""
     anvil.reset_fork(268934406)
 
-    forked_ctx, plasma_vault, _ = setup_vault_basic()
+    forked_ctx, plasma_vault, _ = setup_vault_basic(anvil)
     vault_address = plasma_vault.address
 
     usdc = ERC20(forked_ctx, USDC_ADDRESS)
@@ -146,10 +151,10 @@ def test_should_mint():
     assert plasma_vault.total_assets_in_market(Markets.AAVE_V3) == 0
 
 
-def test_should_redeem():
+def test_should_redeem(anvil):
     anvil.reset_fork(268934406)
 
-    forked_ctx, plasma_vault, _ = setup_vault_with_atomist()
+    forked_ctx, plasma_vault, _ = setup_vault_with_atomist(anvil)
     vault_address = plasma_vault.address
     withdraw_manager = WithdrawManager(
         forked_ctx, plasma_vault.withdraw_manager_address()
@@ -209,11 +214,11 @@ def test_should_redeem():
     assert plasma_vault.total_assets_in_market(Markets.AAVE_V3) == 0
 
 
-def test_should_withdraw():
+def test_should_withdraw(anvil):
     """Test withdrawing assets from the plasma vault."""
     anvil.reset_fork(268934406)
 
-    forked_ctx, plasma_vault, _ = setup_vault_with_atomist()
+    forked_ctx, plasma_vault, _ = setup_vault_with_atomist(anvil)
     vault_address = plasma_vault.address
     withdraw_manager = WithdrawManager(
         forked_ctx, plasma_vault.withdraw_manager_address()
@@ -264,11 +269,11 @@ def test_should_withdraw():
     assert plasma_vault.total_assets_in_market(Markets.AAVE_V3) == 0
 
 
-def test_should_transfer():
+def test_should_transfer(anvil):
     """Test transferring vault shares between users."""
     anvil.reset_fork(268934406)
 
-    forked_ctx, plasma_vault, _ = setup_vault_basic()
+    forked_ctx, plasma_vault, _ = setup_vault_basic(anvil)
     vault_address = plasma_vault.address
 
     usdc = ERC20(forked_ctx, USDC_ADDRESS)
@@ -291,11 +296,11 @@ def test_should_transfer():
     assert user_two_vault_balance == amount, "Incorrect balance after transfer"
 
 
-def test_should_transfer_from():
+def test_should_transfer_from(anvil):
     """Test transferring vault shares between users using transferFrom."""
     anvil.reset_fork(268934406)
 
-    forked_ctx, plasma_vault, _ = setup_vault_basic()
+    forked_ctx, plasma_vault, _ = setup_vault_basic(anvil)
     vault_address = plasma_vault.address
 
     usdc = ERC20(forked_ctx, USDC_ADDRESS)

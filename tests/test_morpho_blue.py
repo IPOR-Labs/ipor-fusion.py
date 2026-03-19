@@ -1,6 +1,7 @@
 import logging
 import os
 
+import pytest
 from eth_typing import BlockNumber
 from web3 import Web3
 
@@ -16,11 +17,14 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["ETHEREUM_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
 
 
-def test_should_deposit_and_withdraw_from_morpho_blue():
+def test_should_deposit_and_withdraw_from_morpho_blue(anvil):
     anvil.reset_fork(BlockNumber(22066578))
 
     vault_address = Web3.to_checksum_address(

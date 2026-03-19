@@ -1,6 +1,7 @@
 import os
 import time
 
+import pytest
 from eth_abi import decode, encode
 from eth_typing import BlockNumber
 from eth_utils import function_signature_to_4byte_selector
@@ -39,15 +40,19 @@ from ipor_fusion.addresses import (
 
 provider_url = os.environ["ARBITRUM_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(provider_url, BlockNumber(261946538))
-anvil.start()
+
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(provider_url, BlockNumber(261946538)) as a:
+        yield a
+
 
 uniswap_v_3_universal_router_address = Web3.to_checksum_address(
     "0x5E325eDA8064b456f4781070C0738d849c824258"
 )
 
 
-def test_should_open_new_position_ramses_v2():
+def test_should_open_new_position_ramses_v2(anvil):
     # setup
     anvil.reset_fork(261946538)
 
@@ -115,7 +120,7 @@ def test_should_open_new_position_ramses_v2():
     ), ("new_position_usdt_change == -int(499000000)")
 
 
-def test_should_collect_all_after_decrease_liquidity():
+def test_should_collect_all_after_decrease_liquidity(anvil):
     # given
     anvil.reset_fork(261946538)
 
@@ -206,7 +211,7 @@ def test_should_collect_all_after_decrease_liquidity():
     assert new_token_id == close_token_id, "new_token_id == close_token_id"
 
 
-def test_should_increase_liquidity():
+def test_should_increase_liquidity(anvil):
     # given
     anvil.reset_fork(261946538)  # 261946538 - 1002 USDC on pilot V5
 
@@ -288,7 +293,7 @@ def test_should_increase_liquidity():
     ), "increase_position_change_usdt == -90_509683"
 
 
-def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manager():
+def test_should_claim_rewards_from_ramses_v2_swap_and_transfer_to_rewards_manager(anvil):
     # given
     anvil.reset_fork(261946538)
 

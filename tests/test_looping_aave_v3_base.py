@@ -1,6 +1,7 @@
 import logging
 import os
 
+import pytest
 from eth_abi import encode
 from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
@@ -34,8 +35,10 @@ log = logging.getLogger(__name__)
 
 fork_url = os.environ["BASE_PROVIDER_URL"]
 
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
 
 AERODROME_ROUTER_ADDRESS = Web3.to_checksum_address(
     "0xBE6D8F0D05cC4bE24d5167a3eF062215bE6D18a5"
@@ -104,7 +107,7 @@ def _log_balances(forked_ctx, vault_address, msg):
     log.info("----")
 
 
-def test_supply_borrow_in_flash_loan():
+def test_supply_borrow_in_flash_loan(anvil):
     anvil.reset_fork(30431901)
 
     atomist = Web3.to_checksum_address("0xF6a9bd8F6DC537675D499Ac1CA14f2c55d8b5569")

@@ -1,6 +1,7 @@
 import os
 import time
 
+import pytest
 from eth_abi import decode, encode
 from eth_abi.packed import encode_packed
 from eth_typing import BlockNumber
@@ -29,15 +30,20 @@ from ipor_fusion.fuses import (
 from ipor_fusion.addresses import ARBITRUM_USDC, ARBITRUM_USDT, ARBITRUM_WETH
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
-anvil = AnvilTestContainerStarter(fork_url, BlockNumber(254084008))
-anvil.start()
+
+
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url, BlockNumber(254084008)) as a:
+        yield a
+
 
 uniswap_v3_universal_router = Web3.to_checksum_address(
     "0x5E325eDA8064b456f4781070C0738d849c824258"
 )
 
 
-def test_should_swap_when_one_hop_uniswap_v3():
+def test_should_swap_when_one_hop_uniswap_v3(anvil):
     anvil.reset_fork(254084008)
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
@@ -117,7 +123,7 @@ def test_should_swap_when_one_hop_uniswap_v3():
     assert 98e6 < usdt_change < 100e6
 
 
-def test_should_swap_when_multiple_hop():
+def test_should_swap_when_multiple_hop(anvil):
     anvil.reset_fork(254084008)
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
@@ -197,7 +203,7 @@ def test_should_swap_when_multiple_hop():
     assert 98e6 < usdt_change < 100e6
 
 
-def test_should_open_new_position_uniswap_v3():
+def test_should_open_new_position_uniswap_v3(anvil):
     anvil.reset_fork(254084008)
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
@@ -258,7 +264,7 @@ def test_should_open_new_position_uniswap_v3():
     assert usdt_change == -489_152502
 
 
-def test_should_collect_all_after_decrease_liquidity():
+def test_should_collect_all_after_decrease_liquidity(anvil):
     anvil.reset_fork(254084008)
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
@@ -346,7 +352,7 @@ def test_should_collect_all_after_decrease_liquidity():
     assert new_token_id == close_token_id
 
 
-def test_should_increase_liquidity():
+def test_should_increase_liquidity(anvil):
     anvil.reset_fork(254084008)
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
