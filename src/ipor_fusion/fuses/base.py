@@ -4,6 +4,8 @@ from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
+from ipor_fusion.types import MAX_UINT256
+
 
 @dataclass(frozen=True)
 class FuseAction:
@@ -36,3 +38,23 @@ class Fuse(ABC):
         selector = function_signature_to_4byte_selector(signature)
         data = selector + encode(abi_types, values)
         return FuseAction(fuse=self._address, data=data)
+
+
+class StakeFuse(Fuse):
+    def __init__(self, fuse_address: ChecksumAddress, staking_address: ChecksumAddress):
+        super().__init__(fuse_address)
+        self._staking_address = staking_address
+
+    def stake(self) -> FuseAction:
+        return self._action_raw(
+            "enter((uint256,address))",
+            ["uint256", "address"],
+            [MAX_UINT256, self._staking_address],
+        )
+
+    def unstake(self, amount: int) -> FuseAction:
+        return self._action_raw(
+            "exit((uint256,address))",
+            ["uint256", "address"],
+            [amount, self._staking_address],
+        )

@@ -9,6 +9,7 @@ from ipor_fusion.core.oracle import PriceOracleMiddleware, AssetPriceSource
 from ipor_fusion.fuses import (
     FuseAction,
     Fuse,
+    StakeFuse,
     AaveV3SupplyFuse,
     AaveV3BorrowFuse,
     MorphoSupplyFuse,
@@ -71,6 +72,7 @@ __all__ = [
     "AssetPriceSource",
     "FuseAction",
     "Fuse",
+    "StakeFuse",
     "AaveV3SupplyFuse",
     "AaveV3BorrowFuse",
     "MorphoSupplyFuse",
