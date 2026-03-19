@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import NewType
 
 from eth_typing import ChecksumAddress
@@ -12,11 +13,11 @@ MorphoBlueMarketId = NewType("MorphoBlueMarketId", str)
 MAX_UINT256 = (1 << 256) - 1
 
 
+@dataclass
 class Price:
-    def __init__(self, asset: ChecksumAddress, amount: Amount, decimals: Decimals):
-        self.asset = asset
-        self.amount = amount
-        self.decimals = decimals
+    asset: ChecksumAddress
+    amount: Amount
+    decimals: Decimals
 
     def readable(self) -> float:
         return self.amount / (10**self.decimals)
@@ -29,7 +30,13 @@ class Price:
 
 
 class Period(int):
-    SECOND = 1
-    MINUTE = 60 * SECOND
-    HOUR = 60 * MINUTE
-    DAY = 24 * HOUR
+    SECOND: "Period"
+    MINUTE: "Period"
+    HOUR: "Period"
+    DAY: "Period"
+
+
+Period.SECOND = Period(1)
+Period.MINUTE = Period(60 * Period.SECOND)
+Period.HOUR = Period(60 * Period.MINUTE)
+Period.DAY = Period(24 * Period.HOUR)
