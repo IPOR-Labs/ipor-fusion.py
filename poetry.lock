@@ -749,7 +749,7 @@ profile = ["gprof2dot (>=2022.7.29)"]
 name = "docker"
 version = "7.1.0"
 description = "A Python library for the Docker Engine API."
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0"},
@@ -2015,7 +2015,7 @@ test = ["hypothesis (>=6.22.0,<6.108.7)", "pytest (>=7.0.0)", "pytest-xdist (>=2
 name = "testcontainers"
 version = "4.9.1"
 description = "Python library for throwaway instances of anything that can run in a Docker container"
-optional = false
+optional = true
 python-versions = "<4.0,>=3.9"
 files = [
     {file = "testcontainers-4.9.1-py3-none-any.whl", hash = "sha256:315fb94b42a383872df530aa45319745278ef0cc18b9cfcdc231a75d14afa5a0"},
@@ -2301,7 +2301,7 @@ files = [
 name = "wrapt"
 version = "1.17.2"
 description = "Module for decorators, wrappers and monkey patching."
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "wrapt-1.17.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:3d57c572081fed831ad2d26fd430d565b76aa277ed1d30ff4d40670b1c0dd984"},
@@ -2481,7 +2481,10 @@ idna = ">=2.0"
 multidict = ">=4.0"
 propcache = ">=0.2.0"
 
+[extras]
+testing = ["requests", "testcontainers"]
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "dda3504e26b4d11538dd45e05e3df2c933a7fb6f1e77fa6cfe01119ff7fc6064"
+content-hash = "60c8b0886febd9c757f8b172d95ca68cce1beb1e71b5382e1ac03da71c761e2d"
