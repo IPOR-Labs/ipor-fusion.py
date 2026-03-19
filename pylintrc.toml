@@ -279,32 +279,9 @@ min-public-methods = 2
 # Exceptions that will emit a warning when caught.
 overgeneral-exceptions = ["builtins.Exception"]
 
-[tool.pylint.format]
-# Expected format of line ending, e.g. empty (any line ending), LF or CRLF.
-# expected-line-ending-format =
-
-# Regexp for a line that is allowed to be longer than the limit.
-ignore-long-lines = "^\\s*(# )?<?https?://\\S+>?$"
-
-# Number of spaces of indent required inside a hanging or continued line.
-indent-after-paren = 2
-
-# String used as indentation unit. This is usually "    " (4 spaces) or "\t" (1
-# tab).
-indent-string = "  "
-
-# Maximum number of characters on a single line.
-max-line-length = 120
-
-# Maximum number of lines in a module.
-max-module-lines = 1000
-
-# Allow the body of a class to be on the same line as the declaration if body
-# contains single statement.
-# single-line-class-stmt =
-
-# Allow the body of an if to be on the same line as the test if there is no else.
-# single-line-if-stmt =
+# [tool.pylint.format] — removed: all formatting checks (line-too-long,
+# bad-indentation, trailing-whitespace, etc.) are disabled; Black is the
+# sole formatting authority.
 
 [tool.pylint.imports]
 # List of modules that can be imported at any level, not just the top level one.

@@ -3,9 +3,9 @@ import time
 
 from eth_abi import decode, encode
 from eth_abi.packed import encode_packed
+from eth_typing import BlockNumber
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from eth_typing import BlockNumber
 from web3.types import TxReceipt
 
 from constants import (
