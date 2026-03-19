@@ -4,6 +4,7 @@ import os
 import pytest
 from eth_typing import BlockNumber
 
+from addresses import ARBITRUM_USDC
 from constants import ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT, ANVIL_WALLET
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
 from ipor_fusion import (
@@ -14,7 +15,6 @@ from ipor_fusion import (
     ERC20,
     WithdrawManager,
 )
-from ipor_fusion.addresses import ARBITRUM_USDC
 
 USDC_ADDRESS = ARBITRUM_USDC
 

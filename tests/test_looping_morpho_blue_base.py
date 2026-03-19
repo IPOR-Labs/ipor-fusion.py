@@ -8,6 +8,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
+from addresses import BASE_WSTETH, BASE_WETH
 from constants import (
     ANVIL_WALLET,
     BASE_MORPHO_COLLATERAL_FUSE,
@@ -23,7 +24,6 @@ from ipor_fusion.fuses import (
     MorphoFlashLoanFuse,
     UniversalTokenSwapperFuse,
 )
-from ipor_fusion.addresses import BASE_WSTETH, BASE_WETH
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

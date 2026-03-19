@@ -4,6 +4,7 @@ import os
 import pytest
 from web3 import Web3
 
+from addresses import ETHEREUM_WBTC, ETHEREUM_WETH
 from constants import (
     ANVIL_WALLET,
     ETHEREUM_AAVE_V3_SUPPLY_FUSE,
@@ -12,7 +13,6 @@ from constants import (
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
 from ipor_fusion import Roles, Markets, PlasmaVault, AccessManager, ERC20
 from ipor_fusion.fuses import AaveV3SupplyFuse, AaveV3BorrowFuse, ERC4626SupplyFuse
-from ipor_fusion.addresses import ETHEREUM_WBTC, ETHEREUM_WETH
 from ipor_fusion.types import Amount
 
 logging.basicConfig(level=logging.INFO)

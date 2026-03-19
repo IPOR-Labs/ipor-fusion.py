@@ -9,6 +9,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
+from addresses import ARBITRUM_USDC, ARBITRUM_USDT, ARBITRUM_WETH
 from constants import (
     ANVIL_WALLET,
     ARBITRUM_PILOT_V4_PLASMA_VAULT,
@@ -27,7 +28,6 @@ from ipor_fusion.fuses import (
     UniswapV3CollectFuse,
     UniversalTokenSwapperFuse,
 )
-from ipor_fusion.addresses import ARBITRUM_USDC, ARBITRUM_USDT, ARBITRUM_WETH
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]
 

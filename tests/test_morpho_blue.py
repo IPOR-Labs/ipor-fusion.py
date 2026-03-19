@@ -5,12 +5,12 @@ import pytest
 from eth_typing import BlockNumber
 from web3 import Web3
 
+from addresses import ETHEREUM_USDC
 from constants import ETHEREUM_MORPHO_SUPPLY_FUSE
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
 from ipor_fusion import PlasmaVault, ERC20
 from ipor_fusion.fuses import MorphoSupplyFuse
 from ipor_fusion.types import MorphoBlueMarketId, Amount
-from ipor_fusion.addresses import ETHEREUM_USDC
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

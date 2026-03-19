@@ -5,10 +5,10 @@ import pytest
 from eth_typing import BlockNumber
 from web3 import Web3
 
+from addresses import ARBITRUM_USDC
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
 from ipor_fusion import Roles, PlasmaVault, AccessManager, ERC20, WithdrawManager
 from ipor_fusion.types import Amount, Period
-from ipor_fusion.addresses import ARBITRUM_USDC
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

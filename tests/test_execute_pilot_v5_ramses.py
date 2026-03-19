@@ -8,6 +8,13 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
+from addresses import (
+    ARBITRUM_USDC,
+    ARBITRUM_USDT,
+    ARBITRUM_WETH,
+    ARBITRUM_RAM_TOKEN,
+    ARBITRUM_XRAM_TOKEN,
+)
 from constants import (
     ARBITRUM_PILOT_V5_PLASMA_VAULT,
     ANVIL_WALLET,
@@ -29,13 +36,6 @@ from ipor_fusion.fuses import (
     RamsesV2CollectFuse,
     RamsesClaimFuse,
     extract_ramses_new_position_events,
-)
-from ipor_fusion.addresses import (
-    ARBITRUM_USDC,
-    ARBITRUM_USDT,
-    ARBITRUM_WETH,
-    ARBITRUM_RAM_TOKEN,
-    ARBITRUM_XRAM_TOKEN,
 )
 
 provider_url = os.environ["ARBITRUM_PROVIDER_URL"]

@@ -7,11 +7,11 @@ from eth_abi.packed import encode_packed
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
+from addresses import BASE_USDC, BASE_WETH
 from constants import ANVIL_WALLET, BASE_UNIVERSAL_SWAP_FUSE
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
 from ipor_fusion import Roles, PlasmaVault, AccessManager, ERC20
 from ipor_fusion.fuses import UniversalTokenSwapperFuse
-from ipor_fusion.addresses import BASE_USDC, BASE_WETH
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

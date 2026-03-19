@@ -4,6 +4,7 @@ import pytest
 from eth_typing import BlockNumber
 from web3 import Web3
 
+from addresses import ARBITRUM_USDC
 from constants import (
     ARBITRUM_PILOT_V3_PLASMA_VAULT,
     ANVIL_WALLET,
@@ -24,7 +25,6 @@ from ipor_fusion.fuses import (
     FluidInstadappSupplyFuse,
     FluidInstadappStakingFuse,
 )
-from ipor_fusion.addresses import ARBITRUM_USDC
 from ipor_fusion.types import MAX_UINT256
 
 fork_url = os.environ["ARBITRUM_PROVIDER_URL"]

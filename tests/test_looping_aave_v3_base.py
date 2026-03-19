@@ -8,6 +8,12 @@ from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
+from addresses import (
+    BASE_WSTETH,
+    BASE_WETH,
+    BASE_AAVE_V3_VARIABLE_DEBT_WETH,
+    BASE_AAVE_V3_A_WSTETH,
+)
 from constants import (
     ANVIL_WALLET,
     BASE_AAVE_V3_SUPPLY_FUSE,
@@ -22,12 +28,6 @@ from ipor_fusion.fuses import (
     AaveV3BorrowFuse,
     MorphoFlashLoanFuse,
     UniversalTokenSwapperFuse,
-)
-from ipor_fusion.addresses import (
-    BASE_WSTETH,
-    BASE_WETH,
-    BASE_AAVE_V3_VARIABLE_DEBT_WETH,
-    BASE_AAVE_V3_A_WSTETH,
 )
 
 logging.basicConfig(level=logging.INFO)
