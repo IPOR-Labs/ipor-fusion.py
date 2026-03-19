@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List
 
 from eth_typing import ChecksumAddress
 
@@ -12,9 +11,7 @@ class LendingProtocol(ABC):
         pass
 
     @abstractmethod
-    def withdraw(
-        self, asset: ChecksumAddress, amount: int, **kwargs
-    ) -> FuseAction:
+    def withdraw(self, asset: ChecksumAddress, amount: int, **kwargs) -> FuseAction:
         pass
 
 

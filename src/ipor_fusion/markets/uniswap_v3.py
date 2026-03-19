@@ -1,5 +1,3 @@
-from typing import List
-
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.errors import UnsupportedFuseError
@@ -64,19 +62,19 @@ class UniswapV3Market(SwapProtocol, LiquidityProtocol):
         if not self._new_position_fuse:
             raise UnsupportedFuseError("UniswapV3NewPositionFuse")
         return self._new_position_fuse.new_position(
-                token0,
-                token1,
-                fee,
-                tick_lower,
-                tick_upper,
-                amount0_desired,
-                amount1_desired,
-                amount0_min,
-                amount1_min,
-                deadline,
-            )
+            token0,
+            token1,
+            fee,
+            tick_lower,
+            tick_upper,
+            amount0_desired,
+            amount1_desired,
+            amount0_min,
+            amount1_min,
+            deadline,
+        )
 
-    def close_position(self, token_ids: List[int]) -> FuseAction:
+    def close_position(self, token_ids: list[int]) -> FuseAction:
         if not self._new_position_fuse:
             raise UnsupportedFuseError("UniswapV3NewPositionFuse")
         return self._new_position_fuse.close_position(token_ids)
@@ -96,15 +94,15 @@ class UniswapV3Market(SwapProtocol, LiquidityProtocol):
         if not self._modify_position_fuse:
             raise UnsupportedFuseError("UniswapV3ModifyPositionFuse")
         return self._modify_position_fuse.increase_liquidity(
-                token0,
-                token1,
-                token_id,
-                amount0_desired,
-                amount1_desired,
-                amount0_min,
-                amount1_min,
-                deadline,
-            )
+            token0,
+            token1,
+            token_id,
+            amount0_desired,
+            amount1_desired,
+            amount0_min,
+            amount1_min,
+            deadline,
+        )
 
     def decrease_liquidity(
         self,
@@ -118,12 +116,12 @@ class UniswapV3Market(SwapProtocol, LiquidityProtocol):
         if not self._modify_position_fuse:
             raise UnsupportedFuseError("UniswapV3ModifyPositionFuse")
         return self._modify_position_fuse.decrease_liquidity(
-                token_id, liquidity, amount0_min, amount1_min, deadline
-            )
+            token_id, liquidity, amount0_min, amount1_min, deadline
+        )
 
     def collect(
         self,
-        token_ids: List[int] = None,
+        token_ids: list[int] = None,
         token_id: int = None,
         amount0_max: int = 0,
         amount1_max: int = 0,

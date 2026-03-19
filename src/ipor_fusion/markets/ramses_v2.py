@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
@@ -69,20 +68,20 @@ class RamsesV2Market(LiquidityProtocol):
         if not self._new_position_fuse:
             raise UnsupportedFuseError("RamsesV2NewPositionFuse")
         return self._new_position_fuse.new_position(
-                token0,
-                token1,
-                fee,
-                tick_lower,
-                tick_upper,
-                amount0_desired,
-                amount1_desired,
-                amount0_min,
-                amount1_min,
-                deadline,
-                ve_ram_token_id,
-            )
+            token0,
+            token1,
+            fee,
+            tick_lower,
+            tick_upper,
+            amount0_desired,
+            amount1_desired,
+            amount0_min,
+            amount1_min,
+            deadline,
+            ve_ram_token_id,
+        )
 
-    def close_position(self, token_ids: List[int]) -> FuseAction:
+    def close_position(self, token_ids: list[int]) -> FuseAction:
         if not self._new_position_fuse:
             raise UnsupportedFuseError("RamsesV2NewPositionFuse")
         return self._new_position_fuse.close_position(token_ids)
@@ -102,15 +101,15 @@ class RamsesV2Market(LiquidityProtocol):
         if not self._modify_position_fuse:
             raise UnsupportedFuseError("RamsesV2ModifyPositionFuse")
         return self._modify_position_fuse.increase_liquidity(
-                token0,
-                token1,
-                token_id,
-                amount0_desired,
-                amount1_desired,
-                amount0_min,
-                amount1_min,
-                deadline,
-            )
+            token0,
+            token1,
+            token_id,
+            amount0_desired,
+            amount1_desired,
+            amount0_min,
+            amount1_min,
+            deadline,
+        )
 
     def decrease_liquidity(
         self,
@@ -124,12 +123,12 @@ class RamsesV2Market(LiquidityProtocol):
         if not self._modify_position_fuse:
             raise UnsupportedFuseError("RamsesV2ModifyPositionFuse")
         return self._modify_position_fuse.decrease_liquidity(
-                token_id, liquidity, amount0_min, amount1_min, deadline
-            )
+            token_id, liquidity, amount0_min, amount1_min, deadline
+        )
 
     def collect(
         self,
-        token_ids: List[int] = None,
+        token_ids: list[int] = None,
         token_id: int = None,
         amount0_max: int = 0,
         amount1_max: int = 0,
@@ -144,8 +143,8 @@ class RamsesV2Market(LiquidityProtocol):
         raise ValueError("Either token_ids or token_id must be provided")
 
     def claim_rewards(
-        self, token_ids: List[int], token_rewards: List[List[str]]
-    ) -> List[FuseAction]:
+        self, token_ids: list[int], token_rewards: list[list[str]]
+    ) -> list[FuseAction]:
         if not self._claim_fuse:
             raise UnsupportedFuseError("RamsesClaimFuse")
         return [self._claim_fuse.claim(token_ids, token_rewards)]
@@ -165,7 +164,7 @@ class RamsesV2Market(LiquidityProtocol):
     @staticmethod
     def extract_new_position_enter_events(
         receipt: TxReceipt,
-    ) -> List[RamsesNewPositionEvent]:
+    ) -> list[RamsesNewPositionEvent]:
         event_signature_hash = Web3.keccak(
             text="RamsesV2NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
         )

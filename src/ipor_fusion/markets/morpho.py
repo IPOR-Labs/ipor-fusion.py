@@ -1,5 +1,3 @@
-from typing import List
-
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.errors import UnsupportedFuseError
@@ -47,7 +45,7 @@ class MorphoMarket(LendingProtocol):
         return self._supply_fuse.withdraw(market_id, amount)
 
     def flash_loan(
-        self, asset: ChecksumAddress, amount: int, actions: List[FuseAction]
+        self, asset: ChecksumAddress, amount: int, actions: list[FuseAction]
     ) -> FuseAction:
         if not self._flash_loan_fuse:
             raise UnsupportedFuseError("MorphoFlashLoanFuse")
@@ -58,10 +56,10 @@ class MorphoMarket(LendingProtocol):
         universal_rewards_distributor: ChecksumAddress,
         rewards_token: ChecksumAddress,
         claimable: int,
-        proof: List[str],
+        proof: list[str],
     ) -> FuseAction:
         if not self._claim_fuse:
             raise UnsupportedFuseError("MorphoClaimFuse")
         return self._claim_fuse.claim(
-                universal_rewards_distributor, rewards_token, claimable, proof
-            )
+            universal_rewards_distributor, rewards_token, claimable, proof
+        )

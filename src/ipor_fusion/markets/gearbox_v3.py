@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import FuseAction
@@ -17,7 +15,7 @@ class GearboxV3Market(LendingProtocol):
     ):
         self._d_token = d_token
         self._farmd_token = farmd_token
-        self._supply_fuse: Optional[GearboxSupplyFuse] = None
+        self._supply_fuse: GearboxSupplyFuse | None = None
         if erc4626_fuse and farm_fuse and d_token and farmd_token:
             self._supply_fuse = GearboxSupplyFuse(
                 erc4626_fuse_address=erc4626_fuse,
@@ -26,24 +24,24 @@ class GearboxV3Market(LendingProtocol):
                 farmd_token_address=farmd_token,
             )
 
-    def supply(self, asset: ChecksumAddress, amount: int, **kwargs) -> List[FuseAction]:
+    def supply(self, asset: ChecksumAddress, amount: int, **kwargs) -> list[FuseAction]:
         if not self._supply_fuse:
             raise ValueError("GearboxV3 supply fuse not configured")
         return self._supply_fuse.supply_and_stake(asset, amount)
 
-    def supply_and_stake(self, amount: int, **kwargs) -> List[FuseAction]:
+    def supply_and_stake(self, amount: int, **kwargs) -> list[FuseAction]:
         if not self._supply_fuse:
             raise ValueError("GearboxV3 supply fuse not configured")
         return self._supply_fuse.supply_and_stake(self._d_token, amount)
 
     def withdraw(
         self, asset: ChecksumAddress, amount: int, **kwargs
-    ) -> List[FuseAction]:
+    ) -> list[FuseAction]:
         if not self._supply_fuse:
             raise ValueError("GearboxV3 supply fuse not configured")
         return self._supply_fuse.unstake_and_withdraw(asset, amount)
 
-    def unstake_and_withdraw(self, amount: int, **kwargs) -> List[FuseAction]:
+    def unstake_and_withdraw(self, amount: int, **kwargs) -> list[FuseAction]:
         if not self._supply_fuse:
             raise ValueError("GearboxV3 supply fuse not configured")
         return self._supply_fuse.unstake_and_withdraw(self._d_token, amount)

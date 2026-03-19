@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import FuseAction
@@ -17,7 +15,7 @@ class FluidInstadappMarket(LendingProtocol):
     ):
         self._pool_token = pool_token
         self._staking_contract = staking_contract
-        self._supply_fuse: Optional[FluidInstadappSupplyFuse] = None
+        self._supply_fuse: FluidInstadappSupplyFuse | None = None
         if erc4626_fuse and staking_fuse and pool_token and staking_contract:
             self._supply_fuse = FluidInstadappSupplyFuse(
                 erc4626_fuse_address=erc4626_fuse,
@@ -26,24 +24,24 @@ class FluidInstadappMarket(LendingProtocol):
                 staking_contract_address=staking_contract,
             )
 
-    def supply(self, asset: ChecksumAddress, amount: int, **kwargs) -> List[FuseAction]:
+    def supply(self, asset: ChecksumAddress, amount: int, **kwargs) -> list[FuseAction]:
         if not self._supply_fuse:
             raise ValueError("FluidInstadapp supply fuse not configured")
         return self._supply_fuse.supply_and_stake(asset, amount)
 
-    def supply_and_stake(self, amount: int) -> List[FuseAction]:
+    def supply_and_stake(self, amount: int) -> list[FuseAction]:
         if not self._supply_fuse:
             raise ValueError("FluidInstadapp supply fuse not configured")
         return self._supply_fuse.supply_and_stake(self._pool_token, amount)
 
     def withdraw(
         self, asset: ChecksumAddress, amount: int, **kwargs
-    ) -> List[FuseAction]:
+    ) -> list[FuseAction]:
         if not self._supply_fuse:
             raise ValueError("FluidInstadapp supply fuse not configured")
         return self._supply_fuse.unstake_and_withdraw(asset, amount)
 
-    def unstake_and_withdraw(self, amount: int) -> List[FuseAction]:
+    def unstake_and_withdraw(self, amount: int) -> list[FuseAction]:
         if not self._supply_fuse:
             raise ValueError("FluidInstadapp supply fuse not configured")
         return self._supply_fuse.unstake_and_withdraw(self._pool_token, amount)

@@ -1,5 +1,3 @@
-from typing import List
-
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import FuseAction
@@ -17,8 +15,8 @@ class UniversalMarket(SwapProtocol):
         token_out: ChecksumAddress,
         amount_in: int,
         min_amount_out: int = 0,
-        targets: List[ChecksumAddress] = None,
-        data: List[bytes] = None,
+        targets: list[ChecksumAddress] = None,
+        data: list[bytes] = None,
         **kwargs,
     ) -> FuseAction:
         if targets is None:

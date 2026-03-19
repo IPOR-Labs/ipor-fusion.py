@@ -1,5 +1,3 @@
-from typing import List
-
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import FuseAction
