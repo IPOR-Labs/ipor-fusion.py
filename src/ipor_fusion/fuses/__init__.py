@@ -12,6 +12,10 @@ from ipor_fusion.fuses.uniswap_v3 import (
     UniswapV3NewPositionFuse,
     UniswapV3ModifyPositionFuse,
     UniswapV3CollectFuse,
+    UniswapV3NewPositionEvent,
+    UniswapV3ClosePositionEvent,
+    extract_uniswap_v3_new_position_events,
+    extract_uniswap_v3_close_position_events,
 )
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.ramses_v2 import (
@@ -45,6 +49,10 @@ __all__ = [
     "UniswapV3NewPositionFuse",
     "UniswapV3ModifyPositionFuse",
     "UniswapV3CollectFuse",
+    "UniswapV3NewPositionEvent",
+    "UniswapV3ClosePositionEvent",
+    "extract_uniswap_v3_new_position_events",
+    "extract_uniswap_v3_close_position_events",
     "CompoundV3SupplyFuse",
     "RamsesV2NewPositionFuse",
     "RamsesV2ModifyPositionFuse",

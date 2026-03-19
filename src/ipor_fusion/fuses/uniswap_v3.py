@@ -1,5 +1,10 @@
+from dataclasses import dataclass
+
+from eth_abi import decode
 from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
+from web3 import Web3
+from web3.types import TxReceipt
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
 from ipor_fusion.types import Amount
@@ -126,3 +131,90 @@ class UniswapV3CollectFuse(Fuse):
     def collect(self, token_ids: list[int]) -> FuseAction:
         self._validate_non_empty_list(token_ids, "token_ids")
         return self._action_raw("enter((uint256[]))", ["(uint256[])"], [[token_ids]])
+
+
+@dataclass
+class UniswapV3NewPositionEvent:
+    version: str
+    token_id: int
+    liquidity: int
+    amount0: int
+    amount1: int
+    sender: str
+    recipient: str
+    fee: int
+    tick_lower: int
+    tick_upper: int
+
+
+@dataclass
+class UniswapV3ClosePositionEvent:
+    version: str
+    token_id: int
+
+
+def extract_uniswap_v3_new_position_events(
+    receipt: TxReceipt,
+) -> list[UniswapV3NewPositionEvent]:
+    event_signature_hash = Web3.keccak(
+        text="UniswapV3NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)"
+    )
+    events = []
+    for log in receipt["logs"]:
+        if log["topics"][0] == event_signature_hash:
+            decoded = tuple(
+                decode(
+                    [
+                        "address",
+                        "uint256",
+                        "uint128",
+                        "uint256",
+                        "uint256",
+                        "address",
+                        "address",
+                        "uint24",
+                        "int24",
+                        "int24",
+                    ],
+                    log["data"],
+                )
+            )
+            events.append(
+                UniswapV3NewPositionEvent(
+                    version=decoded[0],
+                    token_id=decoded[1],
+                    liquidity=decoded[2],
+                    amount0=decoded[3],
+                    amount1=decoded[4],
+                    sender=decoded[5],
+                    recipient=decoded[6],
+                    fee=decoded[7],
+                    tick_lower=decoded[8],
+                    tick_upper=decoded[9],
+                )
+            )
+    return events
+
+
+def extract_uniswap_v3_close_position_events(
+    receipt: TxReceipt,
+) -> list[UniswapV3ClosePositionEvent]:
+    event_signature_hash = Web3.keccak(
+        text="UniswapV3NewPositionFuseExit(address,uint256)"
+    )
+    events = []
+    for log in receipt["logs"]:
+        if log["topics"][0] == event_signature_hash:
+            decoded = tuple(
+                decode(
+                    ["address", "uint256"],
+                    log["data"],
+                )
+            )
+            events.append(
+                UniswapV3ClosePositionEvent(
+                    version=decoded[0],
+                    token_id=decoded[1],
+                )
+            )
+    return events
