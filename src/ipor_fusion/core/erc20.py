@@ -1,21 +1,9 @@
 from eth_abi import decode
 from eth_typing import ChecksumAddress
-from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.types import Amount, Decimals
-
-
-class ERC20Token:
-    """Simple ERC20 token reference (address only, no context)."""
-
-    def __init__(self, address: ChecksumAddress):
-        self._address = Web3.to_checksum_address(address)
-
-    @property
-    def address(self) -> ChecksumAddress:
-        return self._address
 
 
 class ERC20(ContractWrapper):
