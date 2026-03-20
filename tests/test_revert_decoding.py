@@ -1,6 +1,12 @@
+from unittest.mock import MagicMock
+
 from eth_abi import encode as abi_encode
 
-from ipor_fusion.errors import _decode_revert_reason, TransactionError
+from ipor_fusion.errors import (
+    _decode_revert_reason,
+    get_revert_reason,
+    TransactionError,
+)
 
 ERROR_SELECTOR = bytes.fromhex("08c379a0")
 PANIC_SELECTOR = bytes.fromhex("4e487b71")
@@ -96,3 +102,108 @@ def test_transaction_error_no_optional_fields():
     assert str(err) == "Transaction failed"
     assert err.tx_hash is None
     assert err.revert_reason is None
+
+
+# ---------------------------------------------------------------------------
+# _decode_revert_reason — decode failure branches
+# ---------------------------------------------------------------------------
+
+
+def test_decode_error_selector_malformed_payload():
+    """Error selector with payload that cannot be decoded as string."""
+    bad_payload = b"\xff" * 4
+    data = ERROR_SELECTOR + bad_payload
+    result = _decode_revert_reason(data)
+    assert result.startswith("Error(<decode failed>: 0x")
+
+
+def test_decode_panic_selector_malformed_payload():
+    """Panic selector with payload that cannot be decoded as uint256."""
+    bad_payload = b"\xff" * 4
+    data = PANIC_SELECTOR + bad_payload
+    result = _decode_revert_reason(data)
+    assert result.startswith("Panic(<decode failed>: 0x")
+
+
+# ---------------------------------------------------------------------------
+# get_revert_reason — mocked web3
+# ---------------------------------------------------------------------------
+
+
+def _make_web3(*, call_side_effect=None, tx_has_gas=True):
+    """Build a mock Web3 wired for get_revert_reason."""
+    web3 = MagicMock()
+    tx = {
+        "from": "0xaaaa",
+        "to": "0xbbbb",
+        "input": b"\x00",
+        "value": 0,
+    }
+    if tx_has_gas:
+        tx["gas"] = 21000
+    web3.eth.get_transaction.return_value = tx
+    if call_side_effect:
+        web3.eth.call.side_effect = call_side_effect
+    return web3
+
+
+def _receipt(block=100):
+    return {"blockNumber": block}
+
+
+def test_get_revert_reason_replay_succeeds():
+    """When eth_call replays without error, return None."""
+    web3 = _make_web3()
+    web3.eth.call.return_value = b""
+    assert get_revert_reason(web3, b"\x00" * 32, _receipt()) is None
+
+
+def test_get_revert_reason_exception_with_hex_data():
+    """Exception with .data attribute containing 0x-prefixed revert data."""
+    reason_bytes = abi_encode(["string"], ["not enough"])
+    hex_data = "0x" + (ERROR_SELECTOR + reason_bytes).hex()
+    exc = Exception("reverted")
+    exc.data = hex_data  # type: ignore[attr-defined]
+
+    web3 = _make_web3(call_side_effect=exc)
+    result = get_revert_reason(web3, b"\x00" * 32, _receipt())
+    assert result == 'Error("not enough")'
+
+
+def test_get_revert_reason_message_contains_revert():
+    """Exception message containing 'revert' is returned as-is."""
+    exc = Exception("execution reverted: some reason")
+    web3 = _make_web3(call_side_effect=exc)
+    result = get_revert_reason(web3, b"\x00" * 32, _receipt())
+    assert "execution reverted" in result
+
+
+def test_get_revert_reason_message_contains_revert_case_insensitive():
+    """Case-insensitive match on 'Revert'."""
+    exc = Exception("Revert happened")
+    web3 = _make_web3(call_side_effect=exc)
+    result = get_revert_reason(web3, b"\x00" * 32, _receipt())
+    assert "Revert" in result
+
+
+def test_get_revert_reason_unrecognised_exception():
+    """Unrelated exception returns None."""
+    exc = Exception("network timeout")
+    web3 = _make_web3(call_side_effect=exc)
+    assert get_revert_reason(web3, b"\x00" * 32, _receipt()) is None
+
+
+def test_get_revert_reason_tx_without_gas():
+    """Transaction without 'gas' field still works."""
+    web3 = _make_web3(tx_has_gas=False)
+    web3.eth.call.return_value = b""
+    assert get_revert_reason(web3, b"\x00" * 32, _receipt()) is None
+
+
+def test_get_revert_reason_data_not_hex_prefix():
+    """Exception with .data that is a string but not 0x-prefixed."""
+    exc = Exception("something")
+    exc.data = "not-hex"  # type: ignore[attr-defined]
+    web3 = _make_web3(call_side_effect=exc)
+    # Message doesn't contain "revert", data doesn't start with "0x"
+    assert get_revert_reason(web3, b"\x00" * 32, _receipt()) is None

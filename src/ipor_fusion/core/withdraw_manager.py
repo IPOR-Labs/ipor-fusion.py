@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 
 from eth_abi import decode
-from eth_typing import ChecksumAddress
+from eth_typing import BlockNumber, ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractPanicError
@@ -83,7 +83,9 @@ class WithdrawManager(ContractWrapper):
             withdraw_window_in_seconds=withdraw_window_in_seconds,
         )
 
-    def get_pending_requests_info(self, from_block: int = 0) -> tuple[int, int]:
+    def get_pending_requests_info(
+        self, from_block: BlockNumber = BlockNumber(0)
+    ) -> tuple[Shares, Timestamp]:
         current_timestamp = self._ctx.get_block()["timestamp"]
         events = self._get_withdraw_request_updated_events(from_block=from_block)
 
@@ -108,10 +110,10 @@ class WithdrawManager(ContractWrapper):
             except ContractPanicError:
                 logger.warning("ContractPanicError for account %s", account)
 
-        return requested_amount, current_timestamp - 1
+        return Shares(requested_amount), Timestamp(current_timestamp - 1)
 
     def _get_withdraw_request_updated_events(
-        self, from_block: int = 0
+        self, from_block: BlockNumber = BlockNumber(0)
     ) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="WithdrawRequestUpdated(address,uint256,uint32)")
