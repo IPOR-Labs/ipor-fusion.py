@@ -11,7 +11,7 @@ from constants import (
     ETHEREUM_AAVE_V3_BORROW_FUSE,
 )
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
-from ipor_fusion import Roles, Markets, PlasmaVault, AccessManager, ERC20
+from ipor_fusion import Roles, IporFusionMarkets, PlasmaVault, AccessManager, ERC20
 from ipor_fusion.fuses import AaveV3SupplyFuse, AaveV3BorrowFuse, ERC4626SupplyFuse
 from ipor_fusion.types import Amount
 
@@ -69,7 +69,7 @@ def test_should_borrow_aave_v3(anvil):
     anvil.grant_market_substrates(
         _from=atomist,
         plasma_vault=vault_address,
-        market_id=Markets.AAVE_V3,
+        market_id=IporFusionMarkets.AAVE_V3,
         substrates=[
             "0000000000000000000000002260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
             "000000000000000000000000C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -149,7 +149,7 @@ def test_should_deposit_to_plasma_vault(anvil):
     anvil.grant_market_substrates(
         _from=atomist,
         plasma_vault=vault_address,
-        market_id=Markets.ERC4626_0013,
+        market_id=IporFusionMarkets.ERC4626_0013,
         substrates=["0000000000000000000000009824dCdac89F208Bf8b5Cb5C4Dc41F04a0878607"],
     )
 
@@ -157,7 +157,7 @@ def test_should_deposit_to_plasma_vault(anvil):
     anvil.grant_market_substrates(
         _from=atomist,
         plasma_vault=vault_address,
-        market_id=Markets.AAVE_V3,
+        market_id=IporFusionMarkets.AAVE_V3,
         substrates=[
             "0000000000000000000000002260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
             "000000000000000000000000C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",

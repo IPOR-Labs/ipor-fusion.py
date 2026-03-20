@@ -53,7 +53,7 @@ from ipor_fusion.fuses import (
     FluidInstadappStakingFuse,
 )
 from ipor_fusion.config.roles import Roles
-from ipor_fusion.market_ids import Markets
+from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.errors import (
     IporFusionError,
     TransactionError,
@@ -123,7 +123,7 @@ __all__ = [
     "FluidInstadappSupplyFuse",
     "FluidInstadappStakingFuse",
     "Roles",
-    "Markets",
+    "IporFusionMarkets",
     "IporFusionError",
     "TransactionError",
     "Amount",

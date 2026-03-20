@@ -9,7 +9,7 @@ from constants import ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT, ANVIL_WALLET
 from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
 from ipor_fusion import (
     Roles,
-    Markets,
+    IporFusionMarkets,
     PlasmaVault,
     AccessManager,
     ERC20,
@@ -90,7 +90,7 @@ def test_should_deposit(anvil):
         < 100_10000000
     )
 
-    assert plasma_vault.total_assets_in_market(Markets.AAVE_V3) == 0
+    assert plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
 
 def test_should_mint(anvil):
@@ -148,7 +148,7 @@ def test_should_mint(anvil):
         )
         < 5000
     ), "vaultTotalAssetsAfter"
-    assert plasma_vault.total_assets_in_market(Markets.AAVE_V3) == 0
+    assert plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
 
 def test_should_redeem(anvil):
@@ -211,7 +211,7 @@ def test_should_redeem(anvil):
         < 100000
     ), "USDC balance of user"
 
-    assert plasma_vault.total_assets_in_market(Markets.AAVE_V3) == 0
+    assert plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
 
 def test_should_withdraw(anvil):
@@ -266,7 +266,7 @@ def test_should_withdraw(anvil):
         abs(user_vault_balance_before - (user_vault_balance_after + shares_amount))
         < 10000000
     ), "userVaultBalanceAfter"
-    assert plasma_vault.total_assets_in_market(Markets.AAVE_V3) == 0
+    assert plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3) == 0
 
 
 def test_should_transfer(anvil):
