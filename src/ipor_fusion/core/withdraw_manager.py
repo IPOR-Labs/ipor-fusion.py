@@ -11,7 +11,7 @@ from web3.exceptions import ContractPanicError
 from web3.types import TxReceipt, LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import ContractWrapper
-from ipor_fusion.types import Shares, Amount, Period
+from ipor_fusion.types import Shares, Amount, Fee, Period
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +64,9 @@ class WithdrawManager(ContractWrapper):
         (value,) = decode(["uint256"], self._call("getSharesToRelease()"))
         return Shares(value)
 
-    def get_request_fee(self) -> int:
+    def get_request_fee(self) -> Fee:
         (value,) = decode(["uint256"], self._call("getRequestFee()"))
-        return value
+        return Fee(value)
 
     def request_info(self, account: ChecksumAddress) -> WithdrawRequestInfo:
         result = self._call("requestInfo(address)", account)

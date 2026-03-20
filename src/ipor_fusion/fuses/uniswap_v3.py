@@ -2,11 +2,11 @@ from dataclasses import dataclass
 
 from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
-from web3.types import TxReceipt
+from web3.types import Timestamp, TxReceipt
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
 from ipor_fusion.fuses.events import extract_events
-from ipor_fusion.types import Amount, Fee, Tick, TokenId
+from ipor_fusion.types import Amount, Fee, Liquidity, Tick, TokenId
 
 
 class UniswapV3SwapFuse(Fuse):
@@ -48,7 +48,7 @@ class UniswapV3NewPositionFuse(Fuse):
         amount1_desired: Amount,
         amount0_min: Amount,
         amount1_min: Amount,
-        deadline: int,
+        deadline: Timestamp,
     ) -> FuseAction:
         self._validate_address(token0, "token0")
         self._validate_address(token1, "token1")
@@ -90,7 +90,7 @@ class UniswapV3ModifyPositionFuse(Fuse):
         amount1_desired: Amount,
         amount0_min: Amount,
         amount1_min: Amount,
-        deadline: int,
+        deadline: Timestamp,
     ) -> FuseAction:
         self._validate_address(token0, "token0")
         self._validate_address(token1, "token1")
@@ -120,7 +120,7 @@ class UniswapV3ModifyPositionFuse(Fuse):
         liquidity: Amount,
         amount0_min: Amount,
         amount1_min: Amount,
-        deadline: int,
+        deadline: Timestamp,
     ) -> FuseAction:
         self._validate_token_id(token_id, "token_id")
         self._validate_amount(liquidity, "liquidity")
@@ -141,21 +141,21 @@ class UniswapV3CollectFuse(Fuse):
 @dataclass(slots=True)
 class UniswapV3NewPositionEvent:
     version: str
-    token_id: int
-    liquidity: int
-    amount0: int
-    amount1: int
+    token_id: TokenId
+    liquidity: Liquidity
+    amount0: Amount
+    amount1: Amount
     sender: str
     recipient: str
-    fee: int
-    tick_lower: int
-    tick_upper: int
+    fee: Fee
+    tick_lower: Tick
+    tick_upper: Tick
 
 
 @dataclass(slots=True)
 class UniswapV3ClosePositionEvent:
     version: str
-    token_id: int
+    token_id: TokenId
 
 
 class UniswapV3Events:

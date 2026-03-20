@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
+from web3.types import Timestamp
 
 from ipor_fusion.core.contract import ContractWrapper
-from ipor_fusion.types import Amount, MorphoBlueMarketId, Shares
+from ipor_fusion.types import Amount, Fee, MorphoBlueMarketId, Shares
 
 
 @dataclass(slots=True)
@@ -16,8 +17,8 @@ class MorphoMarket:
     total_supply_shares: Shares
     total_borrow_assets: Amount
     total_borrow_shares: Shares
-    last_update: int
-    fee: int
+    last_update: Timestamp
+    fee: Fee
 
 
 @dataclass(slots=True)

@@ -2,6 +2,7 @@ from eth_abi import decode
 from web3 import Web3
 
 from ipor_fusion.core.contract import ContractWrapper
+from ipor_fusion.types import TokenId
 
 _POSITION_ABI_TYPES = [
     "uint96",
@@ -22,7 +23,7 @@ _POSITION_ABI_TYPES = [
 class PositionManagerReader(ContractWrapper):
     """Base reader for NonfungiblePositionManager-style contracts."""
 
-    def _decode_position(self, token_id: int) -> dict:
+    def _decode_position(self, token_id: TokenId) -> dict:
         raw = self._call("positions(uint256)", token_id)
         (
             nonce,

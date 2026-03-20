@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.readers.position_manager import PositionManagerReader
-from ipor_fusion.types import Amount, Fee, Tick
+from ipor_fusion.types import Amount, Fee, Tick, TokenId
 
 
 @dataclass(slots=True)
@@ -27,5 +27,5 @@ class RamsesV2Position:
 class RamsesV2Reader(PositionManagerReader):
     """Reader for Ramses V2 NonfungiblePositionManager on-chain state."""
 
-    def positions(self, token_id: int) -> RamsesV2Position:
+    def positions(self, token_id: TokenId) -> RamsesV2Position:
         return RamsesV2Position(**self._decode_position(token_id))

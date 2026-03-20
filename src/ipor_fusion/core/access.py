@@ -9,6 +9,7 @@ from web3.types import TxReceipt, LogReceipt
 
 from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.config.roles import Roles
+from ipor_fusion.types import RoleId, Period
 
 
 @dataclass(slots=True)
@@ -16,22 +17,22 @@ class RoleAccount:
     """Account-role membership record returned by AccessManager queries."""
 
     account: ChecksumAddress
-    role_id: int
+    role_id: RoleId
     is_member: bool
-    execution_delay: int
+    execution_delay: Period
 
 
 class AccessManager(ContractWrapper):
     """Manages role-based access control for PlasmaVault operations."""
 
     def grant_role(
-        self, role_id: int, account: ChecksumAddress, execution_delay: int
+        self, role_id: int, account: ChecksumAddress, execution_delay: Period
     ) -> TxReceipt:
         return self._send(
             "grantRole(uint64,address,uint32)", role_id, account, execution_delay
         )
 
-    def has_role(self, role_id: int, account: ChecksumAddress) -> tuple[bool, int]:
+    def has_role(self, role_id: int, account: ChecksumAddress) -> tuple[bool, Period]:
         result = self._call("hasRole(uint64,address)", role_id, account)
         is_member, execution_delay = decode(["bool", "uint32"], result)
         return is_member, execution_delay

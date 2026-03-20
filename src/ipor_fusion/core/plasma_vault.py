@@ -44,7 +44,7 @@ class PlasmaVault(ContractWrapper):
     def add_fuses(self, fuses: list[ChecksumAddress]) -> TxReceipt:
         return self._send("addFuses(address[])", fuses)
 
-    def set_total_supply_cap(self, cap: int) -> TxReceipt:
+    def set_total_supply_cap(self, cap: Amount) -> TxReceipt:
         return self._send("setTotalSupplyCap(uint256)", cap)
 
     def transfer(self, to: ChecksumAddress, value: Amount) -> TxReceipt:

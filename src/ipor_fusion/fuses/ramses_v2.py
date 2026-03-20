@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
-from web3.types import TxReceipt
+from web3.types import Timestamp, TxReceipt
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
 from ipor_fusion.fuses.events import extract_events
-from ipor_fusion.types import Amount, Fee, Tick, TokenId
+from ipor_fusion.types import Amount, Fee, Liquidity, Tick, TokenId
 
 
 class RamsesV2NewPositionFuse(Fuse):
@@ -23,7 +23,7 @@ class RamsesV2NewPositionFuse(Fuse):
         amount1_desired: Amount,
         amount0_min: Amount,
         amount1_min: Amount,
-        deadline: int,
+        deadline: Timestamp,
         ve_ram_token_id: TokenId,
     ) -> FuseAction:
         self._validate_address(token0, "token0")
@@ -67,7 +67,7 @@ class RamsesV2ModifyPositionFuse(Fuse):
         amount1_desired: Amount,
         amount0_min: Amount,
         amount1_min: Amount,
-        deadline: int,
+        deadline: Timestamp,
     ) -> FuseAction:
         self._validate_address(token0, "token0")
         self._validate_address(token1, "token1")
@@ -97,7 +97,7 @@ class RamsesV2ModifyPositionFuse(Fuse):
         liquidity: Amount,
         amount0_min: Amount,
         amount1_min: Amount,
-        deadline: int,
+        deadline: Timestamp,
     ) -> FuseAction:
         self._validate_token_id(token_id, "token_id")
         self._validate_amount(liquidity, "liquidity")
@@ -119,7 +119,7 @@ class RamsesClaimFuse(Fuse):
     """Fuse for claiming veRAM reward tokens from Ramses V2 gauges."""
 
     def claim(
-        self, *, token_ids: list[int], token_rewards: list[list[str]]
+        self, *, token_ids: list[TokenId], token_rewards: list[list[str]]
     ) -> FuseAction:
         self._validate_non_empty_list(token_ids, "token_ids")
         self._validate_non_empty_list(token_rewards, "token_rewards")
@@ -137,15 +137,15 @@ class RamsesClaimFuse(Fuse):
 @dataclass(slots=True)
 class RamsesNewPositionEvent:
     version: str
-    token_id: int
-    liquidity: int
-    amount0: int
-    amount1: int
+    token_id: TokenId
+    liquidity: Liquidity
+    amount0: Amount
+    amount1: Amount
     sender: str
     recipient: str
-    fee: int
-    tick_lower: int
-    tick_upper: int
+    fee: Fee
+    tick_lower: Tick
+    tick_upper: Tick
 
 
 class RamsesEvents:

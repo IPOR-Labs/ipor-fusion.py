@@ -1,7 +1,7 @@
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.types import TxReceipt
+from web3.types import Timestamp, TxReceipt
 
 from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
@@ -12,7 +12,7 @@ class RewardsManager(ContractWrapper):
     """Manager for claiming and transferring rewards from PlasmaVault."""
 
     def transfer(
-        self, asset: ChecksumAddress, to: ChecksumAddress, amount: int
+        self, asset: ChecksumAddress, to: ChecksumAddress, amount: Amount
     ) -> TxReceipt:
         return self._send("transfer(address,address,uint256)", asset, to, amount)
 
@@ -20,7 +20,7 @@ class RewardsManager(ContractWrapper):
         (value,) = decode(["uint256"], self._call("balanceOf()"))
         return Amount(value)
 
-    def get_vesting_data(self) -> tuple[int, int, int, int]:
+    def get_vesting_data(self) -> tuple[Timestamp, Timestamp, Amount, Amount]:
         result = self._call("getVestingData()")
         (
             (

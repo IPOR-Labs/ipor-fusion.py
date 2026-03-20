@@ -7,6 +7,7 @@ from web3 import Web3
 from web3.types import TxReceipt, LogReceipt, BlockIdentifier, FilterParams
 
 from ipor_fusion.errors import TransactionError, get_revert_reason
+from ipor_fusion.types import ChainId
 
 
 class Web3Context:
@@ -18,7 +19,7 @@ class Web3Context:
     def __init__(
         self,
         web3: Web3,
-        chain_id: int,
+        chain_id: ChainId,
         signer: ChecksumAddress | None = None,
         private_key: str | None = None,
         gas_multiplier: float = 1.25,
@@ -40,7 +41,7 @@ class Web3Context:
         return self._web3
 
     @property
-    def chain_id(self) -> int:
+    def chain_id(self) -> ChainId:
         return self._chain_id
 
     @property
@@ -55,7 +56,7 @@ class Web3Context:
         gas_multiplier: float = 1.25,
     ) -> "Web3Context":
         web3 = Web3(Web3.HTTPProvider(url))
-        chain_id = web3.eth.chain_id
+        chain_id = ChainId(web3.eth.chain_id)
 
         return cls(
             web3=web3,

@@ -11,7 +11,7 @@ from testcontainers.core.container import DockerContainer  # type: ignore[import
 from web3 import Web3, HTTPProvider
 from web3.types import RPCEndpoint, Timestamp
 
-from ipor_fusion.types import Period
+from ipor_fusion.types import MarketId, Period
 
 
 class AnvilTestContainerStarter:
@@ -126,7 +126,7 @@ class AnvilTestContainerStarter:
         self,
         _from: ChecksumAddress,
         plasma_vault: ChecksumAddress,
-        market_id: int,
+        market_id: MarketId,
         substrates: list[str],
     ):
         join = ",".join(substrates)

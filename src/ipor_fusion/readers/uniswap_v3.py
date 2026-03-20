@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.readers.position_manager import PositionManagerReader
-from ipor_fusion.types import Amount, Fee, Tick
+from ipor_fusion.types import Amount, Fee, Tick, TokenId
 
 
 @dataclass(slots=True)
@@ -27,5 +27,5 @@ class UniswapV3Position:
 class UniswapV3Reader(PositionManagerReader):
     """Reader for Uniswap V3 NonfungiblePositionManager on-chain state."""
 
-    def positions(self, token_id: int) -> UniswapV3Position:
+    def positions(self, token_id: TokenId) -> UniswapV3Position:
         return UniswapV3Position(**self._decode_position(token_id))
