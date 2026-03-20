@@ -53,6 +53,7 @@ black = "24.8.0"
 pylint = "3.3.1"
 mypy = "^1.19.1"
 pytest-xdist = "^3.8.0"
+pytest-cov = "^6.0"
 
 [tool.black]
 line-length = 88
@@ -62,6 +63,14 @@ unstable = false
 
 [tool.pylint]
 config-file = "pylintrc.toml"
+
+[tool.coverage.run]
+source = ["src/ipor_fusion"]
+data_file = ".coverage_data/.coverage"
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 89
 
 [build-system]
 requires = ["poetry-core"]
