@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
@@ -9,6 +11,14 @@ from web3.types import TxReceipt, LogReceipt
 from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.types import Amount, MarketId, Decimals, Shares
+
+
+@dataclass(slots=True)
+class BalanceFuse:
+    """Mapping between a market and its balance-tracking fuse contract."""
+
+    market_id: MarketId
+    fuse: ChecksumAddress
 
 
 class PlasmaVault(ContractWrapper):
@@ -112,12 +122,14 @@ class PlasmaVault(ContractWrapper):
         (value,) = decode(["address[]"], self._call("getFuses()"))
         return [Web3.to_checksum_address(item) for item in list(value)]
 
-    def get_balance_fuses(self) -> list[tuple[MarketId, ChecksumAddress]]:
+    def get_balance_fuses(self) -> list[BalanceFuse]:
         events = self._get_balance_fuse_added_events()
         result = []
         for event in events:
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
-            result.append((market_id, Web3.to_checksum_address(fuse)))
+            result.append(
+                BalanceFuse(market_id=market_id, fuse=Web3.to_checksum_address(fuse))
+            )
         return result
 
     def withdraw_manager_address(self) -> ChecksumAddress | None:

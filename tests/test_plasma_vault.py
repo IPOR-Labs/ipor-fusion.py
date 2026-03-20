@@ -298,8 +298,10 @@ class TestPlasmaVaultEventDecoding:
         result = vault.get_balance_fuses()
 
         assert len(result) == 2
-        assert result[0] == (1, FUSE_ADDR)
-        assert result[1] == (2, FUSE_ADDR_2)
+        assert result[0].market_id == 1
+        assert result[0].fuse == FUSE_ADDR
+        assert result[1].market_id == 2
+        assert result[1].fuse == FUSE_ADDR_2
 
     def test_get_balance_fuses_empty(self):
         vault, ctx = _make_vault()

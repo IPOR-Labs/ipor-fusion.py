@@ -64,12 +64,12 @@ def test_should_release_funds(anvil):
 
     anvil.move_time(Period.HOUR)
 
-    requested_amount, release_timestamp = withdraw_manager.get_pending_requests_info()
-    assert requested_amount == to_withdraw
+    pending = withdraw_manager.get_pending_requests_info()
+    assert pending.shares == to_withdraw
 
     anvil.move_time(Period.MINUTE)
 
-    withdraw_manager.release_funds(timestamp=release_timestamp)
+    withdraw_manager.release_funds(timestamp=pending.timestamp)
 
     anvil.move_time(Period.HOUR)
 

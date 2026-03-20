@@ -13,6 +13,14 @@ from ipor_fusion.types import RoleId, Period
 
 
 @dataclass(slots=True)
+class RoleStatus:
+    """Result of a role membership check for an account."""
+
+    is_member: bool
+    execution_delay: Period
+
+
+@dataclass(slots=True)
 class RoleAccount:
     """Account-role membership record returned by AccessManager queries."""
 
@@ -32,10 +40,10 @@ class AccessManager(ContractWrapper):
             "grantRole(uint64,address,uint32)", role_id, account, execution_delay
         )
 
-    def has_role(self, role_id: int, account: ChecksumAddress) -> tuple[bool, Period]:
+    def has_role(self, role_id: int, account: ChecksumAddress) -> RoleStatus:
         result = self._call("hasRole(uint64,address)", role_id, account)
         is_member, execution_delay = decode(["bool", "uint32"], result)
-        return is_member, execution_delay
+        return RoleStatus(is_member=is_member, execution_delay=execution_delay)
 
     def owner(self) -> ChecksumAddress:
         return self.owners()[0]
@@ -77,14 +85,14 @@ class AccessManager(ContractWrapper):
             (account,) = decode(["address"], event["topics"][2])
             if not predicate(role_id, account):
                 continue
-            is_member, execution_delay = self.has_role(role_id, account)
-            if is_member:
+            role_status = self.has_role(role_id, account)
+            if role_status.is_member:
                 role_accounts.append(
                     RoleAccount(
                         account=Web3.to_checksum_address(account),
                         role_id=role_id,
-                        is_member=is_member,
-                        execution_delay=execution_delay,
+                        is_member=role_status.is_member,
+                        execution_delay=role_status.execution_delay,
                     )
                 )
         return role_accounts

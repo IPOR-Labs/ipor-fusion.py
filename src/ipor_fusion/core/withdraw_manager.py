@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
+class PendingRequestsInfo:
+    """Aggregated pending withdrawal requests across all accounts."""
+
+    shares: Shares
+    timestamp: Timestamp
+
+
+@dataclass(slots=True)
 class WithdrawRequestInfo:
     """Snapshot of a pending withdrawal request for a single account."""
 
@@ -85,7 +93,7 @@ class WithdrawManager(ContractWrapper):
 
     def get_pending_requests_info(
         self, from_block: BlockNumber = BlockNumber(0)
-    ) -> tuple[Shares, Timestamp]:
+    ) -> PendingRequestsInfo:
         current_timestamp = self._ctx.get_block()["timestamp"]
         events = self._get_withdraw_request_updated_events(from_block=from_block)
 
@@ -110,7 +118,10 @@ class WithdrawManager(ContractWrapper):
             except ContractPanicError:
                 logger.warning("ContractPanicError for account %s", account)
 
-        return Shares(requested_amount), Timestamp(current_timestamp - 1)
+        return PendingRequestsInfo(
+            shares=Shares(requested_amount),
+            timestamp=Timestamp(current_timestamp - 1),
+        )
 
     def _get_withdraw_request_updated_events(
         self, from_block: BlockNumber = BlockNumber(0)

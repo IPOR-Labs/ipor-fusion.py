@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
@@ -6,6 +8,16 @@ from web3.types import Timestamp, TxReceipt
 from ipor_fusion.core.contract import ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.types import Amount
+
+
+@dataclass(slots=True)
+class VestingData:
+    """Snapshot of reward vesting schedule from the on-chain manager."""
+
+    vesting_time: Timestamp
+    update_balance_timestamp: Timestamp
+    transferred_tokens: Amount
+    last_update_balance: Amount
 
 
 class RewardsManager(ContractWrapper):
@@ -20,7 +32,7 @@ class RewardsManager(ContractWrapper):
         (value,) = decode(["uint256"], self._call("balanceOf()"))
         return Amount(value)
 
-    def get_vesting_data(self) -> tuple[Timestamp, Timestamp, Amount, Amount]:
+    def get_vesting_data(self) -> VestingData:
         result = self._call("getVestingData()")
         (
             (
@@ -30,11 +42,11 @@ class RewardsManager(ContractWrapper):
                 last_update_balance,
             ),
         ) = decode(["(uint32,uint32,uint128,uint128)"], result)
-        return (
-            vesting_time,
-            update_balance_timestamp,
-            transferred_tokens,
-            last_update_balance,
+        return VestingData(
+            vesting_time=vesting_time,
+            update_balance_timestamp=update_balance_timestamp,
+            transferred_tokens=transferred_tokens,
+            last_update_balance=last_update_balance,
         )
 
     def get_rewards_fuses(self) -> list[ChecksumAddress]:

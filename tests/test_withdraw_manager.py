@@ -168,9 +168,9 @@ def test_pending_requests_aggregates_active(wm, ctx):
         [200, current_ts + 500, True, 3600],
     )
 
-    requested, ts = wm.get_pending_requests_info()
-    assert requested == Shares(200)
-    assert ts == current_ts - 1
+    pending = wm.get_pending_requests_info()
+    assert pending.shares == Shares(200)
+    assert pending.timestamp == current_ts - 1
 
 
 def test_pending_requests_skips_expired_events(wm, ctx):
@@ -178,9 +178,9 @@ def test_pending_requests_skips_expired_events(wm, ctx):
     ctx.get_block.return_value = {"timestamp": current_ts}
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 100, current_ts - 1)]
 
-    requested, ts = wm.get_pending_requests_info()
-    assert requested == Shares(0)
-    assert ts == current_ts - 1
+    pending = wm.get_pending_requests_info()
+    assert pending.shares == Shares(0)
+    assert pending.timestamp == current_ts - 1
 
 
 def test_pending_requests_skips_zero_amount_events(wm, ctx):
@@ -188,8 +188,8 @@ def test_pending_requests_skips_zero_amount_events(wm, ctx):
     ctx.get_block.return_value = {"timestamp": current_ts}
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 0, current_ts + 1000)]
 
-    requested, _ = wm.get_pending_requests_info()
-    assert requested == Shares(0)
+    pending = wm.get_pending_requests_info()
+    assert pending.shares == Shares(0)
 
 
 def test_pending_requests_deduplicates_accounts(wm, ctx):
@@ -204,9 +204,9 @@ def test_pending_requests_deduplicates_accounts(wm, ctx):
         [300, current_ts + 500, True, 3600],
     )
 
-    requested, _ = wm.get_pending_requests_info()
+    pending = wm.get_pending_requests_info()
     assert ctx.call.call_count == 1
-    assert requested == Shares(300)
+    assert pending.shares == Shares(300)
 
 
 def test_pending_requests_handles_contract_panic(wm, ctx):
@@ -215,9 +215,9 @@ def test_pending_requests_handles_contract_panic(wm, ctx):
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 100, current_ts + 1000)]
     ctx.call.side_effect = ContractPanicError("arithmetic overflow")
 
-    requested, ts = wm.get_pending_requests_info()
-    assert requested == Shares(0)
-    assert ts == current_ts - 1
+    pending = wm.get_pending_requests_info()
+    assert pending.shares == Shares(0)
+    assert pending.timestamp == current_ts - 1
 
 
 def test_pending_requests_skips_expired_request_info(wm, ctx):
@@ -229,8 +229,8 @@ def test_pending_requests_skips_expired_request_info(wm, ctx):
         [200, current_ts - 100, False, 3600],
     )
 
-    requested, _ = wm.get_pending_requests_info()
-    assert requested == Shares(0)
+    pending = wm.get_pending_requests_info()
+    assert pending.shares == Shares(0)
 
 
 def test_pending_requests_passes_from_block(wm, ctx):

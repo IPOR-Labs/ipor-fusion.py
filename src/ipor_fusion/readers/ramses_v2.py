@@ -1,31 +1,17 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
-from eth_typing import ChecksumAddress
-
-from ipor_fusion.readers.position_manager import PositionManagerReader
-from ipor_fusion.types import Amount, Fee, Tick, TokenId
+from ipor_fusion.readers.position_manager import PositionData, PositionManagerReader
+from ipor_fusion.types import TokenId
 
 
 @dataclass(slots=True)
-class RamsesV2Position:
+class RamsesV2Position(PositionData):
     """Liquidity position data from the Ramses V2 NonfungiblePositionManager."""
-
-    nonce: int
-    operator: ChecksumAddress
-    token0: ChecksumAddress
-    token1: ChecksumAddress
-    fee: Fee
-    tick_lower: Tick
-    tick_upper: Tick
-    liquidity: Amount
-    fee_growth_inside0_last_x128: int
-    fee_growth_inside1_last_x128: int
-    tokens_owed0: Amount
-    tokens_owed1: Amount
 
 
 class RamsesV2Reader(PositionManagerReader):
     """Reader for Ramses V2 NonfungiblePositionManager on-chain state."""
 
     def positions(self, token_id: TokenId) -> RamsesV2Position:
-        return RamsesV2Position(**self._decode_position(token_id))
+        data = self._decode_position(token_id)
+        return RamsesV2Position(**asdict(data))

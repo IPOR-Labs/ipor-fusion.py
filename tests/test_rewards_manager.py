@@ -46,12 +46,12 @@ class TestGetVestingData:
             [(1000, 2000, 500_000, 300_000)],
         )
 
-        vesting_time, update_ts, transferred, last_update = mgr.get_vesting_data()
+        vesting = mgr.get_vesting_data()
 
-        assert vesting_time == 1000
-        assert update_ts == 2000
-        assert transferred == 500_000
-        assert last_update == 300_000
+        assert vesting.vesting_time == 1000
+        assert vesting.update_balance_timestamp == 2000
+        assert vesting.transferred_tokens == 500_000
+        assert vesting.last_update_balance == 300_000
 
     def test_decodes_zero_values(self):
         mgr, ctx = _make_manager()
@@ -60,12 +60,12 @@ class TestGetVestingData:
             [(0, 0, 0, 0)],
         )
 
-        vesting_time, update_ts, transferred, last_update = mgr.get_vesting_data()
+        vesting = mgr.get_vesting_data()
 
-        assert vesting_time == 0
-        assert update_ts == 0
-        assert transferred == 0
-        assert last_update == 0
+        assert vesting.vesting_time == 0
+        assert vesting.update_balance_timestamp == 0
+        assert vesting.transferred_tokens == 0
+        assert vesting.last_update_balance == 0
 
 
 class TestIsRewardFuseSupported:
