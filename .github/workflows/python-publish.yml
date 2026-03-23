@@ -63,6 +63,11 @@ on:
         type: string
         default: ""
         required: false
+      skip-version-bump:
+        description: "Skip version bump and release the version from pyproject.toml as-is"
+        type: boolean
+        default: false
+        required: false
 
 env:
   POETRY_VIRTUALENVS_PATH: "~/.cache/pypoetry/virtualenvs"
@@ -143,8 +148,8 @@ jobs:
         run: poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
         id: static-code-analyze
 
-      - name: Version release
-        if: inputs.publish-enabled
+      - name: Version release (semantic)
+        if: inputs.publish-enabled && !inputs.skip-version-bump
         id: release
         # from tag: v9.12.0
         uses: python-semantic-release/python-semantic-release@c1bcfdbb994243ac7cf419365d5894d6bfb2950e
@@ -162,16 +167,34 @@ jobs:
           vcs_release: true
           force: ${{ inputs.force-semver-part }}
 
+      - name: Version release (from pyproject.toml)
+        if: inputs.publish-enabled && inputs.skip-version-bump
+        id: release-current
+        run: |
+          VERSION=$(poetry version -s)
+          TAG="v${VERSION}"
+
+          git config user.name "bob-the-builder-ipor"
+          git config user.email "106537082+bob-the-builder-ipor@users.noreply.github.com"
+
+          poetry build
+          git tag -a "${TAG}" -m "${TAG}"
+          git push origin "${TAG}"
+
+          echo "released=true" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub release
         # from tag: v9.12.0
         uses: python-semantic-release/publish-action@7e5b21d0ae796b4efc7a1fc340f48b691cbfdbf9
-        if: inputs.publish-enabled && steps.release.outputs.released
+        if: inputs.publish-enabled && (steps.release.outputs.released || steps.release-current.outputs.released)
         with:
           github_token: ${{ secrets.GH_TOKEN }}
-          tag: ${{ steps.release.outputs.tag }}
+          tag: ${{ steps.release.outputs.tag || steps.release-current.outputs.tag }}
 
       - name: Publish PyPI
-        if: inputs.publish-enabled && steps.release.outputs.released
+        if: inputs.publish-enabled && (steps.release.outputs.released || steps.release-current.outputs.released)
         # from tag: v1.10.3
         uses: pypa/gh-action-pypi-publish@f7600683efdcb7656dec5b29656edb7bc586e597
         with:

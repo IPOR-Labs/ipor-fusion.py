@@ -12,6 +12,10 @@ on:
           - "minor"
           - "major"
         default: ""
+      skip-version-bump:
+        type: boolean
+        description: "Skip version bump and release the version from pyproject.toml as-is"
+        default: false
 
 jobs:
 
@@ -35,6 +39,7 @@ jobs:
     with:
       publish-enabled: ${{ needs.notify.outputs.branch-name == 'main' }}
       force-semver-part: ${{ inputs.force-semver-part }}
+      skip-version-bump: ${{ inputs.skip-version-bump }}
 
   report:
     if: ${{ always() }}
