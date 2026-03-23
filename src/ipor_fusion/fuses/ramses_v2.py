@@ -1,0 +1,174 @@
+from dataclasses import dataclass
+
+from eth_typing import ChecksumAddress
+from web3.types import Timestamp, TxReceipt
+
+from ipor_fusion.fuses.base import Fuse, FuseAction
+from ipor_fusion.fuses.events import extract_events
+from ipor_fusion.types import Amount, Fee, Liquidity, Tick, TokenId
+
+
+class RamsesV2NewPositionFuse(Fuse):
+    """Fuse for minting and closing liquidity positions on Ramses V2."""
+
+    def new_position(
+        self,
+        *,
+        token0: ChecksumAddress,
+        token1: ChecksumAddress,
+        fee: Fee,
+        tick_lower: Tick,
+        tick_upper: Tick,
+        amount0_desired: Amount,
+        amount1_desired: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
+        deadline: Timestamp,
+        ve_ram_token_id: TokenId,
+    ) -> FuseAction:
+        self._validate_address(token0, "token0")
+        self._validate_address(token1, "token1")
+        self._validate_amount(amount0_desired, "amount0_desired")
+        self._validate_amount(amount1_desired, "amount1_desired")
+        return self._action_raw(
+            "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256,uint256))",
+            [
+                [
+                    token0,
+                    token1,
+                    fee,
+                    tick_lower,
+                    tick_upper,
+                    amount0_desired,
+                    amount1_desired,
+                    amount0_min,
+                    amount1_min,
+                    deadline,
+                    ve_ram_token_id,
+                ]
+            ],
+        )
+
+    def close_position(self, token_ids: list[TokenId]) -> FuseAction:
+        self._validate_non_empty_list(token_ids, "token_ids")
+        return self._action_raw("exit((uint256[]))", [[token_ids]])
+
+
+class RamsesV2ModifyPositionFuse(Fuse):
+    """Fuse for increasing and decreasing liquidity on Ramses V2 positions."""
+
+    def increase_liquidity(
+        self,
+        *,
+        token0: ChecksumAddress,
+        token1: ChecksumAddress,
+        token_id: TokenId,
+        amount0_desired: Amount,
+        amount1_desired: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
+        deadline: Timestamp,
+    ) -> FuseAction:
+        self._validate_address(token0, "token0")
+        self._validate_address(token1, "token1")
+        self._validate_token_id(token_id, "token_id")
+        self._validate_amount(amount0_desired, "amount0_desired")
+        self._validate_amount(amount1_desired, "amount1_desired")
+        return self._action_raw(
+            "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))",
+            [
+                [
+                    token0,
+                    token1,
+                    token_id,
+                    amount0_desired,
+                    amount1_desired,
+                    amount0_min,
+                    amount1_min,
+                    deadline,
+                ]
+            ],
+        )
+
+    def decrease_liquidity(
+        self,
+        *,
+        token_id: TokenId,
+        liquidity: Amount,
+        amount0_min: Amount,
+        amount1_min: Amount,
+        deadline: Timestamp,
+    ) -> FuseAction:
+        self._validate_token_id(token_id, "token_id")
+        self._validate_amount(liquidity, "liquidity")
+        return self._action_raw(
+            "exit((uint256,uint128,uint256,uint256,uint256))",
+            [[token_id, liquidity, amount0_min, amount1_min, deadline]],
+        )
+
+
+class RamsesV2CollectFuse(Fuse):
+    """Fuse for collecting accrued fees from Ramses V2 positions."""
+
+    def collect(self, token_ids: list[TokenId]) -> FuseAction:
+        self._validate_non_empty_list(token_ids, "token_ids")
+        return self._action_raw("enter((uint256[]))", [[token_ids]])
+
+
+class RamsesClaimFuse(Fuse):
+    """Fuse for claiming veRAM reward tokens from Ramses V2 gauges."""
+
+    def claim(
+        self, *, token_ids: list[TokenId], token_rewards: list[list[str]]
+    ) -> FuseAction:
+        self._validate_non_empty_list(token_ids, "token_ids")
+        self._validate_non_empty_list(token_rewards, "token_rewards")
+        if len(token_ids) != len(token_rewards):
+            raise ValueError(
+                f"token_ids and token_rewards must have the same length, "
+                f"got {len(token_ids)} and {len(token_rewards)}"
+            )
+        return self._action_raw(
+            "claim(uint256[],address[][])",
+            [token_ids, token_rewards],
+        )
+
+
+@dataclass(slots=True)
+class RamsesNewPositionEvent:
+    version: str
+    token_id: TokenId
+    liquidity: Liquidity
+    amount0: Amount
+    amount1: Amount
+    sender: str
+    recipient: str
+    fee: Fee
+    tick_lower: Tick
+    tick_upper: Tick
+
+
+class RamsesEvents:
+    """Decoder for Ramses V2 fuse events emitted in transaction receipts."""
+
+    @staticmethod
+    def extract_new_position_events(
+        receipt: TxReceipt,
+    ) -> list[RamsesNewPositionEvent]:
+        return extract_events(
+            receipt,
+            "RamsesV2NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,address,address,uint24,int24,int24)",
+            [
+                "address",
+                "uint256",
+                "uint128",
+                "uint256",
+                "uint256",
+                "address",
+                "address",
+                "uint24",
+                "int24",
+                "int24",
+            ],
+            RamsesNewPositionEvent,
+        )

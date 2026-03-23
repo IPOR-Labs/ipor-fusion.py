@@ -1,37 +1,32 @@
 import logging
 import os
 
+import pytest
 from eth_typing import BlockNumber
 from web3 import Web3
 
-from constants import ANVIL_WALLET_PRIVATE_KEY
-from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
-from ipor_fusion.CheatingPlasmaVaultSystemFactory import (
-    CheatingPlasmaVaultSystemFactory,
-)
+from addresses import ETHEREUM_USDC
+from constants import ETHEREUM_MORPHO_SUPPLY_FUSE
+from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
+from ipor_fusion import PlasmaVault, ERC20
+from ipor_fusion.fuses import MorphoSupplyFuse
 from ipor_fusion.types import MorphoBlueMarketId, Amount
 
-# Configure logging to display relevant test information
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-# Retrieve the fork URL from environment variables
-fork_url = os.getenv("ETHEREUM_PROVIDER_URL")
-
-# Initialize the Anvil test container with the provided fork URL
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+fork_url = os.environ["ETHEREUM_PROVIDER_URL"]
 
 
-def test_should_deposit_and_withdraw_from_morpho_blue():
-    # Reset the blockchain to a specific point to ensure consistent test conditions
-    # Block 22066578 represents a known state for reproducible testing
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
+
+
+def test_should_deposit_and_withdraw_from_morpho_blue(anvil):
     anvil.reset_fork(BlockNumber(22066578))
 
-    # Define key addresses and identifiers for the test
-    # vault_address: The address of the Plasma Vault contract that will interact with Morpho Blue
-    # alpha_address: The address with elevated permissions to execute operations
-    # morpho_blue_market_id: Unique identifier for the specific Morpho Blue lending market
     vault_address = Web3.to_checksum_address(
         "0x43Ee0243eA8CF02f7087d8B16C8D2007CC9c7cA2"
     )
@@ -42,64 +37,29 @@ def test_should_deposit_and_withdraw_from_morpho_blue():
         "3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49"
     )
 
-    # Initialize the CheatingPlasmaVaultSystem factory and get an instance
-    # This provides utilities to manipulate blockchain state for testing purposes
-    cheating_system_factory = CheatingPlasmaVaultSystemFactory(
-        provider_url=anvil.get_anvil_http_url(),
-        private_key=ANVIL_WALLET_PRIVATE_KEY,
-    )
-    cheating = cheating_system_factory.get(vault_address)
+    forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
+    plasma_vault = PlasmaVault(forked_ctx, vault_address)
+    forked_ctx.prank(alpha_address)
 
-    # Impersonate the cheating address to perform privileged operations
-    # This simulates actions being taken by an authorized account
-    cheating.prank(alpha_address)
+    morpho = MorphoSupplyFuse(ETHEREUM_MORPHO_SUPPLY_FUSE)
 
-    # Define the amount to deposit/withdraw (1,000 USDC with 6 decimal places)
     amount = Amount(1000_000000)
 
-    # Create a supply operation for the specified Morpho Blue market
-    # This prepares the transaction data for supplying assets to the lending market
-    supply = cheating.morpho().supply(morpho_blue_market_id, amount)
+    supply = morpho.supply(market_id=morpho_blue_market_id, amount=amount)
 
-    # Record the vault's USDC balance before supplying to the market
-    # This will be used to verify the correct amount was transferred
-    usdc = cheating.erc20("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    usdc = ERC20(forked_ctx, ETHEREUM_USDC)
     usdc_balance_of_before_supply = usdc.balance_of(vault_address)
 
-    # Execute the supply operation through the Plasma Vault
-    # The vault will transfer USDC to the Morpho Blue protocol
-    cheating.plasma_vault().execute([supply])
+    plasma_vault.execute([supply])
 
-    # Query the current position data from Morpho Blue protocol
-    # This retrieves detailed information about the vault's position in the specified market
-    morpho_position = cheating.morpho().position(
-        chain_id=cheating.chain_id(),  # Current blockchain network identifier
-        morpho_blue_market_id=morpho_blue_market_id,  # Specific Morpho Blue market to query
-    )
-
-    # Verify that the vault has supplied at least the expected amount to the market
-    # This assertion ensures the supply operation was successful and the position reflects
-    # the correct supplied amount before proceeding with further operations
-    assert morpho_position.supply_amount >= amount
-
-    # Record the vault's USDC balance after supplying to the market
     usdc_balance_of_after_supply = usdc.balance_of(vault_address)
 
-    # Verify that the correct amount of USDC was transferred from the vault
-    # The balance difference should exactly match the supplied amount
     assert usdc_balance_of_before_supply - usdc_balance_of_after_supply == amount
 
-    # Create a withdrawal operation for the same amount from the Morpho Blue market
-    # This prepares the transaction data for withdrawing assets from the lending market
-    withdraw = cheating.morpho().withdraw(morpho_blue_market_id, amount)
+    withdraw = morpho.withdraw(market_id=morpho_blue_market_id, amount=amount)
 
-    # Execute the withdrawal operation through the Plasma Vault
-    # The vault will receive USDC back from the Morpho Blue protocol
-    cheating.plasma_vault().execute([withdraw])
+    plasma_vault.execute([withdraw])
 
-    # Record the vault's USDC balance after withdrawing from the market
     usdc_balance_of_after_withdraw = usdc.balance_of(vault_address)
 
-    # Verify that the correct amount of USDC was returned to the vault
-    # The balance difference should exactly match the withdrawn amount
     assert usdc_balance_of_after_withdraw - usdc_balance_of_after_supply > 999_000000

@@ -82,7 +82,7 @@ jobs:
           key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
 
       - name: Install
-        run: poetry install
+        run: poetry install --all-extras
         id: install
 
       - name: Format code
@@ -94,6 +94,11 @@ jobs:
         if: inputs.static-code-analysis-enabled
         run: poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
         id: static-code-analyze
+
+      - name: Type check
+        if: inputs.static-code-analysis-enabled
+        run: poetry run mypy .
+        id: type-check
 
       - name: Build
         if: inputs.build-enabled
@@ -109,4 +114,16 @@ jobs:
           ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
           BASE_PROVIDER_URL: ${{ secrets.BASE_PROVIDER_URL }}
         id: tests
+
+      - name: Coverage summary
+        if: inputs.test-enabled && always() && steps.tests.outcome != 'skipped'
+        run: |
+          poetry run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage artifact
+        if: inputs.test-enabled && always() && steps.tests.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 

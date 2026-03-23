@@ -1,2 +1,0 @@
-class UnsupportedChainId(Exception):
-    pass

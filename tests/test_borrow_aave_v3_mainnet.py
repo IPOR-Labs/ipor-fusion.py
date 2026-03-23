@@ -1,321 +1,240 @@
 import logging
 import os
 
+import pytest
 from web3 import Web3
 
-from constants import ANVIL_WALLET_PRIVATE_KEY
-from ipor_fusion.AnvilTestContainerStarter import AnvilTestContainerStarter
-from ipor_fusion.IporFusionMarkets import IporFusionMarkets
-from ipor_fusion.PlasmaVaultSystemFactory import PlasmaVaultSystemFactory
-from ipor_fusion.Roles import Roles
-from ipor_fusion.helpers import Addresses
+from addresses import ETHEREUM_WBTC, ETHEREUM_WETH
+from constants import (
+    ANVIL_WALLET,
+    ETHEREUM_AAVE_V3_SUPPLY_FUSE,
+    ETHEREUM_AAVE_V3_BORROW_FUSE,
+)
+from ipor_fusion.testing import AnvilTestContainerStarter, ForkedWeb3Context
+from ipor_fusion import Roles, IporFusionMarkets, PlasmaVault, AccessManager, ERC20
+from ipor_fusion.fuses import AaveV3SupplyFuse, AaveV3BorrowFuse, ERC4626SupplyFuse
 from ipor_fusion.types import Amount
 
-# Configure logging to display relevant test information
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-# Retrieve the fork URL from environment variables for connecting to Ethereum mainnet
-fork_url = os.getenv("ETHEREUM_PROVIDER_URL")
-
-# Initialize the Anvil test container with the provided fork URL
-# This creates a local instance of Ethereum mainnet for testing
-anvil = AnvilTestContainerStarter(fork_url)
-anvil.start()
+fork_url = os.environ["ETHEREUM_PROVIDER_URL"]
 
 
-def test_should_borrow_aave_v3():
-    """
-    Test the full Aave V3 borrow-repay lifecycle using a Plasma Vault.
-    This test demonstrates how to:
-    1. Set up permissions and roles
-    2. Deposit collateral (WBTC)
-    3. Supply collateral to Aave V3
-    4. Borrow another asset (WETH)
-    5. Repay the borrowed asset
-    6. Withdraw the original collateral
-    """
-    # Reset fork to a specific block number to ensure a consistent testing environment
+@pytest.fixture(scope="module")
+def anvil():
+    with AnvilTestContainerStarter(fork_url) as a:
+        yield a
+
+
+def test_should_borrow_aave_v3(anvil):
     anvil.reset_fork(22616438)
 
-    # Define key addresses for the test
-    atomist = Web3.to_checksum_address(
-        "0x46B48240f61C831B85fCf4c198C98028Ab8EE68d"
-    )  # Admin/controller address
+    atomist = Web3.to_checksum_address("0x46B48240f61C831B85fCf4c198C98028Ab8EE68d")
     vault_address = Web3.to_checksum_address(
         "0x1fdf5dc3F915Cb40E0AD5690DE51E3cB464d1BAD"
-    )  # Plasma Vault contract address
-    wbtc_holder = Web3.to_checksum_address(
-        "0xE940ae8cF59fE2709BBc572CBAD2633fB45Abf46"
-    )  # Address with WBTC balance
-
-    # Initialize the Plasma Vault system with the test provider
-    system = PlasmaVaultSystemFactory(
-        provider_url=anvil.get_anvil_http_url(),
-        private_key=ANVIL_WALLET_PRIVATE_KEY,
-    ).get(vault_address)
-
-    # Set up permissions: grant ALPHA_ROLE to the system alpha and WHITELIST_ROLE to the WBTC holder
-    system.cheater(atomist).access_manager().grant_role(
-        Roles.ALPHA_ROLE, system.alpha(), 0
     )
-    system.cheater(atomist).access_manager().grant_role(
-        Roles.WHITELIST_ROLE, wbtc_holder, 0
+    wbtc_holder = Web3.to_checksum_address("0xE940ae8cF59fE2709BBc572CBAD2633fB45Abf46")
+
+    forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
+    plasma_vault = PlasmaVault(forked_ctx, vault_address)
+    access_manager = AccessManager(
+        forked_ctx, plasma_vault.get_access_manager_address()
     )
 
-    # Define the collateral amount (1 WBTC, with 8 decimals)
+    # Grant roles
+    forked_ctx.prank(atomist)
+    access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+    access_manager.grant_role(Roles.WHITELIST_ROLE, wbtc_holder, 0)
+
+    forked_ctx.prank(ANVIL_WALLET)
+
+    aave_supply = AaveV3SupplyFuse(ETHEREUM_AAVE_V3_SUPPLY_FUSE)
+    aave_borrow = AaveV3BorrowFuse(ETHEREUM_AAVE_V3_BORROW_FUSE)
+
     wbtc_collateral_amount = int(1e8)
 
-    # Approve the Plasma Vault to spend WBTC from the holder's account
-    system.cheater(wbtc_holder).erc20(Addresses.ETHEREUM_WBTC_ADDRESS).approve(
-        spender=system.plasma_vault().address(), amount=wbtc_collateral_amount
+    # Approve and deposit
+    forked_ctx.prank(wbtc_holder)
+    ERC20(forked_ctx, ETHEREUM_WBTC).approve(
+        spender=plasma_vault.address, amount=wbtc_collateral_amount
     )
+    plasma_vault.deposit(assets=wbtc_collateral_amount, receiver=wbtc_holder)
 
-    # Deposit WBTC into the Plasma Vault
-    system.cheater(wbtc_holder).plasma_vault().deposit(
-        assets=wbtc_collateral_amount, receiver=wbtc_holder
-    )
+    assert ERC20(forked_ctx, ETHEREUM_WBTC).balance_of(vault_address) == 1e8
 
-    # Verify that the vault now holds 1 WBTC
-    assert (
-        system.erc20(Addresses.ETHEREUM_WBTC_ADDRESS).balance_of(vault_address) == 1e8
-    )
+    forked_ctx.prank(ANVIL_WALLET)
 
-    # Grant market substrates to the vault - this is necessary for the vault to interact with Aave V3
-    # Substrates define which assets the vault can interact with in the protocol
-    anvil.grant_market_substrates(
-        _from=atomist,
-        plasma_vault=vault_address,
-        market_id=1,
-        substrates=[
-            "0000000000000000000000002260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",  # WBTC address
-            "000000000000000000000000C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # WETH address
-        ],
-    )
-
-    # STEP 1: Supply WBTC as collateral to Aave V3
-    # This enables borrowing against this collateral
-    # E-mode 1 is used for higher efficiency borrowing within the same asset class
-    supply = system.aave_v3().supply(
-        asset_address=Addresses.ETHEREUM_WBTC_ADDRESS,
-        amount=wbtc_collateral_amount,
-        e_mode=1,
-    )
-    system.plasma_vault().execute([supply])
-
-    # Verify that WBTC has been transferred from the vault to Aave
-    assert system.erc20(Addresses.ETHEREUM_WBTC_ADDRESS).balance_of(vault_address) == 0
-
-    # STEP 2: Borrow WETH from Aave V3 using the supplied WBTC as collateral
-    weth_borrow_amount = int(20e18)  # 20 WETH (with 18 decimals)
-    borrow = system.aave_v3().borrow(
-        asset_address=Addresses.ETHEREUM_WETH_ADDRESS, amount=weth_borrow_amount
-    )
-    system.plasma_vault().execute([borrow])
-
-    # Verify that the borrowed WETH is now in the vault
-    assert (
-        system.erc20(Addresses.ETHEREUM_WETH_ADDRESS).balance_of(vault_address)
-        == weth_borrow_amount
-    )
-
-    # STEP 3: Repay the borrowed WETH back to Aave V3
-    repay = system.aave_v3().repay(
-        asset_address=Addresses.ETHEREUM_WETH_ADDRESS, amount=weth_borrow_amount
-    )
-    system.plasma_vault().execute([repay])
-
-    # Verify that WETH has been repaid and is no longer in the vault
-    assert system.erc20(Addresses.ETHEREUM_WETH_ADDRESS).balance_of(vault_address) == 0
-
-    # STEP 4: Withdraw the original WBTC collateral from Aave V3
-    # Withdraw slightly less than the full amount to avoid potential precision issues
-    # Aave sometimes fails when attempting to withdraw 100% of the collateral
-    withdraw = system.aave_v3().withdraw(
-        asset_address=Addresses.ETHEREUM_WBTC_ADDRESS,
-        amount=int(wbtc_collateral_amount * 0.99999),
-    )
-    system.plasma_vault().execute([withdraw])
-
-    # Verify that the withdrawn WBTC is back in the vault (minus the small amount left as dust)
-    assert system.erc20(Addresses.ETHEREUM_WBTC_ADDRESS).balance_of(
-        vault_address
-    ) == int(wbtc_collateral_amount * 0.99999)
-
-
-def test_should_deposit_to_plasma_vault():
-    """
-    Test complex DeFi workflow demonstrating:
-    1. WBTC Plasma Vault setup with proper roles and permissions
-    2. WETH Plasma Vault configuration with cross-vault interactions
-    3. Multi-step operation: deposit WBTC → supply to Aave V3 → borrow WETH → deposit to ERC4626 vault
-    This test showcases vault-to-vault asset flows and cross-protocol integrations.
-    """
-    # Reset fork to specific block for consistent test environment
-    anvil.reset_fork(22687555)
-
-    # Define primary addresses for WBTC Plasma Vault operations
-    atomist = Web3.to_checksum_address(
-        "0x46B48240f61C831B85fCf4c198C98028Ab8EE68d"
-    )  # Primary admin/controller with governance permissions
-    vault_address = Web3.to_checksum_address(
-        "0x1fdf5dc3F915Cb40E0AD5690DE51E3cB464d1BAD"
-    )  # Main WBTC Plasma Vault contract address
-    withdraw_manager_address = Web3.to_checksum_address(
-        "0xdaF066a6B51499941299B566d1B124678eBC2b3c"
-    )  # Withdrawal manager for the WBTC vault
-    wbtc_holder = Web3.to_checksum_address(
-        "0xE940ae8cF59fE2709BBc572CBAD2633fB45Abf46"
-    )  # Account holding sufficient WBTC for testing
-    erc4626_fuse_address = Web3.to_checksum_address(
-        "0x970b4f5522685D4826eceb0377B3DdBF12836dFd"
-    )  # ERC4626 fuse adapter for vault interactions
-    weth_vault_address = Web3.to_checksum_address(
-        "0x9824dCdac89F208Bf8b5Cb5C4Dc41F04a0878607"
-    )  # Target WETH Plasma Vault for depositing borrowed assets
-
-    # Initialize WBTC Plasma Vault system with withdrawal manager
-    system = PlasmaVaultSystemFactory(
-        provider_url=anvil.get_anvil_http_url(),
-        private_key=ANVIL_WALLET_PRIVATE_KEY,
-    ).get(
-        plasma_vault_address=vault_address,
-        withdraw_manager_address=withdraw_manager_address,
-    )
-
-    # Grant essential roles for vault operations
-    # ALPHA_ROLE: Allows execution of vault strategies and operations
-    system.cheater(atomist).access_manager().grant_role(
-        Roles.ALPHA_ROLE, system.alpha(), 0
-    )
-    # WHITELIST_ROLE: Permits the WBTC holder to interact with the vault
-    system.cheater(atomist).access_manager().grant_role(
-        Roles.WHITELIST_ROLE, wbtc_holder, 0
-    )
-
-    # Configure market substrates for ERC4626 vault interactions
-    # Market ID 100013 represents the ERC4626 integration market
-    anvil.grant_market_substrates(
-        _from=atomist,
-        plasma_vault=vault_address,
-        market_id=100013,
-        substrates=[
-            "0000000000000000000000009824dCdac89F208Bf8b5Cb5C4Dc41F04a0878607"
-        ],  # WETH vault substrate
-    )
-
-    # Configure Aave V3 market substrates for lending/borrowing operations
-    # Enables vault to interact with WBTC and WETH on Aave V3 protocol
+    # Grant market substrates
     anvil.grant_market_substrates(
         _from=atomist,
         plasma_vault=vault_address,
         market_id=IporFusionMarkets.AAVE_V3,
         substrates=[
-            "0000000000000000000000002260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",  # WBTC substrate for Aave V3
-            "000000000000000000000000C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # WETH substrate for Aave V3
+            "0000000000000000000000002260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "000000000000000000000000C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
         ],
     )
 
-    # Define collateral amount: 1 WBTC (8 decimal places)
+    # Supply to Aave V3
+    supply = aave_supply.supply(
+        asset=ETHEREUM_WBTC,
+        amount=wbtc_collateral_amount,
+        e_mode=1,
+    )
+    plasma_vault.execute([supply])
+
+    assert ERC20(forked_ctx, ETHEREUM_WBTC).balance_of(vault_address) == 0
+
+    # Borrow WETH
+    weth_borrow_amount = int(20e18)
+    borrow = aave_borrow.borrow(asset=ETHEREUM_WETH, amount=weth_borrow_amount)
+    plasma_vault.execute([borrow])
+
+    assert (
+        ERC20(forked_ctx, ETHEREUM_WETH).balance_of(vault_address) == weth_borrow_amount
+    )
+
+    # Repay
+    repay = aave_borrow.repay(asset=ETHEREUM_WETH, amount=weth_borrow_amount)
+    plasma_vault.execute([repay])
+
+    assert ERC20(forked_ctx, ETHEREUM_WETH).balance_of(vault_address) == 0
+
+    # Withdraw
+    withdraw = aave_supply.withdraw(
+        asset=ETHEREUM_WBTC,
+        amount=int(wbtc_collateral_amount * 0.99999),
+    )
+    plasma_vault.execute([withdraw])
+
+    assert ERC20(forked_ctx, ETHEREUM_WBTC).balance_of(vault_address) == int(
+        wbtc_collateral_amount * 0.99999
+    )
+
+
+def test_should_deposit_to_plasma_vault(anvil):
+    anvil.reset_fork(22687555)
+
+    atomist = Web3.to_checksum_address("0x46B48240f61C831B85fCf4c198C98028Ab8EE68d")
+    vault_address = Web3.to_checksum_address(
+        "0x1fdf5dc3F915Cb40E0AD5690DE51E3cB464d1BAD"
+    )
+    wbtc_holder = Web3.to_checksum_address("0xE940ae8cF59fE2709BBc572CBAD2633fB45Abf46")
+    erc4626_fuse_address = Web3.to_checksum_address(
+        "0x970b4f5522685D4826eceb0377B3DdBF12836dFd"
+    )
+    weth_vault_address = Web3.to_checksum_address(
+        "0x9824dCdac89F208Bf8b5Cb5C4Dc41F04a0878607"
+    )
+
+    forked_ctx = ForkedWeb3Context.from_url(anvil.get_anvil_http_url())
+    plasma_vault = PlasmaVault(forked_ctx, vault_address)
+    access_manager = AccessManager(
+        forked_ctx, plasma_vault.get_access_manager_address()
+    )
+
+    # Grant roles
+    forked_ctx.prank(atomist)
+    access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0)
+    access_manager.grant_role(Roles.WHITELIST_ROLE, wbtc_holder, 0)
+
+    forked_ctx.prank(ANVIL_WALLET)
+
+    aave_supply = AaveV3SupplyFuse(ETHEREUM_AAVE_V3_SUPPLY_FUSE)
+    aave_borrow = AaveV3BorrowFuse(ETHEREUM_AAVE_V3_BORROW_FUSE)
+    erc4626 = ERC4626SupplyFuse(erc4626_fuse_address)
+
+    # Grant market substrates for ERC4626
+    anvil.grant_market_substrates(
+        _from=atomist,
+        plasma_vault=vault_address,
+        market_id=IporFusionMarkets.ERC4626_0013,
+        substrates=["0000000000000000000000009824dCdac89F208Bf8b5Cb5C4Dc41F04a0878607"],
+    )
+
+    # Grant market substrates for Aave V3
+    anvil.grant_market_substrates(
+        _from=atomist,
+        plasma_vault=vault_address,
+        market_id=IporFusionMarkets.AAVE_V3,
+        substrates=[
+            "0000000000000000000000002260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "000000000000000000000000C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        ],
+    )
+
     wbtc_collateral_amount = Amount(int(1e8))
 
-    # Approve WBTC spending by the Plasma Vault
-    system.cheater(wbtc_holder).erc20(Addresses.ETHEREUM_WBTC_ADDRESS).approve(
-        spender=system.plasma_vault().address(), amount=wbtc_collateral_amount
+    # Approve and deposit
+    forked_ctx.prank(wbtc_holder)
+    ERC20(forked_ctx, ETHEREUM_WBTC).approve(
+        spender=plasma_vault.address, amount=wbtc_collateral_amount
     )
+    plasma_vault.deposit(assets=wbtc_collateral_amount, receiver=wbtc_holder)
 
-    # Execute initial deposit of WBTC into the Plasma Vault
-    system.cheater(wbtc_holder).plasma_vault().deposit(
-        assets=wbtc_collateral_amount, receiver=wbtc_holder
-    )
+    forked_ctx.prank(ANVIL_WALLET)
 
-    # Configure WETH Plasma Vault system for cross-vault operations
-    weth_vault_system = PlasmaVaultSystemFactory(
-        provider_url=anvil.get_anvil_http_url(),
-        private_key=ANVIL_WALLET_PRIVATE_KEY,
-    ).get(plasma_vault_address=weth_vault_address)
-
-    # WETH vault admin address for permission management
+    # Setup WETH plasma_vault permissions
+    weth_vault = PlasmaVault(forked_ctx, weth_vault_address)
+    weth_access = AccessManager(forked_ctx, weth_vault.get_access_manager_address())
     weth_atomist = Web3.to_checksum_address(
         "0xf2C6a2225BE9829eD77263b032E3D92C52aE6694"
     )
 
-    # Grant WHITELIST_ROLE to the WBTC vault, enabling it to deposit into WETH vault
-    weth_vault_system.cheater(weth_atomist).access_manager().grant_role(
+    forked_ctx.prank(weth_atomist)
+    weth_access.grant_role(
         role_id=Roles.WHITELIST_ROLE, account=vault_address, execution_delay=0
     )
 
-    # Adjust WETH vault supply cap to accommodate the incoming deposit
-    # Reducing cap to 1/4 of original to ensure sufficient capacity
-    cap = weth_vault_system.plasma_vault().get_total_supply_cap()
-    weth_vault_system.cheater(weth_atomist).plasma_vault().set_total_supply_cap(
-        int(cap / 4)
-    )
+    cap = weth_vault.get_total_supply_cap()
+    weth_vault.set_total_supply_cap(int(cap / 4))
 
-    # Verify initial WBTC deposit is in the vault
-    assert (
-        system.erc20(Addresses.ETHEREUM_WBTC_ADDRESS).balance_of(vault_address) == 1e8
-    )
+    forked_ctx.prank(ANVIL_WALLET)
 
-    # STEP 1: Supply WBTC as collateral to Aave V3
-    # E-mode 1 enables higher borrowing efficiency within BTC asset category
-    supply_aave = system.aave_v3().supply(
-        asset_address=Addresses.ETHEREUM_WBTC_ADDRESS,
+    assert ERC20(forked_ctx, ETHEREUM_WBTC).balance_of(vault_address) == 1e8
+
+    # Supply to Aave V3
+    supply_aave = aave_supply.supply(
+        asset=ETHEREUM_WBTC,
         amount=wbtc_collateral_amount,
         e_mode=1,
     )
-    system.plasma_vault().execute([supply_aave])
+    plasma_vault.execute([supply_aave])
 
-    # Verify WBTC has been transferred to Aave V3 (vault balance should be 0)
-    assert system.erc20(Addresses.ETHEREUM_WBTC_ADDRESS).balance_of(vault_address) == 0
+    assert ERC20(forked_ctx, ETHEREUM_WBTC).balance_of(vault_address) == 0
 
-    # STEP 2: Borrow WETH against the WBTC collateral
-    weth_borrow_amount = Amount(int(20e18))  # 20 WETH (18 decimal places)
-    borrow = system.aave_v3().borrow(
-        asset_address=Addresses.ETHEREUM_WETH_ADDRESS, amount=weth_borrow_amount
-    )
-    system.plasma_vault().execute([borrow])
+    # Borrow WETH
+    weth_borrow_amount = Amount(int(20e18))
+    borrow = aave_borrow.borrow(asset=ETHEREUM_WETH, amount=weth_borrow_amount)
+    plasma_vault.execute([borrow])
 
-    # Verify borrowed WETH is now in the WBTC vault
     assert (
-        system.erc20(Addresses.ETHEREUM_WETH_ADDRESS).balance_of(vault_address)
-        == weth_borrow_amount
+        ERC20(forked_ctx, ETHEREUM_WETH).balance_of(vault_address) == weth_borrow_amount
     )
 
-    # Log the borrowed amount for monitoring purposes
     log.info("weth_borrow_amount: %s", weth_borrow_amount / 1e18)
 
-    # STEP 3: Prepare to deposit borrowed WETH into the WETH Plasma Vault via ERC4626 fuse
-    supply_erc4626 = system.erc4626(fuse_address=erc4626_fuse_address).supply(
+    # Supply to ERC4626 vault
+    supply_erc4626 = erc4626.supply(
         vault_address=weth_vault_address, amount=weth_borrow_amount
     )
 
-    # Verify WETH is still in the WBTC vault before final transfer
     assert (
-        system.erc20(Addresses.ETHEREUM_WETH_ADDRESS).balance_of(vault_address)
-        == weth_borrow_amount
+        ERC20(forked_ctx, ETHEREUM_WETH).balance_of(vault_address) == weth_borrow_amount
     )
 
-    # STEP 4: Execute the cross-vault deposit - transfer WETH to the WETH vault
-    system.plasma_vault().execute([supply_erc4626])
+    plasma_vault.execute([supply_erc4626])
 
-    # Verify final state: WETH has been successfully transferred to the WETH vault
-    # WBTC vault should have no WETH remaining after the deposit operation
-    assert system.erc20(Addresses.ETHEREUM_WETH_ADDRESS).balance_of(vault_address) == 0
+    assert ERC20(forked_ctx, ETHEREUM_WETH).balance_of(vault_address) == 0
 
-    # STEP 5: Prepare to withdraw WETH from the WETH Plasma Vault via ERC4626 fuse
-    # This demonstrates the ability to retrieve assets from cross-vault deposits
-    withdraw_erc4626 = system.erc4626(fuse_address=erc4626_fuse_address).withdraw(
+    # Withdraw from ERC4626 vault
+    withdraw_erc4626 = erc4626.withdraw(
         vault_address=weth_vault_address, amount=weth_borrow_amount
     )
 
-    # Advance blockchain time by 60 seconds to simulate realistic conditions
-    # Some protocols may have time-based restrictions or cooldown periods
     anvil.move_time(60)
 
-    # STEP 6: Execute the withdrawal - transfer WETH back from the WETH vault to WBTC vault
-    system.plasma_vault().execute([withdraw_erc4626])
+    plasma_vault.execute([withdraw_erc4626])
 
-    # Verify final state: WETH has been successfully withdrawn back to the original vault
-    # WBTC vault should now have WETH balance greater than 0
-    assert system.erc20(Addresses.ETHEREUM_WETH_ADDRESS).balance_of(vault_address) > 0
+    assert ERC20(forked_ctx, ETHEREUM_WETH).balance_of(vault_address) > 0

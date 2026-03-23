@@ -1,2 +1,0 @@
-class UnsupportedFuseError(Exception):
-    pass

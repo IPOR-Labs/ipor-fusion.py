@@ -26,4 +26,8 @@ __pycache__/
 
 ### Unit test / coverage reports ###
 .pytest_cache/
+.coverage
+.coverage_data/
+coverage.xml
+htmlcov/
 .aider*
