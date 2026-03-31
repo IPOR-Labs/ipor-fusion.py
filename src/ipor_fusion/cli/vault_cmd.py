@@ -9,6 +9,7 @@ from typing import TypeVar
 
 import click
 from web3 import Web3
+from web3.types import HexStr
 
 from ipor_fusion.cli.config_store import (
     FusionConfig,
@@ -18,7 +19,11 @@ from ipor_fusion.cli.config_store import (
     save_config,
     update_contract_cache,
 )
-from ipor_fusion.cli.explorer import get_contract_name
+from ipor_fusion.cli.config_store import (
+    load_deployment_cache,
+    update_deployment_cache,
+)
+from ipor_fusion.cli.explorer import get_contract_name, get_deployment_tx
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
@@ -69,6 +74,19 @@ CHAIN_NAMES: dict[int, str] = {
     43114: "avalanche",
     250: "fantom",
 }
+
+BLOCK_EXPLORER_URLS: dict[int, str] = {
+    1: "https://etherscan.io",
+    42161: "https://arbiscan.io",
+    8453: "https://basescan.org",
+    10: "https://optimistic.etherscan.io",
+    137: "https://polygonscan.com",
+    56: "https://bscscan.com",
+    43114: "https://snowtrace.io",
+    250: "https://ftmscan.com",
+}
+
+IPOR_APP_URL = "https://app.ipor.io/fusion"
 
 
 def _build_market_lookup() -> dict[int, str]:
@@ -121,6 +139,9 @@ def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
         f"No provider for chain {chain_id}. "
         f"Use 'fusion config set-provider {chain_id} <url>'"
     )
+
+
+UINT256_MAX = 2**256 - 1
 
 
 def _format_amount(raw: int, decimals: int) -> str:
@@ -296,6 +317,8 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     fuses: list
     balance_fuses: list
     instant_fuses: list
+    deployment_block: int | None = None
+    deployment_timestamp: int | None = None
 
 
 def _fetch_vault_data(
@@ -362,6 +385,45 @@ def _fetch_vault_data(
         )
 
 
+def _fetch_deployment_info(
+    ctx: Web3Context,
+    chain_id: int,
+    vault_address: str,
+    api_key: str | None,
+) -> tuple[int | None, int | None]:
+    """Return (block, timestamp) for the vault deployment, using cache."""
+    cache_key = f"{chain_id}:{vault_address}"
+    cache = load_deployment_cache()
+    if entry := cache.get(cache_key):
+        return entry["block"], entry["timestamp"]
+
+    if not (tx_hash := get_deployment_tx(chain_id, vault_address, api_key)):
+        return None, None
+
+    try:
+        tx = ctx.web3.eth.get_transaction(HexStr(tx_hash))
+        block_number: int = tx["blockNumber"]
+        block_info = ctx.web3.eth.get_block(block_number)
+        timestamp: int = block_info["timestamp"]
+        update_deployment_cache(cache_key, block_number, timestamp)
+        return block_number, timestamp
+    except Exception:  # pylint: disable=broad-except
+        return None, None
+
+
+def _format_age(timestamp: int) -> str:
+    """Format deployment age as human-readable string."""
+    delta = datetime.now(tz=timezone.utc) - datetime.fromtimestamp(
+        timestamp, tz=timezone.utc
+    )
+    days = delta.days
+    if days == 0:
+        return "today"
+    if days == 1:
+        return "1 day ago"
+    return f"{days} days ago"
+
+
 def _print_vault_info(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -373,6 +435,10 @@ def _print_vault_info(
 ) -> None:
     api_key = cfg.etherscan_api_key
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
+
+    data.deployment_block, data.deployment_timestamp = _fetch_deployment_info(
+        ctx, chain_id, vault_address, api_key
+    )
 
     if json_output:
         result = _build_json_output(
@@ -386,11 +452,23 @@ def _print_vault_info(
     )
 
     click.echo(f"Vault:            {vault_address}")
+    if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
+        click.echo(f"Etherscan:        {explorer_base}/address/{vault_address}")
+    click.echo(f"IPOR app:         {IPOR_APP_URL}/{chain_label}/{vault_address}")
     click.echo(f"Chain:            {chain_label} (chain-id={chain_id})")
     click.echo(f"Block:            {data.block_label}")
     block_dt = datetime.fromtimestamp(data.block_timestamp, tz=timezone.utc)
     block_iso = block_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     click.echo(f"Block time:       {data.block_timestamp} ({block_iso})")
+    if data.deployment_block is not None and data.deployment_timestamp is not None:
+        deploy_dt = datetime.fromtimestamp(data.deployment_timestamp, tz=timezone.utc)
+        deploy_iso = deploy_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        age = _format_age(data.deployment_timestamp)
+        click.echo(
+            f"Deployed at:      block {data.deployment_block}" f" ({deploy_iso}, {age})"
+        )
+    else:
+        click.echo("Deployed at:      N/A")
     click.echo(f"Asset:            {data.asset} ({data.asset_symbol})")
     click.echo(f"Asset decimals:   {data.asset_decimals}")
     click.echo(f"Share decimals:   {data.share_decimals}")
@@ -407,10 +485,13 @@ def _print_vault_info(
         f"Total Supply:     "
         f"{_format_amount(data.total_supply, data.share_decimals)} shares"
     )
-    click.echo(
-        f"Supply Cap:       "
-        f"{_format_amount(data.supply_cap, data.asset_decimals)} {data.asset_symbol}"
-    )
+    if data.supply_cap == UINT256_MAX:
+        click.echo("Supply Cap:       unlimited")
+    else:
+        click.echo(
+            f"Supply Cap:       "
+            f"{_format_amount(data.supply_cap, data.asset_decimals)} {data.asset_symbol}"
+        )
     click.echo(f"Access Manager:   {data.access_manager}")
     click.echo(f"Price Oracle:     {data.price_oracle_addr}")
     click.echo(f"Rewards Manager:  {data.rewards_manager or 'N/A'}")
@@ -455,6 +536,22 @@ def _print_vault_info(
     click.echo()
 
     _print_health_check(data, bf_totals, erc20_totals, all_substrate_addrs)
+
+
+def _build_deployment_json(data: _VaultData) -> dict | None:
+    if data.deployment_block is None or data.deployment_timestamp is None:
+        return None
+    return {
+        "block": data.deployment_block,
+        "timestamp": data.deployment_timestamp,
+        "timestamp_utc": datetime.fromtimestamp(
+            data.deployment_timestamp, tz=timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "age_days": (
+            datetime.now(tz=timezone.utc)
+            - datetime.fromtimestamp(data.deployment_timestamp, tz=timezone.utc)
+        ).days,
+    }
 
 
 def _build_json_output(  # pylint: disable=too-many-locals,too-complex
@@ -632,8 +729,16 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
     health = _compute_health_check(data, bf_totals, erc20_totals, all_sub_lower)
     health_json = {"ok": health.ok, "warnings": health.warnings}
 
+    explorer_base = BLOCK_EXPLORER_URLS.get(chain_id)
+    links: dict[str, str] = {
+        "ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}",
+    }
+    if explorer_base:
+        links["etherscan"] = f"{explorer_base}/address/{vault_address}"
+
     return {
         "vault": vault_address,
+        "links": links,
         "chain": chain_label,
         "chain_id": chain_id,
         "block": data.block_label,
@@ -641,6 +746,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
         "block_timestamp_utc": datetime.fromtimestamp(
             data.block_timestamp, tz=timezone.utc
         ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "deployment": _build_deployment_json(data),
         "asset": {
             "address": data.asset,
             "symbol": data.asset_symbol,
@@ -659,7 +765,11 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
         },
         "supply_cap": {
             "raw": data.supply_cap,
-            "formatted": _format_amount(data.supply_cap, data.asset_decimals),
+            "formatted": (
+                "unlimited"
+                if data.supply_cap == UINT256_MAX
+                else _format_amount(data.supply_cap, data.asset_decimals)
+            ),
         },
         "managers": {
             "access": data.access_manager,

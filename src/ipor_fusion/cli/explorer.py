@@ -46,6 +46,46 @@ def get_contract_name(chain_id: int, address: str, api_key: str | None = None) -
     return ""
 
 
+def get_deployment_tx(
+    chain_id: int, address: str, api_key: str | None = None
+) -> str | None:
+    """Return the creation tx hash for a contract."""
+    return _fetch_contract_creation_tx(chain_id, address, api_key)
+
+
+def _fetch_contract_creation_tx(
+    chain_id: int, address: str, api_key: str | None = None
+) -> str | None:
+    if chain_id not in SUPPORTED_CHAINS:
+        return None
+    if not api_key:
+        return None
+
+    params: dict[str, str] = {
+        "chainid": str(chain_id),
+        "module": "contract",
+        "action": "getcontractcreation",
+        "contractaddresses": address,
+        "apikey": api_key,
+    }
+
+    url = f"{ETHERSCAN_V2_URL}?{urlencode(params)}"
+    for attempt in range(_MAX_RETRIES):
+        _etherscan_limiter.wait()
+        try:
+            with urlopen(url, timeout=10) as resp:  # noqa: S310
+                data = json.loads(resp.read().decode())
+            if data.get("status") == "1" and data.get("result"):
+                return data["result"][0].get("txHash")  # type: ignore[no-any-return]
+            if "rate limit" in str(data.get("result", "")).lower():
+                time.sleep(_RETRY_DELAY * (attempt + 1))
+                continue
+        except (OSError, json.JSONDecodeError, KeyError, IndexError):
+            pass
+        break
+    return None
+
+
 def _fetch_contract_name(
     chain_id: int, address: str, api_key: str | None = None
 ) -> str | None:

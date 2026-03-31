@@ -315,6 +315,11 @@ class TestResolveTokenSymbol:
         monkeypatch.setattr(
             config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
         )
+        monkeypatch.setattr(
+            config_store,
+            "DEPLOYMENT_CACHE_FILE",
+            cache_dir / "deployment_cache.json",
+        )
 
     def test_returns_cached_symbol(self):
         save_contract_cache({"symbol:0xabc": "USDC"})
@@ -365,6 +370,11 @@ class TestPrintErc20Balances:
         monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
         monkeypatch.setattr(
             config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
+        )
+        monkeypatch.setattr(
+            config_store,
+            "DEPLOYMENT_CACHE_FILE",
+            cache_dir / "deployment_cache.json",
         )
 
     def test_no_erc20_market(self, capsys):
@@ -539,6 +549,11 @@ class TestPrintSubstrates:
         monkeypatch.setattr(
             config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
         )
+        monkeypatch.setattr(
+            config_store,
+            "DEPLOYMENT_CACHE_FILE",
+            cache_dir / "deployment_cache.json",
+        )
 
     def test_no_substrates(self, capsys):
         ctx = MagicMock()
@@ -655,6 +670,11 @@ class TestErc20BalancesNotes:
         monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
         monkeypatch.setattr(
             config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
+        )
+        monkeypatch.setattr(
+            config_store,
+            "DEPLOYMENT_CACHE_FILE",
+            cache_dir / "deployment_cache.json",
         )
 
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="TKN")

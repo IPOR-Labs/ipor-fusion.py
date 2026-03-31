@@ -19,6 +19,7 @@ CONFIG_DIR = _xdg_config_home() / "ipor-fusion"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 CACHE_DIR = _xdg_cache_home() / "ipor-fusion"
 CACHE_FILE = CACHE_DIR / "contract_cache.json"
+DEPLOYMENT_CACHE_FILE = CACHE_DIR / "deployment_cache.json"
 
 
 @dataclass
@@ -79,3 +80,25 @@ def update_contract_cache(key: str, value: str) -> None:
             existing = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
         existing[key] = value
         CACHE_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+
+_deployment_cache_lock = threading.Lock()
+
+
+def load_deployment_cache() -> dict[str, dict[str, int]]:
+    with _deployment_cache_lock:
+        if not DEPLOYMENT_CACHE_FILE.exists():
+            return {}
+        return json.loads(DEPLOYMENT_CACHE_FILE.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+
+
+def update_deployment_cache(key: str, block: int, timestamp: int) -> None:
+    with _deployment_cache_lock:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        existing: dict[str, dict[str, int]] = {}
+        if DEPLOYMENT_CACHE_FILE.exists():
+            existing = json.loads(DEPLOYMENT_CACHE_FILE.read_text(encoding="utf-8"))
+        existing[key] = {"block": block, "timestamp": timestamp}
+        DEPLOYMENT_CACHE_FILE.write_text(
+            json.dumps(existing, indent=2), encoding="utf-8"
+        )

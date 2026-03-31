@@ -27,10 +27,12 @@ def tmp_config(tmp_path, monkeypatch):
     cache_dir = tmp_path / ".cache"
     config_file = config_dir / "config.json"
     cache_file = cache_dir / "contract_cache.json"
+    deployment_cache_file = cache_dir / "deployment_cache.json"
     monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
     monkeypatch.setattr(config_store, "CONFIG_FILE", config_file)
     monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
     monkeypatch.setattr(config_store, "CACHE_FILE", cache_file)
+    monkeypatch.setattr(config_store, "DEPLOYMENT_CACHE_FILE", deployment_cache_file)
     return config_dir, config_file, cache_file
 
 
@@ -418,6 +420,249 @@ class TestVaultInfo:
         assert "99999" in result.output
         assert mock_ctx.default_block == 99999
 
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
+    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_vault_info_unlimited_supply_cap(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 100
+        mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.decimals.return_value = 18
+        mock_pv.total_assets.return_value = 0
+        mock_pv.total_supply.return_value = 0
+        mock_pv.get_total_supply_cap.return_value = 2**256 - 1
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv.get_fuses.return_value = []
+        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.get_instant_withdrawal_fuses.return_value = []
+        mock_pv.get_market_substrates.return_value = []
+        mock_pv_cls.return_value = mock_pv
+
+        mock_erc20 = MagicMock()
+        mock_erc20.symbol.return_value = "USDC"
+        mock_erc20.decimals.return_value = 6
+        mock_erc20_cls.return_value = mock_erc20
+
+        mock_oracle = MagicMock()
+        mock_oracle.get_asset_price.return_value = None
+        mock_oracle_cls.return_value = mock_oracle
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Supply Cap:       unlimited" in result.output
+
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
+    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_vault_info_shows_links(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 100
+        mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.decimals.return_value = 18
+        mock_pv.total_assets.return_value = 0
+        mock_pv.total_supply.return_value = 0
+        mock_pv.get_total_supply_cap.return_value = 0
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv.get_fuses.return_value = []
+        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.get_instant_withdrawal_fuses.return_value = []
+        mock_pv.get_market_substrates.return_value = []
+        mock_pv_cls.return_value = mock_pv
+
+        mock_erc20 = MagicMock()
+        mock_erc20.symbol.return_value = "USDC"
+        mock_erc20.decimals.return_value = 6
+        mock_erc20_cls.return_value = mock_erc20
+
+        mock_oracle = MagicMock()
+        mock_oracle.get_asset_price.return_value = None
+        mock_oracle_cls.return_value = mock_oracle
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
+        )
+        assert result.exit_code == 0, result.output
+        assert (
+            f"Etherscan:        https://etherscan.io/address/{ADDR_1}" in result.output
+        )
+        assert (
+            f"IPOR app:         https://app.ipor.io/fusion/ethereum/{ADDR_1}"
+            in result.output
+        )
+
+    @patch("ipor_fusion.cli.vault_cmd.get_deployment_tx", return_value="0xdeadbeef")
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
+    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_vault_info_deployment_info(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        mock_get_deploy_tx,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            etherscan_api_key="test-key",
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 100
+        mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
+        mock_ctx.web3.eth.get_transaction.return_value = {"blockNumber": 18500000}
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.decimals.return_value = 18
+        mock_pv.total_assets.return_value = 0
+        mock_pv.total_supply.return_value = 0
+        mock_pv.get_total_supply_cap.return_value = 0
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv.get_fuses.return_value = []
+        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.get_instant_withdrawal_fuses.return_value = []
+        mock_pv.get_market_substrates.return_value = []
+        mock_pv_cls.return_value = mock_pv
+
+        mock_erc20 = MagicMock()
+        mock_erc20.symbol.return_value = "USDC"
+        mock_erc20.decimals.return_value = 6
+        mock_erc20_cls.return_value = mock_erc20
+
+        mock_oracle = MagicMock()
+        mock_oracle.get_asset_price.return_value = None
+        mock_oracle_cls.return_value = mock_oracle
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Deployed at:      block 18500000" in result.output
+        assert "2023-11-14" in result.output
+
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
+    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_vault_info_deployment_na_without_api_key(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 100
+        mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.decimals.return_value = 18
+        mock_pv.total_assets.return_value = 0
+        mock_pv.total_supply.return_value = 0
+        mock_pv.get_total_supply_cap.return_value = 0
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv.get_fuses.return_value = []
+        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.get_instant_withdrawal_fuses.return_value = []
+        mock_pv.get_market_substrates.return_value = []
+        mock_pv_cls.return_value = mock_pv
+
+        mock_erc20 = MagicMock()
+        mock_erc20.symbol.return_value = "USDC"
+        mock_erc20.decimals.return_value = 6
+        mock_erc20_cls.return_value = mock_erc20
+
+        mock_oracle = MagicMock()
+        mock_oracle.get_asset_price.return_value = None
+        mock_oracle_cls.return_value = mock_oracle
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Deployed at:      N/A" in result.output
+
 
 class TestVaultListJson:
     def test_empty_json(self, tmp_config):
@@ -529,6 +774,78 @@ class TestVaultInfoJson:
         assert len(data["fuses"]) == 1
         assert data["fuses"][0]["contract"] == "SomeFuse"
         assert len(data["balance_fuses"]) == 1
+        assert data["links"]["etherscan"] == f"https://etherscan.io/address/{ADDR_1}"
+        assert (
+            data["links"]["ipor_app"] == f"https://app.ipor.io/fusion/ethereum/{ADDR_1}"
+        )
+        assert data["deployment"] is None
+
+    @patch("ipor_fusion.cli.vault_cmd.get_deployment_tx", return_value="0xdeadbeef")
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
+    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_json_deployment_info(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        mock_get_deploy_tx,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            etherscan_api_key="test-key",
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 100
+        mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
+        mock_ctx.web3.eth.get_transaction.return_value = {"blockNumber": 18500000}
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.decimals.return_value = 18
+        mock_pv.total_assets.return_value = 0
+        mock_pv.total_supply.return_value = 0
+        mock_pv.get_total_supply_cap.return_value = 0
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv.get_fuses.return_value = []
+        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.get_instant_withdrawal_fuses.return_value = []
+        mock_pv.get_market_substrates.return_value = []
+        mock_pv_cls.return_value = mock_pv
+
+        mock_erc20 = MagicMock()
+        mock_erc20.symbol.return_value = "USDC"
+        mock_erc20.decimals.return_value = 6
+        mock_erc20_cls.return_value = mock_erc20
+
+        mock_oracle = MagicMock()
+        mock_oracle.get_asset_price.return_value = None
+        mock_oracle_cls.return_value = mock_oracle
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["vault", "info", "--vault", ADDR_1, "--chain-id", "1", "--json"],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["deployment"]["block"] == 18500000
+        assert data["deployment"]["timestamp"] == 1700000000
+        assert data["deployment"]["timestamp_utc"] == "2023-11-14T22:13:20Z"
+        assert isinstance(data["deployment"]["age_days"], int)
 
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
