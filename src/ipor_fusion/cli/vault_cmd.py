@@ -222,7 +222,7 @@ def remove(address: str) -> None:
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def list_vaults(json_output: bool) -> None:
-    """List saved vaults."""
+    """List saved vaults. (alias: ls)"""
     cfg = load_config()
     if not cfg.vaults:
         if json_output:

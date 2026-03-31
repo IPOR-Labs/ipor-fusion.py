@@ -980,3 +980,74 @@ class TestMainExceptionHandler:
         captured = capsys.readouterr()
         assert "Error:" in captured.out
         assert "invalid number format" in captured.out
+
+
+class TestGlobalFlags:
+    def test_verbose_flag(self, tmp_config):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["-v", "config", "show"])
+        assert result.exit_code == 0
+
+    def test_quiet_flag(self, tmp_config):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["-q", "config", "show"])
+        assert result.exit_code == 0
+
+    def test_verbose_and_quiet_exclusive(self, tmp_config):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["-v", "-q", "config", "show"])
+        assert result.exit_code == 0
+
+    def test_no_color_flag(self, tmp_config):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--no-color", "config", "show"])
+        assert result.exit_code == 0
+
+    def test_no_color_env_var(self, tmp_config, monkeypatch):
+        monkeypatch.setenv("NO_COLOR", "1")
+        runner = CliRunner()
+        result = runner.invoke(cli, ["config", "show"])
+        assert result.exit_code == 0
+
+
+class TestInstallCompletion:
+    def test_bash_explicit(self, tmp_config):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["install-completion", "bash"])
+        assert result.exit_code == 0
+        assert "_FUSION_COMPLETE=bash_source" in result.output
+
+    def test_zsh_explicit(self, tmp_config):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["install-completion", "zsh"])
+        assert result.exit_code == 0
+        assert "_FUSION_COMPLETE=zsh_source" in result.output
+
+    def test_fish_explicit(self, tmp_config):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["install-completion", "fish"])
+        assert result.exit_code == 0
+        assert "_FUSION_COMPLETE=fish_source" in result.output
+        assert "| source" in result.output
+
+    def test_auto_detect_zsh(self, tmp_config, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/zsh")
+        runner = CliRunner()
+        result = runner.invoke(cli, ["install-completion"])
+        assert result.exit_code == 0
+        assert "zsh_source" in result.output
+
+    def test_auto_detect_bash_default(self, tmp_config, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/sh")
+        runner = CliRunner()
+        result = runner.invoke(cli, ["install-completion"])
+        assert result.exit_code == 0
+        assert "bash_source" in result.output
+
+
+class TestListAliasHelp:
+    def test_vault_list_help_shows_alias(self, tmp_config):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["vault", "list", "--help"])
+        assert result.exit_code == 0
+        assert "alias: ls" in result.output
