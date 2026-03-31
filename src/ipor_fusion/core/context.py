@@ -28,6 +28,7 @@ class Web3Context:
         self._chain_id = chain_id
         self._private_key = private_key
         self._gas_multiplier = gas_multiplier
+        self._default_block: BlockIdentifier = "latest"
         self._signer: ChecksumAddress | None = None
 
         if signer:
@@ -43,6 +44,14 @@ class Web3Context:
     @property
     def chain_id(self) -> ChainId:
         return self._chain_id
+
+    @property
+    def default_block(self) -> BlockIdentifier:
+        return self._default_block
+
+    @default_block.setter
+    def default_block(self, value: BlockIdentifier) -> None:
+        self._default_block = value
 
     @property
     def signer(self) -> ChecksumAddress | None:
@@ -65,8 +74,16 @@ class Web3Context:
             gas_multiplier=gas_multiplier,
         )
 
-    def call(self, to: ChecksumAddress, data: bytes) -> HexBytes:
-        return self.web3.eth.call({"to": to, "data": data})
+    def call(
+        self,
+        to: ChecksumAddress,
+        data: bytes,
+        block: BlockIdentifier | None = None,
+    ) -> HexBytes:
+        effective_block = block if block is not None else self._default_block
+        return self.web3.eth.call(
+            {"to": to, "data": data}, block_identifier=effective_block
+        )
 
     def _build_transaction(self, to: ChecksumAddress, data: bytes) -> dict:
         assert self.signer is not None

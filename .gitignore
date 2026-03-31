@@ -31,3 +31,4 @@ __pycache__/
 coverage.xml
 htmlcov/
 .aider*
+.mcp.json

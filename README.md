@@ -93,6 +93,63 @@ action = fuse.supply(
 receipt = vault.execute([action])
 ```
 
+## CLI Quickstart
+
+The SDK ships with a `fusion` CLI for inspecting and managing Plasma Vaults from the terminal.
+
+```bash
+# Install with CLI extras
+pip install 'ipor-fusion[cli]'  # or: poetry install (for development)
+
+# Configure an RPC provider (auto-detects chain ID)
+fusion config set-provider https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+
+# Add a vault
+fusion vault add 0xVAULT_ADDRESS --chain-id 42161
+
+# Inspect a vault
+fusion vault info --vault 0xVAULT_ADDRESS
+
+# List saved vaults
+fusion vault list
+
+# Set a default vault (so --vault can be omitted)
+fusion config set-default-vault 0xVAULT_ADDRESS
+fusion vault info
+```
+
+## MCP Server (Claude Code integration)
+
+The SDK includes an [MCP](https://modelcontextprotocol.io/) server that exposes CLI tools to AI assistants like Claude Code.
+
+```bash
+# Install with MCP extras
+pip install 'ipor-fusion[mcp]'
+```
+
+Add to your `.mcp.json` (or Claude Code MCP settings):
+
+```json
+{
+  "mcpServers": {
+    "ipor-fusion": {
+      "command": "fusion-mcp",
+      "type": "stdio"
+    }
+  }
+}
+```
+
+Available tools:
+
+| Tool | Description |
+|------|-------------|
+| `vault_info` | Full on-chain vault state (assets, fuses, balances, health check) |
+| `vault_list` | List saved vaults |
+| `config_show` | Show current CLI configuration |
+
+The MCP server delegates to the `fusion` CLI, so configure providers and vaults via `fusion config` first.
+
 ## Architecture
 
 The SDK uses a **fuse adapter pattern**:

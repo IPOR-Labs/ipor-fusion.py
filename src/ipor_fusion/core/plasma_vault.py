@@ -102,6 +102,14 @@ class PlasmaVault(ContractWrapper):
         (value,) = decode(["uint256"], self._call("totalAssets()"))
         return Amount(value)
 
+    def total_supply(self) -> Amount:
+        (value,) = decode(["uint256"], self._call("totalSupply()"))
+        return Amount(value)
+
+    def name(self) -> str:
+        (value,) = decode(["string"], self._call("name()"))
+        return value
+
     def underlying_asset_address(self) -> ChecksumAddress:
         (value,) = decode(["address"], self._call("asset()"))
         return Web3.to_checksum_address(value)
