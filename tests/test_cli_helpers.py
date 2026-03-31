@@ -6,6 +6,7 @@ import click
 import pytest
 from click.testing import CliRunner
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_contract_cache
@@ -299,7 +300,7 @@ class TestSafeCall:
 
     def test_returns_none_on_exception(self):
         def explode():
-            raise RuntimeError("boom")
+            raise ContractLogicError("boom")
 
         assert _safe_call(explode) is None
 
@@ -470,10 +471,12 @@ class TestPrintErc20Balances:
         pv.get_market_substrates.return_value = [addr_bytes]
 
         mock_erc20 = MagicMock()
-        mock_erc20.decimals.side_effect = RuntimeError("fail")
-        mock_erc20.balance_of.side_effect = RuntimeError("fail")
+        mock_erc20.decimals.side_effect = ContractLogicError("fail")
+        mock_erc20.balance_of.side_effect = ContractLogicError("fail")
         mock_erc20_cls.return_value = mock_erc20
-        mock_oracle_cls.return_value.get_asset_price.side_effect = RuntimeError("fail")
+        mock_oracle_cls.return_value.get_asset_price.side_effect = ContractLogicError(
+            "fail"
+        )
 
         data = _VaultData(
             block_label="1",

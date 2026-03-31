@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -9,6 +10,7 @@ from typing import TypeVar
 
 import click
 from web3 import Web3
+from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import HexStr
 
 from ipor_fusion.cli.config_store import (
@@ -1427,8 +1429,12 @@ def _format_usd(raw: int, decimals: int, price_usd: float | None) -> str:
 T = TypeVar("T")
 
 
+_logger = logging.getLogger(__name__)
+
+
 def _safe_call(func: Callable[[], T]) -> T | None:
     try:
         return func()
-    except Exception:  # pylint: disable=broad-except
+    except (ContractLogicError, Web3RPCError, TimeExhausted) as exc:
+        _logger.debug("_safe_call suppressed %s: %s", type(exc).__name__, exc)
         return None

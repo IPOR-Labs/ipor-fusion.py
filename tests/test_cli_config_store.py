@@ -1,5 +1,6 @@
 import json
 
+import click
 import pytest
 
 from ipor_fusion.cli import config_store
@@ -145,3 +146,66 @@ class TestSaveContractCache:
         save_contract_cache(original)
         loaded = load_contract_cache()
         assert loaded == original
+
+
+class TestLoadConfigValidation:
+    def test_rejects_non_dict_top_level(self, tmp_path):
+        config_dir = tmp_path / ".fusion"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text("[]", encoding="utf-8")
+        with pytest.raises(click.ClickException):
+            load_config()
+
+    def test_rejects_non_dict_providers(self, tmp_path):
+        config_dir = tmp_path / ".fusion"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(
+            json.dumps({"providers": "bad"}), encoding="utf-8"
+        )
+        with pytest.raises(click.ClickException):
+            load_config()
+
+    def test_rejects_non_list_vaults(self, tmp_path):
+        config_dir = tmp_path / ".fusion"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(
+            json.dumps({"vaults": "bad"}), encoding="utf-8"
+        )
+        with pytest.raises(click.ClickException):
+            load_config()
+
+    def test_rejects_vault_entry_missing_keys(self, tmp_path):
+        config_dir = tmp_path / ".fusion"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(
+            json.dumps({"vaults": [{"address": "0x1"}]}), encoding="utf-8"
+        )
+        with pytest.raises(click.ClickException):
+            load_config()
+
+
+class TestConfigVersioning:
+    def test_save_config_writes_version(self, tmp_path):
+        save_config(FusionConfig())
+        config_file = tmp_path / ".fusion" / "config.json"
+        raw = json.loads(config_file.read_text(encoding="utf-8"))
+        assert raw["version"] == 1
+
+    def test_load_config_migrates_missing_version(self, tmp_path):
+        config_dir = tmp_path / ".fusion"
+        config_dir.mkdir()
+        data = {"providers": {"1": "http://localhost:8545"}}
+        (config_dir / "config.json").write_text(json.dumps(data), encoding="utf-8")
+        cfg = load_config()
+        save_config(cfg)
+        raw = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
+        assert raw["version"] == 1
+
+    def test_load_config_handles_version_1(self, tmp_path):
+        config_dir = tmp_path / ".fusion"
+        config_dir.mkdir()
+        data = {"version": 1, "providers": {}, "vaults": []}
+        (config_dir / "config.json").write_text(json.dumps(data), encoding="utf-8")
+        cfg = load_config()
+        assert not cfg.providers
+        assert not cfg.vaults
