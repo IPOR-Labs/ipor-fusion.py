@@ -1045,6 +1045,206 @@ class TestInstallCompletion:
         assert "bash_source" in result.output
 
 
+class TestMarketDetail:
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="AaveV3Fuse")
+    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_market_detail_json(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 12345678
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        @dataclass
+        class FakeBalanceFuse:
+            market_id: int
+            fuse: str
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.get_balance_fuses.return_value = [
+            FakeBalanceFuse(market_id=1, fuse=ADDR_FUSE_1),
+            FakeBalanceFuse(market_id=14, fuse=ADDR_FUSE_2),
+        ]
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv.total_assets_in_market.return_value = 500 * 10**6
+        mock_pv.get_market_substrates.return_value = []
+        mock_pv_cls.return_value = mock_pv
+
+        mock_erc20 = MagicMock()
+        mock_erc20.symbol.return_value = "USDC"
+        mock_erc20.decimals.return_value = 6
+        mock_erc20_cls.return_value = mock_erc20
+
+        mock_price = MagicMock()
+        mock_price.readable.return_value = 1.0
+        mock_oracle = MagicMock()
+        mock_oracle.get_asset_price.return_value = mock_price
+        mock_oracle_cls.return_value = mock_oracle
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "vault",
+                "market-detail",
+                "--vault",
+                ADDR_1,
+                "--chain-id",
+                "1",
+                "--market-id",
+                "1",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["market"] == "AAVE_V3"
+        assert data["market_id"] == 1
+        assert data["balance"]["raw"] == 500 * 10**6
+        assert data["balance"]["formatted"] == "500.0"
+        assert data["balance"]["usd"] == 500.0
+        assert data["fuse"]["address"] == ADDR_FUSE_1
+        assert data["fuse"]["contract"] == "AaveV3Fuse"
+        assert data["substrates"] == []
+
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="AaveV3Fuse")
+    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_market_detail_text_output(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 12345678
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        @dataclass
+        class FakeBalanceFuse:
+            market_id: int
+            fuse: str
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.get_balance_fuses.return_value = [
+            FakeBalanceFuse(market_id=1, fuse=ADDR_FUSE_1),
+        ]
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv.total_assets_in_market.return_value = 500 * 10**6
+        mock_pv.get_market_substrates.return_value = []
+        mock_pv_cls.return_value = mock_pv
+
+        mock_erc20 = MagicMock()
+        mock_erc20.symbol.return_value = "USDC"
+        mock_erc20.decimals.return_value = 6
+        mock_erc20_cls.return_value = mock_erc20
+
+        mock_price = MagicMock()
+        mock_price.readable.return_value = 1.0
+        mock_oracle = MagicMock()
+        mock_oracle.get_asset_price.return_value = mock_price
+        mock_oracle_cls.return_value = mock_oracle
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "vault",
+                "market-detail",
+                "--vault",
+                ADDR_1,
+                "--chain-id",
+                "1",
+                "--market-id",
+                "1",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "AAVE_V3" in result.output
+        assert "500.0 USDC" in result.output
+        assert "AaveV3Fuse" in result.output
+        assert "(cached)" in result.output
+
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_market_detail_not_found(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 12345678
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        @dataclass
+        class FakeBalanceFuse:
+            market_id: int
+            fuse: str
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.get_balance_fuses.return_value = [
+            FakeBalanceFuse(market_id=1, fuse=ADDR_FUSE_1),
+        ]
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv_cls.return_value = mock_pv
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "vault",
+                "market-detail",
+                "--vault",
+                ADDR_1,
+                "--chain-id",
+                "1",
+                "--market-id",
+                "999",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "Market ID 999 not found" in result.output
+
+
 class TestListAliasHelp:
     def test_vault_list_help_shows_alias(self, tmp_config):
         runner = CliRunner()

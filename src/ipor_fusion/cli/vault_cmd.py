@@ -31,6 +31,7 @@ from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.market_ids import IporFusionMarkets
+from ipor_fusion.types import MarketId
 
 
 class AddressType(click.ParamType):
@@ -298,6 +299,196 @@ def info(
     _print_vault_info(
         ctx, plasma_vault, cfg, data, vault_address, chain_id, json_output
     )
+
+
+@vault.command("market-detail")
+@click.option(
+    "--vault", "vault_address", default=None, type=ADDRESS, help="Vault address."
+)
+@click.option("--chain-id", type=int, default=None, help="Chain ID.")
+@click.option(
+    "--block-number",
+    type=int,
+    default=None,
+    help="Block number (default: latest).",
+)
+@click.option("--market-id", type=int, required=True, help="Market ID to inspect.")
+@click.option(
+    "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
+)
+def market_detail(
+    vault_address: str | None,
+    chain_id: int | None,
+    block_number: int | None,
+    market_id: int,
+    json_output: bool,
+) -> None:
+    """Show detailed info for a single market in a vault."""
+    cfg = load_config()
+    vault_address = _resolve_vault(cfg, vault_address)
+    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    provider_url = _resolve_provider(cfg, chain_id)
+
+    ctx = Web3Context.from_url(provider_url)
+    if block_number is not None:
+        ctx.default_block = block_number
+    checksum_address = Web3.to_checksum_address(vault_address)
+    plasma_vault = PlasmaVault(ctx, checksum_address)
+
+    data = _fetch_market_detail(
+        ctx, plasma_vault, cfg, market_id, chain_id, block_number
+    )
+    if json_output:
+        click.echo(json.dumps(data, indent=2))
+    else:
+        _print_market_detail(data)
+
+
+def _fetch_market_detail(  # pylint: disable=too-many-locals
+    ctx: Web3Context,
+    plasma_vault: PlasmaVault,
+    cfg: FusionConfig,
+    market_id: int,
+    chain_id: int,
+    block_number: int | None,
+) -> dict:
+    api_key = cfg.etherscan_api_key
+
+    with ThreadPoolExecutor() as pool:
+        # Phase 1: discover balance fuses + asset info
+        f_balance_fuses = pool.submit(plasma_vault.get_balance_fuses)
+        f_asset = pool.submit(plasma_vault.underlying_asset_address)
+        f_oracle_addr = pool.submit(plasma_vault.get_price_oracle_middleware_address)
+        f_block = pool.submit(lambda: ctx.web3.eth.block_number)
+
+        balance_fuses = f_balance_fuses.result()
+        match = next((bf for bf in balance_fuses if bf.market_id == market_id), None)
+        if match is None:
+            raise click.UsageError(
+                f"Market ID {market_id} not found in vault balance fuses. "
+                f"Available: {', '.join(_market_name(bf.market_id) + '=' + str(bf.market_id) for bf in balance_fuses)}"
+            )
+
+        asset = f_asset.result()
+        oracle_addr = f_oracle_addr.result()
+        asset_erc20 = ERC20(ctx, asset)
+        oracle = PriceOracleMiddleware(ctx, oracle_addr)
+
+        # Phase 2: market-specific data in parallel
+        mid = MarketId(market_id)
+        f_balance = pool.submit(plasma_vault.total_assets_in_market, mid)
+        f_substrates = pool.submit(plasma_vault.get_market_substrates, mid)
+        f_fuse_name = pool.submit(get_contract_name, chain_id, match.fuse, api_key)
+        f_symbol: Future = pool.submit(_safe_call, asset_erc20.symbol)
+        f_decimals = pool.submit(asset_erc20.decimals)
+        f_price: Future = pool.submit(_safe_call, lambda: oracle.get_asset_price(asset))
+
+        latest_block = f_block.result()
+        effective_block = block_number if block_number is not None else latest_block
+        block_label = (
+            str(block_number)
+            if block_number is not None
+            else f"{latest_block} (latest)"
+        )
+
+        decimals = f_decimals.result()
+        symbol = f_symbol.result() or "?"
+        price_result = f_price.result()
+        price_usd = price_result.readable() if price_result else None
+        balance_raw = f_balance.result()
+        fuse_name = f_fuse_name.result() or "?"
+        substrates = f_substrates.result()
+
+        # Phase 3: resolve substrate addresses
+        sub_addresses: set[str] = set()
+        for sub in substrates:
+            sub_info = _format_substrate(sub)
+            if sub_info.address:
+                sub_addresses.add(sub_info.address)
+
+        sym_futs = {
+            addr: pool.submit(_resolve_token_symbol, ctx, addr)
+            for addr in sub_addresses
+        }
+        contract_futs = {
+            addr: pool.submit(get_contract_name, chain_id, addr, api_key)
+            for addr in sub_addresses
+        }
+
+        substrates_list = []
+        for sub in substrates:
+            sub_info = _format_substrate(sub)
+            if sub_info.address:
+                entry: dict = {"address": sub_info.address}
+                sub_sym = sym_futs[sub_info.address].result()
+                sub_contract = contract_futs[sub_info.address].result()
+                if sub_sym:
+                    entry["symbol"] = sub_sym
+                if sub_contract:
+                    entry["contract"] = sub_contract
+                if sub_info.type_label:
+                    entry["substrate_type"] = sub_info.type_label
+                substrates_list.append(entry)
+            else:
+                substrates_list.append({"raw": sub_info.raw_hex})
+
+    market_label = _market_name(market_id)
+    balance_entry: dict = {
+        "raw": balance_raw,
+        "formatted": _format_amount(balance_raw, decimals),
+    }
+    if price_usd is not None:
+        balance_entry["usd"] = round((balance_raw / 10**decimals) * price_usd, 2)
+
+    return {
+        "vault": Web3.to_checksum_address(plasma_vault.address),
+        "chain_id": chain_id,
+        "block": block_label,
+        "block_number": effective_block,
+        "market": market_label if market_label != "UNKNOWN" else str(market_id),
+        "market_id": market_id,
+        "asset": {"address": asset, "symbol": symbol, "decimals": decimals},
+        "balance": balance_entry,
+        "fuse": {"address": match.fuse, "contract": fuse_name},
+        "substrates": substrates_list,
+    }
+
+
+def _print_market_detail(data: dict) -> None:
+    market_str = data["market"]
+    if market_str != str(data["market_id"]):
+        market_str += f" (id={data['market_id']})"
+
+    click.echo(f"Vault:   {data['vault']}")
+    click.echo(f"Block:   {data['block']}")
+    click.echo(f"Market:  {market_str}")
+    click.echo(f"Fuse:    {data['fuse']['address']}  ({data['fuse']['contract']})")
+
+    balance = data["balance"]
+    usd_str = f" (${balance['usd']:,.2f})" if "usd" in balance else ""
+    click.echo(
+        f"Balance: {balance['formatted']} {data['asset']['symbol']}"
+        f"{usd_str} (cached)"
+    )
+
+    if data["substrates"]:
+        click.echo()
+        click.echo("Substrates:")
+        for sub in data["substrates"]:
+            if "address" in sub:
+                parts = []
+                if sub.get("symbol"):
+                    parts.append(f"symbol={sub['symbol']}")
+                if sub.get("contract"):
+                    parts.append(f"contract={sub['contract']}")
+                if sub.get("substrate_type"):
+                    parts.append(f"substrate-type={sub['substrate_type']}")
+                detail = f" ({', '.join(parts)})" if parts else ""
+                click.echo(f"  {sub['address']}{detail}")
+            else:
+                click.secho(f"  {sub['raw']} [encoding error]", fg="red")
+    else:
+        click.echo("Substrates: (none)")
 
 
 @dataclass
