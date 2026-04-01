@@ -627,12 +627,22 @@ class TestPrintReconciliation:
             instant_fuses=[],
         )
         bf = _BalanceFuseTotals(raw_total=60 * 10**18, usd_total=120000.0)
-        erc20 = _Erc20Totals(raw_asset_total=40 * 10**18, usd_total=80000.0)
+        erc20 = _Erc20Totals(
+            raw_asset_total=40 * 10**18,
+            usd_total=80000.0,
+            token_info={
+                ADDR_2.lower(): _TokenInfo(
+                    symbol="WETH",
+                    balance_str="40.0",
+                    usd_value=80000.0,
+                )
+            },
+        )
         _print_reconciliation(data, bf, erc20)
         captured = capsys.readouterr()
         assert "Balance Reconciliation:" in captured.out
         assert "Balance fuses total:" in captured.out
-        assert "ERC20 direct total:" in captured.out
+        assert "Underlying on vault:" in captured.out
         assert "Delta:" in captured.out
         assert "MISMATCH" not in captured.out
 
@@ -657,7 +667,17 @@ class TestPrintReconciliation:
             instant_fuses=[],
         )
         bf = _BalanceFuseTotals(raw_total=80 * 10**18, usd_total=160000.0)
-        erc20 = _Erc20Totals(raw_asset_total=40 * 10**18, usd_total=80000.0)
+        erc20 = _Erc20Totals(
+            raw_asset_total=40 * 10**18,
+            usd_total=80000.0,
+            token_info={
+                ADDR_2.lower(): _TokenInfo(
+                    symbol="WETH",
+                    balance_str="40.0",
+                    usd_value=80000.0,
+                )
+            },
+        )
         _print_reconciliation(data, bf, erc20)
         captured = capsys.readouterr()
         assert "MISMATCH" in captured.out

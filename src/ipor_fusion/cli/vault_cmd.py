@@ -894,6 +894,11 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
             "formatted": _format_amount(recon.bf_total_raw, decimals),
             "usd": recon.bf_total_usd,
         },
+        "underlying_on_vault": {
+            "raw": recon.underlying_raw,
+            "formatted": _format_amount(recon.underlying_raw, decimals),
+            "usd": recon.underlying_usd,
+        },
         "erc20_direct_total": {
             "raw": recon.erc20_total_raw,
             "formatted": _format_amount(recon.erc20_total_raw, decimals),
@@ -1182,6 +1187,8 @@ def _print_erc20_balances(
 class _ReconciliationData:
     bf_total_raw: int = 0
     bf_total_usd: float = 0.0
+    underlying_raw: int = 0
+    underlying_usd: float = 0.0
     erc20_total_raw: int = 0
     erc20_total_usd: float = 0.0
     sum_raw: int = 0
@@ -1201,8 +1208,17 @@ def _compute_reconciliation(
     decimals = data.asset_decimals
     price = data.asset_price_usd
 
-    sum_raw = bf_totals.raw_total + erc20_totals.raw_asset_total
-    sum_usd = bf_totals.usd_total + erc20_totals.usd_total
+    # Extract underlying-only value (balance fuses already price non-underlying
+    # ERC20s via ERC20BalanceFuse, so adding all ERC20s would double-count).
+    underlying_info = erc20_totals.token_info.get(data.asset.lower())
+    underlying_raw = 0
+    underlying_usd = 0.0
+    if underlying_info and underlying_info.usd_value and price:
+        underlying_raw = int(underlying_info.usd_value / price * 10**decimals)
+        underlying_usd = underlying_info.usd_value
+
+    sum_raw = bf_totals.raw_total + underlying_raw
+    sum_usd = bf_totals.usd_total + underlying_usd
     on_chain = data.total_assets
     delta_raw = sum_raw - on_chain
     delta_usd = abs(sum_usd - (on_chain / 10**decimals * price)) if price else 0
@@ -1211,6 +1227,8 @@ def _compute_reconciliation(
     return _ReconciliationData(
         bf_total_raw=bf_totals.raw_total,
         bf_total_usd=bf_totals.usd_total,
+        underlying_raw=underlying_raw,
+        underlying_usd=underlying_usd,
         erc20_total_raw=erc20_totals.raw_asset_total,
         erc20_total_usd=erc20_totals.usd_total,
         sum_raw=sum_raw,
@@ -1234,13 +1252,13 @@ def _print_reconciliation(
     price = data.asset_price_usd
 
     fmt_bf = _format_amount(recon.bf_total_raw, decimals)
-    fmt_erc20 = _format_amount(recon.erc20_total_raw, decimals)
+    fmt_underlying = _format_amount(recon.underlying_raw, decimals)
     fmt_sum = _format_amount(recon.sum_raw, decimals)
     fmt_onchain = _format_amount(recon.on_chain_raw, decimals)
     fmt_delta = _format_amount(abs(recon.delta_raw), decimals)
 
     usd_bf = f" (${recon.bf_total_usd:,.2f})" if price else ""
-    usd_erc20 = f" (${recon.erc20_total_usd:,.2f})" if price else ""
+    usd_underlying = f" (${recon.underlying_usd:,.2f})" if price else ""
     usd_sum = f" (${recon.sum_usd:,.2f})" if price else ""
     usd_onchain = _format_usd(recon.on_chain_raw, decimals, price)
     usd_delta = f" (${recon.delta_usd:,.2f})" if price else ""
@@ -1250,7 +1268,7 @@ def _print_reconciliation(
         f"  Balance fuses total:  {fmt_bf} {sym}{usd_bf}   [sum balance fuses, cached]"
     )
     click.echo(
-        f"  ERC20 direct total:   {fmt_erc20} {sym}{usd_erc20}   [tokens on vault]"
+        f"  Underlying on vault:  {fmt_underlying} {sym}{usd_underlying}   [{sym} held directly]"
     )
     click.echo(f"  Sum:                  {fmt_sum} {sym}{usd_sum}")
     click.echo(f"  On-chain totalAssets: {fmt_onchain} {sym}{usd_onchain}")
