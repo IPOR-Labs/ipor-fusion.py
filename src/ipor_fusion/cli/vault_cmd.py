@@ -11,7 +11,7 @@ from typing import TypeVar
 import click
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
-from web3.types import HexStr
+from web3.types import ChecksumAddress, HexStr
 
 from ipor_fusion.cli.config_store import (
     FusionConfig,
@@ -566,6 +566,30 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     withdraw_manager_data: _WithdrawManagerData | None = None
 
 
+def _fetch_withdraw_manager_data(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    withdraw_mgr_addr: ChecksumAddress | None,
+) -> _WithdrawManagerData | None:
+    if not withdraw_mgr_addr:
+        return None
+    wm_contract = WithdrawManager(ctx, withdraw_mgr_addr)
+    f_window = pool.submit(_safe_call, wm_contract.get_withdraw_window)
+    f_req_fee = pool.submit(_safe_call, wm_contract.get_request_fee)
+    f_wd_fee = pool.submit(_safe_call, wm_contract.get_withdraw_fee)
+    f_shares = pool.submit(_safe_call, wm_contract.get_shares_to_release)
+    f_last_ts = pool.submit(_safe_call, wm_contract.get_last_release_funds_timestamp)
+    f_requests = pool.submit(_safe_call, wm_contract.get_pending_requests)
+    return _WithdrawManagerData(
+        withdraw_window=f_window.result() or 0,
+        request_fee=f_req_fee.result() or 0,
+        withdraw_fee=f_wd_fee.result() or 0,
+        shares_to_release=f_shares.result() or 0,
+        last_release_funds_timestamp=f_last_ts.result() or 0,
+        pending_requests=f_requests.result() or [],
+    )
+
+
 def _fetch_vault_data(
     ctx: Web3Context, plasma_vault: PlasmaVault, block_number: int | None
 ) -> _VaultData:
@@ -600,36 +624,19 @@ def _fetch_vault_data(
 
         # Collect all results
         latest_block = f_block.result()
-        effective_block = block_number if block_number is not None else latest_block
         block_label = (
             str(block_number)
             if block_number is not None
             else f"{latest_block} (latest)"
         )
-        block_info = ctx.web3.eth.get_block(effective_block)
-        block_timestamp: int = block_info["timestamp"]
+        block_timestamp: int = ctx.web3.eth.get_block(
+            block_number if block_number is not None else latest_block
+        )["timestamp"]
         asset_price = f_price.result()
         withdraw_mgr_addr = f_withdraw.result()
 
         # Phase 3: withdraw manager details (needs address from phase 1)
-        wm_data: _WithdrawManagerData | None = None
-        if withdraw_mgr_addr:
-            wm = WithdrawManager(ctx, withdraw_mgr_addr)
-            f_wm_window = pool.submit(_safe_call, wm.get_withdraw_window)
-            f_wm_req_fee = pool.submit(_safe_call, wm.get_request_fee)
-            f_wm_wd_fee = pool.submit(_safe_call, wm.get_withdraw_fee)
-            f_wm_shares = pool.submit(_safe_call, wm.get_shares_to_release)
-            f_wm_last_ts = pool.submit(_safe_call, wm.get_last_release_funds_timestamp)
-            f_wm_requests = pool.submit(_safe_call, wm.get_pending_requests)
-
-            wm_data = _WithdrawManagerData(
-                withdraw_window=f_wm_window.result() or 0,
-                request_fee=f_wm_req_fee.result() or 0,
-                withdraw_fee=f_wm_wd_fee.result() or 0,
-                shares_to_release=f_wm_shares.result() or 0,
-                last_release_funds_timestamp=f_wm_last_ts.result() or 0,
-                pending_requests=f_wm_requests.result() or [],
-            )
+        wm_data = _fetch_withdraw_manager_data(ctx, pool, withdraw_mgr_addr)
 
         return _VaultData(
             block_label=block_label,
@@ -1184,7 +1191,7 @@ class _Erc20Totals:
     token_details: list[_TokenDetail] = field(default_factory=list)
 
 
-def _compute_erc20_balances(  # pylint: disable=too-complex,too-many-locals
+def _compute_erc20_balances(  # pylint: disable=too-complex
     ctx: Web3Context, plasma_vault: PlasmaVault, data: _VaultData
 ) -> _Erc20Totals:
     totals = _Erc20Totals()
