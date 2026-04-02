@@ -107,15 +107,14 @@ fusion config set-provider https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
 # Add a vault
 fusion vault add 0xVAULT_ADDRESS --chain-id 42161
 
-# Inspect a vault
-fusion vault info --vault 0xVAULT_ADDRESS
+# Inspect a vault (auto-saves to config on first use)
+fusion vault info 0xVAULT_ADDRESS
+
+# Chain ID can be a name
+fusion vault info 0xVAULT_ADDRESS --chain-id ethereum
 
 # List saved vaults
 fusion vault list
-
-# Set a default vault (so --vault can be omitted)
-fusion config set-default-vault 0xVAULT_ADDRESS
-fusion vault info
 ```
 
 ## MCP Server (Claude Code integration)

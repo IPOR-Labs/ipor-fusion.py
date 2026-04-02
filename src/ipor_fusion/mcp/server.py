@@ -22,7 +22,7 @@ def _run_fusion(*args: str) -> str:
 
 @mcp.tool()
 def vault_info(
-    vault_address: str = "",
+    vault_address: str,
     chain_id: int = 0,
     block_number: int = 0,
 ) -> str:
@@ -52,13 +52,11 @@ def vault_info(
     - health_check (ok, warnings)
 
     Args:
-        vault_address: Vault address (uses default if empty).
+        vault_address: Vault address (required).
         chain_id: Chain ID (auto-detected if 0).
         block_number: Block number (latest if 0).
     """
-    args = ["vault", "info", "--json"]
-    if vault_address:
-        args.extend(["--vault", vault_address])
+    args = ["vault", "info", vault_address, "--json"]
     if chain_id:
         args.extend(["--chain-id", str(chain_id)])
     if block_number:
@@ -68,7 +66,7 @@ def vault_info(
 
 @mcp.tool()
 def vault_market_detail(
-    vault_address: str = "",
+    vault_address: str,
     chain_id: int = 0,
     market_id: int = 0,
     block_number: int = 0,
@@ -86,14 +84,19 @@ def vault_market_detail(
     - substrates (address, symbol, contract, substrate_type)
 
     Args:
-        vault_address: Vault address (uses default if empty).
+        vault_address: Vault address (required).
         chain_id: Chain ID (auto-detected if 0).
         market_id: Market ID to inspect (required, use vault_info to find IDs).
         block_number: Block number (latest if 0).
     """
-    args = ["vault", "market-detail", "--json", "--market-id", str(market_id)]
-    if vault_address:
-        args.extend(["--vault", vault_address])
+    args = [
+        "vault",
+        "market-detail",
+        vault_address,
+        "--json",
+        "--market-id",
+        str(market_id),
+    ]
     if chain_id:
         args.extend(["--chain-id", str(chain_id)])
     if block_number:
@@ -142,7 +145,7 @@ def vault_remove(address: str) -> str:
 def config_show() -> str:
     """Show current fusion CLI configuration.
 
-    Displays configured RPC providers, default vault, saved vaults,
+    Displays configured RPC providers, saved vaults,
     and Etherscan API key status.
     """
     return _run_fusion("config", "show")
@@ -170,16 +173,6 @@ def config_set_etherscan_key(api_key: str) -> str:
         api_key: Etherscan API key.
     """
     return _run_fusion("config", "set-etherscan-key", api_key)
-
-
-@mcp.tool()
-def config_set_default_vault(address: str) -> str:
-    """Set the default vault address used when --vault is omitted.
-
-    Args:
-        address: Vault address to set as default.
-    """
-    return _run_fusion("config", "set-default-vault", address)
 
 
 def main() -> None:

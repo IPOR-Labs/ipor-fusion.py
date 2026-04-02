@@ -7,7 +7,6 @@ from ipor_fusion.cli.config_store import (
     load_config,
     save_config,
 )
-from ipor_fusion.cli.vault_cmd import ADDRESS
 
 
 @click.group()
@@ -48,16 +47,6 @@ def set_etherscan_key(api_key: str) -> None:
     click.echo("Etherscan API key set.")
 
 
-@config.command("set-default-vault")
-@click.argument("address", type=ADDRESS)
-def set_default_vault(address: str) -> None:
-    """Set the default vault address."""
-    cfg = load_config()
-    cfg.default_vault = address
-    save_config(cfg)
-    click.echo(f"Default vault set to {address}")
-
-
 @config.command("show")
 def show() -> None:
     """Display current configuration."""
@@ -72,8 +61,6 @@ def _print_config(cfg: FusionConfig) -> None:
             click.echo(f"  Chain {chain_id}: {url}")
     else:
         click.echo("  (none)")
-
-    click.echo(f"\nDefault vault: {cfg.default_vault or '(not set)'}")
 
     click.echo("\nSaved vaults:")
     if cfg.vaults:

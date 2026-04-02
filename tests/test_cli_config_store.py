@@ -35,7 +35,6 @@ class TestDataclassDefaults:
         cfg = FusionConfig()
         assert not cfg.providers
         assert cfg.etherscan_api_key is None
-        assert cfg.default_vault is None
         assert cfg.vaults == []
 
 
@@ -50,7 +49,6 @@ class TestLoadConfig:
         data = {
             "providers": {"1": "https://rpc.example.com"},
             "etherscan_api_key": "abc123",
-            "default_vault": "0xVAULT",
             "vaults": [{"address": "0xVAULT", "label": "test", "chain_id": 42161}],
         }
         (config_dir / "config.json").write_text(json.dumps(data), encoding="utf-8")
@@ -59,7 +57,6 @@ class TestLoadConfig:
 
         assert cfg.providers == {"1": "https://rpc.example.com"}
         assert cfg.etherscan_api_key == "abc123"
-        assert cfg.default_vault == "0xVAULT"
         assert len(cfg.vaults) == 1
         assert cfg.vaults[0] == VaultEntry(
             address="0xVAULT", label="test", chain_id=42161
@@ -77,7 +74,6 @@ class TestLoadConfig:
 
         assert cfg.providers == {"1": "http://localhost:8545"}
         assert cfg.etherscan_api_key is None
-        assert cfg.default_vault is None
         assert cfg.vaults == []
 
 
@@ -86,7 +82,6 @@ class TestSaveConfig:
         cfg = FusionConfig(
             providers={"1": "https://rpc.example.com"},
             etherscan_api_key="key",
-            default_vault="0xABC",
             vaults=[VaultEntry(address="0xABC", label="v1", chain_id=1)],
         )
         save_config(cfg)
@@ -102,7 +97,6 @@ class TestSaveConfig:
         original = FusionConfig(
             providers={"42161": "https://arb-rpc.example.com"},
             etherscan_api_key="secret",
-            default_vault="0xDEF",
             vaults=[
                 VaultEntry(address="0xDEF", label="arb-vault", chain_id=42161),
                 VaultEntry(address="0x123", label="eth-vault", chain_id=1),
@@ -113,7 +107,6 @@ class TestSaveConfig:
 
         assert loaded.providers == original.providers
         assert loaded.etherscan_api_key == original.etherscan_api_key
-        assert loaded.default_vault == original.default_vault
         assert loaded.vaults == original.vaults
 
 

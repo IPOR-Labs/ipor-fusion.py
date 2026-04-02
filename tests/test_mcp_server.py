@@ -13,7 +13,6 @@ from ipor_fusion.mcp.server import (
     config_show,
     config_set_provider,
     config_set_etherscan_key,
-    config_set_default_vault,
 )
 
 
@@ -51,34 +50,26 @@ class TestRunFusion:
 
 class TestVaultInfo:
     @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
-    def test_default_args(self, mock_run):
-        vault_info()
-        mock_run.assert_called_once_with("vault", "info", "--json")
-
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
     def test_all_args(self, mock_run):
         vault_info(vault_address="0xABC", chain_id=42161, block_number=100)
         mock_run.assert_called_once_with(
             "vault",
             "info",
-            "--json",
-            "--vault",
             "0xABC",
+            "--json",
             "--chain-id",
             "42161",
             "--block-number",
             "100",
         )
 
+    @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
+    def test_minimal_args(self, mock_run):
+        vault_info(vault_address="0xABC")
+        mock_run.assert_called_once_with("vault", "info", "0xABC", "--json")
+
 
 class TestVaultMarketDetail:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
-    def test_default_args(self, mock_run):
-        vault_market_detail(market_id=1)
-        mock_run.assert_called_once_with(
-            "vault", "market-detail", "--json", "--market-id", "1"
-        )
-
     @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
     def test_all_args(self, mock_run):
         vault_market_detail(
@@ -87,15 +78,21 @@ class TestVaultMarketDetail:
         mock_run.assert_called_once_with(
             "vault",
             "market-detail",
+            "0xABC",
             "--json",
             "--market-id",
             "14",
-            "--vault",
-            "0xABC",
             "--chain-id",
             "42161",
             "--block-number",
             "100",
+        )
+
+    @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
+    def test_minimal_args(self, mock_run):
+        vault_market_detail(vault_address="0xABC", market_id=1)
+        mock_run.assert_called_once_with(
+            "vault", "market-detail", "0xABC", "--json", "--market-id", "1"
         )
 
 
@@ -155,10 +152,3 @@ class TestConfigSetEtherscanKey:
     def test_calls_set_key(self, mock_run):
         config_set_etherscan_key(api_key="ABC123")
         mock_run.assert_called_once_with("config", "set-etherscan-key", "ABC123")
-
-
-class TestConfigSetDefaultVault:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="Default set.")
-    def test_calls_set_default(self, mock_run):
-        config_set_default_vault(address="0xDEF")
-        mock_run.assert_called_once_with("config", "set-default-vault", "0xDEF")

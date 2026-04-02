@@ -50,7 +50,6 @@ class TestConfigShow:
         cfg = FusionConfig(
             providers={"1": "https://rpc.example.com"},
             etherscan_api_key="secret123",
-            default_vault=ADDR_1,
             vaults=[VaultEntry(address=ADDR_1, label="MyVault", chain_id=1)],
         )
         save_config(cfg)
@@ -105,17 +104,6 @@ class TestConfigSetEtherscanKey:
         assert cfg_data["etherscan_api_key"] == "my-api-key-123"
 
 
-class TestConfigSetDefaultVault:
-    def test_saves_address(self, tmp_config):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["config", "set-default-vault", ADDR_1])
-        assert result.exit_code == 0
-        assert f"Default vault set to {ADDR_1}" in result.output
-
-        cfg_data = json.loads(tmp_config[1].read_text(encoding="utf-8"))
-        assert cfg_data["default_vault"] == ADDR_1
-
-
 class TestVaultList:
     def test_empty(self, tmp_config):
         runner = CliRunner()
@@ -141,23 +129,6 @@ class TestVaultList:
         assert ADDR_2 in result.output
         assert "ethereum" in result.output
         assert "arbitrum" in result.output
-
-    def test_default_vault_marked(self, tmp_config):
-        cfg = FusionConfig(
-            default_vault=ADDR_1,
-            vaults=[
-                VaultEntry(address=ADDR_1, label="DefaultV", chain_id=1),
-                VaultEntry(address=ADDR_2, label="OtherV", chain_id=1),
-            ],
-        )
-        save_config(cfg)
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["vault", "list"])
-        assert result.exit_code == 0
-        assert "DefaultV *" in result.output
-        assert "OtherV" in result.output
-        assert "OtherV *" not in result.output
 
     def test_ls_alias(self, tmp_config):
         cfg = FusionConfig(
@@ -358,9 +329,7 @@ class TestVaultInfo:
         mock_wm_cls.return_value = mock_wm
 
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
-        )
+        result = runner.invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
         assert result.exit_code == 0, result.output
         assert ADDR_1 in result.output
         assert "ethereum" in result.output
@@ -435,7 +404,6 @@ class TestVaultInfo:
             [
                 "vault",
                 "info",
-                "--vault",
                 ADDR_1,
                 "--chain-id",
                 "1",
@@ -500,9 +468,7 @@ class TestVaultInfo:
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
-        )
+        result = runner.invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
         assert result.exit_code == 0, result.output
         assert "Supply Cap:       unlimited" in result.output
 
@@ -559,9 +525,7 @@ class TestVaultInfo:
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
-        )
+        result = runner.invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
         assert result.exit_code == 0, result.output
         assert (
             f"Etherscan:        https://etherscan.io/address/{ADDR_1}" in result.output
@@ -628,9 +592,7 @@ class TestVaultInfo:
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
-        )
+        result = runner.invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
         assert result.exit_code == 0, result.output
         assert "Deployed at:      block 18500000" in result.output
         assert "2023-11-14" in result.output
@@ -688,9 +650,7 @@ class TestVaultInfo:
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["vault", "info", "--vault", ADDR_1, "--chain-id", "1"]
-        )
+        result = runner.invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
         assert result.exit_code == 0, result.output
         assert "Deployed at:      N/A" in result.output
 
@@ -704,7 +664,6 @@ class TestVaultListJson:
 
     def test_json_with_vaults(self, tmp_config):
         cfg = FusionConfig(
-            default_vault=ADDR_1,
             vaults=[
                 VaultEntry(address=ADDR_1, label="Vault A", chain_id=1),
                 VaultEntry(address=ADDR_2, label="Vault B", chain_id=42161),
@@ -720,9 +679,7 @@ class TestVaultListJson:
         assert data[0]["address"] == ADDR_1
         assert data[0]["label"] == "Vault A"
         assert data[0]["chain"] == "ethereum"
-        assert data[0]["default"] is True
         assert data[1]["address"] == ADDR_2
-        assert data[1]["default"] is False
 
 
 class TestVaultInfoJson:
@@ -813,7 +770,7 @@ class TestVaultInfoJson:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["vault", "info", "--vault", ADDR_1, "--chain-id", "1", "--json"],
+            ["vault", "info", ADDR_1, "--chain-id", "1", "--json"],
         )
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -833,7 +790,7 @@ class TestVaultInfoJson:
             data["links"]["ipor_app"] == f"https://app.ipor.io/fusion/ethereum/{ADDR_1}"
         )
         assert data["deployment"] is None
-        subs = data["substrates"]["MORPHO"]
+        subs = data["substrates"]["MORPHO (14)"]
         assert len(subs) == 1
         assert "raw" in subs[0]
         assert subs[0].get("error") is None
@@ -909,7 +866,7 @@ class TestVaultInfoJson:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["vault", "info", "--vault", ADDR_1, "--chain-id", "1", "--json"],
+            ["vault", "info", ADDR_1, "--chain-id", "1", "--json"],
         )
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -992,13 +949,13 @@ class TestVaultInfoJson:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["vault", "info", "--vault", ADDR_1, "--chain-id", "1", "--json"],
+            ["vault", "info", ADDR_1, "--chain-id", "1", "--json"],
         )
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert "substrates" in data
-        assert "ERC20_VAULT_BALANCE" in data["substrates"]
-        subs = data["substrates"]["ERC20_VAULT_BALANCE"]
+        assert "ERC20_VAULT_BALANCE (7)" in data["substrates"]
+        subs = data["substrates"]["ERC20_VAULT_BALANCE (7)"]
         assert len(subs) == 1
         assert subs[0]["symbol"] == "WETH"
         assert subs[0]["contract"] == "SomeFuse"
@@ -1185,7 +1142,6 @@ class TestMarketDetail:
             [
                 "vault",
                 "market-detail",
-                "--vault",
                 ADDR_1,
                 "--chain-id",
                 "1",
@@ -1263,7 +1219,6 @@ class TestMarketDetail:
             [
                 "vault",
                 "market-detail",
-                "--vault",
                 ADDR_1,
                 "--chain-id",
                 "1",
@@ -1339,7 +1294,6 @@ class TestMarketDetail:
             [
                 "vault",
                 "market-detail",
-                "--vault",
                 ADDR_1,
                 "--chain-id",
                 "1",
@@ -1357,7 +1311,6 @@ class TestMarketDetail:
             [
                 "vault",
                 "market-detail",
-                "--vault",
                 ADDR_1,
                 "--chain-id",
                 "1",
@@ -1412,7 +1365,6 @@ class TestMarketDetail:
             [
                 "vault",
                 "market-detail",
-                "--vault",
                 ADDR_1,
                 "--chain-id",
                 "1",

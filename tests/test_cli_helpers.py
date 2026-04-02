@@ -16,7 +16,6 @@ from ipor_fusion.cli.vault_cmd import (
     _print_substrates,
     _resolve_chain_id,
     _resolve_provider,
-    _resolve_vault,
 )
 from ipor_fusion.cli.vault_fetcher import (
     _VaultData,
@@ -326,21 +325,6 @@ class TestMarketName:
         assert _market_name(999_999_999) == "UNKNOWN"
 
 
-class TestResolveVault:
-    def test_returns_explicit_address(self):
-        cfg = FusionConfig()
-        assert _resolve_vault(cfg, "0xABC") == "0xABC"
-
-    def test_returns_default_vault(self):
-        cfg = FusionConfig(default_vault="0xDEFAULT")
-        assert _resolve_vault(cfg, None) == "0xDEFAULT"
-
-    def test_raises_when_no_vault(self):
-        cfg = FusionConfig()
-        with pytest.raises(click.UsageError, match="No vault specified"):
-            _resolve_vault(cfg, None)
-
-
 class TestResolveChainId:
     def test_returns_explicit_chain_id(self):
         cfg = FusionConfig()
@@ -358,9 +342,9 @@ class TestResolveChainId:
         )
         assert _resolve_chain_id(cfg, "0xABC", None) == 42161
 
-    def test_raises_when_no_chain_id(self):
-        cfg = FusionConfig()
-        with pytest.raises(click.UsageError, match="No chain ID"):
+    def test_raises_when_unknown_vault(self):
+        cfg = FusionConfig(providers={"42161": "https://arb-rpc.example.com"})
+        with pytest.raises(click.UsageError, match="Unknown vault"):
             _resolve_chain_id(cfg, "0xABC", None)
 
 

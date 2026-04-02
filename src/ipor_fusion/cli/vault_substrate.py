@@ -119,6 +119,7 @@ _register_markets(
         37,
         40,
         47,
+        *range(100_001, 100_021),  # ERC4626_0001 .. ERC4626_0020
     ],
     _decode_plain_address,
 )

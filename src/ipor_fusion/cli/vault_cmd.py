@@ -94,6 +94,35 @@ CHAIN_NAMES: dict[int, str] = {
     250: "fantom",
 }
 
+CHAIN_NAME_TO_ID: dict[str, int] = {name: cid for cid, name in CHAIN_NAMES.items()}
+
+
+class ChainType(click.ParamType):
+    """Accepts chain ID as int or chain name (ethereum, base, arbitrum, ...)."""
+
+    name = "chain"
+
+    def convert(self, value, param, ctx):  # type: ignore[override]
+        if isinstance(value, int):
+            return value
+        try:
+            return int(value)
+        except ValueError:
+            pass
+        lower = value.lower().strip()
+        if lower in CHAIN_NAME_TO_ID:
+            return CHAIN_NAME_TO_ID[lower]
+        self.fail(
+            f"Unknown chain: {value}. Use a numeric ID or one of: "
+            f"{', '.join(sorted(CHAIN_NAME_TO_ID))}",
+            param,
+            ctx,
+        )
+        return None  # unreachable, keeps mypy happy
+
+
+CHAIN = ChainType()
+
 BLOCK_EXPLORER_URLS: dict[int, str] = {
     1: "https://etherscan.io",
     42161: "https://arbiscan.io",
@@ -110,17 +139,6 @@ IPOR_APP_URL = "https://app.ipor.io/fusion"
 UINT256_MAX = 2**256 - 1
 
 
-def _resolve_vault(cfg: FusionConfig, vault_address: str | None) -> str:
-    if vault_address is not None:
-        return vault_address
-    if cfg.default_vault is not None:
-        return cfg.default_vault
-    raise click.UsageError(
-        "No vault specified. Use --vault or set default with "
-        "'fusion config set-default-vault'"
-    )
-
-
 def _resolve_chain_id(
     cfg: FusionConfig, vault_address: str, chain_id: int | None
 ) -> int:
@@ -132,7 +150,7 @@ def _resolve_chain_id(
     ):
         return entry.chain_id
     raise click.UsageError(
-        "No chain ID. Use --chain-id or save vault with 'fusion vault add'"
+        "Unknown vault — use --chain-id (e.g. --chain-id ethereum, --chain-id 8453)"
     )
 
 
@@ -143,6 +161,21 @@ def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
         f"No provider for chain {chain_id}. "
         f"Use 'fusion config set-provider {chain_id} <url>'"
     )
+
+
+def _auto_save_vault(
+    cfg: FusionConfig, vault_address: str, chain_id: int, plasma_vault: PlasmaVault
+) -> None:
+    """Save vault to config if not already present and it looks like a Plasma Vault."""
+    if any(v.address.lower() == vault_address.lower() for v in cfg.vaults):
+        return
+    try:
+        label = plasma_vault.name()
+    except Exception:  # pylint: disable=broad-except
+        return
+    cfg.vaults.append(VaultEntry(address=vault_address, label=label, chain_id=chain_id))
+    save_config(cfg)
+    click.echo(f"Vault saved: {label} ({vault_address})", err=True)
 
 
 @click.group()
@@ -157,9 +190,9 @@ def vault() -> None:
 )
 @click.option(
     "--chain-id",
-    type=int,
+    type=CHAIN,
     default=None,
-    help="Chain ID (auto-detected when only one provider is configured).",
+    help="Chain ID or name (auto-detected when only one provider is configured).",
 )
 def add(address: str, label: str | None, chain_id: int | None) -> None:
     """Save a vault to the config."""
@@ -231,10 +264,6 @@ def list_vaults(json_output: bool) -> None:
                     "label": v.label,
                     "chain": CHAIN_NAMES.get(v.chain_id, str(v.chain_id)),
                     "chain_id": v.chain_id,
-                    "default": bool(
-                        cfg.default_vault
-                        and v.address.lower() == cfg.default_vault.lower()
-                    ),
                 }
             )
         click.echo(json.dumps(entries, indent=2))
@@ -242,10 +271,7 @@ def list_vaults(json_output: bool) -> None:
     rows: list[tuple[str, ...]] = []
     for v in cfg.vaults:
         chain = CHAIN_NAMES.get(v.chain_id, str(v.chain_id))
-        label = v.label
-        if cfg.default_vault and v.address.lower() == cfg.default_vault.lower():
-            label += " *"
-        rows.append((chain, label, v.address))
+        rows.append((chain, v.label, v.address))
     _print_table(("Chain", "Label", "Address"), rows)
 
 
@@ -253,10 +279,10 @@ vault.add_command(list_vaults, "ls")
 
 
 @vault.command("info")
+@click.argument("vault_address", type=ADDRESS)
 @click.option(
-    "--vault", "vault_address", default=None, type=ADDRESS, help="Vault address."
+    "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
 )
-@click.option("--chain-id", type=int, default=None, help="Chain ID.")
 @click.option(
     "--block-number",
     type=int,
@@ -267,14 +293,13 @@ vault.add_command(list_vaults, "ls")
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def info(
-    vault_address: str | None,
+    vault_address: str,
     chain_id: int | None,
     block_number: int | None,
     json_output: bool,
 ) -> None:
     """Display full on-chain vault state."""
     cfg = load_config()
-    vault_address = _resolve_vault(cfg, vault_address)
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
     provider_url = _resolve_provider(cfg, chain_id)
 
@@ -284,6 +309,8 @@ def info(
     checksum_address = Web3.to_checksum_address(vault_address)
     plasma_vault = PlasmaVault(ctx, checksum_address)
 
+    _auto_save_vault(cfg, vault_address, chain_id, plasma_vault)
+
     data = _fetch_vault_data(ctx, plasma_vault, block_number)
     _print_vault_info(
         ctx, plasma_vault, cfg, data, vault_address, chain_id, json_output
@@ -291,10 +318,10 @@ def info(
 
 
 @vault.command("market-detail")
+@click.argument("vault_address", type=ADDRESS)
 @click.option(
-    "--vault", "vault_address", default=None, type=ADDRESS, help="Vault address."
+    "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
 )
-@click.option("--chain-id", type=int, default=None, help="Chain ID.")
 @click.option(
     "--block-number",
     type=int,
@@ -306,7 +333,7 @@ def info(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def market_detail(
-    vault_address: str | None,
+    vault_address: str,
     chain_id: int | None,
     block_number: int | None,
     market_id: int,
@@ -314,7 +341,6 @@ def market_detail(
 ) -> None:
     """Show detailed info for a single market in a vault."""
     cfg = load_config()
-    vault_address = _resolve_vault(cfg, vault_address)
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
     provider_url = _resolve_provider(cfg, chain_id)
 
@@ -323,6 +349,8 @@ def market_detail(
         ctx.default_block = block_number
     checksum_address = Web3.to_checksum_address(vault_address)
     plasma_vault = PlasmaVault(ctx, checksum_address)
+
+    _auto_save_vault(cfg, vault_address, chain_id, plasma_vault)
 
     data = _fetch_market_detail(
         ctx, plasma_vault, cfg, market_id, chain_id, block_number
@@ -494,11 +522,14 @@ def _print_market_detail(data: dict) -> None:
                 click.secho(f"  {sub['raw']} [encoding error]", fg="red")
             else:
                 parts = []
-                if sub.get("substrate_type"):
-                    parts.append(sub["substrate_type"])
+                sub_type = sub.get("substrate_type", "")
+                if sub_type:
+                    parts.append(sub_type)
                 parts.extend(extra_parts)
                 label = ", ".join(parts) if parts else "bytes32"
-                click.echo(f"  {sub['raw']} ({label})")
+                is_no_decoder = sub_type.startswith("no_decoder(")
+                fg = "red" if is_no_decoder else None
+                click.secho(f"  {sub['raw']} ({label})", fg=fg)
     else:
         click.echo("Substrates: (none)")
 
@@ -774,6 +805,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
             balance_fuses_json.append(
                 {
                     "market": market_str,
+                    "market_id": bf.market_id,
                     "balance": {
                         "raw": assets_in_market,
                         "formatted": _format_amount(
@@ -791,7 +823,9 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
         for i, bf in enumerate(data.balance_fuses):
             market_label = _market_name(bf.market_id)
             market_str = (
-                market_label if market_label != "UNKNOWN" else str(bf.market_id)
+                f"{market_label} ({bf.market_id})"
+                if market_label != "UNKNOWN"
+                else str(bf.market_id)
             )
             if subs := substrate_futs[i].result():
                 market_subs_raw.append((market_str, bf.market_id, subs))
@@ -1047,7 +1081,7 @@ def _print_balance_fuses_table(
         for idx, balance_fuse in enumerate(balance_fuses, 1):
             market_label = _market_name(balance_fuse.market_id)
             market_id_str = (
-                market_label
+                f"{market_label} ({balance_fuse.market_id})"
                 if market_label != "UNKNOWN"
                 else str(balance_fuse.market_id)
             )
@@ -1098,7 +1132,7 @@ def _print_substrates(  # pylint: disable=too-complex
         for balance_fuse in balance_fuses:
             market_label = _market_name(balance_fuse.market_id)
             market_id_str = (
-                market_label
+                f"{market_label} ({balance_fuse.market_id})"
                 if market_label != "UNKNOWN"
                 else str(balance_fuse.market_id)
             )
@@ -1158,6 +1192,8 @@ def _print_substrates(  # pylint: disable=too-complex
                 for k, v in sub_info.extra.items():
                     parts.append(f"{k}={v}")
                 label = ", ".join(parts) if parts else "bytes32"
-                click.echo(f"    {sub_info.raw_hex} ({label})")
+                is_no_decoder = sub_info.type_label.startswith("no_decoder(")
+                fg = "red" if is_no_decoder else None
+                click.secho(f"    {sub_info.raw_hex} ({label})", fg=fg)
 
     return {a.lower() for a in all_addresses}

@@ -39,7 +39,6 @@ class VaultEntry:
 class FusionConfig:
     providers: dict[str, str] = field(default_factory=dict)
     etherscan_api_key: str | None = None
-    default_vault: str | None = None
     vaults: list[VaultEntry] = field(default_factory=list)
 
 
@@ -67,7 +66,7 @@ def _migrate_to_v1(data: dict) -> dict:
     """Ensure all expected keys exist and set version to 1."""
     data.setdefault("providers", {})
     data.setdefault("etherscan_api_key", None)
-    data.setdefault("default_vault", None)
+    data.pop("default_vault", None)
     data.setdefault("vaults", [])
     data["version"] = 1
     return data
@@ -84,7 +83,6 @@ def load_config() -> FusionConfig:
     return FusionConfig(
         providers=data.get("providers", {}),
         etherscan_api_key=data.get("etherscan_api_key"),
-        default_vault=data.get("default_vault"),
         vaults=vaults,
     )
 
