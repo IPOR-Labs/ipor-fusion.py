@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_config
 from ipor_fusion.cli.main import cli, main
+from ipor_fusion.core.withdraw_manager import AccountRequest
 
 ADDR_1 = "0x1111111111111111111111111111111111111111"
 ADDR_2 = "0x2222222222222222222222222222222222222222"
@@ -19,6 +20,7 @@ ADDR_REWARDS = "0x6666666666666666666666666666666666666666"
 ADDR_WITHDRAW = "0x7777777777777777777777777777777777777777"
 ADDR_FUSE_1 = "0x8888888888888888888888888888888888888888"
 ADDR_FUSE_2 = "0x9999999999999999999999999999999999999999"
+ADDR_USER_1 = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 
 @pytest.fixture
@@ -273,6 +275,7 @@ class TestVaultRemove:
 
 
 class TestVaultInfo:
+    @patch("ipor_fusion.cli.vault_cmd.WithdrawManager")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
     @patch("ipor_fusion.cli.vault_cmd.ERC20")
@@ -285,6 +288,7 @@ class TestVaultInfo:
         mock_erc20_cls,
         mock_oracle_cls,
         mock_get_name,
+        mock_wm_cls,
         tmp_config,
     ):
         cfg = FusionConfig(
@@ -322,6 +326,7 @@ class TestVaultInfo:
         mock_pv.name.return_value = "Test Vault"
         mock_pv.get_market_substrates.return_value = []
         mock_pv.total_assets_in_market.return_value = 500 * 10**18
+        mock_pv.convert_to_assets.return_value = 111 * 10**6
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -334,6 +339,22 @@ class TestVaultInfo:
         mock_oracle = MagicMock()
         mock_oracle.get_asset_price.return_value = mock_price
         mock_oracle_cls.return_value = mock_oracle
+
+        mock_wm = MagicMock()
+        mock_wm.get_withdraw_window.return_value = 86400
+        mock_wm.get_request_fee.return_value = 0
+        mock_wm.get_withdraw_fee.return_value = 0
+        mock_wm.get_shares_to_release.return_value = 50 * 10**18
+        mock_wm.get_last_release_funds_timestamp.return_value = 1699999000
+        mock_wm.get_pending_requests.return_value = [
+            AccountRequest(
+                account=ADDR_USER_1,
+                shares=100 * 10**18,
+                end_withdraw_window_timestamp=1700100000,
+                can_withdraw=False,
+            )
+        ]
+        mock_wm_cls.return_value = mock_wm
 
         runner = CliRunner()
         result = runner.invoke(
@@ -350,6 +371,10 @@ class TestVaultInfo:
         assert "Fuses (2)" in result.output
         assert "Balance Fuses (1)" in result.output
         assert "SomeFuse" in result.output
+        assert "Window:" in result.output
+        assert "Pending requests (1):" in result.output
+        assert ADDR_USER_1 in result.output
+        assert "waiting" in result.output
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
@@ -695,6 +720,7 @@ class TestVaultListJson:
 
 
 class TestVaultInfoJson:
+    @patch("ipor_fusion.cli.vault_cmd.WithdrawManager")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
     @patch("ipor_fusion.cli.vault_cmd.ERC20")
@@ -707,6 +733,7 @@ class TestVaultInfoJson:
         mock_erc20_cls,
         mock_oracle_cls,
         mock_get_name,
+        mock_wm_cls,
         tmp_config,
     ):
         cfg = FusionConfig(
@@ -741,8 +768,12 @@ class TestVaultInfoJson:
         mock_pv.get_rewards_claim_manager_address.return_value = ADDR_REWARDS
         mock_pv.withdraw_manager_address.return_value = ADDR_WITHDRAW
         mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.get_market_substrates.return_value = []
+        morpho_sub = bytes.fromhex(
+            "32e253d33f1594a67fc6ef51bf7a39cc4bf2d14904998dee769706fcde489ed9"
+        )
+        mock_pv.get_market_substrates.return_value = [morpho_sub]
         mock_pv.total_assets_in_market.return_value = 500 * 10**18
+        mock_pv.convert_to_assets.return_value = 111 * 10**6
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -755,6 +786,22 @@ class TestVaultInfoJson:
         mock_oracle = MagicMock()
         mock_oracle.get_asset_price.return_value = mock_price
         mock_oracle_cls.return_value = mock_oracle
+
+        mock_wm = MagicMock()
+        mock_wm.get_withdraw_window.return_value = 86400
+        mock_wm.get_request_fee.return_value = 10**15
+        mock_wm.get_withdraw_fee.return_value = 2 * 10**15
+        mock_wm.get_shares_to_release.return_value = 50 * 10**18
+        mock_wm.get_last_release_funds_timestamp.return_value = 1699999000
+        mock_wm.get_pending_requests.return_value = [
+            AccountRequest(
+                account=ADDR_USER_1,
+                shares=100 * 10**18,
+                end_withdraw_window_timestamp=1700100000,
+                can_withdraw=True,
+            ),
+        ]
+        mock_wm_cls.return_value = mock_wm
 
         runner = CliRunner()
         result = runner.invoke(
@@ -779,6 +826,21 @@ class TestVaultInfoJson:
             data["links"]["ipor_app"] == f"https://app.ipor.io/fusion/ethereum/{ADDR_1}"
         )
         assert data["deployment"] is None
+        subs = data["substrates"]["AAVE_V3"]
+        assert len(subs) == 1
+        assert "raw" in subs[0]
+        assert subs[0].get("error") is None
+        wmd = data["withdraw_manager_details"]
+        assert wmd is not None
+        assert wmd["withdraw_window_seconds"] == 86400
+        assert wmd["total_pending_shares"]["raw"] == 100 * 10**18
+        assert wmd["shares_to_release"]["raw"] == 50 * 10**18
+        assert wmd["last_release_funds_timestamp"] == 1699999000
+        assert wmd["request_fee_percent"] == 0.1
+        assert wmd["withdraw_fee_percent"] == 0.2
+        assert len(wmd["pending_requests"]) == 1
+        assert wmd["pending_requests"][0]["account"] == ADDR_USER_1
+        assert wmd["pending_requests"][0]["can_withdraw"] is True
 
     @patch("ipor_fusion.cli.vault_cmd.get_deployment_tx", return_value="0xdeadbeef")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
@@ -1194,6 +1256,101 @@ class TestMarketDetail:
         assert "500.0 USDC" in result.output
         assert "AaveV3Fuse" in result.output
         assert "(cached)" in result.output
+
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="MorphoFuse")
+    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_market_detail_with_bytes32_and_error_substrates(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+
+        mock_ctx = MagicMock()
+        mock_ctx.web3.eth.block_number = 100
+        mock_ctx_cls.from_url.return_value = mock_ctx
+
+        @dataclass
+        class FakeBalanceFuse:
+            market_id: int
+            fuse: str
+
+        morpho_market_id = bytes.fromhex(
+            "32e253d33f1594a67fc6ef51bf7a39cc4bf2d14904998dee769706fcde489ed9"
+        )
+        bad_bytes = bytes.fromhex("ff" * 16)
+
+        mock_pv = MagicMock()
+        mock_pv.address = ADDR_1
+        mock_pv.get_balance_fuses.return_value = [
+            FakeBalanceFuse(market_id=14, fuse=ADDR_FUSE_1),
+        ]
+        mock_pv.underlying_asset_address.return_value = ADDR_2
+        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
+        mock_pv.total_assets_in_market.return_value = 100 * 10**6
+        mock_pv.get_market_substrates.return_value = [morpho_market_id, bad_bytes]
+        mock_pv_cls.return_value = mock_pv
+
+        mock_erc20 = MagicMock()
+        mock_erc20.symbol.return_value = "USDC"
+        mock_erc20.decimals.return_value = 6
+        mock_erc20_cls.return_value = mock_erc20
+
+        mock_oracle = MagicMock()
+        mock_oracle.get_asset_price.return_value = None
+        mock_oracle_cls.return_value = mock_oracle
+
+        # Text output
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "vault",
+                "market-detail",
+                "--vault",
+                ADDR_1,
+                "--chain-id",
+                "1",
+                "--market-id",
+                "14",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "(bytes32)" in result.output
+        assert "[encoding error]" in result.output
+
+        # JSON output
+        result = runner.invoke(
+            cli,
+            [
+                "vault",
+                "market-detail",
+                "--vault",
+                ADDR_1,
+                "--chain-id",
+                "1",
+                "--market-id",
+                "14",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert len(data["substrates"]) == 2
+        assert "raw" in data["substrates"][0]
+        assert data["substrates"][0].get("error") is None
+        assert data["substrates"][1].get("error") is True
 
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")

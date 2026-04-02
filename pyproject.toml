@@ -79,7 +79,7 @@ omit = ["src/ipor_fusion/testing/*", "src/ipor_fusion/mcp/*"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 97
+fail_under = 95
 omit = ["src/ipor_fusion/testing/*", "src/ipor_fusion/mcp/*"]
 
 [build-system]

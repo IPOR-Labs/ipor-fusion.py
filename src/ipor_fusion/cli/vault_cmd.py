@@ -30,6 +30,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import MarketId
 
@@ -154,6 +155,20 @@ def _format_amount(raw: int, decimals: int) -> str:
     fractional_part = raw % (10**decimals)
     frac_str = str(fractional_part).zfill(decimals)[:6].rstrip("0") or "0"
     return f"{integer_part:,}.{frac_str}"
+
+
+def _format_remaining(seconds: int) -> str:
+    if seconds <= 0:
+        return "expired"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    if hours >= 24:
+        days = hours // 24
+        hours = hours % 24
+        return f"{days}d {hours}h left"
+    if hours > 0:
+        return f"{hours}h {minutes}m left"
+    return f"{minutes}m left"
 
 
 @click.group()
@@ -344,7 +359,7 @@ def market_detail(
         _print_market_detail(data)
 
 
-def _fetch_market_detail(  # pylint: disable=too-many-locals
+def _fetch_market_detail(  # pylint: disable=too-many-locals,too-complex
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     cfg: FusionConfig,
@@ -430,7 +445,10 @@ def _fetch_market_detail(  # pylint: disable=too-many-locals
                     entry["substrate_type"] = sub_info.type_label
                 substrates_list.append(entry)
             else:
-                substrates_list.append({"raw": sub_info.raw_hex})
+                raw_entry: dict = {"raw": sub_info.raw_hex}
+                if sub_info.is_error:
+                    raw_entry["error"] = True
+                substrates_list.append(raw_entry)
 
     market_label = _market_name(market_id)
     balance_entry: dict = {
@@ -485,10 +503,24 @@ def _print_market_detail(data: dict) -> None:
                     parts.append(f"substrate-type={sub['substrate_type']}")
                 detail = f" ({', '.join(parts)})" if parts else ""
                 click.echo(f"  {sub['address']}{detail}")
-            else:
+            elif sub.get("error"):
                 click.secho(f"  {sub['raw']} [encoding error]", fg="red")
+            else:
+                click.echo(f"  {sub['raw']} (bytes32)")
     else:
         click.echo("Substrates: (none)")
+
+
+@dataclass
+class _WithdrawManagerData:
+    """On-chain state snapshot from the WithdrawManager contract."""
+
+    withdraw_window: int
+    request_fee: int
+    withdraw_fee: int
+    shares_to_release: int
+    last_release_funds_timestamp: int
+    pending_requests: list[AccountRequest]
 
 
 @dataclass
@@ -512,6 +544,7 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     instant_fuses: list
     deployment_block: int | None = None
     deployment_timestamp: int | None = None
+    withdraw_manager_data: _WithdrawManagerData | None = None
 
 
 def _fetch_vault_data(
@@ -556,6 +589,27 @@ def _fetch_vault_data(
         block_info = ctx.web3.eth.get_block(effective_block)
         block_timestamp: int = block_info["timestamp"]
         asset_price = f_price.result()
+        withdraw_mgr_addr = f_withdraw.result()
+
+        # Phase 3: withdraw manager details (needs address from phase 1)
+        wm_data: _WithdrawManagerData | None = None
+        if withdraw_mgr_addr:
+            wm = WithdrawManager(ctx, withdraw_mgr_addr)
+            f_wm_window = pool.submit(_safe_call, wm.get_withdraw_window)
+            f_wm_req_fee = pool.submit(_safe_call, wm.get_request_fee)
+            f_wm_wd_fee = pool.submit(_safe_call, wm.get_withdraw_fee)
+            f_wm_shares = pool.submit(_safe_call, wm.get_shares_to_release)
+            f_wm_last_ts = pool.submit(_safe_call, wm.get_last_release_funds_timestamp)
+            f_wm_requests = pool.submit(_safe_call, wm.get_pending_requests)
+
+            wm_data = _WithdrawManagerData(
+                withdraw_window=f_wm_window.result() or 0,
+                request_fee=f_wm_req_fee.result() or 0,
+                withdraw_fee=f_wm_wd_fee.result() or 0,
+                shares_to_release=f_wm_shares.result() or 0,
+                last_release_funds_timestamp=f_wm_last_ts.result() or 0,
+                pending_requests=f_wm_requests.result() or [],
+            )
 
         return _VaultData(
             block_label=block_label,
@@ -570,11 +624,12 @@ def _fetch_vault_data(
             access_manager=f_access.result(),
             price_oracle_addr=price_oracle_addr,
             rewards_manager=f_rewards.result(),
-            withdraw_manager=f_withdraw.result(),
+            withdraw_manager=withdraw_mgr_addr,
             asset_price_usd=asset_price.readable() if asset_price else None,
             fuses=f_fuses.result(),
             balance_fuses=f_balance_fuses.result(),
             instant_fuses=f_instant.result(),
+            withdraw_manager_data=wm_data,
         )
 
 
@@ -689,6 +744,22 @@ def _print_vault_info(
     click.echo(f"Price Oracle:     {data.price_oracle_addr}")
     click.echo(f"Rewards Manager:  {data.rewards_manager or 'N/A'}")
     click.echo(f"Withdraw Manager: {data.withdraw_manager or 'N/A'}")
+    if data.withdraw_manager_data:
+        wmd = data.withdraw_manager_data
+        window_h = wmd.withdraw_window / 3600
+        click.echo(f"  Window:         {wmd.withdraw_window}s ({window_h:.1f}h)")
+        click.echo(
+            f"  Request fee:    {wmd.request_fee / 1e18:.4%}"
+            f"   Withdraw fee: {wmd.withdraw_fee / 1e18:.4%}"
+        )
+        release_fmt = _format_amount(wmd.shares_to_release, data.share_decimals)
+        click.echo(f"  Shares to release: {release_fmt}")
+        if wmd.last_release_funds_timestamp > 0:
+            last_dt = datetime.fromtimestamp(
+                wmd.last_release_funds_timestamp, tz=timezone.utc
+            )
+            click.echo(f"  Last release:   {last_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+        _print_pending_requests(data, plasma_vault)
     click.echo()
 
     click.echo(f"Fuses ({len(data.fuses)}):")
@@ -745,6 +816,72 @@ def _build_deployment_json(data: _VaultData) -> dict | None:
             - datetime.fromtimestamp(data.deployment_timestamp, tz=timezone.utc)
         ).days,
     }
+
+
+def _build_withdraw_manager_json(
+    data: _VaultData, plasma_vault: PlasmaVault
+) -> dict | None:
+    if data.withdraw_manager_data is None:
+        return None
+    wmd = data.withdraw_manager_data
+    sdec = data.share_decimals
+    adec = data.asset_decimals
+
+    total_pending_shares = sum((r.shares for r in wmd.pending_requests), 0)
+
+    requests_json = []
+    for req in wmd.pending_requests:
+        assets: int | None = _safe_call(
+            lambda s=req.shares: plasma_vault.convert_to_assets(s)  # type: ignore[misc]
+        )
+        entry: dict = {
+            "account": req.account,
+            "shares": {
+                "raw": req.shares,
+                "formatted": _format_amount(req.shares, sdec),
+            },
+            "end_withdraw_window_timestamp": req.end_withdraw_window_timestamp,
+            "end_withdraw_window_utc": datetime.fromtimestamp(
+                req.end_withdraw_window_timestamp, tz=timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "remaining_seconds": max(
+                0, req.end_withdraw_window_timestamp - data.block_timestamp
+            ),
+            "can_withdraw": req.can_withdraw,
+        }
+        if assets is not None:
+            entry["assets"] = {
+                "raw": assets,
+                "formatted": _format_amount(assets, adec),
+            }
+            if data.asset_price_usd is not None:
+                entry["assets"]["usd"] = round(
+                    (assets / 10**adec) * data.asset_price_usd, 2
+                )
+        requests_json.append(entry)
+
+    result: dict = {
+        "withdraw_window_seconds": wmd.withdraw_window,
+        "request_fee_wad": wmd.request_fee,
+        "request_fee_percent": round(wmd.request_fee / 1e18 * 100, 4),
+        "withdraw_fee_wad": wmd.withdraw_fee,
+        "withdraw_fee_percent": round(wmd.withdraw_fee / 1e18 * 100, 4),
+        "shares_to_release": {
+            "raw": wmd.shares_to_release,
+            "formatted": _format_amount(wmd.shares_to_release, sdec),
+        },
+        "last_release_funds_timestamp": wmd.last_release_funds_timestamp,
+        "pending_requests": requests_json,
+        "total_pending_shares": {
+            "raw": total_pending_shares,
+            "formatted": _format_amount(total_pending_shares, sdec),
+        },
+    }
+    if wmd.last_release_funds_timestamp > 0:
+        result["last_release_funds_utc"] = datetime.fromtimestamp(
+            wmd.last_release_funds_timestamp, tz=timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return result
 
 
 def _build_json_output(  # pylint: disable=too-many-locals,too-complex
@@ -857,7 +994,10 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
                         entry["substrate_type"] = sub_info.type_label
                     entries.append(entry)
                 else:
-                    entries.append({"raw": sub_info.raw_hex})
+                    raw_entry: dict = {"raw": sub_info.raw_hex}
+                    if sub_info.is_error:
+                        raw_entry["error"] = True
+                    entries.append(raw_entry)
             substrates_json[market_str] = entries
 
     # ERC20 balances
@@ -975,6 +1115,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
             "rewards": data.rewards_manager,
             "withdraw": data.withdraw_manager,
         },
+        "withdraw_manager_details": _build_withdraw_manager_json(data, plasma_vault),
         "fuses": fuses_json,
         "balance_fuses": balance_fuses_json,
         "instant_withdrawal_fuses": instant_json,
@@ -1404,6 +1545,59 @@ def _print_health_check(
         click.secho(f"  {line}", fg="yellow")
 
 
+def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None:
+    if (wmd := data.withdraw_manager_data) is None:
+        return
+    if not (requests := wmd.pending_requests):
+        click.echo("  Pending requests: (none)")
+        return
+
+    total_shares = sum((r.shares for r in requests), 0)
+    total_assets: int | None = _safe_call(
+        lambda ts=total_shares: plasma_vault.convert_to_assets(ts)  # type: ignore[misc]
+    )
+
+    click.echo(f"  Pending requests ({len(requests)}):")
+    rows: list[tuple[str, ...]] = []
+    for req in requests:
+        assets: int | None = _safe_call(
+            lambda s=req.shares: plasma_vault.convert_to_assets(s)  # type: ignore[misc]
+        )
+        assets_str = (
+            f"{_format_amount(assets, data.asset_decimals)} {data.asset_symbol}"
+            if assets is not None
+            else "?"
+        )
+        usd_str = ""
+        if assets is not None and data.asset_price_usd is not None:
+            usd_val = (assets / 10**data.asset_decimals) * data.asset_price_usd
+            usd_str = f" (${usd_val:,.2f})"
+        end_dt = datetime.fromtimestamp(
+            req.end_withdraw_window_timestamp, tz=timezone.utc
+        )
+        remaining = req.end_withdraw_window_timestamp - data.block_timestamp
+        remaining_str = _format_remaining(remaining)
+        status = "can_withdraw" if req.can_withdraw else "waiting"
+        rows.append(
+            (
+                req.account,
+                f"{_format_amount(req.shares, data.share_decimals)} shares",
+                f"{assets_str}{usd_str}",
+                f"{end_dt.strftime('%Y-%m-%dT%H:%M:%SZ')} ({remaining_str})",
+                status,
+            )
+        )
+    _print_table(("Account", "Shares", "Assets", "Window ends", "Status"), rows)
+
+    total_fmt = _format_amount(total_shares, data.share_decimals)
+    total_assets_fmt = (
+        f" = {_format_amount(total_assets, data.asset_decimals)} {data.asset_symbol}"
+        if total_assets is not None
+        else ""
+    )
+    click.echo(f"  Total pending: {total_fmt} shares{total_assets_fmt}")
+
+
 def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
     if not rows:
         click.echo("  (none)")
@@ -1506,7 +1700,7 @@ def _substrate_details(symbol: str, contract: str, type_label: str) -> str:
     return f" ({', '.join(parts)})" if parts else ""
 
 
-def _print_substrates(
+def _print_substrates(  # pylint: disable=too-complex
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     balance_fuses: list,
@@ -1568,8 +1762,10 @@ def _print_substrates(
                 contract = resolved_contracts.get(sub_info.address, "")
                 details = _substrate_details(symbol, contract, sub_info.type_label)
                 click.echo(f"    {sub_info.address}{details}")
-            else:
+            elif sub_info.is_error:
                 click.secho(f"    {sub_info.raw_hex} [encoding error]", fg="red")
+            else:
+                click.echo(f"    {sub_info.raw_hex} (bytes32)")
 
     return {a.lower() for a in all_addresses}
 
@@ -1586,12 +1782,13 @@ class _SubstrateInfo:
     address: str = ""
     raw_hex: str = ""
     type_label: str = ""
+    is_error: bool = False
 
 
 def _format_substrate(raw: bytes) -> _SubstrateInfo:
     hex_str = raw.hex()
     if len(hex_str) != 64:
-        return _SubstrateInfo(raw_hex=f"0x{hex_str}")
+        return _SubstrateInfo(raw_hex=f"0x{hex_str}", is_error=True)
     # plain address: 12 zero bytes (24 hex chars) + 20 byte address
     if hex_str[:24] == "0" * 24:
         return _SubstrateInfo(address=f"0x{hex_str[24:]}")
@@ -1601,6 +1798,7 @@ def _format_substrate(raw: bytes) -> _SubstrateInfo:
         addr = f"0x{hex_str[24:]}"
         label = EBISU_SUBSTRATE_TYPES.get(type_byte, f"type={type_byte}")
         return _SubstrateInfo(address=addr, type_label=label)
+    # raw bytes32 value (e.g. Morpho market ID)
     return _SubstrateInfo(raw_hex=f"0x{hex_str}")
 
 

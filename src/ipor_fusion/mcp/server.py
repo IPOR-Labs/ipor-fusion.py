@@ -38,6 +38,11 @@ def vault_info(
     - total_supply (raw, formatted)
     - supply_cap (raw, formatted)
     - managers (access, price_oracle, rewards, withdraw)
+    - withdraw_manager_details — null when no withdraw manager:
+      withdraw_window_seconds, request_fee_wad/percent, withdraw_fee_wad/percent,
+      shares_to_release (raw/formatted), last_release_funds_timestamp/utc,
+      total_pending_shares (raw/formatted),
+      pending_requests[] (account, shares, assets with usd, end_withdraw_window, remaining_seconds, can_withdraw)
     - fuses (address, contract name)
     - instant_withdrawal_fuses (address, contract name)
     - balance_fuses per market (market name, balance raw/formatted, fuse address/contract)

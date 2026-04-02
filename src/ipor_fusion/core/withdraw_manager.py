@@ -34,6 +34,16 @@ class WithdrawRequestInfo:
     withdraw_window_in_seconds: Period
 
 
+@dataclass(slots=True)
+class AccountRequest:
+    """On-chain validated withdrawal request for a single account."""
+
+    account: ChecksumAddress
+    shares: Shares
+    end_withdraw_window_timestamp: Timestamp
+    can_withdraw: bool
+
+
 class WithdrawManager(ContractWrapper):
     """Handles time-windowed withdrawal requests and fund releases."""
 
@@ -76,6 +86,10 @@ class WithdrawManager(ContractWrapper):
         (value,) = decode(["uint256"], self._call("getRequestFee()"))
         return Fee(value)
 
+    def get_withdraw_fee(self) -> Fee:
+        (value,) = decode(["uint256"], self._call("getWithdrawFee()"))
+        return Fee(value)
+
     def request_info(self, account: ChecksumAddress) -> WithdrawRequestInfo:
         result = self._call("requestInfo(address)", account)
         (
@@ -91,13 +105,14 @@ class WithdrawManager(ContractWrapper):
             withdraw_window_in_seconds=withdraw_window_in_seconds,
         )
 
-    def get_pending_requests_info(
+    def get_pending_requests(
         self, from_block: BlockNumber = BlockNumber(0)
-    ) -> PendingRequestsInfo:
+    ) -> list[AccountRequest]:
+        """Return per-account validated withdrawal requests (active only)."""
         current_timestamp = self._ctx.get_block()["timestamp"]
         events = self._get_withdraw_request_updated_events(from_block=from_block)
 
-        accounts = []
+        accounts: list[str] = []
         for event in events:
             (account, amount, end_withdraw_window) = decode(
                 ["address", "uint256", "uint32"], event["data"]
@@ -109,17 +124,32 @@ class WithdrawManager(ContractWrapper):
             ):
                 accounts.append(account)
 
-        requested_amount = 0
+        results: list[AccountRequest] = []
         for account in accounts:
             try:
-                req_info = self.request_info(account)
-                if req_info.end_withdraw_window_timestamp > current_timestamp:
-                    requested_amount += req_info.shares
+                req = self.request_info(Web3.to_checksum_address(account))
+                if req.end_withdraw_window_timestamp > current_timestamp:
+                    results.append(
+                        AccountRequest(
+                            account=Web3.to_checksum_address(account),
+                            shares=Shares(req.shares),
+                            end_withdraw_window_timestamp=req.end_withdraw_window_timestamp,
+                            can_withdraw=req.can_withdraw,
+                        )
+                    )
             except ContractPanicError:
                 logger.warning("ContractPanicError for account %s", account)
 
+        return results
+
+    def get_pending_requests_info(
+        self, from_block: BlockNumber = BlockNumber(0)
+    ) -> PendingRequestsInfo:
+        current_timestamp = self._ctx.get_block()["timestamp"]
+        requests = self.get_pending_requests(from_block=from_block)
+        total = sum(r.shares for r in requests)
         return PendingRequestsInfo(
-            shares=Shares(requested_amount),
+            shares=Shares(total),
             timestamp=Timestamp(current_timestamp - 1),
         )
 

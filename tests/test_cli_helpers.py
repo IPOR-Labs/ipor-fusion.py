@@ -16,12 +16,14 @@ from ipor_fusion.cli.vault_cmd import (
     _Erc20Totals,
     _TokenInfo,
     _VaultData,
+    _WithdrawManagerData,
     _format_amount,
     _format_substrate,
     _format_usd,
     _market_name,
     _print_erc20_balances,
     _print_health_check,
+    _print_pending_requests,
     _print_reconciliation,
     _print_substrates,
     _resolve_chain_id,
@@ -196,11 +198,21 @@ class TestFormatSubstrate:
         assert info.address == f"0x{addr_hex}"
         assert info.type_label == "type=255"
 
+    def test_bytes32_market_id(self):
+        raw = bytes.fromhex(
+            "32e253d33f1594a67fc6ef51bf7a39cc4bf2d14904998dee769706fcde489ed9"
+        )
+        info = _format_substrate(raw)
+        assert info.raw_hex.startswith("0x32e253")
+        assert info.address == ""
+        assert info.is_error is False
+
     def test_wrong_length(self):
         raw = bytes.fromhex("aabb")
         info = _format_substrate(raw)
         assert info.raw_hex == "0xaabb"
         assert info.address == ""
+        assert info.is_error is True
 
     def test_non_address_32_bytes(self):
         raw = bytes.fromhex("ff" * 32)
@@ -583,10 +595,21 @@ class TestPrintSubstrates:
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="")
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="")
-    def test_with_encoding_error_substrate(self, mock_resolve, mock_get_name, capsys):
+    def test_with_bytes32_substrate(self, mock_resolve, mock_get_name, capsys):
         ctx = MagicMock()
         pv = MagicMock()
-        bad_bytes = bytes.fromhex("ff" * 32)
+        raw_bytes32 = bytes.fromhex("ff" * 32)
+        pv.get_market_substrates.return_value = [raw_bytes32]
+
+        _print_substrates(ctx, pv, [FakeBalanceFuse(market_id=7, fuse=ADDR_1)], 1, None)
+        captured = capsys.readouterr()
+        assert "(bytes32)" in captured.out
+        assert "[encoding error]" not in captured.out
+
+    def test_with_encoding_error_substrate(self, capsys):
+        ctx = MagicMock()
+        pv = MagicMock()
+        bad_bytes = bytes.fromhex("ff" * 16)
         pv.get_market_substrates.return_value = [bad_bytes]
 
         _print_substrates(ctx, pv, [FakeBalanceFuse(market_id=7, fuse=ADDR_1)], 1, None)
@@ -882,3 +905,29 @@ class TestHealthCheck:
         _print_health_check(data, bf, erc20, set())
         captured = capsys.readouterr()
         assert "No price feed" in captured.out
+
+
+class TestPrintPendingRequests:
+    def test_no_withdraw_manager_data(self, capsys):
+        data = _make_data()
+        pv = MagicMock()
+        _print_pending_requests(data, pv)
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_empty_pending_requests(self, capsys):
+        data = _make_data(
+            withdraw_manager=ADDR_1,
+            withdraw_manager_data=_WithdrawManagerData(
+                withdraw_window=86400,
+                request_fee=0,
+                withdraw_fee=0,
+                shares_to_release=0,
+                last_release_funds_timestamp=0,
+                pending_requests=[],
+            ),
+        )
+        pv = MagicMock()
+        _print_pending_requests(data, pv)
+        captured = capsys.readouterr()
+        assert "Pending requests: (none)" in captured.out
