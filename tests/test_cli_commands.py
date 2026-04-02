@@ -275,10 +275,10 @@ class TestVaultRemove:
 
 
 class TestVaultInfo:
-    @patch("ipor_fusion.cli.vault_cmd.WithdrawManager")
+    @patch("ipor_fusion.cli.vault_fetcher.WithdrawManager")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_vault_info_output(
@@ -378,8 +378,8 @@ class TestVaultInfo:
         assert "waiting" in result.output
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_vault_info_with_block_number(
@@ -448,8 +448,8 @@ class TestVaultInfo:
         assert mock_ctx.default_block == 99999
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_vault_info_unlimited_supply_cap(
@@ -507,8 +507,8 @@ class TestVaultInfo:
         assert "Supply Cap:       unlimited" in result.output
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_vault_info_shows_links(
@@ -571,10 +571,10 @@ class TestVaultInfo:
             in result.output
         )
 
-    @patch("ipor_fusion.cli.vault_cmd.get_deployment_tx", return_value="0xdeadbeef")
+    @patch("ipor_fusion.cli.vault_fetcher.get_deployment_tx", return_value="0xdeadbeef")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_vault_info_deployment_info(
@@ -636,8 +636,8 @@ class TestVaultInfo:
         assert "2023-11-14" in result.output
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_vault_info_deployment_na_without_api_key(
@@ -726,10 +726,10 @@ class TestVaultListJson:
 
 
 class TestVaultInfoJson:
-    @patch("ipor_fusion.cli.vault_cmd.WithdrawManager")
+    @patch("ipor_fusion.cli.vault_fetcher.WithdrawManager")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_json_output(
@@ -850,10 +850,10 @@ class TestVaultInfoJson:
         assert wmd["pending_requests"][0]["account"] == ADDR_USER_1
         assert wmd["pending_requests"][0]["can_withdraw"] is True
 
-    @patch("ipor_fusion.cli.vault_cmd.get_deployment_tx", return_value="0xdeadbeef")
+    @patch("ipor_fusion.cli.vault_fetcher.get_deployment_tx", return_value="0xdeadbeef")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_json_deployment_info(
@@ -918,10 +918,13 @@ class TestVaultInfoJson:
         assert data["deployment"]["timestamp_utc"] == "2023-11-14T22:13:20Z"
         assert isinstance(data["deployment"]["age_days"], int)
 
+    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.ERC20")
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_json_with_substrates(
@@ -932,6 +935,9 @@ class TestVaultInfoJson:
         mock_oracle_cls,
         mock_get_name,
         mock_resolve_sym,
+        mock_health_erc20_cls,
+        mock_health_oracle_cls,
+        mock_health_resolve_sym,
         tmp_config,
     ):
         cfg = FusionConfig(
@@ -978,8 +984,10 @@ class TestVaultInfoJson:
         mock_erc20.decimals.return_value = 18
         mock_erc20.balance_of.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
+        mock_health_erc20_cls.return_value = mock_erc20
 
         mock_oracle_cls.return_value.get_asset_price.return_value = None
+        mock_health_oracle_cls.return_value.get_asset_price.return_value = None
 
         runner = CliRunner()
         result = runner.invoke(

@@ -12,26 +12,34 @@ from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_contract_cache
 from ipor_fusion.cli.vault_cmd import (
     ADDRESS,
-    _BalanceFuseTotals,
-    _Erc20Totals,
-    _TokenInfo,
-    _VaultData,
-    _WithdrawManagerData,
-    _format_amount,
-    _format_substrate,
-    _format_usd,
-    _market_name,
-    _print_erc20_balances,
-    _print_health_check,
     _print_pending_requests,
-    _print_reconciliation,
     _print_substrates,
     _resolve_chain_id,
     _resolve_provider,
-    _resolve_token_symbol,
     _resolve_vault,
+)
+from ipor_fusion.cli.vault_fetcher import (
+    _VaultData,
+    _WithdrawManagerData,
+    _resolve_token_symbol,
     _safe_call,
+)
+from ipor_fusion.cli.vault_health import (
+    _BalanceFuseTotals,
+    _Erc20Totals,
+    _TokenInfo,
+    _print_erc20_balances,
+    _print_health_check,
+    _print_reconciliation,
+)
+from ipor_fusion.cli.vault_rendering import (
+    _format_amount,
+    _format_usd,
     _substrate_details,
+)
+from ipor_fusion.cli.vault_substrate import (
+    _format_substrate,
+    _market_name,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 
@@ -432,7 +440,7 @@ class TestResolveTokenSymbol:
         result = _resolve_token_symbol(ctx, "0x" + "ab" * 20)
         assert result == "no contract"
 
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     def test_fetches_symbol_from_chain(self, mock_erc20_cls):
         ctx = MagicMock()
         ctx.web3.eth.get_code.return_value = b"\x01"
@@ -440,7 +448,7 @@ class TestResolveTokenSymbol:
         result = _resolve_token_symbol(ctx, "0x" + "ab" * 20)
         assert result == "WETH"
 
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     def test_returns_empty_on_symbol_error(self, mock_erc20_cls):
         ctx = MagicMock()
         ctx.web3.eth.get_code.return_value = b"\x01"
@@ -504,9 +512,9 @@ class TestPrintErc20Balances:
         captured = capsys.readouterr()
         assert "(no ERC20_VAULT_BALANCE market)" in captured.out
 
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.ERC20")
     def test_with_erc20_tokens(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -555,9 +563,9 @@ class TestPrintErc20Balances:
         assert "USDC" in captured.out
         assert "$1.00" in captured.out
 
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="?")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="?")
+    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.ERC20")
     def test_with_error_balances(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -604,7 +612,7 @@ class TestPrintErc20Balances:
         captured = capsys.readouterr()
         assert "error" in captured.out
 
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
     def test_no_token_addrs(self, mock_oracle_cls, capsys):
 
         ctx = MagicMock()
@@ -810,9 +818,9 @@ class TestErc20BalancesNotes:
             cache_dir / "deployment_cache.json",
         )
 
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="TKN")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="TKN")
+    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.ERC20")
     def test_balance_zero_note(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -860,9 +868,9 @@ class TestErc20BalancesNotes:
         assert "balance=0" in captured.out
         assert isinstance(totals.raw_asset_total, int)
 
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="WETH")
-    @patch("ipor_fusion.cli.vault_cmd.PriceOracleMiddleware")
-    @patch("ipor_fusion.cli.vault_cmd.ERC20")
+    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.ERC20")
     def test_underlying_and_stale_notes(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):

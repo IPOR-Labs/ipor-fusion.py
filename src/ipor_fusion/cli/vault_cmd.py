@@ -1,37 +1,52 @@
 from __future__ import annotations
 
 import json
-import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass, field
-from typing import TypeVar
 
 import click
 from web3 import Web3
-from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
-from web3.types import ChecksumAddress, HexStr
 
 from ipor_fusion.cli.config_store import (
     FusionConfig,
     VaultEntry,
     load_config,
-    load_contract_cache,
     save_config,
-    update_contract_cache,
 )
-from ipor_fusion.cli.config_store import (
-    load_deployment_cache,
-    update_deployment_cache,
+from ipor_fusion.cli.explorer import get_contract_name
+from ipor_fusion.cli.vault_fetcher import (
+    _VaultData,
+    _fetch_deployment_info,
+    _fetch_vault_data,
+    _resolve_token_symbol,
+    _safe_call,
 )
-from ipor_fusion.cli.explorer import get_contract_name, get_deployment_tx
+from ipor_fusion.cli.vault_health import (
+    _BalanceFuseTotals,
+    _compute_erc20_balances,
+    _compute_health_check,
+    _compute_reconciliation,
+    _print_erc20_balances,
+    _print_health_check,
+    _print_reconciliation,
+)
+from ipor_fusion.cli.vault_rendering import (
+    _format_age,
+    _format_amount,
+    _format_remaining,
+    _format_usd,
+    _print_table,
+    _substrate_details,
+)
+from ipor_fusion.cli.vault_substrate import (
+    _format_substrate,
+    _market_name,
+)
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
-from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import MarketId
 
 
@@ -92,22 +107,7 @@ BLOCK_EXPLORER_URLS: dict[int, str] = {
 
 IPOR_APP_URL = "https://app.ipor.io/fusion"
 
-
-def _build_market_lookup() -> dict[int, str]:
-    lookup: dict[int, str] = {}
-    for name in dir(IporFusionMarkets):
-        if not name.startswith("_"):
-            val = getattr(IporFusionMarkets, name)
-            if isinstance(val, int):
-                lookup[val] = name
-    return lookup
-
-
-_MARKET_LOOKUP: dict[int, str] = _build_market_lookup()
-
-
-def _market_name(market_id: int) -> str:
-    return _MARKET_LOOKUP.get(market_id, "UNKNOWN")
+UINT256_MAX = 2**256 - 1
 
 
 def _resolve_vault(cfg: FusionConfig, vault_address: str | None) -> str:
@@ -143,32 +143,6 @@ def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
         f"No provider for chain {chain_id}. "
         f"Use 'fusion config set-provider {chain_id} <url>'"
     )
-
-
-UINT256_MAX = 2**256 - 1
-
-
-def _format_amount(raw: int, decimals: int) -> str:
-    if decimals == 0:
-        return f"{raw:,}"
-    integer_part = raw // (10**decimals)
-    fractional_part = raw % (10**decimals)
-    frac_str = str(fractional_part).zfill(decimals)[:6].rstrip("0") or "0"
-    return f"{integer_part:,}.{frac_str}"
-
-
-def _format_remaining(seconds: int) -> str:
-    if seconds <= 0:
-        return "expired"
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    if hours >= 24:
-        days = hours // 24
-        hours = hours % 24
-        return f"{days}d {hours}h left"
-    if hours > 0:
-        return f"{hours}h {minutes}m left"
-    return f"{minutes}m left"
 
 
 @click.group()
@@ -527,177 +501,6 @@ def _print_market_detail(data: dict) -> None:
                 click.echo(f"  {sub['raw']} ({label})")
     else:
         click.echo("Substrates: (none)")
-
-
-@dataclass
-class _WithdrawManagerData:
-    """On-chain state snapshot from the WithdrawManager contract."""
-
-    withdraw_window: int
-    request_fee: int
-    withdraw_fee: int
-    shares_to_release: int
-    last_release_funds_timestamp: int
-    pending_requests: list[AccountRequest]
-
-
-@dataclass
-class _VaultData:  # pylint: disable=too-many-instance-attributes
-    block_label: str
-    block_timestamp: int
-    share_decimals: int
-    asset_decimals: int
-    total_assets: int
-    total_supply: int
-    supply_cap: int
-    asset: str
-    asset_symbol: str
-    access_manager: str
-    price_oracle_addr: str
-    rewards_manager: str | None
-    withdraw_manager: str | None
-    asset_price_usd: float | None
-    fuses: list
-    balance_fuses: list
-    instant_fuses: list
-    vault_name: str = ""
-    deployment_block: int | None = None
-    deployment_timestamp: int | None = None
-    withdraw_manager_data: _WithdrawManagerData | None = None
-
-
-def _fetch_withdraw_manager_data(
-    ctx: Web3Context,
-    pool: ThreadPoolExecutor,
-    withdraw_mgr_addr: ChecksumAddress | None,
-) -> _WithdrawManagerData | None:
-    if not withdraw_mgr_addr:
-        return None
-    wm_contract = WithdrawManager(ctx, withdraw_mgr_addr)
-    f_window = pool.submit(_safe_call, wm_contract.get_withdraw_window)
-    f_req_fee = pool.submit(_safe_call, wm_contract.get_request_fee)
-    f_wd_fee = pool.submit(_safe_call, wm_contract.get_withdraw_fee)
-    f_shares = pool.submit(_safe_call, wm_contract.get_shares_to_release)
-    f_last_ts = pool.submit(_safe_call, wm_contract.get_last_release_funds_timestamp)
-    f_requests = pool.submit(_safe_call, wm_contract.get_pending_requests)
-    return _WithdrawManagerData(
-        withdraw_window=f_window.result() or 0,
-        request_fee=f_req_fee.result() or 0,
-        withdraw_fee=f_wd_fee.result() or 0,
-        shares_to_release=f_shares.result() or 0,
-        last_release_funds_timestamp=f_last_ts.result() or 0,
-        pending_requests=f_requests.result() or [],
-    )
-
-
-def _fetch_vault_data(
-    ctx: Web3Context, plasma_vault: PlasmaVault, block_number: int | None
-) -> _VaultData:
-    with ThreadPoolExecutor() as pool:
-        # Phase 1: all independent vault reads in parallel
-        f_block = pool.submit(lambda: ctx.web3.eth.block_number)
-        f_name: Future = pool.submit(_safe_call, plasma_vault.name)
-        f_decimals = pool.submit(plasma_vault.decimals)
-        f_total_assets = pool.submit(plasma_vault.total_assets)
-        f_total_supply = pool.submit(plasma_vault.total_supply)
-        f_supply_cap = pool.submit(plasma_vault.get_total_supply_cap)
-        f_asset = pool.submit(plasma_vault.underlying_asset_address)
-        f_access = pool.submit(plasma_vault.get_access_manager_address)
-        f_oracle = pool.submit(plasma_vault.get_price_oracle_middleware_address)
-        f_fuses = pool.submit(plasma_vault.get_fuses)
-        f_balance_fuses = pool.submit(plasma_vault.get_balance_fuses)
-        f_rewards: Future = pool.submit(
-            _safe_call, plasma_vault.get_rewards_claim_manager_address
-        )
-        f_withdraw = pool.submit(plasma_vault.withdraw_manager_address)
-        f_instant = pool.submit(plasma_vault.get_instant_withdrawal_fuses)
-
-        # Phase 2: asset-dependent (wait for asset + oracle addresses)
-        asset = f_asset.result()
-        price_oracle_addr = f_oracle.result()
-        asset_erc20 = ERC20(ctx, asset)
-        oracle = PriceOracleMiddleware(ctx, price_oracle_addr)
-
-        f_symbol: Future = pool.submit(_safe_call, asset_erc20.symbol)
-        f_adec = pool.submit(asset_erc20.decimals)
-        f_price: Future = pool.submit(_safe_call, lambda: oracle.get_asset_price(asset))
-
-        # Collect all results
-        latest_block = f_block.result()
-        block_label = (
-            str(block_number)
-            if block_number is not None
-            else f"{latest_block} (latest)"
-        )
-        block_timestamp: int = ctx.web3.eth.get_block(
-            block_number if block_number is not None else latest_block
-        )["timestamp"]
-        asset_price = f_price.result()
-        withdraw_mgr_addr = f_withdraw.result()
-
-        # Phase 3: withdraw manager details (needs address from phase 1)
-        wm_data = _fetch_withdraw_manager_data(ctx, pool, withdraw_mgr_addr)
-
-        return _VaultData(
-            block_label=block_label,
-            block_timestamp=block_timestamp,
-            share_decimals=f_decimals.result(),
-            asset_decimals=f_adec.result(),
-            total_assets=f_total_assets.result(),
-            total_supply=f_total_supply.result(),
-            supply_cap=f_supply_cap.result(),
-            asset=asset,
-            vault_name=f_name.result() or "",
-            asset_symbol=f_symbol.result() or "?",
-            access_manager=f_access.result(),
-            price_oracle_addr=price_oracle_addr,
-            rewards_manager=f_rewards.result(),
-            withdraw_manager=withdraw_mgr_addr,
-            asset_price_usd=asset_price.readable() if asset_price else None,
-            fuses=f_fuses.result(),
-            balance_fuses=f_balance_fuses.result(),
-            instant_fuses=f_instant.result(),
-            withdraw_manager_data=wm_data,
-        )
-
-
-def _fetch_deployment_info(
-    ctx: Web3Context,
-    chain_id: int,
-    vault_address: str,
-    api_key: str | None,
-) -> tuple[int | None, int | None]:
-    """Return (block, timestamp) for the vault deployment, using cache."""
-    cache_key = f"{chain_id}:{vault_address}"
-    cache = load_deployment_cache()
-    if entry := cache.get(cache_key):
-        return entry["block"], entry["timestamp"]
-
-    if not (tx_hash := get_deployment_tx(chain_id, vault_address, api_key)):
-        return None, None
-
-    try:
-        tx = ctx.web3.eth.get_transaction(HexStr(tx_hash))
-        block_number: int = tx["blockNumber"]
-        block_info = ctx.web3.eth.get_block(block_number)
-        timestamp: int = block_info["timestamp"]
-        update_deployment_cache(cache_key, block_number, timestamp)
-        return block_number, timestamp
-    except Exception:  # pylint: disable=broad-except
-        return None, None
-
-
-def _format_age(timestamp: int) -> str:
-    """Format deployment age as human-readable string."""
-    delta = datetime.now(tz=timezone.utc) - datetime.fromtimestamp(
-        timestamp, tz=timezone.utc
-    )
-    days = delta.days
-    if days == 0:
-        return "today"
-    if days == 1:
-        return "1 day ago"
-    return f"{days} days ago"
 
 
 def _print_vault_info(
@@ -1162,425 +965,6 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
     }
 
 
-@dataclass
-class _TokenInfo:
-    symbol: str
-    balance_str: str
-    usd_value: float | None = None
-
-
-@dataclass
-class _TokenDetail:
-    address: str
-    symbol: str
-    decimals: int | None
-    balance: int | None
-    price_usd: float | None
-    usd_value: float | None
-    note: str
-
-
-@dataclass
-class _Erc20Totals:
-    raw_asset_total: int = 0
-    usd_total: float = 0.0
-    cached_bf_value: int = 0
-    tokens_without_price: list[str] = field(default_factory=list)
-    token_addrs_on_vault: set[str] = field(default_factory=set)
-    token_info: dict[str, _TokenInfo] = field(default_factory=dict)
-    token_details: list[_TokenDetail] = field(default_factory=list)
-
-
-def _compute_erc20_balances(  # pylint: disable=too-complex
-    ctx: Web3Context, plasma_vault: PlasmaVault, data: _VaultData
-) -> _Erc20Totals:
-    totals = _Erc20Totals()
-    erc20_market = None
-    for balance_fuse in data.balance_fuses:
-        if _market_name(balance_fuse.market_id) == "ERC20_VAULT_BALANCE":
-            erc20_market = balance_fuse.market_id
-            break
-    if erc20_market is None:
-        return totals
-
-    totals.cached_bf_value = plasma_vault.total_assets_in_market(erc20_market)
-
-    substrates = plasma_vault.get_market_substrates(erc20_market)
-    vault_addr = Web3.to_checksum_address(plasma_vault.address)
-    oracle = PriceOracleMiddleware(
-        ctx, Web3.to_checksum_address(data.price_oracle_addr)
-    )
-
-    erc20_substrate_addrs: set[str] = set()
-    token_addrs: list[str] = []
-    for sub in substrates:
-        sub_info = _format_substrate(sub, market_id=erc20_market)
-        if sub_info.address:
-            token_addrs.append(sub_info.address)
-            erc20_substrate_addrs.add(sub_info.address.lower())
-
-    if not token_addrs:
-        return totals
-
-    with ThreadPoolExecutor() as pool:
-        token_futures: dict[str, dict[str, Future]] = {}
-        for addr in token_addrs:
-            checksum = Web3.to_checksum_address(addr)
-            token = ERC20(ctx, checksum)
-            token_futures[addr] = {
-                "symbol": pool.submit(_resolve_token_symbol, ctx, addr),
-                "decimals": pool.submit(_safe_call, token.decimals),
-                "balance": pool.submit(
-                    _safe_call, lambda t=token: t.balance_of(vault_addr)
-                ),
-                "price": pool.submit(
-                    _safe_call, lambda a=checksum: oracle.get_asset_price(a)
-                ),
-            }
-
-        resolved: list[tuple] = []
-        for addr in token_addrs:
-            futs = token_futures[addr]
-            resolved.append(
-                (
-                    addr,
-                    futs["symbol"].result() or "?",
-                    futs["decimals"].result(),
-                    futs["balance"].result(),
-                    futs["price"].result(),
-                )
-            )
-
-        for addr, symbol, token_decimals, balance, price in resolved:
-            if token_decimals is None or balance is None:
-                continue
-            price_usd = price.readable() if price else None
-            if balance > 0:
-                totals.token_addrs_on_vault.add(addr.lower())
-            if price_usd is not None and data.asset_price_usd:
-                token_value_usd = (balance / 10**token_decimals) * price_usd
-                totals.usd_total += token_value_usd
-                totals.raw_asset_total += int(
-                    token_value_usd / data.asset_price_usd * 10**data.asset_decimals
-                )
-            elif balance > 0:
-                totals.tokens_without_price.append(f"{addr} ({symbol})")
-
-        cached_usd = (
-            (totals.cached_bf_value / 10**data.asset_decimals) * data.asset_price_usd
-            if data.asset_price_usd
-            else None
-        )
-
-        for addr, symbol, token_decimals, balance, price in resolved:
-            if token_decimals is None or balance is None:
-                totals.token_details.append(
-                    _TokenDetail(addr, symbol, token_decimals, balance, None, None, "")
-                )
-                continue
-
-            price_usd = price.readable() if price else None
-            token_usd_val = (
-                (balance / 10**token_decimals) * price_usd if price_usd else None
-            )
-
-            if balance > 0:
-                totals.token_info[addr.lower()] = _TokenInfo(
-                    symbol=symbol,
-                    balance_str=_format_amount(balance, token_decimals),
-                    usd_value=token_usd_val,
-                )
-
-            is_underlying = addr.lower() == data.asset.lower()
-            in_bf = addr.lower() in erc20_substrate_addrs
-            note = ""
-            if is_underlying:
-                note = "underlying asset"
-            elif not in_bf:
-                note = "not in ERC20_VAULT_BALANCE"
-            elif balance == 0:
-                note = "in ERC20_VAULT_BALANCE, balance=0"
-            elif (
-                price_usd
-                and cached_usd is not None
-                and (balance / 10**token_decimals * price_usd) > cached_usd
-            ):
-                usd_fmt = f"${balance / 10**token_decimals * price_usd:,.2f}"
-                note = f"{usd_fmt} not reflected in totalAssets (stale cache)"
-            elif in_bf:
-                note = "in ERC20_VAULT_BALANCE"
-
-            totals.token_details.append(
-                _TokenDetail(
-                    addr,
-                    symbol,
-                    token_decimals,
-                    balance,
-                    price_usd,
-                    token_usd_val,
-                    note,
-                )
-            )
-    return totals
-
-
-def _print_erc20_balances(
-    ctx: Web3Context, plasma_vault: PlasmaVault, data: _VaultData
-) -> _Erc20Totals:
-    totals = _compute_erc20_balances(ctx, plasma_vault, data)
-    if not totals.token_details:
-        has_erc20_market = any(
-            _market_name(bf.market_id) == "ERC20_VAULT_BALANCE"
-            for bf in data.balance_fuses
-        )
-        click.echo(
-            "  (none)" if has_erc20_market else "  (no ERC20_VAULT_BALANCE market)"
-        )
-        return totals
-
-    rows: list[tuple[str, ...]] = []
-    for td in totals.token_details:
-        if td.decimals is None or td.balance is None:
-            rows.append((td.address, td.symbol, "error", "", ""))
-            continue
-        balance_str = (
-            f"{_format_amount(td.balance, td.decimals)}"
-            f"{_format_usd(td.balance, td.decimals, td.price_usd)}"
-        )
-        rows.append(
-            (
-                td.address,
-                td.symbol,
-                balance_str,
-                f"${td.price_usd:,.2f}" if td.price_usd else "N/A",
-                td.note,
-            )
-        )
-    _print_table(("Token", "Symbol", "Balance", "Price", "Note"), rows)
-    return totals
-
-
-@dataclass
-class _ReconciliationData:
-    bf_total_raw: int = 0
-    bf_total_usd: float = 0.0
-    underlying_raw: int = 0
-    underlying_usd: float = 0.0
-    erc20_total_raw: int = 0
-    erc20_total_usd: float = 0.0
-    sum_raw: int = 0
-    sum_usd: float = 0.0
-    on_chain_raw: int = 0
-    on_chain_usd: float | None = None
-    delta_raw: int = 0
-    delta_usd: float = 0.0
-    delta_percent: float = 0.0
-
-
-def _compute_reconciliation(
-    data: _VaultData,
-    bf_totals: _BalanceFuseTotals,
-    erc20_totals: _Erc20Totals,
-) -> _ReconciliationData:
-    decimals = data.asset_decimals
-    price = data.asset_price_usd
-
-    # Extract underlying-only value (balance fuses already price non-underlying
-    # ERC20s via ERC20BalanceFuse, so adding all ERC20s would double-count).
-    underlying_info = erc20_totals.token_info.get(data.asset.lower())
-    underlying_raw = 0
-    underlying_usd = 0.0
-    if underlying_info and underlying_info.usd_value and price:
-        underlying_raw = int(underlying_info.usd_value / price * 10**decimals)
-        underlying_usd = underlying_info.usd_value
-
-    sum_raw = bf_totals.raw_total + underlying_raw
-    sum_usd = bf_totals.usd_total + underlying_usd
-    on_chain = data.total_assets
-    delta_raw = sum_raw - on_chain
-    delta_usd = abs(sum_usd - (on_chain / 10**decimals * price)) if price else 0
-    pct = abs(delta_raw / on_chain * 100) if on_chain else 0.0
-
-    return _ReconciliationData(
-        bf_total_raw=bf_totals.raw_total,
-        bf_total_usd=bf_totals.usd_total,
-        underlying_raw=underlying_raw,
-        underlying_usd=underlying_usd,
-        erc20_total_raw=erc20_totals.raw_asset_total,
-        erc20_total_usd=erc20_totals.usd_total,
-        sum_raw=sum_raw,
-        sum_usd=sum_usd,
-        on_chain_raw=on_chain,
-        on_chain_usd=(on_chain / 10**decimals * price) if price else None,
-        delta_raw=delta_raw,
-        delta_usd=delta_usd,
-        delta_percent=pct,
-    )
-
-
-def _print_reconciliation(
-    data: _VaultData,
-    bf_totals: _BalanceFuseTotals,
-    erc20_totals: _Erc20Totals,
-) -> None:
-    recon = _compute_reconciliation(data, bf_totals, erc20_totals)
-    decimals = data.asset_decimals
-    sym = data.asset_symbol
-    price = data.asset_price_usd
-
-    fmt_bf = _format_amount(recon.bf_total_raw, decimals)
-    fmt_underlying = _format_amount(recon.underlying_raw, decimals)
-    fmt_sum = _format_amount(recon.sum_raw, decimals)
-    fmt_onchain = _format_amount(recon.on_chain_raw, decimals)
-    fmt_delta = _format_amount(abs(recon.delta_raw), decimals)
-
-    usd_bf = f" (${recon.bf_total_usd:,.2f})" if price else ""
-    usd_underlying = f" (${recon.underlying_usd:,.2f})" if price else ""
-    usd_sum = f" (${recon.sum_usd:,.2f})" if price else ""
-    usd_onchain = _format_usd(recon.on_chain_raw, decimals, price)
-    usd_delta = f" (${recon.delta_usd:,.2f})" if price else ""
-
-    click.echo("Balance Reconciliation:")
-    click.echo(
-        f"  Balance fuses total:  {fmt_bf} {sym}{usd_bf}   [sum balance fuses, cached]"
-    )
-    click.echo(
-        f"  Underlying on vault:  {fmt_underlying} {sym}{usd_underlying}   [{sym} held directly]"
-    )
-    click.echo(f"  Sum:                  {fmt_sum} {sym}{usd_sum}")
-    click.echo(f"  On-chain totalAssets: {fmt_onchain} {sym}{usd_onchain}")
-    sign = "+" if recon.delta_raw >= 0 else "-"
-    delta_line = (
-        f"  Delta:                {sign}{fmt_delta} {sym}"
-        f"{usd_delta}   ({recon.delta_percent:.2f}%)"
-    )
-    if recon.delta_percent > 1.0:
-        click.secho(f"{delta_line} !!! MISMATCH", fg="red")
-    else:
-        click.echo(delta_line)
-
-    _ui = erc20_totals.token_info.get(data.asset.lower())
-    erc20_non_underlying = erc20_totals.raw_asset_total - (
-        int(_ui.usd_value / price * 10**decimals)
-        if _ui and _ui.usd_value and price
-        else 0
-    )
-
-    if erc20_totals.cached_bf_value > 0 or erc20_non_underlying > 0:
-        cached_fmt = _format_amount(erc20_totals.cached_bf_value, decimals)
-        direct_fmt = _format_amount(erc20_non_underlying, decimals)
-        if erc20_non_underlying > 0 and erc20_totals.cached_bf_value == 0:
-            click.secho(
-                f"  ERC20_VAULT_BALANCE cached={cached_fmt}, "
-                f"ERC20 direct={direct_fmt} — likely stale cache",
-                fg="yellow",
-            )
-        elif erc20_totals.cached_bf_value > 0 and erc20_non_underlying > 0:
-            cached_vs_direct = abs(erc20_totals.cached_bf_value - erc20_non_underlying)
-            if cached_vs_direct / erc20_non_underlying > 0.1:
-                click.secho(
-                    f"  ERC20_VAULT_BALANCE cached={cached_fmt}, "
-                    f"ERC20 direct={direct_fmt} — significant divergence",
-                    fg="yellow",
-                )
-
-
-@dataclass
-class _HealthCheckData:
-    ok: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-
-
-def _compute_health_check(  # pylint: disable=too-complex
-    data: _VaultData,
-    bf_totals: _BalanceFuseTotals,
-    erc20_totals: _Erc20Totals,
-    all_substrate_addrs: set[str],
-) -> _HealthCheckData:
-    decimals = data.asset_decimals
-    sym = data.asset_symbol
-    underlying = data.asset.lower()
-    result = _HealthCheckData()
-
-    underlying_info = erc20_totals.token_info.get(underlying)
-    underlying_raw = 0
-    if underlying_info and underlying_info.usd_value and data.asset_price_usd:
-        underlying_raw = int(
-            underlying_info.usd_value / data.asset_price_usd * 10**decimals
-        )
-    expected = bf_totals.raw_total + underlying_raw
-    if data.total_assets > 0:
-        pct = abs(expected - data.total_assets) / data.total_assets * 100
-        fmt_exp = _format_amount(expected, decimals)
-        fmt_ta = _format_amount(data.total_assets, decimals)
-        line = (
-            f"Balance fuses + underlying = {fmt_exp} {sym} "
-            f"vs totalAssets {fmt_ta} {sym} ({pct:.2f}%)"
-        )
-        if pct < 1.0:
-            result.ok.append(line)
-        else:
-            result.warnings.append(line)
-
-    uncovered: list[str] = []
-    cached_usd = (
-        erc20_totals.cached_bf_value / 10**decimals * data.asset_price_usd
-        if data.asset_price_usd and erc20_totals.cached_bf_value > 0
-        else 0
-    )
-    for addr in sorted(erc20_totals.token_addrs_on_vault):
-        if addr == underlying:
-            continue
-        if not (info := erc20_totals.token_info.get(addr)):
-            continue
-        usd_str = f" (${info.usd_value:,.2f})" if info.usd_value else ""
-        if addr not in all_substrate_addrs:
-            uncovered.append(
-                f"    {info.symbol:<16} {info.balance_str}{usd_str}"
-                f" — not in any balance fuse substrate"
-            )
-        elif 0 < cached_usd < (info.usd_value or 0):
-            uncovered.append(
-                f"    {info.symbol:<16} {info.balance_str}{usd_str}"
-                f" — {usd_str.strip()} not reflected in totalAssets (stale cache)"
-            )
-    if uncovered:
-        result.warnings.append("ERC20 holdings not covered by balance fuses:")
-        result.warnings.extend(uncovered)
-
-    erc20_non_underlying = erc20_totals.raw_asset_total - underlying_raw
-    if erc20_non_underlying > 0 and (
-        erc20_totals.cached_bf_value == 0
-        or abs(erc20_non_underlying - erc20_totals.cached_bf_value)
-        / erc20_non_underlying
-        > 0.1
-    ):
-        result.warnings.append(
-            "updateMarketsBalances needed — ERC20_VAULT_BALANCE cache stale"
-        )
-
-    for token_ref in erc20_totals.tokens_without_price:
-        result.warnings.append(f"No price feed for {token_ref}")
-
-    return result
-
-
-def _print_health_check(
-    data: _VaultData,
-    bf_totals: _BalanceFuseTotals,
-    erc20_totals: _Erc20Totals,
-    all_substrate_addrs: set[str],
-) -> None:
-    health = _compute_health_check(data, bf_totals, erc20_totals, all_substrate_addrs)
-    click.echo("Health Check:")
-    for line in health.ok:
-        click.secho(f"  {line}", fg="green")
-    if not health.ok and not health.warnings:
-        click.secho("  All checks passed", fg="green")
-    for line in health.warnings:
-        click.secho(f"  {line}", fg="yellow")
-
-
 def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None:
     if (wmd := data.withdraw_manager_data) is None:
         return
@@ -1634,23 +1018,6 @@ def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None
     click.echo(f"  Total pending: {total_fmt} shares{total_assets_fmt}")
 
 
-def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
-    if not rows:
-        click.echo("  (none)")
-        return
-
-    widths = [len(hdr) for hdr in headers]
-    for row in rows:
-        for col_idx, val in enumerate(row):
-            widths[col_idx] = max(widths[col_idx], len(val))
-
-    fmt = "  ".join(f"{{:<{wid}}}" for wid in widths)
-    click.echo(f"  {fmt.format(*headers)}")
-    click.echo(f"  {fmt.format(*('-' * wid for wid in widths))}")
-    for row in rows:
-        click.echo(f"  {fmt.format(*row)}")
-
-
 def _print_fuses_table(
     fuses: Sequence[str], chain_id: int, api_key: str | None
 ) -> None:
@@ -1663,13 +1030,6 @@ def _print_fuses_table(
         for idx, addr, fut in futures:
             rows.append((str(idx), addr, fut.result() or "?"))
     _print_table(("#", "Address", "Contract"), rows)
-
-
-@dataclass
-class _BalanceFuseTotals:
-    raw_total: int = 0
-    usd_total: float = 0.0
-    per_market: dict[str, int] = field(default_factory=dict)
 
 
 def _print_balance_fuses_table(
@@ -1723,25 +1083,6 @@ def _print_balance_fuses_table(
             )
     _print_table(("#", "Market", "Balance", "Fuse", "Contract"), rows)
     return totals
-
-
-def _substrate_details(
-    symbol: str,
-    contract: str,
-    type_label: str,
-    extra: dict[str, str] | None = None,
-) -> str:
-    parts: list[str] = []
-    if symbol:
-        parts.append(f"symbol={symbol}")
-    if contract:
-        parts.append(f"contract={contract}")
-    if type_label:
-        parts.append(f"substrate-type={type_label}")
-    if extra:
-        for key, val in extra.items():
-            parts.append(f"{key}={val}")
-    return f" ({', '.join(parts)})" if parts else ""
 
 
 def _print_substrates(  # pylint: disable=too-complex
@@ -1820,245 +1161,3 @@ def _print_substrates(  # pylint: disable=too-complex
                 click.echo(f"    {sub_info.raw_hex} ({label})")
 
     return {a.lower() for a in all_addresses}
-
-
-@dataclass
-class _SubstrateInfo:
-    address: str = ""
-    raw_hex: str = ""
-    type_label: str = ""
-    is_error: bool = False
-    extra: dict[str, str] = field(default_factory=dict)
-
-
-# ── per-market substrate decoders ────────────────────────────────────────────
-#
-# Bit layout "type<<160": 11 zero bytes + 1 type byte + 20 address bytes
-#   hex: [22 zeros][2 type chars][40 address chars]
-#
-# Bit layout "type<<248": 1 type byte + 11 zero bytes + 20 address bytes
-#   hex: [2 type chars][22 zeros][40 address chars]
-#   Slippage variant: [2 type chars][62 value chars]
-
-
-def _decode_type_lshift160(hex_str: str, types: dict[int, str]) -> _SubstrateInfo:
-    """Decode type<<160 | address (Ebisu, Midas, Balancer, Velodrome)."""
-    type_byte = int(hex_str[22:24], 16)
-    addr = f"0x{hex_str[24:]}"
-    label = types.get(type_byte, f"type={type_byte}")
-    return _SubstrateInfo(address=addr, type_label=label)
-
-
-def _decode_type_lshift248(hex_str: str, types: dict[int, str]) -> _SubstrateInfo:
-    """Decode type<<248 | address_or_value (Odos, Velora, UTS, Aave V4)."""
-    type_byte = int(hex_str[0:2], 16)
-    if (label := types.get(type_byte, f"type={type_byte}")) == "Slippage":
-        value = int(hex_str[2:], 16)
-        return _SubstrateInfo(
-            raw_hex=f"0x{hex_str}", type_label=label, extra={"value": str(value)}
-        )
-    addr = f"0x{hex_str[24:]}"
-    return _SubstrateInfo(address=addr, type_label=label)
-
-
-def _decode_plain_address(hex_str: str) -> _SubstrateInfo:
-    """Decode zero-padded address: 12 zero bytes + 20 address bytes."""
-    return _SubstrateInfo(address=f"0x{hex_str[24:]}")
-
-
-def _decode_morpho(hex_str: str) -> _SubstrateInfo:
-    """Raw bytes32 Morpho market ID — no structure."""
-    return _SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="morpho_market_id")
-
-
-def _decode_enso(hex_str: str) -> _SubstrateInfo:
-    """Decode address<<96 | selector<<64 (Enso)."""
-    addr = f"0x{hex_str[0:40]}"
-    selector = f"0x{hex_str[40:48]}"
-    return _SubstrateInfo(address=addr, extra={"selector": selector})
-
-
-def _decode_dolomite(hex_str: str) -> _SubstrateInfo:
-    """Decode asset<<96 | subAccountId<<88 | canBorrow<<80 (Dolomite)."""
-    addr = f"0x{hex_str[0:40]}"
-    sub_account_id = int(hex_str[40:42], 16)
-    can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
-    return _SubstrateInfo(
-        address=addr,
-        extra={"sub_account_id": str(sub_account_id), "can_borrow": str(can_borrow)},
-    )
-
-
-# Market ID → decoder function.  Markets not listed here get raw hex output.
-_SUBSTRATE_DECODERS: dict[int, Callable[[str], _SubstrateInfo]] = {}
-
-
-def _register_markets(
-    market_ids: list[int], decoder: Callable[[str], _SubstrateInfo]
-) -> None:
-    for mid in market_ids:
-        _SUBSTRATE_DECODERS[mid] = decoder
-
-
-# plain address (zero-padded) — most markets
-_register_markets(
-    [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        13,
-        15,
-        16,
-        17,
-        18,
-        20,
-        21,
-        23,
-        24,
-        25,
-        26,
-        27,
-        28,
-        29,
-        30,
-        33,
-        34,
-        35,
-        37,
-        40,
-        47,
-    ],
-    _decode_plain_address,
-)
-# Morpho markets — raw bytes32
-_register_markets([14, 19, 22, 41], _decode_morpho)
-# Ebisu
-_register_markets(
-    [39],
-    lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "ZAPPER", 2: "REGISTRY"}),
-)
-# Midas
-_register_markets(
-    [45],
-    lambda h: _decode_type_lshift160(
-        h,
-        {
-            0: "UNDEFINED",
-            1: "M_TOKEN",
-            2: "DEPOSIT_VAULT",
-            3: "REDEMPTION_VAULT",
-            4: "INSTANT_REDEMPTION_VAULT",
-            5: "ASSET",
-        },
-    ),
-)
-# Balancer
-_register_markets(
-    [36],
-    lambda h: _decode_type_lshift160(
-        h, {0: "UNDEFINED", 1: "GAUGE", 2: "POOL", 3: "TOKEN"}
-    ),
-)
-# Velodrome Superchain Slipstream
-_register_markets(
-    [32],
-    lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "Gauge", 2: "Pool"}),
-)
-# Aave V4
-_register_markets(
-    [44],
-    lambda h: _decode_type_lshift248(h, {0: "Undefined", 1: "Asset", 2: "Spoke"}),
-)
-# Odos
-_register_markets(
-    [42],
-    lambda h: _decode_type_lshift248(h, {0: "Unknown", 1: "Token", 2: "Slippage"}),
-)
-# Velora
-_register_markets(
-    [43],
-    lambda h: _decode_type_lshift248(h, {0: "Unknown", 1: "Token", 2: "Slippage"}),
-)
-# Universal Token Swapper
-_register_markets(
-    [12],
-    lambda h: _decode_type_lshift248(
-        h, {0: "Unknown", 1: "Token", 2: "Target", 3: "Slippage"}
-    ),
-)
-# Enso
-_register_markets([38], _decode_enso)
-# Dolomite
-_register_markets([46], _decode_dolomite)
-
-
-def _format_substrate(raw: bytes, market_id: int | None = None) -> _SubstrateInfo:
-    hex_str = raw.hex()
-    if len(hex_str) != 64:
-        return _SubstrateInfo(raw_hex=f"0x{hex_str}", is_error=True)
-
-    if market_id is not None:
-        if decoder := _SUBSTRATE_DECODERS.get(market_id):
-            return decoder(hex_str)
-        # Known-length but no decoder — show raw with warning
-        market_name = _market_name(market_id)
-        return _SubstrateInfo(
-            raw_hex=f"0x{hex_str}",
-            type_label=f"no_decoder({market_name})",
-        )
-
-    # No market context — show raw hex
-    return _SubstrateInfo(raw_hex=f"0x{hex_str}")
-
-
-_NO_CONTRACT = "no contract"
-
-
-def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
-    cache = load_contract_cache()
-    cache_key = f"symbol:{address}"
-    if cached := cache.get(cache_key):
-        return cached
-
-    checksum = Web3.to_checksum_address(address)
-    code = ctx.web3.eth.get_code(checksum)
-    if not code or code == b"":
-        update_contract_cache(cache_key, _NO_CONTRACT)
-        return _NO_CONTRACT
-
-    try:
-        symbol = ERC20(ctx, checksum).symbol()
-    except Exception:  # pylint: disable=broad-except
-        symbol = ""
-    if symbol:
-        update_contract_cache(cache_key, symbol)
-    return symbol
-
-
-def _format_usd(raw: int, decimals: int, price_usd: float | None) -> str:
-    if price_usd is None:
-        return ""
-    value = (raw / 10**decimals) * price_usd
-    return f" (${value:,.2f})"
-
-
-T = TypeVar("T")
-
-
-_logger = logging.getLogger(__name__)
-
-
-def _safe_call(func: Callable[[], T]) -> T | None:
-    try:
-        return func()
-    except (ContractLogicError, Web3RPCError, TimeExhausted) as exc:
-        _logger.debug("_safe_call suppressed %s: %s", type(exc).__name__, exc)
-        return None
