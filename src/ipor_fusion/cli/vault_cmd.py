@@ -417,7 +417,7 @@ def _fetch_market_detail(  # pylint: disable=too-many-locals,too-complex
         # Phase 3: resolve substrate addresses
         sub_addresses: set[str] = set()
         for sub in substrates:
-            sub_info = _format_substrate(sub)
+            sub_info = _format_substrate(sub, market_id=market_id)
             if sub_info.address:
                 sub_addresses.add(sub_info.address)
 
@@ -432,7 +432,7 @@ def _fetch_market_detail(  # pylint: disable=too-many-locals,too-complex
 
         substrates_list = []
         for sub in substrates:
-            sub_info = _format_substrate(sub)
+            sub_info = _format_substrate(sub, market_id=market_id)
             if sub_info.address:
                 entry: dict = {"address": sub_info.address}
                 sub_sym = sym_futs[sub_info.address].result()
@@ -443,11 +443,17 @@ def _fetch_market_detail(  # pylint: disable=too-many-locals,too-complex
                     entry["contract"] = sub_contract
                 if sub_info.type_label:
                     entry["substrate_type"] = sub_info.type_label
+                if sub_info.extra:
+                    entry.update(sub_info.extra)
                 substrates_list.append(entry)
             else:
                 raw_entry: dict = {"raw": sub_info.raw_hex}
                 if sub_info.is_error:
                     raw_entry["error"] = True
+                if sub_info.type_label:
+                    raw_entry["substrate_type"] = sub_info.type_label
+                if sub_info.extra:
+                    raw_entry.update(sub_info.extra)
                 substrates_list.append(raw_entry)
 
     market_label = _market_name(market_id)
@@ -492,7 +498,13 @@ def _print_market_detail(data: dict) -> None:
     if data["substrates"]:
         click.echo()
         click.echo("Substrates:")
+        _SKIP_KEYS = {"address", "raw", "error", "symbol", "contract", "substrate_type"}
         for sub in data["substrates"]:
+            extra_parts = [
+                f"{k}={v}"
+                for k, v in sub.items()
+                if k not in _SKIP_KEYS and isinstance(v, str)
+            ]
             if "address" in sub:
                 parts = []
                 if sub.get("symbol"):
@@ -501,12 +513,18 @@ def _print_market_detail(data: dict) -> None:
                     parts.append(f"contract={sub['contract']}")
                 if sub.get("substrate_type"):
                     parts.append(f"substrate-type={sub['substrate_type']}")
+                parts.extend(extra_parts)
                 detail = f" ({', '.join(parts)})" if parts else ""
                 click.echo(f"  {sub['address']}{detail}")
             elif sub.get("error"):
                 click.secho(f"  {sub['raw']} [encoding error]", fg="red")
             else:
-                click.echo(f"  {sub['raw']} (bytes32)")
+                parts = []
+                if sub.get("substrate_type"):
+                    parts.append(sub["substrate_type"])
+                parts.extend(extra_parts)
+                label = ", ".join(parts) if parts else "bytes32"
+                click.echo(f"  {sub['raw']} ({label})")
     else:
         click.echo("Substrates: (none)")
 
@@ -542,6 +560,7 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     fuses: list
     balance_fuses: list
     instant_fuses: list
+    vault_name: str = ""
     deployment_block: int | None = None
     deployment_timestamp: int | None = None
     withdraw_manager_data: _WithdrawManagerData | None = None
@@ -553,6 +572,7 @@ def _fetch_vault_data(
     with ThreadPoolExecutor() as pool:
         # Phase 1: all independent vault reads in parallel
         f_block = pool.submit(lambda: ctx.web3.eth.block_number)
+        f_name: Future = pool.submit(_safe_call, plasma_vault.name)
         f_decimals = pool.submit(plasma_vault.decimals)
         f_total_assets = pool.submit(plasma_vault.total_assets)
         f_total_supply = pool.submit(plasma_vault.total_supply)
@@ -620,6 +640,7 @@ def _fetch_vault_data(
             total_supply=f_total_supply.result(),
             supply_cap=f_supply_cap.result(),
             asset=asset,
+            vault_name=f_name.result() or "",
             asset_symbol=f_symbol.result() or "?",
             access_manager=f_access.result(),
             price_oracle_addr=price_oracle_addr,
@@ -699,7 +720,8 @@ def _print_vault_info(
         data.total_assets, data.asset_decimals, data.asset_price_usd
     )
 
-    click.echo(f"Vault:            {vault_address}")
+    name_suffix = f" ({data.vault_name})" if data.vault_name else ""
+    click.echo(f"Vault:            {vault_address}{name_suffix}")
     if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
         click.echo(f"Etherscan:        {explorer_base}/address/{vault_address}")
     click.echo(f"IPOR app:         {IPOR_APP_URL}/{chain_label}/{vault_address}")
@@ -955,16 +977,16 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
 
         # Substrates - also resolve symbols/contracts for addresses
         all_sub_addresses: set[str] = set()
-        market_subs_raw: list[tuple[str, list]] = []
+        market_subs_raw: list[tuple[str, int, list]] = []
         for i, bf in enumerate(data.balance_fuses):
             market_label = _market_name(bf.market_id)
             market_str = (
                 market_label if market_label != "UNKNOWN" else str(bf.market_id)
             )
             if subs := substrate_futs[i].result():
-                market_subs_raw.append((market_str, subs))
+                market_subs_raw.append((market_str, bf.market_id, subs))
                 for sub in subs:
-                    sub_info = _format_substrate(sub)
+                    sub_info = _format_substrate(sub, market_id=bf.market_id)
                     if sub_info.address:
                         all_sub_addresses.add(sub_info.address)
 
@@ -978,10 +1000,10 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
         }
 
         substrates_json: dict[str, list] = {}
-        for market_str, subs in market_subs_raw:
+        for market_str, mid, subs in market_subs_raw:
             entries = []
             for sub in subs:
-                sub_info = _format_substrate(sub)
+                sub_info = _format_substrate(sub, market_id=mid)
                 if sub_info.address:
                     entry: dict = {"address": sub_info.address}
                     symbol = sym_futs[sub_info.address].result()
@@ -992,11 +1014,17 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
                         entry["contract"] = contract
                     if sub_info.type_label:
                         entry["substrate_type"] = sub_info.type_label
+                    if sub_info.extra:
+                        entry.update(sub_info.extra)
                     entries.append(entry)
                 else:
                     raw_entry: dict = {"raw": sub_info.raw_hex}
                     if sub_info.is_error:
                         raw_entry["error"] = True
+                    if sub_info.type_label:
+                        raw_entry["substrate_type"] = sub_info.type_label
+                    if sub_info.extra:
+                        raw_entry.update(sub_info.extra)
                     entries.append(raw_entry)
             substrates_json[market_str] = entries
 
@@ -1076,6 +1104,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
 
     return {
         "vault": vault_address,
+        "name": data.vault_name or None,
         "links": links,
         "chain": chain_label,
         "chain_id": chain_id,
@@ -1178,7 +1207,7 @@ def _compute_erc20_balances(  # pylint: disable=too-complex,too-many-locals
     erc20_substrate_addrs: set[str] = set()
     token_addrs: list[str] = []
     for sub in substrates:
-        sub_info = _format_substrate(sub)
+        sub_info = _format_substrate(sub, market_id=erc20_market)
         if sub_info.address:
             token_addrs.append(sub_info.address)
             erc20_substrate_addrs.add(sub_info.address.lower())
@@ -1689,7 +1718,12 @@ def _print_balance_fuses_table(
     return totals
 
 
-def _substrate_details(symbol: str, contract: str, type_label: str) -> str:
+def _substrate_details(
+    symbol: str,
+    contract: str,
+    type_label: str,
+    extra: dict[str, str] | None = None,
+) -> str:
     parts: list[str] = []
     if symbol:
         parts.append(f"symbol={symbol}")
@@ -1697,6 +1731,9 @@ def _substrate_details(symbol: str, contract: str, type_label: str) -> str:
         parts.append(f"contract={contract}")
     if type_label:
         parts.append(f"substrate-type={type_label}")
+    if extra:
+        for key, val in extra.items():
+            parts.append(f"{key}={val}")
     return f" ({', '.join(parts)})" if parts else ""
 
 
@@ -1709,7 +1746,7 @@ def _print_substrates(  # pylint: disable=too-complex
 ) -> set[str]:
     # Phase 1: fetch all substrates in parallel
     with ThreadPoolExecutor() as pool:
-        substrate_futures: list[tuple[str, Future]] = []
+        substrate_futures: list[tuple[str, int, Future]] = []
         for balance_fuse in balance_fuses:
             market_label = _market_name(balance_fuse.market_id)
             market_id_str = (
@@ -1720,17 +1757,17 @@ def _print_substrates(  # pylint: disable=too-complex
             fut = pool.submit(
                 plasma_vault.get_market_substrates, balance_fuse.market_id
             )
-            substrate_futures.append((market_id_str, fut))
+            substrate_futures.append((market_id_str, balance_fuse.market_id, fut))
 
     # Collect substrates and identify addresses to resolve
-    market_substrates: list[tuple[str, list]] = []
+    market_substrates: list[tuple[str, int, list]] = []
     all_addresses: set[str] = set()
-    for market_id_str, fut in substrate_futures:
+    for market_id_str, mid, fut in substrate_futures:
         if not (substrates := fut.result()):
             continue
-        market_substrates.append((market_id_str, substrates))
+        market_substrates.append((market_id_str, mid, substrates))
         for sub in substrates:
-            sub_info = _format_substrate(sub)
+            sub_info = _format_substrate(sub, market_id=mid)
             if sub_info.address:
                 all_addresses.add(sub_info.address)
 
@@ -1753,28 +1790,29 @@ def _print_substrates(  # pylint: disable=too-complex
         resolved_contracts = {addr: fut.result() for addr, fut in contract_futs.items()}
 
     # Phase 3: print
-    for market_id_str, substrates in market_substrates:
+    for market_id_str, mid, substrates in market_substrates:
         click.echo(f"  {market_id_str}:")
         for sub in substrates:
-            sub_info = _format_substrate(sub)
+            sub_info = _format_substrate(sub, market_id=mid)
             if sub_info.address:
                 symbol = resolved_symbols.get(sub_info.address, "")
                 contract = resolved_contracts.get(sub_info.address, "")
-                details = _substrate_details(symbol, contract, sub_info.type_label)
+                details = _substrate_details(
+                    symbol, contract, sub_info.type_label, sub_info.extra
+                )
                 click.echo(f"    {sub_info.address}{details}")
             elif sub_info.is_error:
                 click.secho(f"    {sub_info.raw_hex} [encoding error]", fg="red")
             else:
-                click.echo(f"    {sub_info.raw_hex} (bytes32)")
+                parts = []
+                if sub_info.type_label:
+                    parts.append(sub_info.type_label)
+                for k, v in sub_info.extra.items():
+                    parts.append(f"{k}={v}")
+                label = ", ".join(parts) if parts else "bytes32"
+                click.echo(f"    {sub_info.raw_hex} ({label})")
 
     return {a.lower() for a in all_addresses}
-
-
-EBISU_SUBSTRATE_TYPES: dict[int, str] = {
-    0: "UNDEFINED",
-    1: "ZAPPER",
-    2: "REGISTRY",
-}
 
 
 @dataclass
@@ -1783,22 +1821,194 @@ class _SubstrateInfo:
     raw_hex: str = ""
     type_label: str = ""
     is_error: bool = False
+    extra: dict[str, str] = field(default_factory=dict)
 
 
-def _format_substrate(raw: bytes) -> _SubstrateInfo:
+# ── per-market substrate decoders ────────────────────────────────────────────
+#
+# Bit layout "type<<160": 11 zero bytes + 1 type byte + 20 address bytes
+#   hex: [22 zeros][2 type chars][40 address chars]
+#
+# Bit layout "type<<248": 1 type byte + 11 zero bytes + 20 address bytes
+#   hex: [2 type chars][22 zeros][40 address chars]
+#   Slippage variant: [2 type chars][62 value chars]
+
+
+def _decode_type_lshift160(hex_str: str, types: dict[int, str]) -> _SubstrateInfo:
+    """Decode type<<160 | address (Ebisu, Midas, Balancer, Velodrome)."""
+    type_byte = int(hex_str[22:24], 16)
+    addr = f"0x{hex_str[24:]}"
+    label = types.get(type_byte, f"type={type_byte}")
+    return _SubstrateInfo(address=addr, type_label=label)
+
+
+def _decode_type_lshift248(hex_str: str, types: dict[int, str]) -> _SubstrateInfo:
+    """Decode type<<248 | address_or_value (Odos, Velora, UTS, Aave V4)."""
+    type_byte = int(hex_str[0:2], 16)
+    if (label := types.get(type_byte, f"type={type_byte}")) == "Slippage":
+        value = int(hex_str[2:], 16)
+        return _SubstrateInfo(
+            raw_hex=f"0x{hex_str}", type_label=label, extra={"value": str(value)}
+        )
+    addr = f"0x{hex_str[24:]}"
+    return _SubstrateInfo(address=addr, type_label=label)
+
+
+def _decode_plain_address(hex_str: str) -> _SubstrateInfo:
+    """Decode zero-padded address: 12 zero bytes + 20 address bytes."""
+    return _SubstrateInfo(address=f"0x{hex_str[24:]}")
+
+
+def _decode_morpho(hex_str: str) -> _SubstrateInfo:
+    """Raw bytes32 Morpho market ID — no structure."""
+    return _SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="morpho_market_id")
+
+
+def _decode_enso(hex_str: str) -> _SubstrateInfo:
+    """Decode address<<96 | selector<<64 (Enso)."""
+    addr = f"0x{hex_str[0:40]}"
+    selector = f"0x{hex_str[40:48]}"
+    return _SubstrateInfo(address=addr, extra={"selector": selector})
+
+
+def _decode_dolomite(hex_str: str) -> _SubstrateInfo:
+    """Decode asset<<96 | subAccountId<<88 | canBorrow<<80 (Dolomite)."""
+    addr = f"0x{hex_str[0:40]}"
+    sub_account_id = int(hex_str[40:42], 16)
+    can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
+    return _SubstrateInfo(
+        address=addr,
+        extra={"sub_account_id": str(sub_account_id), "can_borrow": str(can_borrow)},
+    )
+
+
+# Market ID → decoder function.  Markets not listed here get raw hex output.
+_SUBSTRATE_DECODERS: dict[int, Callable[[str], _SubstrateInfo]] = {}
+
+
+def _register_markets(
+    market_ids: list[int], decoder: Callable[[str], _SubstrateInfo]
+) -> None:
+    for mid in market_ids:
+        _SUBSTRATE_DECODERS[mid] = decoder
+
+
+# plain address (zero-padded) — most markets
+_register_markets(
+    [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        13,
+        15,
+        16,
+        17,
+        18,
+        20,
+        21,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        33,
+        34,
+        35,
+        37,
+        40,
+        47,
+    ],
+    _decode_plain_address,
+)
+# Morpho markets — raw bytes32
+_register_markets([14, 19, 22, 41], _decode_morpho)
+# Ebisu
+_register_markets(
+    [39],
+    lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "ZAPPER", 2: "REGISTRY"}),
+)
+# Midas
+_register_markets(
+    [45],
+    lambda h: _decode_type_lshift160(
+        h,
+        {
+            0: "UNDEFINED",
+            1: "M_TOKEN",
+            2: "DEPOSIT_VAULT",
+            3: "REDEMPTION_VAULT",
+            4: "INSTANT_REDEMPTION_VAULT",
+            5: "ASSET",
+        },
+    ),
+)
+# Balancer
+_register_markets(
+    [36],
+    lambda h: _decode_type_lshift160(
+        h, {0: "UNDEFINED", 1: "GAUGE", 2: "POOL", 3: "TOKEN"}
+    ),
+)
+# Velodrome Superchain Slipstream
+_register_markets(
+    [32],
+    lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "Gauge", 2: "Pool"}),
+)
+# Aave V4
+_register_markets(
+    [44],
+    lambda h: _decode_type_lshift248(h, {0: "Undefined", 1: "Asset", 2: "Spoke"}),
+)
+# Odos
+_register_markets(
+    [42],
+    lambda h: _decode_type_lshift248(h, {0: "Unknown", 1: "Token", 2: "Slippage"}),
+)
+# Velora
+_register_markets(
+    [43],
+    lambda h: _decode_type_lshift248(h, {0: "Unknown", 1: "Token", 2: "Slippage"}),
+)
+# Universal Token Swapper
+_register_markets(
+    [12],
+    lambda h: _decode_type_lshift248(
+        h, {0: "Unknown", 1: "Token", 2: "Target", 3: "Slippage"}
+    ),
+)
+# Enso
+_register_markets([38], _decode_enso)
+# Dolomite
+_register_markets([46], _decode_dolomite)
+
+
+def _format_substrate(raw: bytes, market_id: int | None = None) -> _SubstrateInfo:
     hex_str = raw.hex()
     if len(hex_str) != 64:
         return _SubstrateInfo(raw_hex=f"0x{hex_str}", is_error=True)
-    # plain address: 12 zero bytes (24 hex chars) + 20 byte address
-    if hex_str[:24] == "0" * 24:
-        return _SubstrateInfo(address=f"0x{hex_str[24:]}")
-    # typed substrate: 11 zero bytes (22 hex chars) + 1 byte type + 20 byte address
-    if hex_str[:22] == "0" * 22:
-        type_byte = int(hex_str[22:24], 16)
-        addr = f"0x{hex_str[24:]}"
-        label = EBISU_SUBSTRATE_TYPES.get(type_byte, f"type={type_byte}")
-        return _SubstrateInfo(address=addr, type_label=label)
-    # raw bytes32 value (e.g. Morpho market ID)
+
+    if market_id is not None:
+        if decoder := _SUBSTRATE_DECODERS.get(market_id):
+            return decoder(hex_str)
+        # Known-length but no decoder — show raw with warning
+        market_name = _market_name(market_id)
+        return _SubstrateInfo(
+            raw_hex=f"0x{hex_str}",
+            type_label=f"no_decoder({market_name})",
+        )
+
+    # No market context — show raw hex
     return _SubstrateInfo(raw_hex=f"0x{hex_str}")
 
 

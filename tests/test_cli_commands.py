@@ -311,6 +311,7 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 1000 * 10**18
         mock_pv.total_supply.return_value = 900 * 10**18
@@ -403,6 +404,7 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 0
         mock_pv.total_supply.return_value = 0
@@ -472,6 +474,7 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 0
         mock_pv.total_supply.return_value = 0
@@ -530,6 +533,7 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 0
         mock_pv.total_supply.return_value = 0
@@ -598,6 +602,7 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 0
         mock_pv.total_supply.return_value = 0
@@ -657,6 +662,7 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 0
         mock_pv.total_supply.return_value = 0
@@ -754,6 +760,7 @@ class TestVaultInfoJson:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 1000 * 10**18
         mock_pv.total_supply.return_value = 900 * 10**18
@@ -763,7 +770,7 @@ class TestVaultInfoJson:
         mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
         mock_pv.get_fuses.return_value = [ADDR_FUSE_1]
         mock_pv.get_balance_fuses.return_value = [
-            FakeBalanceFuse(market_id=1, fuse=ADDR_FUSE_1)
+            FakeBalanceFuse(market_id=14, fuse=ADDR_FUSE_1)
         ]
         mock_pv.get_rewards_claim_manager_address.return_value = ADDR_REWARDS
         mock_pv.withdraw_manager_address.return_value = ADDR_WITHDRAW
@@ -826,10 +833,11 @@ class TestVaultInfoJson:
             data["links"]["ipor_app"] == f"https://app.ipor.io/fusion/ethereum/{ADDR_1}"
         )
         assert data["deployment"] is None
-        subs = data["substrates"]["AAVE_V3"]
+        subs = data["substrates"]["MORPHO"]
         assert len(subs) == 1
         assert "raw" in subs[0]
         assert subs[0].get("error") is None
+        assert subs[0].get("substrate_type") == "morpho_market_id"
         wmd = data["withdraw_manager_details"]
         assert wmd is not None
         assert wmd["withdraw_window_seconds"] == 86400
@@ -873,6 +881,7 @@ class TestVaultInfoJson:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 0
         mock_pv.total_supply.return_value = 0
@@ -945,6 +954,7 @@ class TestVaultInfoJson:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.decimals.return_value = 18
         mock_pv.total_assets.return_value = 0
         mock_pv.total_supply.return_value = 0
@@ -1139,6 +1149,7 @@ class TestMarketDetail:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.get_balance_fuses.return_value = [
             FakeBalanceFuse(market_id=1, fuse=ADDR_FUSE_1),
             FakeBalanceFuse(market_id=14, fuse=ADDR_FUSE_2),
@@ -1217,6 +1228,7 @@ class TestMarketDetail:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.get_balance_fuses.return_value = [
             FakeBalanceFuse(market_id=1, fuse=ADDR_FUSE_1),
         ]
@@ -1293,6 +1305,7 @@ class TestMarketDetail:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.get_balance_fuses.return_value = [
             FakeBalanceFuse(market_id=14, fuse=ADDR_FUSE_1),
         ]
@@ -1327,7 +1340,7 @@ class TestMarketDetail:
             ],
         )
         assert result.exit_code == 0, result.output
-        assert "(bytes32)" in result.output
+        assert "morpho_market_id" in result.output
         assert "[encoding error]" in result.output
 
         # JSON output
@@ -1377,6 +1390,7 @@ class TestMarketDetail:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
+        mock_pv.name.return_value = "Test Vault"
         mock_pv.get_balance_fuses.return_value = [
             FakeBalanceFuse(market_id=1, fuse=ADDR_FUSE_1),
         ]
