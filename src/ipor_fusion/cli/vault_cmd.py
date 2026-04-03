@@ -783,6 +783,11 @@ def _format_market_label(market_id: int) -> str:
 def _print_dependency_graph(data: _VaultData) -> None:
     if not data.dependency_graph:
         return
+
+    from ipor_fusion.cli.vault_dep_graph import (  # pylint: disable=import-outside-toplevel
+        compute_update_reach,
+    )
+
     click.echo("Dependency Balance Graph:")
     for market_id, deps in data.dependency_graph.items():
         label = _format_market_label(market_id)
@@ -790,13 +795,43 @@ def _print_dependency_graph(data: _VaultData) -> None:
         click.echo(f"  {label} → {dep_labels}")
     click.echo()
 
+    reach = compute_update_reach(data.dependency_graph)
+    if reach:
+        click.echo("  Update reach (calling updateMarketsBalances for root market):")
+        for market_id, reachable in sorted(reach.items(), key=lambda kv: -len(kv[1])):
+            label = _format_market_label(market_id)
+            targets = ", ".join(_format_market_label(r) for r in sorted(reachable))
+            click.echo(f"    {label} refreshes: {targets}")
+        click.echo()
 
-def _build_dependency_graph_json(data: _VaultData) -> dict[str, list[str]] | None:
+
+def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     if not data.dependency_graph:
         return None
-    return {
+
+    from ipor_fusion.cli.vault_dep_graph import (  # pylint: disable=import-outside-toplevel
+        compute_update_groups,
+        compute_update_reach,
+    )
+
+    edges = {
         _format_market_label(mid): [_format_market_label(d) for d in deps]
         for mid, deps in data.dependency_graph.items()
+    }
+
+    reach = compute_update_reach(data.dependency_graph)
+    reach_json = {
+        _format_market_label(mid): sorted(_format_market_label(r) for r in reachable)
+        for mid, reachable in reach.items()
+    }
+
+    groups = compute_update_groups(data.dependency_graph)
+    groups_json = [sorted(_format_market_label(m) for m in group) for group in groups]
+
+    return {
+        "edges": edges,
+        "update_reach": reach_json,
+        "update_groups": groups_json,
     }
 
 
@@ -865,6 +900,10 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
                 "fuse": bf.fuse,
                 "contract": bf_contract_futs[i].result() or "?",
             }
+            if data.total_assets > 0:
+                bf_entry["pct_of_total"] = round(
+                    assets_in_market / data.total_assets * 100, 2
+                )
             if data.dependency_graph and bf.market_id in data.dependency_graph:
                 deps = data.dependency_graph[bf.market_id]
                 bf_entry["depends_on"] = [_format_market_label(d) for d in deps]

@@ -438,15 +438,16 @@ class TestBuildDependencyGraphJson:
         )
         result = _build_dependency_graph_json(data)
         assert result is not None
-        assert "GEARBOX_FARM_DTOKEN_V3 (4)" in result
-        assert result["GEARBOX_FARM_DTOKEN_V3 (4)"] == ["GEARBOX_POOL_V3 (3)"]
+        assert "GEARBOX_FARM_DTOKEN_V3 (4)" in result["edges"]
+        assert result["edges"]["GEARBOX_FARM_DTOKEN_V3 (4)"] == ["GEARBOX_POOL_V3 (3)"]
+        assert "GEARBOX_FARM_DTOKEN_V3 (4)" in result["update_reach"]
 
     def test_unknown_market_id(self):
         data = _make_data(dependency_graph={999999: [7]})
         result = _build_dependency_graph_json(data)
         assert result is not None
-        assert "999999" in result
-        assert result["999999"] == ["ERC20_VAULT_BALANCE (7)"]
+        assert "999999" in result["edges"]
+        assert result["edges"]["999999"] == ["ERC20_VAULT_BALANCE (7)"]
 
     def test_multiple_dependencies(self):
         data = _make_data(
@@ -461,7 +462,13 @@ class TestBuildDependencyGraphJson:
         )
         result = _build_dependency_graph_json(data)
         assert result is not None
-        assert len(result) == 2
+        assert len(result["edges"]) == 2
+
+    def test_update_groups(self):
+        data = _make_data(dependency_graph={14: [7, 100002], 100002: [7, 14]})
+        result = _build_dependency_graph_json(data)
+        assert result is not None
+        assert len(result["update_groups"]) >= 1
 
 
 class TestPrintDependencyGraph:
