@@ -163,6 +163,13 @@ class PlasmaVault(ContractWrapper):
         )
         return list(value)
 
+    def get_dependency_balance_graph(self, market_id: MarketId) -> list[MarketId]:
+        (value,) = decode(
+            ["uint256[]"],
+            self._call("getDependencyBalanceGraph(uint256)", market_id),
+        )
+        return [MarketId(v) for v in value]
+
     def get_market_substrates(self, market_id: MarketId) -> list[bytes]:
         (value,) = decode(
             ["bytes32[]"], self._call("getMarketSubstrates(uint256)", market_id)

@@ -653,6 +653,8 @@ def _print_vault_info(
     )
     click.echo()
 
+    _print_dependency_graph(data)
+
     click.echo(f"Instant Withdrawal Fuses ({len(data.instant_fuses)}):")
     _print_fuses_table(data.instant_fuses, chain_id, api_key)
     click.echo()
@@ -773,6 +775,31 @@ def _build_withdraw_manager_json(
     return result
 
 
+def _format_market_label(market_id: int) -> str:
+    label = _market_name(market_id)
+    return f"{label} ({market_id})" if label != "UNKNOWN" else str(market_id)
+
+
+def _print_dependency_graph(data: _VaultData) -> None:
+    if not data.dependency_graph:
+        return
+    click.echo("Dependency Balance Graph:")
+    for market_id, deps in data.dependency_graph.items():
+        label = _format_market_label(market_id)
+        dep_labels = ", ".join(_format_market_label(d) for d in deps)
+        click.echo(f"  {label} → {dep_labels}")
+    click.echo()
+
+
+def _build_dependency_graph_json(data: _VaultData) -> dict[str, list[str]] | None:
+    if not data.dependency_graph:
+        return None
+    return {
+        _format_market_label(mid): [_format_market_label(d) for d in deps]
+        for mid, deps in data.dependency_graph.items()
+    }
+
+
 def _build_json_output(  # pylint: disable=too-many-locals,too-complex
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -828,20 +855,20 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
                 market_label if market_label != "UNKNOWN" else str(bf.market_id)
             )
             assets_in_market = bf_balance_futs[i].result()
-            balance_fuses_json.append(
-                {
-                    "market": market_str,
-                    "market_id": bf.market_id,
-                    "balance": {
-                        "raw": assets_in_market,
-                        "formatted": _format_amount(
-                            assets_in_market, data.asset_decimals
-                        ),
-                    },
-                    "fuse": bf.fuse,
-                    "contract": bf_contract_futs[i].result() or "?",
-                }
-            )
+            bf_entry: dict = {
+                "market": market_str,
+                "market_id": bf.market_id,
+                "balance": {
+                    "raw": assets_in_market,
+                    "formatted": _format_amount(assets_in_market, data.asset_decimals),
+                },
+                "fuse": bf.fuse,
+                "contract": bf_contract_futs[i].result() or "?",
+            }
+            if data.dependency_graph and bf.market_id in data.dependency_graph:
+                deps = data.dependency_graph[bf.market_id]
+                bf_entry["depends_on"] = [_format_market_label(d) for d in deps]
+            balance_fuses_json.append(bf_entry)
 
         # Substrates - also resolve symbols/contracts for addresses
         all_sub_addresses: set[str] = set()
@@ -1020,6 +1047,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
         "balance_fuses": balance_fuses_json,
         "instant_withdrawal_fuses": instant_json,
         "substrates": substrates_json,
+        "dependency_graph": _build_dependency_graph_json(data),
         "erc20_balances": erc20_json,
         "reconciliation": reconciliation_json,
         "health_check": health_json,

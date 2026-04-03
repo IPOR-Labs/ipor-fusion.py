@@ -66,6 +66,7 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     deployment_block: int | None = None
     deployment_timestamp: int | None = None
     withdraw_manager_data: _WithdrawManagerData | None = None
+    dependency_graph: dict[int, list[int]] | None = None
 
 
 def _safe_call(func: Callable[[], T]) -> T | None:
@@ -121,7 +122,7 @@ def _fetch_withdraw_manager_data(
     )
 
 
-def _fetch_vault_data(
+def _fetch_vault_data(  # pylint: disable=too-many-locals
     ctx: Web3Context, plasma_vault: PlasmaVault, block_number: int | None
 ) -> _VaultData:
     with ThreadPoolExecutor() as pool:
@@ -169,6 +170,20 @@ def _fetch_vault_data(
         # Phase 3: withdraw manager details (needs address from phase 1)
         wm_data = _fetch_withdraw_manager_data(ctx, pool, withdraw_mgr_addr)
 
+        # Phase 4: dependency balance graph per market
+        balance_fuses = f_balance_fuses.result()
+        dep_futs = {
+            bf.market_id: pool.submit(
+                plasma_vault.get_dependency_balance_graph, bf.market_id
+            )
+            for bf in balance_fuses
+        }
+        dep_graph: dict[int, list[int]] = {}
+        for market_id, fut in dep_futs.items():
+            deps = fut.result()
+            if deps:
+                dep_graph[market_id] = [int(d) for d in deps]
+
         return _VaultData(
             block_label=block_label,
             block_timestamp=block_timestamp,
@@ -186,9 +201,10 @@ def _fetch_vault_data(
             withdraw_manager=withdraw_mgr_addr,
             asset_price_usd=asset_price.readable() if asset_price else None,
             fuses=f_fuses.result(),
-            balance_fuses=f_balance_fuses.result(),
+            balance_fuses=balance_fuses,
             instant_fuses=f_instant.result(),
             withdraw_manager_data=wm_data,
+            dependency_graph=dep_graph or None,
         )
 
 

@@ -13,7 +13,9 @@ from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_contract
 from ipor_fusion.cli.vault_cmd import (
     ADDRESS,
     CHAIN,
+    _build_dependency_graph_json,
     _build_share_price_json,
+    _print_dependency_graph,
     _print_pending_requests,
     _print_substrates,
     _resolve_chain_id,
@@ -415,6 +417,85 @@ class TestBuildSharePriceJson:
         result = _build_share_price_json(data)
         assert result is not None
         assert result["asset"] == 0.5
+
+
+class TestBuildDependencyGraphJson:
+    def test_none_when_no_graph(self):
+        data = _make_data(dependency_graph=None)
+        assert _build_dependency_graph_json(data) is None
+
+    def test_none_when_empty_graph(self):
+        data = _make_data(dependency_graph={})
+        assert _build_dependency_graph_json(data) is None
+
+    def test_known_markets(self):
+        data = _make_data(
+            dependency_graph={
+                IporFusionMarkets.GEARBOX_FARM_DTOKEN_V3: [
+                    IporFusionMarkets.GEARBOX_POOL_V3,
+                ],
+            }
+        )
+        result = _build_dependency_graph_json(data)
+        assert result is not None
+        assert "GEARBOX_FARM_DTOKEN_V3 (4)" in result
+        assert result["GEARBOX_FARM_DTOKEN_V3 (4)"] == ["GEARBOX_POOL_V3 (3)"]
+
+    def test_unknown_market_id(self):
+        data = _make_data(dependency_graph={999999: [7]})
+        result = _build_dependency_graph_json(data)
+        assert result is not None
+        assert "999999" in result
+        assert result["999999"] == ["ERC20_VAULT_BALANCE (7)"]
+
+    def test_multiple_dependencies(self):
+        data = _make_data(
+            dependency_graph={
+                IporFusionMarkets.UNISWAP_SWAP_V3: [
+                    IporFusionMarkets.ERC20_VAULT_BALANCE,
+                ],
+                IporFusionMarkets.GEARBOX_FARM_DTOKEN_V3: [
+                    IporFusionMarkets.GEARBOX_POOL_V3,
+                ],
+            }
+        )
+        result = _build_dependency_graph_json(data)
+        assert result is not None
+        assert len(result) == 2
+
+
+class TestPrintDependencyGraph:
+    def test_no_output_when_none(self, capsys):
+        data = _make_data(dependency_graph=None)
+        _print_dependency_graph(data)
+        assert capsys.readouterr().out == ""
+
+    def test_no_output_when_empty(self, capsys):
+        data = _make_data(dependency_graph={})
+        _print_dependency_graph(data)
+        assert capsys.readouterr().out == ""
+
+    def test_prints_known_markets(self, capsys):
+        data = _make_data(
+            dependency_graph={
+                IporFusionMarkets.GEARBOX_FARM_DTOKEN_V3: [
+                    IporFusionMarkets.GEARBOX_POOL_V3,
+                ],
+            }
+        )
+        _print_dependency_graph(data)
+        out = capsys.readouterr().out
+        assert "Dependency Balance Graph:" in out
+        assert "GEARBOX_FARM_DTOKEN_V3 (4)" in out
+        assert "GEARBOX_POOL_V3 (3)" in out
+        assert "→" in out
+
+    def test_prints_unknown_market(self, capsys):
+        data = _make_data(dependency_graph={999999: [7]})
+        _print_dependency_graph(data)
+        out = capsys.readouterr().out
+        assert "999999" in out
+        assert "ERC20_VAULT_BALANCE (7)" in out
 
 
 class TestSubstrateDetails:
@@ -985,6 +1066,7 @@ def _make_data(**overrides):
         "fuses": [],
         "balance_fuses": [],
         "instant_fuses": [],
+        "dependency_graph": None,
     }
     defaults.update(overrides)
     return _VaultData(**defaults)
