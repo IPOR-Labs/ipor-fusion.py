@@ -596,6 +596,18 @@ def _print_vault_info(
         f"Total Supply:     "
         f"{_format_amount(data.total_supply, data.share_decimals)} shares"
     )
+    if data.total_supply > 0:
+        share_price = (data.total_assets / 10**data.asset_decimals) / (
+            data.total_supply / 10**data.share_decimals
+        )
+        share_price_usd = (
+            f" (${share_price * data.asset_price_usd:,.6f})"
+            if data.asset_price_usd is not None
+            else ""
+        )
+        click.echo(
+            f"Share Price:      {share_price:,.6f} {data.asset_symbol}{share_price_usd}"
+        )
     if data.supply_cap == UINT256_MAX:
         click.echo("Supply Cap:       unlimited")
     else:
@@ -663,6 +675,20 @@ def _print_vault_info(
     click.echo()
 
     _print_health_check(data, bf_totals, erc20_totals, all_substrate_addrs)
+
+
+def _build_share_price_json(data: _VaultData) -> dict | None:
+    if data.total_supply == 0:
+        return None
+    price = (data.total_assets / 10**data.asset_decimals) / (
+        data.total_supply / 10**data.share_decimals
+    )
+    result: dict = {
+        "asset": round(price, 10),
+    }
+    if data.asset_price_usd is not None:
+        result["usd"] = round(price * data.asset_price_usd, 10)
+    return result
 
 
 def _build_deployment_json(data: _VaultData) -> dict | None:
@@ -974,6 +1000,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
             "raw": data.total_supply,
             "formatted": _format_amount(data.total_supply, data.share_decimals),
         },
+        "share_price": _build_share_price_json(data),
         "supply_cap": {
             "raw": data.supply_cap,
             "formatted": (

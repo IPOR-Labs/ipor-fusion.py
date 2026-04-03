@@ -86,9 +86,9 @@ def _fetch_contract_creation_tx(
     return None
 
 
-def _fetch_contract_name(
+def _fetch_getsourcecode(
     chain_id: int, address: str, api_key: str | None = None
-) -> str | None:
+) -> dict[str, str] | None:
     if chain_id not in SUPPORTED_CHAINS:
         return None
     if not api_key:
@@ -109,7 +109,7 @@ def _fetch_contract_name(
             with urlopen(url, timeout=10) as resp:  # noqa: S310
                 data = json.loads(resp.read().decode())
             if data.get("status") == "1" and data.get("result"):
-                return data["result"][0].get("ContractName") or None  # type: ignore[no-any-return]
+                return data["result"][0]  # type: ignore[no-any-return]
             if "rate limit" in str(data.get("result", "")).lower():
                 time.sleep(_RETRY_DELAY * (attempt + 1))
                 continue
@@ -117,3 +117,12 @@ def _fetch_contract_name(
             pass
         break
     return None
+
+
+def _fetch_contract_name(
+    chain_id: int, address: str, api_key: str | None = None
+) -> str | None:
+    result = _fetch_getsourcecode(chain_id, address, api_key)
+    if result is None:
+        return None
+    return result.get("ContractName") or None
