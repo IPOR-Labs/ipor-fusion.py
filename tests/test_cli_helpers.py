@@ -12,6 +12,8 @@ from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_contract_cache
 from ipor_fusion.cli.vault_cmd import (
     ADDRESS,
+    CHAIN,
+    _build_share_price_json,
     _print_pending_requests,
     _print_substrates,
     _resolve_chain_id,
@@ -357,6 +359,62 @@ class TestResolveProvider:
         cfg = FusionConfig()
         with pytest.raises(click.UsageError, match="No provider for chain 42161"):
             _resolve_provider(cfg, 42161)
+
+
+class TestChainType:
+    def test_numeric_string(self):
+        assert CHAIN.convert("42161", None, None) == 42161
+
+    def test_integer(self):
+        assert CHAIN.convert(42161, None, None) == 42161
+
+    def test_chain_name(self):
+        assert CHAIN.convert("ethereum", None, None) == 1
+
+    def test_chain_name_case_insensitive(self):
+        assert CHAIN.convert("Base", None, None) == 8453
+
+    def test_unknown_name_fails(self):
+        with pytest.raises(click.exceptions.BadParameter):
+            CHAIN.convert("unknown_chain", None, None)
+
+
+class TestBuildSharePriceJson:
+    def test_zero_supply_returns_none(self):
+        data = _make_data(total_supply=0)
+        assert _build_share_price_json(data) is None
+
+    def test_basic_share_price(self):
+        data = _make_data(
+            total_assets=200 * 10**18,
+            total_supply=100 * 10**18,
+            asset_price_usd=None,
+        )
+        result = _build_share_price_json(data)
+        assert result is not None
+        assert result["asset"] == 2.0
+        assert "usd" not in result
+
+    def test_share_price_with_usd(self):
+        data = _make_data(
+            total_assets=200 * 10**18,
+            total_supply=100 * 10**18,
+            asset_price_usd=3000.0,
+        )
+        result = _build_share_price_json(data)
+        assert result is not None
+        assert result["asset"] == 2.0
+        assert result["usd"] == 6000.0
+
+    def test_fractional_share_price(self):
+        data = _make_data(
+            total_assets=50 * 10**18,
+            total_supply=100 * 10**18,
+            asset_price_usd=None,
+        )
+        result = _build_share_price_json(data)
+        assert result is not None
+        assert result["asset"] == 0.5
 
 
 class TestSubstrateDetails:

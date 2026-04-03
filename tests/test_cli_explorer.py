@@ -6,6 +6,7 @@ import pytest
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.explorer import (
     _fetch_contract_name,
+    _fetch_getsourcecode,
     get_contract_name,
 )
 
@@ -113,3 +114,30 @@ class TestFetchContractName:
         result = _fetch_contract_name(1, "0xABC", api_key="key123")
 
         assert result is None
+
+
+class TestFetchGetSourceCode:
+    def test_unsupported_chain_returns_none(self):
+        assert _fetch_getsourcecode(99999, "0xABC", api_key="key123") is None
+
+    def test_no_api_key_returns_none(self):
+        assert _fetch_getsourcecode(1, "0xABC", api_key=None) is None
+
+    @patch("ipor_fusion.cli.explorer.urlopen")
+    def test_returns_full_result_dict(self, mock_urlopen_fn):
+        response = {
+            "status": "1",
+            "result": [{"ContractName": "PlasmaVault", "CompilerVersion": "v0.8.20"}],
+        }
+        mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
+
+        result = _fetch_getsourcecode(1, "0xABC", api_key="key123")
+
+        assert result is not None
+        assert result["ContractName"] == "PlasmaVault"
+        assert result["CompilerVersion"] == "v0.8.20"
+
+    @patch("ipor_fusion.cli.explorer.urlopen")
+    def test_network_error_returns_none(self, mock_urlopen_fn):
+        mock_urlopen_fn.side_effect = OSError("connection refused")
+        assert _fetch_getsourcecode(1, "0xABC", api_key="key123") is None
