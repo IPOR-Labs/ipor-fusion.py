@@ -1,154 +1,144 @@
-"""Tests for the MCP server tool definitions."""
+"""Tests for the MCP server tool definitions (direct SDK import)."""
 
-from subprocess import CompletedProcess
-from unittest.mock import patch
+import json
+from unittest.mock import MagicMock, patch
 
 from ipor_fusion.mcp.server import (
-    _run_fusion,
-    vault_info,
-    vault_list,
-    vault_market_detail,
-    vault_add,
-    vault_remove,
-    config_show,
-    config_set_provider,
     config_set_etherscan_key,
+    config_set_provider,
+    config_show,
+    vault_add,
+    vault_list,
+    vault_remove,
 )
 
 
-class TestRunFusion:
-    @patch("ipor_fusion.mcp.server.subprocess.run")
-    def test_returns_stdout_on_success(self, mock_run):
-        mock_run.return_value = CompletedProcess(
-            args=["fusion"], returncode=0, stdout="ok\n", stderr=""
-        )
-        assert _run_fusion("vault", "list") == "ok"
-        mock_run.assert_called_once_with(
-            ["fusion", "vault", "list"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
+def _empty_config():
+    from ipor_fusion.cli.config_store import FusionConfig
 
-    @patch("ipor_fusion.mcp.server.subprocess.run")
-    def test_returns_error_on_failure(self, mock_run):
-        mock_run.return_value = CompletedProcess(
-            args=["fusion"], returncode=1, stdout="", stderr="bad input\n"
-        )
-        result = _run_fusion("vault", "info")
-        assert result == "Error: bad input"
-
-    @patch("ipor_fusion.mcp.server.subprocess.run")
-    def test_returns_stdout_as_error_when_stderr_empty(self, mock_run):
-        mock_run.return_value = CompletedProcess(
-            args=["fusion"], returncode=1, stdout="fallback msg\n", stderr=""
-        )
-        result = _run_fusion("config", "show")
-        assert result == "Error: fallback msg"
+    return FusionConfig()
 
 
-class TestVaultInfo:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
-    def test_all_args(self, mock_run):
-        vault_info(vault_address="0xABC", chain_id=42161, block_number=100)
-        mock_run.assert_called_once_with(
-            "vault",
-            "info",
-            "0xABC",
-            "--json",
-            "--chain-id",
-            "42161",
-            "--block-number",
-            "100",
-        )
+def _config_with_provider():
+    from ipor_fusion.cli.config_store import FusionConfig
 
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
-    def test_minimal_args(self, mock_run):
-        vault_info(vault_address="0xABC")
-        mock_run.assert_called_once_with("vault", "info", "0xABC", "--json")
+    return FusionConfig(providers={"1": "https://rpc.example.com"})
 
 
-class TestVaultMarketDetail:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
-    def test_all_args(self, mock_run):
-        vault_market_detail(
-            vault_address="0xABC", chain_id=42161, market_id=14, block_number=100
-        )
-        mock_run.assert_called_once_with(
-            "vault",
-            "market-detail",
-            "0xABC",
-            "--json",
-            "--market-id",
-            "14",
-            "--chain-id",
-            "42161",
-            "--block-number",
-            "100",
-        )
+def _config_with_vault():
+    from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
 
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="{}")
-    def test_minimal_args(self, mock_run):
-        vault_market_detail(vault_address="0xABC", market_id=1)
-        mock_run.assert_called_once_with(
-            "vault", "market-detail", "0xABC", "--json", "--market-id", "1"
-        )
-
-
-class TestVaultList:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="[]")
-    def test_calls_list(self, mock_run):
-        vault_list()
-        mock_run.assert_called_once_with("vault", "list", "--json")
-
-
-class TestVaultAdd:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="Vault added.")
-    def test_minimal_args(self, mock_run):
-        vault_add(address="0xABC")
-        mock_run.assert_called_once_with("vault", "add", "0xABC")
-
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="Vault added.")
-    def test_all_args(self, mock_run):
-        vault_add(address="0xABC", label="My Vault", chain_id=42161)
-        mock_run.assert_called_once_with(
-            "vault", "add", "0xABC", "--label", "My Vault", "--chain-id", "42161"
-        )
-
-
-class TestVaultRemove:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="Removed.")
-    def test_calls_remove(self, mock_run):
-        vault_remove(address="0xABC")
-        mock_run.assert_called_once_with("vault", "remove", "0xABC")
+    return FusionConfig(
+        providers={"1": "https://rpc.example.com"},
+        vaults=[VaultEntry(address="0xABC", label="Test", chain_id=1)],
+    )
 
 
 class TestConfigShow:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="config")
-    def test_calls_show(self, mock_run):
-        config_show()
-        mock_run.assert_called_once_with("config", "show")
+    @patch("ipor_fusion.mcp.server.load_config", return_value=_empty_config())
+    def test_empty_config(self, _):
+        result = json.loads(config_show())
+        assert result["providers"] == {}
+        assert result["vaults"] == []
+        assert result["etherscan_api_key"] is None
+
+    @patch("ipor_fusion.mcp.server.load_config", return_value=_config_with_vault())
+    def test_config_with_vault(self, _):
+        result = json.loads(config_show())
+        assert len(result["vaults"]) == 1
+        assert result["vaults"][0]["address"] == "0xABC"
 
 
 class TestConfigSetProvider:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="Provider set.")
-    def test_url_only(self, mock_run):
-        config_set_provider(url="https://rpc.example.com")
-        mock_run.assert_called_once_with(
-            "config", "set-provider", "https://rpc.example.com"
-        )
+    @patch("ipor_fusion.mcp.server.save_config")
+    @patch("ipor_fusion.mcp.server.load_config", return_value=_empty_config())
+    def test_with_chain_id(self, mock_load, mock_save):
+        result = config_set_provider(url="https://rpc.example.com", chain_id=1)
+        assert "chain 1" in result.lower()
+        saved_cfg = mock_save.call_args[0][0]
+        assert saved_cfg.providers["1"] == "https://rpc.example.com"
 
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="Provider set.")
-    def test_with_chain_id(self, mock_run):
-        config_set_provider(url="https://rpc.example.com", chain_id=1)
-        mock_run.assert_called_once_with(
-            "config", "set-provider", "https://rpc.example.com", "--chain-id", "1"
-        )
+    @patch("ipor_fusion.mcp.server.Web3")
+    @patch("ipor_fusion.mcp.server.save_config")
+    @patch("ipor_fusion.mcp.server.load_config", return_value=_empty_config())
+    def test_auto_detect_chain_id(self, mock_load, mock_save, mock_web3):
+        mock_instance = MagicMock()
+        mock_instance.eth.chain_id = 42161
+        mock_web3.return_value = mock_instance
+        mock_web3.HTTPProvider = MagicMock()
+
+        result = config_set_provider(url="https://rpc.example.com")
+        assert "42161" in result
+        saved_cfg = mock_save.call_args[0][0]
+        assert saved_cfg.providers["42161"] == "https://rpc.example.com"
 
 
 class TestConfigSetEtherscanKey:
-    @patch("ipor_fusion.mcp.server._run_fusion", return_value="Key set.")
-    def test_calls_set_key(self, mock_run):
-        config_set_etherscan_key(api_key="ABC123")
-        mock_run.assert_called_once_with("config", "set-etherscan-key", "ABC123")
+    @patch("ipor_fusion.mcp.server.save_config")
+    @patch("ipor_fusion.mcp.server.load_config", return_value=_empty_config())
+    def test_sets_key(self, mock_load, mock_save):
+        result = config_set_etherscan_key(api_key="ABC123")
+        assert "set" in result.lower()
+        saved_cfg = mock_save.call_args[0][0]
+        assert saved_cfg.etherscan_api_key == "ABC123"
+
+
+class TestVaultList:
+    @patch("ipor_fusion.mcp.server.load_config", return_value=_empty_config())
+    def test_empty(self, _):
+        result = json.loads(vault_list())
+        assert result == []
+
+    @patch("ipor_fusion.mcp.server.load_config", return_value=_config_with_vault())
+    def test_with_vault(self, _):
+        result = json.loads(vault_list())
+        assert len(result) == 1
+        assert result[0]["address"] == "0xABC"
+        assert result[0]["label"] == "Test"
+        assert result[0]["chain_id"] == 1
+
+
+class TestVaultAdd:
+    @patch("ipor_fusion.mcp.server.save_config")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_add_with_label_and_chain(self, mock_load, mock_save):
+        result = vault_add(address="0xDEF", label="New Vault", chain_id=1)
+        assert "added" in result.lower()
+        saved_cfg = mock_save.call_args[0][0]
+        assert any(v.address == "0xDEF" for v in saved_cfg.vaults)
+
+    @patch("ipor_fusion.mcp.server.save_config")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_vault(),
+    )
+    def test_update_existing(self, mock_load, mock_save):
+        result = vault_add(address="0xABC", label="Updated", chain_id=1)
+        assert "updated" in result.lower()
+        saved_cfg = mock_save.call_args[0][0]
+        assert len(saved_cfg.vaults) == 1
+        assert saved_cfg.vaults[0].label == "Updated"
+
+
+class TestVaultRemove:
+    @patch("ipor_fusion.mcp.server.save_config")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_vault(),
+    )
+    def test_remove_existing(self, mock_load, mock_save):
+        result = vault_remove(address="0xABC")
+        assert "removed" in result.lower()
+        saved_cfg = mock_save.call_args[0][0]
+        assert len(saved_cfg.vaults) == 0
+
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_vault(),
+    )
+    def test_remove_missing(self, _):
+        result = vault_remove(address="0xNONEXISTENT")
+        assert "not found" in result.lower()
