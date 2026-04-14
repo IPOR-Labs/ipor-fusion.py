@@ -100,8 +100,8 @@ The SDK ships with a `fusion` CLI for inspecting and managing Plasma Vaults from
 You need an RPC provider URL — get a free key at [Alchemy](https://www.alchemy.com/) or [Infura](https://www.infura.io/).
 
 ```bash
-# Install with CLI extras
-pip install 'ipor-fusion[cli]'
+# Install with CLI extras (pipx keeps dependencies isolated)
+pipx install 'ipor-fusion[cli]'
 
 # Configure an RPC provider (auto-detects chain ID)
 fusion config set-provider https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
@@ -113,16 +113,16 @@ fusion vault info 0xB8a451107A9f87FDe481D4D686247D6e43Ed715e --chain-id ethereum
 fusion vault list
 ```
 
-## MCP Server (Claude Code integration)
+## MCP Server
 
-The SDK includes an [MCP](https://modelcontextprotocol.io/) server that exposes CLI tools to AI assistants like Claude Code.
+The SDK includes an [MCP](https://modelcontextprotocol.io/) server that exposes CLI tools to any MCP-compatible AI assistant (Claude Code, Cursor, Windsurf, etc.).
 
 ```bash
-# Install with MCP extras
-pip install 'ipor-fusion[mcp]'
+# Install with MCP extras (pipx keeps dependencies isolated)
+pipx install 'ipor-fusion[mcp]'
 ```
 
-Add to your `.mcp.json` (or Claude Code MCP settings):
+Add to your MCP client configuration (e.g. `.mcp.json`):
 
 ```json
 {
