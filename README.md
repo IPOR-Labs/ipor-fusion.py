@@ -93,6 +93,62 @@ action = fuse.supply(
 receipt = vault.execute([action])
 ```
 
+## CLI Quickstart
+
+The SDK ships with a `fusion` CLI for inspecting and managing Plasma Vaults from the terminal.
+
+You need an RPC provider URL — get a free key at [Alchemy](https://www.alchemy.com/) or [Infura](https://www.infura.io/).
+
+```bash
+# Install with CLI extras
+pip install 'ipor-fusion[cli]'
+
+# Configure an RPC provider (auto-detects chain ID)
+fusion config set-provider https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
+
+# Inspect a vault (auto-saves to config on first use)
+fusion vault info 0xB8a451107A9f87FDe481D4D686247D6e43Ed715e --chain-id ethereum
+
+# List saved vaults
+fusion vault list
+```
+
+## MCP Server (Claude Code integration)
+
+The SDK includes an [MCP](https://modelcontextprotocol.io/) server that exposes CLI tools to AI assistants like Claude Code.
+
+```bash
+# Install with MCP extras
+pip install 'ipor-fusion[mcp]'
+```
+
+Add to your `.mcp.json` (or Claude Code MCP settings):
+
+```json
+{
+  "mcpServers": {
+    "ipor-fusion": {
+      "command": "fusion-mcp",
+      "type": "stdio"
+    }
+  }
+}
+```
+
+Available tools:
+
+| Tool | Description |
+|------|-------------|
+| `config_show` | Show current configuration (providers, vaults, API key status) |
+| `config_set_provider` | Set RPC provider URL for a chain (auto-detects chain ID) |
+| `config_set_etherscan_key` | Set Etherscan API key (enables contract name resolution) |
+| `vault_info` | Full on-chain vault state — assets, fuses, balances, lending health, reconciliation |
+| `vault_list` | List all saved vaults |
+| `vault_add` | Save a vault to the local config (auto-fetches on-chain name) |
+| `vault_remove` | Remove a vault from the local config |
+
+Configure providers and vaults via `fusion config` or the MCP config tools first.
+
 ## Architecture
 
 The SDK uses a **fuse adapter pattern**:

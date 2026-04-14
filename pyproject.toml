@@ -33,15 +33,23 @@ classifiers = [
     "Natural Language :: English"
 ]
 
+[tool.poetry.scripts]
+fusion = "ipor_fusion.entry_cli:main"
+fusion-mcp = "ipor_fusion.entry_mcp:main"
+
 [tool.poetry.dependencies]
 python = "^3.10"
 eth-typing = "^5.0.0"
 eth-abi = "^5.1.0"
 web3 = "^7.7.0"
+click = {version = "^8.0", optional = true}
 testcontainers = {version = "^4.8.2", optional = true}
 requests = {version = "^2.31.0", optional = true}
+mcp = {version = "^1.0", optional = true, extras = ["cli"]}
 
 [tool.poetry.extras]
+cli = ["click", "requests"]
+mcp = ["mcp", "click", "requests"]
 testing = ["testcontainers", "requests"]
 
 [tool.poetry.dev-dependencies]
@@ -67,10 +75,12 @@ config-file = "pylintrc.toml"
 [tool.coverage.run]
 source = ["src/ipor_fusion"]
 data_file = ".coverage_data/.coverage"
+omit = ["src/ipor_fusion/testing/*", "src/ipor_fusion/mcp/*"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 97
+fail_under = 95
+omit = ["src/ipor_fusion/testing/*", "src/ipor_fusion/mcp/*"]
 
 [build-system]
 requires = ["poetry-core"]

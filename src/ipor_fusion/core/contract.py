@@ -2,7 +2,7 @@ from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.types import TxReceipt
+from web3.types import BlockIdentifier, TxReceipt
 
 from ipor_fusion.core.context import Web3Context
 
@@ -23,8 +23,12 @@ class ContractWrapper:
         types = _parse_param_types(signature)
         return selector + encode(types, list(args)) if types else selector
 
-    def _call(self, signature: str, *args) -> bytes:
-        return self._ctx.call(self._address, self._encode(signature, *args))
+    def _call(
+        self, signature: str, *args, block: BlockIdentifier | None = None
+    ) -> bytes:
+        return self._ctx.call(
+            self._address, self._encode(signature, *args), block=block
+        )
 
     def _send(self, signature: str, *args) -> TxReceipt:
         return self._ctx.send(self._address, self._encode(signature, *args))

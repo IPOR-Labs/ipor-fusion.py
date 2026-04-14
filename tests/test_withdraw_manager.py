@@ -133,6 +133,12 @@ def test_get_request_fee(wm, ctx):
     assert result == Fee(50)
 
 
+def test_get_withdraw_fee(wm, ctx):
+    ctx.call.return_value = encode(["uint256"], [100])
+    result = wm.get_withdraw_fee()
+    assert result == Fee(100)
+
+
 # ── request_info ─────────────────────────────────────────────────────────────
 
 

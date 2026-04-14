@@ -102,6 +102,14 @@ class PlasmaVault(ContractWrapper):
         (value,) = decode(["uint256"], self._call("totalAssets()"))
         return Amount(value)
 
+    def total_supply(self) -> Amount:
+        (value,) = decode(["uint256"], self._call("totalSupply()"))
+        return Amount(value)
+
+    def name(self) -> str:
+        (value,) = decode(["string"], self._call("name()"))
+        return value
+
     def underlying_asset_address(self) -> ChecksumAddress:
         (value,) = decode(["address"], self._call("asset()"))
         return Web3.to_checksum_address(value)
@@ -154,6 +162,13 @@ class PlasmaVault(ContractWrapper):
             self._call("getInstantWithdrawalFusesParams(address,uint256)", fuse, index),
         )
         return list(value)
+
+    def get_dependency_balance_graph(self, market_id: MarketId) -> list[MarketId]:
+        (value,) = decode(
+            ["uint256[]"],
+            self._call("getDependencyBalanceGraph(uint256)", market_id),
+        )
+        return [MarketId(v) for v in value]
 
     def get_market_substrates(self, market_id: MarketId) -> list[bytes]:
         (value,) = decode(
