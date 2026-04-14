@@ -4,8 +4,6 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
-from __future__ import annotations
-
 import json
 
 from mcp.server.fastmcp import FastMCP
