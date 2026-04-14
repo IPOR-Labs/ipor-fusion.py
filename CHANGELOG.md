@@ -1,6 +1,260 @@
 # CHANGELOG
 
 
+## v2.1.0 (2026-04-14)
+
+### Bug Fixes
+
+* fix(ci): resolve pylint exit code 8 causing CI failure
+
+Extract withdraw manager fetch into helper, relax max-locals for
+parallel I/O functions, and disable walrus operator suggestion. ([`8813f74`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8813f746dcea85619778fb57127a6e7c76208a22))
+
+* fix(cli): reconciliation double-counting non-underlying ERC20 tokens
+
+Balance fuses already price non-underlying tokens (BOLD, BOLDUSDC-gauge)
+via ERC20BalanceFuse, but the reconciliation sum was adding all ERC20
+values on top, inflating the delta to ~9% on vaults with stablecoins.
+Now uses underlying-only balance, matching the health check logic. ([`d461a6b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d461a6ba9b9ad1ce6e73ccd364052ecb1a345a7c))
+
+### Features
+
+* feat(cli): add lending health monitoring and clean up CLI surface ([`14c9dfe`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/14c9dfe8b5197e5d81d01cf549920eb10c474b00))
+
+* feat(cli): add update reach and update groups to dependency graph output
+
+Show transitive closure of markets refreshed by updateMarketsBalances
+for each root market, making it easy to debug stale balance cache issues.
+
+JSON dependency_graph field expanded to {edges, update_reach, update_groups}.
+Balance fuse entries now include pct_of_total. ([`a65ec74`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a65ec7473fe74a11b7f6e049d42efee88636d1ad))
+
+* feat(cli): add dependency balance graph to vault info
+
+Fetch per-market dependency graph via getDependencyBalanceGraph and
+display it in both CLI and JSON output of vault info. ([`236e006`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/236e006c31ce79bb6ff976c041b9f6472aab9f82))
+
+* feat(cli): add share price to vault info output
+
+Show share price (asset + USD) in both text and JSON output.
+Refactor _fetch_getsourcecode to return full result dict for reuse. ([`8c74d6b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8c74d6b7814f39a5b95beeb677c6eea34a5e34d4))
+
+* feat(cli): per-market substrate decoders and vault name in info output
+
+Replace generic substrate decoder with explicit per-market registry.
+Each market type gets its own decoder matching the Solidity encoding:
+- type<<160: Ebisu, Midas, Balancer, Velodrome Slipstream
+- type<<248: Aave V4, Odos, Velora, Universal Token Swapper
+- address<<96|selector<<64: Enso
+- asset<<96|subAccountId<<88|canBorrow<<80: Dolomite
+- raw bytes32: Morpho markets
+- plain zero-padded address: all others
+
+Unknown markets show raw hex with no_decoder warning instead of
+guessing the encoding. Vault name() displayed next to address. ([`cba3e27`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cba3e27509c73366af6d4ab0978ca0603ba66afa))
+
+* feat(cli): show pending withdrawal requests and fix Morpho substrate display
+
+Add withdraw manager details to vault info output: per-account pending
+requests with shares, asset equivalent, USD value, window expiry with
+remaining time, and can_withdraw status. Also show shares_to_release,
+fees, and last release timestamp.
+
+Fix bytes32 substrate display — Morpho market IDs (full bytes32, not
+zero-padded addresses) now show as (bytes32) instead of [encoding error].
+
+Lower coverage threshold from 97% to 95% to match actual project state. ([`599b1cf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/599b1cfd8c9686b174cb3b5760391e23d9ca5e85))
+
+* feat(mcp): expose all CLI commands as MCP tools with detailed docstrings ([`8619dca`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8619dcae884641f19ed172bf3dbd0318eaf76298))
+
+* feat(cli): add vault market-detail command for single-market deep-dive ([`329116b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/329116bb7dff95acb1e2469fe73e54d63e2b5b01))
+
+* feat(cli): validate config schema, add versioning, narrow _safe_call exceptions ([`63111c7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/63111c7f52c9692036504ec76521bedafd504852))
+
+* feat(cli): add verbose/quiet, no-color, shell completion and alias help ([`4226b29`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4226b29e10f6e5e2f876903141c94a56cf718965))
+
+* feat: links & deployment block number ([`7e9d2fb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7e9d2fbf91f944b778fd6539becd47bfbb731ec2))
+
+* feat: add CLI and MCP server for Plasma Vault inspection
+- fusion CLI: config management, vault add/remove/info with parallel RPC calls
+- fusion-mcp: MCP server exposing vault_info, vault_list, config_show tools
+- guarded entry points with friendly error when optional deps missing
+- pytest markers (sdk/cli/mcp) for selective test execution ([`093bb4d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/093bb4d14be0eec12bfb80c9047b998892e067cd))
+
+### Refactoring
+
+* refactor(mcp): remove unnecessary __future__ annotations import ([`893daa1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/893daa13fdcad9922b4ba904ef62cfe3e68ed210))
+
+* refactor(mcp): replace subprocess CLI calls with direct SDK imports
+
+MCP tools now call the ipor_fusion SDK directly instead of shelling out
+to the fusion CLI via subprocess. Faster execution, no dependency on
+the CLI being installed in PATH, and shared config via load_config(). ([`4418f93`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4418f93312fd0cbe7771193457e6ce21d6842f9e))
+
+* refactor(cli): positional vault address, remove default_vault, auto-save on info
+
+- vault address is now a positional argument: `fusion vault info 0x...`
+- --chain-id accepts names: `--chain-id ethereum`, `--chain-id base`
+- unknown vaults require --chain-id, saved vaults resolve it from config
+- auto-save vault to config on first `info`/`market-detail` (if Plasma Vault)
+- remove default_vault from config, CLI, and MCP server
+- add ERC4626 market range (100001-100020) to plain address decoder
+- show market_id in balance fuses JSON and table output
+- highlight no_decoder substrates in red ([`85782d3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/85782d38371b264b812fab73f2460b00f2b15dd4))
+
+* refactor(cli): split vault_cmd.py into focused modules
+
+Extract four modules from vault_cmd.py (2064→810 lines):
+- vault_substrate.py: substrate decoders, market name lookup
+- vault_rendering.py: formatting helpers (_format_amount, _print_table, etc.)
+- vault_fetcher.py: on-chain data fetching, _VaultData, _safe_call
+- vault_health.py: health checks, reconciliation, ERC20 balances
+
+Click commands and orchestration stay in vault_cmd.py.
+No behavior changes — pure structural refactor. ([`1d05c0a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1d05c0a2596c38755060af93f99e4626df1d3c33))
+
+### Testing
+
+* test: add tests for share price, ChainType, and _fetch_getsourcecode
+
+Cover _build_share_price_json (zero supply, basic, USD, fractional),
+ChainType conversion (numeric, name, case-insensitive, unknown),
+and _fetch_getsourcecode (unsupported chain, no key, success, error). ([`55d0a14`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/55d0a14527e56b1805de683c1f7ab3d9a51159fd))
+
+### Unknown
+
+* Merge pull request #96 from IPOR-Labs/feature/cli-and-mcp
+
+feat: add CLI and MCP server for Plasma Vault inspection ([`37435b0`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/37435b027e66a8805f71c6cdbd236e526e6bd37d))
+
+
+## v2.0.0 (2026-03-23)
+
+### Breaking
+
+* feat!: v2.0.0 — keyword-only args, public API cleanup, DRY refactoring ([`92f6377`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/92f63775bf2b9b8c6ce880ceed41d93e9b6b3756))
+
+* feat!: v2.0.0 — keyword-only args, public API cleanup, DRY refactoring ([`5bdfc64`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5bdfc64675b231e6e1f1fecf2a9fba17f25d9c5d))
+
+* refactor!: rename Erc4626SupplyFuse to ERC4626SupplyFuse ([`83fb6e1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/83fb6e111266687edb57794cf7a62c609ec32069))
+
+### Bug Fixes
+
+* fix: install testing extra in CI workflows ([`9162941`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9162941226136b6685071b3eb1365dcb242d1e15))
+
+* fix: add missing mypy ignore for testcontainers import ([`492d0d3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/492d0d32ccddce7c6d0c9c14e4d4afbcdab5f8e6))
+
+* fix: regenerate poetry.lock to match pyproject.toml ([`0d446b8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0d446b8829b14a23d5024c5cb0d6f38f1da8d123))
+
+* fix: v2.0 cleanup — keyword-only args, naming, DRY readers, slots ([`4e085bc`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4e085bc91d456a0f7aa37965f9741553b9c7e064))
+
+* fix: resolve all mypy errors and add type checking to CI ([`5909d7a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5909d7aeb892ea9f3dac44bbecf652e122d62b0a))
+
+* fix: wrap block number literals with BlockNumber type in tests ([`c0eb13b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c0eb13b30e5e011bc2b7d6ec04745a6114e6a476))
+
+* fix: replace os.getenv with os.environ in tests to fix mypy str | None errors ([`3c8c959`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3c8c959a11392c31b33969a82e8a9643ef3d0b4c))
+
+* fix: resolve pylint warnings (unused vars, walrus operators, signature mismatch) ([`c6ed85b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c6ed85b51678de19e6ee8fc90d0c6c1e898ca7e9))
+
+### Chores
+
+* chore: remove duplicate dead code files before v2.0 ([`b121638`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b12163872df045dfabc3d4fb11f7f66955bd722f))
+
+### Continuous Integration
+
+* ci: add skip-version-bump option to release workflow ([`54439a9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/54439a94f02d52050a4e1a169df1d8cd5990361a))
+
+### Documentation
+
+* docs: add DeepWiki badge to README ([`99fc96e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/99fc96eeb679145564e5834c1292f418ab9744c0))
+
+* docs: add minimal docstrings to public API surface ([`0fd90e2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0fd90e2281350d80a0507c514bcc67d351ee4366))
+
+* docs: add minimal docstrings to public API surface ([`4488317`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/44883174a75c4f8011e1459c1e3e7c013465ab74))
+
+### Features
+
+* feat: sync IporFusionMarkets and Roles with Solidity contracts ([`23a3c8a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/23a3c8a405ca069982c0cdf8066e8d95577c10f2))
+
+* feat: add test coverage reporting to CI workflow ([`a267e80`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a267e8066c82488bdd85217e7302f60abbc80a9b))
+
+* feat: sync __version__ with pyproject.toml via importlib.metadata ([`739c574`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/739c574336d5f10e26e8c254ae0497c8000a77b9))
+
+* feat: add UniswapV3 event extraction utilities ([`afb407a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/afb407adb371c18181bc18df8124d45a68eca29f))
+
+* feat: add edge-case validation and document test addresses ([`53e64c7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/53e64c78850fb7b07d258f6672b6e771d53884d2))
+
+* feat: add protocol-specific reader helpers for on-chain state queries ([`1cc48de`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1cc48de8ecdf3156a6b81edda7f815a092704868))
+
+* feat: add input validation for amounts and addresses on fuse methods ([`c91446c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c91446c1741119c9c8846427e2c922dd9e57c3cc))
+
+* feat: decode EVM revert reasons in TransactionError ([`7c431e6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7c431e6c09c704964a4548dc5df786974f5fadfe))
+
+### Refactoring
+
+* refactor: replace tuple and dict returns with dataclasses ([`a169d07`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a169d07f30ab781ad126338dc2ed369b03d38267))
+
+* refactor: replace bare int with domain NewTypes across public API ([`11478ea`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/11478eaf09ec9488b36c880b2eda41f204742c61))
+
+* refactor: prepare API for v2.0 release ([`4a3b058`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4a3b0580c68140cd88a2e2eb02ff76a3ce6e8522))
+
+* refactor: batch changes ([`e615937`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e6159377d826d5a60a6a805b15cfaae269170413))
+
+* refactor: remove unused ERC20Token class from erc20.py ([`ecab344`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ecab344a0b24090f199d676f8eafda5eaf749d84))
+
+* refactor: apply Amount NewType consistently in fuse method signatures ([`0096bdf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0096bdf1320bb04ea89036f9244ffde60efbde3b))
+
+* refactor: make Web3Context public attributes private with property accessors ([`8bbef5f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8bbef5fec498c4d0874088fb09a50b9a3627ecc5))
+
+* refactor: convert Price to dataclass and fix Period constants to return Period instances ([`915396c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/915396ca737bb9f93e5b62c1ceebf0f3052e225a))
+
+* refactor: move addresses.py from SDK to tests ([`093a12d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/093a12df59cdc7de476c5861ee112c1014c5b4c1))
+
+* refactor: remove dead error classes from public API ([`23cbb82`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/23cbb82f1f95f0b80d9ab8d22b0861c37f536814))
+
+* refactor: extract StakeFuse base class to deduplicate stake fuses ([`7c596aa`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7c596aa7062a404a00d23a80a86e1e2a53830395))
+
+* refactor: migrate all fuses to use Fuse._action_raw() for encoding ([`78793fe`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/78793feae2fda4cc204239acf1406d3e72ff501e))
+
+* refactor: split GearboxSupplyFuse into separate supply and staking fuses ([`2491bbd`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2491bbda9d327481697cb08616f8f72edf3f3224))
+
+* refactor: split FluidInstadappSupplyFuse into separate supply and staking fuses ([`ad9b679`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ad9b67978325571f0b75c4b683fa806ceda098ba))
+
+* refactor: convert AnvilTestContainerStarter to context manager and use pytest fixtures ([`2b8a07a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2b8a07a227769800d79aa848b22f629a029a0eb6))
+
+* refactor: remove dead pylint format config and fix BlockNumber type annotations ([`b59b264`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b59b264f905a1e612a94fc60111368799c6ce04d))
+
+* refactor: extract ContractWrapper base class from core contract classes ([`6203202`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/620320272921e848b5e5880a3cd2d8c026cd1443))
+
+* refactor: make Web3Context.private_key a private attribute ([`dde0435`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dde04354fdd28625fc3bd4020f523216ee8ef72e))
+
+* refactor: remove markets/ abstraction layer in favor of direct fuse API ([`4ea0bc9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4ea0bc940a75141c8cc9480f077df5f92c27fbbf))
+
+* refactor: unify typing to Python 3.10+ builtins (list, X | None) ([`aa6fa31`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/aa6fa31ac14ae25ad00db516a83feb9dd13b148f))
+
+* refactor: unify typing to Python 3.10+ builtins (list, X | None) ([`7e329d5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7e329d581a8d0420f4f13ebc93502b452fdd360e))
+
+### Testing
+
+* test: add unit tests for core modules to raise coverage from 89% to 97% ([`372eb1c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/372eb1c1415cc27ed38490d86c0b4f7dd1a8ca64))
+
+* test: add pytest-xdist for parallel test execution ([`74f19a4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/74f19a4247873ec7f92c0b2d3f9092213dfbbce0))
+
+* test: add unit tests for fuse encoding (no Docker needed) ([`734c085`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/734c0850ee05ad86652fe4aa95953148289ffd5f))
+
+### Unknown
+
+* Merge pull request #95 from IPOR-Labs/exact-version-to-release
+
+ci: add skip-version-bump option to release workflow ([`3867cdf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3867cdf1563a23dde6aab714ef95de96d2fd34a0))
+
+* Merge pull request #94 from IPOR-Labs/feature/new-sdk-arch
+
+SDK 2.0 ([`1839538`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/183953849e99663f49aaeebc362470b2d947f15d))
+
+* [feat] New SDK architecture ([`ecb5ef6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ecb5ef6710a3c872eab2cc285b6695058a3db1db))
+
+
 ## v0.24.0 (2026-03-03)
 
 ### Unknown
