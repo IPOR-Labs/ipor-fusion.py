@@ -196,7 +196,7 @@ jobs:
       - name: Publish PyPI
         if: inputs.publish-enabled && (steps.release.outputs.released || steps.release-current.outputs.released)
         # from tag: v1.14.0
-        uses: pypa/gh-action-pypi-publish@6733eb7d741f0b11ec6a39b58540dab7590f9b7d
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
           print-hash: true
           verify-metadata: true
