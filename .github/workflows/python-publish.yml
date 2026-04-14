@@ -200,4 +200,5 @@ jobs:
         with:
           print-hash: true
           verify-metadata: true
+          attestations: false
         id: publish
