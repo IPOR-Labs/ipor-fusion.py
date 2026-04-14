@@ -20,7 +20,6 @@ from ipor_fusion.cli.config_store import (
 from ipor_fusion.cli.vault_cmd import (
     CHAIN_NAMES,
     _build_json_output,
-    _fetch_market_detail,
 )
 from ipor_fusion.cli.vault_fetcher import (
     _fetch_deployment_info,
@@ -107,6 +106,10 @@ def vault_info(
     - substrates per market (address, symbol, contract, substrate_type)
     - erc20_balances (address, symbol, decimals, balance, price_usd, usd_value)
     - reconciliation (balance_fuses_total, underlying_on_vault, erc20_direct_total, sum, on_chain_total_assets, delta)
+    - lending_health — null when no lending positions:
+      markets[] (protocol, market_id, market_name, current_ltv, max_ltv, health_factor,
+      total_collateral_usd, total_debt_usd, ltv_usage_percent, is_warning, is_critical),
+      worst_ltv_usage_percent
     - health_check (ok, warnings)
 
     Args:
@@ -126,7 +129,7 @@ def vault_info(
     plasma_vault = PlasmaVault(ctx, checksum)
 
     try:
-        data = _fetch_vault_data(ctx, plasma_vault, effective_block)
+        data = _fetch_vault_data(ctx, plasma_vault, effective_block, chain_id=chain_id)
     except Exception as exc:
         if "Tried to read" in str(exc) and "only got 0 bytes" in str(exc):
             raise ValueError(
@@ -145,43 +148,6 @@ def vault_info(
         ctx, plasma_vault, data, vault_address, chain_id, chain_label, api_key
     )
     return json.dumps(result, indent=2)
-
-
-@mcp.tool()
-def vault_market_detail(
-    vault_address: str,
-    chain_id: int = 0,
-    market_id: int = 0,
-    block_number: int = 0,
-) -> str:
-    """Single-market deep-dive for a Plasma Vault (JSON).
-
-    Lighter than vault_info — returns data for one market only.
-
-    Returned JSON fields:
-    - vault, chain_id, block, block_number
-    - market (name), market_id
-    - asset (address, symbol, decimals)
-    - balance (raw, formatted, usd)
-    - fuse (address, contract name)
-    - substrates (address, symbol, contract, substrate_type)
-
-    Args:
-        vault_address: Vault address (required).
-        chain_id: Chain ID (auto-detected if 0).
-        market_id: Market ID to inspect (required, use vault_info to find IDs).
-        block_number: Block number (latest if 0).
-    """
-    cfg = load_config()
-    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
-    ctx, effective_block = _build_ctx(cfg, chain_id, block_number)
-    checksum = Web3.to_checksum_address(vault_address)
-    plasma_vault = PlasmaVault(ctx, checksum)
-
-    data = _fetch_market_detail(
-        ctx, plasma_vault, cfg, market_id, chain_id, effective_block
-    )
-    return json.dumps(data, indent=2)
 
 
 @mcp.tool()

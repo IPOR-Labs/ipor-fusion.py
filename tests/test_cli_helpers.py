@@ -16,6 +16,7 @@ from ipor_fusion.cli.vault_cmd import (
     _build_dependency_graph_json,
     _build_share_price_json,
     _print_dependency_graph,
+    _print_lending_health,
     _print_pending_requests,
     _print_substrates,
     _resolve_chain_id,
@@ -35,8 +36,15 @@ from ipor_fusion.cli.vault_health import (
     _print_health_check,
     _print_reconciliation,
 )
+from ipor_fusion.readers.lending_health import (
+    LendingMarketHealth,
+    VaultLendingHealth,
+)
+from ipor_fusion.config.roles import Roles
 from ipor_fusion.cli.vault_rendering import (
+    _format_age,
     _format_amount,
+    _format_remaining,
     _format_usd,
     _substrate_details,
 )
@@ -529,6 +537,56 @@ class TestSubstrateDetails:
     def test_symbol_and_contract(self):
         result = _substrate_details("WETH", "WrappedEther", "")
         assert result == " (symbol=WETH, contract=WrappedEther)"
+
+    def test_extra_params(self):
+        result = _substrate_details("USDC", "", "", extra={"trove": "0xabc"})
+        assert "trove=0xabc" in result
+
+
+class TestRolesGetName:
+    def test_known_role(self):
+        assert Roles.get_name(Roles.ALPHA_ROLE) == "ALPHA_ROLE"
+
+    def test_unknown_role(self):
+        result = Roles.get_name(999999)
+        assert result.startswith("UNKNOWN_ROLE_")
+
+
+class TestFormatAge:
+    def test_today(self):
+        import time  # pylint: disable=import-outside-toplevel
+
+        assert _format_age(int(time.time())) == "today"
+
+    def test_one_day_ago(self):
+        import time  # pylint: disable=import-outside-toplevel
+
+        assert _format_age(int(time.time()) - 86400) == "1 day ago"
+
+    def test_multiple_days_ago(self):
+        import time  # pylint: disable=import-outside-toplevel
+
+        assert "days ago" in _format_age(int(time.time()) - 86400 * 5)
+
+
+class TestFormatRemaining:
+    def test_expired(self):
+        assert _format_remaining(0) == "expired"
+        assert _format_remaining(-100) == "expired"
+
+    def test_minutes_only(self):
+        result = _format_remaining(300)
+        assert "5m left" in result
+
+    def test_hours_and_minutes(self):
+        result = _format_remaining(3700)
+        assert "1h" in result
+        assert "m left" in result
+
+    def test_days_and_hours(self):
+        result = _format_remaining(100000)
+        assert "d" in result
+        assert "h left" in result
 
 
 class TestSafeCall:
@@ -1074,6 +1132,7 @@ def _make_data(**overrides):
         "balance_fuses": [],
         "instant_fuses": [],
         "dependency_graph": None,
+        "lending_health": None,
     }
     defaults.update(overrides)
     return _VaultData(**defaults)
@@ -1132,6 +1191,104 @@ class TestHealthCheck:
         _print_health_check(data, bf, erc20, set())
         captured = capsys.readouterr()
         assert "No price feed" in captured.out
+
+
+def _make_lending_market(**overrides):
+    defaults = {
+        "protocol": "morpho",
+        "market_id": 1,
+        "market_name": "Morpho",
+        "current_ltv": 0.5,
+        "max_ltv": 0.8,
+        "health_factor": 1.6,
+        "total_collateral_usd": None,
+        "total_debt_usd": None,
+        "ltv_usage_percent": 62.5,
+    }
+    defaults.update(overrides)
+    return LendingMarketHealth(**defaults)
+
+
+class TestPrintLendingHealth:
+    def test_no_lending_positions(self, capsys):
+        data = _make_data()
+        _print_lending_health(data)
+        captured = capsys.readouterr()
+        assert "no lending positions" in captured.out
+
+    def test_ok_status(self, capsys):
+        m = _make_lending_market(ltv_usage_percent=50.0)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        _print_lending_health(data)
+        captured = capsys.readouterr()
+        assert "Lending Health:" in captured.out
+        assert "OK" in captured.out
+
+    def test_warning_status(self, capsys):
+        m = _make_lending_market(health_factor=1.08)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        _print_lending_health(data)
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+        assert "approaching liquidation" in captured.out
+
+    def test_critical_status(self, capsys):
+        m = _make_lending_market(health_factor=1.03)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        _print_lending_health(data)
+        captured = capsys.readouterr()
+        assert "CRITICAL" in captured.out
+        assert "NEAR LIQUIDATION" in captured.out
+
+    def test_none_ltv_shows_na(self, capsys):
+        m = _make_lending_market(
+            current_ltv=None,
+            health_factor=None,
+            ltv_usage_percent=None,
+        )
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        _print_lending_health(data)
+        captured = capsys.readouterr()
+        assert "N/A" in captured.out
+
+
+class TestHealthCheckLendingIntegration:
+    def test_lending_ok_in_health_check(self, capsys):
+        m = _make_lending_market(ltv_usage_percent=50.0)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
+        erc20 = _Erc20Totals()
+        _print_health_check(data, bf, erc20, set())
+        captured = capsys.readouterr()
+        assert "morpho Morpho" in captured.out
+
+    def test_lending_warning_in_health_check(self, capsys):
+        m = _make_lending_market(health_factor=1.08)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
+        erc20 = _Erc20Totals()
+        _print_health_check(data, bf, erc20, set())
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+
+    def test_lending_critical_in_health_check(self, capsys):
+        m = _make_lending_market(health_factor=1.03)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
+        erc20 = _Erc20Totals()
+        _print_health_check(data, bf, erc20, set())
+        captured = capsys.readouterr()
+        assert "CRITICAL" in captured.out
+        assert "NEAR LIQUIDATION" in captured.out
+
+    def test_lending_none_usage_skipped(self, capsys):
+        m = _make_lending_market(ltv_usage_percent=None, health_factor=None)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
+        erc20 = _Erc20Totals()
+        _print_health_check(data, bf, erc20, set())
+        captured = capsys.readouterr()
+        assert "morpho" not in captured.out
 
 
 class TestPrintPendingRequests:

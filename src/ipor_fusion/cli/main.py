@@ -8,8 +8,6 @@ import click
 from ipor_fusion.cli.config_cmd import config
 from ipor_fusion.cli.vault_cmd import vault
 
-_SHELLS = ("bash", "zsh", "fish")
-
 
 @click.group()
 @click.version_option(package_name="ipor_fusion")
@@ -31,29 +29,6 @@ def cli(ctx: click.Context, verbose: bool, quiet: bool, no_color: bool) -> None:
 
 cli.add_command(config)
 cli.add_command(vault)
-
-
-@cli.command("install-completion")
-@click.argument("shell", type=click.Choice(_SHELLS), required=False)
-def install_completion(shell: str | None) -> None:
-    """Print shell completion script for bash, zsh, or fish."""
-    if shell is None:
-        shell_env = os.environ.get("SHELL", "")
-        if "zsh" in shell_env:
-            shell = "zsh"
-        elif "fish" in shell_env:
-            shell = "fish"
-        else:
-            shell = "bash"
-
-    source_type = f"{shell}_source"
-    if shell == "fish":
-        snippet = f"_FUSION_COMPLETE={source_type} fusion | source"
-    else:
-        snippet = f'eval "$(_FUSION_COMPLETE={source_type} fusion)"'
-
-    click.echo("# Add this to your shell config:")
-    click.echo(snippet)
 
 
 def main() -> None:

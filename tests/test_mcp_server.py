@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument,import-outside-toplevel
 """Tests for the MCP server tool definitions (direct SDK import)."""
 
 import json

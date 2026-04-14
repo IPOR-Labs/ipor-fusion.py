@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
@@ -22,6 +22,10 @@ from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
+from ipor_fusion.readers.lending_health import (
+    VaultLendingHealth,
+    fetch_vault_lending_health,
+)
 
 
 T = TypeVar("T")
@@ -67,6 +71,7 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     deployment_timestamp: int | None = None
     withdraw_manager_data: _WithdrawManagerData | None = None
     dependency_graph: dict[int, list[int]] | None = None
+    lending_health: VaultLendingHealth | None = None
 
 
 def _safe_call(func: Callable[[], T]) -> T | None:
@@ -123,7 +128,10 @@ def _fetch_withdraw_manager_data(
 
 
 def _fetch_vault_data(  # pylint: disable=too-many-locals
-    ctx: Web3Context, plasma_vault: PlasmaVault, block_number: int | None
+    ctx: Web3Context,
+    plasma_vault: PlasmaVault,
+    block_number: int | None,
+    chain_id: int = 0,
 ) -> _VaultData:
     with ThreadPoolExecutor() as pool:
         # Phase 1: all independent vault reads in parallel
@@ -184,6 +192,32 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             if deps:
                 dep_graph[market_id] = [int(d) for d in deps]
 
+        # Phase 5: lending health (Morpho, Aave V3)
+        lending_health: VaultLendingHealth | None = None
+        if chain_id:
+            sub_futs: dict[int, Any] = {
+                bf.market_id: pool.submit(
+                    plasma_vault.get_market_substrates, bf.market_id
+                )
+                for bf in balance_fuses
+            }
+            market_substrates: dict[int, list[bytes]] = {}
+            for mid, fut in sub_futs.items():
+                subs = fut.result()
+                if subs:
+                    market_substrates[mid] = subs
+
+            vault_addr = Web3.to_checksum_address(plasma_vault.address)
+            lending_health = _safe_call(
+                lambda: fetch_vault_lending_health(
+                    ctx,
+                    vault_addr,
+                    chain_id,
+                    [bf.market_id for bf in balance_fuses],
+                    market_substrates,
+                )
+            )
+
         return _VaultData(
             block_label=block_label,
             block_timestamp=block_timestamp,
@@ -205,6 +239,7 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             instant_fuses=f_instant.result(),
             withdraw_manager_data=wm_data,
             dependency_graph=dep_graph or None,
+            lending_health=lending_health,
         )
 
 

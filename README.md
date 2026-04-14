@@ -97,21 +97,17 @@ receipt = vault.execute([action])
 
 The SDK ships with a `fusion` CLI for inspecting and managing Plasma Vaults from the terminal.
 
+You need an RPC provider URL — get a free key at [Alchemy](https://www.alchemy.com/) or [Infura](https://www.infura.io/).
+
 ```bash
 # Install with CLI extras
-pip install 'ipor-fusion[cli]'  # or: poetry install (for development)
+pip install 'ipor-fusion[cli]'
 
 # Configure an RPC provider (auto-detects chain ID)
 fusion config set-provider https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
 
-# Add a vault
-fusion vault add 0xVAULT_ADDRESS --chain-id 42161
-
 # Inspect a vault (auto-saves to config on first use)
-fusion vault info 0xVAULT_ADDRESS
-
-# Chain ID can be a name
-fusion vault info 0xVAULT_ADDRESS --chain-id ethereum
+fusion vault info 0xB8a451107A9f87FDe481D4D686247D6e43Ed715e --chain-id ethereum
 
 # List saved vaults
 fusion vault list
@@ -143,11 +139,15 @@ Available tools:
 
 | Tool | Description |
 |------|-------------|
-| `vault_info` | Full on-chain vault state (assets, fuses, balances, health check) |
-| `vault_list` | List saved vaults |
-| `config_show` | Show current CLI configuration |
+| `config_show` | Show current configuration (providers, vaults, API key status) |
+| `config_set_provider` | Set RPC provider URL for a chain (auto-detects chain ID) |
+| `config_set_etherscan_key` | Set Etherscan API key (enables contract name resolution) |
+| `vault_info` | Full on-chain vault state — assets, fuses, balances, lending health, reconciliation |
+| `vault_list` | List all saved vaults |
+| `vault_add` | Save a vault to the local config (auto-fetches on-chain name) |
+| `vault_remove` | Remove a vault from the local config |
 
-The MCP server delegates to the `fusion` CLI, so configure providers and vaults via `fusion config` first.
+Configure providers and vaults via `fusion config` or the MCP config tools first.
 
 ## Architecture
 

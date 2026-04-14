@@ -366,6 +366,30 @@ def _compute_health_check(  # pylint: disable=too-complex
     underlying = data.asset.lower()
     result = _HealthCheckData()
 
+    # Lending health warnings
+    if data.lending_health and data.lending_health.has_lending_positions:
+        for m in data.lending_health.markets:
+            if m.ltv_usage_percent is None:
+                continue
+            ltv_str = f"{m.current_ltv:.4f}" if m.current_ltv is not None else "?"
+            max_str = f"{m.max_ltv:.4f}"
+            hf_str = (
+                f", health_factor={m.health_factor:.4f}"
+                if m.health_factor is not None
+                else ""
+            )
+            line = (
+                f"{m.protocol} {m.market_name}: "
+                f"LTV {ltv_str}/{max_str} ({m.ltv_usage_percent:.1f}% usage)"
+                f"{hf_str}"
+            )
+            if m.is_critical:
+                result.warnings.append(f"CRITICAL — {line} — NEAR LIQUIDATION")
+            elif m.is_warning:
+                result.warnings.append(f"WARNING — {line} — approaching liquidation")
+            else:
+                result.ok.append(line)
+
     underlying_info = erc20_totals.token_info.get(underlying)
     underlying_raw = 0
     if underlying_info and underlying_info.usd_value and data.asset_price_usd:
