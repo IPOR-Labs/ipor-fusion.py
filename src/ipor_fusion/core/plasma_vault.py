@@ -131,14 +131,28 @@ class PlasmaVault(ContractWrapper):
         return [Web3.to_checksum_address(item) for item in list(value)]
 
     def get_balance_fuses(self) -> list[BalanceFuse]:
-        events = self._get_balance_fuse_added_events()
-        result = []
-        for event in events:
+        added_events = self._get_balance_fuse_added_events()
+        removed_events = self._get_balance_fuse_removed_events()
+
+        # Build set of (market_id, fuse) pairs that were removed
+        removed: set[tuple[int, str]] = set()
+        for event in removed_events:
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
-            result.append(
-                BalanceFuse(market_id=market_id, fuse=Web3.to_checksum_address(fuse))
-            )
-        return result
+            removed.add((market_id, Web3.to_checksum_address(fuse).lower()))
+
+        # Net: only include entries that weren't subsequently removed.
+        # Per market, on-chain storage holds exactly one active fuse.
+        # Keep the last Added entry per market_id that isn't in the removed set.
+        per_market: dict[int, BalanceFuse] = {}
+        for event in added_events:
+            (market_id, fuse) = decode(["uint256", "address"], event["data"])
+            checksum = Web3.to_checksum_address(fuse)
+            if (market_id, checksum.lower()) not in removed:
+                per_market[market_id] = BalanceFuse(
+                    market_id=market_id, fuse=checksum
+                )
+
+        return list(per_market.values())
 
     def withdraw_manager_address(self) -> ChecksumAddress | None:
         events = self._get_withdraw_manager_changed_events()
@@ -193,6 +207,16 @@ class PlasmaVault(ContractWrapper):
     def _get_balance_fuse_added_events(self) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="BalanceFuseAdded(uint256,address)")
+        ).to_0x_hex()
+        return list(
+            self._ctx.get_logs(
+                contract_address=self._address, topics=[event_signature_hash]
+            )
+        )
+
+    def _get_balance_fuse_removed_events(self) -> list[LogReceipt]:
+        event_signature_hash = HexBytes(
+            Web3.keccak(text="BalanceFuseRemoved(uint256,address)")
         ).to_0x_hex()
         return list(
             self._ctx.get_logs(
