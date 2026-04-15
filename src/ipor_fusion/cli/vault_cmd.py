@@ -511,13 +511,16 @@ def _print_vault_info(
         data,
         bf_totals,
         erc20_totals,
+        plasma_vault,
     )
     click.echo()
 
     _print_lending_health(data)
     click.echo()
 
-    _print_health_check(data, bf_totals, erc20_totals, all_substrate_addrs)
+    _print_health_check(
+        data, bf_totals, erc20_totals, all_substrate_addrs, plasma_vault
+    )
 
 
 def _build_share_price_json(data: _VaultData) -> dict | None:
@@ -821,9 +824,14 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
         erc20_entry["note"] = td.note
         erc20_json.append(erc20_entry)
 
-    # Balance fuse totals for reconciliation
+    # Balance fuse totals for reconciliation (deduplicate by market_id)
     bf_totals = _BalanceFuseTotals()
+    seen_json_markets: set[int] = set()
     for bfj in balance_fuses_json:
+        mid = bfj["market_id"]
+        if mid in seen_json_markets:
+            continue
+        seen_json_markets.add(mid)
         bf_totals.raw_total += bfj["balance"]["raw"]
         if data.asset_price_usd is not None:
             bf_totals.usd_total += (
@@ -831,9 +839,9 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
             ) * data.asset_price_usd
 
     # Reconciliation
-    recon = _compute_reconciliation(data, bf_totals, erc20_totals)
+    recon = _compute_reconciliation(data, bf_totals, erc20_totals, plasma_vault)
     decimals = data.asset_decimals
-    reconciliation_json = {
+    reconciliation_json: dict = {
         "balance_fuses_total": {
             "raw": recon.bf_total_raw,
             "formatted": _format_amount(recon.bf_total_raw, decimals),
@@ -865,6 +873,16 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
             "usd": recon.delta_usd,
             "percent": recon.delta_percent,
         },
+        "pending_withdrawals": {
+            "raw": recon.pending_withdrawal_raw,
+            "formatted": _format_amount(recon.pending_withdrawal_raw, decimals),
+            "usd": recon.pending_withdrawal_usd,
+        },
+        "implied_market_total": {
+            "raw": recon.implied_market_total,
+            "formatted": _format_amount(recon.implied_market_total, decimals),
+        },
+        "market_storage_divergence": recon.bf_total_raw - recon.implied_market_total,
     }
 
     # Lending health
@@ -892,7 +910,9 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
 
     # Health check
     all_sub_lower = {a.lower() for a in all_sub_addresses}
-    health = _compute_health_check(data, bf_totals, erc20_totals, all_sub_lower)
+    health = _compute_health_check(
+        data, bf_totals, erc20_totals, all_sub_lower, plasma_vault
+    )
     health_json = {"ok": health.ok, "warnings": health.warnings}
 
     explorer_base = BLOCK_EXPLORER_URLS.get(chain_id)
@@ -1035,8 +1055,9 @@ def _print_balance_fuses_table(
     api_key: str | None,
 ) -> _BalanceFuseTotals:
     totals = _BalanceFuseTotals()
+    seen_market_ids: set[int] = set()
     with ThreadPoolExecutor() as pool:
-        futures: list[tuple[int, str, Future, Future]] = []
+        futures: list[tuple[int, int, str, Future, Future]] = []
         for idx, balance_fuse in enumerate(balance_fuses, 1):
             market_label = _market_name(balance_fuse.market_id)
             market_id_str = (
@@ -1050,15 +1071,20 @@ def _print_balance_fuses_table(
             f_contract = pool.submit(
                 get_contract_name, chain_id, balance_fuse.fuse, api_key
             )
-            futures.append((idx, market_id_str, f_balance, f_contract))
+            futures.append((idx, balance_fuse.market_id, market_id_str, f_balance, f_contract))
 
         rows: list[tuple[str, ...]] = []
-        for idx, market_id_str, f_balance, f_contract in futures:
+        for idx, market_id, market_id_str, f_balance, f_contract in futures:
             assets_in_market = f_balance.result()
-            totals.raw_total += assets_in_market
-            totals.per_market[market_id_str] = assets_in_market
-            if asset_price_usd is not None:
-                totals.usd_total += (assets_in_market / 10**decimals) * asset_price_usd
+            # Deduplicate: only count each market_id once in totals
+            # (multiple balance fuses can reference the same market,
+            # but totalAssetsInMarket is a single storage slot per market).
+            if market_id not in seen_market_ids:
+                totals.raw_total += assets_in_market
+                totals.per_market[market_id_str] = assets_in_market
+                if asset_price_usd is not None:
+                    totals.usd_total += (assets_in_market / 10**decimals) * asset_price_usd
+                seen_market_ids.add(market_id)
             contract_name = f_contract.result()
             balance_str = (
                 f"{_format_amount(assets_in_market, decimals)} {asset_symbol}"
