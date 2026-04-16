@@ -683,6 +683,8 @@ class TestVaultListJson:
 
 
 class TestVaultInfoJson:
+    @patch("ipor_fusion.cli.vault_fetcher._fetch_aave_positions", return_value=None)
+    @patch("ipor_fusion.cli.vault_fetcher._fetch_morpho_positions", return_value=None)
     @patch("ipor_fusion.cli.vault_fetcher.WithdrawManager")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
@@ -697,6 +699,8 @@ class TestVaultInfoJson:
         mock_oracle_cls,
         mock_get_name,
         mock_wm_cls,
+        _mock_morpho_positions,
+        _mock_aave_positions,
         tmp_config,
     ):
         cfg = FusionConfig(

@@ -4,6 +4,7 @@ import json
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from concurrent.futures import Future, ThreadPoolExecutor
+from typing import Any
 
 import click
 from web3 import Web3
@@ -19,6 +20,7 @@ from ipor_fusion.cli.vault_fetcher import (
     _VaultData,
     _fetch_deployment_info,
     _fetch_vault_data,
+    _resolve_token_decimals,
     _resolve_token_symbol,
     _safe_call,
 )
@@ -314,62 +316,128 @@ def info(
     )
 
 
-def _print_lending_health(data: _VaultData) -> None:
+def _print_lending_health(  # pylint: disable=too-complex
+    ctx: Web3Context, data: _VaultData
+) -> None:
     lh = data.lending_health
-    if not lh or not lh.has_lending_positions:
-        click.echo("Lending Health: (no lending positions)")
+    has_health = lh is not None and lh.has_lending_positions
+    has_breakdown = bool(data.morpho_positions) or bool(data.aave_positions)
+    if not has_health and not has_breakdown:
+        click.echo("Position Breakdown: (no lending positions)")
         return
 
-    click.echo("Lending Health:")
-    rows: list[tuple[str, ...]] = []
+    click.echo("Position Breakdown:")
+    morpho_health, aave_health = _index_lending_health(lh)
+    consumed_morpho_subs: set[str] = set()
+    consumed_aave_mids: set[int] = set()
+    prices = data.token_prices_usd or {}
+
+    for ipor_mid, positions in (data.morpho_positions or {}).items():
+        click.echo(f"  {_format_market_label(ipor_mid)}:")
+        for pb in positions:
+            coll_sym = _resolve_token_symbol(ctx, pb.collateral_token) or "?"
+            loan_sym = _resolve_token_symbol(ctx, pb.loan_token) or "?"
+            click.echo(
+                f"    morpho market 0x{pb.market_id} ({coll_sym}/{loan_sym}):"
+            )
+            click.echo(
+                f"      Collateral:    {_format_token_amount(ctx, int(pb.collateral), pb.collateral_token, prices)}"
+            )
+            click.echo(
+                f"      Borrow:        {_format_token_amount(ctx, int(pb.borrow_assets), pb.loan_token, prices)}"
+            )
+            click.echo(
+                f"      Supply:        {_format_token_amount(ctx, int(pb.supply_assets), pb.loan_token, prices)}"
+            )
+            sid = str(pb.market_id).lower().removeprefix("0x")
+            consumed_morpho_subs.add(sid)
+            if m := morpho_health.get(sid):
+                _print_health_lines(m, indent="      ")
+
+    for ipor_mid, aave_positions in (data.aave_positions or {}).items():
+        click.echo(f"  {_format_market_label(ipor_mid)}:")
+        for ab in aave_positions:
+            asset_symbol = _resolve_token_symbol(ctx, ab.asset) or "?"
+            click.echo(f"    asset {ab.asset} ({asset_symbol}):")
+            click.echo(
+                f"      Supply:        {_format_token_amount(ctx, int(ab.supply), ab.asset, prices)}"
+            )
+            click.echo(
+                f"      Variable Debt: {_format_token_amount(ctx, int(ab.variable_debt), ab.asset, prices)}"
+            )
+            if ab.stable_debt > 0:
+                click.echo(
+                    f"      Stable Debt:   {_format_token_amount(ctx, int(ab.stable_debt), ab.asset, prices)}"
+                )
+        consumed_aave_mids.add(ipor_mid)
+        if m := aave_health.get(ipor_mid):
+            _print_health_lines(m, indent="    ")
+
+    # Orphan health rows (no breakdown matched — e.g. read failure or supply-only)
+    for sid, m in morpho_health.items():
+        if sid not in consumed_morpho_subs:
+            click.echo(f"  {_format_market_label(m.market_id)}:")
+            click.echo(f"    morpho market 0x{sid}:")
+            _print_health_lines(m, indent="      ")
+    for mid, m in aave_health.items():
+        if mid not in consumed_aave_mids:
+            click.echo(f"  {_format_market_label(mid)}:")
+            _print_health_lines(m, indent="    ")
+
+
+def _index_lending_health(lh: Any) -> tuple[dict[str, Any], dict[int, Any]]:
+    """Split lending health rows by protocol for fast lookup during rendering.
+
+    Morpho rows are keyed by morpho substrate id (one row per substrate).
+    Aave rows are keyed by IPOR market id (account-aggregated, one row per market).
+    """
+    morpho: dict[str, Any] = {}
+    aave: dict[int, Any] = {}
+    if lh is None:
+        return morpho, aave
     for m in lh.markets:
-        ltv_str = f"{m.current_ltv:.4f}" if m.current_ltv is not None else "N/A"
-        max_str = f"{m.max_ltv:.4f}"
-        hf_str = f"{m.health_factor:.4f}" if m.health_factor is not None else "N/A"
-        usage_str = (
-            f"{m.ltv_usage_percent:.1f}%" if m.ltv_usage_percent is not None else "N/A"
-        )
+        if m.protocol == "morpho" and m.substrate_id:
+            morpho[str(m.substrate_id).lower().removeprefix("0x")] = m
+        elif m.protocol == "aave_v3":
+            aave[m.market_id] = m
+    return morpho, aave
 
-        status = "OK"
-        if m.is_critical:
-            status = "CRITICAL"
-        elif m.is_warning:
-            status = "WARNING"
 
-        row = (
-            f"{m.market_name} ({m.market_id})",
-            m.protocol,
-            f"{ltv_str} / {max_str}",
-            usage_str,
-            hf_str,
-            status,
-        )
-        rows.append(row)
+def _print_health_lines(market: Any, indent: str) -> None:
+    """Render LTV / Health Factor / Status lines for a lending market.
 
-    headers = (
-        "Market",
-        "Protocol",
-        "LTV / Max LTV",
-        "Usage",
-        "Health Factor",
-        "Status",
+    Status colors: green when safe, yellow at warning (HF < 1.10), red+bold
+    at critical (HF <= 1.05). The status line includes a short qualifier so
+    "OK" is not ambiguous (e.g. "OK (no debt)" when there's nothing to
+    liquidate, "OK (safe — HF > 1.10)" otherwise).
+    """
+    ltv_str = f"{market.current_ltv:.4f}" if market.current_ltv is not None else "N/A"
+    max_str = f"{market.max_ltv:.4f}"
+    usage_str = (
+        f"{market.ltv_usage_percent:.1f}%"
+        if market.ltv_usage_percent is not None
+        else "N/A"
     )
-    _print_table(headers, rows)
+    hf_str = (
+        f"{market.health_factor:.4f}" if market.health_factor is not None else "N/A"
+    )
 
-    for m in lh.markets:
-        if m.is_critical:
-            click.secho(
-                f"  !!! {m.market_name}: health factor {m.health_factor:.4f} <= 1.05 — "
-                f"NEAR LIQUIDATION",
-                fg="red",
-                bold=True,
-            )
-        elif m.is_warning:
-            click.secho(
-                f"  ! {m.market_name}: health factor {m.health_factor:.4f} < 1.10 — "
-                f"approaching liquidation threshold",
-                fg="yellow",
-            )
+    if market.is_critical:
+        status, color, bold = "CRITICAL (near liquidation — HF ≤ 1.05)", "red", True
+    elif market.is_warning:
+        status, color, bold = (
+            "WARNING (approaching liquidation — HF < 1.10)",
+            "yellow",
+            False,
+        )
+    elif market.health_factor is None:
+        status, color, bold = "OK (no debt)", "green", False
+    else:
+        status, color, bold = "OK (safe — HF > 1.10)", "green", False
+
+    click.echo(f"{indent}LTV:           {ltv_str} / {max_str} ({usage_str})")
+    click.secho(f"{indent}Health Factor: {hf_str}", fg=color, bold=bold)
+    click.secho(f"{indent}Status:        {status}", fg=color, bold=bold)
 
 
 def _print_vault_info(
@@ -515,7 +583,7 @@ def _print_vault_info(
     )
     click.echo()
 
-    _print_lending_health(data)
+    _print_lending_health(ctx, data)
     click.echo()
 
     _print_health_check(
@@ -624,6 +692,52 @@ def _format_market_label(market_id: int) -> str:
     return f"{label} ({market_id})" if label != "UNKNOWN" else str(market_id)
 
 
+def _build_breakdown_amount_json(
+    ctx: Web3Context,
+    raw: int,
+    token_address: str,
+    prices_usd: dict[str, float] | None,
+) -> dict[str, Any]:
+    """Build the JSON entry for one breakdown amount (collateral/borrow/supply/debt).
+
+    Always includes raw + token. When ERC-20 metadata is resolvable, adds
+    symbol, decimals, and `formatted` (decimal-shifted human string). When the
+    oracle has a USD price for the token, adds `usd` (rounded to 2 decimals).
+    """
+    entry: dict[str, Any] = {"raw": raw, "token": token_address}
+    if symbol := _resolve_token_symbol(ctx, token_address):
+        entry["symbol"] = symbol
+    decimals = _resolve_token_decimals(ctx, token_address)
+    if decimals is not None:
+        entry["decimals"] = decimals
+        entry["formatted"] = _format_amount(raw, decimals)
+        if prices_usd and (price := prices_usd.get(token_address.lower())) is not None:
+            entry["usd"] = round((raw / 10**decimals) * price, 2)
+    return entry
+
+
+def _format_token_amount(
+    ctx: Web3Context,
+    raw: int,
+    token_address: str,
+    prices_usd: dict[str, float] | None = None,
+) -> str:
+    """Format a raw on-chain amount using cached ERC-20 symbol + decimals.
+
+    When `prices_usd` (lowercase address → USD price) contains the token, the
+    output is suffixed with ` ($X.XX)` via `_format_usd`.
+    """
+    symbol = _resolve_token_symbol(ctx, token_address) or "?"
+    decimals = _resolve_token_decimals(ctx, token_address)
+    if decimals is None:
+        return f"{raw} raw ({symbol})"
+    base = f"{_format_amount(raw, decimals)} {symbol}"
+    if prices_usd:
+        usd_suffix = _format_usd(raw, decimals, prices_usd.get(token_address.lower()))
+        return f"{base}{usd_suffix}"
+    return base
+
+
 def _print_dependency_graph(data: _VaultData) -> None:
     if not data.dependency_graph:
         return
@@ -679,7 +793,7 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     }
 
 
-def _build_json_output(  # pylint: disable=too-many-locals,too-complex
+def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-branches
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: _VaultData,
@@ -751,6 +865,60 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex
             if data.dependency_graph and bf.market_id in data.dependency_graph:
                 deps = data.dependency_graph[bf.market_id]
                 bf_entry["depends_on"] = [_format_market_label(d) for d in deps]
+            if data.morpho_positions and bf.market_id in data.morpho_positions:
+                bf_entry["position_breakdown"] = [
+                    {
+                        "morpho_market_id": "0x" + str(pb.market_id),
+                        "collateral_symbol": _resolve_token_symbol(
+                            ctx, pb.collateral_token
+                        )
+                        or None,
+                        "loan_symbol": _resolve_token_symbol(ctx, pb.loan_token)
+                        or None,
+                        "collateral": _build_breakdown_amount_json(
+                            ctx,
+                            int(pb.collateral),
+                            pb.collateral_token,
+                            data.token_prices_usd,
+                        ),
+                        "borrow": _build_breakdown_amount_json(
+                            ctx,
+                            int(pb.borrow_assets),
+                            pb.loan_token,
+                            data.token_prices_usd,
+                        ),
+                        "supply": _build_breakdown_amount_json(
+                            ctx,
+                            int(pb.supply_assets),
+                            pb.loan_token,
+                            data.token_prices_usd,
+                        ),
+                    }
+                    for pb in data.morpho_positions[bf.market_id]
+                ]
+            if data.aave_positions and bf.market_id in data.aave_positions:
+                bf_entry["position_breakdown"] = [
+                    {
+                        "asset": pb.asset,
+                        "asset_symbol": _resolve_token_symbol(ctx, pb.asset) or None,
+                        "supply": _build_breakdown_amount_json(
+                            ctx, int(pb.supply), pb.asset, data.token_prices_usd
+                        ),
+                        "variable_debt": _build_breakdown_amount_json(
+                            ctx,
+                            int(pb.variable_debt),
+                            pb.asset,
+                            data.token_prices_usd,
+                        ),
+                        "stable_debt": _build_breakdown_amount_json(
+                            ctx,
+                            int(pb.stable_debt),
+                            pb.asset,
+                            data.token_prices_usd,
+                        ),
+                    }
+                    for pb in data.aave_positions[bf.market_id]
+                ]
             balance_fuses_json.append(bf_entry)
 
         # Substrates - also resolve symbols/contracts for addresses

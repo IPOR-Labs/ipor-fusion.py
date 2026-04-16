@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 from eth_abi import decode
@@ -41,6 +42,24 @@ class MorphoMarketParams:
     lltv: int
 
 
+@dataclass(slots=True)
+class MorphoPositionBreakdown:
+    """User position in a Morpho Blue market, expressed in asset amounts.
+
+    `collateral` is denominated in the market's collateral token; `borrow_assets`
+    and `supply_assets` are denominated in the loan token. Shares are converted
+    to assets using Morpho's rounding convention (round-up for borrow, round-down
+    for supply — matches what the protocol credits on redeem).
+    """
+
+    market_id: MorphoBlueMarketId
+    loan_token: ChecksumAddress
+    collateral_token: ChecksumAddress
+    collateral: Amount
+    borrow_assets: Amount
+    supply_assets: Amount
+
+
 class MorphoReader(ContractWrapper):
     """Reader for Morpho Blue protocol on-chain state."""
 
@@ -62,6 +81,41 @@ class MorphoReader(ContractWrapper):
         )
         values = decode(["uint256", "uint128", "uint128"], raw)
         return MorphoPosition(*values)
+
+    def position_breakdown(
+        self, market_id: MorphoBlueMarketId, user: ChecksumAddress
+    ) -> MorphoPositionBreakdown:
+        """Return the user's position with shares converted to asset amounts.
+
+        Combines `position()`, `market()`, and `market_params()` reads.
+        """
+        pos = self.position(market_id, user)
+        market = self.market(market_id)
+        params = self.market_params(market_id)
+        if market.total_borrow_shares > 0:
+            borrow_assets = math.ceil(
+                pos.borrow_shares
+                * (market.total_borrow_assets + 1)
+                / (market.total_borrow_shares + 1)
+            )
+        else:
+            borrow_assets = 0
+        if market.total_supply_shares > 0:
+            supply_assets = (
+                pos.supply_shares
+                * market.total_supply_assets
+                // market.total_supply_shares
+            )
+        else:
+            supply_assets = 0
+        return MorphoPositionBreakdown(
+            market_id=market_id,
+            loan_token=params.loan_token,
+            collateral_token=params.collateral_token,
+            collateral=pos.collateral,
+            borrow_assets=Amount(borrow_assets),
+            supply_assets=Amount(supply_assets),
+        )
 
     def market_params(self, market_id: MorphoBlueMarketId) -> MorphoMarketParams:
         raw = self._call(

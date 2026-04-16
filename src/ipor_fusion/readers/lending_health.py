@@ -68,7 +68,12 @@ AAVE_V3_MARKET_IDS = frozenset(
 
 @dataclass(slots=True)
 class LendingMarketHealth:
-    """Health status of a single lending market position."""
+    """Health status of a single lending market position.
+
+    `substrate_id` identifies the underlying market within the IPOR market_id:
+    - Morpho: the 64-char hex morpho market id (one row per substrate).
+    - Aave V3: None — Aave health is account-level, aggregated across reserves.
+    """
 
     protocol: str
     market_id: int
@@ -79,6 +84,7 @@ class LendingMarketHealth:
     total_collateral_usd: float | None
     total_debt_usd: float | None
     ltv_usage_percent: float | None
+    substrate_id: str | None = None
 
     @property
     def is_warning(self) -> bool:
@@ -152,6 +158,7 @@ def _compute_morpho_market_health(  # pylint: disable=broad-exception-caught
             total_collateral_usd=None,
             total_debt_usd=None,
             ltv_usage_percent=0.0,
+            substrate_id=morpho_market_id,
         )
 
     try:
@@ -177,6 +184,7 @@ def _compute_morpho_market_health(  # pylint: disable=broad-exception-caught
             total_collateral_usd=None,
             total_debt_usd=None,
             ltv_usage_percent=None,
+            substrate_id=morpho_market_id,
         )
 
     # collateral_value_in_loan = collateral * oracle_price / ORACLE_PRICE_SCALE
@@ -207,6 +215,7 @@ def _compute_morpho_market_health(  # pylint: disable=broad-exception-caught
         total_collateral_usd=None,
         total_debt_usd=None,
         ltv_usage_percent=round(ltv_usage, 2) if ltv_usage is not None else None,
+        substrate_id=morpho_market_id,
     )
 
 

@@ -100,7 +100,17 @@ def vault_info(
       pending_requests[] (account, shares, assets with usd, end_withdraw_window, remaining_seconds, can_withdraw)
     - fuses (address, contract name)
     - instant_withdrawal_fuses (address, contract name)
-    - balance_fuses per market (market name, balance raw/formatted, fuse address/contract)
+    - balance_fuses per market (market name, balance raw/formatted, fuse address/contract,
+      position_breakdown — for Morpho and Aave V3 markets: exposes the per-substrate
+      decomposition hidden behind the single netted balance fuse value. Each amount
+      object contains: raw (native on-chain integer), token (ERC-20 address),
+      symbol/decimals/formatted when ERC-20 metadata is resolvable, and usd when the
+      vault's price oracle has a source for that token.
+        - Morpho: list of per-morpho-market-id positions with morpho_market_id,
+          collateral_symbol, loan_symbol, and collateral/borrow/supply amount objects.
+        - Aave V3: list of per-asset positions with asset, asset_symbol, and
+          supply/variable_debt/stable_debt amount objects; only assets with non-zero
+          amounts are included.)
     - substrates per market (address, symbol, contract, substrate_type)
     - erc20_balances (address, symbol, decimals, balance, price_usd, usd_value)
     - reconciliation (balance_fuses_total, underlying_on_vault, erc20_direct_total, sum, on_chain_total_assets, delta)
