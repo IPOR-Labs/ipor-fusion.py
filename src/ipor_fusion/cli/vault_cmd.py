@@ -1071,7 +1071,9 @@ def _print_balance_fuses_table(
             f_contract = pool.submit(
                 get_contract_name, chain_id, balance_fuse.fuse, api_key
             )
-            futures.append((idx, balance_fuse.market_id, market_id_str, f_balance, f_contract))
+            futures.append(
+                (idx, balance_fuse.market_id, market_id_str, f_balance, f_contract)
+            )
 
         rows: list[tuple[str, ...]] = []
         for idx, market_id, market_id_str, f_balance, f_contract in futures:
@@ -1083,7 +1085,9 @@ def _print_balance_fuses_table(
                 totals.raw_total += assets_in_market
                 totals.per_market[market_id_str] = assets_in_market
                 if asset_price_usd is not None:
-                    totals.usd_total += (assets_in_market / 10**decimals) * asset_price_usd
+                    totals.usd_total += (
+                        assets_in_market / 10**decimals
+                    ) * asset_price_usd
                 seen_market_ids.add(market_id)
             contract_name = f_contract.result()
             balance_str = (

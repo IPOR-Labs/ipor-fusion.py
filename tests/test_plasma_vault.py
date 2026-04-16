@@ -290,9 +290,9 @@ class TestPlasmaVaultEventDecoding:
         vault, ctx = _make_vault()
         event1_data = encode(["uint256", "address"], [1, FUSE_ADDR])
         event2_data = encode(["uint256", "address"], [2, FUSE_ADDR_2])
-        ctx.get_logs.return_value = [
-            {"data": event1_data},
-            {"data": event2_data},
+        ctx.get_logs.side_effect = [
+            [{"data": event1_data}, {"data": event2_data}],
+            [],
         ]
 
         result = vault.get_balance_fuses()
@@ -303,9 +303,38 @@ class TestPlasmaVaultEventDecoding:
         assert result[1].market_id == 2
         assert result[1].fuse == FUSE_ADDR_2
 
+    def test_get_balance_fuses_nets_removed_entries(self):
+        vault, ctx = _make_vault()
+        added = [
+            {"data": encode(["uint256", "address"], [1, FUSE_ADDR])},
+            {"data": encode(["uint256", "address"], [2, FUSE_ADDR_2])},
+        ]
+        removed = [{"data": encode(["uint256", "address"], [1, FUSE_ADDR])}]
+        ctx.get_logs.side_effect = [added, removed]
+
+        result = vault.get_balance_fuses()
+
+        assert len(result) == 1
+        assert result[0].market_id == 2
+        assert result[0].fuse == FUSE_ADDR_2
+
+    def test_get_balance_fuses_deduplicates_per_market(self):
+        vault, ctx = _make_vault()
+        added = [
+            {"data": encode(["uint256", "address"], [1, FUSE_ADDR])},
+            {"data": encode(["uint256", "address"], [1, FUSE_ADDR_2])},
+        ]
+        ctx.get_logs.side_effect = [added, []]
+
+        result = vault.get_balance_fuses()
+
+        assert len(result) == 1
+        assert result[0].market_id == 1
+        assert result[0].fuse == FUSE_ADDR_2
+
     def test_get_balance_fuses_empty(self):
         vault, ctx = _make_vault()
-        ctx.get_logs.return_value = []
+        ctx.get_logs.side_effect = [[], []]
 
         result = vault.get_balance_fuses()
 

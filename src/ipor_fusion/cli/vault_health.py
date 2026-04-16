@@ -229,7 +229,7 @@ def _print_erc20_balances(
 
 
 @dataclass
-class _ReconciliationData:
+class _ReconciliationData:  # pylint: disable=too-many-instance-attributes
     bf_total_raw: int = 0
     bf_total_usd: float = 0.0
     underlying_raw: int = 0
@@ -279,16 +279,10 @@ def _compute_reconciliation(
     # refreshes the markets touched by instant withdrawal fuses.
     pending_raw = 0
     pending_usd = 0.0
-    if (
-        data.withdraw_manager_data
-        and data.withdraw_manager_data.shares_to_release > 0
-        and plasma_vault is not None
-    ):
-        assets = _safe_call(
-            lambda: plasma_vault.convert_to_assets(
-                Shares(data.withdraw_manager_data.shares_to_release)
-            )
-        )
+    wm_data = data.withdraw_manager_data
+    if wm_data and wm_data.shares_to_release > 0 and plasma_vault is not None:
+        shares = Shares(wm_data.shares_to_release)
+        assets = _safe_call(lambda: plasma_vault.convert_to_assets(shares))
         if assets is not None:
             pending_raw = assets
             if price:

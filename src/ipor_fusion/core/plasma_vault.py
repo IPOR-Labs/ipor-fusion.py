@@ -138,7 +138,7 @@ class PlasmaVault(ContractWrapper):
         removed: set[tuple[int, str]] = set()
         for event in removed_events:
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
-            removed.add((market_id, Web3.to_checksum_address(fuse).lower()))
+            removed.add((market_id, str(Web3.to_checksum_address(fuse)).lower()))
 
         # Net: only include entries that weren't subsequently removed.
         # Per market, on-chain storage holds exactly one active fuse.
@@ -147,10 +147,8 @@ class PlasmaVault(ContractWrapper):
         for event in added_events:
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
             checksum = Web3.to_checksum_address(fuse)
-            if (market_id, checksum.lower()) not in removed:
-                per_market[market_id] = BalanceFuse(
-                    market_id=market_id, fuse=checksum
-                )
+            if (market_id, str(checksum).lower()) not in removed:
+                per_market[market_id] = BalanceFuse(market_id=market_id, fuse=checksum)
 
         return list(per_market.values())
 
