@@ -22,10 +22,17 @@ from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
+from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown, AaveV3Reader
 from ipor_fusion.readers.lending_health import (
+    AAVE_V3_MARKET_IDS,
+    AAVE_V3_POOL,
+    MORPHO_BLUE_ADDRESS,
+    MORPHO_MARKET_IDS,
     VaultLendingHealth,
     fetch_vault_lending_health,
 )
+from ipor_fusion.readers.morpho import MorphoPositionBreakdown, MorphoReader
+from ipor_fusion.types import MorphoBlueMarketId
 
 
 T = TypeVar("T")
@@ -72,6 +79,20 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     withdraw_manager_data: _WithdrawManagerData | None = None
     dependency_graph: dict[int, list[int]] | None = None
     lending_health: VaultLendingHealth | None = None
+    # Morpho per-substrate position breakdown (collateral / borrow / supply),
+    # keyed by IPOR market_id. Populated only for markets in MORPHO_MARKET_IDS
+    # whose substrates resolve to valid Morpho Blue market IDs.
+    morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None = None
+    # Aave V3 per-asset position breakdown (supply / variable_debt / stable_debt),
+    # keyed by IPOR market_id. Populated only for markets in AAVE_V3_MARKET_IDS
+    # whose substrates decode to valid asset addresses on supported chains.
+    # Empty positions are filtered out (a vault may allow an asset without using it).
+    aave_positions: dict[int, list[AaveV3PositionBreakdown]] | None = None
+    # USD price per token address (lowercase) for tokens appearing in lending
+    # breakdowns (Morpho loan/collateral, Aave reserve assets). Sourced from the
+    # vault's PriceOracleMiddleware. Missing keys mean the oracle has no source
+    # configured for that token.
+    token_prices_usd: dict[str, float] | None = None
 
 
 def _safe_call(func: Callable[[], T]) -> T | None:
@@ -103,6 +124,26 @@ def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
     return symbol
 
 
+def _resolve_token_decimals(ctx: Web3Context, address: str) -> int | None:
+    """Resolve ERC-20 decimals, cached. Returns None if address is not a contract."""
+    cache = load_contract_cache()
+    cache_key = f"decimals:{address}"
+    if cached := cache.get(cache_key):
+        return int(cached)
+
+    checksum = Web3.to_checksum_address(address)
+    code = ctx.web3.eth.get_code(checksum)
+    if not code or code == b"":
+        return None
+
+    try:
+        decimals = ERC20(ctx, checksum).decimals()
+    except Exception:  # pylint: disable=broad-except
+        return None
+    update_contract_cache(cache_key, str(decimals))
+    return decimals
+
+
 def _fetch_withdraw_manager_data(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
@@ -125,6 +166,170 @@ def _fetch_withdraw_manager_data(
         last_release_funds_timestamp=f_last_ts.result() or 0,
         pending_requests=f_requests.result() or [],
     )
+
+
+def _collect_morpho_substrates(
+    market_substrates: dict[int, list[bytes]],
+) -> dict[int, list[MorphoBlueMarketId]]:
+    """Filter + parse Morpho Blue market IDs from raw substrate bytes."""
+    result: dict[int, list[MorphoBlueMarketId]] = {}
+    for mid, subs in market_substrates.items():
+        if mid not in MORPHO_MARKET_IDS:
+            continue
+        morpho_ids = [
+            MorphoBlueMarketId(sub.hex()) for sub in subs if len(sub.hex()) == 64
+        ]
+        if morpho_ids:
+            result[mid] = morpho_ids
+    return result
+
+
+def _fetch_morpho_positions(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    vault_addr: ChecksumAddress,
+    market_substrates: dict[int, list[bytes]],
+) -> dict[int, list[MorphoPositionBreakdown]] | None:
+    """Fetch collateral / borrow / supply breakdown for every Morpho substrate.
+
+    Each IPOR Morpho market (MORPHO_MARKET_IDS) can hold multiple morpho
+    market_id substrates; each substrate has an independent position. The
+    on-chain balance fuse reports a single netted number per IPOR market —
+    this helper exposes the three-way decomposition behind that number.
+    """
+    per_market_substrates = _collect_morpho_substrates(market_substrates)
+    if not per_market_substrates:
+        return None
+
+    reader = MorphoReader(ctx, MORPHO_BLUE_ADDRESS)
+    futures: dict[int, list[Future]] = {
+        mid: [
+            pool.submit(
+                _safe_call,
+                lambda mid_hex=morpho_mid: reader.position_breakdown(
+                    mid_hex, vault_addr
+                ),
+            )
+            for morpho_mid in morpho_mids
+        ]
+        for mid, morpho_mids in per_market_substrates.items()
+    }
+
+    result: dict[int, list[MorphoPositionBreakdown]] = {}
+    for mid, per_market in futures.items():
+        breakdowns = [bd for fut in per_market if (bd := fut.result()) is not None]
+        if breakdowns:
+            result[mid] = breakdowns
+    return result or None
+
+
+def _collect_aave_substrate_assets(
+    market_substrates: dict[int, list[bytes]],
+) -> dict[int, list[ChecksumAddress]]:
+    """Filter + parse asset addresses from Aave V3 substrate bytes.
+
+    Aave substrates are zero-padded plain addresses (12 zero bytes + 20 address
+    bytes). Returns a per-market list of checksummed asset addresses.
+    """
+    result: dict[int, list[ChecksumAddress]] = {}
+    for mid, subs in market_substrates.items():
+        if mid not in AAVE_V3_MARKET_IDS:
+            continue
+        assets: list[ChecksumAddress] = []
+        for sub in subs:
+            hex_str = sub.hex()
+            if len(hex_str) != 64:
+                continue
+            assets.append(Web3.to_checksum_address("0x" + hex_str[24:]))
+        if assets:
+            result[mid] = assets
+    return result
+
+
+def _fetch_aave_positions(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    vault_addr: ChecksumAddress,
+    chain_id: int,
+    market_substrates: dict[int, list[bytes]],
+) -> dict[int, list[AaveV3PositionBreakdown]] | None:
+    """Fetch supply / variable / stable debt per Aave V3 asset substrate.
+
+    The on-chain `getUserAccountData` aggregates all reserves into a single
+    base-currency total — this helper exposes the per-asset decomposition.
+    Empty positions (vault allows the asset but holds none of it) are dropped.
+    """
+    aave_pool_addr = AAVE_V3_POOL.get(chain_id)
+    if not aave_pool_addr:
+        return None
+    per_market_assets = _collect_aave_substrate_assets(market_substrates)
+    if not per_market_assets:
+        return None
+
+    reader = AaveV3Reader(ctx, aave_pool_addr)
+    futures: dict[int, list[Future]] = {
+        mid: [
+            pool.submit(
+                _safe_call,
+                lambda a=asset: reader.position_breakdown(a, vault_addr),
+            )
+            for asset in assets
+        ]
+        for mid, assets in per_market_assets.items()
+    }
+
+    result: dict[int, list[AaveV3PositionBreakdown]] = {}
+    for mid, per_market in futures.items():
+        breakdowns = [
+            bd
+            for fut in per_market
+            if (bd := fut.result()) is not None and not bd.is_empty
+        ]
+        if breakdowns:
+            result[mid] = breakdowns
+    return result or None
+
+
+def _collect_breakdown_token_addresses(
+    morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None,
+    aave_positions: dict[int, list[AaveV3PositionBreakdown]] | None,
+) -> set[ChecksumAddress]:
+    """Return the set of unique token addresses appearing in any breakdown.
+
+    Used to batch-fetch USD prices via the price oracle in one parallel pass.
+    """
+    addrs: set[ChecksumAddress] = set()
+    for morpho_list in (morpho_positions or {}).values():
+        for pb in morpho_list:
+            addrs.add(pb.loan_token)
+            addrs.add(pb.collateral_token)
+    for aave_list in (aave_positions or {}).values():
+        for ab in aave_list:
+            addrs.add(ab.asset)
+    return addrs
+
+
+def _fetch_breakdown_token_prices(
+    pool: ThreadPoolExecutor,
+    oracle: PriceOracleMiddleware,
+    addresses: set[ChecksumAddress],
+) -> dict[str, float] | None:
+    """Fetch USD prices for breakdown tokens in parallel via the vault's oracle.
+
+    Returns a dict keyed by lowercase token address. Tokens with no oracle
+    source configured are simply omitted (callers treat absence as "no price").
+    """
+    if not addresses:
+        return None
+    futures = {
+        addr: pool.submit(_safe_call, lambda a=addr: oracle.get_asset_price(a))
+        for addr in addresses
+    }
+    prices: dict[str, float] = {}
+    for addr, fut in futures.items():
+        if (price := fut.result()) is not None:
+            prices[addr.lower()] = price.readable()
+    return prices or None
 
 
 def _fetch_vault_data(  # pylint: disable=too-many-locals
@@ -218,6 +423,22 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
                 )
             )
 
+            morpho_positions = _fetch_morpho_positions(
+                ctx, pool, vault_addr, market_substrates
+            )
+            aave_positions = _fetch_aave_positions(
+                ctx, pool, vault_addr, chain_id, market_substrates
+            )
+            token_prices_usd = _fetch_breakdown_token_prices(
+                pool,
+                oracle,
+                _collect_breakdown_token_addresses(morpho_positions, aave_positions),
+            )
+        else:
+            morpho_positions = None
+            aave_positions = None
+            token_prices_usd = None
+
         return _VaultData(
             block_label=block_label,
             block_timestamp=block_timestamp,
@@ -240,6 +461,9 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             withdraw_manager_data=wm_data,
             dependency_graph=dep_graph or None,
             lending_health=lending_health,
+            morpho_positions=morpho_positions,
+            aave_positions=aave_positions,
+            token_prices_usd=token_prices_usd,
         )
 
 

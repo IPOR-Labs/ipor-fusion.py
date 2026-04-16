@@ -1,4 +1,5 @@
 # pylint: disable=unused-argument
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +16,9 @@ from ipor_fusion.cli.vault_cmd import (
     CHAIN,
     _build_dependency_graph_json,
     _build_share_price_json,
+    _index_lending_health,
     _print_dependency_graph,
+    _print_health_lines,
     _print_lending_health,
     _print_pending_requests,
     _print_substrates,
@@ -25,9 +28,18 @@ from ipor_fusion.cli.vault_cmd import (
 from ipor_fusion.cli.vault_fetcher import (
     _VaultData,
     _WithdrawManagerData,
+    _collect_aave_substrate_assets,
+    _collect_breakdown_token_addresses,
+    _collect_morpho_substrates,
+    _fetch_aave_positions,
+    _fetch_breakdown_token_prices,
+    _fetch_morpho_positions,
     _resolve_token_symbol,
     _safe_call,
 )
+from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
+from ipor_fusion.readers.morpho import MorphoPositionBreakdown
+from ipor_fusion.types import Amount, MorphoBlueMarketId
 from ipor_fusion.cli.vault_health import (
     _BalanceFuseTotals,
     _Erc20Totals,
@@ -1214,33 +1226,37 @@ def _make_lending_market(**overrides):
 class TestPrintLendingHealth:
     def test_no_lending_positions(self, capsys):
         data = _make_data()
-        _print_lending_health(data)
+        _print_lending_health(MagicMock(), data)
         captured = capsys.readouterr()
         assert "no lending positions" in captured.out
 
-    def test_ok_status(self, capsys):
-        m = _make_lending_market(ltv_usage_percent=50.0)
+    def test_orphan_morpho_health_renders_without_breakdown(self, capsys):
+        m = _make_lending_market(substrate_id="ab" * 32, ltv_usage_percent=50.0)
+        m.protocol = "morpho"
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        _print_lending_health(data)
-        captured = capsys.readouterr()
-        assert "Lending Health:" in captured.out
-        assert "OK" in captured.out
+        _print_lending_health(MagicMock(), data)
+        out = capsys.readouterr().out
+        assert "Position Breakdown:" in out
+        assert f"morpho market 0x{'ab' * 32}" in out
+        assert "Status:        OK" in out
 
-    def test_warning_status(self, capsys):
-        m = _make_lending_market(health_factor=1.08)
+    def test_orphan_aave_health_renders_without_breakdown(self, capsys):
+        m = _make_lending_market(health_factor=1.4, ltv_usage_percent=70.0)
+        m.protocol = "aave_v3"
+        m.market_id = 1
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        _print_lending_health(data)
-        captured = capsys.readouterr()
-        assert "WARNING" in captured.out
-        assert "approaching liquidation" in captured.out
+        _print_lending_health(MagicMock(), data)
+        out = capsys.readouterr().out
+        assert "AAVE_V3 (1):" in out
+        assert "Health Factor:" in out
 
-    def test_critical_status(self, capsys):
+    def test_orphan_health_critical_status_colored(self, capsys):
         m = _make_lending_market(health_factor=1.03)
+        m.protocol = "aave_v3"
+        m.market_id = 1
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        _print_lending_health(data)
-        captured = capsys.readouterr()
-        assert "CRITICAL" in captured.out
-        assert "NEAR LIQUIDATION" in captured.out
+        _print_lending_health(MagicMock(), data)
+        assert "CRITICAL" in capsys.readouterr().out
 
     def test_none_ltv_shows_na(self, capsys):
         m = _make_lending_market(
@@ -1248,10 +1264,11 @@ class TestPrintLendingHealth:
             health_factor=None,
             ltv_usage_percent=None,
         )
+        m.protocol = "aave_v3"
+        m.market_id = 1
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        _print_lending_health(data)
-        captured = capsys.readouterr()
-        assert "N/A" in captured.out
+        _print_lending_health(MagicMock(), data)
+        assert "N/A" in capsys.readouterr().out
 
 
 class TestHealthCheckLendingIntegration:
@@ -1291,6 +1308,357 @@ class TestHealthCheckLendingIntegration:
         _print_health_check(data, bf, erc20, set())
         captured = capsys.readouterr()
         assert "morpho" not in captured.out
+
+
+# ── Lending Position Breakdown ─────────────────────────────────────────
+
+
+_VAULT_ADDR = Web3.to_checksum_address("0x" + "11" * 20)
+_TOKEN_USDC = Web3.to_checksum_address("0x" + "22" * 20)
+_TOKEN_WETH = Web3.to_checksum_address("0x" + "33" * 20)
+
+
+def _morpho_breakdown(market_id: str = "ab" * 32):
+    return MorphoPositionBreakdown(
+        market_id=MorphoBlueMarketId(market_id),
+        loan_token=_TOKEN_USDC,
+        collateral_token=_TOKEN_WETH,
+        collateral=Amount(10 * 10**18),
+        borrow_assets=Amount(5_000 * 10**6),
+        supply_assets=Amount(0),
+    )
+
+
+def _aave_breakdown(asset=_TOKEN_USDC, supply=0, variable_debt=0, stable_debt=0):
+    return AaveV3PositionBreakdown(
+        asset=asset,
+        a_token=Web3.to_checksum_address("0x" + "44" * 20),
+        variable_debt_token=Web3.to_checksum_address("0x" + "55" * 20),
+        stable_debt_token=Web3.to_checksum_address("0x" + "66" * 20),
+        supply=Amount(supply),
+        variable_debt=Amount(variable_debt),
+        stable_debt=Amount(stable_debt),
+    )
+
+
+class TestPrintLendingPositionBreakdown:
+    def test_no_positions_shows_no_lending(self, capsys):
+        data = _make_data()
+        _print_lending_health(MagicMock(), data)
+        captured = capsys.readouterr()
+        assert "no lending positions" in captured.out
+
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=18)
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="WETH")
+    def test_morpho_breakdown_renders_three_lines(self, _mock_sym, _mock_dec, capsys):
+        data = _make_data(morpho_positions={14: [_morpho_breakdown()]})
+        _print_lending_health(MagicMock(), data)
+        captured = capsys.readouterr()
+        assert "Position Breakdown:" in captured.out
+        assert "morpho market 0x" in captured.out
+        assert "Collateral:" in captured.out
+        assert "Borrow:" in captured.out
+        assert "Supply:" in captured.out
+
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="USDC")
+    def test_aave_breakdown_omits_zero_stable_debt(self, _mock_sym, _mock_dec, capsys):
+        data = _make_data(
+            aave_positions={
+                1: [_aave_breakdown(supply=100, variable_debt=50, stable_debt=0)]
+            }
+        )
+        _print_lending_health(MagicMock(), data)
+        captured = capsys.readouterr()
+        assert "asset 0x" in captured.out
+        assert "Supply:" in captured.out
+        assert "Variable Debt:" in captured.out
+        assert "Stable Debt:" not in captured.out
+
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="USDC")
+    def test_aave_breakdown_includes_stable_debt_when_nonzero(
+        self, _mock_sym, _mock_dec, capsys
+    ):
+        data = _make_data(
+            aave_positions={
+                1: [_aave_breakdown(supply=0, variable_debt=0, stable_debt=42)]
+            }
+        )
+        _print_lending_health(MagicMock(), data)
+        captured = capsys.readouterr()
+        assert "Stable Debt:" in captured.out
+
+
+class TestInlineHealth:
+    def test_index_lending_health_splits_by_protocol(self):
+        morpho_m = _make_lending_market(substrate_id="ab" * 32)
+        morpho_m.protocol = "morpho"
+        aave_m = _make_lending_market()
+        aave_m.protocol = "aave_v3"
+        aave_m.market_id = 1
+        lh = VaultLendingHealth(markets=[morpho_m, aave_m])
+
+        morpho_index, aave_index = _index_lending_health(lh)
+
+        assert "ab" * 32 in morpho_index
+        assert 1 in aave_index
+
+    def test_index_lending_health_handles_none(self):
+        morpho_index, aave_index = _index_lending_health(None)
+        assert not morpho_index
+        assert not aave_index
+
+    def test_health_lines_ok_no_color(self, capsys):
+        m = _make_lending_market(ltv_usage_percent=50.0, health_factor=1.6)
+        _print_health_lines(m, indent="    ")
+        out = capsys.readouterr().out
+        assert "LTV:" in out
+        assert "Health Factor: 1.6000" in out
+        assert "Status:        OK" in out
+
+    def test_health_lines_warning_yellow(self, capsys):
+        m = _make_lending_market(health_factor=1.08)
+        _print_health_lines(m, indent="    ")
+        out = capsys.readouterr().out
+        assert "WARNING" in out
+
+    def test_health_lines_critical_red(self, capsys):
+        m = _make_lending_market(health_factor=1.03)
+        _print_health_lines(m, indent="    ")
+        out = capsys.readouterr().out
+        assert "CRITICAL" in out
+
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol")
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=18)
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="WETH")
+    def test_morpho_market_renders_inline_health(
+        self, _mock_fetcher_sym, _mock_dec, mock_cmd_sym, capsys
+    ):
+        mock_cmd_sym.side_effect = lambda _ctx, addr: {
+            _TOKEN_USDC: "USDC",
+            _TOKEN_WETH: "WETH",
+        }.get(addr, "?")
+        market = _make_lending_market(substrate_id="ab" * 32, ltv_usage_percent=50.0)
+        market.protocol = "morpho"
+        data = _make_data(
+            lending_health=VaultLendingHealth(markets=[market]),
+            morpho_positions={14: [_morpho_breakdown(market_id="ab" * 32)]},
+        )
+        _print_lending_health(MagicMock(), data)
+        out = capsys.readouterr().out
+        # Per-substrate header lists the token pair
+        assert f"morpho market 0x{'ab' * 32} (WETH/USDC)" in out
+        # Inline health below breakdown
+        assert "Collateral:" in out
+        assert "Borrow:" in out
+        assert "Supply:" in out
+        assert "Health Factor:" in out
+        assert "Status:" in out
+
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="USDC")
+    def test_aave_market_renders_inline_health_after_assets(
+        self, _mock_f_sym, _mock_dec, _mock_cmd_sym, capsys
+    ):
+        market = _make_lending_market(ltv_usage_percent=70.0, health_factor=1.4)
+        market.protocol = "aave_v3"
+        market.market_id = 1
+        data = _make_data(
+            lending_health=VaultLendingHealth(markets=[market]),
+            aave_positions={1: [_aave_breakdown(supply=100, variable_debt=50)]},
+        )
+        _print_lending_health(MagicMock(), data)
+        out = capsys.readouterr().out
+        assert "asset 0x" in out
+        # Health appears once for the aggregated Aave market
+        assert out.count("Health Factor:") == 1
+        assert out.count("LTV:") == 1
+
+
+# ── vault_fetcher Aave / Morpho substrate collectors and fetchers ──────
+
+
+class TestFetcherCollectors:
+    def test_collect_morpho_substrates_filters_non_morpho(self):
+        morpho_id = bytes.fromhex("aa" * 32)
+        out = _collect_morpho_substrates(
+            {14: [morpho_id], 1: [bytes.fromhex("bb" * 32)]}
+        )
+        assert 14 in out and 1 not in out
+        assert len(out[14]) == 1
+
+    def test_collect_morpho_substrates_skips_wrong_length(self):
+        bad = bytes.fromhex("aa" * 16)  # wrong length
+        out = _collect_morpho_substrates({14: [bad]})
+        assert not out
+
+    def test_collect_aave_substrate_assets_returns_addresses(self):
+        # Aave substrate = zero-padded address (12 zero bytes + 20 address bytes)
+        addr_bytes = bytes(12) + bytes.fromhex("22" * 20)
+        out = _collect_aave_substrate_assets({1: [addr_bytes]})
+        assert 1 in out
+        assert out[1] == [Web3.to_checksum_address("0x" + "22" * 20)]
+
+    def test_collect_aave_substrate_assets_filters_non_aave(self):
+        addr_bytes = bytes(12) + bytes.fromhex("22" * 20)
+        out = _collect_aave_substrate_assets({14: [addr_bytes]})
+        assert not out
+
+
+class TestFetchAavePositions:
+    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    def test_returns_none_when_chain_unsupported(self, _mock_reader_cls):
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_aave_positions(MagicMock(), pool, _VAULT_ADDR, 999, {})
+        assert result is None
+
+    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    def test_returns_none_when_no_aave_substrates(self, _mock_reader_cls):
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_aave_positions(MagicMock(), pool, _VAULT_ADDR, 1, {})
+        assert result is None
+
+    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    def test_drops_empty_breakdowns(self, mock_reader_cls):
+        mock_reader = MagicMock()
+        mock_reader.position_breakdown.return_value = _aave_breakdown(
+            supply=0, variable_debt=0, stable_debt=0
+        )
+        mock_reader_cls.return_value = mock_reader
+
+        addr_bytes = bytes(12) + bytes.fromhex("22" * 20)
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_aave_positions(
+                MagicMock(), pool, _VAULT_ADDR, 1, {1: [addr_bytes]}
+            )
+        assert result is None
+
+    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    def test_returns_breakdowns_for_active_positions(self, mock_reader_cls):
+        mock_reader = MagicMock()
+        mock_reader.position_breakdown.return_value = _aave_breakdown(supply=42)
+        mock_reader_cls.return_value = mock_reader
+
+        addr_bytes = bytes(12) + bytes.fromhex("22" * 20)
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_aave_positions(
+                MagicMock(), pool, _VAULT_ADDR, 1, {1: [addr_bytes]}
+            )
+        assert result == {1: [_aave_breakdown(supply=42)]}
+
+
+class TestFetchMorphoPositions:
+    @patch("ipor_fusion.cli.vault_fetcher.MorphoReader")
+    def test_returns_none_when_no_morpho_substrates(self, _mock_reader_cls):
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_morpho_positions(MagicMock(), pool, _VAULT_ADDR, {})
+        assert result is None
+
+    @patch("ipor_fusion.cli.vault_fetcher.MorphoReader")
+    def test_returns_breakdowns_for_morpho_substrates(self, mock_reader_cls):
+        mock_reader = MagicMock()
+        mock_reader.position_breakdown.return_value = _morpho_breakdown()
+        mock_reader_cls.return_value = mock_reader
+
+        morpho_sub = bytes.fromhex("ab" * 32)
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_morpho_positions(
+                MagicMock(), pool, _VAULT_ADDR, {14: [morpho_sub]}
+            )
+        assert result == {14: [_morpho_breakdown()]}
+
+
+class TestBreakdownTokenPrices:
+    def test_collect_addresses_unions_morpho_and_aave(self):
+        morpho = {14: [_morpho_breakdown()]}
+        aave = {1: [_aave_breakdown(asset=_TOKEN_WETH)]}
+        addrs = _collect_breakdown_token_addresses(morpho, aave)
+        # morpho contributes loan_token + collateral_token
+        assert _TOKEN_USDC in addrs
+        assert _TOKEN_WETH in addrs
+
+    def test_collect_addresses_handles_none(self):
+        assert _collect_breakdown_token_addresses(None, None) == set()
+
+    def test_fetch_prices_returns_none_for_empty_set(self):
+        with ThreadPoolExecutor() as pool:
+            assert _fetch_breakdown_token_prices(pool, MagicMock(), set()) is None
+
+    def test_fetch_prices_keys_lowercase_and_skips_unknown(self):
+        good_price = MagicMock()
+        good_price.readable.return_value = 1234.56
+        oracle = MagicMock()
+        oracle.get_asset_price.side_effect = [
+            good_price,
+            ContractLogicError("no source"),
+        ]
+
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_breakdown_token_prices(
+                pool, oracle, {_TOKEN_USDC, _TOKEN_WETH}
+            )
+
+        assert result is not None
+        assert len(result) == 1
+        for addr in result:  # pylint: disable=not-an-iterable
+            assert addr == addr.lower()
+
+
+class TestBreakdownAmountJson:
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    def test_includes_symbol_decimals_formatted_and_usd(self, _sym, _dec):
+        from ipor_fusion.cli.vault_cmd import (  # pylint: disable=import-outside-toplevel
+            _build_breakdown_amount_json,
+        )
+
+        prices = {_TOKEN_USDC.lower(): 1.0}  # pylint: disable=no-member
+        entry = _build_breakdown_amount_json(
+            MagicMock(), 1_000_000, _TOKEN_USDC, prices
+        )
+        assert entry["raw"] == 1_000_000
+        assert entry["token"] == _TOKEN_USDC
+        assert entry["symbol"] == "USDC"
+        assert entry["decimals"] == 6
+        assert entry["formatted"] == "1.0"
+        assert entry["usd"] == 1.0
+
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    def test_omits_usd_when_no_price(self, _sym, _dec):
+        from ipor_fusion.cli.vault_cmd import (  # pylint: disable=import-outside-toplevel
+            _build_breakdown_amount_json,
+        )
+
+        entry = _build_breakdown_amount_json(MagicMock(), 1_000_000, _TOKEN_USDC, None)
+        assert "usd" not in entry
+        assert entry["formatted"] == "1.0"
+
+
+class TestFormatTokenAmountUsd:
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    def test_appends_usd_when_price_known(self, _sym, _dec):
+        from ipor_fusion.cli.vault_cmd import (  # pylint: disable=import-outside-toplevel
+            _format_token_amount,
+        )
+
+        prices = {_TOKEN_USDC.lower(): 1.0}  # pylint: disable=no-member
+        out = _format_token_amount(MagicMock(), 1_000_000, _TOKEN_USDC, prices)
+        assert "1.0 USDC" in out
+        assert "$1.00" in out
+
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    def test_no_usd_suffix_when_price_missing(self, _sym, _dec):
+        from ipor_fusion.cli.vault_cmd import (  # pylint: disable=import-outside-toplevel
+            _format_token_amount,
+        )
+
+        out = _format_token_amount(MagicMock(), 1_000_000, _TOKEN_USDC, {})
+        assert "$" not in out
 
 
 class TestPrintPendingRequests:
