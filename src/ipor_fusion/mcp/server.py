@@ -4,8 +4,6 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
-import json
-
 from mcp.server.fastmcp import FastMCP
 from web3 import Web3
 
@@ -25,6 +23,12 @@ from ipor_fusion.cli.vault_fetcher import (
 )
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.mcp.models import (
+    ActionResult,
+    ConfigShowResponse,
+    VaultInfoResponse,
+    VaultListEntry,
+)
 
 mcp = FastMCP("ipor-fusion")
 
@@ -80,45 +84,12 @@ def vault_info(
     vault_address: str,
     chain_id: int = 0,
     block_number: int = 0,
-) -> str:
-    """Get full on-chain state of a Plasma Vault (JSON).
+) -> VaultInfoResponse:
+    """Get full on-chain state of a Plasma Vault.
 
-    Returned JSON fields:
-    - vault, chain, chain_id, block, block_timestamp, block_timestamp_utc
-    - links (ipor_app URL, etherscan URL)
-    - deployment (deployer, deploy_block, deploy_timestamp, vault_age)
-    - asset (address, symbol, decimals, price_usd)
-    - share_decimals
-    - total_assets (raw, formatted, usd)
-    - total_supply (raw, formatted)
-    - supply_cap (raw, formatted)
-    - managers (access, price_oracle, rewards, withdraw)
-    - withdraw_manager_details — null when no withdraw manager:
-      withdraw_window_seconds, request_fee_wad/percent, withdraw_fee_wad/percent,
-      shares_to_release (raw/formatted), last_release_funds_timestamp/utc,
-      total_pending_shares (raw/formatted),
-      pending_requests[] (account, shares, assets with usd, end_withdraw_window, remaining_seconds, can_withdraw)
-    - fuses (address, contract name)
-    - instant_withdrawal_fuses (address, contract name)
-    - balance_fuses per market (market name, balance raw/formatted, fuse address/contract,
-      position_breakdown — for Morpho and Aave V3 markets: exposes the per-substrate
-      decomposition hidden behind the single netted balance fuse value. Each amount
-      object contains: raw (native on-chain integer), token (ERC-20 address),
-      symbol/decimals/formatted when ERC-20 metadata is resolvable, and usd when the
-      vault's price oracle has a source for that token.
-        - Morpho: list of per-morpho-market-id positions with morpho_market_id,
-          collateral_symbol, loan_symbol, and collateral/borrow/supply amount objects.
-        - Aave V3: list of per-asset positions with asset, asset_symbol, and
-          supply/variable_debt/stable_debt amount objects; only assets with non-zero
-          amounts are included.)
-    - substrates per market (address, symbol, contract, substrate_type)
-    - erc20_balances (address, symbol, decimals, balance, price_usd, usd_value)
-    - reconciliation (balance_fuses_total, underlying_on_vault, erc20_direct_total, sum, on_chain_total_assets, delta)
-    - lending_health — null when no lending positions:
-      markets[] (protocol, market_id, market_name, current_ltv, max_ltv, health_factor,
-      total_collateral_usd, total_debt_usd, ltv_usage_percent, is_warning, is_critical),
-      worst_ltv_usage_percent
-    - health_check (ok, warnings)
+    Returns a structured VaultInfoResponse — see model field descriptions
+    for the complete output schema (assets, balance fuses, reconciliation,
+    lending health, substrates, etc.).
 
     Args:
         vault_address: Vault address (required).
@@ -155,23 +126,22 @@ def vault_info(
     result = _build_json_output(
         ctx, plasma_vault, data, vault_address, chain_id, chain_label, api_key
     )
-    return json.dumps(result, indent=2)
+    return VaultInfoResponse.model_validate(result)
 
 
 @mcp.tool()
-def vault_list() -> str:
+def vault_list() -> list[VaultListEntry]:
     """List all saved Plasma Vaults with their chain, label, and address."""
     cfg = load_config()
-    entries = [
-        {
-            "address": v.address,
-            "label": v.label,
-            "chain": CHAIN_NAMES.get(v.chain_id, str(v.chain_id)),
-            "chain_id": v.chain_id,
-        }
+    return [
+        VaultListEntry(
+            address=v.address,
+            label=v.label,
+            chain=CHAIN_NAMES.get(v.chain_id, str(v.chain_id)),
+            chain_id=v.chain_id,
+        )
         for v in cfg.vaults
     ]
-    return json.dumps(entries, indent=2)
 
 
 @mcp.tool()
@@ -179,7 +149,7 @@ def vault_add(
     address: str,
     label: str = "",
     chain_id: int = 0,
-) -> str:
+) -> ActionResult:
     """Save a Plasma Vault to the local config.
 
     Args:
@@ -212,15 +182,15 @@ def vault_add(
             vault_entry.label = label
             vault_entry.chain_id = chain_id
             save_config(cfg)
-            return f"Vault {label} ({address}) updated."
+            return ActionResult(message=f"Vault {label} ({address}) updated.")
 
     cfg.vaults.append(VaultEntry(address=address, label=label, chain_id=chain_id))
     save_config(cfg)
-    return f"Vault {label} ({address}) added."
+    return ActionResult(message=f"Vault {label} ({address}) added.")
 
 
 @mcp.tool()
-def vault_remove(address: str) -> str:
+def vault_remove(address: str) -> ActionResult:
     """Remove a Plasma Vault from the local config.
 
     Args:
@@ -230,9 +200,9 @@ def vault_remove(address: str) -> str:
     before = len(cfg.vaults)
     cfg.vaults = [v for v in cfg.vaults if v.address.lower() != address.lower()]
     if len(cfg.vaults) == before:
-        return "Vault not found."
+        return ActionResult(message="Vault not found.")
     save_config(cfg)
-    return "Vault removed."
+    return ActionResult(message="Vault removed.")
 
 
 # ---------------------------------------------------------------------------
@@ -241,31 +211,30 @@ def vault_remove(address: str) -> str:
 
 
 @mcp.tool()
-def config_show() -> str:
+def config_show() -> ConfigShowResponse:
     """Show current fusion CLI configuration.
 
     Displays configured RPC providers, saved vaults,
     and Etherscan API key status.
     """
     cfg = load_config()
-    result = {
-        "providers": dict(cfg.providers),
-        "vaults": [
-            {
-                "chain_id": v.chain_id,
-                "chain": CHAIN_NAMES.get(v.chain_id, str(v.chain_id)),
-                "label": v.label,
-                "address": v.address,
-            }
+    return ConfigShowResponse(
+        providers=dict(cfg.providers),
+        vaults=[
+            VaultListEntry(
+                address=v.address,
+                label=v.label,
+                chain=CHAIN_NAMES.get(v.chain_id, str(v.chain_id)),
+                chain_id=v.chain_id,
+            )
             for v in cfg.vaults
         ],
-        "etherscan_api_key": "***" if cfg.etherscan_api_key else None,
-    }
-    return json.dumps(result, indent=2)
+        etherscan_api_key="***" if cfg.etherscan_api_key else None,
+    )
 
 
 @mcp.tool()
-def config_set_provider(url: str, chain_id: int = 0) -> str:
+def config_set_provider(url: str, chain_id: int = 0) -> ActionResult:
     """Set RPC provider URL for a chain.
 
     Args:
@@ -279,11 +248,11 @@ def config_set_provider(url: str, chain_id: int = 0) -> str:
     cfg = load_config()
     cfg.providers[str(chain_id)] = url
     save_config(cfg)
-    return f"Provider for chain {chain_id} set."
+    return ActionResult(message=f"Provider for chain {chain_id} set.")
 
 
 @mcp.tool()
-def config_set_etherscan_key(api_key: str) -> str:
+def config_set_etherscan_key(api_key: str) -> ActionResult:
     """Set Etherscan API key (works for all chains via Etherscan V2).
 
     Args:
@@ -292,7 +261,7 @@ def config_set_etherscan_key(api_key: str) -> str:
     cfg = load_config()
     cfg.etherscan_api_key = api_key
     save_config(cfg)
-    return "Etherscan API key set."
+    return ActionResult(message="Etherscan API key set.")
 
 
 def main() -> None:

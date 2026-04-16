@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import os
 import threading
-from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import click
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 
 def _xdg_config_home() -> Path:
@@ -25,73 +25,49 @@ DEPLOYMENT_CACHE_FILE = CACHE_DIR / "deployment_cache.json"
 
 CONFIG_VERSION = 1
 
-_VAULT_REQUIRED_KEYS = {"address", "label", "chain_id"}
 
-
-@dataclass
-class VaultEntry:
+class VaultEntry(BaseModel):
     address: str
     label: str
     chain_id: int
 
 
-@dataclass
-class FusionConfig:
-    providers: dict[str, str] = field(default_factory=dict)
+class FusionConfig(BaseModel):
+    providers: dict[str, str] = Field(default_factory=dict)
     etherscan_api_key: str | None = None
-    vaults: list[VaultEntry] = field(default_factory=list)
+    vaults: list[VaultEntry] = Field(default_factory=list)
+    version: int = CONFIG_VERSION
 
-
-def _validate_config(data: object) -> dict:
-    """Validate config structure, raise click.ClickException on problems."""
-    hint = "Fix the file manually or delete it to start fresh."
-    if not isinstance(data, dict):
-        raise click.ClickException(f"Config {CONFIG_FILE} is not a JSON object. {hint}")
-    if "providers" in data and not isinstance(data["providers"], dict):
-        raise click.ClickException(
-            f"'providers' in {CONFIG_FILE} must be an object. {hint}"
-        )
-    if "vaults" in data and not isinstance(data["vaults"], list):
-        raise click.ClickException(f"'vaults' in {CONFIG_FILE} must be a list. {hint}")
-    for i, entry in enumerate(data.get("vaults", [])):
-        if not isinstance(entry, dict) or not _VAULT_REQUIRED_KEYS <= entry.keys():
-            raise click.ClickException(
-                f"Vault entry {i} in {CONFIG_FILE} must have keys "
-                f"{sorted(_VAULT_REQUIRED_KEYS)}. {hint}"
-            )
-    return data
-
-
-def _migrate_to_v1(data: dict) -> dict:
-    """Ensure all expected keys exist and set version to 1."""
-    data.setdefault("providers", {})
-    data.setdefault("etherscan_api_key", None)
-    data.pop("default_vault", None)
-    data.setdefault("vaults", [])
-    data["version"] = 1
-    return data
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy(cls, data: object) -> object:
+        # Drops fields removed in earlier migrations; missing keys fall back to
+        # the field defaults declared above.
+        if isinstance(data, dict):
+            data.pop("default_vault", None)
+        return data
 
 
 def load_config() -> FusionConfig:
     if not CONFIG_FILE.exists():
         return FusionConfig()
-    data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    _validate_config(data)
-    if data.get("version") is None:
-        _migrate_to_v1(data)
-    vaults = [VaultEntry(**v) for v in data.get("vaults", [])]
-    return FusionConfig(
-        providers=data.get("providers", {}),
-        etherscan_api_key=data.get("etherscan_api_key"),
-        vaults=vaults,
-    )
+    try:
+        return FusionConfig.model_validate_json(CONFIG_FILE.read_text(encoding="utf-8"))
+    except ValidationError as exc:
+        raise click.ClickException(
+            f"Config {CONFIG_FILE} is invalid:\n{exc}\n"
+            "Fix the file manually or delete it to start fresh."
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(
+            f"Config {CONFIG_FILE} is not valid JSON: {exc}. "
+            "Fix the file manually or delete it to start fresh."
+        ) from exc
 
 
 def save_config(config: FusionConfig) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    data = asdict(config)
-    data["version"] = CONFIG_VERSION
-    CONFIG_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    CONFIG_FILE.write_text(config.model_dump_json(indent=2), encoding="utf-8")
 
 
 _cache_lock = threading.Lock()

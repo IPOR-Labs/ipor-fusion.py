@@ -177,6 +177,30 @@ class TestLoadConfigValidation:
             load_config()
 
 
+class TestLegacyMigration:
+    def test_drops_legacy_default_vault_field(self, tmp_path):
+        config_dir = tmp_path / ".fusion"
+        config_dir.mkdir()
+        data = {
+            "providers": {"1": "http://localhost:8545"},
+            "default_vault": "0xLEGACY",
+            "vaults": [],
+        }
+        (config_dir / "config.json").write_text(json.dumps(data), encoding="utf-8")
+
+        cfg = load_config()
+
+        assert not hasattr(cfg, "default_vault")
+        assert cfg.providers == {"1": "http://localhost:8545"}
+
+    def test_invalid_json_raises_click_exception(self, tmp_path):
+        config_dir = tmp_path / ".fusion"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text("{not valid json", encoding="utf-8")
+        with pytest.raises(click.ClickException):
+            load_config()
+
+
 class TestConfigVersioning:
     def test_save_config_writes_version(self, tmp_path):
         save_config(FusionConfig())

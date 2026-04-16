@@ -3127,11 +3127,11 @@ multidict = ">=4.0"
 propcache = ">=0.2.0"
 
 [extras]
-cli = ["click", "requests"]
-mcp = ["click", "mcp", "requests"]
+cli = ["click", "pydantic", "requests"]
+mcp = ["click", "mcp", "pydantic", "requests"]
 testing = ["requests", "testcontainers"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "70822855e159f2f2d45c0cd8fc253bb84f0fccd076f89dbc9ddd6fcdc3bd7cce"
+content-hash = "a8a1559491bc8a6b51bf5e46d1ab5313dc0aaafc88c32bdebad24b4e5314319f"
