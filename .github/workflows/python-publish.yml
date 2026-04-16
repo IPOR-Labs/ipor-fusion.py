@@ -170,6 +170,9 @@ jobs:
       - name: Version release (from pyproject.toml)
         if: inputs.publish-enabled && inputs.skip-version-bump
         id: release-current
+        env:
+          SSH_SIGN_KEY_PRIVATE: ${{ secrets.SSH_SIGN_KEY_PRIVATE }}
+          SSH_SIGN_KEY_PUBLIC: ${{ secrets.SSH_SIGN_KEY_PUBLIC }}
         run: |
           VERSION=$(poetry version -s)
           TAG="v${VERSION}"
@@ -177,8 +180,17 @@ jobs:
           git config user.name "bob-the-builder-ipor"
           git config user.email "106537082+bob-the-builder-ipor@users.noreply.github.com"
 
+          # SSH tag signing — parity with python-semantic-release path
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_SIGN_KEY_PRIVATE" > ~/.ssh/sign_key
+          printf '%s\n' "$SSH_SIGN_KEY_PUBLIC"  > ~/.ssh/sign_key.pub
+          chmod 600 ~/.ssh/sign_key ~/.ssh/sign_key.pub
+          git config --global gpg.format ssh
+          git config --global user.signingkey ~/.ssh/sign_key.pub
+          git config --global tag.gpgsign true
+
           poetry build
-          git tag -a "${TAG}" -m "${TAG}"
+          git tag -s -a "${TAG}" -m "${TAG}"
           git push origin "${TAG}"
 
           echo "released=true" >> "$GITHUB_OUTPUT"
