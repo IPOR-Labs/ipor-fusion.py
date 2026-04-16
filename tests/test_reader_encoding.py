@@ -136,9 +136,7 @@ class TestAaveV3ReaderReserveTokens:
     VARIABLE_DEBT = Web3.to_checksum_address(
         "0x3030303030303030303030303030303030303030"
     )
-    IR_STRATEGY = Web3.to_checksum_address(
-        "0x4040404040404040404040404040404040404040"
-    )
+    IR_STRATEGY = Web3.to_checksum_address("0x4040404040404040404040404040404040404040")
 
     def _encode_reserve_data(self) -> bytes:
         return encode(

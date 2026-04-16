@@ -1350,9 +1350,7 @@ class TestPrintLendingPositionBreakdown:
 
     @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=18)
     @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="WETH")
-    def test_morpho_breakdown_renders_three_lines(
-        self, _mock_sym, _mock_dec, capsys
-    ):
+    def test_morpho_breakdown_renders_three_lines(self, _mock_sym, _mock_dec, capsys):
         data = _make_data(morpho_positions={14: [_morpho_breakdown()]})
         _print_lending_health(MagicMock(), data)
         captured = capsys.readouterr()
@@ -1364,9 +1362,7 @@ class TestPrintLendingPositionBreakdown:
 
     @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=6)
     @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="USDC")
-    def test_aave_breakdown_omits_zero_stable_debt(
-        self, _mock_sym, _mock_dec, capsys
-    ):
+    def test_aave_breakdown_omits_zero_stable_debt(self, _mock_sym, _mock_dec, capsys):
         data = _make_data(
             aave_positions={
                 1: [_aave_breakdown(supply=100, variable_debt=50, stable_debt=0)]

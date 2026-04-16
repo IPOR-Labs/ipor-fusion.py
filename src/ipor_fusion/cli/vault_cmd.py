@@ -337,9 +337,7 @@ def _print_lending_health(  # pylint: disable=too-complex
         for pb in positions:
             coll_sym = _resolve_token_symbol(ctx, pb.collateral_token) or "?"
             loan_sym = _resolve_token_symbol(ctx, pb.loan_token) or "?"
-            click.echo(
-                f"    morpho market 0x{pb.market_id} ({coll_sym}/{loan_sym}):"
-            )
+            click.echo(f"    morpho market 0x{pb.market_id} ({coll_sym}/{loan_sym}):")
             click.echo(
                 f"      Collateral:    {_format_token_amount(ctx, int(pb.collateral), pb.collateral_token, prices)}"
             )
