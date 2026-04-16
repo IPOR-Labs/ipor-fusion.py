@@ -131,26 +131,26 @@ class PlasmaVault(ContractWrapper):
         return [Web3.to_checksum_address(item) for item in list(value)]
 
     def get_balance_fuses(self) -> list[BalanceFuse]:
-        added_events = self._get_balance_fuse_added_events()
-        removed_events = self._get_balance_fuse_removed_events()
+        # Replay Added/Removed events chronologically to mirror on-chain storage.
+        # Sorting by (blockNumber, logIndex) handles provider-side ordering quirks
+        # and re-add-after-remove cases that a set-subtraction approach misses.
+        events: list[tuple[LogReceipt, bool]] = [
+            (e, True) for e in self._get_balance_fuse_added_events()
+        ] + [(e, False) for e in self._get_balance_fuse_removed_events()]
+        events.sort(key=lambda item: (item[0]["blockNumber"], item[0]["logIndex"]))
 
-        # Build set of (market_id, fuse) pairs that were removed
-        removed: set[tuple[int, str]] = set()
-        for event in removed_events:
-            (market_id, fuse) = decode(["uint256", "address"], event["data"])
-            removed.add((market_id, str(Web3.to_checksum_address(fuse)).lower()))
-
-        # Net: only include entries that weren't subsequently removed.
-        # Per market, on-chain storage holds exactly one active fuse.
-        # Keep the last Added entry per market_id that isn't in the removed set.
-        per_market: dict[int, BalanceFuse] = {}
-        for event in added_events:
+        state: dict[int, BalanceFuse] = {}
+        for event, is_added in events:
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
             checksum = Web3.to_checksum_address(fuse)
-            if (market_id, str(checksum).lower()) not in removed:
-                per_market[market_id] = BalanceFuse(market_id=market_id, fuse=checksum)
+            if is_added:
+                state[market_id] = BalanceFuse(market_id=market_id, fuse=checksum)
+            else:
+                current = state.get(market_id)
+                if current and str(current.fuse).lower() == str(checksum).lower():
+                    del state[market_id]
 
-        return list(per_market.values())
+        return list(state.values())
 
     def withdraw_manager_address(self) -> ChecksumAddress | None:
         events = self._get_withdraw_manager_changed_events()

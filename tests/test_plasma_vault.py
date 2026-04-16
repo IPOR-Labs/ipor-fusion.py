@@ -288,28 +288,47 @@ class TestPlasmaVaultEventDecoding:
 
     def test_get_balance_fuses(self):
         vault, ctx = _make_vault()
-        event1_data = encode(["uint256", "address"], [1, FUSE_ADDR])
-        event2_data = encode(["uint256", "address"], [2, FUSE_ADDR_2])
-        ctx.get_logs.side_effect = [
-            [{"data": event1_data}, {"data": event2_data}],
-            [],
+        added = [
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 10,
+                "logIndex": 0,
+            },
+            {
+                "data": encode(["uint256", "address"], [2, FUSE_ADDR_2]),
+                "blockNumber": 11,
+                "logIndex": 0,
+            },
         ]
+        ctx.get_logs.side_effect = [added, []]
 
         result = vault.get_balance_fuses()
 
         assert len(result) == 2
-        assert result[0].market_id == 1
-        assert result[0].fuse == FUSE_ADDR
-        assert result[1].market_id == 2
-        assert result[1].fuse == FUSE_ADDR_2
+        by_market = {bf.market_id: bf.fuse for bf in result}
+        assert by_market == {1: FUSE_ADDR, 2: FUSE_ADDR_2}
 
     def test_get_balance_fuses_nets_removed_entries(self):
         vault, ctx = _make_vault()
         added = [
-            {"data": encode(["uint256", "address"], [1, FUSE_ADDR])},
-            {"data": encode(["uint256", "address"], [2, FUSE_ADDR_2])},
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 10,
+                "logIndex": 0,
+            },
+            {
+                "data": encode(["uint256", "address"], [2, FUSE_ADDR_2]),
+                "blockNumber": 11,
+                "logIndex": 0,
+            },
         ]
-        removed = [{"data": encode(["uint256", "address"], [1, FUSE_ADDR])}]
+        removed = [
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 12,
+                "logIndex": 0,
+            }
+        ]
         ctx.get_logs.side_effect = [added, removed]
 
         result = vault.get_balance_fuses()
@@ -321,8 +340,16 @@ class TestPlasmaVaultEventDecoding:
     def test_get_balance_fuses_deduplicates_per_market(self):
         vault, ctx = _make_vault()
         added = [
-            {"data": encode(["uint256", "address"], [1, FUSE_ADDR])},
-            {"data": encode(["uint256", "address"], [1, FUSE_ADDR_2])},
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 10,
+                "logIndex": 0,
+            },
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR_2]),
+                "blockNumber": 20,
+                "logIndex": 0,
+            },
         ]
         ctx.get_logs.side_effect = [added, []]
 
@@ -330,6 +357,81 @@ class TestPlasmaVaultEventDecoding:
 
         assert len(result) == 1
         assert result[0].market_id == 1
+        assert result[0].fuse == FUSE_ADDR_2
+
+    def test_get_balance_fuses_picks_latest_on_unsorted_added(self):
+        """Provider may return logs out of order; chronological replay must win."""
+        vault, ctx = _make_vault()
+        added = [
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR_2]),
+                "blockNumber": 20,
+                "logIndex": 0,
+            },
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 10,
+                "logIndex": 0,
+            },
+        ]
+        ctx.get_logs.side_effect = [added, []]
+
+        result = vault.get_balance_fuses()
+
+        assert len(result) == 1
+        assert result[0].market_id == 1
+        assert result[0].fuse == FUSE_ADDR_2
+
+    def test_get_balance_fuses_readded_after_removal(self):
+        """Add -> Remove -> Add of the same fuse must result in active fuse."""
+        vault, ctx = _make_vault()
+        added = [
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 10,
+                "logIndex": 0,
+            },
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 30,
+                "logIndex": 0,
+            },
+        ]
+        removed = [
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 20,
+                "logIndex": 0,
+            }
+        ]
+        ctx.get_logs.side_effect = [added, removed]
+
+        result = vault.get_balance_fuses()
+
+        assert len(result) == 1
+        assert result[0].market_id == 1
+        assert result[0].fuse == FUSE_ADDR
+
+    def test_get_balance_fuses_same_block_logindex_tiebreak(self):
+        """Events in the same block are ordered by logIndex."""
+        vault, ctx = _make_vault()
+        added = [
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR_2]),
+                "blockNumber": 10,
+                "logIndex": 2,
+            },
+            {
+                "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
+                "blockNumber": 10,
+                "logIndex": 1,
+            },
+        ]
+        ctx.get_logs.side_effect = [added, []]
+
+        result = vault.get_balance_fuses()
+
+        assert len(result) == 1
         assert result[0].fuse == FUSE_ADDR_2
 
     def test_get_balance_fuses_empty(self):
