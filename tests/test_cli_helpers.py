@@ -936,6 +936,7 @@ class TestPrintReconciliation:
         erc20 = _Erc20Totals(
             raw_asset_total=40 * 10**18,
             usd_total=80000.0,
+            underlying_balance_raw=40 * 10**18,
             token_info={
                 ADDR_2.lower(): _TokenInfo(
                     symbol="WETH",
@@ -976,6 +977,7 @@ class TestPrintReconciliation:
         erc20 = _Erc20Totals(
             raw_asset_total=40 * 10**18,
             usd_total=80000.0,
+            underlying_balance_raw=40 * 10**18,
             token_info={
                 ADDR_2.lower(): _TokenInfo(
                     symbol="WETH",

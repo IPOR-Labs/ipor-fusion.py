@@ -17,6 +17,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.types import Shares
 
 
 @dataclass
@@ -49,6 +50,7 @@ class _Erc20Totals:
     raw_asset_total: int = 0
     usd_total: float = 0.0
     cached_bf_value: int = 0
+    underlying_balance_raw: int = 0
     tokens_without_price: list[str] = field(default_factory=list)
     token_addrs_on_vault: set[str] = field(default_factory=set)
     token_info: dict[str, _TokenInfo] = field(default_factory=dict)
@@ -118,6 +120,8 @@ def _compute_erc20_balances(  # pylint: disable=too-complex
         for addr, symbol, token_decimals, balance, price in resolved:
             if token_decimals is None or balance is None:
                 continue
+            if addr.lower() == data.asset.lower():
+                totals.underlying_balance_raw = balance
             price_usd = price.readable() if price else None
             if balance > 0:
                 totals.token_addrs_on_vault.add(addr.lower())
@@ -225,7 +229,7 @@ def _print_erc20_balances(
 
 
 @dataclass
-class _ReconciliationData:
+class _ReconciliationData:  # pylint: disable=too-many-instance-attributes
     bf_total_raw: int = 0
     bf_total_usd: float = 0.0
     underlying_raw: int = 0
@@ -239,24 +243,27 @@ class _ReconciliationData:
     delta_raw: int = 0
     delta_usd: float = 0.0
     delta_percent: float = 0.0
+    pending_withdrawal_raw: int = 0
+    pending_withdrawal_usd: float = 0.0
+    implied_market_total: int = 0
 
 
 def _compute_reconciliation(
     data: _VaultData,
     bf_totals: _BalanceFuseTotals,
     erc20_totals: _Erc20Totals,
+    plasma_vault: PlasmaVault | None = None,
 ) -> _ReconciliationData:
     decimals = data.asset_decimals
     price = data.asset_price_usd
 
     # Extract underlying-only value (balance fuses already price non-underlying
     # ERC20s via ERC20BalanceFuse, so adding all ERC20s would double-count).
-    underlying_info = erc20_totals.token_info.get(data.asset.lower())
-    underlying_raw = 0
+    # Use the raw on-chain balance directly to avoid USD round-trip rounding.
+    underlying_raw = erc20_totals.underlying_balance_raw
     underlying_usd = 0.0
-    if underlying_info and underlying_info.usd_value and price:
-        underlying_raw = int(underlying_info.usd_value / price * 10**decimals)
-        underlying_usd = underlying_info.usd_value
+    if underlying_raw > 0 and price:
+        underlying_usd = (underlying_raw / 10**decimals) * price
 
     sum_raw = bf_totals.raw_total + underlying_raw
     sum_usd = bf_totals.usd_total + underlying_usd
@@ -264,6 +271,26 @@ def _compute_reconciliation(
     delta_raw = sum_raw - on_chain
     delta_usd = abs(sum_usd - (on_chain / 10**decimals * price)) if price else 0
     pct = abs(delta_raw / on_chain * 100) if on_chain else 0.0
+
+    # Pending withdrawal value: shares_to_release converted to underlying assets.
+    # totalAssets uses a global storage slot (getTotalAssetsInAllMarkets) while
+    # the CLI sums per-market totalAssetsInMarket values. These can diverge after
+    # withdrawals with sharesToRelease > 0, because _updateMarketsBalances only
+    # refreshes the markets touched by instant withdrawal fuses.
+    pending_raw = 0
+    pending_usd = 0.0
+    wm_data = data.withdraw_manager_data
+    if wm_data and wm_data.shares_to_release > 0 and plasma_vault is not None:
+        shares = Shares(wm_data.shares_to_release)
+        assets = _safe_call(lambda: plasma_vault.convert_to_assets(shares))
+        if assets is not None:
+            pending_raw = assets
+            if price:
+                pending_usd = (assets / 10**decimals) * price
+
+    # Implied global market total: totalAssets - underlying.
+    # Divergence from per-market sum indicates accumulated storage drift.
+    implied_market_total = max(0, on_chain - underlying_raw)
 
     return _ReconciliationData(
         bf_total_raw=bf_totals.raw_total,
@@ -279,6 +306,9 @@ def _compute_reconciliation(
         delta_raw=delta_raw,
         delta_usd=delta_usd,
         delta_percent=pct,
+        pending_withdrawal_raw=pending_raw,
+        pending_withdrawal_usd=pending_usd,
+        implied_market_total=implied_market_total,
     )
 
 
@@ -286,8 +316,9 @@ def _print_reconciliation(
     data: _VaultData,
     bf_totals: _BalanceFuseTotals,
     erc20_totals: _Erc20Totals,
+    plasma_vault: PlasmaVault | None = None,
 ) -> None:
-    recon = _compute_reconciliation(data, bf_totals, erc20_totals)
+    recon = _compute_reconciliation(data, bf_totals, erc20_totals, plasma_vault)
     decimals = data.asset_decimals
     sym = data.asset_symbol
     price = data.asset_price_usd
@@ -323,10 +354,41 @@ def _print_reconciliation(
     else:
         click.echo(delta_line)
 
-    _ui = erc20_totals.token_info.get(data.asset.lower())
+    # Per-market sum vs on-chain global market total divergence diagnostic
+    market_divergence = recon.bf_total_raw - recon.implied_market_total
+    if abs(market_divergence) > 10**decimals:
+        fmt_implied = _format_amount(recon.implied_market_total, decimals)
+        fmt_div = _format_amount(abs(market_divergence), decimals)
+        click.secho(
+            f"  Market storage drift: sum(per-market)={fmt_bf} vs "
+            f"implied global={fmt_implied} {sym}, "
+            f"divergence={fmt_div} {sym}",
+            fg="yellow",
+        )
+        click.secho(
+            "  → updateMarketsBalances() needed for all markets to resync",
+            fg="yellow",
+        )
+
+    # Pending withdrawal context
+    if recon.pending_withdrawal_raw > 0:
+        fmt_pending = _format_amount(recon.pending_withdrawal_raw, decimals)
+        usd_pending = f" (${recon.pending_withdrawal_usd:,.2f})" if price else ""
+        click.echo(
+            f"  Pending withdrawals:  {fmt_pending} {sym}{usd_pending}"
+            f"   [sharesToRelease converted to assets]"
+        )
+        if recon.delta_raw > 0 and recon.pending_withdrawal_raw > 0:
+            coverage = min(recon.pending_withdrawal_raw / recon.delta_raw, 1.0)
+            if coverage > 0.5:
+                click.secho(
+                    f"  → Pending withdrawals explain " f"~{coverage:.0%} of the delta",
+                    fg="yellow",
+                )
+
     erc20_non_underlying = erc20_totals.raw_asset_total - (
-        int(_ui.usd_value / price * 10**decimals)
-        if _ui and _ui.usd_value and price
+        erc20_totals.underlying_balance_raw
+        if erc20_totals.underlying_balance_raw > 0
         else 0
     )
 
@@ -360,6 +422,7 @@ def _compute_health_check(  # pylint: disable=too-complex
     bf_totals: _BalanceFuseTotals,
     erc20_totals: _Erc20Totals,
     all_substrate_addrs: set[str],
+    plasma_vault: PlasmaVault | None = None,
 ) -> _HealthCheckData:
     decimals = data.asset_decimals
     sym = data.asset_symbol
@@ -390,12 +453,7 @@ def _compute_health_check(  # pylint: disable=too-complex
             else:
                 result.ok.append(line)
 
-    underlying_info = erc20_totals.token_info.get(underlying)
-    underlying_raw = 0
-    if underlying_info and underlying_info.usd_value and data.asset_price_usd:
-        underlying_raw = int(
-            underlying_info.usd_value / data.asset_price_usd * 10**decimals
-        )
+    underlying_raw = erc20_totals.underlying_balance_raw
     expected = bf_totals.raw_total + underlying_raw
     if data.total_assets > 0:
         pct = abs(expected - data.total_assets) / data.total_assets * 100
@@ -409,6 +467,22 @@ def _compute_health_check(  # pylint: disable=too-complex
             result.ok.append(line)
         else:
             result.warnings.append(line)
+            recon = _compute_reconciliation(data, bf_totals, erc20_totals, plasma_vault)
+            if recon.pending_withdrawal_raw > 0 and recon.delta_raw > 0:
+                fmt_pend = _format_amount(recon.pending_withdrawal_raw, decimals)
+                result.warnings.append(
+                    f"Pending withdrawals: {fmt_pend} {sym} "
+                    f"(sharesToRelease) — market storage may be stale"
+                )
+            implied_market = max(0, data.total_assets - underlying_raw)
+            divergence = bf_totals.raw_total - implied_market
+            if abs(divergence) > 10**decimals:
+                fmt_div = _format_amount(abs(divergence), decimals)
+                result.warnings.append(
+                    f"Market storage drift: {fmt_div} {sym} between "
+                    f"sum(per-market) and global total — "
+                    f"updateMarketsBalances() needed for all markets"
+                )
 
     uncovered: list[str] = []
     cached_usd = (
@@ -458,8 +532,11 @@ def _print_health_check(
     bf_totals: _BalanceFuseTotals,
     erc20_totals: _Erc20Totals,
     all_substrate_addrs: set[str],
+    plasma_vault: PlasmaVault | None = None,
 ) -> None:
-    health = _compute_health_check(data, bf_totals, erc20_totals, all_substrate_addrs)
+    health = _compute_health_check(
+        data, bf_totals, erc20_totals, all_substrate_addrs, plasma_vault
+    )
     click.echo("Health Check:")
     for line in health.ok:
         click.secho(f"  {line}", fg="green")
