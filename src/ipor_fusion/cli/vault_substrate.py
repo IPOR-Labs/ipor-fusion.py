@@ -73,6 +73,28 @@ def _decode_dolomite(hex_str: str) -> _SubstrateInfo:
     )
 
 
+def _decode_euler_v2(hex_str: str) -> _SubstrateInfo:
+    """Decode eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72.
+
+    Source: EulerFuseLib.substrateToBytes32 — address occupies the high 20 bytes
+    (left-aligned), followed by three 1-byte flags. Decoding via the generic
+    plain-address path silently produces a malformed address (last 20 bytes are
+    flag bytes + zero padding).
+    """
+    addr = f"0x{hex_str[0:40]}"
+    is_collateral = (int(hex_str[40:42], 16) & 0x01) == 1
+    can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
+    sub_account = f"0x{hex_str[44:46]}"
+    return _SubstrateInfo(
+        address=addr,
+        extra={
+            "is_collateral": str(is_collateral),
+            "can_borrow": str(can_borrow),
+            "sub_account": sub_account,
+        },
+    )
+
+
 # Market ID → decoder function.  Markets not listed here get raw hex output.
 _SUBSTRATE_DECODERS: dict[int, Callable[[str], _SubstrateInfo]] = {}
 
@@ -97,7 +119,6 @@ _register_markets(
         8,
         9,
         10,
-        11,
         13,
         15,
         16,
@@ -183,6 +204,8 @@ _register_markets(
 _register_markets([38], _decode_enso)
 # Dolomite
 _register_markets([46], _decode_dolomite)
+# Euler V2 (eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72)
+_register_markets([11], _decode_euler_v2)
 
 
 def _build_market_lookup() -> dict[int, str]:

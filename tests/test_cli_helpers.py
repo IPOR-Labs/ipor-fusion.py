@@ -327,6 +327,25 @@ class TestFormatSubstratePerMarket:
         assert info.extra["sub_account_id"] == "5"
         assert info.extra["can_borrow"] == "True"
 
+    # Euler V2 (eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72)
+    def test_euler_v2_supply_only(self):
+        addr_hex = "ab" * 20
+        raw = bytes.fromhex(addr_hex + "00" + "00" + "00" + "00" * 9)
+        info = _format_substrate(raw, market_id=11)
+        assert info.address == f"0x{addr_hex}"
+        assert info.extra["is_collateral"] == "False"
+        assert info.extra["can_borrow"] == "False"
+        assert info.extra["sub_account"] == "0x00"
+
+    def test_euler_v2_collateral_borrow_subaccount(self):
+        addr_hex = "cd" * 20
+        raw = bytes.fromhex(addr_hex + "01" + "01" + "07" + "00" * 9)
+        info = _format_substrate(raw, market_id=11)
+        assert info.address == f"0x{addr_hex}"
+        assert info.extra["is_collateral"] == "True"
+        assert info.extra["can_borrow"] == "True"
+        assert info.extra["sub_account"] == "0x07"
+
     # Unknown market — raw hex with no_decoder label
     def test_unknown_market(self):
         raw = bytes.fromhex("ff" * 32)
