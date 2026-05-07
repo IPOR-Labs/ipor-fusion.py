@@ -202,6 +202,22 @@ def _market_name(market_id: int) -> str:
     return _MARKET_LOOKUP.get(market_id, "UNKNOWN")
 
 
+_UINT256_MAX = 2**256 - 1
+
+
+def _format_market_label(market_id: int) -> str:
+    """Render a market id as ``NAME (id)`` for display.
+
+    Special-cases the ``uint256.max`` sentinel used by burn-fee fuses
+    (ZERO_BALANCE_MARKET) — printing the full 78-digit number is noisy.
+    """
+    if market_id == _UINT256_MAX:
+        name = _market_name(market_id)
+        return f"{name} (uint256.max)" if name != "UNKNOWN" else "uint256.max"
+    label = _market_name(market_id)
+    return f"{label} ({market_id})" if label != "UNKNOWN" else str(market_id)
+
+
 def _format_substrate(raw: bytes, market_id: int | None = None) -> _SubstrateInfo:
     hex_str = raw.hex()
     if len(hex_str) != 64:

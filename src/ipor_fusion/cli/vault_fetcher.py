@@ -10,6 +10,9 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import ChecksumAddress, HexStr
 
+from eth_abi import decode
+from eth_utils import function_signature_to_4byte_selector
+
 from ipor_fusion.cli.config_store import (
     load_contract_cache,
     load_deployment_cache,
@@ -93,6 +96,15 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     # vault's PriceOracleMiddleware. Missing keys mean the oracle has no source
     # configured for that token.
     token_prices_usd: dict[str, float] | None = None
+    # MARKET_ID() reported by each registered action fuse. Keyed by checksummed
+    # fuse address. Fuses that don't expose MARKET_ID() (or whose call reverts)
+    # are absent from the dict — used to detect orphan markets (action fuses
+    # with no matching balance fuse, which silently drop positions from
+    # totalAssets).
+    fuse_markets: dict[str, int] | None = None
+    # Substrates registered for each balance-fuse market. Allows the fuse
+    # tables to report substrate counts per fuse without duplicating reads.
+    market_substrates: dict[int, list[bytes]] | None = None
 
 
 def _safe_call(func: Callable[[], T]) -> T | None:
@@ -101,6 +113,25 @@ def _safe_call(func: Callable[[], T]) -> T | None:
     except (ContractLogicError, Web3RPCError, TimeExhausted) as exc:
         _logger.debug("_safe_call suppressed %s: %s", type(exc).__name__, exc)
         return None
+
+
+_MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
+
+
+def _fetch_fuse_market_id(ctx: Web3Context, fuse_addr: ChecksumAddress) -> int | None:
+    """Read the immutable MARKET_ID() exposed by every IPOR Fusion fuse.
+
+    Returns ``None`` when the call reverts or the fuse contract does not
+    expose the getter (e.g. a non-fuse address ever found in getFuses()).
+    """
+    raw = _safe_call(lambda: ctx.call(fuse_addr, _MARKET_ID_SELECTOR))
+    if not raw:
+        return None
+    try:
+        (value,) = decode(["uint256"], raw)
+    except Exception:  # pylint: disable=broad-except
+        return None
+    return int(value)
 
 
 def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
@@ -397,6 +428,20 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             if deps:
                 dep_graph[market_id] = [int(d) for d in deps]
 
+        # Per-fuse MARKET_ID() — needed to detect orphan markets (action fuse
+        # registered but no balance fuse for the same market_id).
+        fuses_list = f_fuses.result()
+        fuse_market_futs = {
+            addr: pool.submit(_fetch_fuse_market_id, ctx, addr) for addr in fuses_list
+        }
+        fuse_markets: dict[str, int] = {}
+        for addr, fm_fut in fuse_market_futs.items():
+            fuse_mid = fm_fut.result()
+            if fuse_mid is not None:
+                fuse_markets[addr] = fuse_mid
+
+        instant_fuses_list = f_instant.result()
+
         # Phase 5: lending health (Morpho, Aave V3)
         lending_health: VaultLendingHealth | None = None
         if chain_id:
@@ -438,6 +483,7 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             morpho_positions = None
             aave_positions = None
             token_prices_usd = None
+            market_substrates = {}
 
         return _VaultData(
             block_label=block_label,
@@ -455,15 +501,17 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             rewards_manager=f_rewards.result(),
             withdraw_manager=withdraw_mgr_addr,
             asset_price_usd=asset_price.readable() if asset_price else None,
-            fuses=f_fuses.result(),
+            fuses=fuses_list,
             balance_fuses=balance_fuses,
-            instant_fuses=f_instant.result(),
+            instant_fuses=instant_fuses_list,
             withdraw_manager_data=wm_data,
             dependency_graph=dep_graph or None,
             lending_health=lending_health,
             morpho_positions=morpho_positions,
             aave_positions=aave_positions,
             token_prices_usd=token_prices_usd,
+            fuse_markets=fuse_markets or None,
+            market_substrates=market_substrates or None,
         )
 
 

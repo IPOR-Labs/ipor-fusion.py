@@ -13,6 +13,14 @@ from ipor_fusion.cli.config_store import (
     load_config,
     save_config,
 )
+from ipor_fusion.cli.market_cmd import _build_json as _build_morpho_blue_json
+from ipor_fusion.cli.market_cmd import _meta_morpho_json
+from ipor_fusion.cli.morpho_api import (
+    PUBLIC_ALLOCATOR_ADDRESSES,
+    MorphoApiError,
+    fetch_market,
+    fetch_vault,
+)
 from ipor_fusion.cli.vault_cmd import (
     CHAIN_NAMES,
     _build_json_output,
@@ -26,9 +34,14 @@ from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.mcp.models import (
     ActionResult,
     ConfigShowResponse,
+    MetaMorphoVaultResponse,
+    MorphoBlueMarketResponse,
     VaultInfoResponse,
     VaultListEntry,
 )
+from ipor_fusion.readers.lending_health import MORPHO_BLUE_ADDRESS
+from ipor_fusion.readers.morpho import MorphoReader
+from ipor_fusion.types import MorphoBlueMarketId
 
 mcp = FastMCP("ipor-fusion")
 
@@ -262,6 +275,104 @@ def config_set_etherscan_key(api_key: str) -> ActionResult:
     cfg.etherscan_api_key = api_key
     save_config(cfg)
     return ActionResult(message="Etherscan API key set.")
+
+
+# ---------------------------------------------------------------------------
+# Market tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def market_morpho_blue(
+    market_id: str,
+    chain_id: int,
+    block_number: int = 0,
+    no_api: bool = False,
+) -> MorphoBlueMarketResponse:
+    """Inspect a Morpho Blue market by its 32-byte market ID.
+
+    Returns market parameters, on-chain state + APYs (via IRM `borrowRateView`),
+    and — unless `no_api` is set — the MetaMorpho vaults supplying this market
+    along with their PublicAllocator flow caps and admin addresses.
+
+    Returned JSON fields:
+        market_id, chain_id, public_allocator
+        market_params: { loan_token, collateral_token, oracle, irm, lltv }
+        state: { total_supply_assets, total_supply_shares, total_borrow_assets,
+                 total_borrow_shares, liquidity_assets, fee_wad, last_update }
+        rates: { rate_per_second_wad, utilization, borrow_apy, supply_apy }
+        loan_asset / collateral_asset: { address, symbol, decimals } (when API used)
+        vaults: list of supplying vaults with public_allocator_config flow caps
+        api_error: string if Morpho API call failed (state still returned)
+
+    Args:
+        market_id: 32-byte market ID (0x-prefixed hex or 64 raw hex chars).
+        chain_id: EVM chain ID (1 = Ethereum, 8453 = Base, ...).
+        block_number: Block number for on-chain reads (latest if 0).
+        no_api: Skip Morpho API call (no vault discovery / PublicAllocator info).
+    """
+    raw = market_id.strip().removeprefix("0x").removeprefix("0X").lower()
+    if len(raw) != 64 or not all(c in "0123456789abcdef" for c in raw):
+        raise ValueError(
+            f"invalid Morpho market ID (expected 32-byte hex): {market_id}"
+        )
+
+    cfg = load_config()
+    ctx, _ = _build_ctx(cfg, chain_id, block_number)
+    reader = MorphoReader(ctx, MORPHO_BLUE_ADDRESS)
+    mid = MorphoBlueMarketId(raw)
+    params = reader.market_params(mid)
+    state = reader.market(mid)
+    rates = reader.rates_from(state, params)
+
+    api_market = None
+    api_error: str | None = None
+    if not no_api:
+        try:
+            api_market = fetch_market(raw, chain_id)
+        except MorphoApiError as exc:
+            api_error = str(exc)
+
+    public_allocator = PUBLIC_ALLOCATOR_ADDRESSES.get(chain_id)
+    payload = _build_morpho_blue_json(
+        raw, chain_id, params, state, rates, api_market, api_error, public_allocator
+    )
+    return MorphoBlueMarketResponse.model_validate(payload)
+
+
+@mcp.tool()
+def market_meta_morpho(
+    vault_address: str,
+    chain_id: int,
+) -> MetaMorphoVaultResponse:
+    """Inspect a MetaMorpho V1 or Morpho Vault V2 by address (Morpho API).
+
+    Auto-detects vault version. Returns roles (owner/curator/allocators/sentinels),
+    fees, adapters (V2) or supply allocations (V1), and per-market caps with
+    remaining headroom — useful for deciding whether liquidity can be pushed
+    into a Morpho Blue market via reallocate.
+
+    Returned JSON fields (shape depends on `version`):
+        version: "v1" or "v2"
+        chain_id, address, name, symbol
+        asset: { address, symbol, decimals }
+        total_assets
+        owner, curator, allocators
+        v2 only: idle_assets, liquidity, share_price, max_apy, performance_fee,
+                 performance_fee_recipient, management_fee, management_fee_recipient,
+                 sentinels, liquidity_adapter, adapters, caps
+        v1 only: fee_wad, guardian, fee_recipient, public_allocator, allocations
+
+    Args:
+        vault_address: MetaMorpho V1 or Vault V2 address.
+        chain_id: EVM chain ID.
+    """
+    try:
+        info = fetch_vault(vault_address, chain_id)
+    except MorphoApiError as exc:
+        raise ValueError(str(exc)) from exc
+    payload = _meta_morpho_json(info, chain_id)
+    return MetaMorphoVaultResponse.model_validate(payload)
 
 
 def main() -> None:

@@ -670,3 +670,152 @@ class TestHealthCheckLendingWarnings:
 
         # Only the standard reconciliation check, no lending warnings
         assert not any("CRITICAL" in w for w in health.warnings)
+
+
+class TestOrphanFuseMarketsHealthCheck:
+    """The CLI must flag a critical when an action fuse claims a market that
+    has no balance fuse — positions opened via that fuse silently bypass
+    totalAssets accounting (the misconfiguration scenario reported by users)."""
+
+    def _make_data(self, fuse_markets, balance_fuses, dependency_graph=None):
+        from ipor_fusion.cli.vault_fetcher import _VaultData
+
+        addr = Web3.to_checksum_address("0x" + "11" * 20)
+        return _VaultData(
+            block_label="123",
+            block_timestamp=1700000000,
+            share_decimals=18,
+            asset_decimals=18,
+            total_assets=100 * 10**18,
+            total_supply=100 * 10**18,
+            supply_cap=0,
+            asset=addr,
+            vault_name="Test",
+            asset_symbol="USDC",
+            access_manager=addr,
+            price_oracle_addr=addr,
+            rewards_manager=None,
+            withdraw_manager=None,
+            asset_price_usd=1.0,
+            fuses=list(fuse_markets.keys()) if fuse_markets else [],
+            balance_fuses=balance_fuses,
+            instant_fuses=[],
+            fuse_markets=fuse_markets,
+            dependency_graph=dependency_graph,
+        )
+
+    def test_morpho_orphan_marked_critical(self):
+        from ipor_fusion.cli.vault_health import (
+            _BalanceFuseTotals,
+            _Erc20Totals,
+            _compute_health_check,
+        )
+        from ipor_fusion.core.plasma_vault import BalanceFuse
+
+        fuse_addr = "0x" + "aa" * 20
+        balance_fuse = BalanceFuse(
+            market_id=IporFusionMarkets.ERC20_VAULT_BALANCE,
+            fuse=Web3.to_checksum_address("0x" + "bb" * 20),
+        )
+        data = self._make_data(
+            fuse_markets={fuse_addr: IporFusionMarkets.MORPHO},
+            balance_fuses=[balance_fuse],
+        )
+
+        health = _compute_health_check(
+            data, _BalanceFuseTotals(raw_total=100 * 10**18), _Erc20Totals(), set()
+        )
+
+        assert len(health.criticals) == 1
+        line = health.criticals[0]
+        assert "CRITICAL" in line
+        assert "MORPHO" in line
+        assert fuse_addr in line
+        assert "totalAssets" in line
+
+    def test_flash_loan_action_fuse_not_flagged(self):
+        from ipor_fusion.cli.vault_health import (
+            _BalanceFuseTotals,
+            _Erc20Totals,
+            _compute_health_check,
+        )
+
+        data = self._make_data(
+            fuse_markets={"0x" + "cc" * 20: IporFusionMarkets.MORPHO_FLASH_LOAN},
+            balance_fuses=[],
+        )
+
+        health = _compute_health_check(
+            data, _BalanceFuseTotals(), _Erc20Totals(), set()
+        )
+
+        assert not health.criticals
+
+    def test_no_fuse_markets_no_criticals(self):
+        from ipor_fusion.cli.vault_health import (
+            _BalanceFuseTotals,
+            _Erc20Totals,
+            _compute_health_check,
+        )
+
+        data = self._make_data(fuse_markets=None, balance_fuses=[])
+        health = _compute_health_check(
+            data, _BalanceFuseTotals(), _Erc20Totals(), set()
+        )
+        assert not health.criticals
+
+    def test_balance_fuse_market_missing_erc20_dep_marked_critical(self):
+        """The Base vault case: balance fuse for MORPHO_LIQUIDITY_IN_MARKETS
+        (41) exists, but its dependency graph entry doesn't include
+        ERC20_VAULT_BALANCE — updateMarketsBalances(41) silently skips the
+        ERC20 cache refresh."""
+        from ipor_fusion.cli.vault_health import (
+            _BalanceFuseTotals,
+            _Erc20Totals,
+            _compute_health_check,
+        )
+        from ipor_fusion.core.plasma_vault import BalanceFuse
+
+        morpho_lim = 41
+        bf = BalanceFuse(
+            market_id=morpho_lim, fuse=Web3.to_checksum_address("0x" + "bb" * 20)
+        )
+        data = self._make_data(
+            fuse_markets=None,
+            balance_fuses=[bf],
+            dependency_graph={},
+        )
+
+        health = _compute_health_check(
+            data, _BalanceFuseTotals(), _Erc20Totals(), set()
+        )
+
+        critical_lines = [c for c in health.criticals if "ERC20_VAULT_BALANCE" in c]
+        assert len(critical_lines) == 1
+        assert "(41)" in critical_lines[0]
+
+    def test_balance_fuse_with_correct_erc20_dep_no_critical(self):
+        from ipor_fusion.cli.vault_health import (
+            _BalanceFuseTotals,
+            _Erc20Totals,
+            _compute_health_check,
+        )
+        from ipor_fusion.core.plasma_vault import BalanceFuse
+
+        bf = BalanceFuse(
+            market_id=IporFusionMarkets.EULER_V2,
+            fuse=Web3.to_checksum_address("0x" + "bb" * 20),
+        )
+        data = self._make_data(
+            fuse_markets=None,
+            balance_fuses=[bf],
+            dependency_graph={
+                IporFusionMarkets.EULER_V2: [IporFusionMarkets.ERC20_VAULT_BALANCE]
+            },
+        )
+
+        health = _compute_health_check(
+            data, _BalanceFuseTotals(), _Erc20Totals(), set()
+        )
+
+        assert not [c for c in health.criticals if "ERC20_VAULT_BALANCE" in c]

@@ -165,6 +165,112 @@ class ConfigShowResponse(_Base):
     )
 
 
+# ---------------------------------------------------------------------------
+# Market tool models
+# ---------------------------------------------------------------------------
+
+
+class MorphoMarketParamsModel(_Base):
+    loan_token: str
+    collateral_token: str
+    oracle: str
+    irm: str
+    lltv: str = Field(description="LLTV in wad (1e18 = 100%) as a string.")
+
+
+class MorphoMarketStateModel(_Base):
+    total_supply_assets: str
+    total_supply_shares: str
+    total_borrow_assets: str
+    total_borrow_shares: str
+    liquidity_assets: str
+    fee_wad: str
+    last_update: int
+
+
+class MorphoMarketRatesModel(_Base):
+    rate_per_second_wad: str
+    utilization: float
+    borrow_apy: float
+    supply_apy: float
+
+
+class MorphoLoanAssetModel(_Base):
+    address: str
+    symbol: str
+    decimals: int
+
+
+class MorphoVaultPublicAllocatorConfig(_Base):
+    fee_wei: str
+    max_in: str
+    max_out: str
+    admin: str | None = None
+
+
+class MorphoSupplyingVault(_Base):
+    address: str
+    name: str
+    symbol: str
+    asset: dict[str, Any]
+    total_assets: str
+    supply_assets: str
+    supply_cap: str
+    allocators: list[str]
+    public_allocator_config: MorphoVaultPublicAllocatorConfig | None = None
+
+
+class MorphoBlueMarketResponse(_Base):
+    """Morpho Blue market parameters, state, APYs, and supplying vaults."""
+
+    market_id: str
+    chain_id: int
+    public_allocator: str | None = None
+    market_params: MorphoMarketParamsModel
+    state: MorphoMarketStateModel
+    rates: MorphoMarketRatesModel
+    api_error: str | None = None
+    loan_asset: MorphoLoanAssetModel | None = None
+    collateral_asset: MorphoLoanAssetModel | None = None
+    vaults: list[MorphoSupplyingVault] | None = None
+
+
+class MetaMorphoVaultResponse(_Base):
+    """Discriminated by `version` ('v1' or 'v2'). Shape varies between versions
+    — kept loosely typed to avoid duplicating the Morpho API surface."""
+
+    version: str
+    chain_id: int
+    address: str
+    name: str
+    symbol: str
+    asset: dict[str, Any]
+    total_assets: str
+    # v2-only fields
+    idle_assets: str | None = None
+    liquidity: str | None = None
+    share_price: float | None = None
+    max_apy: float | None = None
+    performance_fee: float | None = None
+    performance_fee_recipient: str | None = None
+    management_fee: float | None = None
+    management_fee_recipient: str | None = None
+    sentinels: list[str] | None = None
+    liquidity_adapter: dict[str, Any] | None = None
+    adapters: list[dict[str, Any]] | None = None
+    caps: list[dict[str, Any]] | None = None
+    # v1-only fields
+    fee_wad: str | None = None
+    guardian: str | None = None
+    fee_recipient: str | None = None
+    public_allocator: dict[str, Any] | None = None
+    allocations: list[dict[str, Any]] | None = None
+    # shared
+    owner: str
+    curator: str
+    allocators: list[str]
+
+
 class VaultInfoResponse(_Base):
     """Full on-chain state of a Plasma Vault.
 

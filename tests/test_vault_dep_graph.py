@@ -1,9 +1,13 @@
 """Tests for dependency balance graph analysis."""
 
 from ipor_fusion.cli.vault_dep_graph import (
+    NO_BALANCE_FUSE_MARKETS,
     compute_update_groups,
     compute_update_reach,
+    find_markets_missing_erc20_dependency,
+    find_orphan_fuse_markets,
 )
+from ipor_fusion.market_ids import IporFusionMarkets
 
 
 class TestComputeUpdateReach:
@@ -97,3 +101,112 @@ class TestComputeUpdateGroups:
         assert reach[morpho] == {erc20, erc4626}
         assert reach[erc4626] == {erc20, morpho}
         assert reach[flash] == {erc20}
+
+
+class TestFindOrphanFuseMarkets:
+    def test_empty_inputs(self):
+        assert not find_orphan_fuse_markets({}, set())
+
+    def test_all_markets_covered(self):
+        fuse_markets = {"0xfuse1": IporFusionMarkets.MORPHO}
+        balance_markets = {IporFusionMarkets.MORPHO}
+        assert not find_orphan_fuse_markets(fuse_markets, balance_markets)
+
+    def test_morpho_action_fuse_without_balance_fuse(self):
+        """The misconfiguration the CLI must catch: Morpho action fuse but no
+        Morpho balance fuse, so positions opened via the fuse silently drop
+        out of totalAssets."""
+        fuse_markets = {
+            "0xMorphoSupply": IporFusionMarkets.MORPHO,
+            "0xMorphoBorrow": IporFusionMarkets.MORPHO,
+        }
+        balance_markets = {IporFusionMarkets.ERC20_VAULT_BALANCE}
+        orphans = find_orphan_fuse_markets(fuse_markets, balance_markets)
+        assert orphans == {
+            IporFusionMarkets.MORPHO: ["0xMorphoSupply", "0xMorphoBorrow"]
+        }
+
+    def test_flash_loan_market_excluded(self):
+        """Flash loans intentionally have no balance fuse — must not flag."""
+        fuse_markets = {"0xFlashLoan": IporFusionMarkets.MORPHO_FLASH_LOAN}
+        assert not find_orphan_fuse_markets(fuse_markets, set())
+
+    def test_swap_markets_excluded(self):
+        fuse_markets = {
+            "0xUniV2": IporFusionMarkets.UNISWAP_SWAP_V2,
+            "0xUniV3": IporFusionMarkets.UNISWAP_SWAP_V3,
+            "0xUTS": IporFusionMarkets.UNIVERSAL_TOKEN_SWAPPER,
+        }
+        assert not find_orphan_fuse_markets(fuse_markets, set())
+
+    def test_mixed_orphan_and_valid(self):
+        fuse_markets = {
+            "0xAaveSupply": IporFusionMarkets.AAVE_V3,
+            "0xMorphoSupply": IporFusionMarkets.MORPHO,
+            "0xFlashLoan": IporFusionMarkets.MORPHO_FLASH_LOAN,
+        }
+        balance_markets = {IporFusionMarkets.AAVE_V3}
+        assert find_orphan_fuse_markets(fuse_markets, balance_markets) == {
+            IporFusionMarkets.MORPHO: ["0xMorphoSupply"]
+        }
+
+    def test_unknown_market_id_flagged(self):
+        """An unknown (newly added) market without balance fuse is still an
+        orphan — fail loudly so the allowlist gets updated explicitly."""
+        fuse_markets = {"0xWeird": 9999}
+        assert find_orphan_fuse_markets(fuse_markets, set()) == {9999: ["0xWeird"]}
+
+    def test_no_balance_fuse_markets_constant(self):
+        """Sanity-check the allowlist contains the well-known flow-through
+        markets. Adding new entries here is allowed; removing is a regression."""
+        assert IporFusionMarkets.MORPHO_FLASH_LOAN in NO_BALANCE_FUSE_MARKETS
+        assert IporFusionMarkets.UNIVERSAL_TOKEN_SWAPPER in NO_BALANCE_FUSE_MARKETS
+
+
+class TestFindMarketsMissingErc20Dependency:
+    """The misconfiguration mirrors what we found on a real Base vault:
+    MORPHO_LIQUIDITY_IN_MARKETS had a balance fuse but no edge to
+    ERC20_VAULT_BALANCE in the dep graph, so updateMarketsBalances(41)
+    didn't refresh ERC20 cache."""
+
+    erc20 = IporFusionMarkets.ERC20_VAULT_BALANCE
+    morpho_lim = 41
+    euler = IporFusionMarkets.EULER_V2
+
+    def test_empty_inputs(self):
+        assert not find_markets_missing_erc20_dependency(set(), {})
+
+    def test_market_with_correct_dependency(self):
+        result = find_markets_missing_erc20_dependency(
+            {self.euler}, {self.euler: [self.erc20]}
+        )
+        assert not result
+
+    def test_market_missing_erc20_dependency(self):
+        """The actual user-reported case."""
+        result = find_markets_missing_erc20_dependency(
+            {self.morpho_lim}, dependency_graph={}
+        )
+        assert result == [self.morpho_lim]
+
+    def test_market_with_other_deps_but_not_erc20(self):
+        result = find_markets_missing_erc20_dependency(
+            {self.morpho_lim}, {self.morpho_lim: [self.euler]}
+        )
+        assert result == [self.morpho_lim]
+
+    def test_erc20_market_itself_excluded(self):
+        result = find_markets_missing_erc20_dependency({self.erc20}, {})
+        assert not result
+
+    def test_zero_balance_sentinel_excluded(self):
+        zero_balance = 2**256 - 1
+        result = find_markets_missing_erc20_dependency({zero_balance}, {})
+        assert not result
+
+    def test_mixed_correct_and_missing(self):
+        result = find_markets_missing_erc20_dependency(
+            {self.euler, self.morpho_lim, self.erc20},
+            {self.euler: [self.erc20]},
+        )
+        assert result == [self.morpho_lim]

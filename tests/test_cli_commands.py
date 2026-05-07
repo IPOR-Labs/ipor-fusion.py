@@ -338,7 +338,7 @@ class TestVaultInfo:
         assert ADDR_ORACLE in result.output
         assert ADDR_REWARDS in result.output
         assert ADDR_WITHDRAW in result.output
-        assert "Fuses (2)" in result.output
+        assert "Fuses (2 unique)" in result.output
         assert "Balance Fuses (1)" in result.output
         assert "SomeFuse" in result.output
         assert "Window:" in result.output
