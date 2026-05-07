@@ -451,9 +451,11 @@ def _print_vault_info(
     api_key = cfg.etherscan_api_key
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
 
-    data.deployment_block, data.deployment_timestamp = _fetch_deployment_info(
-        ctx, chain_id, vault_address, api_key
-    )
+    (
+        data.deployment_block,
+        data.deployment_timestamp,
+        data.deployment_error,
+    ) = _fetch_deployment_info(ctx, chain_id, vault_address, api_key)
 
     if json_output:
         result = _build_json_output(
@@ -483,6 +485,8 @@ def _print_vault_info(
         click.echo(
             f"Deployed at:      block {data.deployment_block}" f" ({deploy_iso}, {age})"
         )
+    elif data.deployment_error:
+        click.echo(f"Deployed at:      N/A ({data.deployment_error})")
     else:
         click.echo("Deployed at:      N/A")
     click.echo(f"Asset:            {data.asset} ({data.asset_symbol})")
@@ -618,6 +622,8 @@ def _build_share_price_json(data: _VaultData) -> dict | None:
 
 def _build_deployment_json(data: _VaultData) -> dict | None:
     if data.deployment_block is None or data.deployment_timestamp is None:
+        if data.deployment_error:
+            return {"error": data.deployment_error}
         return None
     return {
         "block": data.deployment_block,

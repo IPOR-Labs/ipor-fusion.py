@@ -132,9 +132,11 @@ def vault_info(
 
     api_key = cfg.etherscan_api_key
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
-    data.deployment_block, data.deployment_timestamp = _fetch_deployment_info(
-        ctx, chain_id, vault_address, api_key
-    )
+    (
+        data.deployment_block,
+        data.deployment_timestamp,
+        data.deployment_error,
+    ) = _fetch_deployment_info(ctx, chain_id, vault_address, api_key)
 
     result = _build_json_output(
         ctx, plasma_vault, data, vault_address, chain_id, chain_label, api_key

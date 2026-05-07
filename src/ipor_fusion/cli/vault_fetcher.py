@@ -79,6 +79,11 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     vault_name: str = ""
     deployment_block: int | None = None
     deployment_timestamp: int | None = None
+    # Short error code from `_fetch_deployment_info` when block/timestamp could
+    # not be resolved. Surfaced in CLI output and the JSON `deployment` field
+    # so users can distinguish "lookup not attempted/failed" from
+    # "no deployment exists" (e.g. `etherscan-paid-tier-required` on Base).
+    deployment_error: str | None = None
     withdraw_manager_data: _WithdrawManagerData | None = None
     dependency_graph: dict[int, list[int]] | None = None
     lending_health: VaultLendingHealth | None = None
@@ -520,15 +525,22 @@ def _fetch_deployment_info(
     chain_id: int,
     vault_address: str,
     api_key: str | None,
-) -> tuple[int | None, int | None]:
-    """Return (block, timestamp) for the vault deployment, using cache."""
+) -> tuple[int | None, int | None, str | None]:
+    """Return ``(block, timestamp, error)`` for the vault deployment, using cache.
+
+    ``error`` is a short machine-readable code surfaced to the caller when the
+    lookup fails for a known reason (e.g. ``etherscan-paid-tier-required`` for
+    Base/Optimism on the free Etherscan tier). ``None`` means either success or
+    a benign empty response.
+    """
     cache_key = f"{chain_id}:{vault_address}"
     cache = load_deployment_cache()
     if entry := cache.get(cache_key):
-        return entry["block"], entry["timestamp"]
+        return entry["block"], entry["timestamp"], None
 
-    if not (tx_hash := get_deployment_tx(chain_id, vault_address, api_key)):
-        return None, None
+    tx_hash, error = get_deployment_tx(chain_id, vault_address, api_key)
+    if not tx_hash:
+        return None, None, error
 
     try:
         tx = ctx.web3.eth.get_transaction(HexStr(tx_hash))
@@ -536,6 +548,6 @@ def _fetch_deployment_info(
         block_info = ctx.web3.eth.get_block(block_number)
         timestamp: int = block_info["timestamp"]
         update_deployment_cache(cache_key, block_number, timestamp)
-        return block_number, timestamp
+        return block_number, timestamp, None
     except Exception:  # pylint: disable=broad-except
-        return None, None
+        return None, None, "rpc-fetch-failed"
