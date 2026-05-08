@@ -1,6 +1,121 @@
 # CHANGELOG
 
 
+## v2.2.0 (2026-05-08)
+
+### Bug Fixes
+
+* fix(cli): decode EULER_V2 substrates as address<<96 + flags
+
+EULER_V2 substrates were being routed through `_decode_plain_address`
+(low 20 bytes), but `EulerFuseLib.substrateToBytes32` packs the
+eulerVault address in the **high** 20 bytes plus three 1-byte flags
+(isCollateral, canBorrow, subAccounts). The plain-address decoder
+silently produced malformed addresses such as
+`0xc6b3381a85a4b410000000000000000000000000` — address tail + flag
+bytes + zero padding — making `vault_info` substrates look like a
+misconfigured vault.
+
+Add a dedicated `_decode_euler_v2` decoder that extracts the address
+from `hex_str[0:40]` and surfaces `is_collateral`, `can_borrow` and
+`sub_account` in the substrate's `extra` dict, mirroring the
+Solidity layout. Register it for market_id 11 and remove 11 from the
+plain-address registration list.
+
+Adds two unit tests covering the supply-only and
+collateral+borrow+sub-account cases. ([`b246920`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b2469202ddacaf604916313b50a1fda272b4a963))
+
+### Features
+
+* feat(cli): surface deployment lookup errors with structured codes
+
+Return (tx_hash, error) and (block, timestamp, error) tuples from
+explorer + vault_fetcher so callers can distinguish "lookup not
+attempted" from "no deployment exists". Recognises Etherscan's
+"Free API access is not supported" response as
+etherscan-paid-tier-required (e.g. Base, Optimism on free tier).
+CLI prints the error code; JSON output emits {"error": ...}. ([`9976fb2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9976fb2a094380706c1f40eb6c1fd6766df8cade))
+
+* feat(cli,mcp): orphan-fuse detection + morpho-blue market explorer
+
+Misconfiguration detection in fusion vault info:
+- Orphan action fuses: flag fuses whose MARKET_ID() has no balance fuse
+  (positions silently bypass totalAssets). Allowlist for flow-through
+  markets (flash loans, swaps, harvest) avoids false positives.
+- Missing ERC20 dependency: flag balance-fuse markets whose dep graph
+  omits ERC20_VAULT_BALANCE — updateMarketsBalances() won't refresh
+  the ERC20 cache, causing totalAssets drift.
+
+UX improvements:
+- Unified Fuses + Instant Withdrawal Fuses tables: same renderer,
+  same columns, dedupe by address with N unique / M registrations
+  in the header, Substrates count column from market substrates.
+- uint256.max sentinel rendered short instead of 78 digits.
+
+New CLI/MCP capability:
+- fusion market morpho-blue <id> + matching MCP tools fetch on-chain
+  Morpho Blue market data and supplying vaults via blue-api.morpho.org.
+- Morpho reader gains supply/borrow position breakdown helpers. ([`582dc71`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/582dc7193c278f19a4f29b3333a0a3c4f5d80739))
+
+* feat(cli,mcp): migrate config_store and MCP tool I/O to Pydantic v2
+
+cli/config_store.py
+- VaultEntry/FusionConfig become BaseModel; manual _validate_config and
+  _migrate_to_v1 collapse into model_validator(mode="before") + Pydantic's
+  own validation. Backward-compat preserved (legacy default_vault dropped,
+  missing version backfilled).
+- ClickException wraps ValidationError and JSONDecodeError with the same
+  user-facing hint as before.
+
+mcp/models.py (new)
+- Strict response models for every MCP tool: VaultInfoResponse,
+  ConfigShowResponse, VaultListEntry, ActionResult, plus shared building
+  blocks (Amount, AssetInfo, Reconciliation, LendingHealth, etc.).
+- model_config: extra="forbid" — any new field added to
+  cli/vault_cmd.py::_build_json_output that is not declared here will fail
+  contract test in tests/test_mcp_models.py. Forces dict-builder and MCP
+  model to stay in sync.
+- Genuinely dynamic sections (substrates keyed by market label, per-protocol
+  position_breakdown, deployment, withdraw_manager_details, share_price,
+  dependency_graph) typed as dict[str, Any] / list[dict[str, Any]] —
+  modelling every variant would be brittle without LLM-side benefit.
+
+mcp/server.py
+- Tools now return model instances instead of json.dumps strings. FastMCP
+  serializes via model_dump() and exposes model_json_schema() as the tool
+  outputSchema, which previously was empty for str-returning tools.
+- vault_info docstring's manual field listing removed; schema lives in the
+  model with Field(description=...).
+
+tests
+- test_cli_config_store.py: +2 cases for legacy default_vault strip and
+  invalid JSON handling.
+- test_mcp_server.py: assertions updated to access model fields directly
+  instead of json.loads()ing the return value.
+- test_mcp_models.py (new): contract test that builds a representative
+  full _build_json_output dict and validates through VaultInfoResponse.
+  Also asserts forbid behaviour by injecting unknown keys.
+
+pyproject
+- pydantic = "^2.10" added under [cli] and [mcp] extras only. Bare
+  ipor_fusion install does not pull pydantic from us (it remains a
+  transitive dep of web3 7.x but we no longer rely on that).
+
+Public SDK surface (PlasmaVault, FuseAction, fuses, readers, types) is
+unchanged. FuseAction stays frozen+slots dataclass — perf-critical hot
+path with no validation gain. ([`578dc1b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/578dc1bfec6663698985d059976197723efbc947))
+
+### Unknown
+
+* Merge pull request #105 from IPOR-Labs/feat/orphan-fuse-detection
+
+feat(cli,mcp): orphan-fuse detection + morpho-blue market explorer ([`a989775`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a9897750964b37196196cee6cec8cd6146ae7c5e))
+
+* Merge pull request #104 from IPOR-Labs/feat/pydantic-config-store
+
+feat(cli,mcp): migrate config_store and MCP tool I/O to Pydantic v2 ([`f52c03d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f52c03dcb85280f85ed4dfe579c6a4e191bd2a1e))
+
+
 ## v2.1.1 (2026-04-16)
 
 ### Bug Fixes
@@ -38,6 +153,10 @@ and use raw underlying balance instead of USD round-trip to avoid rounding. ([`8
 - tests: update get_logs mock to side_effect for added/removed split,
   populate underlying_balance_raw in reconciliation fixtures ([`7d64b3b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7d64b3bad3907cc39cb547c3cfbc8fb32004d1b3))
 
+### Code Style
+
+* style: apply black formatting ([`576982c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/576982c5fee0f76ae0f88b9fa67ab80ba6a12470))
+
 ### Documentation
 
 * docs: use pipx for CLI/MCP install, make MCP section agent-agnostic
@@ -46,7 +165,32 @@ and use raw underlying balance instead of USD round-trip to avoid rounding. ([`8
 - MCP section no longer tied to Claude Code — lists Claude Code, Cursor,
   Windsurf as examples of MCP-compatible assistants ([`336b3ab`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/336b3abf96de9c5e1460edcbc8997696b221c669))
 
+### Features
+
+* feat(cli,mcp): per-market position breakdown for Morpho and Aave V3
+
+Replace the standalone Lending Health table with a unified Position
+Breakdown section that, for every IPOR market, lists each substrate's
+collateral/borrow/supply (Morpho) or supply/variable_debt/stable_debt
+(Aave V3) followed by the inline LTV / Health Factor / Status. Status
+line is now colored (green / yellow / red+bold) and qualified so OK
+isn't ambiguous (e.g. "OK (no debt)", "OK (safe — HF > 1.10)").
+
+USD values are rendered next to every breakdown amount when the vault's
+PriceOracleMiddleware has a source for the token. Prices are batch-
+fetched in parallel for the union of breakdown tokens.
+
+The MCP `vault_info` tool exposes parity: each `position_breakdown[]`
+entry now includes per-amount {raw, token, symbol, decimals, formatted,
+usd}, plus collateral_symbol/loan_symbol (Morpho) or asset_symbol
+(Aave). LendingMarketHealth gains a substrate_id field so each Morpho
+substrate is identifiable by its full 64-char market id. ([`8c951fb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8c951fb0f4f9b633c436d6ecb12afe8188338d37))
+
 ### Unknown
+
+* Merge pull request #102 from IPOR-Labs/feat/lending-position-breakdown
+
+feat(cli,mcp): per-market position breakdown for Morpho and Aave V3 ([`b70fd10`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b70fd10f86d791a30359aecab0c500a93caa5923))
 
 * Merge pull request #101 from IPOR-Labs/fix/reconciliation-pending-withdrawals
 
