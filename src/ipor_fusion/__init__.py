@@ -14,6 +14,7 @@ from ipor_fusion.core.oracle import PriceOracleMiddleware, AssetPriceSource
 from ipor_fusion.readers import (
     MorphoReader,
     MorphoMarket,
+    MorphoMarketRates,
     MorphoPosition,
     MorphoMarketParams,
     AaveV3Reader,
@@ -153,6 +154,7 @@ __all__ = [
     "MAX_UINT256",
     "MorphoReader",
     "MorphoMarket",
+    "MorphoMarketRates",
     "MorphoPosition",
     "MorphoMarketParams",
     "AaveV3Reader",

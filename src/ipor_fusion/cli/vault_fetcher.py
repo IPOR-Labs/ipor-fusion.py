@@ -10,6 +10,9 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import ChecksumAddress, HexStr
 
+from eth_abi import decode
+from eth_utils import function_signature_to_4byte_selector
+
 from ipor_fusion.cli.config_store import (
     load_contract_cache,
     load_deployment_cache,
@@ -76,6 +79,11 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     vault_name: str = ""
     deployment_block: int | None = None
     deployment_timestamp: int | None = None
+    # Short error code from `_fetch_deployment_info` when block/timestamp could
+    # not be resolved. Surfaced in CLI output and the JSON `deployment` field
+    # so users can distinguish "lookup not attempted/failed" from
+    # "no deployment exists" (e.g. `etherscan-paid-tier-required` on Base).
+    deployment_error: str | None = None
     withdraw_manager_data: _WithdrawManagerData | None = None
     dependency_graph: dict[int, list[int]] | None = None
     lending_health: VaultLendingHealth | None = None
@@ -93,6 +101,15 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     # vault's PriceOracleMiddleware. Missing keys mean the oracle has no source
     # configured for that token.
     token_prices_usd: dict[str, float] | None = None
+    # MARKET_ID() reported by each registered action fuse. Keyed by checksummed
+    # fuse address. Fuses that don't expose MARKET_ID() (or whose call reverts)
+    # are absent from the dict — used to detect orphan markets (action fuses
+    # with no matching balance fuse, which silently drop positions from
+    # totalAssets).
+    fuse_markets: dict[str, int] | None = None
+    # Substrates registered for each balance-fuse market. Allows the fuse
+    # tables to report substrate counts per fuse without duplicating reads.
+    market_substrates: dict[int, list[bytes]] | None = None
 
 
 def _safe_call(func: Callable[[], T]) -> T | None:
@@ -101,6 +118,25 @@ def _safe_call(func: Callable[[], T]) -> T | None:
     except (ContractLogicError, Web3RPCError, TimeExhausted) as exc:
         _logger.debug("_safe_call suppressed %s: %s", type(exc).__name__, exc)
         return None
+
+
+_MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
+
+
+def _fetch_fuse_market_id(ctx: Web3Context, fuse_addr: ChecksumAddress) -> int | None:
+    """Read the immutable MARKET_ID() exposed by every IPOR Fusion fuse.
+
+    Returns ``None`` when the call reverts or the fuse contract does not
+    expose the getter (e.g. a non-fuse address ever found in getFuses()).
+    """
+    raw = _safe_call(lambda: ctx.call(fuse_addr, _MARKET_ID_SELECTOR))
+    if not raw:
+        return None
+    try:
+        (value,) = decode(["uint256"], raw)
+    except Exception:  # pylint: disable=broad-except
+        return None
+    return int(value)
 
 
 def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
@@ -397,6 +433,20 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             if deps:
                 dep_graph[market_id] = [int(d) for d in deps]
 
+        # Per-fuse MARKET_ID() — needed to detect orphan markets (action fuse
+        # registered but no balance fuse for the same market_id).
+        fuses_list = f_fuses.result()
+        fuse_market_futs = {
+            addr: pool.submit(_fetch_fuse_market_id, ctx, addr) for addr in fuses_list
+        }
+        fuse_markets: dict[str, int] = {}
+        for addr, fm_fut in fuse_market_futs.items():
+            fuse_mid = fm_fut.result()
+            if fuse_mid is not None:
+                fuse_markets[addr] = fuse_mid
+
+        instant_fuses_list = f_instant.result()
+
         # Phase 5: lending health (Morpho, Aave V3)
         lending_health: VaultLendingHealth | None = None
         if chain_id:
@@ -438,6 +488,7 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             morpho_positions = None
             aave_positions = None
             token_prices_usd = None
+            market_substrates = {}
 
         return _VaultData(
             block_label=block_label,
@@ -455,15 +506,17 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             rewards_manager=f_rewards.result(),
             withdraw_manager=withdraw_mgr_addr,
             asset_price_usd=asset_price.readable() if asset_price else None,
-            fuses=f_fuses.result(),
+            fuses=fuses_list,
             balance_fuses=balance_fuses,
-            instant_fuses=f_instant.result(),
+            instant_fuses=instant_fuses_list,
             withdraw_manager_data=wm_data,
             dependency_graph=dep_graph or None,
             lending_health=lending_health,
             morpho_positions=morpho_positions,
             aave_positions=aave_positions,
             token_prices_usd=token_prices_usd,
+            fuse_markets=fuse_markets or None,
+            market_substrates=market_substrates or None,
         )
 
 
@@ -472,15 +525,22 @@ def _fetch_deployment_info(
     chain_id: int,
     vault_address: str,
     api_key: str | None,
-) -> tuple[int | None, int | None]:
-    """Return (block, timestamp) for the vault deployment, using cache."""
+) -> tuple[int | None, int | None, str | None]:
+    """Return ``(block, timestamp, error)`` for the vault deployment, using cache.
+
+    ``error`` is a short machine-readable code surfaced to the caller when the
+    lookup fails for a known reason (e.g. ``etherscan-paid-tier-required`` for
+    Base/Optimism on the free Etherscan tier). ``None`` means either success or
+    a benign empty response.
+    """
     cache_key = f"{chain_id}:{vault_address}"
     cache = load_deployment_cache()
     if entry := cache.get(cache_key):
-        return entry["block"], entry["timestamp"]
+        return entry["block"], entry["timestamp"], None
 
-    if not (tx_hash := get_deployment_tx(chain_id, vault_address, api_key)):
-        return None, None
+    tx_hash, error = get_deployment_tx(chain_id, vault_address, api_key)
+    if not tx_hash:
+        return None, None, error
 
     try:
         tx = ctx.web3.eth.get_transaction(HexStr(tx_hash))
@@ -488,6 +548,6 @@ def _fetch_deployment_info(
         block_info = ctx.web3.eth.get_block(block_number)
         timestamp: int = block_info["timestamp"]
         update_deployment_cache(cache_key, block_number, timestamp)
-        return block_number, timestamp
+        return block_number, timestamp, None
     except Exception:  # pylint: disable=broad-except
-        return None, None
+        return None, None, "rpc-fetch-failed"

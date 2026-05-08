@@ -338,7 +338,7 @@ class TestVaultInfo:
         assert ADDR_ORACLE in result.output
         assert ADDR_REWARDS in result.output
         assert ADDR_WITHDRAW in result.output
-        assert "Fuses (2)" in result.output
+        assert "Fuses (2 unique)" in result.output
         assert "Balance Fuses (1)" in result.output
         assert "SomeFuse" in result.output
         assert "Window:" in result.output
@@ -535,7 +535,10 @@ class TestVaultInfo:
             in result.output
         )
 
-    @patch("ipor_fusion.cli.vault_fetcher.get_deployment_tx", return_value="0xdeadbeef")
+    @patch(
+        "ipor_fusion.cli.vault_fetcher.get_deployment_tx",
+        return_value=("0xdeadbeef", None),
+    )
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
@@ -793,7 +796,10 @@ class TestVaultInfoJson:
         assert (
             data["links"]["ipor_app"] == f"https://app.ipor.io/fusion/ethereum/{ADDR_1}"
         )
-        assert data["deployment"] is None
+        # Test fixture omits the Etherscan API key — surface that as a structured
+        # error rather than silently emitting null, so callers can distinguish
+        # "lookup not attempted" from "no deployment tx exists".
+        assert data["deployment"] == {"error": "no-api-key"}
         subs = data["substrates"]["MORPHO (14)"]
         assert len(subs) == 1
         assert "raw" in subs[0]
@@ -811,7 +817,10 @@ class TestVaultInfoJson:
         assert wmd["pending_requests"][0]["account"] == ADDR_USER_1
         assert wmd["pending_requests"][0]["can_withdraw"] is True
 
-    @patch("ipor_fusion.cli.vault_fetcher.get_deployment_tx", return_value="0xdeadbeef")
+    @patch(
+        "ipor_fusion.cli.vault_fetcher.get_deployment_tx",
+        return_value=("0xdeadbeef", None),
+    )
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")

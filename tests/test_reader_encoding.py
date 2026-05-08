@@ -8,6 +8,7 @@ from web3 import Web3
 from ipor_fusion.readers.morpho import (
     MorphoReader,
     MorphoMarket,
+    MorphoMarketRates,
     MorphoPosition,
     MorphoMarketParams,
     MorphoPositionBreakdown,
@@ -317,6 +318,72 @@ class TestMorphoReaderPositionBreakdown:
         assert result.borrow_assets == 0
         assert result.supply_assets == 0
         assert result.collateral == 0
+
+
+class TestMorphoReaderRates:
+    def test_rates_computes_apy_and_utilization(self):
+        reader, ctx = _make_reader(MorphoReader)
+        # market(): 90% utilization, 0 protocol fee
+        market_raw = encode(
+            ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+            [1_000_000, 1_000_000, 900_000, 900_000, 1700000000, 0],
+        )
+        params_raw = encode(
+            ["address", "address", "address", "address", "uint256"],
+            [TOKEN_A, TOKEN_B, ORACLE, IRM, 860000000000000000],
+        )
+        # IRM rate = 1e9 wei/sec → ~3.27% borrow APY
+        # (1e9 / 1e18) * 31_536_000 = 0.031536 → exp(...)-1 ≈ 0.03204
+        rate_raw = encode(["uint256"], [10**9])
+        ctx.call.side_effect = [market_raw, params_raw, rate_raw]
+
+        result = reader.rates(MARKET_ID)
+
+        assert isinstance(result, MorphoMarketRates)
+        assert result.rate_per_second_wad == 10**9
+        assert result.utilization == 0.9
+        assert abs(result.borrow_apy - 0.032063) < 1e-4
+        # supply_apy = borrow_apy * util * (1 - fee) = borrow_apy * 0.9
+        assert abs(result.supply_apy - result.borrow_apy * 0.9) < 1e-9
+
+    def test_rates_handles_empty_market(self):
+        reader, ctx = _make_reader(MorphoReader)
+        market_raw = encode(
+            ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+            [0, 0, 0, 0, 0, 0],
+        )
+        params_raw = encode(
+            ["address", "address", "address", "address", "uint256"],
+            [TOKEN_A, TOKEN_B, ORACLE, IRM, 860000000000000000],
+        )
+        rate_raw = encode(["uint256"], [0])
+        ctx.call.side_effect = [market_raw, params_raw, rate_raw]
+
+        result = reader.rates(MARKET_ID)
+
+        assert result.utilization == 0.0
+        assert result.borrow_apy == 0.0
+        assert result.supply_apy == 0.0
+
+    def test_rates_applies_protocol_fee_to_supply_apy(self):
+        reader, ctx = _make_reader(MorphoReader)
+        # 10% protocol fee — supply APY should be reduced by 10%
+        fee_wad = 10**17  # 0.1 * 1e18
+        market_raw = encode(
+            ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+            [1_000_000, 1_000_000, 1_000_000, 1_000_000, 1700000000, fee_wad],
+        )
+        params_raw = encode(
+            ["address", "address", "address", "address", "uint256"],
+            [TOKEN_A, TOKEN_B, ORACLE, IRM, 860000000000000000],
+        )
+        rate_raw = encode(["uint256"], [10**9])
+        ctx.call.side_effect = [market_raw, params_raw, rate_raw]
+
+        result = reader.rates(MARKET_ID)
+
+        # supply_apy = borrow_apy * util(=1.0) * 0.9
+        assert abs(result.supply_apy - result.borrow_apy * 0.9) < 1e-12
 
 
 # ── Compound V3 ────────────────────────────────────────────────────────

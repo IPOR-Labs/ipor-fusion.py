@@ -5,9 +5,11 @@ import pytest
 
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.explorer import (
+    _fetch_contract_creation_tx,
     _fetch_contract_name,
     _fetch_getsourcecode,
     get_contract_name,
+    get_deployment_tx,
 )
 
 
@@ -141,3 +143,62 @@ class TestFetchGetSourceCode:
     def test_network_error_returns_none(self, mock_urlopen_fn):
         mock_urlopen_fn.side_effect = OSError("connection refused")
         assert _fetch_getsourcecode(1, "0xABC", api_key="key123") is None
+
+
+class TestFetchContractCreationTx:
+    def test_unsupported_chain(self):
+        tx, err = _fetch_contract_creation_tx(99999, "0xABC", api_key="key123")
+        assert tx is None
+        assert err == "chain-not-supported"
+
+    def test_no_api_key(self):
+        tx, err = _fetch_contract_creation_tx(1, "0xABC", api_key=None)
+        assert tx is None
+        assert err == "no-api-key"
+
+    @patch("ipor_fusion.cli.explorer.urlopen")
+    def test_paid_tier_required(self, mock_urlopen_fn):
+        response = {
+            "status": "0",
+            "message": "NOTOK",
+            "result": (
+                "Free API access is not supported for this chain. "
+                "Please upgrade your api plan for full chain coverage."
+            ),
+        }
+        mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
+        tx, err = _fetch_contract_creation_tx(8453, "0xABC", api_key="key123")
+        assert tx is None
+        assert err == "etherscan-paid-tier-required"
+
+    @patch("ipor_fusion.cli.explorer.urlopen")
+    def test_no_data_found_is_not_an_error(self, mock_urlopen_fn):
+        response = {"status": "0", "message": "No data found", "result": []}
+        mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
+        tx, err = _fetch_contract_creation_tx(1, "0xABC", api_key="key123")
+        assert tx is None
+        assert err is None
+
+    @patch("ipor_fusion.cli.explorer.urlopen")
+    def test_success_returns_tx_hash(self, mock_urlopen_fn):
+        response = {
+            "status": "1",
+            "result": [{"txHash": "0xdeadbeef"}],
+        }
+        mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
+        tx, err = _fetch_contract_creation_tx(1, "0xABC", api_key="key123")
+        assert tx == "0xdeadbeef"
+        assert err is None
+
+    @patch("ipor_fusion.cli.explorer.urlopen")
+    def test_network_error(self, mock_urlopen_fn):
+        mock_urlopen_fn.side_effect = OSError("connection refused")
+        tx, err = _fetch_contract_creation_tx(1, "0xABC", api_key="key123")
+        assert tx is None
+        assert err == "fetch-failed"
+
+    def test_get_deployment_tx_delegates(self):
+        # Smoke test the public alias.
+        tx, err = get_deployment_tx(99999, "0xABC", api_key="key123")
+        assert tx is None
+        assert err == "chain-not-supported"

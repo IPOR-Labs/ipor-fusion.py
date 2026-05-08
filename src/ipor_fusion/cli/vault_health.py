@@ -6,13 +6,21 @@ from dataclasses import dataclass, field
 import click
 from web3 import Web3
 
+from ipor_fusion.cli.vault_dep_graph import (
+    find_markets_missing_erc20_dependency,
+    find_orphan_fuse_markets,
+)
 from ipor_fusion.cli.vault_fetcher import (
     _VaultData,
     _resolve_token_symbol,
     _safe_call,
 )
 from ipor_fusion.cli.vault_rendering import _format_amount, _format_usd, _print_table
-from ipor_fusion.cli.vault_substrate import _format_substrate, _market_name
+from ipor_fusion.cli.vault_substrate import (
+    _format_market_label,
+    _format_substrate,
+    _market_name,
+)
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
@@ -415,6 +423,53 @@ def _print_reconciliation(
 class _HealthCheckData:
     ok: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    criticals: list[str] = field(default_factory=list)
+
+
+def _compute_orphan_fuse_criticals(data: _VaultData) -> list[str]:
+    """Build CRITICAL lines for action fuses whose market lacks a balance fuse.
+
+    These positions silently bypass ``totalAssets`` accounting. Flow-through
+    markets (flash loans, swaps) are excluded by ``find_orphan_fuse_markets``.
+    """
+    if not data.fuse_markets:
+        return []
+    balance_market_ids = {bf.market_id for bf in data.balance_fuses}
+    orphans = find_orphan_fuse_markets(data.fuse_markets, balance_market_ids)
+    lines: list[str] = []
+    for orphan_mid, fuse_addrs in orphans.items():
+        market_str = _format_market_label(orphan_mid)
+        fuse_list = ", ".join(fuse_addrs)
+        lines.append(
+            f"CRITICAL — action fuse(s) registered for market {market_str} "
+            f"but no balance fuse — positions via these fuses will not "
+            f"contribute to totalAssets: {fuse_list}"
+        )
+    return lines
+
+
+def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
+    """Flag balance-fuse markets that don't declare ERC20_VAULT_BALANCE
+    as a dependency.
+
+    Markets backed by the underlying ERC20 (lending, Morpho liquidity, etc.)
+    must include this edge — without it, ``updateMarketsBalances(market)``
+    won't refresh the ERC20 cache and ``totalAssets`` drifts.
+    """
+    balance_market_ids = {bf.market_id for bf in data.balance_fuses}
+    if not balance_market_ids:
+        return []
+    missing = find_markets_missing_erc20_dependency(
+        balance_market_ids, data.dependency_graph or {}
+    )
+    return [
+        f"CRITICAL — market {_format_market_label(mid)} has a balance fuse "
+        f"but its dependency graph omits ERC20_VAULT_BALANCE — "
+        f"updateMarketsBalances({mid}) will not refresh the ERC20 cache, "
+        f"causing totalAssets drift after deposits/withdrawals through this "
+        f"market"
+        for mid in missing
+    ]
 
 
 def _compute_health_check(  # pylint: disable=too-complex
@@ -428,6 +483,9 @@ def _compute_health_check(  # pylint: disable=too-complex
     sym = data.asset_symbol
     underlying = data.asset.lower()
     result = _HealthCheckData()
+
+    result.criticals.extend(_compute_orphan_fuse_criticals(data))
+    result.criticals.extend(_compute_missing_erc20_dep_criticals(data))
 
     # Lending health warnings
     if data.lending_health and data.lending_health.has_lending_positions:
@@ -540,7 +598,9 @@ def _print_health_check(
     click.echo("Health Check:")
     for line in health.ok:
         click.secho(f"  {line}", fg="green")
-    if not health.ok and not health.warnings:
+    if not health.ok and not health.warnings and not health.criticals:
         click.secho("  All checks passed", fg="green")
+    for line in health.criticals:
+        click.secho(f"  {line}", fg="red", bold=True)
     for line in health.warnings:
         click.secho(f"  {line}", fg="yellow")

@@ -13,6 +13,8 @@ from pydantic import ValidationError
 from ipor_fusion.mcp.models import (
     Amount,
     ConfigShowResponse,
+    MetaMorphoVaultResponse,
+    MorphoBlueMarketResponse,
     Reconciliation,
     VaultInfoResponse,
     VaultListEntry,
@@ -248,6 +250,196 @@ class TestSimpleResponseContracts:
         VaultListEntry.model_validate(
             {"address": "0xA", "label": "x", "chain": "base", "chain_id": 8453}
         )
+
+    def test_morpho_blue_market_full_dict(self):
+        d = {
+            "market_id": "0x" + "ab" * 32,
+            "chain_id": 1,
+            "public_allocator": "0xPA",
+            "market_params": {
+                "loan_token": "0xLOAN",
+                "collateral_token": "0xCOL",
+                "oracle": "0xORA",
+                "irm": "0xIRM",
+                "lltv": "915000000000000000",
+            },
+            "state": {
+                "total_supply_assets": "1000",
+                "total_supply_shares": "1000000000000",
+                "total_borrow_assets": "900",
+                "total_borrow_shares": "900000000000",
+                "liquidity_assets": "100",
+                "fee_wad": "0",
+                "last_update": 1700000000,
+            },
+            "rates": {
+                "rate_per_second_wad": "1000000000",
+                "utilization": 0.9,
+                "borrow_apy": 0.032,
+                "supply_apy": 0.029,
+            },
+            "loan_asset": {
+                "address": "0xLOAN",
+                "symbol": "USDC",
+                "decimals": 6,
+            },
+            "collateral_asset": {
+                "address": "0xCOL",
+                "symbol": "WETH",
+                "decimals": 18,
+            },
+            "vaults": [
+                {
+                    "address": "0xVAULT",
+                    "name": "v",
+                    "symbol": "v",
+                    "asset": {"symbol": "USDC", "decimals": 6},
+                    "total_assets": "1000",
+                    "supply_assets": "0",
+                    "supply_cap": "500",
+                    "allocators": ["0xA"],
+                    "public_allocator_config": {
+                        "fee_wei": "0",
+                        "max_in": "100",
+                        "max_out": "0",
+                        "admin": "0xADMIN",
+                    },
+                }
+            ],
+        }
+        result = MorphoBlueMarketResponse.model_validate(d)
+        assert result.market_id.startswith("0x")
+        assert result.vaults is not None
+        assert result.vaults[0].public_allocator_config is not None
+
+    def test_morpho_blue_market_minimal_no_api(self):
+        """no_api branch: no loan_asset / collateral_asset / vaults."""
+        d = {
+            "market_id": "0xab",
+            "chain_id": 1,
+            "market_params": {
+                "loan_token": "0xL",
+                "collateral_token": "0xC",
+                "oracle": "0xO",
+                "irm": "0xI",
+                "lltv": "0",
+            },
+            "state": {
+                "total_supply_assets": "0",
+                "total_supply_shares": "0",
+                "total_borrow_assets": "0",
+                "total_borrow_shares": "0",
+                "liquidity_assets": "0",
+                "fee_wad": "0",
+                "last_update": 0,
+            },
+            "rates": {
+                "rate_per_second_wad": "0",
+                "utilization": 0.0,
+                "borrow_apy": 0.0,
+                "supply_apy": 0.0,
+            },
+        }
+        MorphoBlueMarketResponse.model_validate(d)
+
+    def test_morpho_blue_unknown_field_rejected(self):
+        d = {
+            "market_id": "0xab",
+            "chain_id": 1,
+            "market_params": {
+                "loan_token": "0xL",
+                "collateral_token": "0xC",
+                "oracle": "0xO",
+                "irm": "0xI",
+                "lltv": "0",
+            },
+            "state": {
+                "total_supply_assets": "0",
+                "total_supply_shares": "0",
+                "total_borrow_assets": "0",
+                "total_borrow_shares": "0",
+                "liquidity_assets": "0",
+                "fee_wad": "0",
+                "last_update": 0,
+            },
+            "rates": {
+                "rate_per_second_wad": "0",
+                "utilization": 0.0,
+                "borrow_apy": 0.0,
+                "supply_apy": 0.0,
+            },
+            "drift": "no",
+        }
+        with pytest.raises(ValidationError):
+            MorphoBlueMarketResponse.model_validate(d)
+
+    def test_meta_morpho_v2_validates(self):
+        d = {
+            "version": "v2",
+            "chain_id": 1,
+            "address": "0xVAULT",
+            "name": "v",
+            "symbol": "v",
+            "asset": {"address": "0xL", "symbol": "USDC", "decimals": 6},
+            "total_assets": "1000",
+            "idle_assets": "0",
+            "liquidity": "1000",
+            "share_price": 1.0,
+            "max_apy": 0.05,
+            "performance_fee": 0.0,
+            "performance_fee_recipient": "0xPF",
+            "management_fee": 0.0,
+            "management_fee_recipient": "0xMF",
+            "owner": "0xOWNER",
+            "curator": "0xCUR",
+            "allocators": ["0xA"],
+            "sentinels": [],
+            "liquidity_adapter": None,
+            "adapters": [],
+            "caps": [],
+        }
+        result = MetaMorphoVaultResponse.model_validate(d)
+        assert result.version == "v2"
+        assert result.fee_wad is None  # v1-only stays unset
+
+    def test_meta_morpho_v1_validates(self):
+        d = {
+            "version": "v1",
+            "chain_id": 1,
+            "address": "0xVAULT",
+            "name": "v",
+            "symbol": "v",
+            "asset": {"address": "0xL", "symbol": "USDC", "decimals": 6},
+            "total_assets": "1000",
+            "fee_wad": "100000000000000000",
+            "owner": "0xOWNER",
+            "curator": "0xCUR",
+            "guardian": "0xGUARD",
+            "fee_recipient": "0xFR",
+            "allocators": ["0xA"],
+            "public_allocator": None,
+            "allocations": [],
+        }
+        result = MetaMorphoVaultResponse.model_validate(d)
+        assert result.version == "v1"
+        assert result.adapters is None  # v2-only stays unset
+
+    def test_meta_morpho_unknown_field_rejected(self):
+        d = {
+            "version": "v1",
+            "chain_id": 1,
+            "address": "0xVAULT",
+            "name": "v",
+            "symbol": "v",
+            "asset": {},
+            "total_assets": "0",
+            "owner": "0x",
+            "curator": "0x",
+            "allocators": [],
+            "drift": "no",
+        }
+        with pytest.raises(ValidationError):
+            MetaMorphoVaultResponse.model_validate(d)
 
     def test_reconciliation_with_no_usd_in_implied_market_total(self):
         """implied_market_total is the only Amount in reconciliation_json that

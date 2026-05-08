@@ -73,6 +73,28 @@ def _decode_dolomite(hex_str: str) -> _SubstrateInfo:
     )
 
 
+def _decode_euler_v2(hex_str: str) -> _SubstrateInfo:
+    """Decode eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72.
+
+    Source: EulerFuseLib.substrateToBytes32 — address occupies the high 20 bytes
+    (left-aligned), followed by three 1-byte flags. Decoding via the generic
+    plain-address path silently produces a malformed address (last 20 bytes are
+    flag bytes + zero padding).
+    """
+    addr = f"0x{hex_str[0:40]}"
+    is_collateral = (int(hex_str[40:42], 16) & 0x01) == 1
+    can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
+    sub_account = f"0x{hex_str[44:46]}"
+    return _SubstrateInfo(
+        address=addr,
+        extra={
+            "is_collateral": str(is_collateral),
+            "can_borrow": str(can_borrow),
+            "sub_account": sub_account,
+        },
+    )
+
+
 # Market ID → decoder function.  Markets not listed here get raw hex output.
 _SUBSTRATE_DECODERS: dict[int, Callable[[str], _SubstrateInfo]] = {}
 
@@ -97,7 +119,6 @@ _register_markets(
         8,
         9,
         10,
-        11,
         13,
         15,
         16,
@@ -183,6 +204,8 @@ _register_markets(
 _register_markets([38], _decode_enso)
 # Dolomite
 _register_markets([46], _decode_dolomite)
+# Euler V2 (eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72)
+_register_markets([11], _decode_euler_v2)
 
 
 def _build_market_lookup() -> dict[int, str]:
@@ -200,6 +223,22 @@ _MARKET_LOOKUP: dict[int, str] = _build_market_lookup()
 
 def _market_name(market_id: int) -> str:
     return _MARKET_LOOKUP.get(market_id, "UNKNOWN")
+
+
+_UINT256_MAX = 2**256 - 1
+
+
+def _format_market_label(market_id: int) -> str:
+    """Render a market id as ``NAME (id)`` for display.
+
+    Special-cases the ``uint256.max`` sentinel used by burn-fee fuses
+    (ZERO_BALANCE_MARKET) — printing the full 78-digit number is noisy.
+    """
+    if market_id == _UINT256_MAX:
+        name = _market_name(market_id)
+        return f"{name} (uint256.max)" if name != "UNKNOWN" else "uint256.max"
+    label = _market_name(market_id)
+    return f"{label} ({market_id})" if label != "UNKNOWN" else str(market_id)
 
 
 def _format_substrate(raw: bytes, market_id: int | None = None) -> _SubstrateInfo:

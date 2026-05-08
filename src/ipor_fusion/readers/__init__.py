@@ -1,6 +1,7 @@
 from ipor_fusion.readers.morpho import (
     MorphoReader,
     MorphoMarket,
+    MorphoMarketRates,
     MorphoPosition,
     MorphoMarketParams,
 )
@@ -18,6 +19,7 @@ from ipor_fusion.readers.ramses_v2 import RamsesV2Reader, RamsesV2Position
 __all__ = [
     "MorphoReader",
     "MorphoMarket",
+    "MorphoMarketRates",
     "MorphoPosition",
     "MorphoMarketParams",
     "AaveV3Reader",

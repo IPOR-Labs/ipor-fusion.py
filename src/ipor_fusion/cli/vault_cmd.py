@@ -42,6 +42,7 @@ from ipor_fusion.cli.vault_rendering import (
     _substrate_details,
 )
 from ipor_fusion.cli.vault_substrate import (
+    _format_market_label,
     _format_substrate,
     _market_name,
 )
@@ -450,9 +451,11 @@ def _print_vault_info(
     api_key = cfg.etherscan_api_key
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
 
-    data.deployment_block, data.deployment_timestamp = _fetch_deployment_info(
-        ctx, chain_id, vault_address, api_key
-    )
+    (
+        data.deployment_block,
+        data.deployment_timestamp,
+        data.deployment_error,
+    ) = _fetch_deployment_info(ctx, chain_id, vault_address, api_key)
 
     if json_output:
         result = _build_json_output(
@@ -482,6 +485,8 @@ def _print_vault_info(
         click.echo(
             f"Deployed at:      block {data.deployment_block}" f" ({deploy_iso}, {age})"
         )
+    elif data.deployment_error:
+        click.echo(f"Deployed at:      N/A ({data.deployment_error})")
     else:
         click.echo("Deployed at:      N/A")
     click.echo(f"Asset:            {data.asset} ({data.asset_symbol})")
@@ -541,8 +546,24 @@ def _print_vault_info(
         _print_pending_requests(data, plasma_vault)
     click.echo()
 
-    click.echo(f"Fuses ({len(data.fuses)}):")
-    _print_fuses_table(data.fuses, chain_id, api_key)
+    _print_fuse_section(
+        "Fuses",
+        data.fuses,
+        data.fuse_markets,
+        data.market_substrates,
+        chain_id,
+        api_key,
+    )
+    click.echo()
+
+    _print_fuse_section(
+        "Instant Withdrawal Fuses",
+        data.instant_fuses,
+        data.fuse_markets,
+        data.market_substrates,
+        chain_id,
+        api_key,
+    )
     click.echo()
 
     click.echo(f"Balance Fuses ({len(data.balance_fuses)}):")
@@ -559,18 +580,14 @@ def _print_vault_info(
 
     _print_dependency_graph(data)
 
-    click.echo(f"Instant Withdrawal Fuses ({len(data.instant_fuses)}):")
-    _print_fuses_table(data.instant_fuses, chain_id, api_key)
-    click.echo()
-
-    click.echo("ERC20 Balances (vault holdings):")
-    erc20_totals = _print_erc20_balances(ctx, plasma_vault, data)
-    click.echo()
-
     click.echo("Substrates per Market:")
     all_substrate_addrs = _print_substrates(
         ctx, plasma_vault, data.balance_fuses, chain_id, api_key
     )
+    click.echo()
+
+    click.echo("ERC20 Balances (vault holdings):")
+    erc20_totals = _print_erc20_balances(ctx, plasma_vault, data)
     click.echo()
 
     _print_reconciliation(
@@ -605,6 +622,8 @@ def _build_share_price_json(data: _VaultData) -> dict | None:
 
 def _build_deployment_json(data: _VaultData) -> dict | None:
     if data.deployment_block is None or data.deployment_timestamp is None:
+        if data.deployment_error:
+            return {"error": data.deployment_error}
         return None
     return {
         "block": data.deployment_block,
@@ -683,11 +702,6 @@ def _build_withdraw_manager_json(
             wmd.last_release_funds_timestamp, tz=timezone.utc
         ).strftime("%Y-%m-%dT%H:%M:%SZ")
     return result
-
-
-def _format_market_label(market_id: int) -> str:
-    label = _market_name(market_id)
-    return f"{label} ({market_id})" if label != "UNKNOWN" else str(market_id)
 
 
 def _build_breakdown_amount_json(
@@ -791,7 +805,7 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     }
 
 
-def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-branches
+def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-branches,too-many-statements
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: _VaultData,
@@ -830,12 +844,21 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
             for bf in data.balance_fuses
         ]
 
+        fuse_markets = data.fuse_markets or {}
+
+        def _fuse_entry(addr: str, contract: str | None) -> dict:
+            entry: dict = {"address": addr, "contract": contract or "?"}
+            if (mid := fuse_markets.get(addr)) is not None:
+                entry["market_id"] = mid
+                label = _market_name(mid)
+                entry["market"] = label if label != "UNKNOWN" else str(mid)
+            return entry
+
         fuses_json = [
-            {"address": addr, "contract": fuse_name_futs[addr].result() or "?"}
-            for addr in data.fuses
+            _fuse_entry(addr, fuse_name_futs[addr].result()) for addr in data.fuses
         ]
         instant_json = [
-            {"address": addr, "contract": instant_name_futs[addr].result() or "?"}
+            _fuse_entry(addr, instant_name_futs[addr].result())
             for addr in data.instant_fuses
         ]
 
@@ -923,12 +946,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
         all_sub_addresses: set[str] = set()
         market_subs_raw: list[tuple[str, int, list]] = []
         for i, bf in enumerate(data.balance_fuses):
-            market_label = _market_name(bf.market_id)
-            market_str = (
-                f"{market_label} ({bf.market_id})"
-                if market_label != "UNKNOWN"
-                else str(bf.market_id)
-            )
+            market_str = _format_market_label(bf.market_id)
             if subs := substrate_futs[i].result():
                 market_subs_raw.append((market_str, bf.market_id, subs))
                 for sub in subs:
@@ -1079,7 +1097,11 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
     health = _compute_health_check(
         data, bf_totals, erc20_totals, all_sub_lower, plasma_vault
     )
-    health_json = {"ok": health.ok, "warnings": health.warnings}
+    health_json = {
+        "ok": health.ok,
+        "warnings": health.warnings,
+        "criticals": health.criticals,
+    }
 
     explorer_base = BLOCK_EXPLORER_URLS.get(chain_id)
     links: dict[str, str] = {
@@ -1197,18 +1219,59 @@ def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None
     click.echo(f"  Total pending: {total_fmt} shares{total_assets_fmt}")
 
 
-def _print_fuses_table(
-    fuses: Sequence[str], chain_id: int, api_key: str | None
+def _print_fuse_section(  # pylint: disable=too-many-arguments
+    title: str,
+    fuses: Sequence[str],
+    fuse_markets: dict[str, int] | None,
+    market_substrates: dict[int, list[bytes]] | None,
+    chain_id: int,
+    api_key: str | None,
 ) -> None:
+    """Render a fuse section (regular or instant-withdrawal) with a unified
+    layout.
+
+    Fuses are deduplicated by address. The ``Substrates`` column reports
+    how many substrates the fuse's market has registered (read from
+    ``getMarketSubstrates(fuse.MARKET_ID())``) — the actionable surface for
+    the fuse. The header surfaces duplication as ``N unique / M registrations``
+    whenever the same address appears multiple times (typical for
+    instant-withdrawal fuses).
+    """
+    counts: dict[str, int] = {}
+    for addr in fuses:
+        counts[addr] = counts.get(addr, 0) + 1
+
+    total = len(fuses)
+    unique_count = len(counts)
+    suffix = f" / {total} registrations" if total != unique_count else ""
+    click.echo(f"{title} ({unique_count} unique{suffix}):")
+
+    if not counts:
+        click.echo("  (none)")
+        return
+
     with ThreadPoolExecutor() as pool:
-        futures = [
-            (idx, addr, pool.submit(get_contract_name, chain_id, addr, api_key))
-            for idx, addr in enumerate(fuses, 1)
-        ]
+        name_futs = {
+            addr: pool.submit(get_contract_name, chain_id, addr, api_key)
+            for addr in counts
+        }
         rows: list[tuple[str, ...]] = []
-        for idx, addr, fut in futures:
-            rows.append((str(idx), addr, fut.result() or "?"))
-    _print_table(("#", "Address", "Contract"), rows)
+        for idx, addr in enumerate(counts, 1):
+            market_label = "?"
+            substrate_count = "?"
+            if fuse_markets and (mid := fuse_markets.get(addr)) is not None:
+                market_label = _format_market_label(mid)
+                substrate_count = str(len((market_substrates or {}).get(mid, [])))
+            rows.append(
+                (
+                    str(idx),
+                    addr,
+                    name_futs[addr].result() or "?",
+                    market_label,
+                    substrate_count,
+                )
+            )
+    _print_table(("#", "Address", "Contract", "Market", "Substrates"), rows)
 
 
 def _print_balance_fuses_table(
@@ -1225,12 +1288,7 @@ def _print_balance_fuses_table(
     with ThreadPoolExecutor() as pool:
         futures: list[tuple[int, int, str, Future, Future]] = []
         for idx, balance_fuse in enumerate(balance_fuses, 1):
-            market_label = _market_name(balance_fuse.market_id)
-            market_id_str = (
-                f"{market_label} ({balance_fuse.market_id})"
-                if market_label != "UNKNOWN"
-                else str(balance_fuse.market_id)
-            )
+            market_id_str = _format_market_label(balance_fuse.market_id)
             f_balance = pool.submit(
                 plasma_vault.total_assets_in_market, balance_fuse.market_id
             )
@@ -1285,12 +1343,7 @@ def _print_substrates(  # pylint: disable=too-complex
     with ThreadPoolExecutor() as pool:
         substrate_futures: list[tuple[str, int, Future]] = []
         for balance_fuse in balance_fuses:
-            market_label = _market_name(balance_fuse.market_id)
-            market_id_str = (
-                f"{market_label} ({balance_fuse.market_id})"
-                if market_label != "UNKNOWN"
-                else str(balance_fuse.market_id)
-            )
+            market_id_str = _format_market_label(balance_fuse.market_id)
             fut = pool.submit(
                 plasma_vault.get_market_substrates, balance_fuse.market_id
             )

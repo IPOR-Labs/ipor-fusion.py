@@ -18,6 +18,7 @@ from ipor_fusion.cli.vault_cmd import (
     _build_share_price_json,
     _index_lending_health,
     _print_dependency_graph,
+    _print_fuse_section,
     _print_health_lines,
     _print_lending_health,
     _print_pending_requests,
@@ -33,6 +34,7 @@ from ipor_fusion.cli.vault_fetcher import (
     _collect_morpho_substrates,
     _fetch_aave_positions,
     _fetch_breakdown_token_prices,
+    _fetch_fuse_market_id,
     _fetch_morpho_positions,
     _resolve_token_symbol,
     _safe_call,
@@ -324,6 +326,25 @@ class TestFormatSubstratePerMarket:
         assert info.address == f"0x{addr_hex}"
         assert info.extra["sub_account_id"] == "5"
         assert info.extra["can_borrow"] == "True"
+
+    # Euler V2 (eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72)
+    def test_euler_v2_supply_only(self):
+        addr_hex = "ab" * 20
+        raw = bytes.fromhex(addr_hex + "00" + "00" + "00" + "00" * 9)
+        info = _format_substrate(raw, market_id=11)
+        assert info.address == f"0x{addr_hex}"
+        assert info.extra["is_collateral"] == "False"
+        assert info.extra["can_borrow"] == "False"
+        assert info.extra["sub_account"] == "0x00"
+
+    def test_euler_v2_collateral_borrow_subaccount(self):
+        addr_hex = "cd" * 20
+        raw = bytes.fromhex(addr_hex + "01" + "01" + "07" + "00" * 9)
+        info = _format_substrate(raw, market_id=11)
+        assert info.address == f"0x{addr_hex}"
+        assert info.extra["is_collateral"] == "True"
+        assert info.extra["can_borrow"] == "True"
+        assert info.extra["sub_account"] == "0x07"
 
     # Unknown market — raw hex with no_decoder label
     def test_unknown_market(self):
@@ -1685,3 +1706,117 @@ class TestPrintPendingRequests:
         _print_pending_requests(data, pv)
         captured = capsys.readouterr()
         assert "Pending requests: (none)" in captured.out
+
+
+class TestPrintFuseSection:
+    """Single unified renderer used by both Fuses and Instant Withdrawal
+    Fuses. Dedupes by address, reports a Registrations column, and surfaces
+    duplicate registrations in the section header."""
+
+    @patch(
+        "ipor_fusion.cli.vault_cmd.get_contract_name", return_value="MorphoSupplyFuse"
+    )
+    def test_renders_market_label_and_substrate_count(self, _mock_name, capsys):
+        addr = ADDR_1
+        _print_fuse_section(
+            "Fuses",
+            [addr],
+            fuse_markets={addr: IporFusionMarkets.MORPHO},
+            market_substrates={IporFusionMarkets.MORPHO: [b"\x11" * 32, b"\x22" * 32]},
+            chain_id=1,
+            api_key=None,
+        )
+        captured = capsys.readouterr()
+        assert "Fuses (1 unique)" in captured.out
+        assert "MORPHO" in captured.out
+        assert addr in captured.out
+        assert "Substrates" in captured.out
+        # Substrate count comes from market_substrates, not from registrations
+        assert "  2  " in captured.out or "2\n" in captured.out
+
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="UnknownFuse")
+    def test_renders_question_mark_without_fuse_markets(self, _mock_name, capsys):
+        _print_fuse_section(
+            "Fuses",
+            [ADDR_1],
+            fuse_markets=None,
+            market_substrates=None,
+            chain_id=1,
+            api_key=None,
+        )
+        captured = capsys.readouterr()
+        assert "?" in captured.out
+
+    @patch(
+        "ipor_fusion.cli.vault_cmd.get_contract_name", return_value="MorphoSupplyFuse"
+    )
+    def test_dedupes_repeated_fuse_address(self, _mock_name, capsys):
+        addr = ADDR_1
+        _print_fuse_section(
+            "Instant Withdrawal Fuses",
+            [addr, addr, addr],
+            fuse_markets={addr: IporFusionMarkets.MORPHO},
+            market_substrates={IporFusionMarkets.MORPHO: [b"\x11" * 32] * 3},
+            chain_id=1,
+            api_key=None,
+        )
+        captured = capsys.readouterr()
+        assert "1 unique / 3 registrations" in captured.out
+        assert captured.out.count(addr) == 1
+
+    @patch(
+        "ipor_fusion.cli.vault_cmd.get_contract_name", return_value="MorphoSupplyFuse"
+    )
+    def test_no_registrations_suffix_when_unique(self, _mock_name, capsys):
+        _print_fuse_section(
+            "Fuses",
+            [ADDR_1, ADDR_2],
+            fuse_markets=None,
+            market_substrates=None,
+            chain_id=1,
+            api_key=None,
+        )
+        captured = capsys.readouterr()
+        assert "registrations" not in captured.out
+        assert "2 unique" in captured.out
+
+    def test_empty_input(self, capsys):
+        _print_fuse_section(
+            "Instant Withdrawal Fuses",
+            [],
+            fuse_markets=None,
+            market_substrates=None,
+            chain_id=1,
+            api_key=None,
+        )
+        captured = capsys.readouterr()
+        assert "(none)" in captured.out
+
+
+class TestFetchFuseMarketId:
+    """Reads the immutable MARKET_ID() exposed by every IPOR Fusion fuse so
+    the CLI can detect orphan markets (action fuses without a matching
+    balance fuse)."""
+
+    def test_returns_decoded_uint256(self):
+        ctx = MagicMock()
+        # uint256(14) ABI-encoded
+        ctx.call.return_value = (14).to_bytes(32, "big")
+        result = _fetch_fuse_market_id(ctx, ADDR_1)
+        assert result == 14
+        ctx.call.assert_called_once()
+
+    def test_returns_none_on_revert(self):
+        ctx = MagicMock()
+        ctx.call.side_effect = ContractLogicError("execution reverted")
+        assert _fetch_fuse_market_id(ctx, ADDR_1) is None
+
+    def test_returns_none_on_empty_response(self):
+        ctx = MagicMock()
+        ctx.call.return_value = b""
+        assert _fetch_fuse_market_id(ctx, ADDR_1) is None
+
+    def test_returns_none_on_undecodable_response(self):
+        ctx = MagicMock()
+        ctx.call.return_value = b"\x00\x01"  # too short for uint256
+        assert _fetch_fuse_market_id(ctx, ADDR_1) is None

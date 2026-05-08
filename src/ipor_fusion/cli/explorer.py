@@ -48,18 +48,23 @@ def get_contract_name(chain_id: int, address: str, api_key: str | None = None) -
 
 def get_deployment_tx(
     chain_id: int, address: str, api_key: str | None = None
-) -> str | None:
-    """Return the creation tx hash for a contract."""
+) -> tuple[str | None, str | None]:
+    """Return ``(tx_hash, error)`` for a contract deployment.
+
+    ``error`` is a short machine-readable code when ``tx_hash`` is None and the
+    failure has a known cause; ``None`` means either success or a benign empty
+    result (e.g. Etherscan responded with "No data found").
+    """
     return _fetch_contract_creation_tx(chain_id, address, api_key)
 
 
 def _fetch_contract_creation_tx(
     chain_id: int, address: str, api_key: str | None = None
-) -> str | None:
+) -> tuple[str | None, str | None]:
     if chain_id not in SUPPORTED_CHAINS:
-        return None
+        return None, "chain-not-supported"
     if not api_key:
-        return None
+        return None, "no-api-key"
 
     params: dict[str, str] = {
         "chainid": str(chain_id),
@@ -70,20 +75,27 @@ def _fetch_contract_creation_tx(
     }
 
     url = f"{ETHERSCAN_V2_URL}?{urlencode(params)}"
+    last_error: str | None = "fetch-failed"
     for attempt in range(_MAX_RETRIES):
         _etherscan_limiter.wait()
         try:
             with urlopen(url, timeout=10) as resp:  # noqa: S310
                 data = json.loads(resp.read().decode())
             if data.get("status") == "1" and data.get("result"):
-                return data["result"][0].get("txHash")  # type: ignore[no-any-return]
-            if "rate limit" in str(data.get("result", "")).lower():
+                return data["result"][0].get("txHash"), None  # type: ignore[no-any-return]
+            result_text = str(data.get("result", "")).lower()
+            if "free api access is not supported" in result_text:
+                return None, "etherscan-paid-tier-required"
+            if "rate limit" in result_text:
+                last_error = "rate-limited"
                 time.sleep(_RETRY_DELAY * (attempt + 1))
                 continue
+            # status=0 with "No data found" — benign, no error
+            last_error = None
         except (OSError, json.JSONDecodeError, KeyError, IndexError):
-            pass
+            last_error = "fetch-failed"
         break
-    return None
+    return None, last_error
 
 
 def _fetch_getsourcecode(
