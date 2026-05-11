@@ -13,9 +13,8 @@ persist across runs) plus the follow-up actions using the captured token_id.
 from __future__ import annotations
 
 import logging
-import time
 
-from eth_abi import encode
+from eth_abi import decode as abi_decode, encode
 from eth_abi.packed import encode_packed
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
@@ -36,7 +35,6 @@ from ipor_fusion import (
     Web3Context,
     PlasmaVault,
     AccessManager,
-    ERC20,
     Roles,
     VaultSimulator,
 )
@@ -47,7 +45,6 @@ from ipor_fusion.fuses import (
     UniswapV3ModifyPositionFuse,
     UniswapV3CollectFuse,
     UniversalTokenSwapperFuse,
-    UniswapV3Events,
 )
 from ipor_fusion.types import ChainId
 
@@ -283,22 +280,22 @@ def _extract_new_position_token_id(execute_logs):
         topics = log_dict.get("topics") or []
         if topics and HexBytes(topics[0]) == target_topic:
             data = HexBytes(log_dict["data"])
-            from eth_abi import decode as abi_decode
-
-            decoded = abi_decode(
-                [
-                    "address",  # version
-                    "uint256",  # token_id
-                    "uint128",  # liquidity
-                    "uint256",
-                    "uint256",
-                    "address",
-                    "address",
-                    "uint24",
-                    "int24",
-                    "int24",
-                ],
-                bytes(data),
+            decoded = tuple(
+                abi_decode(
+                    [
+                        "address",  # version
+                        "uint256",  # token_id
+                        "uint128",  # liquidity
+                        "uint256",
+                        "uint256",
+                        "address",
+                        "address",
+                        "uint24",
+                        "int24",
+                        "int24",
+                    ],
+                    bytes(data),
+                )
             )
             return decoded[1], decoded[2]  # token_id, liquidity
     raise AssertionError("UniswapV3NewPositionFuseEnter event not found in logs")
@@ -353,7 +350,6 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
     first call mints the position to extract token_id from events; second call
     replays setup + adds decrease/collect/close.
     """
-    block_hex = hex(PINNED_BLOCK)
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
@@ -424,7 +420,6 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
 
 def test_simulate_increase_liquidity(web3_arb):
     """Open position → increase liquidity. Pre-extract token_id then replay."""
-    block_hex = hex(PINNED_BLOCK)
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 

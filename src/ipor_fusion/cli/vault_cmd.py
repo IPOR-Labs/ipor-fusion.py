@@ -1219,7 +1219,7 @@ def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None
     click.echo(f"  Total pending: {total_fmt} shares{total_assets_fmt}")
 
 
-def _print_fuse_section(  # pylint: disable=too-many-arguments
+def _print_fuse_section(
     title: str,
     fuses: Sequence[str],
     fuse_markets: dict[str, int] | None,

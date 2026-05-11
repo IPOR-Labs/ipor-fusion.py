@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -101,8 +102,6 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
         # Either the vault has no Fluid position OR raw USDC is too small —
         # the original test's `> 11_000e6` invariant doesn't hold here.
         # Skip rather than mirror a stale assertion.
-        import pytest
-
         pytest.skip(
             f"vault has no Fluid stake ({fluid_stake}) and raw USDC < 11k "
             f"({raw_usdc}) — pre-conditions for original test's invariant don't hold"
@@ -236,8 +235,6 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
     fluid_stake = ERC20(ctx, FLUID_STAKING_CONTRACT).balance_of(vault_address)
     log.info("raw_usdc=%s fluid_stake=%s", raw_usdc / 1e6, fluid_stake / 1e6)
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
-        import pytest
-
         pytest.skip("vault preconditions not met for Compound V3 supply test")
 
     fluid_supply = FluidInstadappSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5)
@@ -316,8 +313,6 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
     raw_usdc = ERC20(ctx, ARBITRUM_USDC).balance_of(vault_address)
     fluid_stake = ERC20(ctx, FLUID_STAKING_CONTRACT).balance_of(vault_address)
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
-        import pytest
-
         pytest.skip("vault preconditions not met for Fluid re-supply test")
 
     fluid_supply = FluidInstadappSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5)
@@ -393,8 +388,6 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     raw_usdc = ERC20(ctx, ARBITRUM_USDC).balance_of(vault_address)
     fluid_stake = ERC20(ctx, FLUID_STAKING_CONTRACT).balance_of(vault_address)
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
-        import pytest
-
         pytest.skip("vault preconditions not met for Gearbox test")
 
     fluid_supply = FluidInstadappSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5)
@@ -411,7 +404,7 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     expected_post_cleanup = raw_usdc + fluid_stake
     supply_amount = expected_post_cleanup - 1_000_000
 
-    farmd_substrate = bytes.fromhex(GEARBOX_FARMD_TOKEN[2:].lower().rjust(64, "0"))
+    farmd_substrate = bytes.fromhex(str(GEARBOX_FARMD_TOKEN)[2:].lower().rjust(64, "0"))
 
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex

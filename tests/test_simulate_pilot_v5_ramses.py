@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from eth_abi import encode
+from eth_abi import decode as abi_decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
@@ -84,26 +84,26 @@ def _extract_ramses_new_position(execute_logs):
             )
         )
     )
-    from eth_abi import decode as abi_decode
-
     for log_dict in execute_logs:
         topics = log_dict.get("topics") or []
         if topics and HexBytes(topics[0]) == target_topic:
             data = HexBytes(log_dict["data"])
-            decoded = abi_decode(
-                [
-                    "address",
-                    "uint256",
-                    "uint128",
-                    "uint256",
-                    "uint256",
-                    "address",
-                    "address",
-                    "uint24",
-                    "int24",
-                    "int24",
-                ],
-                bytes(data),
+            decoded = tuple(
+                abi_decode(
+                    [
+                        "address",
+                        "uint256",
+                        "uint128",
+                        "uint256",
+                        "uint256",
+                        "address",
+                        "address",
+                        "uint24",
+                        "int24",
+                        "int24",
+                    ],
+                    bytes(data),
+                )
             )
             return decoded[1], decoded[2]
     raise AssertionError("RamsesV2NewPositionFuseEnter event not found in logs")
@@ -217,7 +217,6 @@ def _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, amount_desire
 
 def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
     """Open Ramses position → decrease liquidity → collect → close. Two-step sim."""
-    block_hex = hex(PINNED_BLOCK)
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
@@ -286,7 +285,6 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
 
 def test_simulate_increase_liquidity(web3_arb):
     """Open Ramses position → increase liquidity. Two-step."""
-    block_hex = hex(PINNED_BLOCK)
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
@@ -362,7 +360,6 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     RAM rewards. Two-step sim: extract token_id from new position event, then
     replay setup + multi-block move-time + claim.
     """
-    block_hex = hex(PINNED_BLOCK)
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 

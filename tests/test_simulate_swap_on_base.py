@@ -27,7 +27,7 @@ from ipor_fusion import (
 )
 from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses import UniversalTokenSwapperFuse
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import Amount, ChainId
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ def _build_universal_swap(
     return universal.swap(
         token_in=token_in,
         token_out=token_out,
-        amount_in=amount,
+        amount_in=Amount(amount),
         targets=targets,
         data=[transfer_data, execute_data],
     )

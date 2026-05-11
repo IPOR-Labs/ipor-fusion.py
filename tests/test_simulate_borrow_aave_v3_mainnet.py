@@ -24,7 +24,6 @@ from ipor_fusion import (
     Web3Context,
     PlasmaVault,
     AccessManager,
-    ERC20,
     Roles,
     IporFusionMarkets,
     VaultSimulator,

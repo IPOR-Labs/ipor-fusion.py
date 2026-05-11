@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from eth_abi import decode, encode
+from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
@@ -339,9 +340,9 @@ class VaultSimulator:
             decoded: Any | None = None
             if success and source.decode_types and return_data:
                 try:
-                    values = decode(source.decode_types, bytes(return_data))
+                    values = tuple(decode(source.decode_types, bytes(return_data)))
                     decoded = values[0] if len(values) == 1 else values
-                except Exception:
+                except (DecodingError, OverflowError, ValueError):
                     decoded = None
 
             parsed.append(
@@ -416,13 +417,13 @@ def _decode_revert(return_data: HexBytes, error: str | None) -> str | None:
             try:
                 (msg,) = decode(["string"], bytes(return_data[4:]))
                 return msg
-            except Exception:
+            except (DecodingError, OverflowError, ValueError):
                 pass
         if selector == b"\x4e\x48\x7b\x71":  # Panic(uint256)
             try:
                 (code,) = decode(["uint256"], bytes(return_data[4:]))
                 return f"Panic(0x{code:x})"
-            except Exception:
+            except (DecodingError, OverflowError, ValueError):
                 pass
         return f"custom error 0x{selector.hex()}"
     return error
