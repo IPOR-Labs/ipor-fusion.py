@@ -78,7 +78,9 @@ def _aerodrome_path(token_in: ChecksumAddress, token_out: ChecksumAddress) -> by
     raise ValueError(f"Unsupported path: {token_in} -> {token_out}")
 
 
-def _aerodrome_swap(universal, token_in, token_out, amount_in, min_amount_out, deadline):
+def _aerodrome_swap(
+    universal, token_in, token_out, amount_in, min_amount_out, deadline
+):
     targets = [token_in, AERODROME_ROUTER_ADDRESS]
     approve_data = _encode_call(
         "approve(address,uint256)", AERODROME_ROUTER_ADDRESS, amount_in
@@ -112,8 +114,7 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     pre_balance = ctx.web3.eth.call(
         {
             "to": BASE_WSTETH,
-            "data": "0x"
-            + _encode_call("balanceOf(address)", VAULT_ADDRESS).hex(),
+            "data": "0x" + _encode_call("balanceOf(address)", VAULT_ADDRESS).hex(),
         },
         block_identifier=PINNED_BLOCK,
     )
@@ -127,9 +128,7 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     wsteth_collateral_amount = post_balance * LEVERAGE
     flash_loan_amount = wsteth_collateral_amount - post_balance
     ltv = 1 - 1 / LEVERAGE
-    weth_borrow_amount = int(
-        wsteth_collateral_amount * ltv * wsteth_price / weth_price
-    )
+    weth_borrow_amount = int(wsteth_collateral_amount * ltv * wsteth_price / weth_price)
 
     log.info(
         "pre=%.4f deposit=%.4f collateral=%.4f flash=%.4f borrow=%.4f",
@@ -187,31 +186,21 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     )
     sim.add_call(
         to=BASE_WSTETH,
-        data=_encode_call(
-            "approve(address,uint256)", VAULT_ADDRESS, INITIAL_DEPOSIT
-        ),
+        data=_encode_call("approve(address,uint256)", VAULT_ADDRESS, INITIAL_DEPOSIT),
         from_=WSTETH_HOLDER,
     )
     sim.add_call(
         to=VAULT_ADDRESS,
-        data=_encode_call(
-            "deposit(uint256,address)", INITIAL_DEPOSIT, WSTETH_HOLDER
-        ),
+        data=_encode_call("deposit(uint256,address)", INITIAL_DEPOSIT, WSTETH_HOLDER),
         from_=WSTETH_HOLDER,
     )
 
-    sim.observe(
-        "wsteth_pre_loop", BASE_WSTETH, "balanceOf(address)", (VAULT_ADDRESS,)
-    )
+    sim.observe("wsteth_pre_loop", BASE_WSTETH, "balanceOf(address)", (VAULT_ADDRESS,))
 
     sim.execute([flash_loan])
 
-    sim.observe(
-        "wsteth_post_loop", BASE_WSTETH, "balanceOf(address)", (VAULT_ADDRESS,)
-    )
-    sim.observe(
-        "weth_post_loop", BASE_WETH, "balanceOf(address)", (VAULT_ADDRESS,)
-    )
+    sim.observe("wsteth_post_loop", BASE_WSTETH, "balanceOf(address)", (VAULT_ADDRESS,))
+    sim.observe("weth_post_loop", BASE_WETH, "balanceOf(address)", (VAULT_ADDRESS,))
     sim.observe(
         "awsteth_post_loop",
         BASE_AAVE_V3_A_WSTETH,

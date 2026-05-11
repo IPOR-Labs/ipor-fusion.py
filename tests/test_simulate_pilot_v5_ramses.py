@@ -119,9 +119,7 @@ def test_simulate_open_new_position_ramses_v2(web3_arb):
     plasma_vault = PlasmaVault(ctx, vault_address)
     access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
     owner = access_manager.owner()
-    deadline = (
-        int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
-    )
+    deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
     ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
@@ -164,22 +162,14 @@ def test_simulate_open_new_position_ramses_v2(web3_arb):
             )
         ]
     )
-    sim.observe(
-        "usdc_after_new", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
-    sim.observe(
-        "usdt_after_new", ARBITRUM_USDT, "balanceOf(address)", (vault_address,)
-    )
+    sim.observe("usdc_after_new", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
+    sim.observe("usdt_after_new", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
     result = sim.run()
 
     log.info("observations=%s", result.observations)
     assert_all_success(result)
-    assert (
-        result.get("usdc_after_new") - result.get("usdc_after_swap") == -456_205368
-    )
-    assert (
-        result.get("usdt_after_new") - result.get("usdt_after_swap") == -499_000000
-    )
+    assert result.get("usdc_after_new") - result.get("usdc_after_swap") == -456_205368
+    assert result.get("usdt_after_new") - result.get("usdt_after_swap") == -499_000000
 
 
 def _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, amount_desired):
@@ -232,14 +222,10 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
-    deadline = (
-        int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
-    )
+    deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
     # Step 1: extract token_id from new_position event logs
-    sim1 = _build_ramses_open_sim(
-        web3_arb, ctx, vault_address, deadline, int(499e6)
-    )
+    sim1 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(499e6))
     result1 = sim1.run()
     assert_all_success(result1)
     new_token_id, liquidity = _extract_ramses_new_position(result1.execute_logs)
@@ -250,9 +236,7 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
     ramses_collect = RamsesV2CollectFuse(ARBITRUM_RAMSES_V2_COLLECT_FUSE)
     ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
 
-    sim2 = _build_ramses_open_sim(
-        web3_arb, ctx, vault_address, deadline, int(499e6)
-    )
+    sim2 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(499e6))
     sim2.execute(
         [
             ramses_modify.decrease_liquidity(
@@ -307,14 +291,10 @@ def test_simulate_increase_liquidity(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
-    deadline = (
-        int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
-    )
+    deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
     # Step 1: extract token_id from event
-    sim1 = _build_ramses_open_sim(
-        web3_arb, ctx, vault_address, deadline, int(300e6)
-    )
+    sim1 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(300e6))
     result1 = sim1.run()
     assert_all_success(result1)
     new_token_id, _ = _extract_ramses_new_position(result1.execute_logs)
@@ -323,9 +303,7 @@ def test_simulate_increase_liquidity(web3_arb):
     # Step 2: replay + increase
     ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
 
-    sim2 = _build_ramses_open_sim(
-        web3_arb, ctx, vault_address, deadline, int(300e6)
-    )
+    sim2 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(300e6))
     sim2.observe(
         "usdc_before",
         ARBITRUM_USDC,
@@ -393,14 +371,10 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
     rewards = RewardsManager(ctx, plasma_vault.get_rewards_claim_manager_address())
     owner = access_manager.owner()
-    deadline = (
-        int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
-    )
+    deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
     # Step 1: extract token_id from event
-    sim1 = _build_ramses_open_sim(
-        web3_arb, ctx, vault_address, deadline, int(499e6)
-    )
+    sim1 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(499e6))
     result1 = sim1.run()
     assert_all_success(result1)
     new_token_id, _ = _extract_ramses_new_position(result1.execute_logs)
@@ -409,9 +383,7 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     # Step 2: replay + multi-block month-shift + claim
     ramses_claim = RamsesClaimFuse(ARBITRUM_RAMSES_CLAIM_FUSE)
 
-    sim2 = _build_ramses_open_sim(
-        web3_arb, ctx, vault_address, deadline, int(499e6)
-    )
+    sim2 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(499e6))
     # Original test grants additional roles so claim_rewards can be called
     sim2.add_call(
         to=access_manager.address,
@@ -481,6 +453,6 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     ram_diff = result2.get("ram_after_claim") - result2.get("ram_before_claim")
     xram_diff = result2.get("xram_after_claim") - result2.get("xram_before_claim")
     log.info("ram_diff=%s xram_diff=%s", ram_diff, xram_diff)
-    assert ram_diff > 0 or xram_diff > 0, (
-        "claim_rewards moved no RAM and no XRAM into the rewards manager"
-    )
+    assert (
+        ram_diff > 0 or xram_diff > 0
+    ), "claim_rewards moved no RAM and no XRAM into the rewards manager"

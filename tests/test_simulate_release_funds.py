@@ -176,12 +176,8 @@ def test_simulate_release_funds(web3_arb):
 # Variant 2: release_funds(timestamp, shares) + redeem_from_request flow
 # ─────────────────────────────────────────────────────────────────────────
 
-VAULT2_ADDRESS = Web3.to_checksum_address(
-    "0x272Cb09e2d6237304E4D2BcB9DEf40032aA0ebB1"
-)
-ALPHA2_ADDRESS = Web3.to_checksum_address(
-    "0xB2Fc9e5c92577bE694E7EBbE76Eeb5977bec4D9A"
-)
+VAULT2_ADDRESS = Web3.to_checksum_address("0x272Cb09e2d6237304E4D2BcB9DEf40032aA0ebB1")
+ALPHA2_ADDRESS = Web3.to_checksum_address("0xB2Fc9e5c92577bE694E7EBbE76Eeb5977bec4D9A")
 PINNED_BLOCK_2 = 315570373  # mirrors anvil.reset_fork(...) in the original test
 
 
@@ -247,9 +243,7 @@ def test_simulate_release_funds_shares(web3_arb):
     release_timestamp = baseline_timestamp + Period.HOUR - 1
     sim.add_call(
         to=withdraw_manager.address,
-        data=_encode_call(
-            "releaseFunds(uint256,uint256)", release_timestamp, shares
-        ),
+        data=_encode_call("releaseFunds(uint256,uint256)", release_timestamp, shares),
         from_=ALPHA2_ADDRESS,
     )
 

@@ -39,7 +39,9 @@ log = logging.getLogger(__name__)
 VAULT_ADDRESS = Web3.to_checksum_address("0x1fdf5dc3F915Cb40E0AD5690DE51E3cB464d1BAD")
 ATOMIST = Web3.to_checksum_address("0x46B48240f61C831B85fCf4c198C98028Ab8EE68d")
 WBTC_HOLDER = Web3.to_checksum_address("0xE940ae8cF59fE2709BBc572CBAD2633fB45Abf46")
-PINNED_BLOCK = 22616438  # mirrors anvil.reset_fork(...) in test_borrow_aave_v3_mainnet.py
+PINNED_BLOCK = (
+    22616438  # mirrors anvil.reset_fork(...) in test_borrow_aave_v3_mainnet.py
+)
 
 
 def _encode_call(signature: str, *args) -> bytes:
@@ -313,7 +315,11 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
 
     # alpha executes Aave supply, borrow, ERC4626 supply
     sim.execute(
-        [aave_supply.supply(asset=ETHEREUM_WBTC, amount=wbtc_collateral_amount, e_mode=1)]
+        [
+            aave_supply.supply(
+                asset=ETHEREUM_WBTC, amount=wbtc_collateral_amount, e_mode=1
+            )
+        ]
     )
     sim.observe(
         "wbtc_post_aave_supply",

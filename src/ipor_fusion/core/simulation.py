@@ -182,9 +182,7 @@ class VaultSimulator:
         new_block = _Block()
         if time_shift_seconds is not None:
             prev_time = self._current_time()
-            new_block.block_overrides["time"] = hex(
-                prev_time + int(time_shift_seconds)
-            )
+            new_block.block_overrides["time"] = hex(prev_time + int(time_shift_seconds))
         self._blocks.append(new_block)
         return self
 
@@ -372,9 +370,7 @@ class VaultSimulator:
         if revert_reason is None and failed_calls:
             # No execute call reverted but a setup/observation did — surface it.
             first_failed = failed_calls[0]
-            revert_reason = _decode_revert(
-                first_failed.return_data, first_failed.error
-            )
+            revert_reason = _decode_revert(first_failed.return_data, first_failed.error)
 
         return SimulationResult(
             success=execute_success,

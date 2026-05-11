@@ -62,7 +62,9 @@ WSTETH_HOLDER = Web3.to_checksum_address("0xf0bb20865277aBd641a307eCe5Ee04E79073
 
 DEPOSIT_AMOUNT = int(1e18)
 LEVERAGE = 3
-PINNED_BLOCK = 35437300  # mirrors anvil.reset_fork(...) in test_looping_morpho_blue_base.py
+PINNED_BLOCK = (
+    35437300  # mirrors anvil.reset_fork(...) in test_looping_morpho_blue_base.py
+)
 
 
 def _encode_call(signature: str, *args) -> bytes:
@@ -76,13 +78,13 @@ def _aerodrome_path(token_in: ChecksumAddress, token_out: ChecksumAddress) -> by
     if (token_in == BASE_WETH and token_out == BASE_WSTETH) or (
         token_in == BASE_WSTETH and token_out == BASE_WETH
     ):
-        return encode_packed(
-            ["address", "uint24", "address"], [token_in, 1, token_out]
-        )
+        return encode_packed(["address", "uint24", "address"], [token_in, 1, token_out])
     raise ValueError(f"Unsupported path: {token_in} -> {token_out}")
 
 
-def _aerodrome_swap(universal, token_in, token_out, amount_in, min_amount_out, deadline):
+def _aerodrome_swap(
+    universal, token_in, token_out, amount_in, min_amount_out, deadline
+):
     targets = [token_in, AERODROME_ROUTER_ADDRESS]
     approve_data = _encode_call(
         "approve(address,uint256)", AERODROME_ROUTER_ADDRESS, amount_in
@@ -191,17 +193,13 @@ def test_simulate_looping_morpho_blue(web3_base):
     # 3. wsteth_holder approves vault to pull WStETH
     sim.add_call(
         to=BASE_WSTETH,
-        data=_encode_call(
-            "approve(address,uint256)", VAULT_ADDRESS, DEPOSIT_AMOUNT
-        ),
+        data=_encode_call("approve(address,uint256)", VAULT_ADDRESS, DEPOSIT_AMOUNT),
         from_=WSTETH_HOLDER,
     )
     # 4. wsteth_holder deposits into vault — credits 1:1 in underlying
     sim.add_call(
         to=VAULT_ADDRESS,
-        data=_encode_call(
-            "deposit(uint256,address)", DEPOSIT_AMOUNT, WSTETH_HOLDER
-        ),
+        data=_encode_call("deposit(uint256,address)", DEPOSIT_AMOUNT, WSTETH_HOLDER),
         from_=WSTETH_HOLDER,
     )
 
@@ -227,7 +225,10 @@ def test_simulate_looping_morpho_blue(web3_base):
         "vault_weth_post_loop", BASE_WETH, "balanceOf(address)", (VAULT_ADDRESS,)
     )
     sim.observe(
-        "total_assets_post_loop", VAULT_ADDRESS, "totalAssets()", output_types=["uint256"]
+        "total_assets_post_loop",
+        VAULT_ADDRESS,
+        "totalAssets()",
+        output_types=["uint256"],
     )
 
     result = sim.run()

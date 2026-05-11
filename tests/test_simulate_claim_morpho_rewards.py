@@ -29,9 +29,7 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 VAULT_ADDRESS = Web3.to_checksum_address("0xe9385eFf3F937FcB0f0085Da9A3F53D6C2B4fB5F")
-ALPHA_ADDRESS = Web3.to_checksum_address(
-    "0x6d3BE3f86FB1139d0c9668BD552f05fcB643E6e6"
-)
+ALPHA_ADDRESS = Web3.to_checksum_address("0x6d3BE3f86FB1139d0c9668BD552f05fcB643E6e6")
 PINNED_BLOCK = 23168096  # mirrors anvil.reset_fork(...) in the original test
 
 # Hard-coded rewards distribution from the original test's mocked Morpho API

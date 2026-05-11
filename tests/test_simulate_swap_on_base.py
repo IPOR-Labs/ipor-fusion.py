@@ -136,9 +136,7 @@ def test_simulate_swap_cbbtc_to_usdc(web3_base):
     )
     sim.add_call(
         to=vault_address,
-        data=_encode_call(
-            "deposit(uint256,address)", deposit_amount, user_account
-        ),
+        data=_encode_call("deposit(uint256,address)", deposit_amount, user_account),
         from_=user_account,
     )
 

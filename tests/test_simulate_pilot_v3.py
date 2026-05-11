@@ -64,9 +64,7 @@ AAVE_AUSDC_TOKEN = Web3.to_checksum_address(
 COMPOUND_CUSDC_TOKEN = Web3.to_checksum_address(
     "0x9c4ec768c28520b50860ea7a15bd7213a9ff58bf"
 )
-GEARBOX_D_TOKEN = Web3.to_checksum_address(
-    "0x890A69EF363C9c7BdD5E36eb95Ceb569F63ACbF6"
-)
+GEARBOX_D_TOKEN = Web3.to_checksum_address("0x890A69EF363C9c7BdD5E36eb95Ceb569F63ACbF6")
 GEARBOX_FARMD_TOKEN = Web3.to_checksum_address(
     "0xD0181a36B0566a8645B7eECFf2148adE7Ecf2BE9"
 )
@@ -110,9 +108,7 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
             f"({raw_usdc}) — pre-conditions for original test's invariant don't hold"
         )
 
-    fluid_supply = FluidInstadappSupplyFuse(
-        ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5
-    )
+    fluid_supply = FluidInstadappSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5)
     fluid_staking_fuse = FluidInstadappStakingFuse(
         fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
         staking_address=FLUID_STAKING_CONTRACT,
@@ -148,9 +144,7 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
     sim.execute(
         [
             fluid_staking_fuse.unstake(fluid_stake),
-            fluid_supply.withdraw(
-                vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256
-            ),
+            fluid_supply.withdraw(vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256),
         ]
     )
 
@@ -173,9 +167,7 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
     expected_post_cleanup = raw_usdc + fluid_stake
     supply_amount = expected_post_cleanup - 1_000_000  # 1 USDC buffer
 
-    sim.execute(
-        [aave.supply(asset=ARBITRUM_USDC, amount=supply_amount, e_mode=300)]
-    )
+    sim.execute([aave.supply(asset=ARBITRUM_USDC, amount=supply_amount, e_mode=300)])
     sim.observe(
         "ausdc_post_supply",
         AAVE_AUSDC_TOKEN,
@@ -248,9 +240,7 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
 
         pytest.skip("vault preconditions not met for Compound V3 supply test")
 
-    fluid_supply = FluidInstadappSupplyFuse(
-        ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5
-    )
+    fluid_supply = FluidInstadappSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5)
     fluid_staking_fuse = FluidInstadappStakingFuse(
         fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
         staking_address=FLUID_STAKING_CONTRACT,
@@ -273,9 +263,7 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
     sim.execute(
         [
             fluid_staking_fuse.unstake(fluid_stake),
-            fluid_supply.withdraw(
-                vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256
-            ),
+            fluid_supply.withdraw(vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256),
         ]
     )
     sim.execute([compound.supply(asset=ARBITRUM_USDC, amount=supply_amount)])
@@ -307,7 +295,9 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
         result.observations,
     )
     assert_all_success(result)
-    assert result.get("cusdc_post_supply") >= supply_amount * 99 // 100  # ~ supply_amount
+    assert (
+        result.get("cusdc_post_supply") >= supply_amount * 99 // 100
+    )  # ~ supply_amount
     assert result.get("cusdc_post_withdraw") < supply_amount  # < interest only
     assert result.get("raw_usdc_post_withdraw") >= supply_amount
 
@@ -330,9 +320,7 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
 
         pytest.skip("vault preconditions not met for Fluid re-supply test")
 
-    fluid_supply = FluidInstadappSupplyFuse(
-        ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5
-    )
+    fluid_supply = FluidInstadappSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5)
     fluid_staking_fuse = FluidInstadappStakingFuse(
         fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
         staking_address=FLUID_STAKING_CONTRACT,
@@ -354,9 +342,7 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
     sim.execute(
         [
             fluid_staking_fuse.unstake(fluid_stake),
-            fluid_supply.withdraw(
-                vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256
-            ),
+            fluid_supply.withdraw(vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256),
         ]
     )
     # Re-supply + re-stake
@@ -382,9 +368,7 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
     )
     result = sim.run()
 
-    log.info(
-        "all_success=%s observations=%s", result.all_success, result.observations
-    )
+    log.info("all_success=%s observations=%s", result.all_success, result.observations)
     assert_all_success(result)
     # Vault re-staked roughly the same fluid amount it started with
     assert result.get("fluid_stake_after") >= re_supply_amount * 99 // 100
@@ -413,9 +397,7 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
 
         pytest.skip("vault preconditions not met for Gearbox test")
 
-    fluid_supply = FluidInstadappSupplyFuse(
-        ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5
-    )
+    fluid_supply = FluidInstadappSupplyFuse(ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5)
     fluid_staking_fuse = FluidInstadappStakingFuse(
         fuse_address=ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
         staking_address=FLUID_STAKING_CONTRACT,
@@ -429,9 +411,7 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     expected_post_cleanup = raw_usdc + fluid_stake
     supply_amount = expected_post_cleanup - 1_000_000
 
-    farmd_substrate = bytes.fromhex(
-        GEARBOX_FARMD_TOKEN[2:].lower().rjust(64, "0")
-    )
+    farmd_substrate = bytes.fromhex(GEARBOX_FARMD_TOKEN[2:].lower().rjust(64, "0"))
 
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
@@ -455,17 +435,13 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     sim.execute(
         [
             fluid_staking_fuse.unstake(fluid_stake),
-            fluid_supply.withdraw(
-                vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256
-            ),
+            fluid_supply.withdraw(vault_address=FLUID_POOL_TOKEN, amount=MAX_UINT256),
         ]
     )
     # Gearbox supply + stake
     sim.execute(
         [
-            gearbox_supply.supply(
-                vault_address=GEARBOX_D_TOKEN, amount=supply_amount
-            ),
+            gearbox_supply.supply(vault_address=GEARBOX_D_TOKEN, amount=supply_amount),
             gearbox_stake.stake(),
         ]
     )
@@ -481,9 +457,7 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     sim.execute(
         [
             gearbox_stake.unstake(supply_amount),
-            gearbox_supply.withdraw(
-                vault_address=GEARBOX_D_TOKEN, amount=MAX_UINT256
-            ),
+            gearbox_supply.withdraw(vault_address=GEARBOX_D_TOKEN, amount=MAX_UINT256),
         ]
     )
     sim.observe(
@@ -500,9 +474,7 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     )
     result = sim.run()
 
-    log.info(
-        "all_success=%s observations=%s", result.all_success, result.observations
-    )
+    log.info("all_success=%s observations=%s", result.all_success, result.observations)
     assert_all_success(result)
     assert result.get("farmd_post_stake") >= supply_amount * 99 // 100
     assert result.get("farmd_post_withdraw") == 0

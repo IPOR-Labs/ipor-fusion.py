@@ -134,19 +134,11 @@ def test_simulate_swap_when_one_hop_uniswap_v3(web3_arb):
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_alpha(sim, access_manager, owner)
-    sim.observe(
-        "usdc_before", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
-    sim.observe(
-        "usdt_before", ARBITRUM_USDT, "balanceOf(address)", (vault_address,)
-    )
+    sim.observe("usdc_before", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
+    sim.observe("usdt_before", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
     sim.execute([swap_action])
-    sim.observe(
-        "usdc_after", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
-    sim.observe(
-        "usdt_after", ARBITRUM_USDT, "balanceOf(address)", (vault_address,)
-    )
+    sim.observe("usdc_after", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
+    sim.observe("usdt_after", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
 
     result = sim.run()
     log.info("observations=%s", result.observations)
@@ -179,19 +171,11 @@ def test_simulate_swap_when_multiple_hop(web3_arb):
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_alpha(sim, access_manager, owner)
-    sim.observe(
-        "usdc_before", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
-    sim.observe(
-        "usdt_before", ARBITRUM_USDT, "balanceOf(address)", (vault_address,)
-    )
+    sim.observe("usdc_before", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
+    sim.observe("usdt_before", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
     sim.execute([swap_action])
-    sim.observe(
-        "usdc_after", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
-    sim.observe(
-        "usdt_after", ARBITRUM_USDT, "balanceOf(address)", (vault_address,)
-    )
+    sim.observe("usdc_after", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
+    sim.observe("usdt_after", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
 
     result = sim.run()
     log.info("observations=%s", result.observations)
@@ -215,9 +199,7 @@ def test_simulate_open_new_position_uniswap_v3(web3_arb):
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
-    uniswap_new_pos = UniswapV3NewPositionFuse(
-        ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE
-    )
+    uniswap_new_pos = UniswapV3NewPositionFuse(ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE)
 
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
@@ -329,9 +311,7 @@ def _build_open_new_position_sim(web3_arb, ctx, vault_address, deadline):
     owner = access_manager.owner()
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
-    uniswap_new_pos = UniswapV3NewPositionFuse(
-        ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE
-    )
+    uniswap_new_pos = UniswapV3NewPositionFuse(ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE)
 
     block_hex = hex(PINNED_BLOCK)
     sim = VaultSimulator(
@@ -392,9 +372,7 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
         ARBITRUM_UNISWAP_V3_MODIFY_POSITION_FUSE
     )
     uniswap_collect = UniswapV3CollectFuse(ARBITRUM_UNISWAP_V3_COLLECT_FUSE)
-    uniswap_new_pos = UniswapV3NewPositionFuse(
-        ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE
-    )
+    uniswap_new_pos = UniswapV3NewPositionFuse(ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE)
 
     sim2 = _build_open_new_position_sim(web3_arb, ctx, vault_address, deadline)
     sim2.execute(
@@ -458,9 +436,7 @@ def test_simulate_increase_liquidity(web3_arb):
     owner = access_manager.owner()
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
-    uniswap_new_pos = UniswapV3NewPositionFuse(
-        ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE
-    )
+    uniswap_new_pos = UniswapV3NewPositionFuse(ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE)
     uniswap_modify = UniswapV3ModifyPositionFuse(
         ARBITRUM_UNISWAP_V3_MODIFY_POSITION_FUSE
     )

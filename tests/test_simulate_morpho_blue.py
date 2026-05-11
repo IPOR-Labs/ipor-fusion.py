@@ -39,7 +39,9 @@ def test_simulate_supply_and_withdraw_morpho_blue(web3_eth):
 
     result = sim.run()
 
-    log.info("simulation result: success=%s gas_used=%s", result.success, result.gas_used)
+    log.info(
+        "simulation result: success=%s gas_used=%s", result.success, result.gas_used
+    )
     log.info("revert_reason: %s", result.revert_reason)
     log.info("observations: %s", result.observations)
 
@@ -59,9 +61,7 @@ def test_simulate_revert_surfaces_reason(web3_eth):
     morpho = MorphoSupplyFuse(ETHEREUM_MORPHO_SUPPLY_FUSE)
     supply_action = morpho.supply(market_id=MARKET_ID, amount=SUPPLY_AMOUNT)
 
-    not_alpha = Web3.to_checksum_address(
-        "0x000000000000000000000000000000000000dEaD"
-    )
+    not_alpha = Web3.to_checksum_address("0x000000000000000000000000000000000000dEaD")
     sim = VaultSimulator(
         web3=web3_eth, vault=VAULT, alpha=not_alpha, block=hex(PINNED_BLOCK)
     )

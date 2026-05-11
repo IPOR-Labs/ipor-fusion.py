@@ -107,9 +107,7 @@ def test_simulate_deposit(web3_arb):
         data=_encode_call("approve(address,uint256)", vault_address, amount),
         from_=ANVIL_WALLET,
     )
-    sim.observe(
-        "total_assets_before", vault_address, "totalAssets()"
-    )
+    sim.observe("total_assets_before", vault_address, "totalAssets()")
     sim.observe(
         "user_shares_before",
         vault_address,
@@ -169,9 +167,7 @@ def test_simulate_mint(web3_arb):
         data=_encode_call("approve(address,uint256)", vault_address, amount),
         from_=ANVIL_WALLET,
     )
-    sim.observe(
-        "total_assets_before", vault_address, "totalAssets()"
-    )
+    sim.observe("total_assets_before", vault_address, "totalAssets()")
     sim.observe(
         "user_shares_before",
         vault_address,
@@ -186,9 +182,7 @@ def test_simulate_mint(web3_arb):
         data=_encode_call("mint(uint256,address)", shares_amount, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
-    sim.observe(
-        "total_assets_after", vault_address, "totalAssets()"
-    )
+    sim.observe("total_assets_after", vault_address, "totalAssets()")
     sim.observe(
         "user_shares_after",
         vault_address,
@@ -219,7 +213,8 @@ def test_simulate_mint(web3_arb):
     total_assets_before = result.get("total_assets_before")
     user_underlying_after = result.get("user_underlying_after")
     assert (
-        abs(total_assets_after - (total_assets_before + user_underlying_after)) < 100_000
+        abs(total_assets_after - (total_assets_before + user_underlying_after))
+        < 100_000
     )
     shares_diff = result.get("user_shares_after") - result.get("user_shares_before")
     assert abs(shares_diff - shares_amount) < 5_000
@@ -433,7 +428,9 @@ def test_simulate_withdraw(web3_arb):
     # Withdrew ~99 USDC (kept 1 USDC buffer), so total_assets dropped by withdraw_amount
     assert abs((assets_before - assets_after) - withdraw_amount) < 1_000_000
 
-    user_shares_diff = result.get("user_shares_before") - result.get("user_shares_after")
+    user_shares_diff = result.get("user_shares_before") - result.get(
+        "user_shares_after"
+    )
     # Roughly 99% of the shares — original test allows ±10M shares slack
     assert 0 < user_shares_diff < shares_amount + 10_000_000
     assert result.get("aave_total") == 0
