@@ -188,7 +188,7 @@ def vault_add(
         ctx = Web3Context.from_url(provider_url)
         checksum = Web3.to_checksum_address(address)
         try:
-            label = PlasmaVault(ctx, checksum).name()
+            label = PlasmaVault(ctx, checksum).name().call()
         except Exception:  # pylint: disable=broad-except
             label = checksum
 
@@ -323,8 +323,8 @@ def market_morpho_blue(
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
     reader = MorphoReader(ctx, MORPHO_BLUE_ADDRESS)
     mid = MorphoBlueMarketId(raw)
-    params = reader.market_params(mid)
-    state = reader.market(mid)
+    params = reader.market_params(mid).call()
+    state = reader.market(mid).call()
     rates = reader.rates_from(state, params)
 
     api_market = None

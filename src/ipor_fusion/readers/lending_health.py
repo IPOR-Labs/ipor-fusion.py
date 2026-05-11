@@ -140,14 +140,14 @@ def _compute_morpho_market_health(  # pylint: disable=broad-exception-caught
 ) -> LendingMarketHealth | None:
     """Compute LTV health for a single Morpho Blue market position."""
     try:
-        position = reader.position(morpho_market_id, vault_address)
+        position = reader.position(morpho_market_id, vault_address).call()
     except Exception:
         _logger.debug("Failed to read Morpho position for %s", morpho_market_id)
         return None
 
     # No borrow = no liquidation risk
     if position.borrow_shares == 0:
-        params = reader.market_params(morpho_market_id)
+        params = reader.market_params(morpho_market_id).call()
         return LendingMarketHealth(
             protocol="morpho",
             market_id=ipor_market_id,
@@ -162,8 +162,8 @@ def _compute_morpho_market_health(  # pylint: disable=broad-exception-caught
         )
 
     try:
-        market = reader.market(morpho_market_id)
-        params = reader.market_params(morpho_market_id)
+        market = reader.market(morpho_market_id).call()
+        params = reader.market_params(morpho_market_id).call()
         oracle_price = _call_morpho_oracle_price(ctx, params.oracle)
     except Exception:
         _logger.debug("Failed to read Morpho market data for %s", morpho_market_id)
@@ -227,7 +227,7 @@ def _compute_aave_market_health(  # pylint: disable=broad-exception-caught
 ) -> LendingMarketHealth | None:
     """Compute LTV health for the vault's Aave V3 position."""
     try:
-        data = reader.get_user_account_data(vault_address)
+        data = reader.get_user_account_data(vault_address).call()
     except Exception:
         _logger.debug("Failed to read Aave V3 account data for %s", vault_address)
         return None

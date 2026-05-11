@@ -665,7 +665,7 @@ class TestResolveTokenSymbol:
     def test_fetches_symbol_from_chain(self, mock_erc20_cls):
         ctx = MagicMock()
         ctx.web3.eth.get_code.return_value = b"\x01"
-        mock_erc20_cls.return_value.symbol.return_value = "WETH"
+        mock_erc20_cls.return_value.symbol.return_value.call.return_value = "WETH"
         result = _resolve_token_symbol(ctx, "0x" + "ab" * 20)
         assert result == "WETH"
 
@@ -745,16 +745,18 @@ class TestPrintErc20Balances:
         pv.address = ADDR_1
 
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
-        pv.get_market_substrates.return_value = [addr_bytes]
+        pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
 
         mock_erc20 = MagicMock()
-        mock_erc20.decimals.return_value = 6
-        mock_erc20.balance_of.return_value = 1_000_000
+        mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 1_000_000
         mock_erc20_cls.return_value = mock_erc20
 
         mock_price = MagicMock()
         mock_price.readable.return_value = 1.0
-        mock_oracle_cls.return_value.get_asset_price.return_value = mock_price
+        mock_oracle_cls.return_value.get_asset_price.return_value.call.return_value = (
+            mock_price
+        )
 
         data = _VaultData(
             block_label="1",
@@ -796,14 +798,14 @@ class TestPrintErc20Balances:
         pv.address = ADDR_1
 
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
-        pv.get_market_substrates.return_value = [addr_bytes]
+        pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
 
         mock_erc20 = MagicMock()
-        mock_erc20.decimals.side_effect = ContractLogicError("fail")
-        mock_erc20.balance_of.side_effect = ContractLogicError("fail")
+        mock_erc20.decimals.return_value.call.side_effect = ContractLogicError("fail")
+        mock_erc20.balance_of.return_value.call.side_effect = ContractLogicError("fail")
         mock_erc20_cls.return_value = mock_erc20
-        mock_oracle_cls.return_value.get_asset_price.side_effect = ContractLogicError(
-            "fail"
+        mock_oracle_cls.return_value.get_asset_price.return_value.call.side_effect = (
+            ContractLogicError("fail")
         )
 
         data = _VaultData(
@@ -839,7 +841,7 @@ class TestPrintErc20Balances:
         ctx = MagicMock()
         pv = MagicMock()
         pv.address = ADDR_1
-        pv.get_market_substrates.return_value = []
+        pv.get_market_substrates.return_value.call.return_value = []
 
         data = _VaultData(
             block_label="1",
@@ -889,7 +891,7 @@ class TestPrintSubstrates:
     def test_no_substrates(self, capsys):
         ctx = MagicMock()
         pv = MagicMock()
-        pv.get_market_substrates.return_value = []
+        pv.get_market_substrates.return_value.call.return_value = []
         _print_substrates(ctx, pv, [FakeBalanceFuse(market_id=1, fuse=ADDR_1)], 1, None)
         captured = capsys.readouterr()
         assert "(none)" in captured.out
@@ -900,7 +902,7 @@ class TestPrintSubstrates:
         ctx = MagicMock()
         pv = MagicMock()
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
-        pv.get_market_substrates.return_value = [addr_bytes]
+        pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
 
         _print_substrates(
             ctx, pv, [FakeBalanceFuse(market_id=7, fuse=ADDR_1)], 1, "key"
@@ -913,7 +915,7 @@ class TestPrintSubstrates:
         ctx = MagicMock()
         pv = MagicMock()
         raw_bytes32 = bytes.fromhex("ff" * 32)
-        pv.get_market_substrates.return_value = [raw_bytes32]
+        pv.get_market_substrates.return_value.call.return_value = [raw_bytes32]
 
         _print_substrates(
             ctx, pv, [FakeBalanceFuse(market_id=14, fuse=ADDR_1)], 1, None
@@ -926,7 +928,7 @@ class TestPrintSubstrates:
         ctx = MagicMock()
         pv = MagicMock()
         bad_bytes = bytes.fromhex("ff" * 16)
-        pv.get_market_substrates.return_value = [bad_bytes]
+        pv.get_market_substrates.return_value.call.return_value = [bad_bytes]
 
         _print_substrates(ctx, pv, [FakeBalanceFuse(market_id=7, fuse=ADDR_1)], 1, None)
         captured = capsys.readouterr()
@@ -1052,16 +1054,18 @@ class TestErc20BalancesNotes:
         pv.address = ADDR_1
 
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
-        pv.get_market_substrates.return_value = [addr_bytes]
+        pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
 
         mock_erc20 = MagicMock()
-        mock_erc20.decimals.return_value = 18
-        mock_erc20.balance_of.return_value = 0
+        mock_erc20.decimals.return_value.call.return_value = 18
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_price = MagicMock()
         mock_price.readable.return_value = 1.0
-        mock_oracle_cls.return_value.get_asset_price.return_value = mock_price
+        mock_oracle_cls.return_value.get_asset_price.return_value.call.return_value = (
+            mock_price
+        )
 
         data = _VaultData(
             block_label="1",
@@ -1104,17 +1108,24 @@ class TestErc20BalancesNotes:
         # Two substrates: underlying asset (ADDR_2) and another token
         underlying_bytes = bytes.fromhex("00" * 12 + ADDR_2[2:].lower())
         other_bytes = bytes.fromhex("00" * 12 + "cc" * 20)
-        pv.get_market_substrates.return_value = [underlying_bytes, other_bytes]
-        pv.total_assets_in_market.return_value = 1  # tiny cached value
+        pv.get_market_substrates.return_value.call.return_value = [
+            underlying_bytes,
+            other_bytes,
+        ]
+        pv.total_assets_in_market.return_value.call.return_value = (
+            1  # tiny cached value
+        )
 
         mock_erc20 = MagicMock()
-        mock_erc20.decimals.return_value = 18
-        mock_erc20.balance_of.return_value = 10 * 10**18
+        mock_erc20.decimals.return_value.call.return_value = 18
+        mock_erc20.balance_of.return_value.call.return_value = 10 * 10**18
         mock_erc20_cls.return_value = mock_erc20
 
         mock_price = MagicMock()
         mock_price.readable.return_value = 2000.0
-        mock_oracle_cls.return_value.get_asset_price.return_value = mock_price
+        mock_oracle_cls.return_value.get_asset_price.return_value.call.return_value = (
+            mock_price
+        )
 
         data = _VaultData(
             block_label="1",

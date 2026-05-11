@@ -1,7 +1,14 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import Call
 from ipor_fusion.core.plasma_vault import PlasmaVault, BalanceFuse
+from ipor_fusion.core.simulation import (
+    VaultSimulator,
+    SimulationResult,
+    SimulatedCallResult,
+    is_simulate_v1_supported,
+)
 from ipor_fusion.core.access import AccessManager, RoleAccount, RoleStatus
 from ipor_fusion.core.rewards_manager import RewardsManager, VestingData
 from ipor_fusion.core.erc20 import ERC20
@@ -91,6 +98,11 @@ except PackageNotFoundError:
 __all__ = [
     "__version__",
     "Web3Context",
+    "Call",
+    "VaultSimulator",
+    "SimulationResult",
+    "SimulatedCallResult",
+    "is_simulate_v1_supported",
     "PlasmaVault",
     "AccessManager",
     "RoleAccount",

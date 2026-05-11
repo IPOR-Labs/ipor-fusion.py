@@ -77,9 +77,9 @@ def _compute_erc20_balances(  # pylint: disable=too-complex
     if erc20_market is None:
         return totals
 
-    totals.cached_bf_value = plasma_vault.total_assets_in_market(erc20_market)
+    totals.cached_bf_value = plasma_vault.total_assets_in_market(erc20_market).call()
 
-    substrates = plasma_vault.get_market_substrates(erc20_market)
+    substrates = plasma_vault.get_market_substrates(erc20_market).call()
     vault_addr = Web3.to_checksum_address(plasma_vault.address)
     oracle = PriceOracleMiddleware(
         ctx, Web3.to_checksum_address(data.price_oracle_addr)
@@ -103,12 +103,12 @@ def _compute_erc20_balances(  # pylint: disable=too-complex
             token = ERC20(ctx, checksum)
             token_futures[addr] = {
                 "symbol": pool.submit(_resolve_token_symbol, ctx, addr),
-                "decimals": pool.submit(_safe_call, token.decimals),
+                "decimals": pool.submit(_safe_call, token.decimals().call),
                 "balance": pool.submit(
-                    _safe_call, lambda t=token: t.balance_of(vault_addr)
+                    _safe_call, lambda t=token: t.balance_of(vault_addr).call()
                 ),
                 "price": pool.submit(
-                    _safe_call, lambda a=checksum: oracle.get_asset_price(a)
+                    _safe_call, lambda a=checksum: oracle.get_asset_price(a).call()
                 ),
             }
 
@@ -290,7 +290,7 @@ def _compute_reconciliation(
     wm_data = data.withdraw_manager_data
     if wm_data and wm_data.shares_to_release > 0 and plasma_vault is not None:
         shares = Shares(wm_data.shares_to_release)
-        assets = _safe_call(lambda: plasma_vault.convert_to_assets(shares))
+        assets = _safe_call(lambda: plasma_vault.convert_to_assets(shares).call())
         if assets is not None:
             pending_raw = assets
             if price:

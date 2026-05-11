@@ -7,7 +7,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import Timestamp
 
-from ipor_fusion.core.contract import ContractWrapper
+from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.types import Amount, Fee, MorphoBlueMarketId, Shares
 
@@ -82,27 +82,53 @@ class MorphoPositionBreakdown:
     supply_assets: Amount
 
 
+def _market_decoder(value: tuple) -> MorphoMarket:
+    return MorphoMarket(*value)
+
+
+def _position_decoder(value: tuple) -> MorphoPosition:
+    return MorphoPosition(*value)
+
+
+def _market_params_decoder(value: tuple) -> MorphoMarketParams:
+    loan, collateral, oracle, irm, lltv = value
+    return MorphoMarketParams(
+        loan_token=Web3.to_checksum_address(loan),
+        collateral_token=Web3.to_checksum_address(collateral),
+        oracle=Web3.to_checksum_address(oracle),
+        irm=Web3.to_checksum_address(irm),
+        lltv=lltv,
+    )
+
+
 class MorphoReader(ContractWrapper):
     """Reader for Morpho Blue protocol on-chain state."""
 
-    def market(self, market_id: MorphoBlueMarketId) -> MorphoMarket:
-        raw = self._call("market(bytes32)", bytes.fromhex(market_id.removeprefix("0x")))
-        values = decode(
-            ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
-            raw,
+    def market(self, market_id: MorphoBlueMarketId) -> Call[MorphoMarket]:
+        return self._view(
+            "market(bytes32)",
+            bytes.fromhex(market_id.removeprefix("0x")),
+            output_types=[
+                "uint128",
+                "uint128",
+                "uint128",
+                "uint128",
+                "uint128",
+                "uint128",
+            ],
+            decoder=_market_decoder,
         )
-        return MorphoMarket(*values)
 
     def position(
         self, market_id: MorphoBlueMarketId, user: ChecksumAddress
-    ) -> MorphoPosition:
-        raw = self._call(
+    ) -> Call[MorphoPosition]:
+        return self._view(
             "position(bytes32,address)",
             bytes.fromhex(market_id.removeprefix("0x")),
             user,
+            output_types=["uint256", "uint128", "uint128"],
+            decoder=_position_decoder,
         )
-        values = decode(["uint256", "uint128", "uint128"], raw)
-        return MorphoPosition(*values)
 
     def position_breakdown(
         self, market_id: MorphoBlueMarketId, user: ChecksumAddress
@@ -111,9 +137,9 @@ class MorphoReader(ContractWrapper):
 
         Combines `position()`, `market()`, and `market_params()` reads.
         """
-        pos = self.position(market_id, user)
-        market = self.market(market_id)
-        params = self.market_params(market_id)
+        pos = self.position(market_id, user).call()
+        market = self.market(market_id).call()
+        params = self.market_params(market_id).call()
         if market.total_borrow_shares > 0:
             borrow_assets = math.ceil(
                 pos.borrow_shares
@@ -139,19 +165,12 @@ class MorphoReader(ContractWrapper):
             supply_assets=Amount(supply_assets),
         )
 
-    def market_params(self, market_id: MorphoBlueMarketId) -> MorphoMarketParams:
-        raw = self._call(
-            "idToMarketParams(bytes32)", bytes.fromhex(market_id.removeprefix("0x"))
-        )
-        loan, collateral, oracle, irm, lltv = decode(
-            ["address", "address", "address", "address", "uint256"], raw
-        )
-        return MorphoMarketParams(
-            loan_token=Web3.to_checksum_address(loan),
-            collateral_token=Web3.to_checksum_address(collateral),
-            oracle=Web3.to_checksum_address(oracle),
-            irm=Web3.to_checksum_address(irm),
-            lltv=lltv,
+    def market_params(self, market_id: MorphoBlueMarketId) -> Call[MorphoMarketParams]:
+        return self._view(
+            "idToMarketParams(bytes32)",
+            bytes.fromhex(market_id.removeprefix("0x")),
+            output_types=["address", "address", "address", "address", "uint256"],
+            decoder=_market_params_decoder,
         )
 
     def rates(self, market_id: MorphoBlueMarketId) -> MorphoMarketRates:
@@ -161,8 +180,8 @@ class MorphoReader(ContractWrapper):
         APY is continuously compounded using `SECONDS_PER_YEAR = 365 * 86400`,
         matching how the Morpho frontend displays rates.
         """
-        market = self.market(market_id)
-        params = self.market_params(market_id)
+        market = self.market(market_id).call()
+        params = self.market_params(market_id).call()
         return self.rates_from(market, params)
 
     def rates_from(

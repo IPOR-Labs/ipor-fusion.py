@@ -127,8 +127,8 @@ def morpho_blue(
         ctx.default_block = block
     reader = MorphoReader(ctx, MORPHO_BLUE_ADDRESS)
     mid = MorphoBlueMarketId(market_id)
-    params = reader.market_params(mid)
-    state = reader.market(mid)
+    params = reader.market_params(mid).call()
+    state = reader.market(mid).call()
     rates = reader.rates_from(state, params)
 
     api_market: MorphoApiMarket | None = None

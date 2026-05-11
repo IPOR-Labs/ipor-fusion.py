@@ -41,7 +41,7 @@ def test_address_returns_configured_address(wm):
 
 def test_request(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.request(Amount(1000))
+    receipt = wm.request(Amount(1000)).send()
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
@@ -51,7 +51,7 @@ def test_request(wm, ctx):
 
 def test_request_shares(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.request_shares(Shares(500))
+    receipt = wm.request_shares(Shares(500)).send()
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
@@ -61,7 +61,7 @@ def test_request_shares(wm, ctx):
 
 def test_update_withdraw_window(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.update_withdraw_window(Period(3600))
+    receipt = wm.update_withdraw_window(Period(3600)).send()
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
@@ -72,7 +72,7 @@ def test_update_withdraw_window(wm, ctx):
 def test_update_plasma_vault_address(wm, ctx):
     ctx.send.return_value = {"status": 1}
     new_vault = Web3.to_checksum_address("0x0000000000000000000000000000000000000099")
-    receipt = wm.update_plasma_vault_address(new_vault)
+    receipt = wm.update_plasma_vault_address(new_vault).send()
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
@@ -82,28 +82,28 @@ def test_update_plasma_vault_address(wm, ctx):
 
 def test_release_funds_no_args(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.release_funds()
+    receipt = wm.release_funds().send()
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
 
 def test_release_funds_timestamp_only(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.release_funds(timestamp=1000)
+    receipt = wm.release_funds(timestamp=1000).send()
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
 
 def test_release_funds_timestamp_and_shares(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.release_funds(timestamp=1000, shares=Shares(500))
+    receipt = wm.release_funds(timestamp=1000, shares=Shares(500)).send()
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
 
 def test_release_funds_shares_without_timestamp_raises(wm):
     with pytest.raises(ValueError, match="timestamp is required"):
-        wm.release_funds(shares=Shares(500))
+        wm.release_funds(shares=Shares(500)).send()
 
 
 # ── read-only getters ────────────────────────────────────────────────────────
@@ -111,31 +111,31 @@ def test_release_funds_shares_without_timestamp_raises(wm):
 
 def test_get_withdraw_window(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [3600])
-    result = wm.get_withdraw_window()
+    result = wm.get_withdraw_window().call()
     assert result == Period(3600)
 
 
 def test_get_last_release_funds_timestamp(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [12345])
-    result = wm.get_last_release_funds_timestamp()
+    result = wm.get_last_release_funds_timestamp().call()
     assert result == 12345
 
 
 def test_get_shares_to_release(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [999])
-    result = wm.get_shares_to_release()
+    result = wm.get_shares_to_release().call()
     assert result == Shares(999)
 
 
 def test_get_request_fee(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [50])
-    result = wm.get_request_fee()
+    result = wm.get_request_fee().call()
     assert result == Fee(50)
 
 
 def test_get_withdraw_fee(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [100])
-    result = wm.get_withdraw_fee()
+    result = wm.get_withdraw_fee().call()
     assert result == Fee(100)
 
 
@@ -147,7 +147,7 @@ def test_request_info(wm, ctx):
         ["uint256", "uint256", "bool", "uint256"],
         [1000, 2000, True, 3600],
     )
-    info = wm.request_info(FAKE_ACCOUNT)
+    info = wm.request_info(FAKE_ACCOUNT).call()
     assert isinstance(info, WithdrawRequestInfo)
     assert info.shares == 1000
     assert info.end_withdraw_window_timestamp == 2000

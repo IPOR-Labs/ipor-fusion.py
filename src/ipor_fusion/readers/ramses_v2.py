@@ -1,5 +1,6 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
+from ipor_fusion.core.contract import Call
 from ipor_fusion.readers.position_manager import PositionData, PositionManagerReader
 from ipor_fusion.types import TokenId
 
@@ -12,6 +13,5 @@ class RamsesV2Position(PositionData):
 class RamsesV2Reader(PositionManagerReader):
     """Reader for Ramses V2 NonfungiblePositionManager on-chain state."""
 
-    def positions(self, token_id: TokenId) -> RamsesV2Position:
-        data = self._decode_position(token_id)
-        return RamsesV2Position(**asdict(data))
+    def positions(self, token_id: TokenId) -> Call[RamsesV2Position]:
+        return self._positions(token_id, RamsesV2Position)

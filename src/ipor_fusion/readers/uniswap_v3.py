@@ -1,5 +1,6 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
+from ipor_fusion.core.contract import Call
 from ipor_fusion.readers.position_manager import PositionData, PositionManagerReader
 from ipor_fusion.types import TokenId
 
@@ -12,6 +13,5 @@ class UniswapV3Position(PositionData):
 class UniswapV3Reader(PositionManagerReader):
     """Reader for Uniswap V3 NonfungiblePositionManager on-chain state."""
 
-    def positions(self, token_id: TokenId) -> UniswapV3Position:
-        data = self._decode_position(token_id)
-        return UniswapV3Position(**asdict(data))
+    def positions(self, token_id: TokenId) -> Call[UniswapV3Position]:
+        return self._positions(token_id, UniswapV3Position)

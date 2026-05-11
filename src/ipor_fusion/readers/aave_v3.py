@@ -1,10 +1,9 @@
 from dataclasses import dataclass
 
-from eth_abi import decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
-from ipor_fusion.core.contract import ContractWrapper
+from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.types import Amount
 
@@ -75,41 +74,41 @@ class AaveV3PositionBreakdown:
         return self.supply == 0 and self.variable_debt == 0 and self.stable_debt == 0
 
 
+def _user_account_data_decoder(value: tuple) -> AaveV3UserAccountData:
+    return AaveV3UserAccountData(*value)
+
+
+def _reserve_tokens_decoder(value: tuple) -> AaveV3ReserveTokens:
+    a_token = value[8]
+    stable_debt_token = value[9]
+    variable_debt_token = value[10]
+    return AaveV3ReserveTokens(
+        a_token=Web3.to_checksum_address(a_token),
+        stable_debt_token=Web3.to_checksum_address(stable_debt_token),
+        variable_debt_token=Web3.to_checksum_address(variable_debt_token),
+    )
+
+
 class AaveV3Reader(ContractWrapper):
     """Reader for Aave V3 lending pool on-chain state."""
 
-    def get_user_account_data(self, user: ChecksumAddress) -> AaveV3UserAccountData:
-        raw = self._call("getUserAccountData(address)", user)
-        values = decode(
-            ["uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],
-            raw,
+    def get_user_account_data(
+        self, user: ChecksumAddress
+    ) -> Call[AaveV3UserAccountData]:
+        return self._view(
+            "getUserAccountData(address)",
+            user,
+            output_types=["uint256"] * 6,
+            decoder=_user_account_data_decoder,
         )
-        return AaveV3UserAccountData(*values)
 
-    def reserve_tokens(self, asset: ChecksumAddress) -> AaveV3ReserveTokens:
+    def reserve_tokens(self, asset: ChecksumAddress) -> Call[AaveV3ReserveTokens]:
         """Return aToken / stable / variable debt token addresses for `asset`."""
-        raw = self._call("getReserveData(address)", asset)
-        (
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            a_token,
-            stable_debt_token,
-            variable_debt_token,
-            _,
-            _,
-            _,
-            _,
-        ) = decode(_RESERVE_DATA_TYPES, raw)
-        return AaveV3ReserveTokens(
-            a_token=Web3.to_checksum_address(a_token),
-            stable_debt_token=Web3.to_checksum_address(stable_debt_token),
-            variable_debt_token=Web3.to_checksum_address(variable_debt_token),
+        return self._view(
+            "getReserveData(address)",
+            asset,
+            output_types=_RESERVE_DATA_TYPES,
+            decoder=_reserve_tokens_decoder,
         )
 
     def position_breakdown(
@@ -121,13 +120,17 @@ class AaveV3Reader(ContractWrapper):
         Stable debt is queried only when the reserve has a stable debt token
         (some chains/reserves have it disabled and zeroed).
         """
-        tokens = self.reserve_tokens(asset)
-        supply = ERC20(self._ctx, tokens.a_token).balance_of(user)
-        variable_debt = ERC20(self._ctx, tokens.variable_debt_token).balance_of(user)
+        tokens = self.reserve_tokens(asset).call()
+        supply = ERC20(self._ctx, tokens.a_token).balance_of(user).call()
+        variable_debt = (
+            ERC20(self._ctx, tokens.variable_debt_token).balance_of(user).call()
+        )
         if tokens.stable_debt_token.lower() == _ZERO_ADDRESS:
             stable_debt = Amount(0)
         else:
-            stable_debt = ERC20(self._ctx, tokens.stable_debt_token).balance_of(user)
+            stable_debt = (
+                ERC20(self._ctx, tokens.stable_debt_token).balance_of(user).call()
+            )
         return AaveV3PositionBreakdown(
             asset=asset,
             a_token=tokens.a_token,

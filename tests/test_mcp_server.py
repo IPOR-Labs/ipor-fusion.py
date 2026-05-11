@@ -178,14 +178,14 @@ _VAULT = "0xf9bDdD4A9b3a45F980E11Fdde96E16364DDBec49"
 
 def _stub_reader_instance():
     reader = MagicMock()
-    reader.market_params.return_value = MorphoMarketParams(
+    reader.market_params.return_value.call.return_value = MorphoMarketParams(
         loan_token=_LOAN,
         collateral_token=_COLLAT,
         oracle=_ORACLE,
         irm=_IRM,
         lltv=915 * 10**15,
     )
-    reader.market.return_value = MorphoMarket(
+    reader.market.return_value.call.return_value = MorphoMarket(
         total_supply_assets=1_008_277,
         total_supply_shares=1_008_277_000_000,
         total_borrow_assets=908_170,

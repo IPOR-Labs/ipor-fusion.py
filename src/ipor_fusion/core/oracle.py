@@ -1,11 +1,13 @@
 from dataclasses import dataclass
+from functools import partial
+
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import LogReceipt
 
-from ipor_fusion.core.contract import ContractWrapper
+from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.types import Price
 
 
@@ -15,18 +17,40 @@ class AssetPriceSource:
     source: ChecksumAddress
 
 
+def _price_decoder(asset: ChecksumAddress, value: tuple) -> Price:
+    amount, decimals = value
+    return Price(asset=asset, amount=amount, decimals=decimals)
+
+
 class PriceOracleMiddleware(ContractWrapper):
     """Middleware for querying on-chain asset prices."""
 
-    def get_source_of_asset_price(self, asset: ChecksumAddress) -> ChecksumAddress:
-        (value,) = decode(
-            ["address"], self._call("getSourceOfAssetPrice(address)", asset)
+    def get_source_of_asset_price(
+        self, asset: ChecksumAddress
+    ) -> Call[ChecksumAddress]:
+        return self._view(
+            "getSourceOfAssetPrice(address)",
+            asset,
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
         )
-        return Web3.to_checksum_address(value)
 
-    def chainlink_feed_registry(self) -> ChecksumAddress:
-        (value,) = decode(["address"], self._call("CHAINLINK_FEED_REGISTRY()"))
-        return Web3.to_checksum_address(value)
+    def chainlink_feed_registry(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "CHAINLINK_FEED_REGISTRY()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
+    def get_asset_price(self, asset_address: ChecksumAddress) -> Call[Price]:
+        return self._view(
+            "getAssetPrice(address)",
+            asset_address,
+            output_types=["uint256", "uint256"],
+            decoder=partial(_price_decoder, asset_address),
+        )
+
+    # ── Compound method: event replay ──────────────────────────────────────
 
     def get_assets_price_sources(self) -> list[AssetPriceSource]:
         events = self._get_asset_price_source_updated_events()
@@ -40,11 +64,6 @@ class PriceOracleMiddleware(ContractWrapper):
                 )
             )
         return sources
-
-    def get_asset_price(self, asset_address: ChecksumAddress) -> Price:
-        result = self._call("getAssetPrice(address)", asset_address)
-        (amount, decimals) = decode(["uint256", "uint256"], result)
-        return Price(asset=asset_address, amount=amount, decimals=decimals)
 
     def _get_asset_price_source_updated_events(self) -> list[LogReceipt]:
         event_signature_hash = HexBytes(

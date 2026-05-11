@@ -6,9 +6,9 @@ from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import TxReceipt, LogReceipt
+from web3.types import LogReceipt
 
-from ipor_fusion.core.contract import ContractWrapper
+from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.types import Amount, MarketId, Decimals, Shares
 
@@ -21,114 +21,188 @@ class BalanceFuse:
     fuse: ChecksumAddress
 
 
+def _market_id_list_decoder(value: list) -> list[MarketId]:
+    return [MarketId(v) for v in value]
+
+
+def _address_list_decoder(value: list) -> list[ChecksumAddress]:
+    return [Web3.to_checksum_address(item) for item in value]
+
+
 class PlasmaVault(ContractWrapper):
     """ERC-4626 vault that batches and executes FuseAction sequences on-chain."""
 
-    def execute(self, actions: list[FuseAction]) -> TxReceipt:
-        data = self._encode_execute(actions)
-        return self._ctx.send(self._address, data)
+    def execute(self, actions: list[FuseAction]) -> Call[None]:
+        data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
+        return Call(to=self._address, data=data, ctx=self._ctx)
 
-    def deposit(self, assets: Amount, receiver: ChecksumAddress) -> TxReceipt:
-        return self._send("deposit(uint256,address)", assets, receiver)
+    def deposit(self, assets: Amount, receiver: ChecksumAddress) -> Call[None]:
+        return self._write("deposit(uint256,address)", assets, receiver)
 
-    def mint(self, shares: Shares, receiver: ChecksumAddress) -> TxReceipt:
-        return self._send("mint(uint256,address)", shares, receiver)
+    def mint(self, shares: Shares, receiver: ChecksumAddress) -> Call[None]:
+        return self._write("mint(uint256,address)", shares, receiver)
 
     def withdraw(
         self, assets: Amount, receiver: ChecksumAddress, owner: ChecksumAddress
-    ) -> TxReceipt:
-        return self._send("withdraw(uint256,address,address)", assets, receiver, owner)
+    ) -> Call[None]:
+        return self._write("withdraw(uint256,address,address)", assets, receiver, owner)
 
     def redeem(
         self, shares: Shares, receiver: ChecksumAddress, owner: ChecksumAddress
-    ) -> TxReceipt:
-        return self._send("redeem(uint256,address,address)", shares, receiver, owner)
+    ) -> Call[None]:
+        return self._write("redeem(uint256,address,address)", shares, receiver, owner)
 
     def redeem_from_request(
         self, shares: Shares, receiver: ChecksumAddress, owner: ChecksumAddress
-    ) -> TxReceipt:
-        return self._send(
+    ) -> Call[None]:
+        return self._write(
             "redeemFromRequest(uint256,address,address)", shares, receiver, owner
         )
 
-    def add_fuses(self, fuses: list[ChecksumAddress]) -> TxReceipt:
-        return self._send("addFuses(address[])", fuses)
+    def add_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
+        return self._write("addFuses(address[])", fuses)
 
-    def set_total_supply_cap(self, cap: Amount) -> TxReceipt:
-        return self._send("setTotalSupplyCap(uint256)", cap)
+    def set_total_supply_cap(self, cap: Amount) -> Call[None]:
+        return self._write("setTotalSupplyCap(uint256)", cap)
 
-    def transfer(self, to: ChecksumAddress, value: Amount) -> TxReceipt:
-        return self._send("transfer(address,uint256)", to, value)
+    def grant_market_substrates(
+        self, market_id: MarketId, substrates: list[bytes]
+    ) -> Call[None]:
+        """Atomist-only configuration call. Each substrate is bytes32 (an address
+        left-padded to 32 bytes, or a typed substrate prefix-encoded by the vault).
+        """
+        return self._write(
+            "grantMarketSubstrates(uint256,bytes32[])", market_id, substrates
+        )
 
-    def approve(self, account: ChecksumAddress, amount: Amount) -> TxReceipt:
-        return self._send("approve(address,uint256)", account, amount)
+    def transfer(self, to: ChecksumAddress, value: Amount) -> Call[None]:
+        return self._write("transfer(address,uint256)", to, value)
+
+    def approve(self, account: ChecksumAddress, amount: Amount) -> Call[None]:
+        return self._write("approve(address,uint256)", account, amount)
 
     def transfer_from(
         self, _from: ChecksumAddress, to: ChecksumAddress, amount: Amount
-    ) -> TxReceipt:
-        return self._send("transferFrom(address,address,uint256)", _from, to, amount)
+    ) -> Call[None]:
+        return self._write("transferFrom(address,address,uint256)", _from, to, amount)
 
-    def balance_of(self, account: ChecksumAddress) -> Amount:
-        (value,) = decode(["uint256"], self._call("balanceOf(address)", account))
-        return Amount(value)
-
-    def get_total_supply_cap(self) -> Amount:
-        (value,) = decode(["uint256"], self._call("getTotalSupplyCap()"))
-        return Amount(value)
-
-    def max_withdraw(self, account: ChecksumAddress) -> Amount:
-        (value,) = decode(["uint256"], self._call("maxWithdraw(address)", account))
-        return Amount(value)
-
-    def convert_to_shares(self, amount: Amount) -> Shares:
-        (value,) = decode(["uint256"], self._call("convertToShares(uint256)", amount))
-        return Shares(value)
-
-    def convert_to_assets(self, shares: Shares) -> Amount:
-        (value,) = decode(["uint256"], self._call("convertToAssets(uint256)", shares))
-        return Amount(value)
-
-    def total_assets_in_market(self, market: MarketId) -> Amount:
-        (value,) = decode(
-            ["uint256"], self._call("totalAssetsInMarket(uint256)", market)
+    def balance_of(self, account: ChecksumAddress) -> Call[Amount]:
+        return self._view(
+            "balanceOf(address)", account, output_types=["uint256"], decoder=Amount
         )
-        return Amount(value)
 
-    def decimals(self) -> Decimals:
-        (value,) = decode(["uint256"], self._call("decimals()"))
-        return Decimals(value)
+    def get_total_supply_cap(self) -> Call[Amount]:
+        return self._view(
+            "getTotalSupplyCap()", output_types=["uint256"], decoder=Amount
+        )
 
-    def total_assets(self) -> Amount:
-        (value,) = decode(["uint256"], self._call("totalAssets()"))
-        return Amount(value)
+    def max_withdraw(self, account: ChecksumAddress) -> Call[Amount]:
+        return self._view(
+            "maxWithdraw(address)", account, output_types=["uint256"], decoder=Amount
+        )
 
-    def total_supply(self) -> Amount:
-        (value,) = decode(["uint256"], self._call("totalSupply()"))
-        return Amount(value)
+    def convert_to_shares(self, amount: Amount) -> Call[Shares]:
+        return self._view(
+            "convertToShares(uint256)",
+            amount,
+            output_types=["uint256"],
+            decoder=Shares,
+        )
 
-    def name(self) -> str:
-        (value,) = decode(["string"], self._call("name()"))
-        return value
+    def convert_to_assets(self, shares: Shares) -> Call[Amount]:
+        return self._view(
+            "convertToAssets(uint256)",
+            shares,
+            output_types=["uint256"],
+            decoder=Amount,
+        )
 
-    def underlying_asset_address(self) -> ChecksumAddress:
-        (value,) = decode(["address"], self._call("asset()"))
-        return Web3.to_checksum_address(value)
+    def total_assets_in_market(self, market: MarketId) -> Call[Amount]:
+        return self._view(
+            "totalAssetsInMarket(uint256)",
+            market,
+            output_types=["uint256"],
+            decoder=Amount,
+        )
 
-    def get_access_manager_address(self) -> ChecksumAddress:
-        (value,) = decode(["address"], self._call("getAccessManagerAddress()"))
-        return Web3.to_checksum_address(value)
+    def decimals(self) -> Call[Decimals]:
+        return self._view("decimals()", output_types=["uint256"], decoder=Decimals)
 
-    def get_rewards_claim_manager_address(self) -> ChecksumAddress:
-        (value,) = decode(["address"], self._call("getRewardsClaimManagerAddress()"))
-        return Web3.to_checksum_address(value)
+    def total_assets(self) -> Call[Amount]:
+        return self._view("totalAssets()", output_types=["uint256"], decoder=Amount)
 
-    def get_price_oracle_middleware_address(self) -> ChecksumAddress:
-        (value,) = decode(["address"], self._call("getPriceOracleMiddleware()"))
-        return Web3.to_checksum_address(value)
+    def total_supply(self) -> Call[Amount]:
+        return self._view("totalSupply()", output_types=["uint256"], decoder=Amount)
 
-    def get_fuses(self) -> list[ChecksumAddress]:
-        (value,) = decode(["address[]"], self._call("getFuses()"))
-        return [Web3.to_checksum_address(item) for item in list(value)]
+    def name(self) -> Call[str]:
+        return self._view("name()", output_types=["string"])
+
+    def underlying_asset_address(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "asset()", output_types=["address"], decoder=Web3.to_checksum_address
+        )
+
+    def get_access_manager_address(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "getAccessManagerAddress()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
+    def get_rewards_claim_manager_address(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "getRewardsClaimManagerAddress()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
+    def get_price_oracle_middleware_address(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "getPriceOracleMiddleware()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
+    def get_fuses(self) -> Call[list[ChecksumAddress]]:
+        return self._view(
+            "getFuses()", output_types=["address[]"], decoder=_address_list_decoder
+        )
+
+    def get_instant_withdrawal_fuses(self) -> Call[list[ChecksumAddress]]:
+        return self._view(
+            "getInstantWithdrawalFuses()",
+            output_types=["address[]"],
+            decoder=_address_list_decoder,
+        )
+
+    def get_instant_withdrawal_fuses_params(
+        self, fuse: ChecksumAddress, index: int
+    ) -> Call[list[bytes]]:
+        return self._view(
+            "getInstantWithdrawalFusesParams(address,uint256)",
+            fuse,
+            index,
+            output_types=["bytes32[]"],
+            decoder=list,
+        )
+
+    def get_dependency_balance_graph(self, market_id: MarketId) -> Call[list[MarketId]]:
+        return self._view(
+            "getDependencyBalanceGraph(uint256)",
+            market_id,
+            output_types=["uint256[]"],
+            decoder=_market_id_list_decoder,
+        )
+
+    def get_market_substrates(self, market_id: MarketId) -> Call[list[bytes]]:
+        return self._view(
+            "getMarketSubstrates(uint256)",
+            market_id,
+            output_types=["bytes32[]"],
+            decoder=list,
+        )
+
+    # ── Compound methods: event replay, no `Call` shape ─────────────────────
 
     def get_balance_fuses(self) -> list[BalanceFuse]:
         # Replay Added/Removed events chronologically to mirror on-chain storage.
@@ -161,36 +235,6 @@ class PlasmaVault(ContractWrapper):
             (decoded_address,) = decode(["address"], sorted_events[0]["data"])
             return Web3.to_checksum_address(decoded_address)
         return None
-
-    def get_instant_withdrawal_fuses(self) -> list[ChecksumAddress]:
-        (value,) = decode(["address[]"], self._call("getInstantWithdrawalFuses()"))
-        return [Web3.to_checksum_address(item) for item in list(value)]
-
-    def get_instant_withdrawal_fuses_params(
-        self, fuse: ChecksumAddress, index: int
-    ) -> list[bytes]:
-        (value,) = decode(
-            ["bytes32[]"],
-            self._call("getInstantWithdrawalFusesParams(address,uint256)", fuse, index),
-        )
-        return list(value)
-
-    def get_dependency_balance_graph(self, market_id: MarketId) -> list[MarketId]:
-        (value,) = decode(
-            ["uint256[]"],
-            self._call("getDependencyBalanceGraph(uint256)", market_id),
-        )
-        return [MarketId(v) for v in value]
-
-    def get_market_substrates(self, market_id: MarketId) -> list[bytes]:
-        (value,) = decode(
-            ["bytes32[]"], self._call("getMarketSubstrates(uint256)", market_id)
-        )
-        return list(value)
-
-    @staticmethod
-    def _encode_execute(actions: list[FuseAction]) -> bytes:
-        return FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
 
     def _get_withdraw_manager_changed_events(self) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
