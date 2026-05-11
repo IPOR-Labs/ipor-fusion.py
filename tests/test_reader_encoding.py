@@ -57,7 +57,7 @@ class TestMorphoReaderMarket:
         )
         ctx.call.return_value = raw
 
-        result = reader.market(MARKET_ID)
+        result = reader.market(MARKET_ID).call()
 
         assert isinstance(result, MorphoMarket)
         assert result.total_supply_assets == 1000
@@ -74,7 +74,7 @@ class TestMorphoReaderPosition:
         raw = encode(["uint256", "uint128", "uint128"], [5000, 100, 200])
         ctx.call.return_value = raw
 
-        result = reader.position(MARKET_ID, USER_ADDR)
+        result = reader.position(MARKET_ID, USER_ADDR).call()
 
         assert isinstance(result, MorphoPosition)
         assert result.supply_shares == 5000
@@ -91,7 +91,7 @@ class TestMorphoReaderMarketParams:
         )
         ctx.call.return_value = raw
 
-        result = reader.market_params(MARKET_ID)
+        result = reader.market_params(MARKET_ID).call()
 
         assert isinstance(result, MorphoMarketParams)
         assert result.loan_token == TOKEN_A
@@ -120,7 +120,7 @@ class TestAaveV3Reader:
         )
         ctx.call.return_value = raw
 
-        result = reader.get_user_account_data(USER_ADDR)
+        result = reader.get_user_account_data(USER_ADDR).call()
 
         assert isinstance(result, AaveV3UserAccountData)
         assert result.total_collateral_base == 10_000_000_000
@@ -181,7 +181,7 @@ class TestAaveV3ReaderReserveTokens:
         reader, ctx = _make_reader(AaveV3Reader)
         ctx.call.return_value = self._encode_reserve_data()
 
-        tokens = reader.reserve_tokens(TOKEN_A)
+        tokens = reader.reserve_tokens(TOKEN_A).call()
 
         assert isinstance(tokens, AaveV3ReserveTokens)
         assert tokens.a_token == self.A_TOKEN
@@ -447,7 +447,7 @@ class TestUniswapV3Reader:
         )
         ctx.call.return_value = raw
 
-        result = reader.positions(42)
+        result = reader.positions(42).call()
 
         assert isinstance(result, UniswapV3Position)
         assert result.nonce == 1
@@ -502,7 +502,7 @@ class TestRamsesV2Reader:
         )
         ctx.call.return_value = raw
 
-        result = reader.positions(99)
+        result = reader.positions(99).call()
 
         assert isinstance(result, RamsesV2Position)
         assert result.nonce == 0

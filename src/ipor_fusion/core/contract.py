@@ -8,7 +8,7 @@ from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.types import BlockIdentifier, TxReceipt
+from web3.types import TxReceipt
 
 from ipor_fusion.core.context import Web3Context
 
@@ -106,16 +106,6 @@ class ContractWrapper:
             to=self._address,
             data=_encode_calldata(signature, *args),
             ctx=self._ctx,
-        )
-
-    def _raw_call(
-        self, signature: str, *args: Any, block: BlockIdentifier | None = None
-    ) -> bytes:
-        """Run an `eth_call` and return raw bytes — for compound methods
-        (event-replay, multi-call aggregation) that don't fit the `Call` shape.
-        """
-        return self._ctx.call(
-            self._address, _encode_calldata(signature, *args), block=block
         )
 
 
