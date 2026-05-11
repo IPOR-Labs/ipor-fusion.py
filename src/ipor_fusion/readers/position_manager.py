@@ -45,7 +45,7 @@ class PositionManagerReader(ContractWrapper):
     """Base reader for NonfungiblePositionManager-style contracts."""
 
     def _decode_position(self, token_id: TokenId) -> PositionData:
-        raw = self._call("positions(uint256)", token_id)
+        raw = self._raw_call("positions(uint256)", token_id)
         (
             nonce,
             operator,

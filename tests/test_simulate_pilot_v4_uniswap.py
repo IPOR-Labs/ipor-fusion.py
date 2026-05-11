@@ -35,10 +35,10 @@ from ipor_fusion import (
     Web3Context,
     PlasmaVault,
     AccessManager,
+    ERC20,
     Roles,
     VaultSimulator,
 )
-from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses import (
     UniswapV3SwapFuse,
     UniswapV3NewPositionFuse,
@@ -46,7 +46,7 @@ from ipor_fusion.fuses import (
     UniswapV3CollectFuse,
     UniversalTokenSwapperFuse,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import Amount, ChainId
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -58,28 +58,21 @@ UNISWAP_V3_UNIVERSAL_ROUTER = Web3.to_checksum_address(
 DEADLINE_OFFSET = 1000  # seconds past block.timestamp
 
 
-def _encode_call(signature: str, *args) -> bytes:
-    selector = function_signature_to_4byte_selector(signature)
-    types = _parse_param_types(signature)
-    return selector + encode(types, list(args)) if types else selector
-
-
 def _setup_alpha(sim, access_manager, owner):
     """Standard pilot v4 setup: owner grants ALPHA_ROLE to ANVIL_WALLET."""
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=owner,
     )
 
 
-def _build_universal_swap(token_in, token_out, amount_in, min_out, path):
+def _build_universal_swap(ctx, token_in, token_out, amount_in, min_out, path):
     """Build calldata for UniversalTokenSwapperFuse via Uniswap V3 universal router."""
     targets = [token_in, UNISWAP_V3_UNIVERSAL_ROUTER]
-    transfer_data = _encode_call(
-        "transfer(address,uint256)", UNISWAP_V3_UNIVERSAL_ROUTER, amount_in
+    transfer_data = (
+        ERC20(ctx, token_in)
+        .transfer(UNISWAP_V3_UNIVERSAL_ROUTER, Amount(amount_in))
+        .data
     )
     inputs = [
         encode(
@@ -117,25 +110,29 @@ def test_simulate_swap_when_one_hop_uniswap_v3(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    usdt = ERC20(ctx, ARBITRUM_USDT)
 
     path = encode_packed(
         ["address", "uint24", "address"], [ARBITRUM_USDC, 100, ARBITRUM_USDT]
     )
     swap_action = _build_universal_swap(
-        ARBITRUM_USDC, ARBITRUM_USDT, int(100e6), int(99e6), path
+        ctx, ARBITRUM_USDC, ARBITRUM_USDT, int(100e6), int(99e6), path
     )
 
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_alpha(sim, access_manager, owner)
-    sim.observe("usdc_before", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
-    sim.observe("usdt_before", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
+    sim.observe("usdc_before", usdc.balance_of(vault_address))
+    sim.observe("usdt_before", usdt.balance_of(vault_address))
     sim.execute([swap_action])
-    sim.observe("usdc_after", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
-    sim.observe("usdt_after", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
+    sim.observe("usdc_after", usdc.balance_of(vault_address))
+    sim.observe("usdt_after", usdt.balance_of(vault_address))
 
     result = sim.run()
     log.info("observations=%s", result.observations)
@@ -153,26 +150,30 @@ def test_simulate_swap_when_multiple_hop(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    usdt = ERC20(ctx, ARBITRUM_USDT)
 
     path = encode_packed(
         ["address", "uint24", "address", "uint24", "address"],
         [ARBITRUM_USDC, 500, ARBITRUM_WETH, 3000, ARBITRUM_USDT],
     )
     swap_action = _build_universal_swap(
-        ARBITRUM_USDC, ARBITRUM_USDT, int(100e6), int(99e6), path
+        ctx, ARBITRUM_USDC, ARBITRUM_USDT, int(100e6), int(99e6), path
     )
 
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_alpha(sim, access_manager, owner)
-    sim.observe("usdc_before", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
-    sim.observe("usdt_before", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
+    sim.observe("usdc_before", usdc.balance_of(vault_address))
+    sim.observe("usdt_before", usdt.balance_of(vault_address))
     sim.execute([swap_action])
-    sim.observe("usdc_after", ARBITRUM_USDC, "balanceOf(address)", (vault_address,))
-    sim.observe("usdt_after", ARBITRUM_USDT, "balanceOf(address)", (vault_address,))
+    sim.observe("usdc_after", usdc.balance_of(vault_address))
+    sim.observe("usdt_after", usdt.balance_of(vault_address))
 
     result = sim.run()
     log.info("observations=%s", result.observations)
@@ -190,8 +191,12 @@ def test_simulate_open_new_position_uniswap_v3(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    usdt = ERC20(ctx, ARBITRUM_USDT)
 
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
@@ -213,12 +218,8 @@ def test_simulate_open_new_position_uniswap_v3(web3_arb):
             )
         ]
     )
-    sim.observe(
-        "usdc_after_swap", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
-    sim.observe(
-        "usdt_after_swap", ARBITRUM_USDT, "balanceOf(address)", (vault_address,)
-    )
+    sim.observe("usdc_after_swap", usdc.balance_of(vault_address))
+    sim.observe("usdt_after_swap", usdt.balance_of(vault_address))
     sim.execute(
         [
             uniswap_new_pos.new_position(
@@ -235,18 +236,8 @@ def test_simulate_open_new_position_uniswap_v3(web3_arb):
             )
         ]
     )
-    sim.observe(
-        "usdc_after_position",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim.observe(
-        "usdt_after_position",
-        ARBITRUM_USDT,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("usdc_after_position", usdc.balance_of(vault_address))
+    sim.observe("usdt_after_position", usdt.balance_of(vault_address))
 
     result = sim.run()
     log.info("observations=%s", result.observations)
@@ -304,7 +295,9 @@ def _extract_new_position_token_id(execute_logs):
 def _build_open_new_position_sim(web3_arb, ctx, vault_address, deadline):
     """Common builder: setup + swap + new_position. Used by both two-step tests."""
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
@@ -355,6 +348,8 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    usdt = ERC20(ctx, ARBITRUM_USDT)
 
     # Step 1: extract token_id from new_position event logs
     sim1 = _build_open_new_position_sim(web3_arb, ctx, vault_address, deadline)
@@ -382,31 +377,11 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
             )
         ]
     )
-    sim2.observe(
-        "usdc_before_collect",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim2.observe(
-        "usdt_before_collect",
-        ARBITRUM_USDT,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim2.observe("usdc_before_collect", usdc.balance_of(vault_address))
+    sim2.observe("usdt_before_collect", usdt.balance_of(vault_address))
     sim2.execute([uniswap_collect.collect([new_token_id])])
-    sim2.observe(
-        "usdc_after_collect",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim2.observe(
-        "usdt_after_collect",
-        ARBITRUM_USDT,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim2.observe("usdc_after_collect", usdc.balance_of(vault_address))
+    sim2.observe("usdt_after_collect", usdt.balance_of(vault_address))
     sim2.execute([uniswap_new_pos.close_position([new_token_id])])
 
     result2 = sim2.run()
@@ -427,8 +402,12 @@ def test_simulate_increase_liquidity(web3_arb):
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    usdt = ERC20(ctx, ARBITRUM_USDT)
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
     uniswap_new_pos = UniswapV3NewPositionFuse(ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE)
@@ -482,18 +461,8 @@ def test_simulate_increase_liquidity(web3_arb):
 
     # Step 2: replay + increase
     sim2 = _build_setup_sim()
-    sim2.observe(
-        "usdc_before",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim2.observe(
-        "usdt_before",
-        ARBITRUM_USDT,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim2.observe("usdc_before", usdc.balance_of(vault_address))
+    sim2.observe("usdt_before", usdt.balance_of(vault_address))
     sim2.execute(
         [
             uniswap_modify.increase_liquidity(
@@ -508,18 +477,8 @@ def test_simulate_increase_liquidity(web3_arb):
             )
         ]
     )
-    sim2.observe(
-        "usdc_after",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim2.observe(
-        "usdt_after",
-        ARBITRUM_USDT,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim2.observe("usdc_after", usdc.balance_of(vault_address))
+    sim2.observe("usdt_after", usdt.balance_of(vault_address))
 
     result2 = sim2.run()
     log.info("step2 observations=%s", result2.observations)

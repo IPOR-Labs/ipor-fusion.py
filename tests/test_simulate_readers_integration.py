@@ -102,14 +102,14 @@ class TestCompoundV3ReaderIntegration:
         reader = CompoundV3Reader(
             _ctx(web3_arb, self.BLOCK), ARBITRUM_COMPOUND_V3_C_USDC
         )
-        balance = reader.balance_of(ARBITRUM_COMPOUND_V3_C_USDC)
+        balance = reader.balance_of(ARBITRUM_COMPOUND_V3_C_USDC).call()
         assert balance >= 0
 
     def test_borrow_balance_of(self, web3_arb):
         reader = CompoundV3Reader(
             _ctx(web3_arb, self.BLOCK), ARBITRUM_COMPOUND_V3_C_USDC
         )
-        borrow = reader.borrow_balance_of(ARBITRUM_COMPOUND_V3_C_USDC)
+        borrow = reader.borrow_balance_of(ARBITRUM_COMPOUND_V3_C_USDC).call()
         assert borrow >= 0
 
 

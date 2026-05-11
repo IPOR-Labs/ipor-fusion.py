@@ -86,7 +86,9 @@ class MorphoReader(ContractWrapper):
     """Reader for Morpho Blue protocol on-chain state."""
 
     def market(self, market_id: MorphoBlueMarketId) -> MorphoMarket:
-        raw = self._call("market(bytes32)", bytes.fromhex(market_id.removeprefix("0x")))
+        raw = self._raw_call(
+            "market(bytes32)", bytes.fromhex(market_id.removeprefix("0x"))
+        )
         values = decode(
             ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
             raw,
@@ -96,7 +98,7 @@ class MorphoReader(ContractWrapper):
     def position(
         self, market_id: MorphoBlueMarketId, user: ChecksumAddress
     ) -> MorphoPosition:
-        raw = self._call(
+        raw = self._raw_call(
             "position(bytes32,address)",
             bytes.fromhex(market_id.removeprefix("0x")),
             user,
@@ -140,7 +142,7 @@ class MorphoReader(ContractWrapper):
         )
 
     def market_params(self, market_id: MorphoBlueMarketId) -> MorphoMarketParams:
-        raw = self._call(
+        raw = self._raw_call(
             "idToMarketParams(bytes32)", bytes.fromhex(market_id.removeprefix("0x"))
         )
         loan, collateral, oracle, irm, lltv = decode(

@@ -15,8 +15,6 @@ from __future__ import annotations
 
 import logging
 
-from eth_abi import encode
-from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from _simulate import assert_all_success
@@ -27,11 +25,11 @@ from ipor_fusion import (
     PlasmaVault,
     AccessManager,
     WithdrawManager,
+    ERC20,
     Roles,
     IporFusionMarkets,
     VaultSimulator,
 )
-from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.types import ChainId
 
 logging.basicConfig(level=logging.INFO)
@@ -41,26 +39,14 @@ PINNED_BLOCK = 268934406  # mirrors anvil.reset_fork(...)
 WHALE_ACCOUNT = Web3.to_checksum_address("0x1F7bc4dA1a0c2e49d7eF542F74CD46a3FE592cb1")
 
 
-def _encode_call(signature: str, *args) -> bytes:
-    selector = function_signature_to_4byte_selector(signature)
-    types = _parse_param_types(signature)
-    return selector + encode(types, list(args)) if types else selector
-
-
 def _setup_basic(sim, access_manager, owner):
     """Owner grants ALPHA + WHITELIST to ANVIL_WALLET."""
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=owner,
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.WHITELIST_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, ANVIL_WALLET, 0),
         from_=owner,
     )
 
@@ -68,19 +54,15 @@ def _setup_basic(sim, access_manager, owner):
 def _setup_with_atomist(sim, access_manager, owner):
     _setup_basic(sim, access_manager, owner)
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ATOMIST_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ATOMIST_ROLE, ANVIL_WALLET, 0),
         from_=owner,
     )
 
 
-def _whale_fund(sim, recipient, amount):
+def _whale_fund(sim, usdc, recipient, amount):
     """Whale transfers USDC to the recipient (impersonated, no signature)."""
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("transfer(address,uint256)", recipient, amount),
+        call=usdc.transfer(recipient, amount),
         from_=WHALE_ACCOUNT,
     )
 
@@ -93,7 +75,10 @@ def test_simulate_deposit(web3_arb):
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
+    usdc = ERC20(ctx, ARBITRUM_USDC)
     owner = access_manager.owner()
     amount = 100_000000
 
@@ -101,36 +86,22 @@ def test_simulate_deposit(web3_arb):
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_basic(sim, access_manager, owner)
-    _whale_fund(sim, ANVIL_WALLET, amount)
+    _whale_fund(sim, usdc, ANVIL_WALLET, amount)
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("approve(address,uint256)", vault_address, amount),
+        call=usdc.approve(vault_address, amount),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_before", vault_address, "totalAssets()")
-    sim.observe(
-        "user_shares_before",
-        vault_address,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
+    sim.observe("total_assets_before", plasma_vault.total_assets())
+    sim.observe("user_shares_before", plasma_vault.balance_of(ANVIL_WALLET))
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("deposit(uint256,address)", amount, ANVIL_WALLET),
+        call=plasma_vault.deposit(amount, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_after", vault_address, "totalAssets()")
-    sim.observe(
-        "user_shares_after",
-        vault_address,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
+    sim.observe("total_assets_after", plasma_vault.total_assets())
+    sim.observe("user_shares_after", plasma_vault.balance_of(ANVIL_WALLET))
     sim.observe(
         "aave_total",
-        vault_address,
-        "totalAssetsInMarket(uint256)",
-        (IporFusionMarkets.AAVE_V3,),
+        plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3),
     )
 
     result = sim.run()
@@ -151,58 +122,38 @@ def test_simulate_mint(web3_arb):
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
+    usdc = ERC20(ctx, ARBITRUM_USDC)
     owner = access_manager.owner()
     amount = 110_000000
-    decimals = plasma_vault.decimals()
+    decimals = plasma_vault.decimals().call()
     shares_amount = 100 * 10**decimals
 
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_basic(sim, access_manager, owner)
-    _whale_fund(sim, ANVIL_WALLET, amount)
+    _whale_fund(sim, usdc, ANVIL_WALLET, amount)
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("approve(address,uint256)", vault_address, amount),
+        call=usdc.approve(vault_address, amount),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_before", vault_address, "totalAssets()")
-    sim.observe(
-        "user_shares_before",
-        vault_address,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
-    sim.observe(
-        "vault_usdc_before", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
+    sim.observe("total_assets_before", plasma_vault.total_assets())
+    sim.observe("user_shares_before", plasma_vault.balance_of(ANVIL_WALLET))
+    sim.observe("vault_usdc_before", usdc.balance_of(vault_address))
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("mint(uint256,address)", shares_amount, ANVIL_WALLET),
+        call=plasma_vault.mint(shares_amount, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_after", vault_address, "totalAssets()")
-    sim.observe(
-        "user_shares_after",
-        vault_address,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
-    sim.observe(
-        "user_underlying_after",
-        vault_address,
-        "maxWithdraw(address)",
-        (ANVIL_WALLET,),
-    )
-    sim.observe(
-        "vault_usdc_after", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
+    sim.observe("total_assets_after", plasma_vault.total_assets())
+    sim.observe("user_shares_after", plasma_vault.balance_of(ANVIL_WALLET))
+    sim.observe("user_underlying_after", plasma_vault.max_withdraw(ANVIL_WALLET))
+    sim.observe("vault_usdc_after", usdc.balance_of(vault_address))
     sim.observe(
         "aave_total",
-        vault_address,
-        "totalAssetsInMarket(uint256)",
-        (IporFusionMarkets.AAVE_V3,),
+        plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3),
     )
 
     result = sim.run()
@@ -231,43 +182,34 @@ def test_simulate_redeem(web3_arb):
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
-    owner = access_manager.owner()
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     withdraw_manager = WithdrawManager(ctx, plasma_vault.withdraw_manager_address())
-    decimals = plasma_vault.decimals()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    owner = access_manager.owner()
+    decimals = plasma_vault.decimals().call()
     amount = 100_000000
     to_redeem = 50 * 10**decimals
     # convert_to_assets is deterministic at the pinned block (vault ratio is stable)
-    to_withdraw = plasma_vault.convert_to_assets(to_redeem)
+    to_withdraw = plasma_vault.convert_to_assets(to_redeem).call()
 
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_with_atomist(sim, access_manager, owner)
-    _whale_fund(sim, ANVIL_WALLET, amount)
+    _whale_fund(sim, usdc, ANVIL_WALLET, amount)
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("approve(address,uint256)", vault_address, amount),
+        call=usdc.approve(vault_address, amount),
         from_=ANVIL_WALLET,
     )
 
-    sim.observe("total_assets_before", vault_address, "totalAssets()")
-    sim.observe(
-        "user_shares_before",
-        vault_address,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
-    sim.observe(
-        "user_usdc_before",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
+    sim.observe("total_assets_before", plasma_vault.total_assets())
+    sim.observe("user_shares_before", plasma_vault.balance_of(ANVIL_WALLET))
+    sim.observe("user_usdc_before", usdc.balance_of(ANVIL_WALLET))
 
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("deposit(uint256,address)", amount, ANVIL_WALLET),
+        call=plasma_vault.deposit(amount, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
 
@@ -276,46 +218,30 @@ def test_simulate_redeem(web3_arb):
 
     # Atomist updates withdraw window + user requests withdraw
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("updateWithdrawWindow(uint256)", 7 * 60 * 60),
+        call=withdraw_manager.update_withdraw_window(7 * 60 * 60),
         from_=ANVIL_WALLET,  # has ATOMIST role
     )
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("request(uint256)", to_withdraw),
+        call=withdraw_manager.request(to_withdraw),
         from_=ANVIL_WALLET,
     )
 
     # +1 hour, release
     sim.next_block(time_shift_seconds=60 * 60)
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("releaseFunds()"),
+        call=withdraw_manager.release_funds(),
         from_=ANVIL_WALLET,
     )
 
     # Redeem
     sim.add_call(
-        to=vault_address,
-        data=_encode_call(
-            "redeem(uint256,address,address)", to_redeem, ANVIL_WALLET, ANVIL_WALLET
-        ),
+        call=plasma_vault.redeem(to_redeem, ANVIL_WALLET, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
 
-    sim.observe("total_assets_after", vault_address, "totalAssets()")
-    sim.observe(
-        "user_shares_after",
-        vault_address,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
-    sim.observe(
-        "user_usdc_after",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
+    sim.observe("total_assets_after", plasma_vault.total_assets())
+    sim.observe("user_shares_after", plasma_vault.balance_of(ANVIL_WALLET))
+    sim.observe("user_usdc_after", usdc.balance_of(ANVIL_WALLET))
 
     result = sim.run()
     log.info("observations=%s", result.observations)
@@ -339,10 +265,13 @@ def test_simulate_withdraw(web3_arb):
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
-    owner = access_manager.owner()
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     withdraw_manager = WithdrawManager(ctx, plasma_vault.withdraw_manager_address())
-    decimals = plasma_vault.decimals()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    owner = access_manager.owner()
+    decimals = plasma_vault.decimals().call()
     amount = 100_000000
     shares_amount = 100 * 10**decimals
     # max_withdraw at the pinned block before deposit; we'll request the full
@@ -353,70 +282,47 @@ def test_simulate_withdraw(web3_arb):
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_with_atomist(sim, access_manager, owner)
-    _whale_fund(sim, ANVIL_WALLET, amount)
+    _whale_fund(sim, usdc, ANVIL_WALLET, amount)
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("approve(address,uint256)", vault_address, amount),
+        call=usdc.approve(vault_address, amount),
         from_=ANVIL_WALLET,
     )
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("deposit(uint256,address)", amount, ANVIL_WALLET),
+        call=plasma_vault.deposit(amount, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_before", vault_address, "totalAssets()")
-    sim.observe(
-        "user_shares_before",
-        vault_address,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
+    sim.observe("total_assets_before", plasma_vault.total_assets())
+    sim.observe("user_shares_before", plasma_vault.balance_of(ANVIL_WALLET))
 
     # +7 hours
     sim.next_block(time_shift_seconds=7 * 60 * 60)
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("updateWithdrawWindow(uint256)", 7 * 60 * 60),
+        call=withdraw_manager.update_withdraw_window(7 * 60 * 60),
         from_=ANVIL_WALLET,
     )
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("request(uint256)", to_withdraw_request),
+        call=withdraw_manager.request(to_withdraw_request),
         from_=ANVIL_WALLET,
     )
 
     sim.next_block(time_shift_seconds=60 * 60)
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("releaseFunds()"),
+        call=withdraw_manager.release_funds(),
         from_=ANVIL_WALLET,
     )
 
     # Withdraw a deterministic safe amount (1 USDC under the requested amount)
     withdraw_amount = to_withdraw_request - 1_000_000
     sim.add_call(
-        to=vault_address,
-        data=_encode_call(
-            "withdraw(uint256,address,address)",
-            withdraw_amount,
-            ANVIL_WALLET,
-            ANVIL_WALLET,
-        ),
+        call=plasma_vault.withdraw(withdraw_amount, ANVIL_WALLET, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
 
-    sim.observe("total_assets_after", vault_address, "totalAssets()")
-    sim.observe(
-        "user_shares_after",
-        vault_address,
-        "balanceOf(address)",
-        (ANVIL_WALLET,),
-    )
+    sim.observe("total_assets_after", plasma_vault.total_assets())
+    sim.observe("user_shares_after", plasma_vault.balance_of(ANVIL_WALLET))
     sim.observe(
         "aave_total",
-        vault_address,
-        "totalAssetsInMarket(uint256)",
-        (IporFusionMarkets.AAVE_V3,),
+        plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3),
     )
 
     result = sim.run()
@@ -444,7 +350,10 @@ def test_simulate_transfer(web3_arb):
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
+    usdc = ERC20(ctx, ARBITRUM_USDC)
     owner = access_manager.owner()
 
     amount = 100_000000
@@ -457,44 +366,27 @@ def test_simulate_transfer(web3_arb):
     _setup_basic(sim, access_manager, owner)
     # Also whitelist user_one so deposit on their behalf works
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.WHITELIST_ROLE, user_one, 0
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, user_one, 0),
         from_=owner,
     )
-    _whale_fund(sim, user_one, amount)
+    _whale_fund(sim, usdc, user_one, amount)
     # user_one approves vault
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("approve(address,uint256)", vault_address, amount),
+        call=usdc.approve(vault_address, amount),
         from_=user_one,
     )
-    # ANVIL_WALLET deposits on user_one's behalf — but original test does:
-    #   forked_ctx.prank(ANVIL_WALLET); usdc.approve(vault_address, 3*amount)
-    #   plasma_vault.deposit(amount, user_one)
-    # i.e. ANVIL_WALLET (whale-funded earlier? no — funded user_one) — actually
-    # original test funds user_one with USDC and then ANVIL_WALLET (no USDC) calls
-    # deposit(amount, user_one). That requires ANVIL_WALLET to have approve from
-    # somewhere... it works on anvil because approve goes through automatically.
-    # Simpler here: user_one self-deposits.
+    # user_one self-deposits (original test funds user_one with USDC; we keep
+    # the impersonated deposit simple here).
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("deposit(uint256,address)", amount, user_one),
+        call=plasma_vault.deposit(amount, user_one),
         from_=user_one,
     )
     # user_one transfers shares to user_two
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("transfer(address,uint256)", user_two, amount),
+        call=plasma_vault.transfer(user_two, amount),
         from_=user_one,
     )
-    sim.observe(
-        "user_two_shares",
-        vault_address,
-        "balanceOf(address)",
-        (user_two,),
-    )
+    sim.observe("user_two_shares", plasma_vault.balance_of(user_two))
 
     result = sim.run()
     log.info("observations=%s", result.observations)
@@ -510,7 +402,10 @@ def test_simulate_transfer_from(web3_arb):
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
+    usdc = ERC20(ctx, ARBITRUM_USDC)
     owner = access_manager.owner()
 
     amount = 100_000000
@@ -522,45 +417,29 @@ def test_simulate_transfer_from(web3_arb):
     )
     _setup_basic(sim, access_manager, owner)
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.WHITELIST_ROLE, user_one, 0
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, user_one, 0),
         from_=owner,
     )
-    _whale_fund(sim, user_one, amount)
+    _whale_fund(sim, usdc, user_one, amount)
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("approve(address,uint256)", vault_address, amount),
+        call=usdc.approve(vault_address, amount),
         from_=user_one,
     )
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("deposit(uint256,address)", amount, user_one),
+        call=plasma_vault.deposit(amount, user_one),
         from_=user_one,
     )
-    # user_one approves spender (here: user_one itself for simplicity in
-    # transferFrom; original test's intent is "approve a spender first"; we use
-    # ANVIL_WALLET as the spender)
+    # user_one approves ANVIL_WALLET as a share-spender
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("approve(address,uint256)", ANVIL_WALLET, amount),
+        call=plasma_vault.approve(ANVIL_WALLET, amount),
         from_=user_one,
     )
     # ANVIL_WALLET (the approved spender) transferFrom user_one to user_two
     sim.add_call(
-        to=vault_address,
-        data=_encode_call(
-            "transferFrom(address,address,uint256)", user_one, user_two, amount
-        ),
+        call=plasma_vault.transfer_from(user_one, user_two, amount),
         from_=ANVIL_WALLET,
     )
-    sim.observe(
-        "user_two_shares",
-        vault_address,
-        "balanceOf(address)",
-        (user_two,),
-    )
+    sim.observe("user_two_shares", plasma_vault.balance_of(user_two))
     result = sim.run()
     log.info("observations=%s", result.observations)
     assert_all_success(result)

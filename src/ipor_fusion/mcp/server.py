@@ -188,7 +188,7 @@ def vault_add(
         ctx = Web3Context.from_url(provider_url)
         checksum = Web3.to_checksum_address(address)
         try:
-            label = PlasmaVault(ctx, checksum).name()
+            label = PlasmaVault(ctx, checksum).name().call()
         except Exception:  # pylint: disable=broad-except
             label = checksum
 

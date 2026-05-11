@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import logging
 
-from eth_abi import encode
-from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
-from _simulate import assert_all_success
+from _simulate import address_substrate, assert_all_success
 from addresses import ETHEREUM_WBTC, ETHEREUM_WETH
 from constants import (
     ANVIL_WALLET,
@@ -24,11 +22,11 @@ from ipor_fusion import (
     Web3Context,
     PlasmaVault,
     AccessManager,
+    ERC20,
     Roles,
     IporFusionMarkets,
     VaultSimulator,
 )
-from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses import AaveV3SupplyFuse, AaveV3BorrowFuse, ERC4626SupplyFuse
 from ipor_fusion.types import ChainId, Period
 
@@ -43,24 +41,17 @@ PINNED_BLOCK = (
 )
 
 
-def _encode_call(signature: str, *args) -> bytes:
-    selector = function_signature_to_4byte_selector(signature)
-    types = _parse_param_types(signature)
-    return selector + encode(types, list(args)) if types else selector
-
-
-def _address_substrate(addr: str) -> bytes:
-    """Pad an EVM address into a 32-byte substrate value."""
-    return bytes.fromhex(addr.removeprefix("0x").lower().rjust(64, "0"))
-
-
 def test_simulate_borrow_aave_v3(web3_eth):
     block_hex = hex(PINNED_BLOCK)
     ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
     plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
+    wbtc = ERC20(ctx, ETHEREUM_WBTC)
+    weth = ERC20(ctx, ETHEREUM_WETH)
 
     # Original test's exact amounts on the pinned block — wbtc_holder has WBTC
     # there, so we deposit instead of needing stateOverrides.stateDiff.
@@ -91,78 +82,47 @@ def test_simulate_borrow_aave_v3(web3_eth):
 
     # Setup: atomist grants ALPHA + WHITELIST + required market substrates.
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=ATOMIST,
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)",
-            Roles.WHITELIST_ROLE,
-            WBTC_HOLDER,
-            0,
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, WBTC_HOLDER, 0),
         from_=ATOMIST,
     )
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call(
-            "grantMarketSubstrates(uint256,bytes32[])",
+        call=plasma_vault.grant_market_substrates(
             IporFusionMarkets.AAVE_V3,
-            [
-                _address_substrate(ETHEREUM_WBTC),
-                _address_substrate(ETHEREUM_WETH),
-            ],
+            [address_substrate(ETHEREUM_WBTC), address_substrate(ETHEREUM_WETH)],
         ),
         from_=ATOMIST,
     )
     # wbtc_holder approves and deposits 1 WBTC into the vault
     sim.add_call(
-        to=ETHEREUM_WBTC,
-        data=_encode_call(
-            "approve(address,uint256)", VAULT_ADDRESS, wbtc_collateral_amount
-        ),
+        call=wbtc.approve(VAULT_ADDRESS, wbtc_collateral_amount),
         from_=WBTC_HOLDER,
     )
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call(
-            "deposit(uint256,address)", wbtc_collateral_amount, WBTC_HOLDER
-        ),
+        call=plasma_vault.deposit(wbtc_collateral_amount, WBTC_HOLDER),
         from_=WBTC_HOLDER,
     )
 
-    sim.observe("wbtc_initial", ETHEREUM_WBTC, "balanceOf(address)", (VAULT_ADDRESS,))
+    sim.observe("wbtc_initial", wbtc.balance_of(VAULT_ADDRESS))
 
     # 1. Supply WBTC as collateral
     sim.execute([supply_action])
-    sim.observe(
-        "wbtc_after_supply", ETHEREUM_WBTC, "balanceOf(address)", (VAULT_ADDRESS,)
-    )
+    sim.observe("wbtc_after_supply", wbtc.balance_of(VAULT_ADDRESS))
 
     # 2. Borrow WETH against the collateral
     sim.execute([borrow_action])
-    sim.observe(
-        "weth_after_borrow", ETHEREUM_WETH, "balanceOf(address)", (VAULT_ADDRESS,)
-    )
+    sim.observe("weth_after_borrow", weth.balance_of(VAULT_ADDRESS))
 
     # 3. Repay the WETH loan
     sim.execute([repay_action])
-    sim.observe(
-        "weth_after_repay", ETHEREUM_WETH, "balanceOf(address)", (VAULT_ADDRESS,)
-    )
+    sim.observe("weth_after_repay", weth.balance_of(VAULT_ADDRESS))
 
     # 4. Withdraw most of the WBTC collateral
     sim.execute([withdraw_action])
-    sim.observe(
-        "wbtc_after_withdraw",
-        ETHEREUM_WBTC,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
+    sim.observe("wbtc_after_withdraw", wbtc.balance_of(VAULT_ADDRESS))
 
     result = sim.run()
 
@@ -210,13 +170,17 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
     ctx.default_block = PINNED_BLOCK_DEPOSIT
 
     plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     weth_vault = PlasmaVault(ctx, WETH_VAULT_ADDRESS)
-    weth_access = AccessManager(ctx, weth_vault.get_access_manager_address())
+    weth_access = AccessManager(ctx, weth_vault.get_access_manager_address().call())
+    wbtc = ERC20(ctx, ETHEREUM_WBTC)
+    weth = ERC20(ctx, ETHEREUM_WETH)
 
     # Pre-fetched read: original test caps the WETH vault's supply at cap/4 so
     # this deposit doesn't blow past the existing limit.
-    cap = weth_vault.get_total_supply_cap()
+    cap = weth_vault.get_total_supply_cap().call()
     new_cap = cap // 4
     log.info("weth_vault total_supply_cap=%s -> new=%s", cap, new_cap)
 
@@ -234,83 +198,49 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
     # ── Block 0: full setup + deposit + 3 executes (Aave supply, borrow, 4626 supply)
     # main vault: atomist grants ALPHA + WHITELIST + Aave/4626 substrates
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=ATOMIST,
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)",
-            Roles.WHITELIST_ROLE,
-            WBTC_HOLDER,
-            0,
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, WBTC_HOLDER, 0),
         from_=ATOMIST,
     )
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call(
-            "grantMarketSubstrates(uint256,bytes32[])",
+        call=plasma_vault.grant_market_substrates(
             IporFusionMarkets.AAVE_V3,
-            [
-                _address_substrate(ETHEREUM_WBTC),
-                _address_substrate(ETHEREUM_WETH),
-            ],
+            [address_substrate(ETHEREUM_WBTC), address_substrate(ETHEREUM_WETH)],
         ),
         from_=ATOMIST,
     )
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call(
-            "grantMarketSubstrates(uint256,bytes32[])",
+        call=plasma_vault.grant_market_substrates(
             IporFusionMarkets.ERC4626_0013,
-            [_address_substrate(WETH_VAULT_ADDRESS)],
+            [address_substrate(WETH_VAULT_ADDRESS)],
         ),
         from_=ATOMIST,
     )
 
     # WETH vault: its atomist whitelists the main vault and lifts supply cap
     sim.add_call(
-        to=weth_access.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)",
-            Roles.WHITELIST_ROLE,
-            VAULT_ADDRESS,
-            0,
-        ),
+        call=weth_access.grant_role(Roles.WHITELIST_ROLE, VAULT_ADDRESS, 0),
         from_=WETH_VAULT_ATOMIST,
     )
     sim.add_call(
-        to=WETH_VAULT_ADDRESS,
-        data=_encode_call("setTotalSupplyCap(uint256)", new_cap),
+        call=weth_vault.set_total_supply_cap(new_cap),
         from_=WETH_VAULT_ATOMIST,
     )
 
     # wbtc_holder approves and deposits 1 WBTC
     sim.add_call(
-        to=ETHEREUM_WBTC,
-        data=_encode_call(
-            "approve(address,uint256)", VAULT_ADDRESS, wbtc_collateral_amount
-        ),
+        call=wbtc.approve(VAULT_ADDRESS, wbtc_collateral_amount),
         from_=WBTC_HOLDER,
     )
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call(
-            "deposit(uint256,address)", wbtc_collateral_amount, WBTC_HOLDER
-        ),
+        call=plasma_vault.deposit(wbtc_collateral_amount, WBTC_HOLDER),
         from_=WBTC_HOLDER,
     )
 
-    sim.observe(
-        "wbtc_post_deposit",
-        ETHEREUM_WBTC,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
+    sim.observe("wbtc_post_deposit", wbtc.balance_of(VAULT_ADDRESS))
 
     # alpha executes Aave supply, borrow, ERC4626 supply
     sim.execute(
@@ -320,30 +250,15 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
             )
         ]
     )
-    sim.observe(
-        "wbtc_post_aave_supply",
-        ETHEREUM_WBTC,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
+    sim.observe("wbtc_post_aave_supply", wbtc.balance_of(VAULT_ADDRESS))
 
     sim.execute([aave_borrow.borrow(asset=ETHEREUM_WETH, amount=weth_borrow_amount)])
-    sim.observe(
-        "weth_post_borrow",
-        ETHEREUM_WETH,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
+    sim.observe("weth_post_borrow", weth.balance_of(VAULT_ADDRESS))
 
     sim.execute(
         [erc4626.supply(vault_address=WETH_VAULT_ADDRESS, amount=weth_borrow_amount)]
     )
-    sim.observe(
-        "weth_post_erc4626_supply",
-        ETHEREUM_WETH,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
+    sim.observe("weth_post_erc4626_supply", weth.balance_of(VAULT_ADDRESS))
 
     # ── Block 1: +60 seconds (mirrors anvil.move_time(60) before withdraw)
     sim.next_block(time_shift_seconds=Period.MINUTE)
@@ -351,12 +266,7 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
     sim.execute(
         [erc4626.withdraw(vault_address=WETH_VAULT_ADDRESS, amount=weth_borrow_amount)]
     )
-    sim.observe(
-        "weth_post_erc4626_withdraw",
-        ETHEREUM_WETH,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
+    sim.observe("weth_post_erc4626_withdraw", weth.balance_of(VAULT_ADDRESS))
 
     result = sim.run()
 

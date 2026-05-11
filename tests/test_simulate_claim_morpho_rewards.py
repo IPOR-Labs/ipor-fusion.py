@@ -20,6 +20,7 @@ from ipor_fusion import (
     Web3Context,
     PlasmaVault,
     RewardsManager,
+    ERC20,
     VaultSimulator,
 )
 from ipor_fusion.fuses import MorphoClaimFuse
@@ -66,7 +67,10 @@ def test_simulate_claim_morpho_rewards(web3_eth):
     ctx.default_block = PINNED_BLOCK
 
     plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    rewards = RewardsManager(ctx, plasma_vault.get_rewards_claim_manager_address())
+    rewards = RewardsManager(
+        ctx, plasma_vault.get_rewards_claim_manager_address().call()
+    )
+    rewards_token = ERC20(ctx, REWARDS_TOKEN)
 
     morpho = MorphoClaimFuse(ETHEREUM_MORPHO_CLAIM_FUSE)
     claim_action = morpho.claim(
@@ -80,28 +84,14 @@ def test_simulate_claim_morpho_rewards(web3_eth):
         web3=web3_eth, vault=VAULT_ADDRESS, alpha=ALPHA_ADDRESS, block=block_hex
     )
 
-    sim.observe(
-        "rewards_before",
-        REWARDS_TOKEN,
-        "balanceOf(address)",
-        (rewards.address,),
-    )
+    sim.observe("rewards_before", rewards_token.balance_of(rewards.address))
 
     # alpha invokes RewardsManager.claimRewards([(fuse, calldata)]) — same shape
     # as plasma_vault.execute, but on the rewards manager with a different
     # function signature.
-    sim.execute_on(
-        target=rewards.address,
-        signature="claimRewards((address,bytes)[])",
-        actions=[claim_action],
-    )
+    sim.execute_call(call=rewards.claim_rewards([claim_action]))
 
-    sim.observe(
-        "rewards_after",
-        REWARDS_TOKEN,
-        "balanceOf(address)",
-        (rewards.address,),
-    )
+    sim.observe("rewards_after", rewards_token.balance_of(rewards.address))
 
     result = sim.run()
 

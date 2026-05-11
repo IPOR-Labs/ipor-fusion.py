@@ -151,7 +151,7 @@ class TestVaultAdd:
         save_config(cfg)
 
         mock_ctx_cls.from_url.return_value = MagicMock()
-        mock_pv_cls.return_value.name.return_value = "On-Chain Vault"
+        mock_pv_cls.return_value.name.return_value.call.return_value = "On-Chain Vault"
 
         runner = CliRunner()
         result = runner.invoke(cli, ["vault", "add", ADDR_1, "--chain-id", "1"])
@@ -282,42 +282,48 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 1000 * 10**18
-        mock_pv.total_supply.return_value = 900 * 10**18
-        mock_pv.get_total_supply_cap.return_value = 5000 * 10**18
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = [ADDR_FUSE_1, ADDR_FUSE_2]
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 1000 * 10**18
+        mock_pv.total_supply.return_value.call.return_value = 900 * 10**18
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 5000 * 10**18
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = [ADDR_FUSE_1, ADDR_FUSE_2]
         mock_pv.get_balance_fuses.return_value = [balance_fuse_1]
-        mock_pv.get_rewards_claim_manager_address.return_value = ADDR_REWARDS
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = (
+            ADDR_REWARDS
+        )
         mock_pv.withdraw_manager_address.return_value = ADDR_WITHDRAW
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.get_market_substrates.return_value = []
-        mock_pv.total_assets_in_market.return_value = 500 * 10**18
-        mock_pv.convert_to_assets.return_value = 111 * 10**6
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.get_market_substrates.return_value.call.return_value = []
+        mock_pv.total_assets_in_market.return_value.call.return_value = 500 * 10**18
+        mock_pv.convert_to_assets.return_value.call.return_value = 111 * 10**6
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "USDC"
-        mock_erc20.decimals.return_value = 6
+        mock_erc20.symbol.return_value.call.return_value = "USDC"
+        mock_erc20.decimals.return_value.call.return_value = 6
         mock_erc20_cls.return_value = mock_erc20
 
         mock_price = MagicMock()
         mock_price.readable.return_value = 1.0
         mock_oracle = MagicMock()
-        mock_oracle.get_asset_price.return_value = mock_price
+        mock_oracle.get_asset_price.return_value.call.return_value = mock_price
         mock_oracle_cls.return_value = mock_oracle
 
         mock_wm = MagicMock()
-        mock_wm.get_withdraw_window.return_value = 86400
-        mock_wm.get_request_fee.return_value = 0
-        mock_wm.get_withdraw_fee.return_value = 0
-        mock_wm.get_shares_to_release.return_value = 50 * 10**18
-        mock_wm.get_last_release_funds_timestamp.return_value = 1699999000
+        mock_wm.get_withdraw_window.return_value.call.return_value = 86400
+        mock_wm.get_request_fee.return_value.call.return_value = 0
+        mock_wm.get_withdraw_fee.return_value.call.return_value = 0
+        mock_wm.get_shares_to_release.return_value.call.return_value = 50 * 10**18
+        mock_wm.get_last_release_funds_timestamp.return_value.call.return_value = (
+            1699999000
+        )
         mock_wm.get_pending_requests.return_value = [
             AccountRequest(
                 account=ADDR_USER_1,
@@ -373,29 +379,31 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 0
-        mock_pv.total_supply.return_value = 0
-        mock_pv.get_total_supply_cap.return_value = 0
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = []
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 0
+        mock_pv.total_supply.return_value.call.return_value = 0
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 0
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = []
         mock_pv.get_balance_fuses.return_value = []
-        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
         mock_pv.withdraw_manager_address.return_value = None
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.get_market_substrates.return_value = []
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+        mock_pv.get_market_substrates.return_value.call.return_value = []
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "USDC"
-        mock_erc20.decimals.return_value = 6
+        mock_erc20.symbol.return_value.call.return_value = "USDC"
+        mock_erc20.decimals.return_value.call.return_value = 6
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
-        mock_oracle.get_asset_price.return_value = None
+        mock_oracle.get_asset_price.return_value.call.return_value = None
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
@@ -442,29 +450,31 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 0
-        mock_pv.total_supply.return_value = 0
-        mock_pv.get_total_supply_cap.return_value = 2**256 - 1
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = []
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 0
+        mock_pv.total_supply.return_value.call.return_value = 0
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 2**256 - 1
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = []
         mock_pv.get_balance_fuses.return_value = []
-        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
         mock_pv.withdraw_manager_address.return_value = None
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.get_market_substrates.return_value = []
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+        mock_pv.get_market_substrates.return_value.call.return_value = []
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "USDC"
-        mock_erc20.decimals.return_value = 6
+        mock_erc20.symbol.return_value.call.return_value = "USDC"
+        mock_erc20.decimals.return_value.call.return_value = 6
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
-        mock_oracle.get_asset_price.return_value = None
+        mock_oracle.get_asset_price.return_value.call.return_value = None
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
@@ -499,29 +509,31 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 0
-        mock_pv.total_supply.return_value = 0
-        mock_pv.get_total_supply_cap.return_value = 0
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = []
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 0
+        mock_pv.total_supply.return_value.call.return_value = 0
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 0
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = []
         mock_pv.get_balance_fuses.return_value = []
-        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
         mock_pv.withdraw_manager_address.return_value = None
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.get_market_substrates.return_value = []
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+        mock_pv.get_market_substrates.return_value.call.return_value = []
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "USDC"
-        mock_erc20.decimals.return_value = 6
+        mock_erc20.symbol.return_value.call.return_value = "USDC"
+        mock_erc20.decimals.return_value.call.return_value = 6
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
-        mock_oracle.get_asset_price.return_value = None
+        mock_oracle.get_asset_price.return_value.call.return_value = None
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
@@ -569,29 +581,31 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 0
-        mock_pv.total_supply.return_value = 0
-        mock_pv.get_total_supply_cap.return_value = 0
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = []
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 0
+        mock_pv.total_supply.return_value.call.return_value = 0
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 0
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = []
         mock_pv.get_balance_fuses.return_value = []
-        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
         mock_pv.withdraw_manager_address.return_value = None
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.get_market_substrates.return_value = []
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+        mock_pv.get_market_substrates.return_value.call.return_value = []
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "USDC"
-        mock_erc20.decimals.return_value = 6
+        mock_erc20.symbol.return_value.call.return_value = "USDC"
+        mock_erc20.decimals.return_value.call.return_value = 6
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
-        mock_oracle.get_asset_price.return_value = None
+        mock_oracle.get_asset_price.return_value.call.return_value = None
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
@@ -627,29 +641,31 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 0
-        mock_pv.total_supply.return_value = 0
-        mock_pv.get_total_supply_cap.return_value = 0
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = []
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 0
+        mock_pv.total_supply.return_value.call.return_value = 0
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 0
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = []
         mock_pv.get_balance_fuses.return_value = []
-        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
         mock_pv.withdraw_manager_address.return_value = None
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.get_market_substrates.return_value = []
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+        mock_pv.get_market_substrates.return_value.call.return_value = []
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "USDC"
-        mock_erc20.decimals.return_value = 6
+        mock_erc20.symbol.return_value.call.return_value = "USDC"
+        mock_erc20.decimals.return_value.call.return_value = 6
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
-        mock_oracle.get_asset_price.return_value = None
+        mock_oracle.get_asset_price.return_value.call.return_value = None
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
@@ -724,46 +740,52 @@ class TestVaultInfoJson:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 1000 * 10**18
-        mock_pv.total_supply.return_value = 900 * 10**18
-        mock_pv.get_total_supply_cap.return_value = 5000 * 10**18
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = [ADDR_FUSE_1]
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 1000 * 10**18
+        mock_pv.total_supply.return_value.call.return_value = 900 * 10**18
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 5000 * 10**18
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = [ADDR_FUSE_1]
         mock_pv.get_balance_fuses.return_value = [
             FakeBalanceFuse(market_id=14, fuse=ADDR_FUSE_1)
         ]
-        mock_pv.get_rewards_claim_manager_address.return_value = ADDR_REWARDS
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = (
+            ADDR_REWARDS
+        )
         mock_pv.withdraw_manager_address.return_value = ADDR_WITHDRAW
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         morpho_sub = bytes.fromhex(
             "32e253d33f1594a67fc6ef51bf7a39cc4bf2d14904998dee769706fcde489ed9"
         )
-        mock_pv.get_market_substrates.return_value = [morpho_sub]
-        mock_pv.total_assets_in_market.return_value = 500 * 10**18
-        mock_pv.convert_to_assets.return_value = 111 * 10**6
+        mock_pv.get_market_substrates.return_value.call.return_value = [morpho_sub]
+        mock_pv.total_assets_in_market.return_value.call.return_value = 500 * 10**18
+        mock_pv.convert_to_assets.return_value.call.return_value = 111 * 10**6
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "USDC"
-        mock_erc20.decimals.return_value = 6
+        mock_erc20.symbol.return_value.call.return_value = "USDC"
+        mock_erc20.decimals.return_value.call.return_value = 6
         mock_erc20_cls.return_value = mock_erc20
 
         mock_price = MagicMock()
         mock_price.readable.return_value = 1.0
         mock_oracle = MagicMock()
-        mock_oracle.get_asset_price.return_value = mock_price
+        mock_oracle.get_asset_price.return_value.call.return_value = mock_price
         mock_oracle_cls.return_value = mock_oracle
 
         mock_wm = MagicMock()
-        mock_wm.get_withdraw_window.return_value = 86400
-        mock_wm.get_request_fee.return_value = 10**15
-        mock_wm.get_withdraw_fee.return_value = 2 * 10**15
-        mock_wm.get_shares_to_release.return_value = 50 * 10**18
-        mock_wm.get_last_release_funds_timestamp.return_value = 1699999000
+        mock_wm.get_withdraw_window.return_value.call.return_value = 86400
+        mock_wm.get_request_fee.return_value.call.return_value = 10**15
+        mock_wm.get_withdraw_fee.return_value.call.return_value = 2 * 10**15
+        mock_wm.get_shares_to_release.return_value.call.return_value = 50 * 10**18
+        mock_wm.get_last_release_funds_timestamp.return_value.call.return_value = (
+            1699999000
+        )
         mock_wm.get_pending_requests.return_value = [
             AccountRequest(
                 account=ADDR_USER_1,
@@ -851,29 +873,31 @@ class TestVaultInfoJson:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 0
-        mock_pv.total_supply.return_value = 0
-        mock_pv.get_total_supply_cap.return_value = 0
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = []
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 0
+        mock_pv.total_supply.return_value.call.return_value = 0
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 0
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = []
         mock_pv.get_balance_fuses.return_value = []
-        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
         mock_pv.withdraw_manager_address.return_value = None
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.get_market_substrates.return_value = []
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+        mock_pv.get_market_substrates.return_value.call.return_value = []
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "USDC"
-        mock_erc20.decimals.return_value = 6
+        mock_erc20.symbol.return_value.call.return_value = "USDC"
+        mock_erc20.decimals.return_value.call.return_value = 6
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
-        mock_oracle.get_asset_price.return_value = None
+        mock_oracle.get_asset_price.return_value.call.return_value = None
         mock_oracle_cls.return_value = mock_oracle
 
         runner = CliRunner()
@@ -930,34 +954,40 @@ class TestVaultInfoJson:
 
         mock_pv = MagicMock()
         mock_pv.address = ADDR_1
-        mock_pv.name.return_value = "Test Vault"
-        mock_pv.decimals.return_value = 18
-        mock_pv.total_assets.return_value = 0
-        mock_pv.total_supply.return_value = 0
-        mock_pv.get_total_supply_cap.return_value = 0
-        mock_pv.underlying_asset_address.return_value = ADDR_2
-        mock_pv.get_access_manager_address.return_value = ADDR_ACCESS
-        mock_pv.get_price_oracle_middleware_address.return_value = ADDR_ORACLE
-        mock_pv.get_fuses.return_value = []
+        mock_pv.name.return_value.call.return_value = "Test Vault"
+        mock_pv.decimals.return_value.call.return_value = 18
+        mock_pv.total_assets.return_value.call.return_value = 0
+        mock_pv.total_supply.return_value.call.return_value = 0
+        mock_pv.get_total_supply_cap.return_value.call.return_value = 0
+        mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+        mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+        mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+            ADDR_ORACLE
+        )
+        mock_pv.get_fuses.return_value.call.return_value = []
         mock_pv.get_balance_fuses.return_value = [
             FakeBalanceFuse(market_id=7, fuse=ADDR_FUSE_1)
         ]
-        mock_pv.get_rewards_claim_manager_address.return_value = None
+        mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
         mock_pv.withdraw_manager_address.return_value = None
-        mock_pv.get_instant_withdrawal_fuses.return_value = []
-        mock_pv.get_market_substrates.return_value = [addr_bytes]
-        mock_pv.total_assets_in_market.return_value = 0
+        mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+        mock_pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
+        mock_pv.total_assets_in_market.return_value.call.return_value = 0
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
-        mock_erc20.symbol.return_value = "X"
-        mock_erc20.decimals.return_value = 18
-        mock_erc20.balance_of.return_value = 0
+        mock_erc20.symbol.return_value.call.return_value = "X"
+        mock_erc20.decimals.return_value.call.return_value = 18
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
         mock_health_erc20_cls.return_value = mock_erc20
 
-        mock_oracle_cls.return_value.get_asset_price.return_value = None
-        mock_health_oracle_cls.return_value.get_asset_price.return_value = None
+        mock_oracle_cls.return_value.get_asset_price.return_value.call.return_value = (
+            None
+        )
+        mock_health_oracle_cls.return_value.get_asset_price.return_value.call.return_value = (
+            None
+        )
 
         runner = CliRunner()
         result = runner.invoke(

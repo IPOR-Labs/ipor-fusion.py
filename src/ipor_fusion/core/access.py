@@ -5,9 +5,9 @@ from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import TxReceipt, LogReceipt
+from web3.types import LogReceipt
 
-from ipor_fusion.core.contract import ContractWrapper
+from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.types import RoleId, Period
 
@@ -30,20 +30,33 @@ class RoleAccount:
     execution_delay: Period
 
 
+def _role_status_decoder(values: tuple) -> RoleStatus:
+    is_member, execution_delay = values
+    return RoleStatus(is_member=is_member, execution_delay=execution_delay)
+
+
 class AccessManager(ContractWrapper):
     """Manages role-based access control for PlasmaVault operations."""
 
     def grant_role(
         self, role_id: int, account: ChecksumAddress, execution_delay: Period
-    ) -> TxReceipt:
-        return self._send(
+    ) -> Call[None]:
+        return self._write(
             "grantRole(uint64,address,uint32)", role_id, account, execution_delay
         )
 
-    def has_role(self, role_id: int, account: ChecksumAddress) -> RoleStatus:
-        result = self._call("hasRole(uint64,address)", role_id, account)
-        is_member, execution_delay = decode(["bool", "uint32"], result)
-        return RoleStatus(is_member=is_member, execution_delay=execution_delay)
+    def has_role(self, role_id: int, account: ChecksumAddress) -> Call[RoleStatus]:
+        return self._view(
+            "hasRole(uint64,address)",
+            role_id,
+            account,
+            output_types=["bool", "uint32"],
+            decoder=_role_status_decoder,
+        )
+
+    # ── Compound methods: event replay + per-account hasRole reads ─────────
+    # These don't fit the single-eth_call `Call` shape, so they stay as
+    # immediate-execute methods.
 
     def owner(self) -> ChecksumAddress:
         return self.owners()[0]
@@ -85,7 +98,7 @@ class AccessManager(ContractWrapper):
             (account,) = decode(["address"], event["topics"][2])
             if not predicate(role_id, account):
                 continue
-            role_status = self.has_role(role_id, account)
+            role_status = self.has_role(role_id, account).call()
             if role_status.is_member:
                 role_accounts.append(
                     RoleAccount(

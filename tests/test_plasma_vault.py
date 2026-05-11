@@ -36,7 +36,7 @@ class TestPlasmaVaultSendMethods:
         ctx.send.return_value = {"status": 1}
         action = FuseAction(fuse=FUSE_ADDR, data=b"\x01\x02\x03")
 
-        result = vault.execute([action])
+        result = vault.execute([action]).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -45,7 +45,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.deposit(Amount(1000), USER_ADDR)
+        result = vault.deposit(Amount(1000), USER_ADDR).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -54,7 +54,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.mint(Shares(500), USER_ADDR)
+        result = vault.mint(Shares(500), USER_ADDR).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -63,7 +63,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.withdraw(Amount(2000), USER_ADDR, USER_ADDR)
+        result = vault.withdraw(Amount(2000), USER_ADDR, USER_ADDR).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -72,7 +72,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.redeem(Shares(300), USER_ADDR, USER_ADDR)
+        result = vault.redeem(Shares(300), USER_ADDR, USER_ADDR).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -81,7 +81,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.redeem_from_request(Shares(100), USER_ADDR, USER_ADDR)
+        result = vault.redeem_from_request(Shares(100), USER_ADDR, USER_ADDR).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -91,7 +91,7 @@ class TestPlasmaVaultSendMethods:
         ctx.send.return_value = {"status": 1}
         fuses = [FUSE_ADDR, FUSE_ADDR_2]
 
-        result = vault.add_fuses(fuses)
+        result = vault.add_fuses(fuses).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -102,7 +102,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.set_total_supply_cap(Amount(500_000))
+        result = vault.set_total_supply_cap(Amount(500_000)).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -111,7 +111,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.transfer(USER_ADDR, Amount(750))
+        result = vault.transfer(USER_ADDR, Amount(750)).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -120,7 +120,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.approve(USER_ADDR, Amount(999))
+        result = vault.approve(USER_ADDR, Amount(999)).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -129,7 +129,7 @@ class TestPlasmaVaultSendMethods:
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
 
-        result = vault.transfer_from(FUSE_ADDR, USER_ADDR, Amount(400))
+        result = vault.transfer_from(FUSE_ADDR, USER_ADDR, Amount(400)).send()
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -142,7 +142,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["address"], [TOKEN_ADDR])
 
-        result = vault.underlying_asset_address()
+        result = vault.underlying_asset_address().call()
 
         assert result == TOKEN_ADDR
 
@@ -150,7 +150,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["address"], [ACCESS_MANAGER])
 
-        result = vault.get_access_manager_address()
+        result = vault.get_access_manager_address().call()
 
         assert result == ACCESS_MANAGER
 
@@ -158,7 +158,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["address"], [REWARDS_MANAGER])
 
-        result = vault.get_rewards_claim_manager_address()
+        result = vault.get_rewards_claim_manager_address().call()
 
         assert result == REWARDS_MANAGER
 
@@ -166,7 +166,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["address"], [PRICE_ORACLE])
 
-        result = vault.get_price_oracle_middleware_address()
+        result = vault.get_price_oracle_middleware_address().call()
 
         assert result == PRICE_ORACLE
 
@@ -174,7 +174,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["address[]"], [[FUSE_ADDR, FUSE_ADDR_2]])
 
-        result = vault.get_fuses()
+        result = vault.get_fuses().call()
 
         assert result == [FUSE_ADDR, FUSE_ADDR_2]
 
@@ -182,7 +182,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["address[]"], [[]])
 
-        result = vault.get_fuses()
+        result = vault.get_fuses().call()
 
         assert result == []
 
@@ -190,7 +190,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["address[]"], [[FUSE_ADDR]])
 
-        result = vault.get_instant_withdrawal_fuses()
+        result = vault.get_instant_withdrawal_fuses().call()
 
         assert result == [FUSE_ADDR]
 
@@ -200,7 +200,7 @@ class TestPlasmaVaultCallMethods:
         param2 = b"\x02" * 32
         ctx.call.return_value = encode(["bytes32[]"], [[param1, param2]])
 
-        result = vault.get_instant_withdrawal_fuses_params(FUSE_ADDR, 0)
+        result = vault.get_instant_withdrawal_fuses_params(FUSE_ADDR, 0).call()
 
         assert len(result) == 2
         assert result[0] == param1
@@ -212,7 +212,7 @@ class TestPlasmaVaultCallMethods:
         sub2 = b"\xbb" * 32
         ctx.call.return_value = encode(["bytes32[]"], [[sub1, sub2]])
 
-        result = vault.get_market_substrates(MarketId(42))
+        result = vault.get_market_substrates(MarketId(42)).call()
 
         assert len(result) == 2
         assert result[0] == sub1
@@ -222,7 +222,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["uint256"], [18])
 
-        result = vault.decimals()
+        result = vault.decimals().call()
 
         assert result == Decimals(18)
 
@@ -230,7 +230,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["uint256"], [1_000_000])
 
-        result = vault.total_assets()
+        result = vault.total_assets().call()
 
         assert result == Amount(1_000_000)
 
@@ -238,7 +238,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["uint256"], [500_000])
 
-        result = vault.total_assets_in_market(MarketId(7))
+        result = vault.total_assets_in_market(MarketId(7)).call()
 
         assert result == Amount(500_000)
 
@@ -246,7 +246,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["uint256"], [42_000])
 
-        result = vault.balance_of(USER_ADDR)
+        result = vault.balance_of(USER_ADDR).call()
 
         assert result == Amount(42_000)
 
@@ -254,7 +254,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["uint256"], [10_000_000])
 
-        result = vault.get_total_supply_cap()
+        result = vault.get_total_supply_cap().call()
 
         assert result == Amount(10_000_000)
 
@@ -262,7 +262,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["uint256"], [5_000])
 
-        result = vault.max_withdraw(USER_ADDR)
+        result = vault.max_withdraw(USER_ADDR).call()
 
         assert result == Amount(5_000)
 
@@ -270,7 +270,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["uint256"], [999])
 
-        result = vault.convert_to_shares(Amount(1000))
+        result = vault.convert_to_shares(Amount(1000)).call()
 
         assert result == Shares(999)
 
@@ -278,7 +278,7 @@ class TestPlasmaVaultCallMethods:
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["uint256"], [1001])
 
-        result = vault.convert_to_assets(Shares(1000))
+        result = vault.convert_to_assets(Shares(1000)).call()
 
         assert result == Amount(1001)
 

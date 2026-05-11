@@ -13,11 +13,9 @@ from __future__ import annotations
 import logging
 
 import pytest
-from eth_abi import encode
-from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
-from _simulate import assert_all_success
+from _simulate import address_substrate, assert_all_success
 from addresses import ARBITRUM_USDC
 from constants import (
     ANVIL_WALLET,
@@ -37,7 +35,6 @@ from ipor_fusion import (
     Roles,
     VaultSimulator,
 )
-from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses import (
     AaveV3SupplyFuse,
     CompoundV3SupplyFuse,
@@ -46,7 +43,7 @@ from ipor_fusion.fuses import (
     GearboxStakeFuse,
     GearboxSupplyFuse,
 )
-from ipor_fusion.types import ChainId, MAX_UINT256
+from ipor_fusion.types import ChainId, MarketId, MAX_UINT256
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -71,12 +68,6 @@ GEARBOX_FARMD_TOKEN = Web3.to_checksum_address(
 )
 
 
-def _encode_call(signature: str, *args) -> bytes:
-    selector = function_signature_to_4byte_selector(signature)
-    types = _parse_param_types(signature)
-    return selector + encode(types, list(args)) if types else selector
-
-
 def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
     """Cleanup Fluid stake, supply on Aave V3, withdraw — all in one batch."""
     block_hex = hex(PINNED_BLOCK)
@@ -85,12 +76,17 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    fluid_stake_token = ERC20(ctx, FLUID_STAKING_CONTRACT)
+    ausdc = ERC20(ctx, AAVE_AUSDC_TOKEN)
 
     # Probe vault state at the pinned block — deterministic on archive.
-    raw_usdc = ERC20(ctx, ARBITRUM_USDC).balance_of(vault_address)
-    fluid_stake = ERC20(ctx, FLUID_STAKING_CONTRACT).balance_of(vault_address)
+    raw_usdc = usdc.balance_of(vault_address).call()
+    fluid_stake = fluid_stake_token.balance_of(vault_address).call()
     log.info(
         "owner=%s raw_usdc=%s fluid_stake=%s (block=%s)",
         owner,
@@ -120,22 +116,12 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
 
     # ── Setup: owner grants ALPHA to ANVIL_WALLET ────────────────────────
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=owner,
     )
 
-    sim.observe(
-        "raw_usdc_initial", ARBITRUM_USDC, "balanceOf(address)", (vault_address,)
-    )
-    sim.observe(
-        "fluid_stake_initial",
-        FLUID_STAKING_CONTRACT,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("raw_usdc_initial", usdc.balance_of(vault_address))
+    sim.observe("fluid_stake_initial", fluid_stake_token.balance_of(vault_address))
 
     # ── Cleanup: unstake fluid + withdraw all from fluid pool ────────────
     # Mirrors withdraw_from_fluid() helper. Using MAX_UINT256 for the
@@ -147,18 +133,8 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
         ]
     )
 
-    sim.observe(
-        "raw_usdc_post_cleanup",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim.observe(
-        "fluid_stake_post_cleanup",
-        FLUID_STAKING_CONTRACT,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("raw_usdc_post_cleanup", usdc.balance_of(vault_address))
+    sim.observe("fluid_stake_post_cleanup", fluid_stake_token.balance_of(vault_address))
 
     # ── Strategy: Aave V3 supply USDC, then withdraw ─────────────────────
     # Pre-compute supply amount with safety buffer (1 USDC) below the post-cleanup
@@ -167,33 +143,13 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
     supply_amount = expected_post_cleanup - 1_000_000  # 1 USDC buffer
 
     sim.execute([aave.supply(asset=ARBITRUM_USDC, amount=supply_amount, e_mode=300)])
-    sim.observe(
-        "ausdc_post_supply",
-        AAVE_AUSDC_TOKEN,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim.observe(
-        "raw_usdc_post_supply",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("ausdc_post_supply", ausdc.balance_of(vault_address))
+    sim.observe("raw_usdc_post_supply", usdc.balance_of(vault_address))
 
     # Withdraw same amount back from Aave
     sim.execute([aave.withdraw(asset=ARBITRUM_USDC, amount=supply_amount)])
-    sim.observe(
-        "ausdc_post_withdraw",
-        AAVE_AUSDC_TOKEN,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim.observe(
-        "raw_usdc_post_withdraw",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("ausdc_post_withdraw", ausdc.balance_of(vault_address))
+    sim.observe("raw_usdc_post_withdraw", usdc.balance_of(vault_address))
 
     result = sim.run()
 
@@ -228,11 +184,16 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    fluid_stake_token = ERC20(ctx, FLUID_STAKING_CONTRACT)
+    cusdc = ERC20(ctx, COMPOUND_CUSDC_TOKEN)
 
-    raw_usdc = ERC20(ctx, ARBITRUM_USDC).balance_of(vault_address)
-    fluid_stake = ERC20(ctx, FLUID_STAKING_CONTRACT).balance_of(vault_address)
+    raw_usdc = usdc.balance_of(vault_address).call()
+    fluid_stake = fluid_stake_token.balance_of(vault_address).call()
     log.info("raw_usdc=%s fluid_stake=%s", raw_usdc / 1e6, fluid_stake / 1e6)
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
         pytest.skip("vault preconditions not met for Compound V3 supply test")
@@ -251,10 +212,7 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=owner,
     )
     sim.execute(
@@ -264,25 +222,10 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
         ]
     )
     sim.execute([compound.supply(asset=ARBITRUM_USDC, amount=supply_amount)])
-    sim.observe(
-        "cusdc_post_supply",
-        COMPOUND_CUSDC_TOKEN,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("cusdc_post_supply", cusdc.balance_of(vault_address))
     sim.execute([compound.withdraw(asset=ARBITRUM_USDC, amount=supply_amount)])
-    sim.observe(
-        "cusdc_post_withdraw",
-        COMPOUND_CUSDC_TOKEN,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim.observe(
-        "raw_usdc_post_withdraw",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("cusdc_post_withdraw", cusdc.balance_of(vault_address))
+    sim.observe("raw_usdc_post_withdraw", usdc.balance_of(vault_address))
     result = sim.run()
 
     log.info(
@@ -307,11 +250,15 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    fluid_stake_token = ERC20(ctx, FLUID_STAKING_CONTRACT)
 
-    raw_usdc = ERC20(ctx, ARBITRUM_USDC).balance_of(vault_address)
-    fluid_stake = ERC20(ctx, FLUID_STAKING_CONTRACT).balance_of(vault_address)
+    raw_usdc = usdc.balance_of(vault_address).call()
+    fluid_stake = fluid_stake_token.balance_of(vault_address).call()
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
         pytest.skip("vault preconditions not met for Fluid re-supply test")
 
@@ -327,10 +274,7 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=owner,
     )
     # Cleanup
@@ -349,18 +293,8 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
             fluid_staking_fuse.stake(),
         ]
     )
-    sim.observe(
-        "fluid_stake_after",
-        FLUID_STAKING_CONTRACT,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim.observe(
-        "raw_usdc_after",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("fluid_stake_after", fluid_stake_token.balance_of(vault_address))
+    sim.observe("raw_usdc_after", usdc.balance_of(vault_address))
     result = sim.run()
 
     log.info("all_success=%s observations=%s", result.all_success, result.observations)
@@ -374,7 +308,7 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     """Cleanup Fluid stake, grant FARMD substrate, supply+stake on Gearbox, then unstake+withdraw.
 
     Original test calls anvil.grant_market_substrates(..., 4, [farmd_substrate]).
-    Same effect via a `grantMarketSubstrates(uint256,bytes32[])` impersonated call.
+    Same effect via a `plasma_vault.grant_market_substrates(...)` impersonated call.
     """
     block_hex = hex(PINNED_BLOCK)
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
@@ -382,11 +316,16 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     owner = access_manager.owner()
+    usdc = ERC20(ctx, ARBITRUM_USDC)
+    fluid_stake_token = ERC20(ctx, FLUID_STAKING_CONTRACT)
+    farmd_token = ERC20(ctx, GEARBOX_FARMD_TOKEN)
 
-    raw_usdc = ERC20(ctx, ARBITRUM_USDC).balance_of(vault_address)
-    fluid_stake = ERC20(ctx, FLUID_STAKING_CONTRACT).balance_of(vault_address)
+    raw_usdc = usdc.balance_of(vault_address).call()
+    fluid_stake = fluid_stake_token.balance_of(vault_address).call()
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
         pytest.skip("vault preconditions not met for Gearbox test")
 
@@ -404,23 +343,17 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     expected_post_cleanup = raw_usdc + fluid_stake
     supply_amount = expected_post_cleanup - 1_000_000
 
-    farmd_substrate = bytes.fromhex(str(GEARBOX_FARMD_TOKEN)[2:].lower().rjust(64, "0"))
-
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=owner,
     )
     # Grant FARMD substrate for Gearbox market_id=4
     sim.add_call(
-        to=vault_address,
-        data=_encode_call(
-            "grantMarketSubstrates(uint256,bytes32[])", 4, [farmd_substrate]
+        call=plasma_vault.grant_market_substrates(
+            MarketId(4), [address_substrate(GEARBOX_FARMD_TOKEN)]
         ),
         from_=owner,
     )
@@ -438,12 +371,7 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
             gearbox_stake.stake(),
         ]
     )
-    sim.observe(
-        "farmd_post_stake",
-        GEARBOX_FARMD_TOKEN,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("farmd_post_stake", farmd_token.balance_of(vault_address))
     # Unstake + withdraw — read farmd amount via observation, but use the
     # known supply_amount as a deterministic input for unstake (vault's farmd
     # mints 1:1 with the dToken).
@@ -453,18 +381,8 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
             gearbox_supply.withdraw(vault_address=GEARBOX_D_TOKEN, amount=MAX_UINT256),
         ]
     )
-    sim.observe(
-        "farmd_post_withdraw",
-        GEARBOX_FARMD_TOKEN,
-        "balanceOf(address)",
-        (vault_address,),
-    )
-    sim.observe(
-        "raw_usdc_post_withdraw",
-        ARBITRUM_USDC,
-        "balanceOf(address)",
-        (vault_address,),
-    )
+    sim.observe("farmd_post_withdraw", farmd_token.balance_of(vault_address))
+    sim.observe("raw_usdc_post_withdraw", usdc.balance_of(vault_address))
     result = sim.run()
 
     log.info("all_success=%s observations=%s", result.all_success, result.observations)

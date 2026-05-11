@@ -152,7 +152,7 @@ def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
         return _NO_CONTRACT
 
     try:
-        symbol = ERC20(ctx, checksum).symbol()
+        symbol = ERC20(ctx, checksum).symbol().call()
     except Exception:  # pylint: disable=broad-except
         symbol = ""
     if symbol:
@@ -173,7 +173,7 @@ def _resolve_token_decimals(ctx: Web3Context, address: str) -> int | None:
         return None
 
     try:
-        decimals = ERC20(ctx, checksum).decimals()
+        decimals = ERC20(ctx, checksum).decimals().call()
     except Exception:  # pylint: disable=broad-except
         return None
     update_contract_cache(cache_key, str(decimals))
@@ -188,11 +188,13 @@ def _fetch_withdraw_manager_data(
     if not withdraw_mgr_addr:
         return None
     wm_contract = WithdrawManager(ctx, withdraw_mgr_addr)
-    f_window = pool.submit(_safe_call, wm_contract.get_withdraw_window)
-    f_req_fee = pool.submit(_safe_call, wm_contract.get_request_fee)
-    f_wd_fee = pool.submit(_safe_call, wm_contract.get_withdraw_fee)
-    f_shares = pool.submit(_safe_call, wm_contract.get_shares_to_release)
-    f_last_ts = pool.submit(_safe_call, wm_contract.get_last_release_funds_timestamp)
+    f_window = pool.submit(_safe_call, wm_contract.get_withdraw_window().call)
+    f_req_fee = pool.submit(_safe_call, wm_contract.get_request_fee().call)
+    f_wd_fee = pool.submit(_safe_call, wm_contract.get_withdraw_fee().call)
+    f_shares = pool.submit(_safe_call, wm_contract.get_shares_to_release().call)
+    f_last_ts = pool.submit(
+        _safe_call, wm_contract.get_last_release_funds_timestamp().call
+    )
     f_requests = pool.submit(_safe_call, wm_contract.get_pending_requests)
     return _WithdrawManagerData(
         withdraw_window=f_window.result() or 0,
@@ -358,7 +360,7 @@ def _fetch_breakdown_token_prices(
     if not addresses:
         return None
     futures = {
-        addr: pool.submit(_safe_call, lambda a=addr: oracle.get_asset_price(a))
+        addr: pool.submit(_safe_call, lambda a=addr: oracle.get_asset_price(a).call())
         for addr in addresses
     }
     prices: dict[str, float] = {}
@@ -377,21 +379,21 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
     with ThreadPoolExecutor() as pool:
         # Phase 1: all independent vault reads in parallel
         f_block = pool.submit(lambda: ctx.web3.eth.block_number)
-        f_name: Future = pool.submit(_safe_call, plasma_vault.name)
-        f_decimals = pool.submit(plasma_vault.decimals)
-        f_total_assets = pool.submit(plasma_vault.total_assets)
-        f_total_supply = pool.submit(plasma_vault.total_supply)
-        f_supply_cap = pool.submit(plasma_vault.get_total_supply_cap)
-        f_asset = pool.submit(plasma_vault.underlying_asset_address)
-        f_access = pool.submit(plasma_vault.get_access_manager_address)
-        f_oracle = pool.submit(plasma_vault.get_price_oracle_middleware_address)
-        f_fuses = pool.submit(plasma_vault.get_fuses)
+        f_name: Future = pool.submit(_safe_call, plasma_vault.name().call)
+        f_decimals = pool.submit(plasma_vault.decimals().call)
+        f_total_assets = pool.submit(plasma_vault.total_assets().call)
+        f_total_supply = pool.submit(plasma_vault.total_supply().call)
+        f_supply_cap = pool.submit(plasma_vault.get_total_supply_cap().call)
+        f_asset = pool.submit(plasma_vault.underlying_asset_address().call)
+        f_access = pool.submit(plasma_vault.get_access_manager_address().call)
+        f_oracle = pool.submit(plasma_vault.get_price_oracle_middleware_address().call)
+        f_fuses = pool.submit(plasma_vault.get_fuses().call)
         f_balance_fuses = pool.submit(plasma_vault.get_balance_fuses)
         f_rewards: Future = pool.submit(
-            _safe_call, plasma_vault.get_rewards_claim_manager_address
+            _safe_call, plasma_vault.get_rewards_claim_manager_address().call
         )
         f_withdraw = pool.submit(plasma_vault.withdraw_manager_address)
-        f_instant = pool.submit(plasma_vault.get_instant_withdrawal_fuses)
+        f_instant = pool.submit(plasma_vault.get_instant_withdrawal_fuses().call)
 
         # Phase 2: asset-dependent (wait for asset + oracle addresses)
         asset = f_asset.result()
@@ -399,9 +401,11 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
         asset_erc20 = ERC20(ctx, asset)
         oracle = PriceOracleMiddleware(ctx, price_oracle_addr)
 
-        f_symbol: Future = pool.submit(_safe_call, asset_erc20.symbol)
-        f_adec = pool.submit(asset_erc20.decimals)
-        f_price: Future = pool.submit(_safe_call, lambda: oracle.get_asset_price(asset))
+        f_symbol: Future = pool.submit(_safe_call, asset_erc20.symbol().call)
+        f_adec = pool.submit(asset_erc20.decimals().call)
+        f_price: Future = pool.submit(
+            _safe_call, lambda: oracle.get_asset_price(asset).call()
+        )
 
         # Collect all results
         latest_block = f_block.result()
@@ -423,7 +427,7 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
         balance_fuses = f_balance_fuses.result()
         dep_futs = {
             bf.market_id: pool.submit(
-                plasma_vault.get_dependency_balance_graph, bf.market_id
+                plasma_vault.get_dependency_balance_graph(bf.market_id).call
             )
             for bf in balance_fuses
         }
@@ -452,7 +456,7 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
         if chain_id:
             sub_futs: dict[int, Any] = {
                 bf.market_id: pool.submit(
-                    plasma_vault.get_market_substrates, bf.market_id
+                    plasma_vault.get_market_substrates(bf.market_id).call
                 )
                 for bf in balance_fuses
             }

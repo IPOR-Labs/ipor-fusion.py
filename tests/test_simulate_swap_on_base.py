@@ -25,7 +25,6 @@ from ipor_fusion import (
     Roles,
     VaultSimulator,
 )
-from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses import UniversalTokenSwapperFuse
 from ipor_fusion.types import Amount, ChainId
 
@@ -38,13 +37,8 @@ UNIV3_UNIVERSAL_ROUTER = Web3.to_checksum_address(
 CBBTC = Web3.to_checksum_address("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf")
 
 
-def _encode_call(signature: str, *args) -> bytes:
-    selector = function_signature_to_4byte_selector(signature)
-    types = _parse_param_types(signature)
-    return selector + encode(types, list(args)) if types else selector
-
-
 def _build_universal_swap(
+    ctx: Web3Context,
     universal: UniversalTokenSwapperFuse,
     token_in: ChecksumAddress,
     token_out: ChecksumAddress,
@@ -54,12 +48,12 @@ def _build_universal_swap(
     """Build a UniversalTokenSwapperFuse swap action via Uniswap V3 universal router.
 
     Two sub-calls:
-      1. token_in.transfer(router, amount)
+      1. token_in.transfer(router, amount) — encoded via ERC20.transfer_call
       2. router.execute(commands=V3_SWAP_EXACT_IN, inputs=[(recipient, amount, 0, path, false)])
     """
     targets = [token_in, UNIV3_UNIVERSAL_ROUTER]
-    transfer_data = _encode_call(
-        "transfer(address,uint256)", UNIV3_UNIVERSAL_ROUTER, amount
+    transfer_data = (
+        ERC20(ctx, token_in).transfer(UNIV3_UNIVERSAL_ROUTER, Amount(amount)).data
     )
     path = encode_packed(["address", "uint24", "address"], [token_in, fee, token_out])
     inputs = [
@@ -98,53 +92,48 @@ def test_simulate_swap_cbbtc_to_usdc(web3_base):
     ctx.default_block = pinned_block
 
     plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
+    cbbtc = ERC20(ctx, CBBTC)
+    usdc = ERC20(ctx, BASE_USDC)
     atomist = access_manager.atomists()[0]
 
     deposit_amount = 1_00000000  # 1 cbBTC, exactly as in the original test
     swap_amount = deposit_amount // 2
 
     universal = UniversalTokenSwapperFuse(BASE_UNIVERSAL_SWAP_FUSE)
-    swap_action = _build_universal_swap(universal, CBBTC, BASE_USDC, swap_amount, 500)
+    swap_action = _build_universal_swap(
+        ctx, universal, CBBTC, BASE_USDC, swap_amount, 500
+    )
 
     sim = VaultSimulator(
         web3=web3_base, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     # atomist grants roles
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=atomist,
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)",
-            Roles.WHITELIST_ROLE,
-            user_account,
-            0,
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, user_account, 0),
         from_=atomist,
     )
     # user_account approves and deposits 1 cbBTC into the vault
     sim.add_call(
-        to=CBBTC,
-        data=_encode_call("approve(address,uint256)", vault_address, deposit_amount),
+        call=cbbtc.approve(vault_address, deposit_amount),
         from_=user_account,
     )
     sim.add_call(
-        to=vault_address,
-        data=_encode_call("deposit(uint256,address)", deposit_amount, user_account),
+        call=plasma_vault.deposit(deposit_amount, user_account),
         from_=user_account,
     )
 
-    sim.observe("cbbtc_before", CBBTC, "balanceOf(address)", (vault_address,))
-    sim.observe("usdc_before", BASE_USDC, "balanceOf(address)", (vault_address,))
+    sim.observe("cbbtc_before", cbbtc.balance_of(vault_address))
+    sim.observe("usdc_before", usdc.balance_of(vault_address))
     sim.execute([swap_action])
-    sim.observe("cbbtc_after", CBBTC, "balanceOf(address)", (vault_address,))
-    sim.observe("usdc_after", BASE_USDC, "balanceOf(address)", (vault_address,))
+    sim.observe("cbbtc_after", cbbtc.balance_of(vault_address))
+    sim.observe("usdc_after", usdc.balance_of(vault_address))
 
     result = sim.run()
 
@@ -178,19 +167,23 @@ def test_simulate_swap_weth_to_pepe(web3_base):
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
     ctx.default_block = pinned_block
 
-    weth_balance = ERC20(ctx, BASE_WETH).balance_of(vault_address)
+    weth = ERC20(ctx, BASE_WETH)
+    pepe_token = ERC20(ctx, pepe)
+    weth_balance = weth.balance_of(vault_address).call()
 
     universal = UniversalTokenSwapperFuse(BASE_UNIVERSAL_SWAP_FUSE)
-    swap_action = _build_universal_swap(universal, BASE_WETH, pepe, weth_balance, 10000)
+    swap_action = _build_universal_swap(
+        ctx, universal, BASE_WETH, pepe, weth_balance, 10000
+    )
 
     sim = VaultSimulator(
         web3=web3_base, vault=vault_address, alpha=alpha_address, block=block_hex
     )
-    sim.observe("weth_before", BASE_WETH, "balanceOf(address)", (vault_address,))
-    sim.observe("pepe_before", pepe, "balanceOf(address)", (vault_address,))
+    sim.observe("weth_before", weth.balance_of(vault_address))
+    sim.observe("pepe_before", pepe_token.balance_of(vault_address))
     sim.execute([swap_action])
-    sim.observe("weth_after", BASE_WETH, "balanceOf(address)", (vault_address,))
-    sim.observe("pepe_after", pepe, "balanceOf(address)", (vault_address,))
+    sim.observe("weth_after", weth.balance_of(vault_address))
+    sim.observe("pepe_after", pepe_token.balance_of(vault_address))
 
     result = sim.run()
 

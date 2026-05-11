@@ -27,7 +27,7 @@ def test_decimals():
     erc20, ctx = _make_erc20()
     ctx.call.return_value = encode(["uint256"], [6])
 
-    result = erc20.decimals()
+    result = erc20.decimals().call()
 
     assert result == 6
     ctx.call.assert_called_once()
@@ -37,7 +37,7 @@ def test_symbol():
     erc20, ctx = _make_erc20()
     ctx.call.return_value = encode(["string"], ["USDC"])
 
-    result = erc20.symbol()
+    result = erc20.symbol().call()
 
     assert result == "USDC"
     ctx.call.assert_called_once()
@@ -47,7 +47,7 @@ def test_name():
     erc20, ctx = _make_erc20()
     ctx.call.return_value = encode(["string"], ["USD Coin"])
 
-    result = erc20.name()
+    result = erc20.name().call()
 
     assert result == "USD Coin"
     ctx.call.assert_called_once()
@@ -58,7 +58,7 @@ def test_total_supply():
     expected = 10_000_000_000
     ctx.call.return_value = encode(["uint256"], [expected])
 
-    result = erc20.total_supply()
+    result = erc20.total_supply().call()
 
     assert result == Amount(expected)
     ctx.call.assert_called_once()
@@ -69,7 +69,7 @@ def test_balance_of():
     expected = 1_000_000
     ctx.call.return_value = encode(["uint256"], [expected])
 
-    result = erc20.balance_of(ALICE)
+    result = erc20.balance_of(ALICE).call()
 
     assert result == Amount(expected)
     ctx.call.assert_called_once()
@@ -80,7 +80,7 @@ def test_allowance():
     expected = 500_000
     ctx.call.return_value = encode(["uint256"], [expected])
 
-    result = erc20.allowance(ALICE, BOB)
+    result = erc20.allowance(ALICE, BOB).call()
 
     assert result == Amount(expected)
     ctx.call.assert_called_once()
@@ -90,7 +90,7 @@ def test_transfer():
     erc20, ctx = _make_erc20()
     ctx.send.return_value = {"status": 1}
 
-    erc20.transfer(ALICE, Amount(500_000))
+    erc20.transfer(ALICE, Amount(500_000)).send()
 
     ctx.send.assert_called_once()
 
@@ -99,6 +99,6 @@ def test_approve():
     erc20, ctx = _make_erc20()
     ctx.send.return_value = {"status": 1}
 
-    erc20.approve(ALICE, Amount(1_000_000))
+    erc20.approve(ALICE, Amount(1_000_000)).send()
 
     ctx.send.assert_called_once()

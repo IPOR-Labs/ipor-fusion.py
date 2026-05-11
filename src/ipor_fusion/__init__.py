@@ -1,6 +1,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import Call
 from ipor_fusion.core.plasma_vault import PlasmaVault, BalanceFuse
 from ipor_fusion.core.simulation import (
     VaultSimulator,
@@ -97,6 +98,7 @@ except PackageNotFoundError:
 __all__ = [
     "__version__",
     "Web3Context",
+    "Call",
     "VaultSimulator",
     "SimulationResult",
     "SimulatedCallResult",

@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from eth_abi import decode, encode
+from eth_abi import decode
 from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import RPCEndpoint, BlockIdentifier
 
-from ipor_fusion.core.contract import _parse_param_types
+from ipor_fusion.core.contract import Call
 from ipor_fusion.fuses.base import FuseAction
 
 
@@ -22,6 +22,7 @@ class _Call:
     from_: ChecksumAddress | None
     label: str | None
     decode_types: list[str] | None
+    decoder: Callable[..., Any] | None
     is_execute: bool
 
 
@@ -108,15 +109,13 @@ class VaultSimulator:
             raise RuntimeError("provider must implement eth_simulateV1")
 
         sim = VaultSimulator(web3, vault=VAULT, alpha=ALPHA, block="latest")
-        sim.observe("ltv_before", aave_pool, "getUserAccountData(address)", (vault,),
-                    output_types=["uint256","uint256","uint256","uint256","uint256","uint256"])
+        sim.observe("ltv_before", aave_pool.get_user_account_data(vault))
         sim.execute([flash_loan_action])
-        sim.observe("ltv_after", aave_pool, "getUserAccountData(address)", (vault,),
-                    output_types=["uint256","uint256","uint256","uint256","uint256","uint256"])
+        sim.observe("ltv_after", aave_pool.get_user_account_data(vault))
 
         result = sim.run()
         if result.all_success and is_health_safe(result.get("ltv_after")):
-            vault.execute([flash_loan_action])  # green-light real execution
+            vault.execute([flash_loan_action]).send()  # green-light real execution
 
     Limitations:
       - State does not survive across separate `run()` calls (each is fresh)
@@ -195,75 +194,81 @@ class VaultSimulator:
         return self._baseline()
 
     def execute(self, actions: list[FuseAction]) -> "VaultSimulator":
-        return self.execute_on(
-            target=self._vault,
-            signature="execute((address,bytes)[])",
-            actions=actions,
+        """Queue a default `execute((address,bytes)[])` batch on the vault, from alpha."""
+        data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
+        return self._queue_execute(self._vault, data, self._alpha)
+
+    def execute_call(
+        self, call: Call, from_: ChecksumAddress | None = None
+    ) -> "VaultSimulator":
+        """Queue a pre-encoded write call as an `execute`-style step. Used for
+        e.g. `RewardsManager.claim_rewards(...)` where the wrapper differs from
+        `PlasmaVault.execute`. `from_` defaults to alpha.
+        """
+        return self._queue_execute(
+            call.to,
+            call.data,
+            Web3.to_checksum_address(from_) if from_ else self._alpha,
         )
 
-    def execute_on(
-        self,
-        target: ChecksumAddress,
-        signature: str,
-        actions: list[FuseAction],
-        from_: ChecksumAddress | None = None,
+    def _queue_execute(
+        self, to: ChecksumAddress, data: bytes, from_: ChecksumAddress
     ) -> "VaultSimulator":
-        """Encode and queue a `signature((address,bytes)[])`-style FuseAction batch
-        targeting `target`, sent from `from_` (defaults to alpha). Used both for
-        `PlasmaVault.execute(...)` and `RewardsManager.claimRewards(...)`.
-        """
-        data = FuseAction.encode_execute_payload(actions, signature)
         self._current.calls.append(
             _Call(
-                to=Web3.to_checksum_address(target),
+                to=to,
                 data=data,
-                from_=Web3.to_checksum_address(from_) if from_ else self._alpha,
+                from_=from_,
                 label=None,
                 decode_types=None,
+                decoder=None,
                 is_execute=True,
-            )
-        )
-        return self
-
-    def observe(
-        self,
-        label: str,
-        contract: ChecksumAddress,
-        signature: str,
-        args: tuple = (),
-        output_types: list[str] | None = None,
-    ) -> "VaultSimulator":
-        selector = function_signature_to_4byte_selector(signature)
-        input_types = _parse_param_types(signature)
-        data = selector + (encode(input_types, list(args)) if input_types else b"")
-        decode_types = output_types or [_default_return_type(signature)]
-        self._current.calls.append(
-            _Call(
-                to=Web3.to_checksum_address(contract),
-                data=data,
-                from_=None,
-                label=label,
-                decode_types=decode_types,
-                is_execute=False,
             )
         )
         return self
 
     def add_call(
         self,
-        to: ChecksumAddress,
-        data: bytes,
+        call: Call,
         from_: ChecksumAddress | None = None,
         label: str | None = None,
-        output_types: list[str] | None = None,
     ) -> "VaultSimulator":
+        """Queue an arbitrary write/setup call (role grant, config tweak,
+        impersonated deposit). Build via a wrapper method, e.g.
+        `access_manager.grant_role(...)` or `usdc.approve(...)`.
+        """
         self._current.calls.append(
             _Call(
-                to=Web3.to_checksum_address(to),
-                data=data,
+                to=call.to,
+                data=call.data,
                 from_=Web3.to_checksum_address(from_) if from_ else None,
                 label=label,
-                decode_types=output_types,
+                decode_types=call.output_types,
+                decoder=call.decoder,
+                is_execute=False,
+            )
+        )
+        return self
+
+    def observe(self, label: str, call: Call) -> "VaultSimulator":
+        """Queue a view-style read; decoded per the wrapper method's types and
+        decoder so `result.get(label)` returns the typed Python value
+        (`Amount`, `Decimals`, …). Build `call` via a wrapper method, e.g.
+        `usdc.balance_of(addr)` or `plasma_vault.total_assets()`.
+        """
+        if not call.output_types:
+            raise ValueError(
+                f"observe({label!r}): Call must carry output_types — pass a "
+                "view-returning wrapper method (e.g. `usdc.balance_of(addr)`)."
+            )
+        self._current.calls.append(
+            _Call(
+                to=call.to,
+                data=call.data,
+                from_=None,
+                label=label,
+                decode_types=call.output_types,
+                decoder=call.decoder,
                 is_execute=False,
             )
         )
@@ -341,7 +346,12 @@ class VaultSimulator:
             if success and source.decode_types and return_data:
                 try:
                     values = tuple(decode(source.decode_types, bytes(return_data)))
-                    decoded = values[0] if len(values) == 1 else values
+                    raw_value = values[0] if len(values) == 1 else values
+                    decoded = (
+                        source.decoder(raw_value)
+                        if source.decoder is not None
+                        else raw_value
+                    )
                 except (DecodingError, OverflowError, ValueError):
                     decoded = None
 
@@ -383,31 +393,6 @@ class VaultSimulator:
             calls=parsed,
             failed_calls=failed_calls,
         )
-
-
-def _default_return_type(signature: str) -> str:
-    name = signature.split("(", 1)[0].lower()
-    if name in {
-        "balanceof",
-        "totalassets",
-        "totalsupply",
-        "decimals",
-        "maxwithdraw",
-        "maxredeem",
-        "maxdeposit",
-        "maxmint",
-        "converttoshares",
-        "converttoassets",
-        "previewdeposit",
-        "previewwithdraw",
-        "previewmint",
-        "previewredeem",
-        "totalassetsinmarket",
-    }:
-        return "uint256"
-    if name in {"asset", "owner"}:
-        return "address"
-    return "bytes"
 
 
 def _decode_revert(return_data: HexBytes, error: str | None) -> str | None:

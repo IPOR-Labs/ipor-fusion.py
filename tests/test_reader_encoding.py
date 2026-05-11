@@ -395,7 +395,7 @@ class TestCompoundV3Reader:
         raw = encode(["uint256"], [42_000])
         ctx.call.return_value = raw
 
-        result = reader.balance_of(USER_ADDR)
+        result = reader.balance_of(USER_ADDR).call()
 
         assert result == Amount(42_000)
 
@@ -404,7 +404,7 @@ class TestCompoundV3Reader:
         raw = encode(["uint256"], [7_500])
         ctx.call.return_value = raw
 
-        result = reader.borrow_balance_of(USER_ADDR)
+        result = reader.borrow_balance_of(USER_ADDR).call()
 
         assert result == Amount(7_500)
 

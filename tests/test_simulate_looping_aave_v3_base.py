@@ -32,18 +32,19 @@ from constants import (
 from ipor_fusion import (
     Web3Context,
     PlasmaVault,
+    AccessManager,
+    ERC20,
     PriceOracleMiddleware,
     Roles,
     VaultSimulator,
 )
-from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses import (
     AaveV3SupplyFuse,
     AaveV3BorrowFuse,
     MorphoFlashLoanFuse,
     UniversalTokenSwapperFuse,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import Amount, ChainId
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -64,12 +65,6 @@ LEVERAGE = 10
 PINNED_BLOCK = 30431901  # mirrors anvil.reset_fork(...) in the original test
 
 
-def _encode_call(signature: str, *args) -> bytes:
-    selector = function_signature_to_4byte_selector(signature)
-    types = _parse_param_types(signature)
-    return selector + encode(types, list(args)) if types else selector
-
-
 def _aerodrome_path(token_in: ChecksumAddress, token_out: ChecksumAddress) -> bytes:
     if (token_in == BASE_WETH and token_out == BASE_WSTETH) or (
         token_in == BASE_WSTETH and token_out == BASE_WETH
@@ -79,11 +74,11 @@ def _aerodrome_path(token_in: ChecksumAddress, token_out: ChecksumAddress) -> by
 
 
 def _aerodrome_swap(
-    universal, token_in, token_out, amount_in, min_amount_out, deadline
+    ctx, universal, token_in, token_out, amount_in, min_amount_out, deadline
 ):
     targets = [token_in, AERODROME_ROUTER_ADDRESS]
-    approve_data = _encode_call(
-        "approve(address,uint256)", AERODROME_ROUTER_ADDRESS, amount_in
+    approve_data = (
+        ERC20(ctx, token_in).approve(AERODROME_ROUTER_ADDRESS, Amount(amount_in)).data
     )
     path = _aerodrome_path(token_in, token_out)
     swap_data = function_signature_to_4byte_selector(
@@ -107,20 +102,20 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     ctx.default_block = PINNED_BLOCK
 
     plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager_addr = plasma_vault.get_access_manager_address()
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     oracle = PriceOracleMiddleware(
-        ctx, plasma_vault.get_price_oracle_middleware_address()
+        ctx, plasma_vault.get_price_oracle_middleware_address().call()
     )
-    pre_balance = ctx.web3.eth.call(
-        {
-            "to": BASE_WSTETH,
-            "data": "0x" + _encode_call("balanceOf(address)", VAULT_ADDRESS).hex(),
-        },
-        block_identifier=PINNED_BLOCK,
-    )
-    pre_balance_int = int.from_bytes(bytes(pre_balance), "big")
-    wsteth_price = oracle.get_asset_price(BASE_WSTETH).readable()
-    weth_price = oracle.get_asset_price(BASE_WETH).readable()
+    wsteth = ERC20(ctx, BASE_WSTETH)
+    weth = ERC20(ctx, BASE_WETH)
+    awsteth = ERC20(ctx, BASE_AAVE_V3_A_WSTETH)
+    dweth = ERC20(ctx, BASE_AAVE_V3_VARIABLE_DEBT_WETH)
+
+    pre_balance_int = wsteth.balance_of(VAULT_ADDRESS).call()
+    wsteth_price = oracle.get_asset_price(BASE_WSTETH).call().readable()
+    weth_price = oracle.get_asset_price(BASE_WETH).call().readable()
     deadline = int(web3_base.eth.get_block(PINNED_BLOCK)["timestamp"]) + 1000
 
     # Strategy maths — vault holdings + 1 WStETH deposit, 10x leverage, 90% LTV
@@ -150,6 +145,7 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     )
     borrow_action = aave_borrow.borrow(asset=BASE_WETH, amount=weth_borrow_amount)
     swap_action = _aerodrome_swap(
+        ctx=ctx,
         universal=universal,
         token_in=BASE_WETH,
         token_out=BASE_WSTETH,
@@ -168,51 +164,30 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
         web3=web3_base, vault=VAULT_ADDRESS, alpha=ANVIL_WALLET, block=block_hex
     )
     sim.add_call(
-        to=access_manager_addr,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=ATOMIST,
     )
     sim.add_call(
-        to=access_manager_addr,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)",
-            Roles.WHITELIST_ROLE,
-            WSTETH_HOLDER,
-            0,
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, WSTETH_HOLDER, 0),
         from_=ATOMIST,
     )
     sim.add_call(
-        to=BASE_WSTETH,
-        data=_encode_call("approve(address,uint256)", VAULT_ADDRESS, INITIAL_DEPOSIT),
+        call=wsteth.approve(VAULT_ADDRESS, INITIAL_DEPOSIT),
         from_=WSTETH_HOLDER,
     )
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call("deposit(uint256,address)", INITIAL_DEPOSIT, WSTETH_HOLDER),
+        call=plasma_vault.deposit(INITIAL_DEPOSIT, WSTETH_HOLDER),
         from_=WSTETH_HOLDER,
     )
 
-    sim.observe("wsteth_pre_loop", BASE_WSTETH, "balanceOf(address)", (VAULT_ADDRESS,))
+    sim.observe("wsteth_pre_loop", wsteth.balance_of(VAULT_ADDRESS))
 
     sim.execute([flash_loan])
 
-    sim.observe("wsteth_post_loop", BASE_WSTETH, "balanceOf(address)", (VAULT_ADDRESS,))
-    sim.observe("weth_post_loop", BASE_WETH, "balanceOf(address)", (VAULT_ADDRESS,))
-    sim.observe(
-        "awsteth_post_loop",
-        BASE_AAVE_V3_A_WSTETH,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
-    sim.observe(
-        "dweth_post_loop",
-        BASE_AAVE_V3_VARIABLE_DEBT_WETH,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
+    sim.observe("wsteth_post_loop", wsteth.balance_of(VAULT_ADDRESS))
+    sim.observe("weth_post_loop", weth.balance_of(VAULT_ADDRESS))
+    sim.observe("awsteth_post_loop", awsteth.balance_of(VAULT_ADDRESS))
+    sim.observe("dweth_post_loop", dweth.balance_of(VAULT_ADDRESS))
 
     result = sim.run()
 
@@ -228,9 +203,9 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     # - aWStETH (collateral receipt) ~ wsteth_collateral_amount, dWETH (debt) ~ weth_borrow_amount
     assert result.get("wsteth_pre_loop") == post_balance
     assert result.get("weth_post_loop") < int(0.01e18)
-    awsteth = result.get("awsteth_post_loop")
-    dweth = result.get("dweth_post_loop")
+    awsteth_after = result.get("awsteth_post_loop")
+    dweth_after = result.get("dweth_post_loop")
     # Aave aTokens accrue ratio-style; values match collateral/borrow amounts within
     # rebasing precision (~1 wei per unit).
-    assert abs(awsteth - wsteth_collateral_amount) <= 10
-    assert abs(dweth - weth_borrow_amount) <= 10
+    assert abs(awsteth_after - wsteth_collateral_amount) <= 10
+    assert abs(dweth_after - weth_borrow_amount) <= 10

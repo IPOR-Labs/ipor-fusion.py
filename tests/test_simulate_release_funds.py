@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import logging
 
-from eth_abi import encode
-from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from _simulate import assert_all_success
@@ -22,10 +20,10 @@ from ipor_fusion import (
     PlasmaVault,
     AccessManager,
     WithdrawManager,
+    ERC20,
     Roles,
     VaultSimulator,
 )
-from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.types import ChainId, Period
 
 logging.basicConfig(level=logging.INFO)
@@ -37,20 +35,17 @@ DEPOSIT_AMOUNT = 1000_000000  # 1000 USDC (6 decimals), mirrors original test
 PINNED_BLOCK = 285000000  # mirrors anvil.reset_fork(...) in the original test
 
 
-def _encode_call(signature: str, *args) -> bytes:
-    selector = function_signature_to_4byte_selector(signature)
-    types = _parse_param_types(signature)
-    return selector + encode(types, list(args)) if types else selector
-
-
 def test_simulate_release_funds(web3_arb):
     block_hex = hex(PINNED_BLOCK)
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
     plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     withdraw_manager = WithdrawManager(ctx, plasma_vault.withdraw_manager_address())
+    usdc = ERC20(ctx, ARBITRUM_USDC)
     owner = access_manager.owner()
     baseline_timestamp = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"])
 
@@ -69,32 +64,23 @@ def test_simulate_release_funds(web3_arb):
     # ── Block 0 (baseline) ────────────────────────────────────────────────
     # owner grants roles, user deposits, user requests withdraw.
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, USER, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, USER, 0),
         from_=owner,
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.WHITELIST_ROLE, USER, 0
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, USER, 0),
         from_=owner,
     )
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("approve(address,uint256)", VAULT_ADDRESS, DEPOSIT_AMOUNT),
+        call=usdc.approve(VAULT_ADDRESS, DEPOSIT_AMOUNT),
         from_=USER,
     )
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call("deposit(uint256,address)", DEPOSIT_AMOUNT, USER),
+        call=plasma_vault.deposit(DEPOSIT_AMOUNT, USER),
         from_=USER,
     )
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("request(uint256)", DEPOSIT_AMOUNT),
+        call=withdraw_manager.request(DEPOSIT_AMOUNT),
         from_=USER,
     )
 
@@ -103,13 +89,7 @@ def test_simulate_release_funds(web3_arb):
     # get_pending_requests_info() aggregates events and per-account reads — that
     # can't be a single eth_call, so we read the user's request_info instead.
     sim.next_block(time_shift_seconds=Period.HOUR)
-    sim.observe(
-        "request_info",
-        withdraw_manager.address,
-        "requestInfo(address)",
-        (USER,),
-        output_types=["uint256", "uint256", "bool", "uint256"],
-    )
+    sim.observe("request_info", withdraw_manager.request_info(USER))
 
     # ── Block 2: +1 minute, alpha (= user) releases funds ─────────────────
     # Original test calls release_funds(timestamp=pending.timestamp) where
@@ -117,22 +97,15 @@ def test_simulate_release_funds(web3_arb):
     sim.next_block(time_shift_seconds=Period.MINUTE)
     release_timestamp = baseline_timestamp + Period.HOUR - 1
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("releaseFunds(uint256)", release_timestamp),
+        call=withdraw_manager.release_funds(timestamp=release_timestamp),
         from_=USER,
     )
 
     # ── Block 3: +1 hour, user withdraws and we measure the balance delta ─
     sim.next_block(time_shift_seconds=Period.HOUR)
-    sim.observe(
-        "request_after_release",
-        withdraw_manager.address,
-        "requestInfo(address)",
-        (USER,),
-        output_types=["uint256", "uint256", "bool", "uint256"],
-    )
-    sim.observe("max_withdraw", VAULT_ADDRESS, "maxWithdraw(address)", (USER,))
-    sim.observe("usdc_before", ARBITRUM_USDC, "balanceOf(address)", (USER,))
+    sim.observe("request_after_release", withdraw_manager.request_info(USER))
+    sim.observe("max_withdraw", plasma_vault.max_withdraw(USER))
+    sim.observe("usdc_before", usdc.balance_of(USER))
 
     # The original test calls withdraw(max_withdraw(user)) — exact value known
     # only at runtime. eth_simulateV1 can't thread observed values into later
@@ -141,13 +114,10 @@ def test_simulate_release_funds(web3_arb):
     # test's second variant (delta > 999 USDC).
     withdraw_amount = 999_000000  # 999 USDC, leaves >0.998 USDC buffer
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call(
-            "withdraw(uint256,address,address)", withdraw_amount, USER, USER
-        ),
+        call=plasma_vault.withdraw(withdraw_amount, USER, USER),
         from_=USER,
     )
-    sim.observe("usdc_after", ARBITRUM_USDC, "balanceOf(address)", (USER,))
+    sim.observe("usdc_after", usdc.balance_of(USER))
 
     result = sim.run()
 
@@ -162,9 +132,9 @@ def test_simulate_release_funds(web3_arb):
     assert_all_success(result)
 
     # Confirm release flipped can_withdraw and that the requested amount survived.
-    request_amount, _, can_withdraw, _ = result.get("request_after_release")
-    assert request_amount == DEPOSIT_AMOUNT
-    assert can_withdraw is True
+    request = result.get("request_after_release")
+    assert request.shares == DEPOSIT_AMOUNT
+    assert request.can_withdraw is True
     assert result.get("max_withdraw") >= withdraw_amount
 
     delta = result.get("usdc_after") - result.get("usdc_before")
@@ -188,14 +158,17 @@ def test_simulate_release_funds_shares(web3_arb):
     ctx.default_block = PINNED_BLOCK_2
 
     plasma_vault = PlasmaVault(ctx, VAULT2_ADDRESS)
-    access_manager = AccessManager(ctx, plasma_vault.get_access_manager_address())
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
+    )
     withdraw_manager = WithdrawManager(ctx, plasma_vault.withdraw_manager_address())
+    usdc = ERC20(ctx, ARBITRUM_USDC)
     owner = access_manager.owner()
     baseline_timestamp = int(web3_arb.eth.get_block(PINNED_BLOCK_2)["timestamp"])
 
     # Pre-compute exact shares for the deposit at the pinned block. The vault's
     # share/assets ratio on this block determines convert_to_shares deterministically.
-    shares = plasma_vault.convert_to_shares(DEPOSIT_AMOUNT)
+    shares = plasma_vault.convert_to_shares(DEPOSIT_AMOUNT).call()
     log.info("baseline_ts=%s shares_for_1k_USDC=%s", baseline_timestamp, shares)
 
     sim = VaultSimulator(
@@ -206,32 +179,23 @@ def test_simulate_release_funds_shares(web3_arb):
     # owner grants ALPHA to alpha_address, WHITELIST to user;
     # user approves and deposits; user requests share-denominated withdrawal.
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ALPHA2_ADDRESS, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ALPHA2_ADDRESS, 0),
         from_=owner,
     )
     sim.add_call(
-        to=access_manager.address,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.WHITELIST_ROLE, USER, 0
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, USER, 0),
         from_=owner,
     )
     sim.add_call(
-        to=ARBITRUM_USDC,
-        data=_encode_call("approve(address,uint256)", VAULT2_ADDRESS, DEPOSIT_AMOUNT),
+        call=usdc.approve(VAULT2_ADDRESS, DEPOSIT_AMOUNT),
         from_=USER,
     )
     sim.add_call(
-        to=VAULT2_ADDRESS,
-        data=_encode_call("deposit(uint256,address)", DEPOSIT_AMOUNT, USER),
+        call=plasma_vault.deposit(DEPOSIT_AMOUNT, USER),
         from_=USER,
     )
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("requestShares(uint256)", shares),
+        call=withdraw_manager.request_shares(shares),
         from_=USER,
     )
 
@@ -242,22 +206,18 @@ def test_simulate_release_funds_shares(web3_arb):
     sim.next_block(time_shift_seconds=Period.HOUR)
     release_timestamp = baseline_timestamp + Period.HOUR - 1
     sim.add_call(
-        to=withdraw_manager.address,
-        data=_encode_call("releaseFunds(uint256,uint256)", release_timestamp, shares),
+        call=withdraw_manager.release_funds(timestamp=release_timestamp, shares=shares),
         from_=ALPHA2_ADDRESS,
     )
 
     # ── Block 2: +1 hour, user redeems via redeem_from_request ─────────────
     sim.next_block(time_shift_seconds=Period.HOUR)
-    sim.observe("usdc_before", ARBITRUM_USDC, "balanceOf(address)", (USER,))
+    sim.observe("usdc_before", usdc.balance_of(USER))
     sim.add_call(
-        to=VAULT2_ADDRESS,
-        data=_encode_call(
-            "redeemFromRequest(uint256,address,address)", shares, USER, USER
-        ),
+        call=plasma_vault.redeem_from_request(shares, USER, USER),
         from_=USER,
     )
-    sim.observe("usdc_after", ARBITRUM_USDC, "balanceOf(address)", (USER,))
+    sim.observe("usdc_after", usdc.balance_of(USER))
 
     result = sim.run()
 

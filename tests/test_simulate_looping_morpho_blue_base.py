@@ -27,19 +27,19 @@ from constants import (
 from ipor_fusion import (
     Web3Context,
     PlasmaVault,
+    AccessManager,
     PriceOracleMiddleware,
     ERC20,
     Roles,
     VaultSimulator,
 )
-from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses import (
     MorphoCollateralFuse,
     MorphoBorrowFuse,
     MorphoFlashLoanFuse,
     UniversalTokenSwapperFuse,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import Amount, ChainId
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -67,13 +67,6 @@ PINNED_BLOCK = (
 )
 
 
-def _encode_call(signature: str, *args) -> bytes:
-    """Same encoding ContractWrapper._encode uses, no wrapper needed."""
-    selector = function_signature_to_4byte_selector(signature)
-    types = _parse_param_types(signature)
-    return selector + encode(types, list(args)) if types else selector
-
-
 def _aerodrome_path(token_in: ChecksumAddress, token_out: ChecksumAddress) -> bytes:
     if (token_in == BASE_WETH and token_out == BASE_WSTETH) or (
         token_in == BASE_WSTETH and token_out == BASE_WETH
@@ -83,11 +76,11 @@ def _aerodrome_path(token_in: ChecksumAddress, token_out: ChecksumAddress) -> by
 
 
 def _aerodrome_swap(
-    universal, token_in, token_out, amount_in, min_amount_out, deadline
+    ctx, universal, token_in, token_out, amount_in, min_amount_out, deadline
 ):
     targets = [token_in, AERODROME_ROUTER_ADDRESS]
-    approve_data = _encode_call(
-        "approve(address,uint256)", AERODROME_ROUTER_ADDRESS, amount_in
+    approve_data = (
+        ERC20(ctx, token_in).approve(AERODROME_ROUTER_ADDRESS, Amount(amount_in)).data
     )
     path = _aerodrome_path(token_in, token_out)
     swap_data = function_signature_to_4byte_selector(
@@ -112,13 +105,17 @@ def test_simulate_looping_morpho_blue(web3_base):
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
     plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager_addr = plasma_vault.get_access_manager_address()
-    oracle = PriceOracleMiddleware(
-        ctx, plasma_vault.get_price_oracle_middleware_address()
+    access_manager = AccessManager(
+        ctx, plasma_vault.get_access_manager_address().call()
     )
-    pre_balance = ERC20(ctx, BASE_WSTETH).balance_of(VAULT_ADDRESS)
-    wsteth_price = oracle.get_asset_price(BASE_WSTETH).readable()
-    weth_price = oracle.get_asset_price(BASE_WETH).readable()
+    oracle = PriceOracleMiddleware(
+        ctx, plasma_vault.get_price_oracle_middleware_address().call()
+    )
+    wsteth = ERC20(ctx, BASE_WSTETH)
+    weth = ERC20(ctx, BASE_WETH)
+    pre_balance = wsteth.balance_of(VAULT_ADDRESS).call()
+    wsteth_price = oracle.get_asset_price(BASE_WSTETH).call().readable()
+    weth_price = oracle.get_asset_price(BASE_WETH).call().readable()
     deadline = int(web3_base.eth.get_block(PINNED_BLOCK)["timestamp"]) + 1000
 
     # Strategy maths — fully resolved before any simulated call is sent.
@@ -153,6 +150,7 @@ def test_simulate_looping_morpho_blue(web3_base):
         market_id=MORPHO_BLUE_MARKET_ID, amount=weth_borrow_amount
     )
     swap = _aerodrome_swap(
+        ctx=ctx,
         universal=universal,
         token_in=BASE_WETH,
         token_out=BASE_WSTETH,
@@ -173,63 +171,35 @@ def test_simulate_looping_morpho_blue(web3_base):
 
     # 1. atomist grants ALPHA_ROLE to ANVIL_WALLET (alpha used by sim.execute)
     sim.add_call(
-        to=access_manager_addr,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)", Roles.ALPHA_ROLE, ANVIL_WALLET, 0
-        ),
+        call=access_manager.grant_role(Roles.ALPHA_ROLE, ANVIL_WALLET, 0),
         from_=ATOMIST,
     )
     # 2. atomist grants WHITELIST_ROLE to wsteth_holder so it can deposit
     sim.add_call(
-        to=access_manager_addr,
-        data=_encode_call(
-            "grantRole(uint64,address,uint32)",
-            Roles.WHITELIST_ROLE,
-            WSTETH_HOLDER,
-            0,
-        ),
+        call=access_manager.grant_role(Roles.WHITELIST_ROLE, WSTETH_HOLDER, 0),
         from_=ATOMIST,
     )
     # 3. wsteth_holder approves vault to pull WStETH
     sim.add_call(
-        to=BASE_WSTETH,
-        data=_encode_call("approve(address,uint256)", VAULT_ADDRESS, DEPOSIT_AMOUNT),
+        call=wsteth.approve(VAULT_ADDRESS, DEPOSIT_AMOUNT),
         from_=WSTETH_HOLDER,
     )
     # 4. wsteth_holder deposits into vault — credits 1:1 in underlying
     sim.add_call(
-        to=VAULT_ADDRESS,
-        data=_encode_call("deposit(uint256,address)", DEPOSIT_AMOUNT, WSTETH_HOLDER),
+        call=plasma_vault.deposit(DEPOSIT_AMOUNT, WSTETH_HOLDER),
         from_=WSTETH_HOLDER,
     )
 
     # Pre-loop snapshot (after deposit, before execute)
-    sim.observe(
-        "vault_wsteth_pre_loop",
-        BASE_WSTETH,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
+    sim.observe("vault_wsteth_pre_loop", wsteth.balance_of(VAULT_ADDRESS))
 
     # 5. alpha executes the flash-loan-wrapped leverage loop atomically
     sim.execute([flash_loan])
 
     # Post-loop observations
-    sim.observe(
-        "vault_wsteth_post_loop",
-        BASE_WSTETH,
-        "balanceOf(address)",
-        (VAULT_ADDRESS,),
-    )
-    sim.observe(
-        "vault_weth_post_loop", BASE_WETH, "balanceOf(address)", (VAULT_ADDRESS,)
-    )
-    sim.observe(
-        "total_assets_post_loop",
-        VAULT_ADDRESS,
-        "totalAssets()",
-        output_types=["uint256"],
-    )
+    sim.observe("vault_wsteth_post_loop", wsteth.balance_of(VAULT_ADDRESS))
+    sim.observe("vault_weth_post_loop", weth.balance_of(VAULT_ADDRESS))
+    sim.observe("total_assets_post_loop", plasma_vault.total_assets())
 
     result = sim.run()
 

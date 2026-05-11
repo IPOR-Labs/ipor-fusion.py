@@ -170,7 +170,7 @@ def _auto_save_vault(
     if any(v.address.lower() == vault_address.lower() for v in cfg.vaults):
         return
     try:
-        label = plasma_vault.name()
+        label = plasma_vault.name().call()
     except Exception:  # pylint: disable=broad-except
         return
     cfg.vaults.append(VaultEntry(address=vault_address, label=label, chain_id=chain_id))
@@ -212,7 +212,7 @@ def add(address: str, label: str | None, chain_id: int | None) -> None:
         ctx = Web3Context.from_url(provider_url)
         checksum = Web3.to_checksum_address(address)
         try:
-            label = PlasmaVault(ctx, checksum).name()
+            label = PlasmaVault(ctx, checksum).name().call()
         except Exception:  # pylint: disable=broad-except
             label = checksum
 
@@ -652,7 +652,7 @@ def _build_withdraw_manager_json(
     requests_json = []
     for req in wmd.pending_requests:
         assets: int | None = _safe_call(
-            lambda s=req.shares: plasma_vault.convert_to_assets(s)  # type: ignore[misc]
+            lambda s=req.shares: plasma_vault.convert_to_assets(s).call()  # type: ignore[misc]
         )
         entry: dict = {
             "account": req.account,
@@ -836,11 +836,11 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
             for bf in data.balance_fuses
         ]
         bf_balance_futs = [
-            pool.submit(plasma_vault.total_assets_in_market, bf.market_id)
+            pool.submit(plasma_vault.total_assets_in_market(bf.market_id).call)
             for bf in data.balance_fuses
         ]
         substrate_futs = [
-            pool.submit(plasma_vault.get_market_substrates, bf.market_id)
+            pool.submit(plasma_vault.get_market_substrates(bf.market_id).call)
             for bf in data.balance_fuses
         ]
 
@@ -1175,14 +1175,14 @@ def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None
 
     total_shares = sum((r.shares for r in requests), 0)
     total_assets: int | None = _safe_call(
-        lambda ts=total_shares: plasma_vault.convert_to_assets(ts)  # type: ignore[misc]
+        lambda ts=total_shares: plasma_vault.convert_to_assets(ts).call()  # type: ignore[misc]
     )
 
     click.echo(f"  Pending requests ({len(requests)}):")
     rows: list[tuple[str, ...]] = []
     for req in requests:
         assets: int | None = _safe_call(
-            lambda s=req.shares: plasma_vault.convert_to_assets(s)  # type: ignore[misc]
+            lambda s=req.shares: plasma_vault.convert_to_assets(s).call()  # type: ignore[misc]
         )
         assets_str = (
             f"{_format_amount(assets, data.asset_decimals)} {data.asset_symbol}"
@@ -1290,7 +1290,7 @@ def _print_balance_fuses_table(
         for idx, balance_fuse in enumerate(balance_fuses, 1):
             market_id_str = _format_market_label(balance_fuse.market_id)
             f_balance = pool.submit(
-                plasma_vault.total_assets_in_market, balance_fuse.market_id
+                plasma_vault.total_assets_in_market(balance_fuse.market_id).call
             )
             f_contract = pool.submit(
                 get_contract_name, chain_id, balance_fuse.fuse, api_key
@@ -1345,7 +1345,7 @@ def _print_substrates(  # pylint: disable=too-complex
         for balance_fuse in balance_fuses:
             market_id_str = _format_market_label(balance_fuse.market_id)
             fut = pool.submit(
-                plasma_vault.get_market_substrates, balance_fuse.market_id
+                plasma_vault.get_market_substrates(balance_fuse.market_id).call
             )
             substrate_futures.append((market_id_str, balance_fuse.market_id, fut))
 

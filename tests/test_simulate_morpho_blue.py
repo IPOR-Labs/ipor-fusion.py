@@ -5,9 +5,14 @@ from web3 import Web3
 from _simulate import assert_all_success
 from addresses import ETHEREUM_USDC
 from constants import ETHEREUM_MORPHO_SUPPLY_FUSE
-from ipor_fusion import VaultSimulator
+from ipor_fusion import (
+    Web3Context,
+    PlasmaVault,
+    ERC20,
+    VaultSimulator,
+)
 from ipor_fusion.fuses import MorphoSupplyFuse
-from ipor_fusion.types import MorphoBlueMarketId, Amount
+from ipor_fusion.types import ChainId, MorphoBlueMarketId, Amount
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -22,6 +27,12 @@ PINNED_BLOCK = 22066578  # mirrors anvil.reset_fork(...) in test_morpho_blue.py
 
 
 def test_simulate_supply_and_withdraw_morpho_blue(web3_eth):
+    ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
+    ctx.default_block = PINNED_BLOCK
+
+    plasma_vault = PlasmaVault(ctx, VAULT)
+    usdc = ERC20(ctx, ETHEREUM_USDC)
+
     morpho = MorphoSupplyFuse(ETHEREUM_MORPHO_SUPPLY_FUSE)
     supply_action = morpho.supply(market_id=MARKET_ID, amount=SUPPLY_AMOUNT)
     withdraw_action = morpho.withdraw(market_id=MARKET_ID, amount=SUPPLY_AMOUNT)
@@ -30,12 +41,12 @@ def test_simulate_supply_and_withdraw_morpho_blue(web3_eth):
         web3=web3_eth, vault=VAULT, alpha=ALPHA, block=hex(PINNED_BLOCK)
     )
 
-    sim.observe("usdc_before", ETHEREUM_USDC, "balanceOf(address)", (VAULT,))
+    sim.observe("usdc_before", usdc.balance_of(VAULT))
     sim.execute([supply_action])
-    sim.observe("usdc_after_supply", ETHEREUM_USDC, "balanceOf(address)", (VAULT,))
+    sim.observe("usdc_after_supply", usdc.balance_of(VAULT))
     sim.execute([withdraw_action])
-    sim.observe("usdc_after_withdraw", ETHEREUM_USDC, "balanceOf(address)", (VAULT,))
-    sim.observe("total_assets", VAULT, "totalAssets()")
+    sim.observe("usdc_after_withdraw", usdc.balance_of(VAULT))
+    sim.observe("total_assets", plasma_vault.total_assets())
 
     result = sim.run()
 

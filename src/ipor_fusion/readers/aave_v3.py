@@ -79,7 +79,7 @@ class AaveV3Reader(ContractWrapper):
     """Reader for Aave V3 lending pool on-chain state."""
 
     def get_user_account_data(self, user: ChecksumAddress) -> AaveV3UserAccountData:
-        raw = self._call("getUserAccountData(address)", user)
+        raw = self._raw_call("getUserAccountData(address)", user)
         values = decode(
             ["uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],
             raw,
@@ -88,7 +88,7 @@ class AaveV3Reader(ContractWrapper):
 
     def reserve_tokens(self, asset: ChecksumAddress) -> AaveV3ReserveTokens:
         """Return aToken / stable / variable debt token addresses for `asset`."""
-        raw = self._call("getReserveData(address)", asset)
+        raw = self._raw_call("getReserveData(address)", asset)
         (
             _,
             _,
@@ -122,12 +122,16 @@ class AaveV3Reader(ContractWrapper):
         (some chains/reserves have it disabled and zeroed).
         """
         tokens = self.reserve_tokens(asset)
-        supply = ERC20(self._ctx, tokens.a_token).balance_of(user)
-        variable_debt = ERC20(self._ctx, tokens.variable_debt_token).balance_of(user)
+        supply = ERC20(self._ctx, tokens.a_token).balance_of(user).call()
+        variable_debt = (
+            ERC20(self._ctx, tokens.variable_debt_token).balance_of(user).call()
+        )
         if tokens.stable_debt_token.lower() == _ZERO_ADDRESS:
             stable_debt = Amount(0)
         else:
-            stable_debt = ERC20(self._ctx, tokens.stable_debt_token).balance_of(user)
+            stable_debt = (
+                ERC20(self._ctx, tokens.stable_debt_token).balance_of(user).call()
+            )
         return AaveV3PositionBreakdown(
             asset=asset,
             a_token=tokens.a_token,

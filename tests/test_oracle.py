@@ -28,7 +28,7 @@ class TestGetSourceOfAssetPrice:
         oracle, ctx = _make_oracle()
         ctx.call.return_value = encode(["address"], [SOURCE_ADDR])
 
-        result = oracle.get_source_of_asset_price(ASSET_ADDR)
+        result = oracle.get_source_of_asset_price(ASSET_ADDR).call()
 
         assert result == SOURCE_ADDR
         ctx.call.assert_called_once()
@@ -39,7 +39,7 @@ class TestChainlinkFeedRegistry:
         oracle, ctx = _make_oracle()
         ctx.call.return_value = encode(["address"], [FEED_REGISTRY])
 
-        result = oracle.chainlink_feed_registry()
+        result = oracle.chainlink_feed_registry().call()
 
         assert result == FEED_REGISTRY
         ctx.call.assert_called_once()
@@ -86,7 +86,7 @@ class TestGetAssetPrice:
         oracle, ctx = _make_oracle()
         ctx.call.return_value = encode(["uint256", "uint256"], [1_500_000_000, 8])
 
-        result = oracle.get_asset_price(ASSET_ADDR)
+        result = oracle.get_asset_price(ASSET_ADDR).call()
 
         assert isinstance(result, Price)
         assert result.asset == ASSET_ADDR
