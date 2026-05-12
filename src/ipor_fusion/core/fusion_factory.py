@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
+from web3 import Web3
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.types import Period
@@ -73,7 +74,49 @@ _FUSION_INSTANCE_OUTPUT_TYPES: list[str] = [
 
 
 def _fusion_instance_decoder(values: tuple) -> FusionInstance:
-    return FusionInstance(*values)
+    # eth_abi.decode returns address fields as lowercase hex strings; the
+    # FusionInstance dataclass declares them as ChecksumAddress, so normalize
+    # to EIP-55 before constructing — otherwise equality against checksummed
+    # inputs (e.g. `Web3.to_checksum_address(...)`) silently fails.
+    (
+        index,
+        version,
+        asset_name,
+        asset_symbol,
+        asset_decimals,
+        underlying_token,
+        underlying_token_symbol,
+        underlying_token_decimals,
+        initial_owner,
+        plasma_vault,
+        plasma_vault_base,
+        access_manager,
+        fee_manager,
+        rewards_manager,
+        withdraw_manager,
+        context_manager,
+        price_manager,
+    ) = values
+    addr = Web3.to_checksum_address
+    return FusionInstance(
+        index=index,
+        version=version,
+        asset_name=asset_name,
+        asset_symbol=asset_symbol,
+        asset_decimals=asset_decimals,
+        underlying_token=addr(underlying_token),
+        underlying_token_symbol=underlying_token_symbol,
+        underlying_token_decimals=underlying_token_decimals,
+        initial_owner=addr(initial_owner),
+        plasma_vault=addr(plasma_vault),
+        plasma_vault_base=addr(plasma_vault_base),
+        access_manager=addr(access_manager),
+        fee_manager=addr(fee_manager),
+        rewards_manager=addr(rewards_manager),
+        withdraw_manager=addr(withdraw_manager),
+        context_manager=addr(context_manager),
+        price_manager=addr(price_manager),
+    )
 
 
 # Encoded as a tuple because `Call._view` wraps inputs in a single root
