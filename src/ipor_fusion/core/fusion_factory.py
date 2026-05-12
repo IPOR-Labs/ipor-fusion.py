@@ -14,7 +14,8 @@ when they disagree.
 
 `clone()` is a write — call `.send(ctx)` for a real tx, or `.call(ctx)`
 for an eth_call dry-run preview that returns the deterministic CREATE2
-addresses without burning gas.
+addresses without burning gas. For external-signer flows, grab the bytes
+directly: `factory.clone(...).calldata`.
 """
 
 from __future__ import annotations
@@ -23,20 +24,12 @@ from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
 
-from eth_utils import function_signature_to_4byte_selector
-from eth_abi import encode as abi_encode
-
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.types import Period
 
-CLONE_SIGNATURE = "clone(string,string,address,uint256,address,uint256)"
-CLONE_SUPERVISED_SIGNATURE = (
-    "cloneSupervised(string,string,address,uint256,address,uint256)"
-)
-
 
 @dataclass(slots=True, frozen=True)
-class FusionInstance:
+class FusionInstance:  # pylint: disable=too-many-instance-attributes
     """17-field tuple returned by FusionFactory.clone()."""
 
     index: int
@@ -92,34 +85,6 @@ _FUSION_INSTANCE_TUPLE_TYPE = "(" + ",".join(_FUSION_INSTANCE_OUTPUT_TYPES) + ")
 class FusionFactory(ContractWrapper):
     """Wraps IporFusionFactoryProxy. Use `clone()` for a permissionless
     deploy, `clone_supervised()` for the maintenance-manager-gated path."""
-
-    @staticmethod
-    def encode_clone_calldata(
-        asset_name: str,
-        asset_symbol: str,
-        underlying_token: str,
-        redemption_delay_seconds: int,
-        owner: str,
-        dao_fee_package_index: int = 0,
-    ) -> bytes:
-        """Selector + ABI-encoded args for `clone(...)`. Pure helper — no
-        ctx required. Use when you need to hand calldata to an external
-        signer (e.g. an HTTP signing service) instead of routing through
-        `Call.send()`.
-        """
-        selector = function_signature_to_4byte_selector(CLONE_SIGNATURE)
-        encoded = abi_encode(
-            ["string", "string", "address", "uint256", "address", "uint256"],
-            [
-                asset_name,
-                asset_symbol,
-                underlying_token,
-                int(redemption_delay_seconds),
-                owner,
-                int(dao_fee_package_index),
-            ],
-        )
-        return selector + encoded
 
     def clone(
         self,

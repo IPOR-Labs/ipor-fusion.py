@@ -2,9 +2,10 @@
 
 Two test paths:
 
-  * `test_encode_*` — pure helpers, no RPC. Each setter encoder is asserted
-    against its 4-byte selector AND round-tripped through `eth_abi.decode` to
-    confirm the on-chain canonical shape is what we produce.
+  * `test_*_calldata_*` — pure encoding, no RPC. Each setter's
+    `Call.calldata` is asserted against its 4-byte selector AND
+    round-tripped through `eth_abi.decode` to confirm the on-chain
+    canonical shape is what we produce.
 
   * `test_simulate_plasma_vault_*_base` — uses the `web3_base` session
     fixture (set via `BASE_PROVIDER_URL`) to read live state from the
@@ -38,19 +39,28 @@ SAMPLE_FUSE_A = Web3.to_checksum_address("0x" + "a1" * 20)
 SAMPLE_FUSE_B = Web3.to_checksum_address("0x" + "b2" * 20)
 
 
+def _bare_vault() -> PlasmaVault:
+    """Build a PlasmaVault without a Web3Context. Safe because `.calldata`
+    only reads the pre-encoded `Call.data` — never touches ctx."""
+    vault = PlasmaVault.__new__(PlasmaVault)
+    vault._ctx = None  # type: ignore[assignment]  # pylint: disable=protected-access
+    vault._address = BASE_PLASMA_VAULT  # pylint: disable=protected-access
+    return vault
+
+
 # --- pure encoding: selector + ABI round-trip -------------------------------
 
 
-def test_encode_add_fuses_selector_and_roundtrip():
+def test_add_fuses_calldata_selector_and_roundtrip():
     fuses = [SAMPLE_FUSE_A, SAMPLE_FUSE_B]
-    calldata = PlasmaVault.encode_add_fuses_calldata(fuses)
+    calldata = _bare_vault().add_fuses(fuses).calldata
     assert calldata[:4] == function_signature_to_4byte_selector("addFuses(address[])")
     (decoded,) = abi_decode(["address[]"], calldata[4:])
     assert [Web3.to_checksum_address(a) for a in decoded] == fuses
 
 
-def test_encode_add_balance_fuse_selector_and_roundtrip():
-    calldata = PlasmaVault.encode_add_balance_fuse_calldata(7, SAMPLE_FUSE_A)
+def test_add_balance_fuse_calldata_selector_and_roundtrip():
+    calldata = _bare_vault().add_balance_fuse(7, SAMPLE_FUSE_A).calldata
     assert calldata[:4] == function_signature_to_4byte_selector(
         "addBalanceFuse(uint256,address)"
     )
@@ -59,9 +69,9 @@ def test_encode_add_balance_fuse_selector_and_roundtrip():
     assert Web3.to_checksum_address(fuse) == SAMPLE_FUSE_A
 
 
-def test_encode_grant_market_substrates_selector_and_roundtrip():
-    substrate = b"\x00" * 12 + bytes.fromhex(SAMPLE_FUSE_A[2:])
-    calldata = PlasmaVault.encode_grant_market_substrates_calldata(3, [substrate])
+def test_grant_market_substrates_calldata_selector_and_roundtrip():
+    substrate = b"\x00" * 12 + bytes.fromhex(str(SAMPLE_FUSE_A)[2:])
+    calldata = _bare_vault().grant_market_substrates(3, [substrate]).calldata
     assert calldata[:4] == function_signature_to_4byte_selector(
         "grantMarketSubstrates(uint256,bytes32[])"
     )
@@ -70,9 +80,9 @@ def test_encode_grant_market_substrates_selector_and_roundtrip():
     assert list(substrates) == [substrate]
 
 
-def test_encode_setup_markets_limits_selector_and_roundtrip():
+def test_setup_markets_limits_calldata_selector_and_roundtrip():
     pairs = [(1, 1_000_000_000_000), (2, 500_000_000_000)]
-    calldata = PlasmaVault.encode_setup_markets_limits_calldata(pairs)
+    calldata = _bare_vault().setup_markets_limits(pairs).calldata
     assert calldata[:4] == function_signature_to_4byte_selector(
         "setupMarketsLimits((uint256,uint256)[])"
     )
@@ -80,11 +90,11 @@ def test_encode_setup_markets_limits_selector_and_roundtrip():
     assert [(int(mkt), int(cap)) for mkt, cap in decoded] == pairs
 
 
-def test_encode_configure_instant_withdrawal_fuses_selector_and_roundtrip():
+def test_configure_instant_withdrawal_fuses_calldata_selector_and_roundtrip():
     sub1 = b"\x11" * 32
     sub2 = b"\x22" * 32
     configs = [(SAMPLE_FUSE_A, [sub1]), (SAMPLE_FUSE_B, [sub1, sub2])]
-    calldata = PlasmaVault.encode_configure_instant_withdrawal_fuses_calldata(configs)
+    calldata = _bare_vault().configure_instant_withdrawal_fuses(configs).calldata
     assert calldata[:4] == function_signature_to_4byte_selector(
         "configureInstantWithdrawalFuses((address,bytes32[])[])"
     )
@@ -98,32 +108,11 @@ def test_encode_configure_instant_withdrawal_fuses_selector_and_roundtrip():
     assert list(params_b) == [sub1, sub2]
 
 
-def test_call_builder_matches_static_encoder():
-    """Call[T] data must equal static encoder output — the wrapper instance
-    method and the `@staticmethod` helper must produce identical bytes."""
-
-    # Bare context — `_view`/`_write` use `ctx` only at `.call()`/`.send()` time,
-    # so we can build the Call shapes without hitting the network.
-    class _BareCtx:
-        pass
-
-    vault = PlasmaVault.__new__(PlasmaVault)
-    vault._ctx = _BareCtx()
-    vault._address = BASE_PLASMA_VAULT
-
-    pairs = [(1, 0)]
-    assert vault.setup_markets_limits(pairs).data == (
-        PlasmaVault.encode_setup_markets_limits_calldata(pairs)
-    )
-    assert vault.add_balance_fuse(2, SAMPLE_FUSE_A).data == (
-        PlasmaVault.encode_add_balance_fuse_calldata(2, SAMPLE_FUSE_A)
-    )
-    sub = b"\x01" * 32
-    assert vault.configure_instant_withdrawal_fuses(
-        [(SAMPLE_FUSE_A, [sub])]
-    ).data == PlasmaVault.encode_configure_instant_withdrawal_fuses_calldata(
-        [(SAMPLE_FUSE_A, [sub])]
-    )
+def test_calldata_property_aliases_data():
+    """`Call.calldata` must be byte-identical to `Call.data` — the property is
+    a semantic alias for external-signer flows, not a separate encoding."""
+    call = _bare_vault().setup_markets_limits([(1, 0)])
+    assert call.calldata == call.data
 
 
 # --- live eth_call against the deployed BASE plasmaVault --------------------

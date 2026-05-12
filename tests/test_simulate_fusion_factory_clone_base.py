@@ -1,12 +1,13 @@
-"""FusionFactory.clone() pure encoding + live BASE eth_call preview.
+"""FusionFactory.clone() calldata encoding + live BASE eth_call preview.
 
 Two test paths:
 
-  * `test_encode_clone_calldata_*` — pure helpers, no RPC. Asserts the
-    selector + length layout matches the deployed BASE impl signature
-    (0x8697b10a).
+  * `test_clone_calldata_*` — pure encoding, no RPC. Each test pulls
+    `factory.clone(...).calldata` from a bare wrapper instance (no ctx) and
+    asserts the selector + length layout matches the deployed BASE impl
+    signature (0x8697b10a).
 
-  * `test_clone_preview_base` — uses the `web3_base` session fixture
+  * `test_simulate_clone_*_base` — uses the `web3_base` session fixture
     (set via `BASE_PROVIDER_URL`) to run `factory.clone(...).call(ctx)`,
     decoding the 17-field `FusionInstance` tuple. eth_call is read-only
     so the CREATE2 addresses returned are deterministic for the current
@@ -23,7 +24,6 @@ from __future__ import annotations
 
 import logging
 
-import pytest
 from web3 import Web3
 
 from ipor_fusion import Web3Context
@@ -38,53 +38,71 @@ BASE_USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
 SAMPLE_OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
 
+def _bare_factory() -> FusionFactory:
+    """Build a FusionFactory without a Web3Context. Safe because `.calldata`
+    only reads the pre-encoded `Call.data` — never touches ctx."""
+    factory = FusionFactory.__new__(FusionFactory)
+    factory._ctx = None  # type: ignore[assignment]  # pylint: disable=protected-access
+    factory._address = BASE_FUSION_FACTORY  # pylint: disable=protected-access
+    return factory
+
+
 # --- pure encoding ----------------------------------------------------------
 
 
-def test_encode_clone_calldata_selector_matches_deployed():
+def test_clone_calldata_selector_matches_deployed():
     """Selector 0x8697b10a — verified against impl bytecode."""
-    calldata = FusionFactory.encode_clone_calldata(
-        asset_name="IPOR USDC Vault",
-        asset_symbol="ipUSDC",
-        underlying_token=BASE_USDC,
-        redemption_delay_seconds=86400,
-        owner=SAMPLE_OWNER,
-        dao_fee_package_index=0,
+    calldata = (
+        _bare_factory()
+        .clone(
+            asset_name="IPOR USDC Vault",
+            asset_symbol="ipUSDC",
+            underlying_token=BASE_USDC,
+            redemption_delay_seconds=86400,
+            owner=SAMPLE_OWNER,
+            dao_fee_package_index=0,
+        )
+        .calldata
     )
     assert calldata[:4].hex() == "8697b10a"
 
 
-def test_encode_clone_calldata_length_signals_six_args():
+def test_clone_calldata_length_signals_six_args():
     """6-arg signature → selector (4) + 2 dynamic string offsets + 4 static
     args + 2 string heads (length+padded data). 4-arg or 5-arg variants
     would have a different byte count."""
-    calldata = FusionFactory.encode_clone_calldata(
-        asset_name="A",
-        asset_symbol="B",
-        underlying_token=BASE_USDC,
-        redemption_delay_seconds=0,
-        owner=SAMPLE_OWNER,
+    calldata = (
+        _bare_factory()
+        .clone(
+            asset_name="A",
+            asset_symbol="B",
+            underlying_token=BASE_USDC,
+            redemption_delay_seconds=0,
+            owner=SAMPLE_OWNER,
+        )
+        .calldata
     )
     # 4 selector + 6 head slots (32 each = 192) + 2 string tails (32 len + 32 data = 64 each)
     assert len(calldata) == 4 + 6 * 32 + 2 * 64
 
 
-def test_encode_clone_calldata_defaults_dao_fee_to_zero():
-    with_default = FusionFactory.encode_clone_calldata(
+def test_clone_calldata_defaults_dao_fee_to_zero():
+    factory = _bare_factory()
+    with_default = factory.clone(
         asset_name="x",
         asset_symbol="y",
         underlying_token=BASE_USDC,
         redemption_delay_seconds=0,
         owner=SAMPLE_OWNER,
-    )
-    with_explicit_zero = FusionFactory.encode_clone_calldata(
+    ).calldata
+    with_explicit_zero = factory.clone(
         asset_name="x",
         asset_symbol="y",
         underlying_token=BASE_USDC,
         redemption_delay_seconds=0,
         owner=SAMPLE_OWNER,
         dao_fee_package_index=0,
-    )
+    ).calldata
     assert with_default == with_explicit_zero
 
 
@@ -110,10 +128,10 @@ def test_simulate_clone_preview_base(web3_base):
     assert instance.version >= 1
     assert instance.asset_name == "IPOR USDC Vault"
     assert instance.asset_symbol == "ipUSDC"
-    assert instance.underlying_token.lower() == BASE_USDC.lower()
+    assert instance.underlying_token == BASE_USDC
     assert instance.underlying_token_symbol == "USDC"
     assert instance.underlying_token_decimals == 6
-    assert instance.initial_owner.lower() == SAMPLE_OWNER.lower()
+    assert instance.initial_owner == SAMPLE_OWNER
 
     # All 8 cloned addresses must be non-zero (CREATE2-deterministic).
     cloned = [
@@ -164,17 +182,21 @@ def test_simulate_clone_two_calls_same_index(web3_base):
     )
 
 
-def test_encode_clone_calldata_known_layout():
+def test_clone_calldata_known_layout():
     """Spot-check: leading word after selector is the offset to the first
     dynamic string (assetName). For 6-arg signature with 2 strings, both
     dynamic-arg head slots point past the 6-word header (offset >= 0xa0)."""
-    calldata = FusionFactory.encode_clone_calldata(
-        asset_name="IPOR USDC Vault",
-        asset_symbol="ipUSDC",
-        underlying_token=BASE_USDC,
-        redemption_delay_seconds=0,
-        owner=SAMPLE_OWNER,
-        dao_fee_package_index=0,
+    calldata = (
+        _bare_factory()
+        .clone(
+            asset_name="IPOR USDC Vault",
+            asset_symbol="ipUSDC",
+            underlying_token=BASE_USDC,
+            redemption_delay_seconds=0,
+            owner=SAMPLE_OWNER,
+            dao_fee_package_index=0,
+        )
+        .calldata
     )
     first_head = int.from_bytes(calldata[4:36], "big")
     second_head = int.from_bytes(calldata[36:68], "big")

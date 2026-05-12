@@ -42,6 +42,13 @@ class Call(Generic[T]):
     decoder: Callable[..., T] | None = None
     ctx: Web3Context | None = None
 
+    @property
+    def calldata(self) -> bytes:
+        """Selector + ABI-encoded args as bytes. Use when handing the payload
+        to an external signer (HTTP signing service, multisig flow) instead of
+        routing through `.send(ctx)`. Pure data — no ctx required."""
+        return self.data
+
     def call(self, ctx: Web3Context | None = None) -> T:
         """Execute as `eth_call`; decode and convert per `output_types`/`decoder`."""
         actual = self._resolve_ctx(ctx)
