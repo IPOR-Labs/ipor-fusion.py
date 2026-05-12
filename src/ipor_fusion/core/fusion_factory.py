@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from eth_abi import decode as abi_decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
@@ -128,6 +129,19 @@ _FUSION_INSTANCE_TUPLE_TYPE = "(" + ",".join(_FUSION_INSTANCE_OUTPUT_TYPES) + ")
 class FusionFactory(ContractWrapper):
     """Wraps IporFusionFactoryProxy. Use `clone()` for a permissionless
     deploy, `clone_supervised()` for the maintenance-manager-gated path."""
+
+    @staticmethod
+    def decode_clone_result(data: bytes) -> FusionInstance:
+        """Decode raw ABI-encoded `clone()` return bytes → `FusionInstance`.
+
+        Useful for off-context flows where caller has the raw bytes from
+        their own `eth_call` (e.g. agent runtimes that broadcast via an
+        external signing service and replay the preview at a historical
+        block to recover CREATE2-deterministic addresses). The address
+        fields are normalized to EIP-55 checksum.
+        """
+        (values,) = abi_decode([_FUSION_INSTANCE_TUPLE_TYPE], data)
+        return _fusion_instance_decoder(values)
 
     def clone(
         self,

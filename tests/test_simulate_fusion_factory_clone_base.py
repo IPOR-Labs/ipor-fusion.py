@@ -106,6 +106,56 @@ def test_clone_calldata_defaults_dao_fee_to_zero():
     assert with_default == with_explicit_zero
 
 
+# --- public decoder helper --------------------------------------------------
+
+
+def test_decode_clone_result_round_trip():
+    """`FusionFactory.decode_clone_result(bytes)` is the public entry-point
+    for off-context flows (agent runtimes broadcasting via external signer,
+    replaying preview at a historical block). Round-trips through `eth_abi`
+    encoding and the EIP-55 normalizer."""
+    from eth_abi import encode as abi_encode
+
+    from ipor_fusion.core.fusion_factory import _FUSION_INSTANCE_TUPLE_TYPE
+
+    plasma_vault_lc = "0x" + "a1" * 20
+    access_manager_lc = "0x" + "b2" * 20
+    raw = abi_encode(
+        [_FUSION_INSTANCE_TUPLE_TYPE],
+        [
+            (
+                138,
+                8,
+                "IPOR USDC Vault",
+                "ipUSDC",
+                8,
+                BASE_USDC.lower(),
+                "USDC",
+                6,
+                SAMPLE_OWNER.lower(),
+                plasma_vault_lc,
+                "0x" + "33" * 20,
+                access_manager_lc,
+                "0x" + "44" * 20,
+                "0x" + "55" * 20,
+                "0x" + "66" * 20,
+                "0x" + "77" * 20,
+                "0x" + "88" * 20,
+            )
+        ],
+    )
+    inst = FusionFactory.decode_clone_result(raw)
+    assert inst.index == 138
+    assert inst.version == 8
+    assert inst.asset_name == "IPOR USDC Vault"
+    assert inst.asset_symbol == "ipUSDC"
+    # Addresses normalized to EIP-55 (not raw lowercase from eth_abi).
+    assert inst.underlying_token == BASE_USDC
+    assert inst.initial_owner == SAMPLE_OWNER
+    assert inst.plasma_vault == Web3.to_checksum_address(plasma_vault_lc)
+    assert inst.access_manager == Web3.to_checksum_address(access_manager_lc)
+
+
 # --- live eth_call preview (no gas, no state change) ------------------------
 
 
