@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from eth_abi import decode
+from eth_abi import decode, encode as abi_encode
 from eth_typing import ChecksumAddress
+from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import LogReceipt
@@ -31,6 +32,65 @@ def _address_list_decoder(value: list) -> list[ChecksumAddress]:
 
 class PlasmaVault(ContractWrapper):
     """ERC-4626 vault that batches and executes FuseAction sequences on-chain."""
+
+    # ── Pure encoders ───────────────────────────────────────────────────────
+    # Static `encode_*_calldata` helpers mirror `FusionFactory.encode_clone_calldata`:
+    # they produce selector + ABI-encoded args without needing a Web3Context.
+    # Callers that route through an external signer (e.g. HTTP signing service,
+    # multisig flow) can build calldata once and dispatch it themselves.
+
+    @staticmethod
+    def encode_add_fuses_calldata(fuses: list[ChecksumAddress]) -> bytes:
+        selector = function_signature_to_4byte_selector("addFuses(address[])")
+        return selector + abi_encode(["address[]"], [list(fuses)])
+
+    @staticmethod
+    def encode_add_balance_fuse_calldata(
+        market_id: MarketId, balance_fuse: ChecksumAddress
+    ) -> bytes:
+        selector = function_signature_to_4byte_selector(
+            "addBalanceFuse(uint256,address)"
+        )
+        return selector + abi_encode(
+            ["uint256", "address"], [int(market_id), balance_fuse]
+        )
+
+    @staticmethod
+    def encode_grant_market_substrates_calldata(
+        market_id: MarketId, substrates: list[bytes]
+    ) -> bytes:
+        selector = function_signature_to_4byte_selector(
+            "grantMarketSubstrates(uint256,bytes32[])"
+        )
+        return selector + abi_encode(
+            ["uint256", "bytes32[]"], [int(market_id), list(substrates)]
+        )
+
+    @staticmethod
+    def encode_setup_markets_limits_calldata(
+        limits: list[tuple[MarketId, Amount]],
+    ) -> bytes:
+        selector = function_signature_to_4byte_selector(
+            "setupMarketsLimits((uint256,uint256)[])"
+        )
+        return selector + abi_encode(
+            ["(uint256,uint256)[]"],
+            [[(int(mkt), int(cap)) for mkt, cap in limits]],
+        )
+
+    @staticmethod
+    def encode_configure_instant_withdrawal_fuses_calldata(
+        configs: list[tuple[ChecksumAddress, list[bytes]]],
+    ) -> bytes:
+        selector = function_signature_to_4byte_selector(
+            "configureInstantWithdrawalFuses((address,bytes32[])[])"
+        )
+        return selector + abi_encode(
+            ["(address,bytes32[])[]"],
+            [[(fuse, list(params)) for fuse, params in configs]],
+        )
+
+    # ── Call builders ───────────────────────────────────────────────────────
 
     def execute(self, actions: list[FuseAction]) -> Call[None]:
         data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
@@ -73,6 +133,26 @@ class PlasmaVault(ContractWrapper):
         """
         return self._write(
             "grantMarketSubstrates(uint256,bytes32[])", market_id, substrates
+        )
+
+    def add_balance_fuse(
+        self, market_id: MarketId, balance_fuse: ChecksumAddress
+    ) -> Call[None]:
+        """FUSE_MANAGER-only: link a balance-tracking fuse to a market id."""
+        return self._write("addBalanceFuse(uint256,address)", market_id, balance_fuse)
+
+    def setup_markets_limits(self, limits: list[tuple[MarketId, Amount]]) -> Call[None]:
+        """ATOMIST-only: set per-market cap in the underlying asset's smallest unit."""
+        return self._write("setupMarketsLimits((uint256,uint256)[])", list(limits))
+
+    def configure_instant_withdrawal_fuses(
+        self, configs: list[tuple[ChecksumAddress, list[bytes]]]
+    ) -> Call[None]:
+        """CONFIG_INSTANT_WITHDRAWAL_FUSES-only: (fuse, bytes32[] params) tuples.
+        Order defines priority — index 0 is queried first on instant withdraw."""
+        normalized = [(fuse, list(params)) for fuse, params in configs]
+        return self._write(
+            "configureInstantWithdrawalFuses((address,bytes32[])[])", normalized
         )
 
     def transfer(self, to: ChecksumAddress, value: Amount) -> Call[None]:

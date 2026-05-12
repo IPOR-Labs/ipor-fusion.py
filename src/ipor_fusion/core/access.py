@@ -1,8 +1,9 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from eth_abi import decode
+from eth_abi import decode, encode as abi_encode
 from eth_typing import ChecksumAddress
+from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import LogReceipt
@@ -37,6 +38,23 @@ def _role_status_decoder(values: tuple) -> RoleStatus:
 
 class AccessManager(ContractWrapper):
     """Manages role-based access control for PlasmaVault operations."""
+
+    @staticmethod
+    def encode_grant_role_calldata(
+        role_id: int, account: ChecksumAddress, execution_delay: Period = 0
+    ) -> bytes:
+        """Selector + ABI-encoded args for `grantRole(uint64,address,uint32)`.
+
+        Pure helper — no ctx required. Use when handing calldata to an external
+        signer (HTTP signing service, multisig flow) instead of `Call.send()`.
+        """
+        selector = function_signature_to_4byte_selector(
+            "grantRole(uint64,address,uint32)"
+        )
+        return selector + abi_encode(
+            ["uint64", "address", "uint32"],
+            [int(role_id), account, int(execution_delay)],
+        )
 
     def grant_role(
         self, role_id: int, account: ChecksumAddress, execution_delay: Period
