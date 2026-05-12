@@ -24,10 +24,12 @@ from __future__ import annotations
 
 import logging
 
+from eth_abi import encode as abi_encode
 from web3 import Web3
 
 from ipor_fusion import Web3Context
 from ipor_fusion.core import FusionFactory
+from ipor_fusion.core.fusion_factory import _FUSION_INSTANCE_TUPLE_TYPE
 
 LOG = logging.getLogger(__name__)
 
@@ -114,10 +116,6 @@ def test_decode_clone_result_round_trip():
     for off-context flows (agent runtimes broadcasting via external signer,
     replaying preview at a historical block). Round-trips through `eth_abi`
     encoding and the EIP-55 normalizer."""
-    from eth_abi import encode as abi_encode
-
-    from ipor_fusion.core.fusion_factory import _FUSION_INSTANCE_TUPLE_TYPE
-
     plasma_vault_lc = "0x" + "a1" * 20
     access_manager_lc = "0x" + "b2" * 20
     raw = abi_encode(
@@ -129,10 +127,10 @@ def test_decode_clone_result_round_trip():
                 "IPOR USDC Vault",
                 "ipUSDC",
                 8,
-                BASE_USDC.lower(),
+                str(BASE_USDC).lower(),
                 "USDC",
                 6,
-                SAMPLE_OWNER.lower(),
+                str(SAMPLE_OWNER).lower(),
                 plasma_vault_lc,
                 "0x" + "33" * 20,
                 access_manager_lc,
