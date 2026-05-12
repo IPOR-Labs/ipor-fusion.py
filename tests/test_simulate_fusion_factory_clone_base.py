@@ -31,7 +31,9 @@ from ipor_fusion.core import FusionFactory
 
 LOG = logging.getLogger(__name__)
 
-BASE_FUSION_FACTORY = Web3.to_checksum_address("0x1455717668fA96534f675856347A973fA907e922")
+BASE_FUSION_FACTORY = Web3.to_checksum_address(
+    "0x1455717668fA96534f675856347A973fA907e922"
+)
 BASE_USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
 SAMPLE_OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
@@ -69,12 +71,18 @@ def test_encode_clone_calldata_length_signals_six_args():
 
 def test_encode_clone_calldata_defaults_dao_fee_to_zero():
     with_default = FusionFactory.encode_clone_calldata(
-        asset_name="x", asset_symbol="y", underlying_token=BASE_USDC,
-        redemption_delay_seconds=0, owner=SAMPLE_OWNER,
+        asset_name="x",
+        asset_symbol="y",
+        underlying_token=BASE_USDC,
+        redemption_delay_seconds=0,
+        owner=SAMPLE_OWNER,
     )
     with_explicit_zero = FusionFactory.encode_clone_calldata(
-        asset_name="x", asset_symbol="y", underlying_token=BASE_USDC,
-        redemption_delay_seconds=0, owner=SAMPLE_OWNER,
+        asset_name="x",
+        asset_symbol="y",
+        underlying_token=BASE_USDC,
+        redemption_delay_seconds=0,
+        owner=SAMPLE_OWNER,
         dao_fee_package_index=0,
     )
     assert with_default == with_explicit_zero
@@ -122,8 +130,12 @@ def test_simulate_clone_preview_base(web3_base):
         assert int(addr, 16) != 0, f"unexpected zero address in clone preview: {addr}"
         assert len(addr) == 42
 
-    LOG.info("clone preview: index=%d version=%d plasmaVault=%s",
-             instance.index, instance.version, instance.plasma_vault)
+    LOG.info(
+        "clone preview: index=%d version=%d plasmaVault=%s",
+        instance.index,
+        instance.version,
+        instance.plasma_vault,
+    )
 
 
 def test_simulate_clone_two_calls_same_index(web3_base):
@@ -133,12 +145,18 @@ def test_simulate_clone_two_calls_same_index(web3_base):
     ctx = Web3Context(web3=web3_base, chain_id=8453, signer=SAMPLE_OWNER)
     factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
     first = factory.clone(
-        asset_name="a", asset_symbol="b", underlying_token=BASE_USDC,
-        redemption_delay_seconds=86400, owner=SAMPLE_OWNER,
+        asset_name="a",
+        asset_symbol="b",
+        underlying_token=BASE_USDC,
+        redemption_delay_seconds=86400,
+        owner=SAMPLE_OWNER,
     ).call()
     second = factory.clone(
-        asset_name="a", asset_symbol="b", underlying_token=BASE_USDC,
-        redemption_delay_seconds=86400, owner=SAMPLE_OWNER,
+        asset_name="a",
+        asset_symbol="b",
+        underlying_token=BASE_USDC,
+        redemption_delay_seconds=86400,
+        owner=SAMPLE_OWNER,
     ).call()
     assert first.index == second.index, (
         "eth_call must not mutate the factory index; got "
@@ -161,5 +179,5 @@ def test_encode_clone_calldata_known_layout():
     first_head = int.from_bytes(calldata[4:36], "big")
     second_head = int.from_bytes(calldata[36:68], "big")
     # 6 head slots × 32 bytes = 0xc0 — first string body starts right after.
-    assert first_head == 0xc0
+    assert first_head == 0xC0
     assert second_head > first_head, "assetSymbol offset must point past assetName"

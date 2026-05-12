@@ -30,7 +30,9 @@ from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.types import Period
 
 CLONE_SIGNATURE = "clone(string,string,address,uint256,address,uint256)"
-CLONE_SUPERVISED_SIGNATURE = "cloneSupervised(string,string,address,uint256,address,uint256)"
+CLONE_SUPERVISED_SIGNATURE = (
+    "cloneSupervised(string,string,address,uint256,address,uint256)"
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -59,12 +61,12 @@ class FusionInstance:
 _FUSION_INSTANCE_OUTPUT_TYPES: list[str] = [
     "uint256",  # index
     "uint256",  # version
-    "string",   # assetName
-    "string",   # assetSymbol
-    "uint8",    # assetDecimals
+    "string",  # assetName
+    "string",  # assetSymbol
+    "uint8",  # assetDecimals
     "address",  # underlyingToken
-    "string",   # underlyingTokenSymbol
-    "uint8",    # underlyingTokenDecimals
+    "string",  # underlyingTokenSymbol
+    "uint8",  # underlyingTokenDecimals
     "address",  # initialOwner
     "address",  # plasmaVault
     "address",  # plasmaVaultBase
