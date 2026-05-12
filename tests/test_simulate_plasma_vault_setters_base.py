@@ -69,6 +69,26 @@ def test_add_balance_fuse_calldata_selector_and_roundtrip():
     assert Web3.to_checksum_address(fuse) == SAMPLE_FUSE_A
 
 
+def test_remove_fuses_calldata_selector_and_roundtrip():
+    fuses = [SAMPLE_FUSE_A, SAMPLE_FUSE_B]
+    calldata = _bare_vault().remove_fuses(fuses).calldata
+    assert calldata[:4] == function_signature_to_4byte_selector(
+        "removeFuses(address[])"
+    )
+    (decoded,) = abi_decode(["address[]"], calldata[4:])
+    assert [Web3.to_checksum_address(a) for a in decoded] == fuses
+
+
+def test_remove_balance_fuse_calldata_selector_and_roundtrip():
+    calldata = _bare_vault().remove_balance_fuse(7, SAMPLE_FUSE_A).calldata
+    assert calldata[:4] == function_signature_to_4byte_selector(
+        "removeBalanceFuse(uint256,address)"
+    )
+    market_id, fuse = abi_decode(["uint256", "address"], calldata[4:])
+    assert market_id == 7
+    assert Web3.to_checksum_address(fuse) == SAMPLE_FUSE_A
+
+
 def test_grant_market_substrates_calldata_selector_and_roundtrip():
     substrate = b"\x00" * 12 + bytes.fromhex(str(SAMPLE_FUSE_A)[2:])
     calldata = _bare_vault().grant_market_substrates(3, [substrate]).calldata

@@ -66,6 +66,12 @@ class PlasmaVault(ContractWrapper):
     def add_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
         return self._write("addFuses(address[])", fuses)
 
+    def remove_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
+        """FUSE_MANAGER-only inverse of `add_fuses`. Used by partial-failure
+        rollback flows where a setter batch aborted mid-sequence and prior
+        `addFuses` steps must be reverted before the vault is usable."""
+        return self._write("removeFuses(address[])", fuses)
+
     def set_total_supply_cap(self, cap: Amount) -> Call[None]:
         return self._write("setTotalSupplyCap(uint256)", cap)
 
@@ -84,6 +90,15 @@ class PlasmaVault(ContractWrapper):
     ) -> Call[None]:
         """FUSE_MANAGER-only: link a balance-tracking fuse to a market id."""
         return self._write("addBalanceFuse(uint256,address)", market_id, balance_fuse)
+
+    def remove_balance_fuse(
+        self, market_id: MarketId, balance_fuse: ChecksumAddress
+    ) -> Call[None]:
+        """FUSE_MANAGER-only inverse of `add_balance_fuse`. Pairs with
+        `remove_fuses` for partial-failure rollback."""
+        return self._write(
+            "removeBalanceFuse(uint256,address)", market_id, balance_fuse
+        )
 
     def setup_markets_limits(self, limits: list[tuple[MarketId, Amount]]) -> Call[None]:
         """ATOMIST-only: set per-market cap in the underlying asset's smallest unit."""
