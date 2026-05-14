@@ -24,11 +24,13 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from eth_abi import encode as abi_encode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion import Web3Context
-from ipor_fusion.core import FusionFactory
+from ipor_fusion.core import CloneArgs, FusionFactory
 from ipor_fusion.core.fusion_factory import _FUSION_INSTANCE_TUPLE_TYPE
 
 LOG = logging.getLogger(__name__)
@@ -41,12 +43,10 @@ SAMPLE_OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46Dc
 
 
 def _bare_factory() -> FusionFactory:
-    """Build a FusionFactory without a Web3Context. Safe because `.calldata`
-    only reads the pre-encoded `Call.data` — never touches ctx."""
-    factory = FusionFactory.__new__(FusionFactory)
-    factory._ctx = None  # type: ignore[assignment]  # pylint: disable=protected-access
-    factory._address = BASE_FUSION_FACTORY  # pylint: disable=protected-access
-    return factory
+    """Build a FusionFactory without a Web3Context. Delegates to the
+    public `encoder()` classmethod — `.calldata` only reads `Call.data`
+    so the placeholder ctx is fine."""
+    return FusionFactory.encoder(BASE_FUSION_FACTORY)
 
 
 # --- pure encoding ----------------------------------------------------------
@@ -228,6 +228,87 @@ def test_simulate_clone_two_calls_same_index(web3_base):
         "eth_call must not mutate the factory index; got "
         f"first={first.index} second={second.index}"
     )
+
+
+def test_clone_func_sig_constant_matches_deployed_selector():
+    """`CLONE_FUNC_SIG` is the single source of truth — derived selector
+    must equal the deployed impl bytecode selector and the
+    `CLONE_SELECTOR` byte constant."""
+    derived = function_signature_to_4byte_selector(FusionFactory.CLONE_FUNC_SIG)
+    assert derived.hex() == "8697b10a"
+    assert FusionFactory.CLONE_SELECTOR == derived
+
+
+def test_decode_clone_calldata_round_trip():
+    """Build calldata via `clone(...).calldata`, decode back to `CloneArgs`,
+    assert all 6 fields survive ABI encoding round-trip (incl. EIP-55
+    normalization on address fields)."""
+    encoded = (
+        _bare_factory()
+        .clone(
+            asset_name="IPOR USDC Vault",
+            asset_symbol="ipUSDC",
+            underlying_token=BASE_USDC,
+            redemption_delay_seconds=86400,
+            owner=SAMPLE_OWNER,
+            dao_fee_package_index=2,
+        )
+        .calldata
+    )
+    args = FusionFactory.decode_clone_calldata(encoded)
+    assert isinstance(args, CloneArgs)
+    assert args.asset_name == "IPOR USDC Vault"
+    assert args.asset_symbol == "ipUSDC"
+    assert args.underlying_token == BASE_USDC
+    assert args.redemption_delay_seconds == 86400
+    assert args.owner == SAMPLE_OWNER
+    assert args.dao_fee_package_index == 2
+
+
+def test_decode_clone_calldata_rejects_unknown_selector():
+    """Selector mismatch raises — guards callers that route by tx selector."""
+    with pytest.raises(ValueError, match="does not match"):
+        FusionFactory.decode_clone_calldata(b"\xde\xad\xbe\xef" + b"\x00" * 32)
+
+
+def test_decode_clone_calldata_rejects_short_calldata():
+    """Calldata too short for a selector also raises (no silent garbage)."""
+    with pytest.raises(ValueError, match="does not match"):
+        FusionFactory.decode_clone_calldata(b"\x86\x97\xb1")
+
+
+def test_encoder_classmethod_builds_ctx_less_wrapper():
+    """`FusionFactory.encoder(addr)` returns a wrapper with no ctx but a
+    real address; `.calldata` works, but `.call()` / `.send()` raise."""
+    f = FusionFactory.encoder(BASE_FUSION_FACTORY)
+    assert f.address == BASE_FUSION_FACTORY
+    call = f.clone(
+        asset_name="a",
+        asset_symbol="b",
+        underlying_token=BASE_USDC,
+        redemption_delay_seconds=0,
+        owner=SAMPLE_OWNER,
+    )
+    # calldata works without ctx
+    assert call.calldata[:4] == FusionFactory.CLONE_SELECTOR
+    # .call() requires a ctx — should refuse since encoder()'s placeholder is None
+    with pytest.raises(ValueError, match="Web3Context required"):
+        call.call()
+
+
+def test_encoder_classmethod_defaults_to_zero_address():
+    """No address arg → placeholder zero address. Calldata still encodes
+    fine because `to` is irrelevant to ABI-encoded args."""
+    f = FusionFactory.encoder()
+    assert int(f.address, 16) == 0
+    data = f.clone(
+        asset_name="a",
+        asset_symbol="b",
+        underlying_token=BASE_USDC,
+        redemption_delay_seconds=0,
+        owner=SAMPLE_OWNER,
+    ).calldata
+    assert data[:4] == FusionFactory.CLONE_SELECTOR
 
 
 def test_clone_calldata_known_layout():

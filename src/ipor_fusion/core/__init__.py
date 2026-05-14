@@ -9,7 +9,7 @@ from ipor_fusion.core.withdraw_manager import (
     PendingRequestsInfo,
 )
 from ipor_fusion.core.oracle import PriceOracleMiddleware, AssetPriceSource
-from ipor_fusion.core.fusion_factory import FusionFactory, FusionInstance
+from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInstance
 
 __all__ = [
     "Web3Context",
@@ -28,4 +28,5 @@ __all__ = [
     "AssetPriceSource",
     "FusionFactory",
     "FusionInstance",
+    "CloneArgs",
 ]

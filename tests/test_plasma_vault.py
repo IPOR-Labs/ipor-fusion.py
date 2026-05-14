@@ -107,6 +107,25 @@ class TestPlasmaVaultSendMethods:
         assert result == {"status": 1}
         ctx.send.assert_called_once()
 
+    def test_convert_to_public_vault(self):
+        """No-args setter: calldata is exactly the 4-byte selector."""
+        vault, ctx = _make_vault()
+        ctx.send.return_value = {"status": 1}
+
+        call = vault.convert_to_public_vault()
+        # Selector-only, no args → 4 bytes total.
+        assert len(call.calldata) == 4
+        assert (
+            call.calldata.hex() == Web3.keccak(text="convertToPublicVault()")[:4].hex()
+        )
+
+        result = call.send()
+        assert result == {"status": 1}
+        ctx.send.assert_called_once()
+        sent_to, sent_data = ctx.send.call_args[0]
+        assert sent_to == VAULT_ADDR
+        assert sent_data == call.calldata
+
     def test_transfer(self):
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}

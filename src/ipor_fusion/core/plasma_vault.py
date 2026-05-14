@@ -75,6 +75,11 @@ class PlasmaVault(ContractWrapper):
     def set_total_supply_cap(self, cap: Amount) -> Call[None]:
         return self._write("setTotalSupplyCap(uint256)", cap)
 
+    def convert_to_public_vault(self) -> Call[None]:
+        """ATOMIST-only one-way switch: flips deposit/mint gating from
+        WHITELIST_ROLE to PUBLIC_ROLE. Cannot be reverted."""
+        return self._write("convertToPublicVault()")
+
     def grant_market_substrates(
         self, market_id: MarketId, substrates: list[bytes]
     ) -> Call[None]:

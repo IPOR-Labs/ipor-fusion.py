@@ -79,6 +79,11 @@ class Call(Generic[T]):
         return actual
 
 
+_ENCODER_PLACEHOLDER_ADDRESS: ChecksumAddress = cast(
+    ChecksumAddress, "0x0000000000000000000000000000000000000000"
+)
+
+
 class ContractWrapper:
     """Base wrapper. Subclasses expose one method per Solidity function that
     returns a `Call[T]` — never executing eagerly. Callers chain `.call()` for
@@ -92,6 +97,29 @@ class ContractWrapper:
     @property
     def address(self) -> ChecksumAddress:
         return self._address
+
+    @classmethod
+    def encoder(cls, address: ChecksumAddress | None = None):
+        """Build a ctx-less wrapper for raw calldata encoding.
+
+        External-signer flows (HTTP signing service, multisig) only need
+        `Call.calldata` — the actual `to` and `ctx` are filled in by the
+        signer. `encoder()` returns an instance with a placeholder zero
+        address and `ctx=None`, suitable for any builder method whose only
+        consumer is `.calldata`. Calling `.call()` or `.send()` on a Call
+        produced this way raises (no ctx).
+
+        Pass `address` if you want the placeholder slot filled in (purely
+        cosmetic — `.calldata` ignores it).
+        """
+        instance = cls.__new__(cls)
+        instance._ctx = None  # type: ignore[assignment]
+        instance._address = (
+            Web3.to_checksum_address(address)
+            if address is not None
+            else _ENCODER_PLACEHOLDER_ADDRESS
+        )
+        return instance
 
     def _view(
         self,
