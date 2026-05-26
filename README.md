@@ -197,7 +197,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 ```bash
 poetry install                                              # Install dependencies
 poetry run pytest tests/test_fuse_encoding.py -n auto -v    # Unit tests (fast, no Docker)
-poetry run pytest -v -s                                     # All tests (needs Docker + .env)
+poetry run pytest -v -s                                     # All tests (needs `.*_PROVIDER_URL` variables in `.env`)
 poetry run black ./                                         # Format
 poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .  # Lint
 poetry run mypy .                                           # Type check
