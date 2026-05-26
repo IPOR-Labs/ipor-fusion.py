@@ -30,7 +30,11 @@ def _address_list_decoder(value: list) -> list[ChecksumAddress]:
 
 
 class PlasmaVault(ContractWrapper):
-    """ERC-4626 vault that batches and executes FuseAction sequences on-chain."""
+    """ERC-4626 vault that batches and executes FuseAction sequences on-chain.
+
+    Each method returns a `Call[T]`. For external-signer flows (HTTP signing
+    service, multisig), grab the bytes directly: `vault.add_fuses(...).calldata`.
+    """
 
     def execute(self, actions: list[FuseAction]) -> Call[None]:
         data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
@@ -62,8 +66,19 @@ class PlasmaVault(ContractWrapper):
     def add_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
         return self._write("addFuses(address[])", fuses)
 
+    def remove_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
+        """FUSE_MANAGER-only inverse of `add_fuses`. Used by partial-failure
+        rollback flows where a setter batch aborted mid-sequence and prior
+        `addFuses` steps must be reverted before the vault is usable."""
+        return self._write("removeFuses(address[])", fuses)
+
     def set_total_supply_cap(self, cap: Amount) -> Call[None]:
         return self._write("setTotalSupplyCap(uint256)", cap)
+
+    def convert_to_public_vault(self) -> Call[None]:
+        """ATOMIST-only one-way switch: flips deposit/mint gating from
+        WHITELIST_ROLE to PUBLIC_ROLE. Cannot be reverted."""
+        return self._write("convertToPublicVault()")
 
     def grant_market_substrates(
         self, market_id: MarketId, substrates: list[bytes]
@@ -73,6 +88,35 @@ class PlasmaVault(ContractWrapper):
         """
         return self._write(
             "grantMarketSubstrates(uint256,bytes32[])", market_id, substrates
+        )
+
+    def add_balance_fuse(
+        self, market_id: MarketId, balance_fuse: ChecksumAddress
+    ) -> Call[None]:
+        """FUSE_MANAGER-only: link a balance-tracking fuse to a market id."""
+        return self._write("addBalanceFuse(uint256,address)", market_id, balance_fuse)
+
+    def remove_balance_fuse(
+        self, market_id: MarketId, balance_fuse: ChecksumAddress
+    ) -> Call[None]:
+        """FUSE_MANAGER-only inverse of `add_balance_fuse`. Pairs with
+        `remove_fuses` for partial-failure rollback."""
+        return self._write(
+            "removeBalanceFuse(uint256,address)", market_id, balance_fuse
+        )
+
+    def setup_markets_limits(self, limits: list[tuple[MarketId, Amount]]) -> Call[None]:
+        """ATOMIST-only: set per-market cap in the underlying asset's smallest unit."""
+        return self._write("setupMarketsLimits((uint256,uint256)[])", list(limits))
+
+    def configure_instant_withdrawal_fuses(
+        self, configs: list[tuple[ChecksumAddress, list[bytes]]]
+    ) -> Call[None]:
+        """CONFIG_INSTANT_WITHDRAWAL_FUSES-only: (fuse, bytes32[] params) tuples.
+        Order defines priority — index 0 is queried first on instant withdraw."""
+        normalized = [(fuse, list(params)) for fuse, params in configs]
+        return self._write(
+            "configureInstantWithdrawalFuses((address,bytes32[])[])", normalized
         )
 
     def transfer(self, to: ChecksumAddress, value: Amount) -> Call[None]:
