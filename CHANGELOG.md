@@ -1,6 +1,174 @@
 # CHANGELOG
 
 
+## v3.0.0 (2026-05-26)
+
+### Breaking
+
+* feat(sdk)!: VaultSimulator (eth_simulateV1) + lazy Call[T] wrapper API
+
+## VaultSimulator
+
+  Build and run an `eth_simulateV1` payload for a PlasmaVault flow. Buffers
+  writes (FuseAction batches via `execute`) and reads (`observe`) into a
+  single JSON-RPC roundtrip; state threads through every step in a simulated
+  block; multi-block batches via `next_block(time_shift_seconds=…)`.
+
+  ```python
+  sim = VaultSimulator(web3, vault=VAULT, alpha=ALPHA, block="latest")
+  sim.observe("usdc_before", usdc.balance_of(vault))
+  sim.execute([flash_loan_action])
+  sim.observe("usdc_after", usdc.balance_of(vault))
+  result = sim.run()                          # one eth_simulateV1 roundtrip
+  result.get("usdc_after")                    # → Amount (typed via decoder)
+
+  Use cases: simulation gate before submitting on-chain, health-factor
+  projection across time, parameter sweep on the same baseline, replacement
+  for anvil-forked integration tests where state doesn't need to persist.
+
+  Ports 38 anvil-forked integration tests to eth_simulateV1, retires 12.
+
+  Lazy Call[T] wrapper API
+
+  Every wrapper method (ERC20.balance_of, PlasmaVault.deposit,
+  AaveV3Reader.get_user_account_data, …) returns Call[T] carrying target,
+  calldata, ABI output types, and decoder. The same builder powers eth_call,
+  eth_sendTransaction, and eth_simulateV1 batching:
+
+  balance = usdc.balance_of(addr).call()              # eth_call → Amount
+  usdc.transfer(to, amt).send()                       # tx → TxReceipt
+  sim.observe("x", usdc.balance_of(vault))            # eth_simulateV1
+  sim.add_call(call=usdc.approve(spender, amt), from_=user)
+  sim.execute_call(call=rewards.claim_rewards([action]))
+
+  Decoder propagates through the simulator: result.get(label) returns the
+  typed Python value (Amount, WithdrawRequestInfo, MorphoMarket,
+  AaveV3UserAccountData, …) — not a raw tuple.
+
+  ctx is a default carried from the wrapper; override per call via
+  .call(other_ctx) for cross-context reads.
+
+  Compound methods (event-replay: get_balance_fuses,
+  get_pending_requests, owners, atomists, get_assets_price_sources)
+  stay immediate-execute since they don't fit a single eth_call.
+
+  Breaking changes
+
+  - Every wrapper method now returns Call[T] instead of the typed value
+  or TxReceipt. Migration: add .call() to reads, .send() to writes.
+  - ContractWrapper._raw_call, _call, _send, _encode helpers
+  removed — readers use the same _view / _write path.
+  - EncodedCall removed; Call[T] is the public type.
+  - ~180 call sites updated across CLI, MCP, readers, and tests. ([`42606b6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/42606b68df53fdaea349a9db312174b3f672594a))
+
+### Unknown
+
+* core: add FusionFactory wrapper (#107)
+
+* core: add FusionFactory wrapper (clone + clone_supervised + FusionInstance)
+
+Wraps IporFusionFactoryProxy so projects depending on this SDK no
+longer reimplement the clone() ABI encoding by hand.
+
+Deployed BASE signature (verified 2026-05-12 via impl bytecode at
+0x610152a79be7f2aa3aa70520c9331c18fe8d33b7, selector 0x8697b10a):
+  clone(string, string, address, uint256, address, uint256)
+        → FusionInstance{17 fields}
+
+API:
+  FusionFactory(ctx, address).clone(...).call(ctx)  → FusionInstance preview
+  FusionFactory(ctx, address).clone(...).send(ctx)  → TxReceipt (real deploy)
+  FusionFactory.encode_clone_calldata(...)          → bytes (no ctx)
+  clone_supervised(...)                             → same shape, MAINTENANCE_MANAGER_ROLE gated
+
+`encode_clone_calldata` is a staticmethod for callers that send via an
+external signer (HTTP signing service, hardware wallet) and just need
+the encoded bytes.
+
+`FusionInstance` is a frozen dataclass with 17 fields mirroring the
+deployed FusionFactoryLib.FusionInstance struct (index, version,
+assetName, assetSymbol, assetDecimals, underlyingToken,
+underlyingTokenSymbol, underlyingTokenDecimals, initialOwner,
+plasmaVault, plasmaVaultBase, accessManager, feeManager,
+rewardsManager, withdrawManager, contextManager, priceManager).
+
+tests/test_simulate_fusion_factory_clone_base.py:
+- 4 pure-encoding cases (selector match, byte layout, dao_fee default,
+  head offset)
+- 2 live BASE eth_call cases (preview returns valid FusionInstance with
+  non-zero addresses; double-call returns same index — eth_call read-only)
+
+Backwards-compatible: existing wrappers unchanged.
+
+* style: apply black formatting to FusionFactory + clone tests
+
+* core: add PlasmaVaultGovernance setters + AccessManager.encode_grant_role_calldata
+
+PlasmaVault gains 3 Call[None] setter wrappers (add_balance_fuse,
+setup_markets_limits, configure_instant_withdrawal_fuses) plus 5 static
+encode_*_calldata helpers — same shape as FusionFactory.encode_clone_calldata,
+for callers that hand calldata to an external signer instead of routing
+through Call.send().
+
+AccessManager gains encode_grant_role_calldata (pure helper, no ctx).
+
+Selectors verified live against impl bytecode on BASE via
+ipor-multi-agent/scripts/smoke_base_postsetup.py:
+  addFuses 0x3e3a86e0, addBalanceFuse 0x0c63abc6,
+  grantMarketSubstrates 0xd1dffb88, setupMarketsLimits 0x27d9e8b2,
+  configureInstantWithdrawalFuses 0xf2d888df.
+
+Tests: 5 selector+round-trip encoding tests, 1 Call-vs-static parity test,
+1 live BASE eth_call (getFuses() on the deployed plasmaVault at
+0xc4f086…d4fd).
+
+pylintrc.toml: max-public-methods 35 -> 50 (PlasmaVault is now 41).
+
+* refactor(core): expose Call.calldata, drop encode_*_calldata statics
+
+Add a `calldata` property to `Call` so external-signer flows can grab the
+selector + ABI-encoded args via `wrapper.method(...).calldata` instead of
+parallel `Class.encode_method_calldata(...)` static helpers.
+
+Removes 7 redundant statics: FusionFactory.encode_clone_calldata,
+AccessManager.encode_grant_role_calldata, and 5 PlasmaVault encoders
+(add_fuses, add_balance_fuse, grant_market_substrates,
+setup_markets_limits, configure_instant_withdrawal_fuses). Tests
+rebuild bare wrappers via `__new__` since `.calldata` never touches ctx.
+
+* fix(core): checksum addresses in FusionInstance decoder
+
+eth_abi.decode returns address fields as lowercase hex; the dataclass
+declares them as ChecksumAddress, so equality against EIP-55 inputs
+(Web3.to_checksum_address) silently failed. Apply to_checksum_address
+in `_fusion_instance_decoder` to honor the type contract.
+
+Fixes `test_simulate_clone_preview_base` regression on BASE.
+
+* core: expose FusionFactory.decode_clone_result(bytes) -> FusionInstance public helper
+
+Eliminates the need for callers to import the module-private
+`_FUSION_INSTANCE_TUPLE_TYPE` constant. Off-context flows (agent
+runtimes broadcasting via external signer, replaying preview at a
+historical block, parsing raw eth_call return bytes) get a typed
+FusionInstance with EIP-55 checksum addresses for free.
+
+Implementation: thin @staticmethod wrapper around eth_abi.decode +
+_fusion_instance_decoder — same decode path as Call.call() but
+accessible without a Web3Context. Drift between callers and the
+canonical SDK layout is impossible because there's only one
+_FUSION_INSTANCE_OUTPUT_TYPES list now.
+
+Test: round-trip via eth_abi.encode → decode_clone_result. Verifies
+EIP-55 normalization (lowercase input → checksum output).
+
+* style(tests): hoist imports + appease pylint no-member on ChecksumAddress
+
+* core: PlasmaVault.remove_fuses + remove_balance_fuse — rollback setters for partial-failure flows
+
+* core: public off-context helpers — ContractWrapper.encoder(), FusionFactory.decode_clone_calldata + CLONE_SELECTOR, PlasmaVault.convert_to_public_vault ([`175b20f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/175b20f3d1a22d58e3bb9d582ac835144743a431))
+
+
 ## v2.2.0 (2026-05-08)
 
 ### Bug Fixes
