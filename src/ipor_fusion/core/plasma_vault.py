@@ -109,6 +109,13 @@ class PlasmaVault(ContractWrapper):
         """ATOMIST-only: set per-market cap in the underlying asset's smallest unit."""
         return self._write("setupMarketsLimits((uint256,uint256)[])", list(limits))
 
+    def update_markets_balances(self, market_ids: list[MarketId]) -> Call[None]:
+        """UPDATE_MARKETS_BALANCES-only: re-read and cache each market's balance
+        via its balance fuse. `total_assets_in_market` / `total_assets` return a
+        *stored* value refreshed by the post-execute hook; call this to resync
+        after time passes (e.g. accrued lending interest) without an execute."""
+        return self._write("updateMarketsBalances(uint256[])", list(market_ids))
+
     def configure_instant_withdrawal_fuses(
         self, configs: list[tuple[ChecksumAddress, list[bytes]]]
     ) -> Call[None]:
