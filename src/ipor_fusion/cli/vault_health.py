@@ -136,8 +136,6 @@ def _compute_erc20_balances(  # pylint: disable=too-complex
         for addr, symbol, token_decimals, balance, price in resolved:
             if token_decimals is None or balance is None:
                 continue
-            if addr.lower() == data.asset.lower():
-                totals.underlying_balance_raw = balance
             price_usd = price.readable() if price else None
             if balance > 0:
                 totals.token_addrs_on_vault.add(addr.lower())
