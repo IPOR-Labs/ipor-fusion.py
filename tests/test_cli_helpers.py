@@ -46,6 +46,8 @@ from ipor_fusion.cli.vault_health import (
     _BalanceFuseTotals,
     _Erc20Totals,
     _TokenInfo,
+    _compute_erc20_balances,
+    _compute_health_check,
     _print_erc20_balances,
     _print_health_check,
     _print_reconciliation,
@@ -869,6 +871,120 @@ class TestPrintErc20Balances:
         _print_erc20_balances(ctx, pv, data)
         captured = capsys.readouterr()
         assert "(none)" in captured.out
+
+
+class TestUnderlyingOnVaultIL7463:
+    """IL-7463 regression.
+
+    Idle underlying held directly on the vault is part of ``totalAssets`` via
+    ERC4626 base accounting, but by design it is NOT registered as an
+    ``ERC20_VAULT_BALANCE`` substrate. ``_compute_erc20_balances`` must still
+    report it in ``underlying_balance_raw`` — otherwise reconciliation reports a
+    false-positive delta (and a cascading "market storage drift" warning).
+
+    Reproduces BASE vault 0x7743931f74157C8aC65697660102555d40D09a77 at block
+    46334673, where 10 idle USDC (not yet supplied to Aave) produced a 100%
+    reconciliation mismatch.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _tmp_config(self, tmp_path, monkeypatch):
+        config_dir = tmp_path / ".fusion"
+        cache_dir = tmp_path / ".cache"
+        monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
+        monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
+        monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(
+            config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
+        )
+        monkeypatch.setattr(
+            config_store,
+            "DEPLOYMENT_CACHE_FILE",
+            cache_dir / "deployment_cache.json",
+        )
+
+    def _make_data(self, balance_fuses, underlying_balance_on_vault=0):
+        return _VaultData(
+            block_label="1",
+            block_timestamp=0,
+            share_decimals=8,
+            asset_decimals=6,
+            total_assets=10 * 10**6,
+            total_supply=10 * 10**6,
+            supply_cap=0,
+            asset=ADDR_2,  # the underlying (USDC stand-in)
+            asset_symbol="USDC",
+            access_manager=ADDR_1,
+            price_oracle_addr=ADDR_ORACLE,
+            rewards_manager=None,
+            withdraw_manager=None,
+            asset_price_usd=1.0,
+            fuses=[],
+            balance_fuses=balance_fuses,
+            instant_fuses=[],
+            underlying_balance_on_vault=underlying_balance_on_vault,
+        )
+
+    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    def test_underlying_counted_when_erc20_market_has_no_substrate(
+        self, mock_oracle_cls
+    ):
+        ctx = MagicMock()
+        pv = MagicMock()
+        pv.address = ADDR_1
+        # ERC20_VAULT_BALANCE market exists but lists NO substrates (live config).
+        pv.get_market_substrates.return_value.call.return_value = []
+        pv.total_assets_in_market.return_value.call.return_value = 0
+
+        data = self._make_data(
+            [
+                FakeBalanceFuse(
+                    market_id=IporFusionMarkets.ERC20_VAULT_BALANCE, fuse=ADDR_1
+                )
+            ],
+            underlying_balance_on_vault=10 * 10**6,
+        )
+        totals = _compute_erc20_balances(ctx, pv, data)
+
+        assert totals.underlying_balance_raw == 10 * 10**6
+
+    def test_underlying_counted_when_no_erc20_market(self):
+        ctx = MagicMock()
+        pv = MagicMock()
+
+        # No ERC20_VAULT_BALANCE market registered at all.
+        data = self._make_data(
+            [FakeBalanceFuse(market_id=999, fuse=ADDR_1)],
+            underlying_balance_on_vault=10 * 10**6,
+        )
+        totals = _compute_erc20_balances(ctx, pv, data)
+
+        assert totals.underlying_balance_raw == 10 * 10**6
+
+    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    def test_no_false_reconciliation_warning_for_idle_underlying(self, mock_oracle_cls):
+        ctx = MagicMock()
+        pv = MagicMock()
+        pv.address = ADDR_1
+        pv.get_market_substrates.return_value.call.return_value = []
+        pv.total_assets_in_market.return_value.call.return_value = 0
+
+        data = self._make_data(
+            [
+                FakeBalanceFuse(
+                    market_id=IporFusionMarkets.ERC20_VAULT_BALANCE, fuse=ADDR_1
+                )
+            ],
+            underlying_balance_on_vault=10 * 10**6,
+        )
+        totals = _compute_erc20_balances(ctx, pv, data)
+        # Nothing is deployed to markets at this block — only idle underlying.
+        health = _compute_health_check(
+            data, _BalanceFuseTotals(raw_total=0), totals, set()
+        )
+
+        recon_warnings = [w for w in health.warnings if "totalAssets" in w]
+        assert recon_warnings == []
 
 
 class TestPrintSubstrates:

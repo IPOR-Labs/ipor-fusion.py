@@ -76,6 +76,11 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     fuses: list
     balance_fuses: list
     instant_fuses: list
+    # Underlying asset balance held directly on the vault (raw). Part of
+    # totalAssets via ERC4626 base accounting; by design NOT tracked as an
+    # ERC20_VAULT_BALANCE substrate, so it is read directly in
+    # _fetch_vault_data rather than derived from substrates (IL-7463).
+    underlying_balance_on_vault: int = 0
     vault_name: str = ""
     deployment_block: int | None = None
     deployment_timestamp: int | None = None
@@ -403,6 +408,9 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
 
         f_symbol: Future = pool.submit(_safe_call, asset_erc20.symbol().call)
         f_adec = pool.submit(asset_erc20.decimals().call)
+        f_underlying_bal = pool.submit(
+            asset_erc20.balance_of(Web3.to_checksum_address(plasma_vault.address)).call
+        )
         f_price: Future = pool.submit(
             _safe_call, lambda: oracle.get_asset_price(asset).call()
         )
@@ -499,6 +507,7 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             block_timestamp=block_timestamp,
             share_decimals=f_decimals.result(),
             asset_decimals=f_adec.result(),
+            underlying_balance_on_vault=f_underlying_bal.result(),
             total_assets=f_total_assets.result(),
             total_supply=f_total_supply.result(),
             supply_cap=f_supply_cap.result(),

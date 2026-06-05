@@ -308,6 +308,7 @@ class TestVaultInfo:
         mock_erc20 = MagicMock()
         mock_erc20.symbol.return_value.call.return_value = "USDC"
         mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_price = MagicMock()
@@ -400,6 +401,7 @@ class TestVaultInfo:
         mock_erc20 = MagicMock()
         mock_erc20.symbol.return_value.call.return_value = "USDC"
         mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
@@ -471,6 +473,7 @@ class TestVaultInfo:
         mock_erc20 = MagicMock()
         mock_erc20.symbol.return_value.call.return_value = "USDC"
         mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
@@ -530,6 +533,7 @@ class TestVaultInfo:
         mock_erc20 = MagicMock()
         mock_erc20.symbol.return_value.call.return_value = "USDC"
         mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
@@ -602,6 +606,7 @@ class TestVaultInfo:
         mock_erc20 = MagicMock()
         mock_erc20.symbol.return_value.call.return_value = "USDC"
         mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
@@ -662,6 +667,7 @@ class TestVaultInfo:
         mock_erc20 = MagicMock()
         mock_erc20.symbol.return_value.call.return_value = "USDC"
         mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
@@ -770,6 +776,7 @@ class TestVaultInfoJson:
         mock_erc20 = MagicMock()
         mock_erc20.symbol.return_value.call.return_value = "USDC"
         mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_price = MagicMock()
@@ -894,6 +901,7 @@ class TestVaultInfoJson:
         mock_erc20 = MagicMock()
         mock_erc20.symbol.return_value.call.return_value = "USDC"
         mock_erc20.decimals.return_value.call.return_value = 6
+        mock_erc20.balance_of.return_value.call.return_value = 0
         mock_erc20_cls.return_value = mock_erc20
 
         mock_oracle = MagicMock()
