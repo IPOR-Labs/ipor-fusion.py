@@ -16,6 +16,7 @@ dependency; signing reuses ``eth_account``, which is already a core dependency.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import time
@@ -35,6 +36,10 @@ DEFAULT_KEEPER_URL = "https://api.mainnet.ipor.io"
 PRIVATE_KEY_ENV = "FUSION_PRIVATE_KEY"
 KEEPER_URL_ENV = "FUSION_KEEPER_URL"
 
+# Refresh a cached JWT this many seconds before its `exp`, so clock skew and
+# network latency can't race the keeper's expiry check.
+_TOKEN_EXPIRY_SKEW_SECONDS = 30
+
 
 class KeeperError(IporFusionError):
     """Raised when a Keeper API call fails (network, HTTP, or authentication)."""
@@ -49,9 +54,10 @@ class KeeperClient:
 
     Construct with an ``eth_account`` ``LocalAccount`` directly, or — more
     commonly — via :meth:`from_env`, which reads the signing key and base URL
-    from the environment. Every authenticated call runs the
-    ``nonce -> sign -> token`` handshake; in-memory token caching is layered on
-    top separately.
+    from the environment. The first authenticated call runs the
+    ``nonce -> sign -> token`` handshake; the resulting JWT is cached in memory
+    and reused until it nears expiry or a request returns 401. It is never
+    written to disk.
     """
 
     def __init__(
@@ -64,6 +70,7 @@ class KeeperClient:
         self._account = account
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._token: str | None = None
 
     @classmethod
     def from_env(cls, *, timeout: float = 10.0) -> "KeeperClient":
@@ -123,7 +130,8 @@ class KeeperClient:
         token = response.get("token")
         if not token:
             raise KeeperError("Keeper /api/auth/sign did not return a token")
-        return str(token)
+        self._token = str(token)
+        return self._token
 
     def verify(self) -> dict[str, Any]:
         """Confirm the wallet authenticates successfully (GET /api/auth/verify)."""
@@ -136,8 +144,32 @@ class KeeperClient:
         *,
         body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Issue an authenticated Keeper request (authenticates first)."""
-        return self._http(method, path, body=body, authenticated=True)
+        """Issue an authenticated Keeper request.
+
+        Uses the cached token. If the keeper rejects it with 401 (expired or
+        revoked server-side), the token is discarded and the call is retried
+        exactly once with a freshly minted token.
+        """
+        try:
+            return self._http(method, path, body=body, authenticated=True)
+        except KeeperError as exc:
+            if exc.status_code != 401:
+                raise
+            # Drop the rejected token; the retry's _http -> token() re-runs the
+            # handshake because _token is now None. The retry is outside the
+            # try, so a second 401 propagates instead of looping.
+            self._token = None
+            return self._http(method, path, body=body, authenticated=True)
+
+    def token(self) -> str:
+        """Return a usable JWT, authenticating or refreshing only when needed.
+
+        Re-authenticates when no token is cached or the cached one is at/near its
+        expiry; otherwise returns the in-memory token unchanged.
+        """
+        if self._token is None or self._is_expired(self._token):
+            return self.authenticate()
+        return self._token
 
     # ── Internals ─────────────────────────────────────────────────────────
 
@@ -180,7 +212,7 @@ class KeeperClient:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
         if authenticated:
-            headers["Authorization"] = f"Bearer {self.authenticate()}"
+            headers["Authorization"] = f"Bearer {self.token()}"
         request = Request(
             f"{self._base_url}{path}", data=data, headers=headers, method=method
         )
@@ -201,3 +233,36 @@ class KeeperClient:
             return json.loads(raw)
         except json.JSONDecodeError as exc:
             raise KeeperError(f"Keeper returned invalid JSON: {exc}") from exc
+
+    @staticmethod
+    def _is_expired(token: str) -> bool:
+        exp = KeeperClient._token_expiry(token)
+        if exp is None:
+            # No readable `exp` — don't pre-empt; let a real 401 force re-auth.
+            return False
+        return time.time() >= exp - _TOKEN_EXPIRY_SKEW_SECONDS
+
+    @staticmethod
+    def _token_expiry(token: str) -> float | None:
+        """Best-effort read of a JWT's `exp` (unix seconds); None if unreadable.
+
+        Decodes only the payload segment — the signature is NOT verified. This is
+        a client-side refresh hint, not a security check; the keeper validates
+        the token for real on every request.
+        """
+        segments = token.split(".")
+        if len(segments) != 3:
+            return None
+        payload_b64 = segments[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)  # restore base64 padding
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        except ValueError:
+            # binascii.Error (bad base64) and JSONDecodeError both subclass this.
+            return None
+        if not isinstance(payload, dict):
+            return None
+        exp = payload.get("exp")
+        if isinstance(exp, (int, float)):
+            return float(exp)
+        return None
