@@ -9,6 +9,7 @@ import base64
 import io
 import json
 import time
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
 
@@ -17,7 +18,7 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 from web3 import Web3
 
-from ipor_fusion.core.keeper import KeeperClient, KeeperError
+from ipor_fusion.core.keeper import AlphaConfig, KeeperClient, KeeperError
 
 # Throwaway secp256k1 key — a test fixture, not a secret (cf. test_web3_context.py).
 TEST_PRIVATE_KEY = "0x" + "11" * 32
@@ -63,10 +64,18 @@ class _FakeKeeper:
         nonce: int = 7,
         token: str = TOKEN,
         verify_errors: list[int] | None = None,
+        alpha_payload: dict | None = None,
+        alpha_raw: bytes | None = None,
+        alpha_status: int | None = None,
+        alpha_errors: list[int] | None = None,
     ) -> None:
         self.nonce = nonce
         self.token = token
         self.verify_errors = list(verify_errors or [])
+        self.alpha_payload = alpha_payload
+        self.alpha_raw = alpha_raw
+        self.alpha_status = alpha_status
+        self.alpha_errors = list(alpha_errors or [])
         self.calls: list = []
 
     def __call__(self, request, timeout=None):
@@ -81,6 +90,17 @@ class _FakeKeeper:
                 status = self.verify_errors.pop(0)
                 raise HTTPError(url, status, "err", {}, io.BytesIO(b'{"error":"x"}'))
             return _json({"valid": True, "walletAddress": TEST_WALLET})
+        if "/api/alpha/config/" in url:
+            if self.alpha_errors:
+                status = self.alpha_errors.pop(0)
+                raise HTTPError(url, status, "err", {}, io.BytesIO(b'{"error":"x"}'))
+            if self.alpha_status is not None:
+                raise HTTPError(
+                    url, self.alpha_status, "err", {}, io.BytesIO(b'{"error":"x"}')
+                )
+            if self.alpha_raw is not None:
+                return _resp(self.alpha_raw)
+            return _json(self.alpha_payload or {})
         raise AssertionError(f"unexpected {request.get_method()} {url}")
 
     def calls_to(self, suffix: str) -> list:
@@ -330,3 +350,115 @@ def test_missing_token_raises():
     ):
         with pytest.raises(KeeperError, match="did not return a token"):
             _client().authenticate()
+
+
+# ── read_alpha_config ─────────────────────────────────────────────────────
+
+
+def test_read_alpha_config_parses_full_payload():
+    fake = _FakeKeeper(
+        alpha_payload={
+            "chainId": 1,
+            "vaultAddress": TEST_WALLET,
+            "marketCaps": [
+                {
+                    "chainId": 1,
+                    "protocol": "morpho-blue",
+                    "marketId": "0xabc",
+                    "value": {"type": "amount", "amount": 1000000},
+                },
+                {
+                    "chainId": 8453,
+                    "protocol": "aave-v3",
+                    "marketId": "USDC",
+                    "value": {"type": "percentage", "percentage": 0.75},
+                },
+            ],
+            "dryRunEnabled": True,
+        }
+    )
+    with patch("ipor_fusion.core.keeper.urlopen", fake):
+        cfg = _client().read_alpha_config(1, TEST_WALLET)
+
+    assert isinstance(cfg, AlphaConfig)
+    assert cfg.chain_id == 1
+    assert cfg.vault_address == TEST_WALLET
+    assert cfg.dry_run_enabled is True
+
+    amount_cap, pct_cap = cfg.market_caps
+    assert (amount_cap.chain_id, amount_cap.protocol, amount_cap.market_id) == (
+        1,
+        "morpho-blue",
+        "0xabc",
+    )
+    assert amount_cap.value.kind == "amount"
+    assert amount_cap.value.amount == Decimal("1000000")
+    assert amount_cap.value.percentage is None
+
+    assert pct_cap.value.kind == "percentage"
+    assert pct_cap.value.percentage == Decimal("0.75")
+    assert pct_cap.value.amount is None
+
+
+def test_read_alpha_config_handles_missing_dry_run_and_empty_caps():
+    fake = _FakeKeeper(
+        alpha_payload={"chainId": 1, "vaultAddress": TEST_WALLET, "marketCaps": []}
+    )
+    with patch("ipor_fusion.core.keeper.urlopen", fake):
+        cfg = _client().read_alpha_config(1, TEST_WALLET)
+
+    assert cfg is not None
+    assert not cfg.market_caps
+    assert cfg.dry_run_enabled is None
+
+
+def test_read_alpha_config_preserves_decimal_precision():
+    # A value with more significant digits than float64 can hold round-trips
+    # exactly only because _http parses JSON numbers as Decimal.
+    raw = (
+        b'{"chainId":1,"vaultAddress":"'
+        + str(TEST_WALLET).encode()
+        + b'","marketCaps":[{"chainId":1,"protocol":"morpho-blue","marketId":"0x1",'
+        b'"value":{"type":"amount","amount":123456789.123456789}}],'
+        b'"dryRunEnabled":false}'
+    )
+    fake = _FakeKeeper(alpha_raw=raw)
+    with patch("ipor_fusion.core.keeper.urlopen", fake):
+        cfg = _client().read_alpha_config(1, TEST_WALLET)
+
+    assert cfg is not None
+    assert cfg.market_caps[0].value.amount == Decimal("123456789.123456789")
+    assert cfg.dry_run_enabled is False
+
+
+def test_decimal_precision_survives_a_401_retry():
+    # A 401 forces request()'s retry path; the high-precision value must survive
+    # it too (both _http calls parse JSON numbers as Decimal).
+    raw = (
+        b'{"chainId":1,"vaultAddress":"'
+        + str(TEST_WALLET).encode()
+        + b'","marketCaps":[{"chainId":1,"protocol":"morpho-blue","marketId":"0x1",'
+        b'"value":{"type":"amount","amount":123456789.123456789}}],'
+        b'"dryRunEnabled":false}'
+    )
+    fake = _FakeKeeper(alpha_raw=raw, alpha_errors=[401])  # 401 once, then succeed
+    with patch("ipor_fusion.core.keeper.urlopen", fake):
+        cfg = _client().read_alpha_config(1, TEST_WALLET)
+
+    assert cfg is not None
+    assert cfg.market_caps[0].value.amount == Decimal("123456789.123456789")
+    assert len(fake.calls_to(f"/api/alpha/config/1/{TEST_WALLET}")) == 2  # retried
+
+
+def test_read_alpha_config_returns_none_on_404():
+    fake = _FakeKeeper(alpha_status=404)
+    with patch("ipor_fusion.core.keeper.urlopen", fake):
+        assert _client().read_alpha_config(1, TEST_WALLET) is None
+
+
+def test_read_alpha_config_raises_on_403():
+    fake = _FakeKeeper(alpha_status=403)
+    with patch("ipor_fusion.core.keeper.urlopen", fake):
+        with pytest.raises(KeeperError) as excinfo:
+            _client().read_alpha_config(1, TEST_WALLET)
+    assert excinfo.value.status_code == 403

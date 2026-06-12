@@ -18,7 +18,13 @@ from ipor_fusion.core.withdraw_manager import (
     PendingRequestsInfo,
 )
 from ipor_fusion.core.oracle import PriceOracleMiddleware, AssetPriceSource
-from ipor_fusion.core.keeper import KeeperClient, KeeperError
+from ipor_fusion.core.keeper import (
+    KeeperClient,
+    KeeperError,
+    AlphaConfig,
+    MarketCap,
+    CapValue,
+)
 from ipor_fusion.readers import (
     MorphoReader,
     MorphoMarket,
@@ -119,6 +125,9 @@ __all__ = [
     "AssetPriceSource",
     "KeeperClient",
     "KeeperError",
+    "AlphaConfig",
+    "MarketCap",
+    "CapValue",
     "FuseAction",
     "Fuse",
     "StakeFuse",

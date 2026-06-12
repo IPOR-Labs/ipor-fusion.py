@@ -20,7 +20,9 @@ import base64
 import json
 import os
 import time
-from typing import Any
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -47,6 +49,67 @@ class KeeperError(IporFusionError):
     def __init__(self, message: str, *, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+@dataclass(slots=True)
+class CapValue:
+    """A market cap expressed as an absolute ``amount`` or a ``percentage``.
+
+    Exactly one is set (the keeper omits the other). Amounts are ``Decimal`` to
+    preserve the keeper's ``BigDecimal`` precision.
+    """
+
+    kind: Literal["amount", "percentage"]
+    amount: Decimal | None
+    percentage: Decimal | None
+
+
+@dataclass(slots=True)
+class MarketCap:
+    """A per-market cap within an alpha configuration."""
+
+    chain_id: int
+    protocol: str
+    market_id: str
+    value: CapValue
+
+
+@dataclass(slots=True)
+class AlphaConfig:
+    """A vault's effective alpha configuration (per-market caps)."""
+
+    chain_id: int
+    vault_address: str
+    market_caps: list[MarketCap]
+    dry_run_enabled: bool | None
+
+
+def _parse_cap_value(raw: dict[str, Any]) -> CapValue:
+    amount = raw.get("amount")
+    percentage = raw.get("percentage")
+    return CapValue(
+        kind=raw["type"],
+        amount=Decimal(amount) if amount is not None else None,
+        percentage=Decimal(percentage) if percentage is not None else None,
+    )
+
+
+def _parse_market_cap(raw: dict[str, Any]) -> MarketCap:
+    return MarketCap(
+        chain_id=int(raw["chainId"]),
+        protocol=raw["protocol"],
+        market_id=raw["marketId"],
+        value=_parse_cap_value(raw["value"]),
+    )
+
+
+def _parse_alpha_config(payload: dict[str, Any]) -> AlphaConfig:
+    return AlphaConfig(
+        chain_id=int(payload["chainId"]),
+        vault_address=payload["vaultAddress"],
+        market_caps=[_parse_market_cap(mc) for mc in payload.get("marketCaps") or []],
+        dry_run_enabled=payload.get("dryRunEnabled"),
+    )
 
 
 class KeeperClient:
@@ -136,6 +199,25 @@ class KeeperClient:
     def verify(self) -> dict[str, Any]:
         """Confirm the wallet authenticates successfully (GET /api/auth/verify)."""
         return self.request("GET", "/api/auth/verify")
+
+    def read_alpha_config(
+        self, chain_id: int, vault_address: str
+    ) -> AlphaConfig | None:
+        """Return the vault's effective alpha configuration, or None if absent.
+
+        Returns ``None`` when the keeper has no config for the vault (HTTP 404 —
+        vault not tracked / nothing configured). Raises :class:`KeeperError` on
+        any other failure (e.g. 403 without permission, or a transport error).
+        """
+        try:
+            payload = self.request(
+                "GET", f"/api/alpha/config/{chain_id}/{vault_address}"
+            )
+        except KeeperError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return _parse_alpha_config(payload)
 
     def request(
         self,
@@ -230,7 +312,10 @@ class KeeperClient:
         if not raw:
             return {}
         try:
-            return json.loads(raw)
+            # Always parse JSON numbers as Decimal: the keeper is a financial API
+            # (BigDecimal cap amounts) and float would silently lose precision.
+            # Callers wanting a plain float should downcast in their typed parser.
+            return json.loads(raw, parse_float=Decimal)
         except json.JSONDecodeError as exc:
             raise KeeperError(f"Keeper returned invalid JSON: {exc}") from exc
 
