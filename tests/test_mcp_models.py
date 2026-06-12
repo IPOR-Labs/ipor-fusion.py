@@ -179,6 +179,25 @@ def _full_vault_info_dict() -> dict:
             "worst_ltv_usage_percent": 58.1,
         },
         "health_check": {"ok": True, "warnings": []},
+        "alpha_config": {
+            "chain_id": 1,
+            "vault_address": "0xVAULT",
+            "market_caps": [
+                {
+                    "chain_id": 1,
+                    "protocol": "aave-v3",
+                    "market_id": "0xMARKET",
+                    "value": {"type": "amount", "amount": "1000.5"},
+                },
+                {
+                    "chain_id": 1,
+                    "protocol": "morpho-blue",
+                    "market_id": "0xABC",
+                    "value": {"type": "percentage", "percentage": "12.5"},
+                },
+            ],
+            "dry_run_enabled": True,
+        },
     }
 
 
@@ -189,6 +208,11 @@ class TestVaultInfoResponseContract:
         assert result.balance_fuses[0].position_breakdown is not None
         assert result.lending_health is not None
         assert result.reconciliation.delta.percent == 0.0
+        assert result.alpha_config is not None
+        assert result.alpha_config.dry_run_enabled is True
+        assert result.alpha_config.market_caps[0].value.amount == "1000.5"
+        assert result.alpha_config.market_caps[1].value.percentage == "12.5"
+        assert result.alpha_config_error is None
 
     def test_minimal_dict_validates(self):
         """All optional sections set to None/empty."""
@@ -204,7 +228,23 @@ class TestVaultInfoResponseContract:
         d["erc20_balances"] = []
         d["fuses"] = []
         d["instant_withdrawal_fuses"] = []
+        d["alpha_config"] = None
         VaultInfoResponse.model_validate(d)
+
+    def test_alpha_config_error_without_config(self):
+        """The degraded path: no config, but a diagnostic error string."""
+        d = _full_vault_info_dict()
+        d["alpha_config"] = None
+        d["alpha_config_error"] = "Keeper unreachable: timed out"
+        result = VaultInfoResponse.model_validate(d)
+        assert result.alpha_config is None
+        assert result.alpha_config_error == "Keeper unreachable: timed out"
+
+    def test_alpha_config_unknown_field_rejected(self):
+        d = _full_vault_info_dict()
+        d["alpha_config"]["unexpected"] = "drift"
+        with pytest.raises(ValidationError):
+            VaultInfoResponse.model_validate(d)
 
     def test_unknown_top_level_key_rejected(self):
         d = _full_vault_info_dict()

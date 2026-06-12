@@ -271,6 +271,47 @@ class MetaMorphoVaultResponse(_Base):
     allocators: list[str]
 
 
+class CapValueModel(_Base):
+    """A market cap value — either an absolute amount or a percentage."""
+
+    type: str = Field(description='Discriminator: "amount" or "percentage".')
+    amount: str | None = Field(
+        default=None,
+        description="Absolute cap as a decimal string; null for percentage caps.",
+    )
+    percentage: str | None = Field(
+        default=None,
+        description=(
+            "Percentage cap as a decimal string, expressed as a fraction in "
+            '[0, 1] (e.g. "0.5" means 50%); null for amount caps.'
+        ),
+    )
+
+
+class MarketCapModel(_Base):
+    """A per-market cap within a vault's alpha configuration."""
+
+    chain_id: int
+    protocol: str
+    market_id: str
+    value: CapValueModel
+
+
+class AlphaConfigModel(_Base):
+    """A vault's keeper alpha configuration (off-chain, per-market caps)."""
+
+    chain_id: int
+    vault_address: str
+    market_caps: list[MarketCapModel]
+    dry_run_enabled: bool | None = Field(
+        default=None,
+        description=(
+            "When true, the alpha evaluates rebalances but does not execute "
+            "them on-chain (simulation mode). Null when the keeper omits it."
+        ),
+    )
+
+
 class VaultInfoResponse(_Base):
     """Full on-chain state of a Plasma Vault.
 
@@ -311,3 +352,20 @@ class VaultInfoResponse(_Base):
     reconciliation: Reconciliation
     lending_health: LendingHealth | None = None
     health_check: HealthCheck
+    alpha_config: AlphaConfigModel | None = Field(
+        default=None,
+        description=(
+            "Off-chain alpha configuration (per-market position caps) managed "
+            "by the IPOR keeper. Present only when a keeper signing key is "
+            "configured and the keeper has a config for this vault; otherwise "
+            "absent (its absence is normal, not an error)."
+        ),
+    )
+    alpha_config_error: str | None = Field(
+        default=None,
+        description=(
+            "Set only when a keeper signing key was present but reading the "
+            "alpha config failed (e.g. no permission, or the keeper was "
+            "unreachable). Absent on success and in the no-key case."
+        ),
+    )

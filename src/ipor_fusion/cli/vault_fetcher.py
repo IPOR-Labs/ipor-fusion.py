@@ -22,6 +22,7 @@ from ipor_fusion.cli.config_store import (
 from ipor_fusion.cli.explorer import get_deployment_tx
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
+from ipor_fusion.core.keeper import AlphaConfig, KeeperClient, KeeperError
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
@@ -110,6 +111,15 @@ class _VaultData:  # pylint: disable=too-many-instance-attributes
     # Substrates registered for each balance-fuse market. Allows the fuse
     # tables to report substrate counts per fuse without duplicating reads.
     market_substrates: dict[int, list[bytes]] | None = None
+    # Keeper alpha configuration (off-chain, JWT-gated). Populated only when a
+    # signing key (FUSION_PRIVATE_KEY) is set AND the keeper has a config for
+    # this vault; otherwise None (the field is omitted from output). See
+    # _fetch_alpha_config for the graceful-degradation rules.
+    alpha_config: AlphaConfig | None = None
+    # Short diagnostic set only when creds WERE present but the keeper call
+    # genuinely failed (403 no-permission, network, 5xx). Stays None for the
+    # common "no key" / "no config" cases so read-only output is unchanged.
+    alpha_config_error: str | None = None
 
 
 def _safe_call(func: Callable[[], T]) -> T | None:
@@ -370,6 +380,36 @@ def _fetch_breakdown_token_prices(
     return prices or None
 
 
+def _fetch_alpha_config(
+    chain_id: int, vault_address: str
+) -> tuple[AlphaConfig | None, str | None]:
+    """Fetch the keeper's alpha config for a vault, degrading gracefully.
+
+    Returns ``(config, error)`` and is designed to NEVER raise into
+    ``vault info`` — the alpha config is a bonus, not a hard dependency:
+
+    - No / invalid ``FUSION_PRIVATE_KEY`` -> ``from_env`` raises before any
+      network call -> ``(None, None)`` silently. This is the normal read-only
+      case; the field is simply omitted downstream (output unchanged).
+    - Config found -> ``(config, None)``; no config (HTTP 404) -> ``(None, None)``.
+    - Creds present but the call genuinely fails (403 no-permission, network,
+      5xx) -> ``(None, str(exc))`` so a short diagnostic can be surfaced.
+    """
+    try:
+        client = KeeperClient.from_env()
+    except KeeperError:
+        # No usable signing key — alpha config is simply unavailable here.
+        return None, None
+    try:
+        config = client.read_alpha_config(chain_id, vault_address)
+    except KeeperError as exc:
+        return None, str(exc)
+    except Exception as exc:  # pylint: disable=broad-except
+        # Last-resort guard: alpha config must never break vault info.
+        return None, str(exc)
+    return config, None
+
+
 def _fetch_vault_data(  # pylint: disable=too-many-locals
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -494,6 +534,15 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             token_prices_usd = None
             market_substrates = {}
 
+        # Off-chain keeper alpha config. Args come from the vault address and
+        # the effective chain id (falling back to the live context), so no
+        # signature change is needed here — which is what lets this propagate
+        # to the dev MCP on a version bump. Network-free when no key is set.
+        eff_chain = chain_id or ctx.chain_id
+        alpha_config, alpha_config_error = _fetch_alpha_config(
+            eff_chain, plasma_vault.address
+        )
+
         return _VaultData(
             block_label=block_label,
             block_timestamp=block_timestamp,
@@ -521,6 +570,8 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             token_prices_usd=token_prices_usd,
             fuse_markets=fuse_markets or None,
             market_substrates=market_substrates or None,
+            alpha_config=alpha_config,
+            alpha_config_error=alpha_config_error,
         )
 
 

@@ -1,6 +1,7 @@
 # pylint: disable=unused-argument
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import click
@@ -14,6 +15,7 @@ from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_contract
 from ipor_fusion.cli.vault_cmd import (
     ADDRESS,
     CHAIN,
+    _build_alpha_config_json,
     _build_dependency_graph_json,
     _build_share_price_json,
     _index_lending_health,
@@ -33,12 +35,14 @@ from ipor_fusion.cli.vault_fetcher import (
     _collect_breakdown_token_addresses,
     _collect_morpho_substrates,
     _fetch_aave_positions,
+    _fetch_alpha_config,
     _fetch_breakdown_token_prices,
     _fetch_fuse_market_id,
     _fetch_morpho_positions,
     _resolve_token_symbol,
     _safe_call,
 )
+from ipor_fusion.core.keeper import AlphaConfig, CapValue, KeeperError, MarketCap
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.morpho import MorphoPositionBreakdown
 from ipor_fusion.types import Amount, MorphoBlueMarketId
@@ -1831,3 +1835,145 @@ class TestFetchFuseMarketId:
         ctx = MagicMock()
         ctx.call.return_value = b"\x00\x01"  # too short for uint256
         assert _fetch_fuse_market_id(ctx, ADDR_1) is None
+
+
+class TestBuildAlphaConfigJson:
+    def test_amount_cap_with_dry_run(self):
+        cfg = AlphaConfig(
+            chain_id=8453,
+            vault_address=ADDR_1,
+            market_caps=[
+                MarketCap(
+                    chain_id=8453,
+                    protocol="aave-v3",
+                    market_id="0xMARKET",
+                    value=CapValue(
+                        kind="amount", amount=Decimal("1000.5"), percentage=None
+                    ),
+                )
+            ],
+            dry_run_enabled=True,
+        )
+        result = _build_alpha_config_json(cfg)
+        assert result["chain_id"] == 8453
+        assert result["vault_address"] == ADDR_1
+        assert result["dry_run_enabled"] is True
+        assert len(result["market_caps"]) == 1
+        assert result["market_caps"][0] == {
+            "chain_id": 8453,
+            "protocol": "aave-v3",
+            "market_id": "0xMARKET",
+            "value": {"type": "amount", "amount": "1000.5"},
+        }
+
+    def test_percentage_cap_omits_dry_run_when_none(self):
+        cfg = AlphaConfig(
+            chain_id=1,
+            vault_address=ADDR_1,
+            market_caps=[
+                MarketCap(
+                    chain_id=1,
+                    protocol="morpho-blue",
+                    market_id="0xABC",
+                    value=CapValue(
+                        kind="percentage", amount=None, percentage=Decimal("12.5")
+                    ),
+                )
+            ],
+            dry_run_enabled=None,
+        )
+        result = _build_alpha_config_json(cfg)
+        assert "dry_run_enabled" not in result
+        assert len(result["market_caps"]) == 1
+        assert result["market_caps"][0]["value"] == {
+            "type": "percentage",
+            "percentage": "12.5",
+        }
+
+    def test_empty_market_caps(self):
+        cfg = AlphaConfig(
+            chain_id=1, vault_address=ADDR_1, market_caps=[], dry_run_enabled=False
+        )
+        result = _build_alpha_config_json(cfg)
+        assert not result["market_caps"]
+        assert result["dry_run_enabled"] is False
+
+    def test_decimal_precision_preserved_as_string(self):
+        # A high-precision BigDecimal that binary float would silently corrupt.
+        big = Decimal("123456789.123456789123456789")
+        cfg = AlphaConfig(
+            chain_id=1,
+            vault_address=ADDR_1,
+            market_caps=[
+                MarketCap(
+                    chain_id=1,
+                    protocol="aave-v3",
+                    market_id="0x1",
+                    value=CapValue(kind="amount", amount=big, percentage=None),
+                )
+            ],
+            dry_run_enabled=None,
+        )
+        result = _build_alpha_config_json(cfg)
+        assert (
+            result["market_caps"][0]["value"]["amount"]
+            == "123456789.123456789123456789"
+        )
+
+
+class TestFetchAlphaConfig:
+    """_fetch_alpha_config must degrade gracefully and never raise."""
+
+    def test_no_key_returns_none_none_silently(self):
+        # from_env raises before any network call when the key is absent.
+        with patch(
+            "ipor_fusion.cli.vault_fetcher.KeeperClient.from_env",
+            side_effect=KeeperError("FUSION_PRIVATE_KEY is not set"),
+        ):
+            assert _fetch_alpha_config(1, ADDR_1) == (None, None)
+
+    def test_success_returns_config_no_error(self):
+        cfg = AlphaConfig(
+            chain_id=1, vault_address=ADDR_1, market_caps=[], dry_run_enabled=None
+        )
+        client = MagicMock()
+        client.read_alpha_config.return_value = cfg
+        with patch(
+            "ipor_fusion.cli.vault_fetcher.KeeperClient.from_env",
+            return_value=client,
+        ):
+            assert _fetch_alpha_config(1, ADDR_1) == (cfg, None)
+        client.read_alpha_config.assert_called_once_with(1, ADDR_1)
+
+    def test_no_config_404_returns_none_none(self):
+        client = MagicMock()
+        client.read_alpha_config.return_value = None  # keeper 404 -> None
+        with patch(
+            "ipor_fusion.cli.vault_fetcher.KeeperClient.from_env",
+            return_value=client,
+        ):
+            assert _fetch_alpha_config(1, ADDR_1) == (None, None)
+
+    def test_keeper_error_surfaces_message(self):
+        client = MagicMock()
+        client.read_alpha_config.side_effect = KeeperError(
+            "Keeper GET /api/alpha/config failed: HTTP 403", status_code=403
+        )
+        with patch(
+            "ipor_fusion.cli.vault_fetcher.KeeperClient.from_env",
+            return_value=client,
+        ):
+            config, error = _fetch_alpha_config(1, ADDR_1)
+        assert config is None
+        assert error is not None and "403" in error
+
+    def test_unexpected_exception_is_guarded(self):
+        client = MagicMock()
+        client.read_alpha_config.side_effect = RuntimeError("boom")
+        with patch(
+            "ipor_fusion.cli.vault_fetcher.KeeperClient.from_env",
+            return_value=client,
+        ):
+            config, error = _fetch_alpha_config(1, ADDR_1)
+        assert config is None
+        assert error == "boom"

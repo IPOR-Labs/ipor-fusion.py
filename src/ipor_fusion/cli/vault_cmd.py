@@ -47,6 +47,7 @@ from ipor_fusion.cli.vault_substrate import (
     _market_name,
 )
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.keeper import AlphaConfig
 from ipor_fusion.core.plasma_vault import PlasmaVault
 
 
@@ -638,6 +639,39 @@ def _build_deployment_json(data: _VaultData) -> dict | None:
     }
 
 
+def _build_alpha_config_json(cfg: AlphaConfig) -> dict:
+    """Serialize a keeper alpha config to the JSON shape (snake_case).
+
+    Cap amounts are ``Decimal`` (the keeper sends Java ``BigDecimal``); they are
+    emitted as strings to preserve full precision through JSON. ``CapValue.kind``
+    maps to the JSON ``"type"`` discriminator, and only the populated branch
+    (amount xor percentage) is included.
+    """
+    market_caps: list[dict] = []
+    for mc in cfg.market_caps:
+        value: dict = {"type": mc.value.kind}
+        if mc.value.amount is not None:
+            value["amount"] = str(mc.value.amount)
+        if mc.value.percentage is not None:
+            value["percentage"] = str(mc.value.percentage)
+        market_caps.append(
+            {
+                "chain_id": mc.chain_id,
+                "protocol": mc.protocol,
+                "market_id": mc.market_id,
+                "value": value,
+            }
+        )
+    result: dict = {
+        "chain_id": cfg.chain_id,
+        "vault_address": cfg.vault_address,
+        "market_caps": market_caps,
+    }
+    if cfg.dry_run_enabled is not None:
+        result["dry_run_enabled"] = cfg.dry_run_enabled
+    return result
+
+
 def _build_withdraw_manager_json(
     data: _VaultData, plasma_vault: PlasmaVault
 ) -> dict | None:
@@ -1110,7 +1144,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
     if explorer_base:
         links["etherscan"] = f"{explorer_base}/address/{vault_address}"
 
-    return {
+    output: dict = {
         "vault": vault_address,
         "name": data.vault_name or None,
         "links": links,
@@ -1164,6 +1198,13 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
         "lending_health": lending_health_json,
         "health_check": health_json,
     }
+    # Keep alpha keys absent unless populated, so read-only `vault info --json`
+    # (no signing key) stays byte-for-byte unchanged.
+    if data.alpha_config is not None:
+        output["alpha_config"] = _build_alpha_config_json(data.alpha_config)
+    if data.alpha_config_error is not None:
+        output["alpha_config_error"] = data.alpha_config_error
+    return output
 
 
 def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None:

@@ -1,6 +1,7 @@
 # pylint: disable=unused-argument
 import json
 from dataclasses import dataclass
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import click
@@ -10,6 +11,7 @@ from click.testing import CliRunner
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_config
 from ipor_fusion.cli.main import cli, main
+from ipor_fusion.core.keeper import AlphaConfig, CapValue, MarketCap
 from ipor_fusion.core.withdraw_manager import AccountRequest
 
 ADDR_1 = "0x1111111111111111111111111111111111111111"
@@ -36,6 +38,48 @@ def tmp_config(tmp_path, monkeypatch):
     monkeypatch.setattr(config_store, "CACHE_FILE", cache_file)
     monkeypatch.setattr(config_store, "DEPLOYMENT_CACHE_FILE", deployment_cache_file)
     return config_dir, config_file, cache_file
+
+
+def _setup_minimal_vault_json_mocks(
+    mock_ctx_cls, mock_pv_cls, mock_erc20_cls, mock_oracle_cls
+):
+    """Wire the happy-path mocks for a `vault info --json` run with no fuses or
+    positions, so a test can focus on a single added section (e.g. alpha config).
+    """
+    mock_ctx = MagicMock()
+    mock_ctx.web3.eth.block_number = 100
+    mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
+    mock_ctx_cls.from_url.return_value = mock_ctx
+
+    mock_pv = MagicMock()
+    mock_pv.address = ADDR_1
+    mock_pv.name.return_value.call.return_value = "Test Vault"
+    mock_pv.decimals.return_value.call.return_value = 18
+    mock_pv.total_assets.return_value.call.return_value = 0
+    mock_pv.total_supply.return_value.call.return_value = 0
+    mock_pv.get_total_supply_cap.return_value.call.return_value = 0
+    mock_pv.underlying_asset_address.return_value.call.return_value = ADDR_2
+    mock_pv.get_access_manager_address.return_value.call.return_value = ADDR_ACCESS
+    mock_pv.get_price_oracle_middleware_address.return_value.call.return_value = (
+        ADDR_ORACLE
+    )
+    mock_pv.get_fuses.return_value.call.return_value = []
+    mock_pv.get_balance_fuses.return_value = []
+    mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
+    mock_pv.withdraw_manager_address.return_value = None
+    mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
+    mock_pv.get_market_substrates.return_value.call.return_value = []
+    mock_pv_cls.return_value = mock_pv
+
+    mock_erc20 = MagicMock()
+    mock_erc20.symbol.return_value.call.return_value = "USDC"
+    mock_erc20.decimals.return_value.call.return_value = 6
+    mock_erc20.balance_of.return_value.call.return_value = 0
+    mock_erc20_cls.return_value = mock_erc20
+
+    mock_oracle = MagicMock()
+    mock_oracle.get_asset_price.return_value.call.return_value = None
+    mock_oracle_cls.return_value = mock_oracle
 
 
 class TestConfigShow:
@@ -911,6 +955,108 @@ class TestVaultInfoJson:
         assert data["deployment"]["timestamp"] == 1700000000
         assert data["deployment"]["timestamp_utc"] == "2023-11-14T22:13:20Z"
         assert isinstance(data["deployment"]["age_days"], int)
+        # No FUSION_PRIVATE_KEY (autouse fixture clears it): the alpha keys must
+        # be omitted entirely, leaving read-only JSON output unchanged.
+        assert "alpha_config" not in data
+        assert "alpha_config_error" not in data
+
+    @patch("ipor_fusion.cli.vault_fetcher._fetch_alpha_config")
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_json_with_alpha_config(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        mock_fetch_alpha,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+        _setup_minimal_vault_json_mocks(
+            mock_ctx_cls, mock_pv_cls, mock_erc20_cls, mock_oracle_cls
+        )
+        mock_fetch_alpha.return_value = (
+            AlphaConfig(
+                chain_id=1,
+                vault_address=ADDR_1,
+                market_caps=[
+                    MarketCap(
+                        chain_id=1,
+                        protocol="aave-v3",
+                        market_id="0xMARKET",
+                        value=CapValue(
+                            kind="amount", amount=Decimal("1000.5"), percentage=None
+                        ),
+                    )
+                ],
+                dry_run_enabled=True,
+            ),
+            None,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["vault", "info", ADDR_1, "--chain-id", "1", "--json"]
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        alpha = data["alpha_config"]
+        assert alpha["chain_id"] == 1
+        assert alpha["vault_address"] == ADDR_1
+        assert alpha["dry_run_enabled"] is True
+        assert alpha["market_caps"][0]["value"] == {
+            "type": "amount",
+            "amount": "1000.5",
+        }
+        assert "alpha_config_error" not in data
+        # Keeper args come from the chain id + vault address inside
+        # _fetch_vault_data — no signature change to the call chain.
+        mock_fetch_alpha.assert_called_once_with(1, ADDR_1)
+
+    @patch("ipor_fusion.cli.vault_fetcher._fetch_alpha_config")
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_json_alpha_config_error(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        mock_fetch_alpha,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+        _setup_minimal_vault_json_mocks(
+            mock_ctx_cls, mock_pv_cls, mock_erc20_cls, mock_oracle_cls
+        )
+        # Creds present but the keeper call failed: a diagnostic, no config block.
+        mock_fetch_alpha.return_value = (None, "Keeper unreachable: timed out")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["vault", "info", ADDR_1, "--chain-id", "1", "--json"]
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert "alpha_config" not in data
+        assert data["alpha_config_error"] == "Keeper unreachable: timed out"
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")

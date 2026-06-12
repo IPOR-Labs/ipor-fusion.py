@@ -20,6 +20,20 @@ def pytest_collection_modifyitems(items):
             item.add_marker(pytest.mark.sdk)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_keeper_env(monkeypatch):
+    """Disable keeper auth by default so offline tests never hit the network.
+
+    `vault info` fetches alpha config via `KeeperClient.from_env()`, which only
+    attempts a network call when `FUSION_PRIVATE_KEY` is set. `load_dotenv()`
+    above can pull a developer's key into the session, which would make the
+    offline CLI/MCP vault-info tests reach the real keeper. Removing it here
+    makes "keeper off" the default; tests that exercise auth opt back in with
+    `monkeypatch.setenv(...)`, which runs after this fixture and wins.
+    """
+    monkeypatch.delenv("FUSION_PRIVATE_KEY", raising=False)
+
+
 def _connected_web3(env_var: str) -> Web3:
     """Build a Web3 client from `env_var`; skip the test if missing/unreachable."""
     url = os.environ.get(env_var)
