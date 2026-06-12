@@ -1058,6 +1058,57 @@ class TestVaultInfoJson:
         assert "alpha_config" not in data
         assert data["alpha_config_error"] == "Keeper unreachable: timed out"
 
+    @patch("ipor_fusion.cli.vault_fetcher._fetch_alpha_config")
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
+    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
+    @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_text_view_shows_alpha_config(
+        self,
+        mock_ctx_cls,
+        mock_pv_cls,
+        mock_erc20_cls,
+        mock_oracle_cls,
+        mock_get_name,
+        mock_fetch_alpha,
+        tmp_config,
+    ):
+        cfg = FusionConfig(
+            providers={"1": "https://rpc.example.com"},
+            vaults=[VaultEntry(address=ADDR_1, label="Test Vault", chain_id=1)],
+        )
+        save_config(cfg)
+        _setup_minimal_vault_json_mocks(
+            mock_ctx_cls, mock_pv_cls, mock_erc20_cls, mock_oracle_cls
+        )
+        mock_fetch_alpha.return_value = (
+            AlphaConfig(
+                chain_id=1,
+                vault_address=ADDR_1,
+                market_caps=[
+                    MarketCap(
+                        chain_id=1,
+                        protocol="aave-v3",
+                        market_id="0xMARKET",
+                        value=CapValue(
+                            kind="amount", amount=Decimal("1000.5"), percentage=None
+                        ),
+                    )
+                ],
+                dry_run_enabled=True,
+            ),
+            None,
+        )
+
+        runner = CliRunner()
+        # No --json: exercise the human-readable text renderer.
+        result = runner.invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
+        assert result.exit_code == 0, result.output
+        assert "Alpha config:" in result.output
+        assert "Dry run:        on" in result.output
+        assert "aave-v3 0xMARKET: 1000.5" in result.output
+
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
     @patch("ipor_fusion.cli.vault_health.ERC20")

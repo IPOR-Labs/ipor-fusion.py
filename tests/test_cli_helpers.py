@@ -18,6 +18,8 @@ from ipor_fusion.cli.vault_cmd import (
     _build_alpha_config_json,
     _build_dependency_graph_json,
     _build_share_price_json,
+    _format_cap_value,
+    _print_alpha_config,
     _index_lending_health,
     _print_dependency_graph,
     _print_fuse_section,
@@ -1977,3 +1979,97 @@ class TestFetchAlphaConfig:
             config, error = _fetch_alpha_config(1, ADDR_1)
         assert config is None
         assert error == "boom"
+
+
+def _alpha_cfg(*, market_caps, dry_run_enabled=None):
+    return AlphaConfig(
+        chain_id=8453,
+        vault_address=ADDR_1,
+        market_caps=market_caps,
+        dry_run_enabled=dry_run_enabled,
+    )
+
+
+class TestFormatCapValue:
+    def test_amount(self):
+        value = CapValue(kind="amount", amount=Decimal("1000.5"), percentage=None)
+        assert _format_cap_value(value) == "1000.5"
+
+    def test_percentage_fraction_scaled_to_percent(self):
+        # Keeper stores percentages as a fraction in [0, 1]: 0.125 -> "12.5%".
+        value = CapValue(kind="percentage", amount=None, percentage=Decimal("0.125"))
+        assert _format_cap_value(value) == "12.5%"
+
+    def test_percentage_trims_trailing_zeros(self):
+        # 0.5 * 100 == 50.0 -> "50%" (not "50.0%" or "5E+1%").
+        value = CapValue(kind="percentage", amount=None, percentage=Decimal("0.5"))
+        assert _format_cap_value(value) == "50%"
+
+    def test_percentage_full(self):
+        value = CapValue(kind="percentage", amount=None, percentage=Decimal("1"))
+        assert _format_cap_value(value) == "100%"
+
+    def test_malformed_falls_back(self):
+        # kind says "amount" but the amount is missing — defensive sentinel.
+        value = CapValue(kind="amount", amount=None, percentage=None)
+        assert _format_cap_value(value) == "?"
+
+
+class TestPrintAlphaConfig:
+    def test_absent_prints_nothing(self, capsys):
+        # No key / no config: alpha_config and alpha_config_error both None.
+        _print_alpha_config(_make_data())
+        assert capsys.readouterr().out == ""
+
+    def test_error_renders_na(self, capsys):
+        data = _make_data(alpha_config_error="Keeper unreachable: timed out")
+        _print_alpha_config(data)
+        out = capsys.readouterr().out
+        assert "Alpha config:     N/A (Keeper unreachable: timed out)" in out
+
+    def test_empty_caps_no_dry_run(self, capsys):
+        # The live smoke-test shape: a config record with no caps, no dry-run.
+        data = _make_data(alpha_config=_alpha_cfg(market_caps=[]))
+        _print_alpha_config(data)
+        out = capsys.readouterr().out
+        assert "Alpha config:" in out
+        assert "Market caps:    (none configured)" in out
+        assert "Dry run:" not in out
+
+    def test_caps_with_dry_run(self, capsys):
+        data = _make_data(
+            alpha_config=_alpha_cfg(
+                market_caps=[
+                    MarketCap(
+                        chain_id=8453,
+                        protocol="aave-v3",
+                        market_id="0xMARKET",
+                        value=CapValue(
+                            kind="amount", amount=Decimal("1000.5"), percentage=None
+                        ),
+                    ),
+                    MarketCap(
+                        chain_id=8453,
+                        protocol="morpho-blue",
+                        market_id="0xABC",
+                        value=CapValue(
+                            kind="percentage", amount=None, percentage=Decimal("0.125")
+                        ),
+                    ),
+                ],
+                dry_run_enabled=True,
+            )
+        )
+        _print_alpha_config(data)
+        out = capsys.readouterr().out
+        assert "Dry run:        on" in out
+        assert "Market caps (2):" in out
+        assert "aave-v3 0xMARKET: 1000.5" in out
+        assert "morpho-blue 0xABC: 12.5%" in out
+
+    def test_dry_run_off(self, capsys):
+        data = _make_data(
+            alpha_config=_alpha_cfg(market_caps=[], dry_run_enabled=False)
+        )
+        _print_alpha_config(data)
+        assert "Dry run:        off" in capsys.readouterr().out

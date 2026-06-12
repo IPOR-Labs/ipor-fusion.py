@@ -47,7 +47,7 @@ from ipor_fusion.cli.vault_substrate import (
     _market_name,
 )
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.keeper import AlphaConfig
+from ipor_fusion.core.keeper import AlphaConfig, CapValue
 from ipor_fusion.core.plasma_vault import PlasmaVault
 
 
@@ -547,6 +547,8 @@ def _print_vault_info(
         _print_pending_requests(data, plasma_vault)
     click.echo()
 
+    _print_alpha_config(data)
+
     _print_fuse_section(
         "Fuses",
         data.fuses,
@@ -670,6 +672,51 @@ def _build_alpha_config_json(cfg: AlphaConfig) -> dict:
     if cfg.dry_run_enabled is not None:
         result["dry_run_enabled"] = cfg.dry_run_enabled
     return result
+
+
+def _format_cap_value(value: CapValue) -> str:
+    """Render a single market cap value for the text view.
+
+    Amounts are shown as the keeper's raw decimal (already in token units, and
+    not asset-scaled here since the cap's denomination token is per-market and
+    not in the payload). Percentages are stored by the keeper as a fraction in
+    [0, 1], so they are scaled to a human percent (0.5 -> "50%"); ``normalize``
+    + ``"f"`` trims trailing zeros without scientific notation (50.0 -> "50",
+    not "5E+1").
+    """
+    if value.kind == "amount" and value.amount is not None:
+        return str(value.amount)
+    if value.kind == "percentage" and value.percentage is not None:
+        pct = format((value.percentage * 100).normalize(), "f")
+        return f"{pct}%"
+    return "?"
+
+
+def _print_alpha_config(data: _VaultData) -> None:
+    """Render the keeper alpha config section, mirroring deployment N/A handling.
+
+    Present config -> a compact block (dry-run flag + one line per market cap,
+    or an explicit "(none configured)" when the keeper has a config record but
+    no caps). A genuine fetch failure -> ``N/A (<error>)``. The no-key / no-config
+    case prints nothing, so read-only text output stays unchanged.
+    """
+    if data.alpha_config is not None:
+        cfg = data.alpha_config
+        click.echo("Alpha config:")
+        if cfg.dry_run_enabled is not None:
+            click.echo(f"  Dry run:        {'on' if cfg.dry_run_enabled else 'off'}")
+        if not cfg.market_caps:
+            click.echo("  Market caps:    (none configured)")
+        else:
+            click.echo(f"  Market caps ({len(cfg.market_caps)}):")
+            for mc in cfg.market_caps:
+                click.echo(
+                    f"    {mc.protocol} {mc.market_id}: {_format_cap_value(mc.value)}"
+                )
+        click.echo()
+    elif data.alpha_config_error:
+        click.echo(f"Alpha config:     N/A ({data.alpha_config_error})")
+        click.echo()
 
 
 def _build_withdraw_manager_json(
