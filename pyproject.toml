@@ -57,18 +57,30 @@ dev = [
     "pytest-xdist>=3.8.0,<4",
     "pytest-cov>=6.0,<7",
     "mypy>=1.19.1,<2",
-    "black==24.8.0",
-    "pylint==3.3.1",
+    "ruff>=0.14,<1",
 ]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ["py310"]
-include = '\.pyi?$'
-unstable = false
+target-version = "py310"
 
-[tool.pylint]
-config-file = "pylintrc.toml"
+[tool.ruff.lint]
+# Kept identical to ipor-fusion-dev.py — shared tool config; see UPDATE_TOOLING.md "Sync with dev".
+# E,F,W,I,B,UP = base; S = flake8-bandit security; C901 + PLR0911/0912/0913/0915 = design limits.
+select = ["E", "F", "W", "I", "B", "UP", "S", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.ruff.lint.pylint]
+max-args = 15
+max-branches = 27
+max-returns = 11
+max-statements = 100
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.coverage.run]
 source = ["src/ipor_fusion"]
