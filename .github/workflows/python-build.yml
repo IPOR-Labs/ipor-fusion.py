@@ -67,12 +67,12 @@ jobs:
 
       - name: Format code
         if: inputs.format-code-enabled
-        run: uv run black --check ./
+        run: uv run ruff format --check ./
         id: format-code
 
       - name: Static code analysis
         if: inputs.static-code-analysis-enabled
-        run: uv run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
+        run: uv run ruff check ./
         id: static-code-analyze
 
       - name: Type check
