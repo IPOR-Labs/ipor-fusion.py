@@ -272,7 +272,7 @@ def _compute_aave_market_health(  # pylint: disable=broad-exception-caught
     )
 
 
-def fetch_vault_lending_health(  # pylint: disable=too-complex,import-outside-toplevel
+def fetch_vault_lending_health(  # noqa: C901
     ctx: Web3Context,
     vault_address: ChecksumAddress,
     chain_id: int,

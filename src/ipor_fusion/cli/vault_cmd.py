@@ -317,7 +317,7 @@ def info(
     )
 
 
-def _print_lending_health(  # pylint: disable=too-complex
+def _print_lending_health(  # noqa: C901
     ctx: Web3Context, data: _VaultData
 ) -> None:
     lh = data.lending_health
@@ -805,7 +805,7 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     }
 
 
-def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-branches,too-many-statements
+def _build_json_output(  # noqa: C901, PLR0912, PLR0915
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: _VaultData,
@@ -1332,7 +1332,7 @@ def _print_balance_fuses_table(
     return totals
 
 
-def _print_substrates(  # pylint: disable=too-complex
+def _print_substrates(  # noqa: C901
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     balance_fuses: list,

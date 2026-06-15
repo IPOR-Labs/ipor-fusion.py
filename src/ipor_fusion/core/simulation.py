@@ -333,7 +333,7 @@ class VaultSimulator:
         observations: dict[str, Any] = {}
         parsed: list[SimulatedCallResult] = []
 
-        for source, raw in zip(sources, raw_calls):
+        for source, raw in zip(sources, raw_calls, strict=False):
             return_hex = raw.get("returnData", "0x")
             return_data = HexBytes(return_hex)
             status = int(raw.get("status", "0x1"), 16)

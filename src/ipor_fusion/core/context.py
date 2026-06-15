@@ -86,7 +86,7 @@ class Web3Context:
         )
 
     def _build_transaction(self, to: ChecksumAddress, data: bytes) -> dict:
-        assert self.signer is not None
+        assert self.signer is not None  # noqa: S101  # signer ensured by callers
         nonce = self.web3.eth.get_transaction_count(self.signer)
         gas_price = self.web3.eth.gas_price
         max_fee_per_gas = self._calculate_max_fee_per_gas(gas_price)

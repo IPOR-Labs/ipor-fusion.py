@@ -34,7 +34,7 @@ class FuseAction:
         return function_signature_to_4byte_selector(signature) + encoded
 
 
-class Fuse(ABC):
+class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
     """Abstract base class for all protocol fuse adapters."""
 
     def __init__(self, address: ChecksumAddress):

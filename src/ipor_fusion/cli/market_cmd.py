@@ -166,7 +166,7 @@ def morpho_blue(
     if api_error:
         click.secho(f"\nConnected vaults: unavailable ({api_error}).", fg="yellow")
         return
-    assert api_market is not None
+    assert api_market is not None  # noqa: S101  # narrowing; guaranteed by guard above
     _print_vaults(api_market, vault_filter, params, public_allocator)
 
 
