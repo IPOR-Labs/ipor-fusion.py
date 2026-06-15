@@ -195,12 +195,12 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 ## Development
 
 ```bash
-poetry install                                              # Install dependencies
-poetry run pytest tests/test_fuse_encoding.py -n auto -v    # Unit tests (fast, no Docker)
-poetry run pytest -v -s                                     # All tests (needs `.*_PROVIDER_URL` variables in `.env`)
-poetry run black ./                                         # Format
-poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .  # Lint
-poetry run mypy .                                           # Type check
+uv sync --all-extras                                       # Install dependencies
+uv run pytest tests/test_fuse_encoding.py -n auto -v       # Unit tests (fast, no Docker)
+uv run pytest -v -s                                        # All tests (needs `.*_PROVIDER_URL` variables in `.env`)
+uv run black ./                                            # Format
+uv run pylint --rcfile=pylintrc.toml --verbose --recursive=y .  # Lint
+uv run mypy .                                              # Type check
 ```
 
 Integration tests require Docker (Anvil) and provider URLs in `.env`:
