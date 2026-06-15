@@ -154,7 +154,7 @@ def fetch_market(
             "variables": {"marketId": market_id, "chainId": chain_id},
         }
     ).encode()
-    req = Request(
+    req = Request(  # noqa: S310  # fixed https endpoint, not user input
         MORPHO_API_URL,
         data=payload,
         headers={"Content-Type": "application/json"},
@@ -404,7 +404,7 @@ def fetch_vault(
 def _post_query(query: str, variables: dict, timeout: float) -> dict:
     """POST a GraphQL query and return the parsed body. Tolerates NOT_FOUND."""
     payload = json.dumps({"query": query, "variables": variables}).encode()
-    req = Request(
+    req = Request(  # noqa: S310  # fixed https endpoint, not user input
         MORPHO_API_URL,
         data=payload,
         headers={"Content-Type": "application/json"},

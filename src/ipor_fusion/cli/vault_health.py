@@ -67,7 +67,7 @@ class _Erc20Totals:
     token_details: list[_TokenDetail] = field(default_factory=list)
 
 
-def _compute_erc20_balances(  # pylint: disable=too-complex
+def _compute_erc20_balances(  # noqa: C901
     ctx: Web3Context, plasma_vault: PlasmaVault, data: _VaultData
 ) -> _Erc20Totals:
     totals = _Erc20Totals()
@@ -503,7 +503,7 @@ def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
     ]
 
 
-def _compute_health_check(  # pylint: disable=too-complex
+def _compute_health_check(  # noqa: C901
     data: _VaultData,
     bf_totals: _BalanceFuseTotals,
     erc20_totals: _Erc20Totals,
