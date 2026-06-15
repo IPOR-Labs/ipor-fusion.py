@@ -29,8 +29,6 @@ from ipor_fusion.cli.vault_cmd import (
     _resolve_provider,
 )
 from ipor_fusion.cli.vault_fetcher import (
-    _VaultData,
-    _WithdrawManagerData,
     _collect_aave_substrate_assets,
     _collect_breakdown_token_addresses,
     _collect_morpho_substrates,
@@ -40,10 +38,9 @@ from ipor_fusion.cli.vault_fetcher import (
     _fetch_morpho_positions,
     _resolve_token_symbol,
     _safe_call,
+    _VaultData,
+    _WithdrawManagerData,
 )
-from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
-from ipor_fusion.readers.morpho import MorphoPositionBreakdown
-from ipor_fusion.types import Amount, MorphoBlueMarketId
 from ipor_fusion.cli.vault_health import (
     _BalanceFuseTotals,
     _Erc20Totals,
@@ -54,11 +51,6 @@ from ipor_fusion.cli.vault_health import (
     _print_health_check,
     _print_reconciliation,
 )
-from ipor_fusion.readers.lending_health import (
-    LendingMarketHealth,
-    VaultLendingHealth,
-)
-from ipor_fusion.config.roles import Roles
 from ipor_fusion.cli.vault_rendering import (
     _format_age,
     _format_amount,
@@ -70,8 +62,15 @@ from ipor_fusion.cli.vault_substrate import (
     _format_substrate,
     _market_name,
 )
+from ipor_fusion.config.roles import Roles
 from ipor_fusion.market_ids import IporFusionMarkets
-
+from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
+from ipor_fusion.readers.lending_health import (
+    LendingMarketHealth,
+    VaultLendingHealth,
+)
+from ipor_fusion.readers.morpho import MorphoPositionBreakdown
+from ipor_fusion.types import Amount, MorphoBlueMarketId
 
 VALID_ADDR_LOWER = "0x" + "ab" * 20
 VALID_ADDR_UPPER = "0x" + "AB" * 20

@@ -14,36 +14,37 @@ from __future__ import annotations
 
 import logging
 
-from eth_abi import decode as abi_decode, encode
-from eth_abi.packed import encode_packed
-from eth_utils import function_signature_to_4byte_selector
-from hexbytes import HexBytes
-from web3 import Web3
-
 from _simulate import assert_all_success
 from addresses import ARBITRUM_USDC, ARBITRUM_USDT, ARBITRUM_WETH
 from constants import (
     ANVIL_WALLET,
     ARBITRUM_PILOT_V4_PLASMA_VAULT,
-    ARBITRUM_UNISWAP_V3_SWAP_FUSE,
-    ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE,
-    ARBITRUM_UNISWAP_V3_MODIFY_POSITION_FUSE,
     ARBITRUM_UNISWAP_V3_COLLECT_FUSE,
+    ARBITRUM_UNISWAP_V3_MODIFY_POSITION_FUSE,
+    ARBITRUM_UNISWAP_V3_SWAP_FUSE,
     ARBITRUM_UNIVERSAL_SWAP_FUSE,
+    ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE,
 )
+from eth_abi import decode as abi_decode
+from eth_abi import encode
+from eth_abi.packed import encode_packed
+from eth_utils import function_signature_to_4byte_selector
+from hexbytes import HexBytes
+from web3 import Web3
+
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
     ERC20,
+    AccessManager,
+    PlasmaVault,
     Roles,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.fuses import (
-    UniswapV3SwapFuse,
-    UniswapV3NewPositionFuse,
-    UniswapV3ModifyPositionFuse,
     UniswapV3CollectFuse,
+    UniswapV3ModifyPositionFuse,
+    UniswapV3NewPositionFuse,
+    UniswapV3SwapFuse,
     UniversalTokenSwapperFuse,
 )
 from ipor_fusion.types import Amount, ChainId
@@ -486,4 +487,4 @@ def test_simulate_increase_liquidity(web3_arb):
     usdc_change = result2.get("usdc_after") - result2.get("usdc_before")
     usdt_change = result2.get("usdt_after") - result2.get("usdt_before")
     assert usdc_change == -int(99e6)
-    assert usdt_change == -int(97_046288)
+    assert usdt_change == -97_046288

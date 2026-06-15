@@ -8,22 +8,22 @@ from __future__ import annotations
 
 import logging
 
+from _simulate import assert_all_success
+from addresses import BASE_USDC, BASE_WETH
+from constants import ANVIL_WALLET, BASE_UNIVERSAL_SWAP_FUSE
 from eth_abi import encode
 from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
-from _simulate import assert_all_success
-from addresses import BASE_USDC, BASE_WETH
-from constants import ANVIL_WALLET, BASE_UNIVERSAL_SWAP_FUSE
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
     ERC20,
+    AccessManager,
+    PlasmaVault,
     Roles,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.fuses import UniversalTokenSwapperFuse
 from ipor_fusion.types import Amount, ChainId
@@ -196,4 +196,4 @@ def test_simulate_swap_weth_to_pepe(web3_base):
     assert result.get("weth_before") == 5000000000000000
     assert result.get("weth_after") == 0
     assert result.get("pepe_before") == 0
-    assert result.get("pepe_after") == int(174743647_876992680486051295)
+    assert result.get("pepe_after") == 174743647_876992680486051295

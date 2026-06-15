@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from ipor_fusion.market_ids import IporFusionMarkets
 
-
 # Markets where action fuses are intentionally registered without a matching
 # balance fuse. These represent flow-through actions (flash loans, swaps,
 # maintenance) that hold no persistent on-chain position — funds end up tracked

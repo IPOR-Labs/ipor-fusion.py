@@ -55,8 +55,7 @@ def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
     if provider_url := cfg.providers.get(str(chain_id)):
         return provider_url
     raise ValueError(
-        f"No provider for chain {chain_id}. "
-        f"Use config_set_provider to configure one."
+        f"No provider for chain {chain_id}. Use config_set_provider to configure one."
     )
 
 

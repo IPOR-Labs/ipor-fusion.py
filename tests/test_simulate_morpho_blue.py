@@ -1,18 +1,18 @@
 import logging
 
-from web3 import Web3
-
 from _simulate import assert_all_success
 from addresses import ETHEREUM_USDC
 from constants import ETHEREUM_MORPHO_SUPPLY_FUSE
+from web3 import Web3
+
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
     ERC20,
+    PlasmaVault,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.fuses import MorphoSupplyFuse
-from ipor_fusion.types import ChainId, MorphoBlueMarketId, Amount
+from ipor_fusion.types import Amount, ChainId, MorphoBlueMarketId
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

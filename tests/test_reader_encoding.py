@@ -5,14 +5,6 @@ from unittest.mock import MagicMock
 from eth_abi import encode
 from web3 import Web3
 
-from ipor_fusion.readers.morpho import (
-    MorphoReader,
-    MorphoMarket,
-    MorphoMarketRates,
-    MorphoPosition,
-    MorphoMarketParams,
-    MorphoPositionBreakdown,
-)
 from ipor_fusion.readers.aave_v3 import (
     AaveV3PositionBreakdown,
     AaveV3Reader,
@@ -20,8 +12,16 @@ from ipor_fusion.readers.aave_v3 import (
     AaveV3UserAccountData,
 )
 from ipor_fusion.readers.compound_v3 import CompoundV3Reader
-from ipor_fusion.readers.uniswap_v3 import UniswapV3Reader, UniswapV3Position
-from ipor_fusion.readers.ramses_v2 import RamsesV2Reader, RamsesV2Position
+from ipor_fusion.readers.morpho import (
+    MorphoMarket,
+    MorphoMarketParams,
+    MorphoMarketRates,
+    MorphoPosition,
+    MorphoPositionBreakdown,
+    MorphoReader,
+)
+from ipor_fusion.readers.ramses_v2 import RamsesV2Position, RamsesV2Reader
+from ipor_fusion.readers.uniswap_v3 import UniswapV3Position, UniswapV3Reader
 from ipor_fusion.types import Amount
 
 # Deterministic test addresses

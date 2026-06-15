@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 from eth_abi import encode as abi_encode
 
 from ipor_fusion.errors import (
+    TransactionError,
     _decode_revert_reason,
     get_revert_reason,
-    TransactionError,
 )
 
 ERROR_SELECTOR = bytes.fromhex("08c379a0")

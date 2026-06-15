@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import datetime, timezone
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Any
 
 import click
@@ -17,12 +17,12 @@ from ipor_fusion.cli.config_store import (
 )
 from ipor_fusion.cli.explorer import get_contract_name
 from ipor_fusion.cli.vault_fetcher import (
-    _VaultData,
     _fetch_deployment_info,
     _fetch_vault_data,
     _resolve_token_decimals,
     _resolve_token_symbol,
     _safe_call,
+    _VaultData,
 )
 from ipor_fusion.cli.vault_health import (
     _BalanceFuseTotals,

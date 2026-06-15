@@ -7,9 +7,9 @@ from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import LogReceipt
 
-from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.config.roles import Roles
-from ipor_fusion.types import RoleId, Period
+from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.types import Period, RoleId
 
 
 @dataclass(slots=True)

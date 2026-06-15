@@ -11,7 +11,7 @@ from web3.exceptions import ContractPanicError
 from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.types import Shares, Amount, Fee, Period
+from ipor_fusion.types import Amount, Fee, Period, Shares
 
 logger = logging.getLogger(__name__)
 

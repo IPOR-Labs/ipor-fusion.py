@@ -6,12 +6,11 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
+from eth_abi import decode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import ChecksumAddress, HexStr
-
-from eth_abi import decode
-from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.cli.config_store import (
     load_contract_cache,
@@ -36,7 +35,6 @@ from ipor_fusion.readers.lending_health import (
 )
 from ipor_fusion.readers.morpho import MorphoPositionBreakdown, MorphoReader
 from ipor_fusion.types import MorphoBlueMarketId
-
 
 T = TypeVar("T")
 

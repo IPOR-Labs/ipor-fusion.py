@@ -9,33 +9,33 @@ from __future__ import annotations
 
 import logging
 
+from _simulate import assert_all_success
+from addresses import BASE_WETH, BASE_WSTETH
+from constants import (
+    ANVIL_WALLET,
+    BASE_MORPHO_BORROW_FUSE,
+    BASE_MORPHO_COLLATERAL_FUSE,
+    BASE_MORPHO_FLASH_LOAN_FUSE,
+    BASE_UNIVERSAL_SWAP_FUSE,
+)
 from eth_abi import encode
 from eth_abi.packed import encode_packed
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
-from _simulate import assert_all_success
-from addresses import BASE_WSTETH, BASE_WETH
-from constants import (
-    ANVIL_WALLET,
-    BASE_MORPHO_COLLATERAL_FUSE,
-    BASE_MORPHO_BORROW_FUSE,
-    BASE_MORPHO_FLASH_LOAN_FUSE,
-    BASE_UNIVERSAL_SWAP_FUSE,
-)
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
-    PriceOracleMiddleware,
     ERC20,
+    AccessManager,
+    PlasmaVault,
+    PriceOracleMiddleware,
     Roles,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.fuses import (
-    MorphoCollateralFuse,
     MorphoBorrowFuse,
+    MorphoCollateralFuse,
     MorphoFlashLoanFuse,
     UniversalTokenSwapperFuse,
 )
