@@ -1,93 +1,93 @@
 from importlib.metadata import PackageNotFoundError, version
 
+from ipor_fusion.config.roles import Roles
+from ipor_fusion.core.access import AccessManager, RoleAccount, RoleStatus
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
-from ipor_fusion.core.plasma_vault import PlasmaVault, BalanceFuse
+from ipor_fusion.core.erc20 import ERC20
+from ipor_fusion.core.oracle import AssetPriceSource, PriceOracleMiddleware
+from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
+from ipor_fusion.core.rewards_manager import RewardsManager, VestingData
 from ipor_fusion.core.simulation import (
-    VaultSimulator,
-    SimulationResult,
     SimulatedCallResult,
+    SimulationResult,
+    VaultSimulator,
     is_simulate_v1_supported,
 )
-from ipor_fusion.core.access import AccessManager, RoleAccount, RoleStatus
-from ipor_fusion.core.rewards_manager import RewardsManager, VestingData
-from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.withdraw_manager import (
+    PendingRequestsInfo,
     WithdrawManager,
     WithdrawRequestInfo,
-    PendingRequestsInfo,
 )
-from ipor_fusion.core.oracle import PriceOracleMiddleware, AssetPriceSource
-from ipor_fusion.readers import (
-    MorphoReader,
-    MorphoMarket,
-    MorphoMarketRates,
-    MorphoPosition,
-    MorphoMarketParams,
-    AaveV3Reader,
-    AaveV3UserAccountData,
-    CompoundV3Reader,
-    LendingMarketHealth,
-    VaultLendingHealth,
-    fetch_vault_lending_health,
-    UniswapV3Reader,
-    UniswapV3Position,
-    RamsesV2Reader,
-    RamsesV2Position,
-)
-from ipor_fusion.fuses import (
-    FuseAction,
-    Fuse,
-    StakeFuse,
-    AaveV3SupplyFuse,
-    AaveV3BorrowFuse,
-    MorphoSupplyFuse,
-    MorphoCollateralFuse,
-    MorphoBorrowFuse,
-    MorphoFlashLoanFuse,
-    MorphoClaimFuse,
-    UniswapV3SwapFuse,
-    UniswapV3NewPositionFuse,
-    UniswapV3ModifyPositionFuse,
-    UniswapV3CollectFuse,
-    UniswapV3NewPositionEvent,
-    UniswapV3ClosePositionEvent,
-    UniswapV3Events,
-    CompoundV3SupplyFuse,
-    RamsesV2NewPositionFuse,
-    RamsesV2ModifyPositionFuse,
-    RamsesV2CollectFuse,
-    RamsesClaimFuse,
-    RamsesNewPositionEvent,
-    RamsesEvents,
-    GearboxSupplyFuse,
-    GearboxStakeFuse,
-    ERC4626SupplyFuse,
-    UniversalTokenSwapperFuse,
-    FluidInstadappSupplyFuse,
-    FluidInstadappStakingFuse,
-)
-from ipor_fusion.config.roles import Roles
-from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.errors import (
     IporFusionError,
     TransactionError,
 )
+from ipor_fusion.fuses import (
+    AaveV3BorrowFuse,
+    AaveV3SupplyFuse,
+    CompoundV3SupplyFuse,
+    ERC4626SupplyFuse,
+    FluidInstadappStakingFuse,
+    FluidInstadappSupplyFuse,
+    Fuse,
+    FuseAction,
+    GearboxStakeFuse,
+    GearboxSupplyFuse,
+    MorphoBorrowFuse,
+    MorphoClaimFuse,
+    MorphoCollateralFuse,
+    MorphoFlashLoanFuse,
+    MorphoSupplyFuse,
+    RamsesClaimFuse,
+    RamsesEvents,
+    RamsesNewPositionEvent,
+    RamsesV2CollectFuse,
+    RamsesV2ModifyPositionFuse,
+    RamsesV2NewPositionFuse,
+    StakeFuse,
+    UniswapV3ClosePositionEvent,
+    UniswapV3CollectFuse,
+    UniswapV3Events,
+    UniswapV3ModifyPositionFuse,
+    UniswapV3NewPositionEvent,
+    UniswapV3NewPositionFuse,
+    UniswapV3SwapFuse,
+    UniversalTokenSwapperFuse,
+)
+from ipor_fusion.market_ids import IporFusionMarkets
+from ipor_fusion.readers import (
+    AaveV3Reader,
+    AaveV3UserAccountData,
+    CompoundV3Reader,
+    LendingMarketHealth,
+    MorphoMarket,
+    MorphoMarketParams,
+    MorphoMarketRates,
+    MorphoPosition,
+    MorphoReader,
+    RamsesV2Position,
+    RamsesV2Reader,
+    UniswapV3Position,
+    UniswapV3Reader,
+    VaultLendingHealth,
+    fetch_vault_lending_health,
+)
 from ipor_fusion.types import (
-    Amount,
-    Shares,
-    Decimals,
-    MarketId,
-    TokenId,
-    Fee,
-    Tick,
-    Liquidity,
-    RoleId,
-    ChainId,
-    MorphoBlueMarketId,
-    Price,
-    Period,
     MAX_UINT256,
+    Amount,
+    ChainId,
+    Decimals,
+    Fee,
+    Liquidity,
+    MarketId,
+    MorphoBlueMarketId,
+    Period,
+    Price,
+    RoleId,
+    Shares,
+    Tick,
+    TokenId,
 )
 
 try:

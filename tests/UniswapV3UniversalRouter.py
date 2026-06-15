@@ -7,7 +7,6 @@ from ipor_fusion.core.context import Web3Context
 
 
 class UniswapV3UniversalRouter:
-
     def __init__(
         self,
         ctx: Web3Context,

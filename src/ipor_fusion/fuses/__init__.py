@@ -1,37 +1,37 @@
-from ipor_fusion.fuses.base import FuseAction, Fuse, StakeFuse
-from ipor_fusion.fuses.aave_v3 import AaveV3SupplyFuse, AaveV3BorrowFuse
+from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
+from ipor_fusion.fuses.base import Fuse, FuseAction, StakeFuse
+from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
+from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
+from ipor_fusion.fuses.fluid_instadapp import (
+    FluidInstadappStakingFuse,
+    FluidInstadappSupplyFuse,
+)
+from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
 from ipor_fusion.fuses.morpho import (
-    MorphoSupplyFuse,
-    MorphoCollateralFuse,
     MorphoBorrowFuse,
-    MorphoFlashLoanFuse,
     MorphoClaimFuse,
+    MorphoCollateralFuse,
+    MorphoFlashLoanFuse,
+    MorphoSupplyFuse,
+)
+from ipor_fusion.fuses.ramses_v2 import (
+    RamsesClaimFuse,
+    RamsesEvents,
+    RamsesNewPositionEvent,
+    RamsesV2CollectFuse,
+    RamsesV2ModifyPositionFuse,
+    RamsesV2NewPositionFuse,
 )
 from ipor_fusion.fuses.uniswap_v3 import (
-    UniswapV3SwapFuse,
-    UniswapV3NewPositionFuse,
-    UniswapV3ModifyPositionFuse,
-    UniswapV3CollectFuse,
-    UniswapV3NewPositionEvent,
     UniswapV3ClosePositionEvent,
+    UniswapV3CollectFuse,
     UniswapV3Events,
+    UniswapV3ModifyPositionFuse,
+    UniswapV3NewPositionEvent,
+    UniswapV3NewPositionFuse,
+    UniswapV3SwapFuse,
 )
-from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
-from ipor_fusion.fuses.ramses_v2 import (
-    RamsesV2NewPositionFuse,
-    RamsesV2ModifyPositionFuse,
-    RamsesV2CollectFuse,
-    RamsesClaimFuse,
-    RamsesNewPositionEvent,
-    RamsesEvents,
-)
-from ipor_fusion.fuses.gearbox_v3 import GearboxSupplyFuse, GearboxStakeFuse
-from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
 from ipor_fusion.fuses.universal import UniversalTokenSwapperFuse
-from ipor_fusion.fuses.fluid_instadapp import (
-    FluidInstadappSupplyFuse,
-    FluidInstadappStakingFuse,
-)
 
 __all__ = [
     "FuseAction",

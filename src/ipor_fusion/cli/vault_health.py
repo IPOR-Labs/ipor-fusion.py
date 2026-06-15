@@ -11,9 +11,9 @@ from ipor_fusion.cli.vault_dep_graph import (
     find_orphan_fuse_markets,
 )
 from ipor_fusion.cli.vault_fetcher import (
-    _VaultData,
     _resolve_token_symbol,
     _safe_call,
+    _VaultData,
 )
 from ipor_fusion.cli.vault_rendering import _format_amount, _format_usd, _print_table
 from ipor_fusion.cli.vault_substrate import (
@@ -396,7 +396,7 @@ def _print_reconciliation(
             coverage = min(recon.pending_withdrawal_raw / recon.delta_raw, 1.0)
             if coverage > 0.5:
                 click.secho(
-                    f"  → Pending withdrawals explain " f"~{coverage:.0%} of the delta",
+                    f"  → Pending withdrawals explain ~{coverage:.0%} of the delta",
                     fg="yellow",
                 )
 

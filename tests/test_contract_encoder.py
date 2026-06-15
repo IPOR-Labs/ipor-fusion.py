@@ -15,7 +15,6 @@ from web3 import Web3
 
 from ipor_fusion.core import AccessManager, FusionFactory, PlasmaVault
 
-
 SAMPLE_ADDRESS = Web3.to_checksum_address("0x1455717668fA96534f675856347A973fA907e922")
 SAMPLE_USER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 

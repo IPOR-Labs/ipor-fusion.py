@@ -8,7 +8,6 @@ from web3 import Web3
 from ipor_fusion.fuses.events import extract_events
 from ipor_fusion.types import Amount, Decimals, Price
 
-
 ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 
 

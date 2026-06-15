@@ -7,6 +7,7 @@ from eth_abi import encode
 from web3 import Web3
 
 from ipor_fusion.market_ids import IporFusionMarkets
+from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
     MORPHO_BLUE_ADDRESS,
@@ -19,7 +20,6 @@ from ipor_fusion.readers.lending_health import (
     _shares_to_assets_up,
     fetch_vault_lending_health,
 )
-from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.morpho import MorphoReader
 from ipor_fusion.types import MorphoBlueMarketId
 
@@ -524,8 +524,8 @@ class TestHealthCheckLendingWarnings:
         from ipor_fusion.cli.vault_fetcher import _VaultData
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
@@ -580,8 +580,8 @@ class TestHealthCheckLendingWarnings:
         from ipor_fusion.cli.vault_fetcher import _VaultData
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
@@ -635,8 +635,8 @@ class TestHealthCheckLendingWarnings:
         from ipor_fusion.cli.vault_fetcher import _VaultData
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
@@ -707,8 +707,8 @@ class TestOrphanFuseMarketsHealthCheck:
     def test_morpho_orphan_marked_critical(self):
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 
@@ -736,8 +736,8 @@ class TestOrphanFuseMarketsHealthCheck:
     def test_flash_loan_action_fuse_not_flagged(self):
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
 
         data = self._make_data(
@@ -754,8 +754,8 @@ class TestOrphanFuseMarketsHealthCheck:
     def test_no_fuse_markets_no_criticals(self):
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
 
         data = self._make_data(fuse_markets=None, balance_fuses=[])
@@ -771,8 +771,8 @@ class TestOrphanFuseMarketsHealthCheck:
         ERC20 cache refresh."""
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 
@@ -797,8 +797,8 @@ class TestOrphanFuseMarketsHealthCheck:
     def test_balance_fuse_with_correct_erc20_dep_no_critical(self):
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 

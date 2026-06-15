@@ -7,8 +7,8 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import Timestamp
 
-from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.types import Amount, Fee, MorphoBlueMarketId, Shares
 
 WAD = 10**18

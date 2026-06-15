@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import datetime, timezone
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Any
 
 import click
@@ -17,12 +17,12 @@ from ipor_fusion.cli.config_store import (
 )
 from ipor_fusion.cli.explorer import get_contract_name
 from ipor_fusion.cli.vault_fetcher import (
-    _VaultData,
     _fetch_deployment_info,
     _fetch_vault_data,
     _resolve_token_decimals,
     _resolve_token_symbol,
     _safe_call,
+    _VaultData,
 )
 from ipor_fusion.cli.vault_health import (
     _BalanceFuseTotals,
@@ -483,7 +483,7 @@ def _print_vault_info(
         deploy_iso = deploy_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         age = _format_age(data.deployment_timestamp)
         click.echo(
-            f"Deployed at:      block {data.deployment_block}" f" ({deploy_iso}, {age})"
+            f"Deployed at:      block {data.deployment_block} ({deploy_iso}, {age})"
         )
     elif data.deployment_error:
         click.echo(f"Deployed at:      N/A ({data.deployment_error})")

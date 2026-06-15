@@ -11,17 +11,17 @@ from __future__ import annotations
 
 import logging
 
+from _simulate import assert_all_success
+from constants import ETHEREUM_MORPHO_CLAIM_FUSE
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
-from _simulate import assert_all_success
-from constants import ETHEREUM_MORPHO_CLAIM_FUSE
 from ipor_fusion import (
-    Web3Context,
+    ERC20,
     PlasmaVault,
     RewardsManager,
-    ERC20,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.fuses import MorphoClaimFuse
 from ipor_fusion.types import ChainId

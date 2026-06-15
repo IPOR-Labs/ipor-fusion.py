@@ -9,25 +9,25 @@ from __future__ import annotations
 
 import logging
 
-from web3 import Web3
-
 from _simulate import address_substrate, assert_all_success
 from addresses import ETHEREUM_WBTC, ETHEREUM_WETH
 from constants import (
     ANVIL_WALLET,
-    ETHEREUM_AAVE_V3_SUPPLY_FUSE,
     ETHEREUM_AAVE_V3_BORROW_FUSE,
+    ETHEREUM_AAVE_V3_SUPPLY_FUSE,
 )
+from web3 import Web3
+
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
     ERC20,
-    Roles,
+    AccessManager,
     IporFusionMarkets,
+    PlasmaVault,
+    Roles,
     VaultSimulator,
+    Web3Context,
 )
-from ipor_fusion.fuses import AaveV3SupplyFuse, AaveV3BorrowFuse, ERC4626SupplyFuse
+from ipor_fusion.fuses import AaveV3BorrowFuse, AaveV3SupplyFuse, ERC4626SupplyFuse
 from ipor_fusion.types import ChainId, Period
 
 logging.basicConfig(level=logging.INFO)

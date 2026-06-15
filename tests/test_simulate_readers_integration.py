@@ -8,16 +8,16 @@ to anvil.reset_fork(...) at a fraction of the time and zero infrastructure.
 
 from __future__ import annotations
 
+from addresses import ARBITRUM_COMPOUND_V3_C_USDC, ETHEREUM_USDC
 from web3 import Web3
 
-from addresses import ETHEREUM_USDC, ARBITRUM_COMPOUND_V3_C_USDC
 from ipor_fusion import Web3Context
 from ipor_fusion.readers import (
-    MorphoReader,
     AaveV3Reader,
     CompoundV3Reader,
-    UniswapV3Reader,
+    MorphoReader,
     RamsesV2Reader,
+    UniswapV3Reader,
 )
 from ipor_fusion.types import ChainId, MorphoBlueMarketId
 
