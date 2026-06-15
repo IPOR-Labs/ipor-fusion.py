@@ -61,12 +61,6 @@ dev = [
     "pylint==3.3.1",
 ]
 
-# Transitional: the one piece Poetry still needs that uv/hatchling infer differently —
-# the src-layout package location. Poetry 2.x reads everything else from [project] above.
-# Removed in the "remove Poetry" commit.
-[tool.poetry]
-packages = [{ include = "ipor_fusion", from = "src" }]
-
 [tool.black]
 line-length = 88
 target-version = ["py310"]
