@@ -108,7 +108,6 @@ class VaultAllocation:
 
 
 @dataclass(slots=True)
-# pylint: disable-next=too-many-instance-attributes
 class MorphoApiMarket:
     """Snapshot of a Morpho Blue market plus the vaults supplying to it."""
 
@@ -305,7 +304,6 @@ class VaultV2Adapter:
 
 
 @dataclass(slots=True)
-# pylint: disable-next=too-many-instance-attributes
 class VaultV2Info:
     """Snapshot of a Morpho Vault V2."""
 
@@ -354,7 +352,6 @@ class VaultV1MarketAllocation:
 
 
 @dataclass(slots=True)
-# pylint: disable-next=too-many-instance-attributes
 class VaultV1Info:
     """Snapshot of a MetaMorpho V1 vault."""
 
@@ -529,7 +526,7 @@ def _decode_market_v1_id_data(
                 data,
             )
         )
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         # eth_abi raises various subclasses (DecodingError, InsufficientDataBytes, ...)
         # for malformed payloads — treat them all as "not a MarketV1 cap".
         return None

@@ -1,4 +1,3 @@
-# pylint: disable=unused-argument
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
@@ -588,17 +587,17 @@ class TestRolesGetName:
 
 class TestFormatAge:
     def test_today(self):
-        import time  # pylint: disable=import-outside-toplevel
+        import time
 
         assert _format_age(int(time.time())) == "today"
 
     def test_one_day_ago(self):
-        import time  # pylint: disable=import-outside-toplevel
+        import time
 
         assert _format_age(int(time.time()) - 86400) == "1 day ago"
 
     def test_multiple_days_ago(self):
-        import time  # pylint: disable=import-outside-toplevel
+        import time
 
         assert "days ago" in _format_age(int(time.time()) - 86400 * 5)
 
@@ -1749,7 +1748,7 @@ class TestBreakdownTokenPrices:
 
         assert result is not None
         assert len(result) == 1
-        for addr in result:  # pylint: disable=not-an-iterable
+        for addr in result:
             assert addr == addr.lower()
 
 
@@ -1757,11 +1756,11 @@ class TestBreakdownAmountJson:
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
     def test_includes_symbol_decimals_formatted_and_usd(self, _sym, _dec):
-        from ipor_fusion.cli.vault_cmd import (  # pylint: disable=import-outside-toplevel
+        from ipor_fusion.cli.vault_cmd import (
             _build_breakdown_amount_json,
         )
 
-        prices = {_TOKEN_USDC.lower(): 1.0}  # pylint: disable=no-member
+        prices = {_TOKEN_USDC.lower(): 1.0}
         entry = _build_breakdown_amount_json(
             MagicMock(), 1_000_000, _TOKEN_USDC, prices
         )
@@ -1775,7 +1774,7 @@ class TestBreakdownAmountJson:
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
     def test_omits_usd_when_no_price(self, _sym, _dec):
-        from ipor_fusion.cli.vault_cmd import (  # pylint: disable=import-outside-toplevel
+        from ipor_fusion.cli.vault_cmd import (
             _build_breakdown_amount_json,
         )
 
@@ -1788,11 +1787,11 @@ class TestFormatTokenAmountUsd:
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
     def test_appends_usd_when_price_known(self, _sym, _dec):
-        from ipor_fusion.cli.vault_cmd import (  # pylint: disable=import-outside-toplevel
+        from ipor_fusion.cli.vault_cmd import (
             _format_token_amount,
         )
 
-        prices = {_TOKEN_USDC.lower(): 1.0}  # pylint: disable=no-member
+        prices = {_TOKEN_USDC.lower(): 1.0}
         out = _format_token_amount(MagicMock(), 1_000_000, _TOKEN_USDC, prices)
         assert "1.0 USDC" in out
         assert "$1.00" in out
@@ -1800,7 +1799,7 @@ class TestFormatTokenAmountUsd:
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
     def test_no_usd_suffix_when_price_missing(self, _sym, _dec):
-        from ipor_fusion.cli.vault_cmd import (  # pylint: disable=import-outside-toplevel
+        from ipor_fusion.cli.vault_cmd import (
             _format_token_amount,
         )
 

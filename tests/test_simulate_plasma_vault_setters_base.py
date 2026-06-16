@@ -43,8 +43,8 @@ def _bare_vault() -> PlasmaVault:
     """Build a PlasmaVault without a Web3Context. Safe because `.calldata`
     only reads the pre-encoded `Call.data` — never touches ctx."""
     vault = PlasmaVault.__new__(PlasmaVault)
-    vault._ctx = None  # type: ignore[assignment]  # pylint: disable=protected-access
-    vault._address = BASE_PLASMA_VAULT  # pylint: disable=protected-access
+    vault._ctx = None  # type: ignore[assignment]
+    vault._address = BASE_PLASMA_VAULT
     return vault
 
 
