@@ -196,14 +196,14 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 
 ```bash
 uv sync --all-extras                                       # Install dependencies
-uv run pytest tests/test_fuse_encoding.py -n auto -v       # Unit tests (fast, no Docker)
+uv run pytest tests/test_fuse_encoding.py -n auto -v       # Unit tests (fast, offline)
 uv run pytest -v -s                                        # All tests (needs `.*_PROVIDER_URL` variables in `.env`)
 uv run ruff format ./                                      # Format
 uv run ruff check ./                                       # Lint
 uv run pyright                                             # Type check
 ```
 
-Integration tests require Docker (Anvil) and provider URLs in `.env`:
+Integration tests need provider URLs in `.env` (eth_simulateV1 at a pinned fork block — no local node):
 
 ```bash
 cp .env.example .env
