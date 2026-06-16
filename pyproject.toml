@@ -56,8 +56,8 @@ dev = [
     "python-dotenv>=1.0.1,<2",
     "pytest-xdist>=3.8.0,<4",
     "pytest-cov>=6.0,<7",
-    "mypy>=1.19.1,<2",
     "ruff>=0.14,<1",
+    "pyright>=1.1.390,<2",
 ]
 
 [tool.ruff]
@@ -81,6 +81,21 @@ max-statements = 100
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+# Shared eth_*/web3 stub frictions (same as ipor-fusion-dev.py):
+#   reportPrivateImportUsage      — eth_utils.keccak / eth_abi.decode are public API
+#                                   but missing from the stubs' __all__.
+#   reportTypedDictNotRequiredAccess — web3 TxData["input"] is always present at
+#                                   runtime but typed NotRequired.
+reportPrivateImportUsage = false
+reportTypedDictNotRequiredAccess = false
+# Tests pass raw ints/literals where domain NewTypes (Amount, MarketId, Period, …) are
+# declared — harmless (NewType is identity at runtime). Disabled to match ipor-fusion-dev.py.
+reportArgumentType = false
 
 [tool.coverage.run]
 source = ["src/ipor_fusion"]

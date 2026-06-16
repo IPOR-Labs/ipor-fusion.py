@@ -1,3 +1,4 @@
+# pyright: reportOperatorIssue=false, reportOptionalOperand=false
 """Unit tests for lending health computation — mock on-chain calls."""
 
 from unittest.mock import MagicMock, patch

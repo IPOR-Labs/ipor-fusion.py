@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false
 """Unit tests for `fusion market morpho-blue` and the Morpho API client."""
 
 import json
