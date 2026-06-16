@@ -32,7 +32,7 @@ classifiers = [
     "Natural Language :: English",
 ]
 dependencies = [
-    "eth-typing>=5.0.0,<6",
+    "eth-typing>=6.0.0,<7",
     "eth-abi>=5.1.0,<6",
     "web3>=7.7.0,<8",
 ]
