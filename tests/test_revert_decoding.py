@@ -1,3 +1,4 @@
+# pyright: reportOperatorIssue=false
 from unittest.mock import MagicMock
 
 from eth_abi import encode as abi_encode

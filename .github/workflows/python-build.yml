@@ -77,7 +77,7 @@ jobs:
 
       - name: Type check
         if: inputs.static-code-analysis-enabled
-        run: uv run mypy .
+        run: uv run pyright
         id: type-check
 
       - name: Build

@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false
 """Unit tests for Web3Context — mock Web3 calls, no network required."""
 
 from unittest.mock import MagicMock, patch

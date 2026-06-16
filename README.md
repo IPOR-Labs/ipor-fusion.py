@@ -200,7 +200,7 @@ uv run pytest tests/test_fuse_encoding.py -n auto -v       # Unit tests (fast, n
 uv run pytest -v -s                                        # All tests (needs `.*_PROVIDER_URL` variables in `.env`)
 uv run ruff format ./                                      # Format
 uv run ruff check ./                                       # Lint
-uv run mypy .                                              # Type check
+uv run pyright                                             # Type check
 ```
 
 Integration tests require Docker (Anvil) and provider URLs in `.env`:
