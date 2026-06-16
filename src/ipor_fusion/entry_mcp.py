@@ -1,4 +1,3 @@
-# pylint: disable=import-outside-toplevel
 """Guarded entry point for the ``fusion-mcp`` server script."""
 
 from __future__ import annotations

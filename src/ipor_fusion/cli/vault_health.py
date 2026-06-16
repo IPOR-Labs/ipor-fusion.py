@@ -245,7 +245,7 @@ def _print_erc20_balances(
 
 
 @dataclass
-class _ReconciliationData:  # pylint: disable=too-many-instance-attributes
+class _ReconciliationData:
     bf_total_raw: int = 0
     bf_total_usd: float = 0.0
     underlying_raw: int = 0

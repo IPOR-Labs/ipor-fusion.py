@@ -39,7 +39,7 @@ def _decode_revert_reason(data: bytes) -> str:
         try:
             (reason,) = abi_decode(["string"], payload)
             return f'Error("{reason}")'
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             return f"Error(<decode failed>: 0x{payload.hex()[:64]})"
 
     if selector == PANIC_SELECTOR:
@@ -47,7 +47,7 @@ def _decode_revert_reason(data: bytes) -> str:
             (code,) = abi_decode(["uint256"], payload)
             description = PANIC_CODES.get(code, "unknown panic code")
             return f"Panic(0x{code:02x}: {description})"
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             return f"Panic(<decode failed>: 0x{payload.hex()[:64]})"
 
     # Unknown selector — show truncated hex
@@ -73,7 +73,7 @@ def get_revert_reason(web3: Web3, tx_hash: bytes, receipt: TxReceipt) -> str | N
         block_number = receipt["blockNumber"]
         web3.eth.call(call_params, block_identifier=block_number)  # type: ignore[arg-type]
         return None  # replay succeeded — can't determine reason
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         exc_data = getattr(exc, "data", None)
         if isinstance(exc_data, str) and exc_data.startswith("0x"):
             raw = str(exc_data)

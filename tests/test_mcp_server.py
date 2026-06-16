@@ -1,4 +1,3 @@
-# pylint: disable=unused-argument,import-outside-toplevel
 """Tests for the MCP server tool definitions (direct SDK import)."""
 
 from unittest.mock import MagicMock, patch
@@ -147,7 +146,7 @@ class TestVaultRemove:
 # ── market tools ──────────────────────────────────────────────────────
 
 
-from ipor_fusion.cli.morpho_api import (  # noqa: E402  pylint: disable=wrong-import-position
+from ipor_fusion.cli.morpho_api import (  # noqa: E402
     MorphoApiError,
     MorphoApiMarket,
     VaultAllocation,
@@ -158,11 +157,11 @@ from ipor_fusion.cli.morpho_api import (  # noqa: E402  pylint: disable=wrong-im
     VaultV2Cap,
     VaultV2Info,
 )
-from ipor_fusion.mcp.server import (  # noqa: E402  pylint: disable=wrong-import-position
+from ipor_fusion.mcp.server import (  # noqa: E402
     market_meta_morpho,
     market_morpho_blue,
 )
-from ipor_fusion.readers.morpho import (  # noqa: E402  pylint: disable=wrong-import-position
+from ipor_fusion.readers.morpho import (  # noqa: E402
     MorphoMarket,
     MorphoMarketParams,
     MorphoMarketRates,

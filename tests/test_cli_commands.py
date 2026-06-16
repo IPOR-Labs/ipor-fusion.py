@@ -1,4 +1,3 @@
-# pylint: disable=unused-argument
 import json
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch

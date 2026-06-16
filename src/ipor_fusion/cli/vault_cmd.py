@@ -68,7 +68,7 @@ class AddressType(click.ParamType):
         if not raw.islower() and not raw.isupper():
             try:
                 checksum = Web3.to_checksum_address(value)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 self.fail(f"invalid address checksum: {value}", param, ctx)
             if checksum != value:
                 self.fail(
@@ -193,7 +193,7 @@ def _auto_save_vault(
         return
     try:
         label = plasma_vault.name().call()
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return
     cfg.vaults.append(VaultEntry(address=vault_address, label=label, chain_id=chain_id))
     save_config(cfg)
@@ -235,7 +235,7 @@ def add(address: str, label: str | None, chain_id: int | None) -> None:
         checksum = Web3.to_checksum_address(address)
         try:
             label = PlasmaVault(ctx, checksum).name().call()
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             label = checksum
 
     for vault_entry in cfg.vaults:
@@ -782,7 +782,7 @@ def _print_dependency_graph(data: _VaultData) -> None:
     if not data.dependency_graph:
         return
 
-    from ipor_fusion.cli.vault_dep_graph import (  # pylint: disable=import-outside-toplevel
+    from ipor_fusion.cli.vault_dep_graph import (
         compute_update_reach,
     )
 
@@ -807,7 +807,7 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     if not data.dependency_graph:
         return None
 
-    from ipor_fusion.cli.vault_dep_graph import (  # pylint: disable=import-outside-toplevel
+    from ipor_fusion.cli.vault_dep_graph import (
         compute_update_groups,
         compute_update_reach,
     )

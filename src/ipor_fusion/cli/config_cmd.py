@@ -24,7 +24,7 @@ def config() -> None:
 )
 def set_provider(url: str, chain_id: int | None) -> None:
     """Set RPC provider URL for a chain (chain ID auto-detected via eth_chainId)."""
-    from web3 import Web3  # pylint: disable=import-outside-toplevel
+    from web3 import Web3
 
     if chain_id is None:
         web3 = Web3(Web3.HTTPProvider(url))

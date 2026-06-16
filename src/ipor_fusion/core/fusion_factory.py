@@ -46,7 +46,7 @@ class CloneArgs:
 
 
 @dataclass(slots=True, frozen=True)
-class FusionInstance:  # pylint: disable=too-many-instance-attributes
+class FusionInstance:
     """17-field tuple returned by FusionFactory.clone()."""
 
     index: int
