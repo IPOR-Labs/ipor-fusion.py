@@ -86,6 +86,10 @@ max-complexity = 10
 include = ["src", "tests"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"
+# Resolve imports against the uv-managed ./.venv so an editor-launched pyright (eglot, etc.)
+# matches `uv run pyright`/CI without per-developer interpreter config.
+venvPath = "."
+venv = ".venv"
 # Shared eth_*/web3 stub frictions (same as ipor-fusion-dev.py):
 #   reportPrivateImportUsage      — eth_utils.keccak / eth_abi.decode are public API
 #                                   but missing from the stubs' __all__.
