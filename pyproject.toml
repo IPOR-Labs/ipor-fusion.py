@@ -34,6 +34,7 @@ classifiers = [
 dependencies = [
     "eth-typing>=6.0.0,<7",
     "eth-abi>=5.1.0,<6",
+    "eth-utils>=6.0.0,<7",
     "web3>=7.7.0,<8",
 ]
 
