@@ -23,7 +23,7 @@ import pytest
 from web3 import Web3
 
 from ipor_fusion import PlasmaVault, Web3Context
-from ipor_fusion.cli.vault_fetcher import _VaultData, _fetch_vault_data
+from ipor_fusion.cli.vault_fetcher import _fetch_vault_data, _VaultData
 from ipor_fusion.cli.vault_health import (
     _BalanceFuseTotals,
     _compute_erc20_balances,

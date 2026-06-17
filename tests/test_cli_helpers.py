@@ -40,13 +40,13 @@ from ipor_fusion.cli.vault_fetcher import (
 )
 from ipor_fusion.cli.vault_health import (
     _BalanceFuseTotals,
-    _Erc20Totals,
-    _TokenInfo,
     _compute_erc20_balances,
     _compute_health_check,
+    _Erc20Totals,
     _print_erc20_balances,
     _print_health_check,
     _print_reconciliation,
+    _TokenInfo,
 )
 from ipor_fusion.cli.vault_rendering import (
     _format_age,
