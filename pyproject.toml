@@ -65,7 +65,7 @@ line-length = 88
 target-version = "py310"
 
 [tool.ruff.lint]
-# Kept identical to ipor-fusion-dev.py — shared tool config; see UPDATE_TOOLING.md "Sync with dev".
+# Kept identical to ipor-fusion-dev.py — shared tool config
 # E,F,W,I,B,UP = base; S = flake8-bandit security; C901 + PLR0911/0912/0913/0915 = design limits.
 select = ["E", "F", "W", "I", "B", "UP", "S", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 ignore = ["E501"]
