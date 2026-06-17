@@ -89,8 +89,8 @@ jobs:
 
     steps:
       - name: Checkout
-        # from tag: v4.2.2
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # from tag: v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           token: ${{ secrets.GH_TOKEN }}
           fetch-depth: 0
@@ -101,20 +101,20 @@ jobs:
           git checkout -B ${{ github.ref_name }} ${{ github.sha }}
 
       - name: Set up Python
-        # from tag: v5.3.0
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
+        # from tag: v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ inputs.python-version }}
 
       - name: Set up Poetry
-        # from tag: v3.0.1
-        uses: abatilo/actions-poetry@e78f54a89cb052fff327414dd9ff010b5d2b4dbd
+        # from tag: v4.0.0
+        uses: abatilo/actions-poetry@3765cf608f2d4a72178a9fc5b918668e542b89b1
         with:
           poetry-version: ${{ inputs.poetry-version }}
 
       - name: Cache
-        # from tag: v4.1.2
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        # from tag: v5.0.5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ${{ env.POETRY_VIRTUALENVS_PATH }}
           key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
@@ -151,8 +151,8 @@ jobs:
       - name: Version release (semantic)
         if: inputs.publish-enabled && !inputs.skip-version-bump
         id: release
-        # from tag: v9.12.0
-        uses: python-semantic-release/python-semantic-release@c1bcfdbb994243ac7cf419365d5894d6bfb2950e
+        # from tag: v10.5.3
+        uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0
         with:
           github_token: ${{ secrets.GH_TOKEN }}
           git_committer_name: "bob-the-builder-ipor"
@@ -186,8 +186,8 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
-        # from tag: v9.12.0
-        uses: python-semantic-release/publish-action@7e5b21d0ae796b4efc7a1fc340f48b691cbfdbf9
+        # from tag: v10.5.3
+        uses: python-semantic-release/publish-action@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0
         if: inputs.publish-enabled && (steps.release.outputs.released || steps.release-current.outputs.released)
         with:
           github_token: ${{ secrets.GH_TOKEN }}

@@ -73,8 +73,8 @@ jobs:
 
       - name: Slack status start
         id: slack-status
-        # from tag: v2-ipor-v1
-        uses: IPOR-Labs/github-action-slack-notify-build@5d45bafed9eff565533d3162564a840e4a9745a3
+        # from tag: v2-ipor-v3
+        uses: IPOR-Labs/github-action-slack-notify-build@0b897c449a221747d64b0bec85b7e04dbeda8de5
         with:
           channel: ${{ inputs.status-slack-channel-name }}
           status: STARTING
