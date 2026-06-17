@@ -69,6 +69,14 @@ def _compute_erc20_balances(  # pylint: disable=too-complex
     ctx: Web3Context, plasma_vault: PlasmaVault, data: _VaultData
 ) -> _Erc20Totals:
     totals = _Erc20Totals()
+
+    # Underlying held directly on the vault is part of totalAssets via ERC4626
+    # base accounting, but by design it is NOT an ERC20_VAULT_BALANCE substrate.
+    # _fetch_vault_data reads it once (see _VaultData.underlying_balance_on_vault);
+    # surface it here so reconciliation counts idle underlying regardless of
+    # substrate configuration — or whether an ERC20 market exists (IL-7463).
+    totals.underlying_balance_raw = data.underlying_balance_on_vault
+
     erc20_market = None
     for balance_fuse in data.balance_fuses:
         if _market_name(balance_fuse.market_id) == "ERC20_VAULT_BALANCE":
@@ -128,8 +136,6 @@ def _compute_erc20_balances(  # pylint: disable=too-complex
         for addr, symbol, token_decimals, balance, price in resolved:
             if token_decimals is None or balance is None:
                 continue
-            if addr.lower() == data.asset.lower():
-                totals.underlying_balance_raw = balance
             price_usd = price.readable() if price else None
             if balance > 0:
                 totals.token_addrs_on_vault.add(addr.lower())
