@@ -842,6 +842,18 @@ class TestVaultInfoJson:
         assert wmd["last_release_funds_timestamp"] == 1699999000
         assert wmd["request_fee_percent"] == 0.1
         assert wmd["withdraw_fee_percent"] == 0.2
+        # Each field carries a short _note disambiguating its semantics; the
+        # fee notes must flag the two exit paths as mutually exclusive so a
+        # consumer never sums request_fee + withdraw_fee.
+        assert "mutually exclusive" in wmd["request_fee_percent_note"].lower()
+        assert "mutually exclusive" in wmd["withdraw_fee_percent_note"].lower()
+        for key in (
+            "withdraw_window_seconds",
+            "shares_to_release",
+            "last_release_funds_timestamp",
+            "total_pending_shares",
+        ):
+            assert wmd[f"{key}_note"]
         assert len(wmd["pending_requests"]) == 1
         assert wmd["pending_requests"][0]["account"] == ADDR_USER_1
         assert wmd["pending_requests"][0]["can_withdraw"] is True

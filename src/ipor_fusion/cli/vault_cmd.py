@@ -483,7 +483,7 @@ def _print_vault_info(
         deploy_iso = deploy_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         age = _format_age(data.deployment_timestamp)
         click.echo(
-            f"Deployed at:      block {data.deployment_block}" f" ({deploy_iso}, {age})"
+            f"Deployed at:      block {data.deployment_block} ({deploy_iso}, {age})"
         )
     elif data.deployment_error:
         click.echo(f"Deployed at:      N/A ({data.deployment_error})")
@@ -682,20 +682,26 @@ def _build_withdraw_manager_json(
 
     result: dict = {
         "withdraw_window_seconds": wmd.withdraw_window,
+        "withdraw_window_seconds_note": "Length of the window, starting at request time, in which a scheduled withdrawal can be executed (also requires the vault Alpha to release funds after the request).",
         "request_fee_wad": wmd.request_fee,
         "request_fee_percent": round(wmd.request_fee / 1e18 * 100, 4),
+        "request_fee_percent_note": "Scheduled-exit fee, charged once at request. Mutually exclusive with withdraw_fee — a user pays one path, never summed.",
         "withdraw_fee_wad": wmd.withdraw_fee,
         "withdraw_fee_percent": round(wmd.withdraw_fee / 1e18 * 100, 4),
+        "withdraw_fee_percent_note": "Instant-exit fee on standard redeem/withdraw from unallocated balance. Mutually exclusive with request_fee — a user pays one path, never summed.",
         "shares_to_release": {
             "raw": wmd.shares_to_release,
             "formatted": _format_amount(wmd.shares_to_release, sdec),
         },
+        "shares_to_release_note": "Current shares the vault Alpha has approved for release via releaseFunds().",
         "last_release_funds_timestamp": wmd.last_release_funds_timestamp,
+        "last_release_funds_timestamp_note": "Release timestamp set by the last releaseFunds() call; 0 if never released.",
         "pending_requests": requests_json,
         "total_pending_shares": {
             "raw": total_pending_shares,
             "formatted": _format_amount(total_pending_shares, sdec),
         },
+        "total_pending_shares_note": "Sum of shares across all pending withdrawal requests.",
     }
     if wmd.last_release_funds_timestamp > 0:
         result["last_release_funds_utc"] = datetime.fromtimestamp(
