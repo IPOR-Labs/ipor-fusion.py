@@ -187,7 +187,7 @@ jobs:
 
       - name: Publish GitHub release
         # from tag: v10.5.3
-        uses: python-semantic-release/publish-action@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0
+        uses: python-semantic-release/publish-action@310a9983a0ae878b29f3aac778d7c77c1db27378
         if: inputs.publish-enabled && (steps.release.outputs.released || steps.release-current.outputs.released)
         with:
           github_token: ${{ secrets.GH_TOKEN }}
