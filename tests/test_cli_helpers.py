@@ -714,7 +714,8 @@ class TestPrintErc20Balances:
         ctx = MagicMock()
         pv = MagicMock()
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -761,7 +762,8 @@ class TestPrintErc20Balances:
         )
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -810,7 +812,8 @@ class TestPrintErc20Balances:
         )
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -844,7 +847,8 @@ class TestPrintErc20Balances:
         pv.get_market_substrates.return_value.call.return_value = []
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -903,7 +907,8 @@ class TestUnderlyingOnVaultIL7463:
 
     def _make_data(self, balance_fuses, underlying_balance_on_vault=0):
         return _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=8,
             asset_decimals=6,
@@ -1096,7 +1101,8 @@ class TestAddressTypeChecksumException:
 class TestPrintReconciliation:
     def test_within_threshold(self, capsys):
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -1137,7 +1143,8 @@ class TestPrintReconciliation:
 
     def test_mismatch_over_1pct(self, capsys):
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -1215,7 +1222,8 @@ class TestErc20BalancesNotes:
         )
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -1275,7 +1283,8 @@ class TestErc20BalancesNotes:
         )
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -1306,7 +1315,8 @@ class TestErc20BalancesNotes:
 
 def _make_data(**overrides):
     defaults = {
-        "block_label": "1",
+        "block_number": 1,
+        "is_latest": True,
         "block_timestamp": 0,
         "share_decimals": 18,
         "asset_decimals": 18,

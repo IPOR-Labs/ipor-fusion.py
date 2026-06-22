@@ -546,7 +546,8 @@ class TestHealthCheckLendingWarnings:
         )
 
         data = _VaultData(
-            block_label="123",
+            block_number=123,
+            is_latest=True,
             block_timestamp=1700000000,
             share_decimals=18,
             asset_decimals=18,
@@ -602,7 +603,8 @@ class TestHealthCheckLendingWarnings:
         )
 
         data = _VaultData(
-            block_label="123",
+            block_number=123,
+            is_latest=True,
             block_timestamp=1700000000,
             share_decimals=18,
             asset_decimals=18,
@@ -642,7 +644,8 @@ class TestHealthCheckLendingWarnings:
         addr = Web3.to_checksum_address("0x" + "11" * 20)
 
         data = _VaultData(
-            block_label="123",
+            block_number=123,
+            is_latest=True,
             block_timestamp=1700000000,
             share_decimals=18,
             asset_decimals=18,
@@ -688,7 +691,8 @@ class TestOrphanFuseMarketsHealthCheck:
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
         return _VaultData(
-            block_label="123",
+            block_number=123,
+            is_latest=True,
             block_timestamp=1700000000,
             share_decimals=18,
             asset_decimals=18,

@@ -496,7 +496,8 @@ def _print_vault_info(
         click.echo(f"Etherscan:        {explorer_base}/address/{vault_address}")
     click.echo(f"IPOR app:         {IPOR_APP_URL}/{chain_label}/{vault_address}")
     click.echo(f"Chain:            {chain_label} (chain-id={chain_id})")
-    click.echo(f"Block:            {data.block_label}")
+    block_suffix = " (latest)" if data.is_latest else ""
+    click.echo(f"Block:            {data.block_number}{block_suffix}")
     block_dt = datetime.fromtimestamp(data.block_timestamp, tz=timezone.utc)
     block_iso = block_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     click.echo(f"Block time:       {data.block_timestamp} ({block_iso})")
@@ -1148,7 +1149,8 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
         "links": links,
         "chain": chain_label,
         "chain_id": chain_id,
-        "block": data.block_label,
+        "block": data.block_number,
+        "is_latest": data.is_latest,
         "block_timestamp": data.block_timestamp,
         "block_timestamp_utc": datetime.fromtimestamp(
             data.block_timestamp, tz=timezone.utc

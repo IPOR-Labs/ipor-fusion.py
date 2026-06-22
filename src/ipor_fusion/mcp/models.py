@@ -288,7 +288,12 @@ class VaultInfoResponse(_Base):
     )
     chain: str
     chain_id: int
-    block: int | str
+    block: int
+    is_latest: bool = Field(
+        default=False,
+        description="True when the query targeted the latest block (block is the "
+        "resolved height at read time); False for a pinned historical block.",
+    )
     block_timestamp: int
     block_timestamp_utc: str
     deployment: dict[str, Any] | None = None

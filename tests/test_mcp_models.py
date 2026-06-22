@@ -41,6 +41,7 @@ def _full_vault_info_dict() -> dict:
         "chain": "ethereum",
         "chain_id": 1,
         "block": 12345,
+        "is_latest": True,
         "block_timestamp": 1700000000,
         "block_timestamp_utc": "2023-11-14T22:13:20Z",
         "deployment": {

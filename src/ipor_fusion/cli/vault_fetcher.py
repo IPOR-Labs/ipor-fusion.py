@@ -59,7 +59,8 @@ class _WithdrawManagerData:
 
 @dataclass
 class _VaultData:  # pylint: disable=too-many-instance-attributes
-    block_label: str
+    block_number: int
+    is_latest: bool
     block_timestamp: int
     share_decimals: int
     asset_decimals: int
@@ -417,14 +418,9 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
 
         # Collect all results
         latest_block = f_block.result()
-        block_label = (
-            str(block_number)
-            if block_number is not None
-            else f"{latest_block} (latest)"
-        )
-        block_timestamp: int = ctx.web3.eth.get_block(
-            block_number if block_number is not None else latest_block
-        )["timestamp"]
+        is_latest = block_number is None
+        resolved_block = latest_block if block_number is None else block_number
+        block_timestamp: int = ctx.web3.eth.get_block(resolved_block)["timestamp"]
         asset_price = f_price.result()
         withdraw_mgr_addr = f_withdraw.result()
 
@@ -503,7 +499,8 @@ def _fetch_vault_data(  # pylint: disable=too-many-locals
             market_substrates = {}
 
         return _VaultData(
-            block_label=block_label,
+            block_number=resolved_block,
+            is_latest=is_latest,
             block_timestamp=block_timestamp,
             share_decimals=f_decimals.result(),
             asset_decimals=f_adec.result(),

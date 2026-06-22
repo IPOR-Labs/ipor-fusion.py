@@ -813,6 +813,10 @@ class TestVaultInfoJson:
         assert data["vault"] == ADDR_1
         assert data["chain"] == "ethereum"
         assert data["chain_id"] == 1
+        # block is always a plain int; the latest-query marker is a separate flag.
+        assert data["block"] == 12345678
+        assert isinstance(data["block"], int)
+        assert data["is_latest"] is True
         assert data["asset"]["symbol"] == "USDC"
         assert data["asset"]["price_usd"] == 1.0
         assert data["total_assets"]["raw"] == 1000 * 10**18
