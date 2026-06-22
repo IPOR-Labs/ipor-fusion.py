@@ -7,6 +7,7 @@ import click
 from web3 import Web3
 
 from ipor_fusion.cli.vault_dep_graph import (
+    erc20_balance_tracks_non_underlying,
     find_markets_missing_erc20_dependency,
     find_orphan_fuse_markets,
 )
@@ -25,6 +26,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import Shares
 
 
@@ -396,7 +398,7 @@ def _print_reconciliation(
             coverage = min(recon.pending_withdrawal_raw / recon.delta_raw, 1.0)
             if coverage > 0.5:
                 click.secho(
-                    f"  → Pending withdrawals explain " f"~{coverage:.0%} of the delta",
+                    f"  → Pending withdrawals explain ~{coverage:.0%} of the delta",
                     fg="yellow",
                 )
 
@@ -454,14 +456,37 @@ def _compute_orphan_fuse_criticals(data: _VaultData) -> list[str]:
     return lines
 
 
+def _erc20_balance_substrate_addrs(data: _VaultData) -> set[str]:
+    """Lowercased token addresses tracked by the ERC20_VAULT_BALANCE market.
+
+    Substrates are 32-byte words with the address in the low 20 bytes.
+    """
+    if not data.market_substrates:
+        return set()
+    raws = data.market_substrates.get(IporFusionMarkets.ERC20_VAULT_BALANCE, [])
+    addrs: set[str] = set()
+    for raw in raws:
+        hex_str = raw.hex()
+        if len(hex_str) == 64:
+            addrs.add(f"0x{hex_str[24:]}".lower())
+    return addrs
+
+
 def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
     """Flag balance-fuse markets that don't declare ERC20_VAULT_BALANCE
     as a dependency.
 
-    Markets backed by the underlying ERC20 (lending, Morpho liquidity, etc.)
-    must include this edge — without it, ``updateMarketsBalances(market)``
-    won't refresh the ERC20 cache and ``totalAssets`` drifts.
+    Only relevant when the vault holds *non-underlying* tokens idle: those are
+    tracked by ERC20_VAULT_BALANCE, and markets touching them must depend on it
+    so ``updateMarketsBalances(market)`` cascades to refresh that cache.
+    Idle underlying is already in ``totalAssets`` via ERC4626 base accounting,
+    so a single-asset vault (no ERC20_VAULT_BALANCE market, or one tracking
+    only the underlying) needs no such edge and is not flagged.
     """
+    if not erc20_balance_tracks_non_underlying(
+        _erc20_balance_substrate_addrs(data), data.asset
+    ):
+        return []
     balance_market_ids = {bf.market_id for bf in data.balance_fuses}
     if not balance_market_ids:
         return []

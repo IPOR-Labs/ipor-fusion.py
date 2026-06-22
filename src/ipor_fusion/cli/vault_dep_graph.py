@@ -94,6 +94,26 @@ def find_markets_missing_erc20_dependency(
     return missing
 
 
+def erc20_balance_tracks_non_underlying(
+    erc20_substrate_addrs: set[str], underlying_addr: str
+) -> bool:
+    """True if the ERC20_VAULT_BALANCE market tracks any token besides the
+    underlying.
+
+    Idle underlying held directly on the vault is already counted in
+    ``totalAssets`` via ERC4626 base accounting, so it needs no balance-graph
+    wiring. Only *non-underlying* idle tokens — swap intermediates, borrowed
+    assets, reward tokens in multi-asset vaults — are tracked by
+    ERC20_VAULT_BALANCE and require markets to depend on it.
+
+    When this set is empty (a single-asset optimizer, or no
+    ERC20_VAULT_BALANCE market at all) no balance market needs that dependency,
+    so the missing-dependency check must not fire.
+    """
+    underlying = underlying_addr.lower()
+    return any(addr.lower() != underlying for addr in erc20_substrate_addrs)
+
+
 def compute_update_reach(graph: dict[int, list[int]]) -> dict[int, set[int]]:
     """For each market with dependencies, compute the transitive closure.
 

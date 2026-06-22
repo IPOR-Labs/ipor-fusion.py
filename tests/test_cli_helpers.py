@@ -17,6 +17,8 @@ from ipor_fusion.cli.vault_cmd import (
     _build_dependency_graph_json,
     _build_share_price_json,
     _index_lending_health,
+    _partition_balance_fuses,
+    _print_balance_fuses_table,
     _print_dependency_graph,
     _print_fuse_section,
     _print_health_lines,
@@ -709,11 +711,11 @@ class TestPrintErc20Balances:
         )
 
     def test_no_erc20_market(self, capsys):
-
         ctx = MagicMock()
         pv = MagicMock()
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -741,7 +743,6 @@ class TestPrintErc20Balances:
     def test_with_erc20_tokens(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
-
         ctx = MagicMock()
         pv = MagicMock()
         pv.address = ADDR_1
@@ -761,7 +762,8 @@ class TestPrintErc20Balances:
         )
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -794,7 +796,6 @@ class TestPrintErc20Balances:
     def test_with_error_balances(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
-
         ctx = MagicMock()
         pv = MagicMock()
         pv.address = ADDR_1
@@ -811,7 +812,8 @@ class TestPrintErc20Balances:
         )
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -839,14 +841,14 @@ class TestPrintErc20Balances:
 
     @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
     def test_no_token_addrs(self, mock_oracle_cls, capsys):
-
         ctx = MagicMock()
         pv = MagicMock()
         pv.address = ADDR_1
         pv.get_market_substrates.return_value.call.return_value = []
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -905,7 +907,8 @@ class TestUnderlyingOnVaultIL7463:
 
     def _make_data(self, balance_fuses, underlying_balance_on_vault=0):
         return _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=8,
             asset_decimals=6,
@@ -1051,6 +1054,39 @@ class TestPrintSubstrates:
         assert "[encoding error]" in captured.out
 
 
+class TestPrintBalanceFusesTable:
+    @patch("ipor_fusion.cli.vault_cmd.get_contract_name")
+    def test_splits_venues_and_zero_balance(self, mock_get_name, capsys):
+        mock_get_name.side_effect = lambda chain, addr, key: (
+            "ZeroBalanceFuse" if addr == ADDR_2 else "MorphoBalanceFuse"
+        )
+        pv = MagicMock()
+        pv.total_assets_in_market.return_value.call.return_value = 0
+        fuses = [
+            FakeBalanceFuse(market_id=14, fuse=ADDR_1),
+            FakeBalanceFuse(market_id=12, fuse=ADDR_2),
+        ]
+
+        _print_balance_fuses_table(pv, fuses, 6, "USDC", 1.0, 1, None)
+        out = capsys.readouterr().out
+        assert "Balance Fuses (1):" in out
+        assert "Zero-Balance Fuses (1):" in out
+
+    @patch(
+        "ipor_fusion.cli.vault_cmd.get_contract_name",
+        return_value="MorphoBalanceFuse",
+    )
+    def test_no_zero_balance_section_when_all_venues(self, mock_get_name, capsys):
+        pv = MagicMock()
+        pv.total_assets_in_market.return_value.call.return_value = 0
+        _print_balance_fuses_table(
+            pv, [FakeBalanceFuse(market_id=14, fuse=ADDR_1)], 6, "USDC", 1.0, 1, None
+        )
+        out = capsys.readouterr().out
+        assert "Balance Fuses (1):" in out
+        assert "Zero-Balance Fuses" not in out
+
+
 class TestAddressTypeChecksumException:
     @patch("ipor_fusion.cli.vault_cmd.Web3.to_checksum_address")
     def test_checksum_exception_caught(self, mock_checksum):
@@ -1065,7 +1101,8 @@ class TestAddressTypeChecksumException:
 class TestPrintReconciliation:
     def test_within_threshold(self, capsys):
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -1106,7 +1143,8 @@ class TestPrintReconciliation:
 
     def test_mismatch_over_1pct(self, capsys):
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -1184,7 +1222,8 @@ class TestErc20BalancesNotes:
         )
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -1244,7 +1283,8 @@ class TestErc20BalancesNotes:
         )
 
         data = _VaultData(
-            block_label="1",
+            block_number=1,
+            is_latest=True,
             block_timestamp=0,
             share_decimals=18,
             asset_decimals=18,
@@ -1275,7 +1315,8 @@ class TestErc20BalancesNotes:
 
 def _make_data(**overrides):
     defaults = {
-        "block_label": "1",
+        "block_number": 1,
+        "is_latest": True,
         "block_timestamp": 0,
         "share_decimals": 18,
         "asset_decimals": 18,
@@ -1947,3 +1988,32 @@ class TestFetchFuseMarketId:
         ctx = MagicMock()
         ctx.call.return_value = b"\x00\x01"  # too short for uint256
         assert _fetch_fuse_market_id(ctx, ADDR_1) is None
+
+
+class TestPartitionBalanceFuses:
+    def test_splits_venues_and_zero_balance(self):
+        entries = [
+            {"market_id": 14, "contract": "MorphoBalanceFuse"},
+            {"market_id": 12, "contract": "ZeroBalanceFuse"},
+            {"market_id": 1, "contract": "AaveV3BalanceFuse"},
+            {"market_id": 19, "contract": "ZeroBalanceFuse"},
+        ]
+        venues, zero_balance = _partition_balance_fuses(entries)
+        assert [e["market_id"] for e in venues] == [14, 1]
+        assert [e["market_id"] for e in zero_balance] == [12, 19]
+
+    def test_all_venues_when_no_capability(self):
+        entries = [
+            {"market_id": 14, "contract": "MorphoBalanceFuse"},
+            {"market_id": 7, "contract": "ERC20BalanceFuse"},
+        ]
+        venues, zero_balance = _partition_balance_fuses(entries)
+        assert venues == entries
+        assert zero_balance == []
+
+    def test_unknown_contract_is_venue(self):
+        venues, zero_balance = _partition_balance_fuses(
+            [{"market_id": 1, "contract": "?"}]
+        )
+        assert len(venues) == 1
+        assert zero_balance == []

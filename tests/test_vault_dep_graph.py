@@ -4,10 +4,34 @@ from ipor_fusion.cli.vault_dep_graph import (
     NO_BALANCE_FUSE_MARKETS,
     compute_update_groups,
     compute_update_reach,
+    erc20_balance_tracks_non_underlying,
     find_markets_missing_erc20_dependency,
     find_orphan_fuse_markets,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
+
+
+class TestErc20BalanceTracksNonUnderlying:
+    underlying = "0x" + "11" * 20
+    other = "0x" + "22" * 20
+
+    def test_empty_set_is_false(self):
+        assert not erc20_balance_tracks_non_underlying(set(), self.underlying)
+
+    def test_only_underlying_is_false(self):
+        assert not erc20_balance_tracks_non_underlying(
+            {self.underlying}, self.underlying
+        )
+
+    def test_non_underlying_present_is_true(self):
+        assert erc20_balance_tracks_non_underlying(
+            {self.underlying, self.other}, self.underlying
+        )
+
+    def test_case_insensitive(self):
+        assert not erc20_balance_tracks_non_underlying(
+            {self.underlying.upper()}, self.underlying.lower()
+        )
 
 
 class TestComputeUpdateReach:

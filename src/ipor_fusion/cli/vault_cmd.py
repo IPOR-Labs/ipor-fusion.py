@@ -138,6 +138,28 @@ IPOR_APP_URL = "https://app.ipor.io/fusion"
 
 UINT256_MAX = 2**256 - 1
 
+# Balance fuses whose ``balanceOf()`` is structurally zero (``pure`` → 0). Their
+# market is a registered *capability* (swap / flash-loan / instant-withdrawal /
+# admin plumbing), not a *venue* where assets actually sit. Anything backed by a
+# real ``*BalanceFuse`` is a venue.
+_CAPABILITY_BALANCE_FUSES: frozenset[str] = frozenset({"ZeroBalanceFuse"})
+
+
+def _partition_balance_fuses(entries: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Split balance-fuse entries into ``(venues, zero_balance)``.
+
+    Venues are real ``*BalanceFuse`` markets where assets can sit. Zero-balance
+    fuses are ZeroBalanceFuse-backed markets (swap/flash-loan/admin plumbing)
+    with a structurally-zero balance — capabilities, not liquidity markets.
+    Splitting keeps both visible while letting a consumer count only venues as
+    markets.
+    """
+    venues = [e for e in entries if e.get("contract") not in _CAPABILITY_BALANCE_FUSES]
+    zero_balance = [
+        e for e in entries if e.get("contract") in _CAPABILITY_BALANCE_FUSES
+    ]
+    return venues, zero_balance
+
 
 def _resolve_chain_id(
     cfg: FusionConfig, vault_address: str, chain_id: int | None
@@ -474,7 +496,8 @@ def _print_vault_info(
         click.echo(f"Etherscan:        {explorer_base}/address/{vault_address}")
     click.echo(f"IPOR app:         {IPOR_APP_URL}/{chain_label}/{vault_address}")
     click.echo(f"Chain:            {chain_label} (chain-id={chain_id})")
-    click.echo(f"Block:            {data.block_label}")
+    block_suffix = " (latest)" if data.is_latest else ""
+    click.echo(f"Block:            {data.block_number}{block_suffix}")
     block_dt = datetime.fromtimestamp(data.block_timestamp, tz=timezone.utc)
     block_iso = block_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     click.echo(f"Block time:       {data.block_timestamp} ({block_iso})")
@@ -483,7 +506,7 @@ def _print_vault_info(
         deploy_iso = deploy_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         age = _format_age(data.deployment_timestamp)
         click.echo(
-            f"Deployed at:      block {data.deployment_block}" f" ({deploy_iso}, {age})"
+            f"Deployed at:      block {data.deployment_block} ({deploy_iso}, {age})"
         )
     elif data.deployment_error:
         click.echo(f"Deployed at:      N/A ({data.deployment_error})")
@@ -566,7 +589,6 @@ def _print_vault_info(
     )
     click.echo()
 
-    click.echo(f"Balance Fuses ({len(data.balance_fuses)}):")
     bf_totals = _print_balance_fuses_table(
         plasma_vault,
         data.balance_fuses,
@@ -682,20 +704,26 @@ def _build_withdraw_manager_json(
 
     result: dict = {
         "withdraw_window_seconds": wmd.withdraw_window,
+        "withdraw_window_seconds_note": "Length of the window, starting at request time, in which a scheduled withdrawal can be executed (also requires the vault Alpha to release funds after the request).",
         "request_fee_wad": wmd.request_fee,
         "request_fee_percent": round(wmd.request_fee / 1e18 * 100, 4),
+        "request_fee_percent_note": "Scheduled-exit fee, charged once at request. Mutually exclusive with withdraw_fee — a user pays one path, never summed.",
         "withdraw_fee_wad": wmd.withdraw_fee,
         "withdraw_fee_percent": round(wmd.withdraw_fee / 1e18 * 100, 4),
+        "withdraw_fee_percent_note": "Instant-exit fee on standard redeem/withdraw from unallocated balance. Mutually exclusive with request_fee — a user pays one path, never summed.",
         "shares_to_release": {
             "raw": wmd.shares_to_release,
             "formatted": _format_amount(wmd.shares_to_release, sdec),
         },
+        "shares_to_release_note": "Current shares the vault Alpha has approved for release via releaseFunds().",
         "last_release_funds_timestamp": wmd.last_release_funds_timestamp,
+        "last_release_funds_timestamp_note": "Release timestamp set by the last releaseFunds() call; 0 if never released.",
         "pending_requests": requests_json,
         "total_pending_shares": {
             "raw": total_pending_shares,
             "formatted": _format_amount(total_pending_shares, sdec),
         },
+        "total_pending_shares_note": "Sum of shares across all pending withdrawal requests.",
     }
     if wmd.last_release_funds_timestamp > 0:
         result["last_release_funds_utc"] = datetime.fromtimestamp(
@@ -869,6 +897,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
                 market_label if market_label != "UNKNOWN" else str(bf.market_id)
             )
             assets_in_market = bf_balance_futs[i].result()
+            contract_name = bf_contract_futs[i].result() or "?"
             bf_entry: dict = {
                 "market": market_str,
                 "market_id": bf.market_id,
@@ -877,7 +906,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
                     "formatted": _format_amount(assets_in_market, data.asset_decimals),
                 },
                 "fuse": bf.fuse,
-                "contract": bf_contract_futs[i].result() or "?",
+                "contract": contract_name,
             }
             if data.total_assets > 0:
                 bf_entry["pct_of_total"] = round(
@@ -941,6 +970,10 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
                     for pb in data.aave_positions[bf.market_id]
                 ]
             balance_fuses_json.append(bf_entry)
+
+        balance_fuses_json, zero_balance_fuses_json = _partition_balance_fuses(
+            balance_fuses_json
+        )
 
         # Substrates - also resolve symbols/contracts for addresses
         all_sub_addresses: set[str] = set()
@@ -1116,7 +1149,8 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
         "links": links,
         "chain": chain_label,
         "chain_id": chain_id,
-        "block": data.block_label,
+        "block": data.block_number,
+        "is_latest": data.is_latest,
         "block_timestamp": data.block_timestamp,
         "block_timestamp_utc": datetime.fromtimestamp(
             data.block_timestamp, tz=timezone.utc
@@ -1156,6 +1190,7 @@ def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-
         "withdraw_manager_details": _build_withdraw_manager_json(data, plasma_vault),
         "fuses": fuses_json,
         "balance_fuses": balance_fuses_json,
+        "zero_balance_fuses": zero_balance_fuses_json,
         "instant_withdrawal_fuses": instant_json,
         "substrates": substrates_json,
         "dependency_graph": _build_dependency_graph_json(data),
@@ -1299,7 +1334,8 @@ def _print_balance_fuses_table(
                 (idx, balance_fuse.market_id, market_id_str, f_balance, f_contract)
             )
 
-        rows: list[tuple[str, ...]] = []
+        venue_rows: list[tuple[str, ...]] = []
+        zero_rows: list[tuple[str, ...]] = []
         for idx, market_id, market_id_str, f_balance, f_contract in futures:
             assets_in_market = f_balance.result()
             # Deduplicate: only count each market_id once in totals
@@ -1313,22 +1349,29 @@ def _print_balance_fuses_table(
                         assets_in_market / 10**decimals
                     ) * asset_price_usd
                 seen_market_ids.add(market_id)
-            contract_name = f_contract.result()
+            contract_name = f_contract.result() or "?"
             balance_str = (
                 f"{_format_amount(assets_in_market, decimals)} {asset_symbol}"
                 f"{_format_usd(assets_in_market, decimals, asset_price_usd)}"
                 f" (cached)"
             )
-            rows.append(
-                (
-                    str(idx),
-                    market_id_str,
-                    balance_str,
-                    balance_fuses[idx - 1].fuse,
-                    contract_name or "?",
-                )
+            target = (
+                zero_rows if contract_name in _CAPABILITY_BALANCE_FUSES else venue_rows
             )
-    _print_table(("#", "Market", "Balance", "Fuse", "Contract"), rows)
+            target.append(
+                (market_id_str, balance_str, balance_fuses[idx - 1].fuse, contract_name)
+            )
+
+    # Venues (real *BalanceFuse) are liquidity markets; zero-balance fuses are
+    # capabilities (swap/flash-loan/admin plumbing) shown separately so they are
+    # not read as markets.
+    header = ("#", "Market", "Balance", "Fuse", "Contract")
+    click.echo(f"Balance Fuses ({len(venue_rows)}):")
+    _print_table(header, [(str(i), *row) for i, row in enumerate(venue_rows, 1)])
+    if zero_rows:
+        click.echo()
+        click.echo(f"Zero-Balance Fuses ({len(zero_rows)}):")
+        _print_table(header, [(str(i), *row) for i, row in enumerate(zero_rows, 1)])
     return totals
 
 
