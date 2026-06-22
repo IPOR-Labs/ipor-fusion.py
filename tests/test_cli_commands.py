@@ -821,6 +821,10 @@ class TestVaultInfoJson:
         assert len(data["fuses"]) == 1
         assert data["fuses"][0]["contract"] == "SomeFuse"
         assert len(data["balance_fuses"]) == 1
+        # Real *BalanceFuse → kept as a venue (not a ZeroBalanceFuse capability).
+        assert data["balance_fuses"][0]["contract"] == "SomeFuse"
+        # Zero-balance (capability) fuses are split into their own section.
+        assert data["zero_balance_fuses"] == []
         assert data["links"]["etherscan"] == f"https://etherscan.io/address/{ADDR_1}"
         assert (
             data["links"]["ipor_app"] == f"https://app.ipor.io/fusion/ethereum/{ADDR_1}"

@@ -302,6 +302,12 @@ class VaultInfoResponse(_Base):
     withdraw_manager_details: dict[str, Any] | None = None
     fuses: list[FuseEntry]
     balance_fuses: list[BalanceFuseEntry]
+    zero_balance_fuses: list[BalanceFuseEntry] = Field(
+        default_factory=list,
+        description="Markets backed by a ZeroBalanceFuse (structurally-zero "
+        "balance): swap/flash-loan/admin capabilities, not liquidity venues. "
+        "Kept separate from balance_fuses so they are not counted as markets.",
+    )
     instant_withdrawal_fuses: list[FuseEntry]
     substrates: dict[str, list[dict[str, Any]]] = Field(
         description="Per-market substrate entries; outer keys are human-readable market labels."

@@ -124,6 +124,16 @@ def _full_vault_info_dict() -> dict:
                 ],
             },
         ],
+        "zero_balance_fuses": [
+            {
+                "market": "UNIVERSAL_TOKEN_SWAPPER (12)",
+                "market_id": 12,
+                "balance": _amount(0, "0.0", 0.0),
+                "fuse": "0xZBF1",
+                "contract": "ZeroBalanceFuse",
+                "pct_of_total": 0.0,
+            },
+        ],
         "instant_withdrawal_fuses": [
             {"address": "0xIW1", "contract": "ERC4626SupplyFuse"},
         ],
@@ -187,6 +197,7 @@ class TestVaultInfoResponseContract:
         result = VaultInfoResponse.model_validate(_full_vault_info_dict())
         assert result.vault == "0xVAULT"
         assert result.balance_fuses[0].position_breakdown is not None
+        assert result.zero_balance_fuses[0].contract == "ZeroBalanceFuse"
         assert result.lending_health is not None
         assert result.reconciliation.delta.percent == 0.0
 
