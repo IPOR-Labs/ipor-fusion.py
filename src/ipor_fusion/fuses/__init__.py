@@ -32,6 +32,15 @@ from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappSupplyFuse,
     FluidInstadappStakingFuse,
 )
+from ipor_fusion.fuses.euler_swap import (
+    StaticParams,
+    DynamicParams,
+    InitialState,
+    EulerV2SwapDeployFuse,
+    EulerV2SwapReconfigureFuse,
+    EulerV2SwapRegistryFuse,
+    euler_account,
+)
 
 __all__ = [
     "FuseAction",
@@ -64,4 +73,11 @@ __all__ = [
     "UniversalTokenSwapperFuse",
     "FluidInstadappSupplyFuse",
     "FluidInstadappStakingFuse",
+    "StaticParams",
+    "DynamicParams",
+    "InitialState",
+    "EulerV2SwapDeployFuse",
+    "EulerV2SwapReconfigureFuse",
+    "EulerV2SwapRegistryFuse",
+    "euler_account",
 ]

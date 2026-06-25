@@ -66,6 +66,13 @@ from ipor_fusion.fuses import (
     UniversalTokenSwapperFuse,
     FluidInstadappSupplyFuse,
     FluidInstadappStakingFuse,
+    StaticParams,
+    DynamicParams,
+    InitialState,
+    EulerV2SwapDeployFuse,
+    EulerV2SwapReconfigureFuse,
+    EulerV2SwapRegistryFuse,
+    euler_account,
 )
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -146,6 +153,13 @@ __all__ = [
     "UniversalTokenSwapperFuse",
     "FluidInstadappSupplyFuse",
     "FluidInstadappStakingFuse",
+    "StaticParams",
+    "DynamicParams",
+    "InitialState",
+    "EulerV2SwapDeployFuse",
+    "EulerV2SwapReconfigureFuse",
+    "EulerV2SwapRegistryFuse",
+    "euler_account",
     "Roles",
     "IporFusionMarkets",
     "IporFusionError",

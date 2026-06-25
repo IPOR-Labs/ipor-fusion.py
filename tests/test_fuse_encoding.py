@@ -36,6 +36,15 @@ from ipor_fusion.fuses.uniswap_v3 import (
     UniswapV3SwapFuse,
 )
 from ipor_fusion.fuses.universal import UniversalTokenSwapperFuse
+from ipor_fusion.fuses.euler_swap import (
+    StaticParams,
+    DynamicParams,
+    InitialState,
+    EulerV2SwapDeployFuse,
+    EulerV2SwapReconfigureFuse,
+    EulerV2SwapRegistryFuse,
+    euler_account,
+)
 from ipor_fusion.types import MAX_UINT256
 
 # Deterministic test addresses
@@ -955,3 +964,284 @@ class TestParseParamTypes:
             "(uint256,address)",
             "(bool,bytes)",
         ]
+
+
+# ── EulerSwap (EulerV2Swap) fuses ───────────────────────────────────────
+
+# Verified 4-byte selectors, taken from the *deployed* contracts (independent of the SDK's own
+# signature-string -> selector computation, so a typo in a signature string is caught here).
+_EULER_DEPLOY_ENTER_SEL = bytes.fromhex("a4495570")
+_EULER_EXIT_SEL = bytes.fromhex(
+    "a82f288a"
+)  # Deploy.exit and Registry.exit share this signature
+_EULER_RECONFIG_ENTER_SEL = bytes.fromhex("72cebabf")
+_EULER_REGISTRY_ENTER_SEL = bytes.fromhex("8653ba01")
+
+_SUPPLY0 = Web3.to_checksum_address("0x00000000000000000000000000000000000000a1")
+_SUPPLY1 = Web3.to_checksum_address("0x00000000000000000000000000000000000000a2")
+_BORROW0 = Web3.to_checksum_address("0x00000000000000000000000000000000000000a3")
+_BORROW1 = Web3.to_checksum_address("0x00000000000000000000000000000000000000a4")
+_EULER_ACCT = Web3.to_checksum_address("0x00000000000000000000000000000000000000a5")
+_POOL = Web3.to_checksum_address("0x00000000000000000000000000000000000000b1")
+_PRED_POOL = Web3.to_checksum_address("0x00000000000000000000000000000000000000b2")
+
+_SALT = bytes(range(32))
+_SUB = b"\x01"
+
+# Lowercase forms for comparing against eth_abi.decode output (str() so pylint sees a str).
+_SUPPLY0_LOW = str(_SUPPLY0).lower()
+_SUPPLY1_LOW = str(_SUPPLY1).lower()
+_BORROW0_LOW = str(_BORROW0).lower()
+_BORROW1_LOW = str(_BORROW1).lower()
+_EULER_ACCT_LOW = str(_EULER_ACCT).lower()
+_POOL_LOW = str(_POOL).lower()
+_PRED_POOL_LOW = str(_PRED_POOL).lower()
+
+_STATIC_T = "(address,address,address,address,address,address)"
+_DYNAMIC_T = "(uint112,uint112,uint112,uint112,uint80,uint80,uint64,uint64,uint64,uint64,uint40,uint8,address)"
+_INITIAL_T = "(uint112,uint112)"
+_DEPLOY_ENTER_BODY = f"({_STATIC_T},{_DYNAMIC_T},{_INITIAL_T},bytes32,address,bytes1)"
+
+
+def _static() -> StaticParams:
+    return StaticParams(
+        supply_vault0=_SUPPLY0,
+        supply_vault1=_SUPPLY1,
+        borrow_vault0=_BORROW0,
+        borrow_vault1=_BORROW1,
+        euler_account=_EULER_ACCT,
+    )
+
+
+def _dynamic() -> DynamicParams:
+    # Distinct sentinel value per field proves exact ABI order & per-field width.
+    return DynamicParams(
+        equilibrium_reserve0=1,
+        equilibrium_reserve1=2,
+        min_reserve0=3,
+        min_reserve1=4,
+        price_x=5,
+        price_y=6,
+        concentration_x=7,
+        concentration_y=8,
+        fee0=9,
+        fee1=10,
+        expiration=11,
+    )
+
+
+def _initial() -> InitialState:
+    return InitialState(reserve0=12, reserve1=13)
+
+
+class TestEulerV2SwapDeployFuse:
+    def test_deploy_enter_selector_and_payload(self):
+        action = EulerV2SwapDeployFuse(FUSE_ADDR).deploy(
+            static=_static(),
+            dynamic=_dynamic(),
+            initial=_initial(),
+            salt=_SALT,
+            predicted_pool=_PRED_POOL,
+            sub_account=_SUB,
+        )
+        assert action.fuse == FUSE_ADDR
+        # Selector matches both the deployed contract and the SDK's own signature.
+        assert action.data[:4] == _EULER_DEPLOY_ENTER_SEL
+        assert action.data[:4] == _selector(f"enter({_DEPLOY_ENTER_BODY})")
+
+        (decoded,) = decode([_DEPLOY_ENTER_BODY], action.data[4:])
+        static, dynamic, initial, salt, predicted, sub = decoded
+
+        # StaticParams: 5 caller addresses + pinned feeRecipient == 0.
+        assert [a.lower() for a in static] == [
+            _SUPPLY0_LOW,
+            _SUPPLY1_LOW,
+            _BORROW0_LOW,
+            _BORROW1_LOW,
+            _EULER_ACCT_LOW,
+            ZERO_ADDRESS,
+        ]
+        # DynamicParams: 11 caller fields in order, then pinned swapHookedOperations=0, swapHook=0.
+        assert list(dynamic[:11]) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        assert dynamic[11] == 0
+        assert dynamic[12].lower() == ZERO_ADDRESS
+        assert list(initial) == [12, 13]
+        assert salt == _SALT
+        assert predicted.lower() == _PRED_POOL_LOW
+        assert sub == _SUB
+
+    def test_decommission_exit(self):
+        action = EulerV2SwapDeployFuse(FUSE_ADDR).decommission(
+            pool=_POOL, sub_account=_SUB
+        )
+        assert action.data[:4] == _EULER_EXIT_SEL
+        assert action.data[:4] == _selector("exit((address,bytes1))")
+        (pool, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert pool.lower() == _POOL_LOW
+        assert sub == _SUB
+
+    def test_zero_borrow_vaults_accepted(self):
+        # Supply-only pool: borrow vaults may be the zero address.
+        static = StaticParams(
+            supply_vault0=_SUPPLY0,
+            supply_vault1=_SUPPLY1,
+            borrow_vault0=ZERO_ADDR,
+            borrow_vault1=ZERO_ADDR,
+            euler_account=_EULER_ACCT,
+        )
+        action = EulerV2SwapDeployFuse(FUSE_ADDR).deploy(
+            static=static,
+            dynamic=_dynamic(),
+            initial=_initial(),
+            salt=_SALT,
+            predicted_pool=_PRED_POOL,
+            sub_account=_SUB,
+        )
+        (decoded,) = decode([_DEPLOY_ENTER_BODY], action.data[4:])
+        assert decoded[0][2].lower() == ZERO_ADDRESS
+        assert decoded[0][3].lower() == ZERO_ADDRESS
+
+    def test_bad_salt_length_raises(self):
+        with pytest.raises(ValueError, match="salt must be exactly 32 bytes"):
+            EulerV2SwapDeployFuse(FUSE_ADDR).deploy(
+                static=_static(),
+                dynamic=_dynamic(),
+                initial=_initial(),
+                salt=b"\x00" * 31,
+                predicted_pool=_PRED_POOL,
+                sub_account=_SUB,
+            )
+
+    def test_bad_sub_account_length_raises(self):
+        with pytest.raises(ValueError, match="sub_account must be exactly 1 byte"):
+            EulerV2SwapDeployFuse(FUSE_ADDR).deploy(
+                static=_static(),
+                dynamic=_dynamic(),
+                initial=_initial(),
+                salt=_SALT,
+                predicted_pool=_PRED_POOL,
+                sub_account=b"\x01\x02",
+            )
+
+    def test_fee_at_or_above_one_e18_raises(self):
+        bad = DynamicParams(
+            equilibrium_reserve0=1,
+            equilibrium_reserve1=2,
+            min_reserve0=3,
+            min_reserve1=4,
+            price_x=5,
+            price_y=6,
+            concentration_x=7,
+            concentration_y=8,
+            fee0=10**18,
+            fee1=10,
+            expiration=11,
+        )
+        with pytest.raises(ValueError, match="dynamic.fee0 must be in"):
+            EulerV2SwapDeployFuse(FUSE_ADDR).deploy(
+                static=_static(),
+                dynamic=bad,
+                initial=_initial(),
+                salt=_SALT,
+                predicted_pool=_PRED_POOL,
+                sub_account=_SUB,
+            )
+
+    def test_zero_predicted_pool_raises(self):
+        with pytest.raises(ValueError, match="predicted_pool"):
+            EulerV2SwapDeployFuse(FUSE_ADDR).deploy(
+                static=_static(),
+                dynamic=_dynamic(),
+                initial=_initial(),
+                salt=_SALT,
+                predicted_pool=ZERO_ADDR,
+                sub_account=_SUB,
+            )
+
+
+class TestEulerV2SwapReconfigureFuse:
+    def test_reconfigure_enter_selector_and_payload(self):
+        action = EulerV2SwapReconfigureFuse(FUSE_ADDR).reconfigure(
+            pool=_POOL, sub_account=_SUB, dynamic=_dynamic(), initial=_initial()
+        )
+        body = f"(address,bytes1,{_DYNAMIC_T},{_INITIAL_T})"
+        assert action.data[:4] == _EULER_RECONFIG_ENTER_SEL
+        assert action.data[:4] == _selector(f"enter({body})")
+        (decoded,) = decode([body], action.data[4:])
+        pool, sub, dynamic, initial = decoded
+        assert pool.lower() == _POOL_LOW
+        assert sub == _SUB
+        assert list(dynamic[:11]) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        assert dynamic[11] == 0
+        assert dynamic[12].lower() == ZERO_ADDRESS
+        assert list(initial) == [12, 13]
+
+    def test_no_exit_method(self):
+        # Reconfiguration is one-directional: the on-chain exit() reverts, so the SDK exposes none.
+        assert not hasattr(EulerV2SwapReconfigureFuse, "decommission")
+        assert not hasattr(EulerV2SwapReconfigureFuse, "exit")
+        assert not hasattr(EulerV2SwapReconfigureFuse, "unregister")
+
+    def test_bad_sub_account_length_raises(self):
+        with pytest.raises(ValueError, match="sub_account must be exactly 1 byte"):
+            EulerV2SwapReconfigureFuse(FUSE_ADDR).reconfigure(
+                pool=_POOL, sub_account=b"", dynamic=_dynamic(), initial=_initial()
+            )
+
+
+class TestEulerV2SwapRegistryFuse:
+    def test_register_enter(self):
+        action = EulerV2SwapRegistryFuse(FUSE_ADDR).register(
+            pool=_POOL, sub_account=_SUB
+        )
+        assert action.data[:4] == _EULER_REGISTRY_ENTER_SEL
+        assert action.data[:4] == _selector("enter((address,bytes1))")
+        (pool, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert pool.lower() == _POOL_LOW
+        assert sub == _SUB
+
+    def test_unregister_exit(self):
+        action = EulerV2SwapRegistryFuse(FUSE_ADDR).unregister(
+            pool=_POOL, sub_account=_SUB
+        )
+        assert action.data[:4] == _EULER_EXIT_SEL
+        assert action.data[:4] == _selector("exit((address,bytes1))")
+        (pool, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert pool.lower() == _POOL_LOW
+        assert sub == _SUB
+
+    def test_bad_sub_account_length_raises(self):
+        with pytest.raises(ValueError, match="sub_account must be exactly 1 byte"):
+            EulerV2SwapRegistryFuse(FUSE_ADDR).register(
+                pool=_POOL, sub_account=b"\x01\x02"
+            )
+
+
+class TestEulerSwapPinnedFields:
+    """The contract-fixed fields are absent from the dataclasses and pinned to zero in to_tuple()."""
+
+    def test_fields_absent_from_dataclasses(self):
+        assert not hasattr(_static(), "fee_recipient")
+        assert not hasattr(_dynamic(), "swap_hook")
+        assert not hasattr(_dynamic(), "swap_hooked_operations")
+
+    def test_to_tuple_pins_zero(self):
+        # StaticParams: feeRecipient (index 5) pinned to zero address.
+        assert _static().to_tuple()[5] == ZERO_ADDRESS
+        # DynamicParams: swapHookedOperations (index 11) and swapHook (index 12) pinned.
+        dyn = _dynamic().to_tuple()
+        assert dyn[11] == 0
+        assert dyn[12] == ZERO_ADDRESS
+
+
+class TestEulerAccountHelper:
+    def test_xor_low_byte(self):
+        assert int(euler_account(VAULT_ADDR, b"\x01"), 16) == int(VAULT_ADDR, 16) ^ 1
+        assert int(euler_account(VAULT_ADDR, b"\xff"), 16) == int(VAULT_ADDR, 16) ^ 0xFF
+
+    def test_zero_sub_account_is_vault(self):
+        assert int(euler_account(VAULT_ADDR, b"\x00"), 16) == int(VAULT_ADDR, 16)
+
+    def test_bad_sub_account_length_raises(self):
+        with pytest.raises(ValueError, match="sub_account must be exactly 1 byte"):
+            euler_account(VAULT_ADDR, b"\x01\x02")
