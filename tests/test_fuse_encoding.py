@@ -35,6 +35,21 @@ from ipor_fusion.fuses.uniswap_v3 import (
     UniswapV3NewPositionFuse,
     UniswapV3SwapFuse,
 )
+from ipor_fusion.fuses.euler_v2 import (
+    EulerSwapDynamicParams,
+    EulerSwapInitialState,
+    EulerSwapStaticParams,
+    EulerV2BatchFuse,
+    EulerV2BatchItem,
+    EulerV2BorrowFuse,
+    EulerV2CollateralFuse,
+    EulerV2ControllerFuse,
+    EulerV2SupplyFuse,
+    EulerV2SwapDeployFuse,
+    EulerV2SwapReconfigureFuse,
+    EulerV2SwapRegistryFuse,
+    euler_substrate,
+)
 from ipor_fusion.fuses.universal import UniversalTokenSwapperFuse
 from ipor_fusion.types import MAX_UINT256
 
@@ -955,3 +970,351 @@ class TestParseParamTypes:
             "(uint256,address)",
             "(bool,bytes)",
         ]
+
+
+# ── Euler V2 ──────────────────────────────────────────────────────────
+
+
+class TestEulerSubstrate:
+    def test_packs_layout(self):
+        # eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72
+        packed = euler_substrate(
+            euler_vault=TOKEN_A, is_collateral=True, can_borrow=False, sub_account=0x01
+        )
+        assert len(packed) == 32
+        assert packed[:20].hex() == TOKEN_A_LOW[2:]
+        assert packed[20] == 1  # isCollateral
+        assert packed[21] == 0  # canBorrow
+        assert packed[22] == 1  # subAccount
+
+    def test_rejects_out_of_range_sub_account(self):
+        with pytest.raises(ValueError):
+            euler_substrate(
+                euler_vault=TOKEN_A,
+                is_collateral=True,
+                can_borrow=True,
+                sub_account=256,
+            )
+
+
+class TestEulerV2SupplyFuse:
+    def test_supply(self):
+        action = EulerV2SupplyFuse(FUSE_ADDR).supply(
+            euler_vault=TOKEN_A, max_amount=1000, sub_account=0x01
+        )
+        assert action.data[:4] == _selector("enter((address,uint256,bytes1))")
+        (vault, amount, sub) = decode(["address", "uint256", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_A_LOW
+        assert amount == 1000
+        assert sub == b"\x01"
+
+    def test_withdraw(self):
+        action = EulerV2SupplyFuse(FUSE_ADDR).withdraw(
+            euler_vault=TOKEN_A, max_amount=500, sub_account=0x02
+        )
+        assert action.data[:4] == _selector("exit((address,uint256,bytes1))")
+        (vault, amount, sub) = decode(["address", "uint256", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_A_LOW
+        assert amount == 500
+        assert sub == b"\x02"
+
+    def test_supply_rejects_zero_vault(self):
+        with pytest.raises(ValueError):
+            EulerV2SupplyFuse(FUSE_ADDR).supply(
+                euler_vault=ZERO_ADDRESS, max_amount=1, sub_account=0x01
+            )
+
+
+def _static_params() -> EulerSwapStaticParams:
+    return EulerSwapStaticParams(
+        supply_vault0=TOKEN_A,
+        supply_vault1=TOKEN_B,
+        borrow_vault0=TOKEN_A,
+        borrow_vault1=TOKEN_B,
+        euler_account=VAULT_ADDR,
+        fee_recipient=Web3.to_checksum_address(ZERO_ADDRESS),
+    )
+
+
+def _dynamic_params() -> EulerSwapDynamicParams:
+    return EulerSwapDynamicParams(
+        equilibrium_reserve0=5,
+        equilibrium_reserve1=6,
+        min_reserve0=0,
+        min_reserve1=0,
+        price_x=10**18,
+        price_y=10**18,
+        concentration_x=1,
+        concentration_y=2,
+        fee0=3,
+        fee1=4,
+        expiration=0,
+        swap_hooked_operations=0,
+        swap_hook=Web3.to_checksum_address(ZERO_ADDRESS),
+    )
+
+
+class TestEulerV2SwapDeployFuse:
+    _ENTER = (
+        "enter("
+        "((address,address,address,address,address,address),"
+        "(uint112,uint112,uint112,uint112,uint80,uint80,uint64,uint64,"
+        "uint64,uint64,uint40,uint8,address),"
+        "(uint112,uint112),bytes32,address,bytes1))"
+    )
+
+    def test_deploy(self):
+        salt = (1234).to_bytes(32, "big")
+        action = EulerV2SwapDeployFuse(FUSE_ADDR).deploy(
+            static_params=_static_params(),
+            dynamic_params=_dynamic_params(),
+            initial_state=EulerSwapInitialState(reserve0=5, reserve1=6),
+            salt=salt,
+            predicted_pool=TOKEN_A,
+            sub_account=0x01,
+        )
+        assert action.data[:4] == _selector(self._ENTER)
+        (decoded,) = decode(
+            [
+                "((address,address,address,address,address,address),"
+                "(uint112,uint112,uint112,uint112,uint80,uint80,uint64,uint64,"
+                "uint64,uint64,uint40,uint8,address),"
+                "(uint112,uint112),bytes32,address,bytes1)"
+            ],
+            action.data[4:],
+        )
+        static, _, init, decoded_salt, pool, sub = decoded
+        assert static[0].lower() == TOKEN_A_LOW
+        assert init == (5, 6)
+        assert decoded_salt == salt
+        assert pool.lower() == TOKEN_A_LOW
+        assert sub == b"\x01"
+
+    def test_deploy_rejects_bad_salt_length(self):
+        with pytest.raises(ValueError):
+            EulerV2SwapDeployFuse(FUSE_ADDR).deploy(
+                static_params=_static_params(),
+                dynamic_params=_dynamic_params(),
+                initial_state=EulerSwapInitialState(reserve0=5, reserve1=6),
+                salt=b"\x00" * 16,
+                predicted_pool=TOKEN_A,
+                sub_account=0x01,
+            )
+
+    def test_decommission(self):
+        action = EulerV2SwapDeployFuse(FUSE_ADDR).decommission(
+            pool=TOKEN_B, sub_account=0x03
+        )
+        assert action.data[:4] == _selector("exit((address,bytes1))")
+        (pool, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert pool.lower() == TOKEN_B_LOW
+        assert sub == b"\x03"
+
+
+class TestEulerV2SwapReconfigureFuse:
+    _ENTER = (
+        "enter("
+        "(address,bytes1,"
+        "(uint112,uint112,uint112,uint112,uint80,uint80,uint64,uint64,"
+        "uint64,uint64,uint40,uint8,address),"
+        "(uint112,uint112)))"
+    )
+
+    def test_reconfigure(self):
+        action = EulerV2SwapReconfigureFuse(FUSE_ADDR).reconfigure(
+            pool=TOKEN_A,
+            sub_account=0x01,
+            dynamic_params=_dynamic_params(),
+            initial_state=EulerSwapInitialState(reserve0=7, reserve1=8),
+        )
+        assert action.data[:4] == _selector(self._ENTER)
+        (decoded,) = decode(
+            [
+                "(address,bytes1,"
+                "(uint112,uint112,uint112,uint112,uint80,uint80,uint64,uint64,"
+                "uint64,uint64,uint40,uint8,address),"
+                "(uint112,uint112))"
+            ],
+            action.data[4:],
+        )
+        pool, sub, dyn, init = decoded
+        assert pool.lower() == TOKEN_A_LOW
+        assert sub == b"\x01"
+        assert dyn[8] == 3  # fee0 (from _dynamic_params)
+        assert init == (7, 8)
+
+    def test_reconfigure_rejects_zero_pool(self):
+        with pytest.raises(ValueError):
+            EulerV2SwapReconfigureFuse(FUSE_ADDR).reconfigure(
+                pool=ZERO_ADDRESS,
+                sub_account=0x01,
+                dynamic_params=_dynamic_params(),
+                initial_state=EulerSwapInitialState(reserve0=1, reserve1=2),
+            )
+
+
+class TestEulerV2SwapRegistryFuse:
+    def test_register(self):
+        action = EulerV2SwapRegistryFuse(FUSE_ADDR).register(
+            pool=TOKEN_A, sub_account=0x01
+        )
+        assert action.data[:4] == _selector("enter((address,bytes1))")
+        (pool, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert pool.lower() == TOKEN_A_LOW
+        assert sub == b"\x01"
+
+    def test_unregister(self):
+        action = EulerV2SwapRegistryFuse(FUSE_ADDR).unregister(
+            pool=TOKEN_B, sub_account=0x02
+        )
+        assert action.data[:4] == _selector("exit((address,bytes1))")
+        (pool, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert pool.lower() == TOKEN_B_LOW
+        assert sub == b"\x02"
+
+    def test_register_rejects_zero_pool(self):
+        with pytest.raises(ValueError):
+            EulerV2SwapRegistryFuse(FUSE_ADDR).register(
+                pool=ZERO_ADDRESS, sub_account=0x01
+            )
+
+
+class TestEulerV2BatchFuse:
+    _ENTER = "enter(((address,bytes1,bytes)[],address[],address[]))"
+
+    def test_batch(self):
+        items = [
+            EulerV2BatchItem(
+                target_contract=TOKEN_A, on_behalf_of_account=0x00, data=b"\x11\x22"
+            ),
+            EulerV2BatchItem(
+                target_contract=TOKEN_B, on_behalf_of_account=0x01, data=b"\x33"
+            ),
+        ]
+        action = EulerV2BatchFuse(FUSE_ADDR).batch(
+            items=items,
+            assets_for_approvals=[TOKEN_A],
+            euler_vaults_for_approvals=[TOKEN_B],
+        )
+        assert action.data[:4] == _selector(self._ENTER)
+        (decoded,) = decode(
+            ["((address,bytes1,bytes)[],address[],address[])"], action.data[4:]
+        )
+        batch_items, assets, vaults = decoded
+        assert len(batch_items) == 2
+        assert batch_items[0][0].lower() == TOKEN_A_LOW
+        assert batch_items[0][1] == b"\x00"
+        assert batch_items[0][2] == b"\x11\x22"
+        assert batch_items[1][1] == b"\x01"
+        assert [a.lower() for a in assets] == [TOKEN_A_LOW]
+        assert [v.lower() for v in vaults] == [TOKEN_B_LOW]
+
+    def test_batch_defaults_empty_approvals(self):
+        action = EulerV2BatchFuse(FUSE_ADDR).batch(
+            items=[
+                EulerV2BatchItem(
+                    target_contract=TOKEN_A, on_behalf_of_account=0, data=b""
+                )
+            ]
+        )
+        (decoded,) = decode(
+            ["((address,bytes1,bytes)[],address[],address[])"], action.data[4:]
+        )
+        _, assets, vaults = decoded
+        assert len(assets) == 0
+        assert len(vaults) == 0
+
+    def test_batch_rejects_empty_items(self):
+        with pytest.raises(ValueError):
+            EulerV2BatchFuse(FUSE_ADDR).batch(items=[])
+
+    def test_batch_rejects_approval_length_mismatch(self):
+        with pytest.raises(ValueError):
+            EulerV2BatchFuse(FUSE_ADDR).batch(
+                items=[
+                    EulerV2BatchItem(
+                        target_contract=TOKEN_A, on_behalf_of_account=0, data=b""
+                    )
+                ],
+                assets_for_approvals=[TOKEN_A],
+                euler_vaults_for_approvals=[],
+            )
+
+
+class TestEulerV2CollateralFuse:
+    def test_enable_collateral(self):
+        action = EulerV2CollateralFuse(FUSE_ADDR).enable_collateral(
+            euler_vault=TOKEN_A, sub_account=0x01
+        )
+        assert action.data[:4] == _selector("enter((address,bytes1))")
+        (vault, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_A_LOW
+        assert sub == b"\x01"
+
+    def test_disable_collateral(self):
+        action = EulerV2CollateralFuse(FUSE_ADDR).disable_collateral(
+            euler_vault=TOKEN_B, sub_account=0x02
+        )
+        assert action.data[:4] == _selector("exit((address,bytes1))")
+        (vault, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_B_LOW
+        assert sub == b"\x02"
+
+    def test_rejects_zero_vault(self):
+        with pytest.raises(ValueError):
+            EulerV2CollateralFuse(FUSE_ADDR).enable_collateral(
+                euler_vault=ZERO_ADDRESS, sub_account=0x01
+            )
+
+
+class TestEulerV2ControllerFuse:
+    def test_enable_controller(self):
+        action = EulerV2ControllerFuse(FUSE_ADDR).enable_controller(
+            euler_vault=TOKEN_A, sub_account=0x01
+        )
+        assert action.data[:4] == _selector("enter((address,bytes1))")
+        (vault, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_A_LOW
+        assert sub == b"\x01"
+
+    def test_disable_controller(self):
+        action = EulerV2ControllerFuse(FUSE_ADDR).disable_controller(
+            euler_vault=TOKEN_A, sub_account=0x03
+        )
+        assert action.data[:4] == _selector("exit((address,bytes1))")
+        (_, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert sub == b"\x03"
+
+    def test_rejects_zero_vault(self):
+        with pytest.raises(ValueError):
+            EulerV2ControllerFuse(FUSE_ADDR).enable_controller(
+                euler_vault=ZERO_ADDRESS, sub_account=0x01
+            )
+
+
+class TestEulerV2BorrowFuse:
+    def test_borrow(self):
+        action = EulerV2BorrowFuse(FUSE_ADDR).borrow(
+            euler_vault=TOKEN_A, asset_amount=1234, sub_account=0x01
+        )
+        assert action.data[:4] == _selector("enter((address,uint256,bytes1))")
+        (vault, amount, sub) = decode(["address", "uint256", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_A_LOW
+        assert amount == 1234
+        assert sub == b"\x01"
+
+    def test_repay(self):
+        action = EulerV2BorrowFuse(FUSE_ADDR).repay(
+            euler_vault=TOKEN_B, max_asset_amount=MAX_UINT256, sub_account=0x02
+        )
+        assert action.data[:4] == _selector("exit((address,uint256,bytes1))")
+        (vault, amount, sub) = decode(["address", "uint256", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_B_LOW
+        assert amount == MAX_UINT256
+        assert sub == b"\x02"
+
+    def test_rejects_zero_vault(self):
+        with pytest.raises(ValueError):
+            EulerV2BorrowFuse(FUSE_ADDR).borrow(
+                euler_vault=ZERO_ADDRESS, asset_amount=1, sub_account=0x01
+            )
