@@ -150,6 +150,80 @@ class EulerV2SupplyFuse(Fuse):
         )
 
 
+class EulerV2CollateralFuse(Fuse):
+    """Fuse for enabling/disabling an Euler V2 vault as EVC collateral for a sub-account."""
+
+    def enable_collateral(
+        self, *, euler_vault: ChecksumAddress, sub_account: int
+    ) -> FuseAction:
+        self._validate_address(euler_vault, "euler_vault")
+        return self._action_raw(
+            "enter((address,bytes1))",
+            [[euler_vault, _sub_account_byte(sub_account)]],
+        )
+
+    def disable_collateral(
+        self, *, euler_vault: ChecksumAddress, sub_account: int
+    ) -> FuseAction:
+        self._validate_address(euler_vault, "euler_vault")
+        return self._action_raw(
+            "exit((address,bytes1))",
+            [[euler_vault, _sub_account_byte(sub_account)]],
+        )
+
+
+class EulerV2ControllerFuse(Fuse):
+    """Fuse for enabling/disabling an Euler V2 vault as the EVC controller for a sub-account."""
+
+    def enable_controller(
+        self, *, euler_vault: ChecksumAddress, sub_account: int
+    ) -> FuseAction:
+        self._validate_address(euler_vault, "euler_vault")
+        return self._action_raw(
+            "enter((address,bytes1))",
+            [[euler_vault, _sub_account_byte(sub_account)]],
+        )
+
+    def disable_controller(
+        self, *, euler_vault: ChecksumAddress, sub_account: int
+    ) -> FuseAction:
+        self._validate_address(euler_vault, "euler_vault")
+        return self._action_raw(
+            "exit((address,bytes1))",
+            [[euler_vault, _sub_account_byte(sub_account)]],
+        )
+
+
+class EulerV2BorrowFuse(Fuse):
+    """Fuse for borrowing/repaying an Euler V2 vault's underlying asset on a sub-account."""
+
+    def borrow(
+        self,
+        *,
+        euler_vault: ChecksumAddress,
+        asset_amount: Amount,
+        sub_account: int,
+    ) -> FuseAction:
+        self._validate_address(euler_vault, "euler_vault")
+        return self._action_raw(
+            "enter((address,uint256,bytes1))",
+            [[euler_vault, asset_amount, _sub_account_byte(sub_account)]],
+        )
+
+    def repay(
+        self,
+        *,
+        euler_vault: ChecksumAddress,
+        max_asset_amount: Amount,
+        sub_account: int,
+    ) -> FuseAction:
+        self._validate_address(euler_vault, "euler_vault")
+        return self._action_raw(
+            "exit((address,uint256,bytes1))",
+            [[euler_vault, max_asset_amount, _sub_account_byte(sub_account)]],
+        )
+
+
 class EulerV2SwapDeployFuse(Fuse):
     """Fuse for deploying and decommissioning an EulerSwap v2 LP pool.
 

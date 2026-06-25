@@ -41,6 +41,9 @@ from ipor_fusion.fuses.euler_v2 import (
     EulerSwapStaticParams,
     EulerV2BatchFuse,
     EulerV2BatchItem,
+    EulerV2BorrowFuse,
+    EulerV2CollateralFuse,
+    EulerV2ControllerFuse,
     EulerV2SupplyFuse,
     EulerV2SwapDeployFuse,
     EulerV2SwapReconfigureFuse,
@@ -1235,4 +1238,83 @@ class TestEulerV2BatchFuse:
                 ],
                 assets_for_approvals=[TOKEN_A],
                 euler_vaults_for_approvals=[],
+            )
+
+
+class TestEulerV2CollateralFuse:
+    def test_enable_collateral(self):
+        action = EulerV2CollateralFuse(FUSE_ADDR).enable_collateral(
+            euler_vault=TOKEN_A, sub_account=0x01
+        )
+        assert action.data[:4] == _selector("enter((address,bytes1))")
+        (vault, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_A_LOW
+        assert sub == b"\x01"
+
+    def test_disable_collateral(self):
+        action = EulerV2CollateralFuse(FUSE_ADDR).disable_collateral(
+            euler_vault=TOKEN_B, sub_account=0x02
+        )
+        assert action.data[:4] == _selector("exit((address,bytes1))")
+        (vault, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_B_LOW
+        assert sub == b"\x02"
+
+    def test_rejects_zero_vault(self):
+        with pytest.raises(ValueError):
+            EulerV2CollateralFuse(FUSE_ADDR).enable_collateral(
+                euler_vault=ZERO_ADDRESS, sub_account=0x01
+            )
+
+
+class TestEulerV2ControllerFuse:
+    def test_enable_controller(self):
+        action = EulerV2ControllerFuse(FUSE_ADDR).enable_controller(
+            euler_vault=TOKEN_A, sub_account=0x01
+        )
+        assert action.data[:4] == _selector("enter((address,bytes1))")
+        (vault, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_A_LOW
+        assert sub == b"\x01"
+
+    def test_disable_controller(self):
+        action = EulerV2ControllerFuse(FUSE_ADDR).disable_controller(
+            euler_vault=TOKEN_A, sub_account=0x03
+        )
+        assert action.data[:4] == _selector("exit((address,bytes1))")
+        (_, sub) = decode(["address", "bytes1"], action.data[4:])
+        assert sub == b"\x03"
+
+    def test_rejects_zero_vault(self):
+        with pytest.raises(ValueError):
+            EulerV2ControllerFuse(FUSE_ADDR).enable_controller(
+                euler_vault=ZERO_ADDRESS, sub_account=0x01
+            )
+
+
+class TestEulerV2BorrowFuse:
+    def test_borrow(self):
+        action = EulerV2BorrowFuse(FUSE_ADDR).borrow(
+            euler_vault=TOKEN_A, asset_amount=1234, sub_account=0x01
+        )
+        assert action.data[:4] == _selector("enter((address,uint256,bytes1))")
+        (vault, amount, sub) = decode(["address", "uint256", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_A_LOW
+        assert amount == 1234
+        assert sub == b"\x01"
+
+    def test_repay(self):
+        action = EulerV2BorrowFuse(FUSE_ADDR).repay(
+            euler_vault=TOKEN_B, max_asset_amount=MAX_UINT256, sub_account=0x02
+        )
+        assert action.data[:4] == _selector("exit((address,uint256,bytes1))")
+        (vault, amount, sub) = decode(["address", "uint256", "bytes1"], action.data[4:])
+        assert vault.lower() == TOKEN_B_LOW
+        assert amount == MAX_UINT256
+        assert sub == b"\x02"
+
+    def test_rejects_zero_vault(self):
+        with pytest.raises(ValueError):
+            EulerV2BorrowFuse(FUSE_ADDR).borrow(
+                euler_vault=ZERO_ADDRESS, asset_amount=1, sub_account=0x01
             )

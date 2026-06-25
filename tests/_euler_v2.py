@@ -66,6 +66,15 @@ EULER_BATCH_FUSE = Web3.to_checksum_address(
 EULER_SUPPLY_FUSE = Web3.to_checksum_address(
     "0x598326fcEDE2C1B8E9023a20C18FFf6Dea5306A4"
 )
+EULER_COLLATERAL_FUSE = Web3.to_checksum_address(
+    "0x12c479f8aB53D4884fc76F803dD24eb8B6D17a94"
+)
+EULER_CONTROLLER_FUSE = Web3.to_checksum_address(
+    "0x108c8cFB9e00681FfA1fa3b654937E8b3BCd2E64"
+)
+EULER_BORROW_FUSE = Web3.to_checksum_address(
+    "0x906496F0D4C733275F892b1a6fC92eD56639B379"
+)
 EULER_BALANCE_FUSE = Web3.to_checksum_address(
     "0xF8A6AA09bB55f2319113b0DA88883F392e66A5fa"
 )
@@ -232,6 +241,16 @@ def registry_pool_by_euler_account(
     return Call(to=EULERSWAP_REGISTRY, data=data, output_types=["address"], ctx=ctx)
 
 
+def evault_debt_of(
+    ctx: Web3Context, euler_vault: ChecksumAddress, account: ChecksumAddress
+) -> Call[int]:
+    """Read an Euler eVault's outstanding debt for an account (underlying units)."""
+    data = function_signature_to_4byte_selector("debtOf(address)") + encode(
+        ["address"], [account]
+    )
+    return Call(to=euler_vault, data=data, output_types=["uint256"], ctx=ctx)
+
+
 @dataclass(frozen=True)
 class EulerDeployPlan:
     """Everything a test needs to drive (and reconfigure) a freshly-deployed pool."""
@@ -317,6 +336,9 @@ def queue_setup(
         call=plasma_vault.add_fuses(
             [
                 EULER_SUPPLY_FUSE,
+                EULER_COLLATERAL_FUSE,
+                EULER_CONTROLLER_FUSE,
+                EULER_BORROW_FUSE,
                 EULER_SWAP_DEPLOY_FUSE,
                 EULER_SWAP_RECONFIGURE_FUSE,
                 EULER_SWAP_REGISTRY_FUSE,
