@@ -9,29 +9,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from addresses import BASE_WETH
+from constants import ANVIL_WALLET
 from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
-from addresses import BASE_WETH
-from constants import ANVIL_WALLET
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
     ERC20,
+    AccessManager,
+    PlasmaVault,
     Roles,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fusion_factory import FusionFactory
 from ipor_fusion.fuses import (
-    EulerV2SupplyFuse,
-    EulerV2SwapDeployFuse,
-    EulerSwapStaticParams,
     EulerSwapDynamicParams,
     EulerSwapInitialState,
+    EulerSwapStaticParams,
+    EulerV2SupplyFuse,
+    EulerV2SwapDeployFuse,
     FuseAction,
     euler_substrate,
 )

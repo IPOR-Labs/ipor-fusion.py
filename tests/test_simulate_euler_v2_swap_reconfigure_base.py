@@ -24,7 +24,8 @@ from _euler_v2 import (
 )
 from _simulate import assert_all_success
 from constants import ANVIL_WALLET
-from ipor_fusion import Web3Context, VaultSimulator
+
+from ipor_fusion import VaultSimulator, Web3Context
 from ipor_fusion.core.fusion_factory import FusionFactory
 from ipor_fusion.fuses import EulerV2SwapReconfigureFuse
 from ipor_fusion.types import ChainId

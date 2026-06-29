@@ -824,8 +824,8 @@ class TestOrphanFuseMarketsHealthCheck:
         must not be flagged — even though the dependency graph omits it."""
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 
@@ -856,8 +856,8 @@ class TestOrphanFuseMarketsHealthCheck:
         is nothing to depend on, so the check must not fire."""
         from ipor_fusion.cli.vault_health import (
             _BalanceFuseTotals,
-            _Erc20Totals,
             _compute_health_check,
+            _Erc20Totals,
         )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 

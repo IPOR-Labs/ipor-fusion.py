@@ -23,14 +23,15 @@ from _euler_v2 import (
     EULER_SWAP_DEPLOY_FUSE,
     OWNER,
     SUB_ACCOUNT,
+    clone_args,
     evc_is_operator_authorized,
     factory_deployed_pools,
-    clone_args,
     queue_setup,
 )
 from _simulate import assert_all_success
 from constants import ANVIL_WALLET
-from ipor_fusion import Web3Context, VaultSimulator
+
+from ipor_fusion import VaultSimulator, Web3Context
 from ipor_fusion.core.fusion_factory import FusionFactory
 from ipor_fusion.fuses import EulerV2SwapDeployFuse
 from ipor_fusion.types import ChainId
