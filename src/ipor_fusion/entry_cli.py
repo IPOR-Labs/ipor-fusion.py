@@ -1,4 +1,3 @@
-# pylint: disable=import-outside-toplevel
 """Guarded entry point for the ``fusion`` CLI script."""
 
 from __future__ import annotations

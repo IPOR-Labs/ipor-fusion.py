@@ -11,6 +11,21 @@ from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
+from ipor_fusion.fuses.euler_v2 import (
+    EulerSwapDynamicParams,
+    EulerSwapInitialState,
+    EulerSwapStaticParams,
+    EulerV2BatchFuse,
+    EulerV2BatchItem,
+    EulerV2BorrowFuse,
+    EulerV2CollateralFuse,
+    EulerV2ControllerFuse,
+    EulerV2SupplyFuse,
+    EulerV2SwapDeployFuse,
+    EulerV2SwapReconfigureFuse,
+    EulerV2SwapRegistryFuse,
+    euler_substrate,
+)
 from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappStakingFuse,
     FluidInstadappSupplyFuse,
@@ -34,21 +49,6 @@ from ipor_fusion.fuses.uniswap_v3 import (
     UniswapV3ModifyPositionFuse,
     UniswapV3NewPositionFuse,
     UniswapV3SwapFuse,
-)
-from ipor_fusion.fuses.euler_v2 import (
-    EulerSwapDynamicParams,
-    EulerSwapInitialState,
-    EulerSwapStaticParams,
-    EulerV2BatchFuse,
-    EulerV2BatchItem,
-    EulerV2BorrowFuse,
-    EulerV2CollateralFuse,
-    EulerV2ControllerFuse,
-    EulerV2SupplyFuse,
-    EulerV2SwapDeployFuse,
-    EulerV2SwapReconfigureFuse,
-    EulerV2SwapRegistryFuse,
-    euler_substrate,
 )
 from ipor_fusion.fuses.universal import UniversalTokenSwapperFuse
 from ipor_fusion.types import MAX_UINT256

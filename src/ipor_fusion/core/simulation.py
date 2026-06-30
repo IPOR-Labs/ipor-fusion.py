@@ -9,7 +9,7 @@ from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import RPCEndpoint, BlockIdentifier
+from web3.types import BlockIdentifier, RPCEndpoint
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.fuses.base import FuseAction
@@ -154,12 +154,12 @@ class VaultSimulator:
             )
         return self._baseline_timestamp
 
-    def with_block_time_shift(self, seconds: int) -> "VaultSimulator":
+    def with_block_time_shift(self, seconds: int) -> VaultSimulator:
         """Override the current block's `time` to baseline + seconds."""
         self._current.block_overrides["time"] = hex(self._baseline() + int(seconds))
         return self
 
-    def with_block_override(self, **fields: Any) -> "VaultSimulator":
+    def with_block_override(self, **fields: Any) -> VaultSimulator:
         for key, value in fields.items():
             self._current.block_overrides[key] = (
                 hex(value) if isinstance(value, int) else value
@@ -168,11 +168,11 @@ class VaultSimulator:
 
     def with_state_override(
         self, address: ChecksumAddress, **overrides: Any
-    ) -> "VaultSimulator":
+    ) -> VaultSimulator:
         self._current.state_overrides[Web3.to_checksum_address(address)] = overrides
         return self
 
-    def next_block(self, time_shift_seconds: int | None = None) -> "VaultSimulator":
+    def next_block(self, time_shift_seconds: int | None = None) -> VaultSimulator:
         """Seal the current block and open a new one, optionally shifted in time.
 
         State carries from the previous block — same semantics as `evm_mine` after
@@ -193,14 +193,14 @@ class VaultSimulator:
                 return int(block.block_overrides["time"], 16)
         return self._baseline()
 
-    def execute(self, actions: list[FuseAction]) -> "VaultSimulator":
+    def execute(self, actions: list[FuseAction]) -> VaultSimulator:
         """Queue a default `execute((address,bytes)[])` batch on the vault, from alpha."""
         data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
         return self._queue_execute(self._vault, data, self._alpha)
 
     def execute_call(
         self, call: Call, from_: ChecksumAddress | None = None
-    ) -> "VaultSimulator":
+    ) -> VaultSimulator:
         """Queue a pre-encoded write call as an `execute`-style step. Used for
         e.g. `RewardsManager.claim_rewards(...)` where the wrapper differs from
         `PlasmaVault.execute`. `from_` defaults to alpha.
@@ -213,7 +213,7 @@ class VaultSimulator:
 
     def _queue_execute(
         self, to: ChecksumAddress, data: bytes, from_: ChecksumAddress
-    ) -> "VaultSimulator":
+    ) -> VaultSimulator:
         self._current.calls.append(
             _Call(
                 to=to,
@@ -232,7 +232,7 @@ class VaultSimulator:
         call: Call,
         from_: ChecksumAddress | None = None,
         label: str | None = None,
-    ) -> "VaultSimulator":
+    ) -> VaultSimulator:
         """Queue an arbitrary write/setup call (role grant, config tweak,
         impersonated deposit). Build via a wrapper method, e.g.
         `access_manager.grant_role(...)` or `usdc.approve(...)`.
@@ -250,7 +250,7 @@ class VaultSimulator:
         )
         return self
 
-    def observe(self, label: str, call: Call) -> "VaultSimulator":
+    def observe(self, label: str, call: Call) -> VaultSimulator:
         """Queue a view-style read; decoded per the wrapper method's types and
         decoder so `result.get(label)` returns the typed Python value
         (`Amount`, `Decimals`, …). Build `call` via a wrapper method, e.g.
@@ -333,7 +333,7 @@ class VaultSimulator:
         observations: dict[str, Any] = {}
         parsed: list[SimulatedCallResult] = []
 
-        for source, raw in zip(sources, raw_calls):
+        for source, raw in zip(sources, raw_calls, strict=False):
             return_hex = raw.get("returnData", "0x")
             return_data = HexBytes(return_hex)
             status = int(raw.get("status", "0x1"), 16)

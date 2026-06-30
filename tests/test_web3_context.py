@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false
 """Unit tests for Web3Context — mock Web3 calls, no network required."""
 
 from unittest.mock import MagicMock, patch
@@ -136,7 +137,7 @@ class TestSend:
 # ── _handle_receipt ─────────────────────────────────────────────────────
 
 
-class TestHandleReceipt:  # pylint: disable=protected-access
+class TestHandleReceipt:
     def test_successful_receipt_returned(self):
         ctx = _make_ctx(signer=ADDR)
         receipt = {"status": 1, "blockNumber": 100}

@@ -177,7 +177,7 @@ def test_simulate_clone_preview_base(web3_base):
     assert instance.asset_name == "IPOR USDC Vault"
     assert instance.asset_symbol == "ipUSDC"
     assert instance.underlying_token == BASE_USDC
-    assert instance.underlying_token_symbol == "USDC"
+    assert instance.underlying_token_symbol == "USDC"  # noqa: S105  # token symbol, not a secret
     assert instance.underlying_token_decimals == 6
     assert instance.initial_owner == SAMPLE_OWNER
 

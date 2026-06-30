@@ -13,37 +13,37 @@ from __future__ import annotations
 import logging
 
 import pytest
-from web3 import Web3
-
 from _simulate import address_substrate, assert_all_success
 from addresses import ARBITRUM_USDC
 from constants import (
     ANVIL_WALLET,
-    ARBITRUM_PILOT_V3_PLASMA_VAULT,
     ARBITRUM_AAVE_V3_SUPPLY_FUSE,
+    ARBITRUM_PILOT_V3_PLASMA_VAULT,
     ARBITRUM_V3_COMPOUND_V3_SUPPLY_FUSE,
     ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_3,
     ARBITRUM_V3_ERC4626_SUPPLY_FUSE_MARKET_ID_5,
     ARBITRUM_V3_FLUID_INSTADAPP_STAKING_FUSE,
     ARBITRUM_V3_GEARBOX_V3_FARM_FUSE,
 )
+from web3 import Web3
+
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
     ERC20,
+    AccessManager,
+    PlasmaVault,
     Roles,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.fuses import (
     AaveV3SupplyFuse,
     CompoundV3SupplyFuse,
-    FluidInstadappSupplyFuse,
     FluidInstadappStakingFuse,
+    FluidInstadappSupplyFuse,
     GearboxStakeFuse,
     GearboxSupplyFuse,
 )
-from ipor_fusion.types import ChainId, MarketId, MAX_UINT256
+from ipor_fusion.types import MAX_UINT256, ChainId, MarketId
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

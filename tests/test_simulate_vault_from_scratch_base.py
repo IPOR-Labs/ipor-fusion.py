@@ -22,23 +22,23 @@ from __future__ import annotations
 
 import logging
 
-from web3 import Web3
-
 from _simulate import address_substrate, assert_all_success
 from addresses import BASE_USDC
 from constants import ANVIL_WALLET, BASE_AAVE_V3_SUPPLY_FUSE
+from web3 import Web3
+
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
     ERC20,
+    AccessManager,
+    PlasmaVault,
     Roles,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.fuses import AaveV3SupplyFuse
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import ChainId, MarketId, Amount
+from ipor_fusion.types import Amount, ChainId, MarketId
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

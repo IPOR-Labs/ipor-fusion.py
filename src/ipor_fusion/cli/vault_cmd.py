@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import datetime, timezone
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Any
 
 import click
@@ -17,12 +17,12 @@ from ipor_fusion.cli.config_store import (
 )
 from ipor_fusion.cli.explorer import get_contract_name
 from ipor_fusion.cli.vault_fetcher import (
-    _VaultData,
     _fetch_deployment_info,
     _fetch_vault_data,
     _resolve_token_decimals,
     _resolve_token_symbol,
     _safe_call,
+    _VaultData,
 )
 from ipor_fusion.cli.vault_health import (
     _BalanceFuseTotals,
@@ -68,7 +68,7 @@ class AddressType(click.ParamType):
         if not raw.islower() and not raw.isupper():
             try:
                 checksum = Web3.to_checksum_address(value)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 self.fail(f"invalid address checksum: {value}", param, ctx)
             if checksum != value:
                 self.fail(
@@ -193,7 +193,7 @@ def _auto_save_vault(
         return
     try:
         label = plasma_vault.name().call()
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return
     cfg.vaults.append(VaultEntry(address=vault_address, label=label, chain_id=chain_id))
     save_config(cfg)
@@ -235,7 +235,7 @@ def add(address: str, label: str | None, chain_id: int | None) -> None:
         checksum = Web3.to_checksum_address(address)
         try:
             label = PlasmaVault(ctx, checksum).name().call()
-        except Exception:  # pylint: disable=broad-except
+        except Exception:
             label = checksum
 
     for vault_entry in cfg.vaults:
@@ -339,7 +339,7 @@ def info(
     )
 
 
-def _print_lending_health(  # pylint: disable=too-complex
+def _print_lending_health(  # noqa: C901
     ctx: Web3Context, data: _VaultData
 ) -> None:
     lh = data.lending_health
@@ -782,7 +782,7 @@ def _print_dependency_graph(data: _VaultData) -> None:
     if not data.dependency_graph:
         return
 
-    from ipor_fusion.cli.vault_dep_graph import (  # pylint: disable=import-outside-toplevel
+    from ipor_fusion.cli.vault_dep_graph import (
         compute_update_reach,
     )
 
@@ -807,7 +807,7 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     if not data.dependency_graph:
         return None
 
-    from ipor_fusion.cli.vault_dep_graph import (  # pylint: disable=import-outside-toplevel
+    from ipor_fusion.cli.vault_dep_graph import (
         compute_update_groups,
         compute_update_reach,
     )
@@ -833,7 +833,7 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     }
 
 
-def _build_json_output(  # pylint: disable=too-many-locals,too-complex,too-many-branches,too-many-statements
+def _build_json_output(  # noqa: C901, PLR0912, PLR0915
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: _VaultData,
@@ -1375,7 +1375,7 @@ def _print_balance_fuses_table(
     return totals
 
 
-def _print_substrates(  # pylint: disable=too-complex
+def _print_substrates(  # noqa: C901
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     balance_fuses: list,

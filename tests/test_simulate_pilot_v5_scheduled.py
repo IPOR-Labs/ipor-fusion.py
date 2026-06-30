@@ -15,20 +15,20 @@ from __future__ import annotations
 
 import logging
 
-from web3 import Web3
-
 from _simulate import assert_all_success
 from addresses import ARBITRUM_USDC
-from constants import ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT, ANVIL_WALLET
+from constants import ANVIL_WALLET, ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
+from web3 import Web3
+
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
-    WithdrawManager,
     ERC20,
-    Roles,
+    AccessManager,
     IporFusionMarkets,
+    PlasmaVault,
+    Roles,
     VaultSimulator,
+    Web3Context,
+    WithdrawManager,
 )
 from ipor_fusion.types import ChainId
 

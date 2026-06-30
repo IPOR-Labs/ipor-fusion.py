@@ -7,7 +7,7 @@ from web3 import Web3
 
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.fuses.base import FuseAction
-from ipor_fusion.types import Amount, Shares, Decimals, MarketId
+from ipor_fusion.types import Amount, Decimals, MarketId, Shares
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 USER_ADDR = Web3.to_checksum_address("0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa")

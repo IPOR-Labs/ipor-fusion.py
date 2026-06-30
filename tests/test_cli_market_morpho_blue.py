@@ -1,6 +1,5 @@
+# pyright: reportAttributeAccessIssue=false
 """Unit tests for `fusion market morpho-blue` and the Morpho API client."""
-
-# pylint: disable=unused-argument
 
 import json
 from unittest.mock import MagicMock, patch

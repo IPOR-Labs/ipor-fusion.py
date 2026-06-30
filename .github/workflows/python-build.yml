@@ -17,11 +17,6 @@ on:
         type: string
         default: 3.12
         required: false
-      poetry-version:
-        description: "Poetry version"
-        type: string
-        default: 1.8
-        required: false
       test-options:
         description: "Extra pytest options"
         type: string
@@ -48,9 +43,6 @@ on:
         default: true
         required: false
 
-env:
-  POETRY_VIRTUALENVS_PATH: "~/.cache/pypoetry/virtualenvs"
-
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -62,53 +54,41 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Python
-        # from tag: v6.2.0
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      - name: Set up uv
+        # from tag: v5.4.2
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
         with:
           python-version: ${{ inputs.python-version }}
-
-      - name: Set up Poetry
-        # from tag: v4.0.0
-        uses: abatilo/actions-poetry@3765cf608f2d4a72178a9fc5b918668e542b89b1
-        with:
-          poetry-version: ${{ inputs.poetry-version }}
-
-      - name: Cache
-        # from tag: v5.0.5
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
-        with:
-          path: ${{ env.POETRY_VIRTUALENVS_PATH }}
-          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+          enable-cache: true
 
       - name: Install
-        run: poetry install --all-extras
+        run: uv sync --all-extras --locked
         id: install
 
       - name: Format code
         if: inputs.format-code-enabled
-        run: poetry run black --check ./
+        run: uv run ruff format --check ./
         id: format-code
 
       - name: Static code analysis
         if: inputs.static-code-analysis-enabled
-        run: poetry run pylint --rcfile=pylintrc.toml --verbose --recursive=y .
+        run: uv run ruff check ./
         id: static-code-analyze
 
       - name: Type check
         if: inputs.static-code-analysis-enabled
-        run: poetry run mypy .
+        run: uv run pyright
         id: type-check
 
       - name: Build
         if: inputs.build-enabled
-        run: poetry build
+        run: uv build
         id: build
 
       - name: Tests
         if: inputs.test-enabled
         run: |
-          poetry run pytest ${{ inputs.test-options }}
+          uv run pytest ${{ inputs.test-options }}
         env:
           ETHEREUM_PROVIDER_URL: ${{ secrets.ETHEREUM_PROVIDER_URL }}
           ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
@@ -118,7 +98,7 @@ jobs:
       - name: Coverage summary
         if: inputs.test-enabled && always() && steps.tests.outcome != 'skipped'
         run: |
-          poetry run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
+          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
 
       - name: Upload coverage artifact
         if: inputs.test-enabled && always() && steps.tests.outcome != 'skipped'

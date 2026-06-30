@@ -1,11 +1,12 @@
 from abc import ABC
 from dataclasses import dataclass
+
 from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.core.contract import _parse_param_types
-from ipor_fusion.types import Amount, TokenId, MAX_UINT256
+from ipor_fusion.types import MAX_UINT256, Amount, TokenId
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -33,7 +34,7 @@ class FuseAction:
         return function_signature_to_4byte_selector(signature) + encoded
 
 
-class Fuse(ABC):
+class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
     """Abstract base class for all protocol fuse adapters."""
 
     def __init__(self, address: ChecksumAddress):

@@ -10,7 +10,7 @@ from web3.types import LogReceipt
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
-from ipor_fusion.types import Amount, MarketId, Decimals, Shares
+from ipor_fusion.types import Amount, Decimals, MarketId, Shares
 
 
 @dataclass(slots=True)

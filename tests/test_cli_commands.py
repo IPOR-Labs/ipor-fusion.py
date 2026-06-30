@@ -1,4 +1,3 @@
-# pylint: disable=unused-argument
 import json
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
@@ -1013,9 +1012,7 @@ class TestVaultInfoJson:
         mock_oracle_cls.return_value.get_asset_price.return_value.call.return_value = (
             None
         )
-        mock_health_oracle_cls.return_value.get_asset_price.return_value.call.return_value = (
-            None
-        )
+        mock_health_oracle_cls.return_value.get_asset_price.return_value.call.return_value = None
 
         runner = CliRunner()
         result = runner.invoke(

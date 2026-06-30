@@ -6,12 +6,11 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
+from eth_abi import decode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import ChecksumAddress, HexStr
-
-from eth_abi import decode
-from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.cli.config_store import (
     load_contract_cache,
@@ -37,7 +36,6 @@ from ipor_fusion.readers.lending_health import (
 from ipor_fusion.readers.morpho import MorphoPositionBreakdown, MorphoReader
 from ipor_fusion.types import MorphoBlueMarketId
 
-
 T = TypeVar("T")
 
 _logger = logging.getLogger(__name__)
@@ -58,7 +56,7 @@ class _WithdrawManagerData:
 
 
 @dataclass
-class _VaultData:  # pylint: disable=too-many-instance-attributes
+class _VaultData:
     block_number: int
     is_latest: bool
     block_timestamp: int
@@ -140,7 +138,7 @@ def _fetch_fuse_market_id(ctx: Web3Context, fuse_addr: ChecksumAddress) -> int |
         return None
     try:
         (value,) = decode(["uint256"], raw)
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return None
     return int(value)
 
@@ -159,7 +157,7 @@ def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
 
     try:
         symbol = ERC20(ctx, checksum).symbol().call()
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         symbol = ""
     if symbol:
         update_contract_cache(cache_key, symbol)
@@ -180,7 +178,7 @@ def _resolve_token_decimals(ctx: Web3Context, address: str) -> int | None:
 
     try:
         decimals = ERC20(ctx, checksum).decimals().call()
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return None
     update_contract_cache(cache_key, str(decimals))
     return decimals
@@ -376,7 +374,7 @@ def _fetch_breakdown_token_prices(
     return prices or None
 
 
-def _fetch_vault_data(  # pylint: disable=too-many-locals
+def _fetch_vault_data(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     block_number: int | None,
@@ -559,5 +557,5 @@ def _fetch_deployment_info(
         timestamp: int = block_info["timestamp"]
         update_deployment_cache(cache_key, block_number, timestamp)
         return block_number, timestamp, None
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return None, None, "rpc-fetch-failed"

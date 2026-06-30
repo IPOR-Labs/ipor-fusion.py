@@ -12,9 +12,9 @@ from ipor_fusion.cli.vault_dep_graph import (
     find_orphan_fuse_markets,
 )
 from ipor_fusion.cli.vault_fetcher import (
-    _VaultData,
     _resolve_token_symbol,
     _safe_call,
+    _VaultData,
 )
 from ipor_fusion.cli.vault_rendering import _format_amount, _format_usd, _print_table
 from ipor_fusion.cli.vault_substrate import (
@@ -67,7 +67,7 @@ class _Erc20Totals:
     token_details: list[_TokenDetail] = field(default_factory=list)
 
 
-def _compute_erc20_balances(  # pylint: disable=too-complex
+def _compute_erc20_balances(  # noqa: C901
     ctx: Web3Context, plasma_vault: PlasmaVault, data: _VaultData
 ) -> _Erc20Totals:
     totals = _Erc20Totals()
@@ -245,7 +245,7 @@ def _print_erc20_balances(
 
 
 @dataclass
-class _ReconciliationData:  # pylint: disable=too-many-instance-attributes
+class _ReconciliationData:
     bf_total_raw: int = 0
     bf_total_usd: float = 0.0
     underlying_raw: int = 0
@@ -503,7 +503,7 @@ def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
     ]
 
 
-def _compute_health_check(  # pylint: disable=too-complex
+def _compute_health_check(  # noqa: C901
     data: _VaultData,
     bf_totals: _BalanceFuseTotals,
     erc20_totals: _Erc20Totals,

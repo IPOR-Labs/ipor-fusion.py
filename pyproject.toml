@@ -1,21 +1,20 @@
-[tool.poetry]
-name = "ipor_fusion"
+[project]
+name = "ipor-fusion"
 version = "3.1.0"
 description = "The IPOR Fusion SDK for Python"
-authors = ["Adam Mydlarz <amydlarz@gmail.com>", "rav <rav@ipor.io>"]
+authors = [
+    { name = "Adam Mydlarz", email = "amydlarz@gmail.com" },
+    { name = "rav", email = "rav@ipor.io" },
+]
 readme = "README.md"
-license = "BSD-3"
-homepage = "https://ipor.io"
-repository = "https://github.com/IPOR-Labs/ipor-fusion.py"
-documentation = "https://docs.ipor.io/ipor-fusion/fusion-introduction"
+license = "BSD-3-Clause"
+requires-python = ">=3.10"
 keywords = ["ethereum", "defi", "ipor", "plasma-vault", "evm", "web3"]
-packages = [{ include = "ipor_fusion", from = "src" }]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: Financial and Insurance Industry",
-    "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -30,47 +29,78 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Utilities",
-    "Natural Language :: English"
+    "Natural Language :: English",
+]
+dependencies = [
+    "eth-typing>=6.0.0,<7",
+    "eth-abi>=5.1.0,<6",
+    "eth-utils>=6.0.0,<7",
+    "web3>=7.7.0,<8",
 ]
 
-[tool.poetry.scripts]
+[project.optional-dependencies]
+cli = ["click>=8.0,<9", "requests>=2.31.0,<3", "pydantic>=2.10,<3"]
+mcp = ["mcp[cli]>=1.0,<2", "click>=8.0,<9", "requests>=2.31.0,<3", "pydantic>=2.10,<3"]
+
+[project.urls]
+homepage = "https://ipor.io"
+repository = "https://github.com/IPOR-Labs/ipor-fusion.py"
+documentation = "https://docs.ipor.io/ipor-fusion/fusion-introduction"
+
+[project.scripts]
 fusion = "ipor_fusion.entry_cli:main"
 fusion-mcp = "ipor_fusion.entry_mcp:main"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-eth-typing = "^5.0.0"
-eth-abi = "^5.1.0"
-web3 = "^7.7.0"
-click = {version = "^8.0", optional = true}
-requests = {version = "^2.31.0", optional = true}
-mcp = {version = "^1.0", optional = true, extras = ["cli"]}
-pydantic = {version = "^2.10", optional = true}
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3,<10",
+    "python-dotenv>=1.0.1,<2",
+    "pytest-xdist>=3.8.0,<4",
+    "pytest-cov>=7.0,<8",
+    "ruff>=0.14,<1",
+    "pyright>=1.1.390,<2",
+]
 
-[tool.poetry.extras]
-cli = ["click", "requests", "pydantic"]
-mcp = ["mcp", "click", "requests", "pydantic"]
-
-[tool.poetry.dev-dependencies]
-pytest = "^8.3.3"
-python-dotenv = "^1.0.1"
-
-[tool.poetry.group.dev.dependencies]
-black = "24.8.0"
-pylint = "3.3.1"
-mypy = "^1.19.1"
-pytest-xdist = "^3.8.0"
-pytest-cov = "^6.0"
-
-
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ["py310"]
-include = '\.pyi?$'
-unstable = false
+target-version = "py310"
 
-[tool.pylint]
-config-file = "pylintrc.toml"
+[tool.ruff.lint]
+# Kept identical to ipor-fusion-dev.py — shared tool config
+# E,F,W,I,B,UP = base; S = flake8-bandit security; C901 + PLR0911/0912/0913/0915 = design limits.
+select = ["E", "F", "W", "I", "B", "UP", "S", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.ruff.lint.pylint]
+max-args = 15
+max-branches = 27
+max-returns = 11
+max-statements = 100
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+# Resolve imports against the uv-managed ./.venv so an editor-launched pyright (eglot, etc.)
+# matches `uv run pyright`/CI without per-developer interpreter config.
+venvPath = "."
+venv = ".venv"
+# Shared eth_*/web3 stub frictions (same as ipor-fusion-dev.py):
+#   reportPrivateImportUsage      — eth_utils.keccak / eth_abi.decode are public API
+#                                   but missing from the stubs' __all__.
+#   reportTypedDictNotRequiredAccess — web3 TxData["input"] is always present at
+#                                   runtime but typed NotRequired.
+reportPrivateImportUsage = false
+reportTypedDictNotRequiredAccess = false
+# Tests pass raw ints/literals where domain NewTypes (Amount, MarketId, Period, …) are
+# declared — harmless (NewType is identity at runtime). Disabled to match ipor-fusion-dev.py.
+reportArgumentType = false
 
 [tool.coverage.run]
 source = ["src/ipor_fusion"]
@@ -82,13 +112,12 @@ show_missing = true
 fail_under = 95
 omit = ["src/ipor_fusion/mcp/*"]
 
-
 [tool.semantic_release]
-build_command = "rm -rf dist/* && pip install poetry && poetry build"
+build_command = "rm -rf dist/* && uv build"
 logging_use_named_masks = true
 commit_parser = "angular"
 major_on_zero = true
-version_toml = ["pyproject.toml:tool.poetry.version"]
+version_toml = ["pyproject.toml:project.version"]
 
 [tool.semantic_release.branches.main]
 match = "main"
@@ -99,8 +128,9 @@ prerelease_token = "rc"
 type = "github"
 token = { env = "GH_TOKEN" }
 
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/ipor_fusion"]

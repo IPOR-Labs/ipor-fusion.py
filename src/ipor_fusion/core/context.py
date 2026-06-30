@@ -4,7 +4,7 @@ from eth_account import Account
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import TxReceipt, LogReceipt, BlockIdentifier, FilterParams
+from web3.types import BlockIdentifier, FilterParams, LogReceipt, TxReceipt
 
 from ipor_fusion.errors import TransactionError, get_revert_reason
 from ipor_fusion.types import ChainId
@@ -63,7 +63,7 @@ class Web3Context:
         url: str,
         private_key: str | None = None,
         gas_multiplier: float = 1.25,
-    ) -> "Web3Context":
+    ) -> Web3Context:
         web3 = Web3(Web3.HTTPProvider(url))
         chain_id = ChainId(web3.eth.chain_id)
 
@@ -86,7 +86,7 @@ class Web3Context:
         )
 
     def _build_transaction(self, to: ChecksumAddress, data: bytes) -> dict:
-        assert self.signer is not None
+        assert self.signer is not None  # noqa: S101  # signer ensured by callers
         nonce = self.web3.eth.get_transaction_count(self.signer)
         gas_price = self.web3.eth.gas_price
         max_fee_per_gas = self._calculate_max_fee_per_gas(gas_price)

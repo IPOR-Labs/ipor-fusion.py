@@ -130,7 +130,7 @@ def _shares_to_assets_up(shares: int, total_assets: int, total_shares: int) -> i
     return math.ceil(shares * (total_assets + 1) / (total_shares + 1))
 
 
-def _compute_morpho_market_health(  # pylint: disable=broad-exception-caught
+def _compute_morpho_market_health(
     ctx: Web3Context,
     reader: MorphoReader,
     morpho_market_id: MorphoBlueMarketId,
@@ -219,7 +219,7 @@ def _compute_morpho_market_health(  # pylint: disable=broad-exception-caught
     )
 
 
-def _compute_aave_market_health(  # pylint: disable=broad-exception-caught
+def _compute_aave_market_health(
     reader: AaveV3Reader,
     vault_address: ChecksumAddress,
     ipor_market_id: int,
@@ -272,7 +272,7 @@ def _compute_aave_market_health(  # pylint: disable=broad-exception-caught
     )
 
 
-def fetch_vault_lending_health(  # pylint: disable=too-complex,import-outside-toplevel
+def fetch_vault_lending_health(  # noqa: C901
     ctx: Web3Context,
     vault_address: ChecksumAddress,
     chain_id: int,

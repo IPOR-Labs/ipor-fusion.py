@@ -21,7 +21,7 @@ class FluidInstadappSupplyFuse(Fuse):
 class FluidInstadappStakingFuse(StakeFuse):
     """Fuse for staking and unstaking on Fluid Instadapp staking contracts."""
 
-    def __init__(  # pylint: disable=useless-parent-delegation
+    def __init__(
         self,
         fuse_address: ChecksumAddress,
         staking_address: ChecksumAddress,

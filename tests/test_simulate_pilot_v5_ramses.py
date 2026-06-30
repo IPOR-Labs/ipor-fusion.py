@@ -11,42 +11,42 @@ from __future__ import annotations
 
 import logging
 
-from eth_abi import decode as abi_decode
-from hexbytes import HexBytes
-from web3 import Web3
-
 from _simulate import assert_all_success
 from addresses import (
+    ARBITRUM_RAM_TOKEN,
     ARBITRUM_USDC,
     ARBITRUM_USDT,
-    ARBITRUM_RAM_TOKEN,
     ARBITRUM_XRAM_TOKEN,
 )
 from constants import (
     ANVIL_WALLET,
     ARBITRUM_PILOT_V5_PLASMA_VAULT,
-    ARBITRUM_UNISWAP_V3_SWAP_FUSE,
-    ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE,
-    ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE,
-    ARBITRUM_RAMSES_V2_COLLECT_FUSE,
     ARBITRUM_RAMSES_CLAIM_FUSE,
+    ARBITRUM_RAMSES_V2_COLLECT_FUSE,
+    ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE,
+    ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE,
+    ARBITRUM_UNISWAP_V3_SWAP_FUSE,
     MONTH,
 )
+from eth_abi import decode as abi_decode
+from hexbytes import HexBytes
+from web3 import Web3
+
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
-    RewardsManager,
     ERC20,
+    AccessManager,
+    PlasmaVault,
+    RewardsManager,
     Roles,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.fuses import (
-    UniswapV3SwapFuse,
-    RamsesV2NewPositionFuse,
-    RamsesV2ModifyPositionFuse,
-    RamsesV2CollectFuse,
     RamsesClaimFuse,
+    RamsesV2CollectFuse,
+    RamsesV2ModifyPositionFuse,
+    RamsesV2NewPositionFuse,
+    UniswapV3SwapFuse,
 )
 from ipor_fusion.types import ChainId
 
@@ -376,6 +376,6 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     ram_diff = result2.get("ram_after_claim") - result2.get("ram_before_claim")
     xram_diff = result2.get("xram_after_claim") - result2.get("xram_before_claim")
     log.info("ram_diff=%s xram_diff=%s", ram_diff, xram_diff)
-    assert (
-        ram_diff > 0 or xram_diff > 0
-    ), "claim_rewards moved no RAM and no XRAM into the rewards manager"
+    assert ram_diff > 0 or xram_diff > 0, (
+        "claim_rewards moved no RAM and no XRAM into the rewards manager"
+    )

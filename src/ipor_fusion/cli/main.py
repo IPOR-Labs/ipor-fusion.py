@@ -51,6 +51,6 @@ def main() -> None:
         else:
             click.secho(f"Error: {msg}", fg="red")
         sys.exit(1)
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         click.secho(f"Error: {exc}", fg="red")
         sys.exit(1)

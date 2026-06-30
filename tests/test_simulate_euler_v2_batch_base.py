@@ -16,14 +16,10 @@ from __future__ import annotations
 
 import logging
 
-from eth_abi import encode
-from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
-
 from _euler_v2 import (
     BASE_FUSION_FACTORY,
-    EULER_BATCH_FUSE,
     EULER_BALANCE_FUSE,
+    EULER_BATCH_FUSE,
     EULER_MARKET,
     EULER_V2_EVC,
     EVAULT_WETH,
@@ -35,17 +31,21 @@ from _euler_v2 import (
 from _simulate import assert_all_success
 from addresses import BASE_WETH
 from constants import ANVIL_WALLET
+from eth_abi import encode
+from eth_typing import ChecksumAddress
+from eth_utils import function_signature_to_4byte_selector
+
 from ipor_fusion import (
-    Web3Context,
-    PlasmaVault,
-    AccessManager,
     ERC20,
+    AccessManager,
+    PlasmaVault,
     Roles,
     VaultSimulator,
+    Web3Context,
 )
 from ipor_fusion.core.fusion_factory import FusionFactory
 from ipor_fusion.fuses import EulerV2BatchFuse, EulerV2BatchItem
-from ipor_fusion.types import Amount, ChainId, Period, MAX_UINT256
+from ipor_fusion.types import MAX_UINT256, Amount, ChainId, Period
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
