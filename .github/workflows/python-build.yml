@@ -62,7 +62,7 @@ jobs:
           enable-cache: true
 
       - name: Install
-        run: uv sync --all-extras --frozen
+        run: uv sync --all-extras --locked
         id: install
 
       - name: Format code
