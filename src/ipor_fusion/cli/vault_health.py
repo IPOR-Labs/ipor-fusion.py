@@ -503,6 +503,91 @@ def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
     ]
 
 
+def _compute_unpriceable_collateral_criticals(data: _VaultData) -> list[str]:
+    """Flag Morpho collateral tokens that have no price feed in the middleware.
+
+    ``MorphoBalanceFuse.balanceOf()`` iterates every whitelisted Morpho market
+    and prices the collateral leg whenever it is non-zero. Because Morpho's
+    ``supplyCollateral`` is permissionless in ``onBehalf``, anyone can push
+    collateral onto the vault's position in a whitelisted market; if that
+    market's collateral token has no feed, ``getAssetPrice`` reverts,
+    ``balanceOf`` reverts, and ``totalAssets`` (deposits/withdrawals/
+    reconciliation) is bricked.
+
+    The check keys off whitelisted substrates (via the per-market breakdown),
+    not current positions, so it catches the exposure *before* it is exploited.
+    ``unpriceable_tokens`` holds only tokens confirmed unpriceable (no explicit
+    feed AND ``getAssetPrice`` reverts — the mainnet middleware can fall back
+    to the Chainlink Feed Registry, so a missing source alone is not enough);
+    transient read failures never land in it, so no false alarms.
+    """
+    if not data.morpho_positions or not data.unpriceable_tokens:
+        return []
+    lines: list[str] = []
+    seen: set[str] = set()
+    for market_id, breakdowns in data.morpho_positions.items():
+        for pb in breakdowns:
+            key = pb.collateral_token.lower()
+            if key in seen or key not in data.unpriceable_tokens:
+                continue
+            seen.add(key)
+            lines.append(
+                f"CRITICAL — Morpho market {market_id}: collateral token "
+                f"{pb.collateral_token} cannot be priced by the "
+                f"PriceOracleMiddleware — anyone can supplyCollateral "
+                f"onBehalf of the vault to make MorphoBalanceFuse."
+                f"balanceOf() revert, bricking totalAssets "
+                f"(deposits/withdrawals/reconciliation)"
+            )
+    return lines
+
+
+def _compute_unpriceable_substrate_criticals(data: _VaultData) -> list[str]:
+    """Flag granted substrates whose middleware-priced token has no feed.
+
+    Several balance fuses price tokens derived from granted substrates via the
+    vault's PriceOracleMiddleware; ``getAssetPrice`` reverts when no feed is
+    configured, so ``balanceOf()`` reverts and ``totalAssets`` (deposits/
+    withdrawals/reconciliation) is bricked. Silo V2, Euler V2 and the
+    middleware-priced Aave V3 fuse price *before* any balance check, so a
+    granted feed-less substrate reverts at the next balance update of that
+    market even with a zero position. Dolomite and Aave V4 price only non-zero
+    balances — but those protocols accept third-party deposits on the vault's
+    behalf, so anyone can trigger the revert (same class as the Morpho
+    collateral check above).
+
+    Token derivation happens in ``_fetch_middleware_priced_substrates``;
+    ``unpriceable_tokens`` holds only tokens confirmed unpriceable (no
+    explicit feed AND ``getAssetPrice`` reverts — see
+    ``_fetch_unpriceable_tokens``), so registry-priced tokens and transient
+    read failures are never flagged.
+    """
+    if not data.middleware_priced_substrates or not data.unpriceable_tokens:
+        return []
+    lines: list[str] = []
+    seen: set[tuple[int, str]] = set()
+    for market_id, tokens in sorted(data.middleware_priced_substrates.items()):
+        for mpt in tokens:
+            key = (market_id, mpt.token)
+            if key in seen or mpt.token not in data.unpriceable_tokens:
+                continue
+            seen.add(key)
+            tail = (
+                "balanceOf() reverts even at zero balance, bricking "
+                "totalAssets at the next balance update of this market"
+                if mpt.zero_balance_reverts
+                else "any non-zero balance (third parties can deposit on the "
+                "vault's behalf) makes balanceOf() revert, bricking "
+                "totalAssets"
+            )
+            lines.append(
+                f"CRITICAL — market {_format_market_label(market_id)}: "
+                f"{mpt.via} — token {mpt.token} cannot be priced by the "
+                f"PriceOracleMiddleware — {tail}"
+            )
+    return lines
+
+
 def _compute_health_check(  # noqa: C901
     data: _VaultData,
     bf_totals: _BalanceFuseTotals,
@@ -517,6 +602,8 @@ def _compute_health_check(  # noqa: C901
 
     result.criticals.extend(_compute_orphan_fuse_criticals(data))
     result.criticals.extend(_compute_missing_erc20_dep_criticals(data))
+    result.criticals.extend(_compute_unpriceable_collateral_criticals(data))
+    result.criticals.extend(_compute_unpriceable_substrate_criticals(data))
 
     # Lending health warnings
     if data.lending_health and data.lending_health.has_lending_positions:

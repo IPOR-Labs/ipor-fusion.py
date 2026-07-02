@@ -324,10 +324,18 @@ class TestFormatSubstratePerMarket:
     def test_dolomite(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex(addr_hex + "05" + "01" + "00" * 10)
-        info = _format_substrate(raw, market_id=46)
+        info = _format_substrate(raw, market_id=47)
         assert info.address == f"0x{addr_hex}"
         assert info.extra["sub_account_id"] == "5"
         assert info.extra["can_borrow"] == "True"
+
+    # Napier (plain zero-padded Principal Token address; took market id 46
+    # from Dolomite, which moved to 47)
+    def test_napier_plain_address(self):
+        addr_hex = "ab" * 20
+        raw = bytes.fromhex("00" * 12 + addr_hex)
+        info = _format_substrate(raw, market_id=46)
+        assert info.address == f"0x{addr_hex}"
 
     # Euler V2 (eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72)
     def test_euler_v2_supply_only(self):
