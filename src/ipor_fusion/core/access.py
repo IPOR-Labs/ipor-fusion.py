@@ -29,6 +29,10 @@ class RoleAccount:
     is_member: bool
     execution_delay: Period
 
+    @property
+    def role_name(self) -> str:
+        return Roles.get_name(self.role_id)
+
 
 def _role_status_decoder(values: tuple) -> RoleStatus:
     is_member, execution_delay = values

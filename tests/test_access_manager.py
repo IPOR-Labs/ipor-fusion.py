@@ -54,6 +54,14 @@ class TestGetAllRoleAccounts:
 
         assert account.execution_delay == 3600
 
+    def test_role_name_property(self):
+        manager = _manager_with([_grant_event(100, ALICE), _grant_event(1234, BOB)])
+
+        atomist, unknown = manager.get_all_role_accounts()
+
+        assert atomist.role_name == "ATOMIST_ROLE"
+        assert unknown.role_name == "UNKNOWN_ROLE_1234"
+
     def test_deduplicates_repeated_grants(self):
         # A re-granted (role, account) emits two RoleGranted events but is one
         # current membership.
