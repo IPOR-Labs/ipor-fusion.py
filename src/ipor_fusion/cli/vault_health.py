@@ -503,6 +503,48 @@ def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
     ]
 
 
+def _compute_unpriceable_collateral_criticals(data: _VaultData) -> list[str]:
+    """Flag Morpho collateral tokens that have no price feed in the middleware.
+
+    ``MorphoBalanceFuse.balanceOf()`` iterates every whitelisted Morpho market
+    and prices the collateral leg whenever it is non-zero. Because Morpho's
+    ``supplyCollateral`` is permissionless in ``onBehalf``, anyone can push
+    collateral onto the vault's position in a whitelisted market; if that
+    market's collateral token has no feed, ``getAssetPrice`` reverts,
+    ``balanceOf`` reverts, and ``totalAssets`` (deposits/withdrawals/
+    reconciliation) is bricked.
+
+    The check keys off whitelisted substrates (via the per-market breakdown),
+    not current positions, so it catches the exposure *before* it is exploited.
+    A zero-address feed source means "no feed"; tokens whose source read failed
+    transiently are absent from ``asset_price_sources`` and are not flagged.
+    """
+    if not data.morpho_positions or data.asset_price_sources is None:
+        return []
+    sources = data.asset_price_sources
+    lines: list[str] = []
+    seen: set[str] = set()
+    for market_id, breakdowns in data.morpho_positions.items():
+        for pb in breakdowns:
+            key = pb.collateral_token.lower()
+            if key in seen:
+                continue
+            source = sources.get(key)
+            if source is None:
+                continue
+            if int(source, 16) == 0:
+                seen.add(key)
+                lines.append(
+                    f"CRITICAL — Morpho market {market_id}: collateral token "
+                    f"{pb.collateral_token} has no price feed in the "
+                    f"PriceOracleMiddleware — anyone can supplyCollateral "
+                    f"onBehalf of the vault to make MorphoBalanceFuse."
+                    f"balanceOf() revert, bricking totalAssets "
+                    f"(deposits/withdrawals/reconciliation)"
+                )
+    return lines
+
+
 def _compute_health_check(  # noqa: C901
     data: _VaultData,
     bf_totals: _BalanceFuseTotals,
@@ -517,6 +559,7 @@ def _compute_health_check(  # noqa: C901
 
     result.criticals.extend(_compute_orphan_fuse_criticals(data))
     result.criticals.extend(_compute_missing_erc20_dep_criticals(data))
+    result.criticals.extend(_compute_unpriceable_collateral_criticals(data))
 
     # Lending health warnings
     if data.lending_health and data.lending_health.has_lending_positions:

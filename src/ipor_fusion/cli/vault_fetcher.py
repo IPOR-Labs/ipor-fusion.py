@@ -105,6 +105,12 @@ class _VaultData:
     # vault's PriceOracleMiddleware. Missing keys mean the oracle has no source
     # configured for that token.
     token_prices_usd: dict[str, float] | None = None
+    # Price-feed *source* address per breakdown token, keyed by lowercase
+    # address. A zero-address source means the PriceOracleMiddleware has no feed
+    # configured for that token; used to flag unpriceable Morpho collateral
+    # (a permissionless-supplyCollateral griefing/DoS vector). Tokens whose
+    # source read failed transiently are absent (not treated as missing).
+    asset_price_sources: dict[str, str] | None = None
     # MARKET_ID() reported by each registered action fuse. Keyed by checksummed
     # fuse address. Fuses that don't expose MARKET_ID() (or whose call reverts)
     # are absent from the dict — used to detect orphan markets (action fuses
@@ -374,6 +380,35 @@ def _fetch_breakdown_token_prices(
     return prices or None
 
 
+def _fetch_asset_price_sources(
+    pool: ThreadPoolExecutor,
+    oracle: PriceOracleMiddleware,
+    addresses: set[ChecksumAddress],
+) -> dict[str, str] | None:
+    """Fetch the configured price-feed source per breakdown token in parallel.
+
+    Returns a dict keyed by lowercase token address → source address (hex). A
+    zero-address source means the oracle has no feed configured for that token;
+    the health check flags Morpho collateral tokens in that state (see
+    ``_compute_unpriceable_collateral_criticals``). ``getSourceOfAssetPrice``
+    does not revert on a missing source, so a token is omitted only when the
+    read fails transiently — such tokens are not mistaken for a missing feed.
+    """
+    if not addresses:
+        return None
+    futures = {
+        addr: pool.submit(
+            _safe_call, lambda a=addr: oracle.get_source_of_asset_price(a).call()
+        )
+        for addr in addresses
+    }
+    sources: dict[str, str] = {}
+    for addr, fut in futures.items():
+        if (source := fut.result()) is not None:
+            sources[addr.lower()] = str(source)
+    return sources or None
+
+
 def _fetch_vault_data(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -485,15 +520,20 @@ def _fetch_vault_data(
             aave_positions = _fetch_aave_positions(
                 ctx, pool, vault_addr, chain_id, market_substrates
             )
+            breakdown_addrs = _collect_breakdown_token_addresses(
+                morpho_positions, aave_positions
+            )
             token_prices_usd = _fetch_breakdown_token_prices(
-                pool,
-                oracle,
-                _collect_breakdown_token_addresses(morpho_positions, aave_positions),
+                pool, oracle, breakdown_addrs
+            )
+            asset_price_sources = _fetch_asset_price_sources(
+                pool, oracle, breakdown_addrs
             )
         else:
             morpho_positions = None
             aave_positions = None
             token_prices_usd = None
+            asset_price_sources = None
             market_substrates = {}
 
         return _VaultData(
@@ -523,6 +563,7 @@ def _fetch_vault_data(
             morpho_positions=morpho_positions,
             aave_positions=aave_positions,
             token_prices_usd=token_prices_usd,
+            asset_price_sources=asset_price_sources,
             fuse_markets=fuse_markets or None,
             market_substrates=market_substrates or None,
         )
