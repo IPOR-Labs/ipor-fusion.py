@@ -134,6 +134,7 @@ class LendingHealth(_Base):
 class HealthCheck(_Base):
     ok: bool
     warnings: list[str]
+    criticals: list[str]
 
 
 # ---------------------------------------------------------------------------

@@ -189,7 +189,7 @@ def _full_vault_info_dict() -> dict:
             ],
             "worst_ltv_usage_percent": 58.1,
         },
-        "health_check": {"ok": True, "warnings": []},
+        "health_check": {"ok": True, "warnings": [], "criticals": []},
     }
 
 
