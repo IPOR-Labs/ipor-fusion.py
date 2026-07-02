@@ -93,11 +93,16 @@ class AccessManager(ContractWrapper):
         # N+1 RPC: each candidate requires a has_role() call; multicall would fix
         # this but is out of scope.
         role_accounts: list[RoleAccount] = []
+        seen: set[tuple[int, str]] = set()
         for event in events:
             (role_id,) = decode(["uint64"], event["topics"][1])
             (account,) = decode(["address"], event["topics"][2])
             if not predicate(role_id, account):
                 continue
+            # A re-granted (role, account) emits multiple RoleGranted events.
+            if (role_id, account) in seen:
+                continue
+            seen.add((role_id, account))
             role_status = self.has_role(role_id, account).call()
             if role_status.is_member:
                 role_accounts.append(
