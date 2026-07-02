@@ -139,7 +139,7 @@ _register_markets(
         35,
         37,
         40,
-        47,
+        46,  # Napier — plain Principal Token / input token addresses
         *range(100_001, 100_021),  # ERC4626_0001 .. ERC4626_0020
     ],
     _decode_plain_address,
@@ -202,8 +202,8 @@ _register_markets(
 )
 # Enso
 _register_markets([38], _decode_enso)
-# Dolomite
-_register_markets([46], _decode_dolomite)
+# Dolomite (renumbered 46 -> 47 upstream when Napier took 46)
+_register_markets([47], _decode_dolomite)
 # Euler V2 (eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72)
 _register_markets([11], _decode_euler_v2)
 

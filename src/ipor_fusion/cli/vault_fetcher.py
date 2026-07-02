@@ -24,6 +24,7 @@ from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
+from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown, AaveV3Reader
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
@@ -53,6 +54,23 @@ class _WithdrawManagerData:
     shares_to_release: int
     last_release_funds_timestamp: int
     pending_requests: list[AccountRequest]
+
+
+@dataclass(frozen=True)
+class MiddlewarePricedToken:
+    """A token a balance fuse will price via the IPOR PriceOracleMiddleware.
+
+    Derived from a granted substrate (e.g. the ``asset()`` of a granted Euler
+    vault). ``token`` is the lowercase address passed to ``getAssetPrice``;
+    ``via`` describes the derivation for health-check messages;
+    ``zero_balance_reverts`` is True when the fuse prices the token *before*
+    any balance check, so a missing feed reverts ``balanceOf()`` even with no
+    position.
+    """
+
+    token: str
+    via: str
+    zero_balance_reverts: bool
 
 
 @dataclass
@@ -105,6 +123,18 @@ class _VaultData:
     # vault's PriceOracleMiddleware. Missing keys mean the oracle has no source
     # configured for that token.
     token_prices_usd: dict[str, float] | None = None
+    # Lowercase addresses of tokens the PriceOracleMiddleware cannot price at
+    # all (no explicit feed source AND getAssetPrice reverts, so no registry
+    # fallback either — see _fetch_unpriceable_tokens). Used to flag
+    # unpriceable Morpho collateral and middleware-priced substrates (a
+    # totalAssets-DoS class). None means the check did not run.
+    unpriceable_tokens: frozenset[str] | None = None
+    # Tokens that balance fuses price via the IPOR PriceOracleMiddleware,
+    # derived from granted substrates and keyed by market_id. Joined with
+    # unpriceable_tokens to flag granted substrates whose priced token cannot
+    # be priced (balanceOf() reverts -> totalAssets DoS). See
+    # _fetch_middleware_priced_substrates.
+    middleware_priced_substrates: dict[int, list[MiddlewarePricedToken]] | None = None
     # MARKET_ID() reported by each registered action fuse. Keyed by checksummed
     # fuse address. Fuses that don't expose MARKET_ID() (or whose call reverts)
     # are absent from the dict — used to detect orphan markets (action fuses
@@ -125,6 +155,9 @@ def _safe_call(func: Callable[[], T]) -> T | None:
 
 
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
+_ASSET_SELECTOR = function_signature_to_4byte_selector("asset()")
+_GET_SILOS_SELECTOR = function_signature_to_4byte_selector("getSilos()")
+_GET_PRICE_ORACLE_SELECTOR = function_signature_to_4byte_selector("getPriceOracle()")
 
 
 def _fetch_fuse_market_id(ctx: Web3Context, fuse_addr: ChecksumAddress) -> int | None:
@@ -374,6 +407,267 @@ def _fetch_breakdown_token_prices(
     return prices or None
 
 
+def _price_reverts_deterministically(
+    oracle: PriceOracleMiddleware, addr: ChecksumAddress
+) -> bool | None:
+    """Probe ``getAssetPrice``: True = deterministic revert (unpriceable),
+    False = priced fine, None = transient failure (unknown)."""
+    try:
+        oracle.get_asset_price(addr).call()
+        return False
+    except ContractLogicError:
+        return True
+    except (Web3RPCError, TimeExhausted):
+        return None
+
+
+def _fetch_unpriceable_tokens(
+    pool: ThreadPoolExecutor,
+    oracle: PriceOracleMiddleware,
+    addresses: set[ChecksumAddress],
+) -> frozenset[str] | None:
+    """Return the (lowercase) tokens the middleware cannot price at all.
+
+    Covers breakdown tokens (Morpho/Aave positions) plus substrate-derived
+    tokens from ``_fetch_middleware_priced_substrates``. A token is unpriceable
+    only when BOTH hold:
+
+    - ``getSourceOfAssetPrice`` returns the zero address (no explicit feed),
+      AND
+    - ``getAssetPrice`` reverts deterministically (``ContractLogicError``).
+
+    The second probe is required because on Ethereum mainnet the middleware
+    falls back to the Chainlink Feed Registry when no explicit source is set —
+    a zero source alone does not mean the token is unpriceable (e.g. USDC is
+    registry-priced on several mainnet vaults). Transient RPC failures at
+    either step leave the token out of the result (never a false alarm).
+    Returns ``None`` when there was nothing to check.
+    """
+    if not addresses:
+        return None
+    source_futs = {
+        addr: pool.submit(
+            _safe_call, lambda a=addr: oracle.get_source_of_asset_price(a).call()
+        )
+        for addr in addresses
+    }
+    zero_source = [
+        addr
+        for addr, fut in source_futs.items()
+        if (source := fut.result()) is not None and int(str(source), 16) == 0
+    ]
+    probe_futs = {
+        addr: pool.submit(_price_reverts_deterministically, oracle, addr)
+        for addr in zero_source
+    }
+    return frozenset(
+        addr.lower() for addr, fut in probe_futs.items() if fut.result() is True
+    )
+
+
+def _decode_address_call(raw: bytes | None) -> ChecksumAddress | None:
+    if not raw:
+        return None
+    try:
+        (addr,) = decode(["address"], raw)
+    except Exception:
+        return None
+    if int(addr, 16) == 0:
+        return None
+    return Web3.to_checksum_address(addr)
+
+
+def _fetch_erc4626_asset(ctx: Web3Context, vault_addr: str) -> ChecksumAddress | None:
+    """Read ``asset()`` of an ERC4626-style vault (Euler vault, Silo)."""
+    checksum = Web3.to_checksum_address(vault_addr)
+    return _decode_address_call(_safe_call(lambda: ctx.call(checksum, _ASSET_SELECTOR)))
+
+
+def _fetch_silo_assets(ctx: Web3Context, config_addr: str) -> list[tuple[str, str]]:
+    """Resolve a Silo Config substrate to its two silos' underlying assets.
+
+    Returns ``[(silo, asset), ...]`` — SiloV2BalanceFuse prices ``asset()`` of
+    both silos returned by ``ISiloConfig.getSilos()``.
+    """
+    checksum = Web3.to_checksum_address(config_addr)
+    raw = _safe_call(lambda: ctx.call(checksum, _GET_SILOS_SELECTOR))
+    if not raw:
+        return []
+    try:
+        silos = decode(["address", "address"], raw)
+    except Exception:
+        return []
+    pairs: list[tuple[str, str]] = []
+    for silo in silos:
+        if int(silo, 16) == 0:
+            continue
+        if asset := _fetch_erc4626_asset(ctx, silo):
+            pairs.append((Web3.to_checksum_address(silo), asset))
+    return pairs
+
+
+def _is_middleware_priced_aave_v3(ctx: Web3Context, fuse_addr: str) -> bool:
+    """Heuristic: is an Aave V3 balance fuse the middleware-priced variant?
+
+    The standard ``AaveV3BalanceFuse`` prices via Aave's own oracle, which it
+    must resolve through ``IPoolAddressesProvider.getPriceOracle()`` — that
+    selector appears as a PUSH4 in its deployed bytecode.
+    ``AaveV3WithPriceOracleMiddlewareBalanceFuse`` never calls it (it uses the
+    vault's PriceOracleMiddleware). Both variants expose identical public
+    getters, so bytecode is the only on-chain discriminator. A false negative
+    (selector bytes occurring by chance) only silences the health check.
+    """
+    code = _safe_call(
+        lambda: ctx.web3.eth.get_code(Web3.to_checksum_address(fuse_addr))
+    )
+    if not code:
+        return False
+    return _GET_PRICE_ORACLE_SELECTOR not in bytes(code)
+
+
+def _substrate_high_address(sub: bytes) -> str | None:
+    """Address packed in the high 20 bytes (Euler, Dolomite substrates)."""
+    hex_str = sub.hex()
+    if len(hex_str) != 64 or int(hex_str[0:40], 16) == 0:
+        return None
+    return f"0x{hex_str[0:40]}"
+
+
+def _substrate_low_address(sub: bytes) -> str | None:
+    """Address packed in the low 20 bytes (plain-address substrates)."""
+    hex_str = sub.hex()
+    if len(hex_str) != 64 or int(hex_str[24:], 16) == 0:
+        return None
+    return f"0x{hex_str[24:]}"
+
+
+def _fetch_middleware_priced_substrates(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    market_substrates: dict[int, list[bytes]],
+    balance_fuses: list,
+) -> dict[int, list[MiddlewarePricedToken]] | None:
+    """Derive, per market, the tokens its balance fuse prices via the IPOR
+    PriceOracleMiddleware.
+
+    Covered fuses (verified against ipor-fusion contracts @ origin/main):
+
+    - Euler V2 (11): prices ``ERC4626(eulerVault).asset()`` of every granted
+      substrate *before* checking the balance — reverts even at zero position.
+    - Silo V2 (35): prices ``ISilo(silo).asset()`` for both silos of every
+      granted Silo Config, also before the balance check.
+    - Aave V3 middleware variant (markets 1/20 when the balance fuse is
+      ``AaveV3WithPriceOracleMiddlewareBalanceFuse``): prices every granted
+      substrate asset unconditionally.
+    - Dolomite (47): prices the substrate asset only when the Dolomite Wei
+      balance is non-zero — but third-party deposits on the vault's behalf
+      can create one.
+    - Aave V4 (44): prices a spoke reserve's underlying only when it is a
+      granted Asset substrate with a non-zero position — permissionless
+      supply-on-behalf can create one. Skipped when no Spoke substrate is
+      granted (the fuse iterates spokes, so nothing is ever priced).
+    """
+    result: dict[int, list[MiddlewarePricedToken]] = {}
+    fuse_by_market = {bf.market_id: bf.fuse for bf in balance_fuses}
+
+    euler_futs: list[tuple[str, Future]] = []
+    silo_futs: list[Future] = []
+
+    for mid, subs in market_substrates.items():
+        tokens: list[MiddlewarePricedToken] = []
+
+        if mid == IporFusionMarkets.EULER_V2:
+            euler_futs.extend(
+                (vault, pool.submit(_fetch_erc4626_asset, ctx, vault))
+                for sub in subs
+                if (vault := _substrate_high_address(sub))
+            )
+        elif mid == IporFusionMarkets.SILO_V2:
+            silo_futs.extend(
+                pool.submit(_fetch_silo_assets, ctx, config)
+                for sub in subs
+                if (config := _substrate_low_address(sub))
+            )
+        elif mid == IporFusionMarkets.DOLOMITE:
+            tokens = _dolomite_priced_tokens(subs)
+        elif mid == IporFusionMarkets.AAVE_V4:
+            tokens = _aave_v4_priced_tokens(subs)
+        elif mid in AAVE_V3_MARKET_IDS:
+            tokens = _aave_v3_mw_priced_tokens(ctx, fuse_by_market.get(mid), subs)
+
+        if tokens:
+            result[mid] = tokens
+
+    euler_tokens = [
+        MiddlewarePricedToken(
+            token=asset.lower(),
+            via=f"underlying of granted Euler vault {vault}",
+            zero_balance_reverts=True,
+        )
+        for vault, fut in euler_futs
+        if (asset := fut.result()) is not None
+    ]
+    if euler_tokens:
+        result.setdefault(IporFusionMarkets.EULER_V2, []).extend(euler_tokens)
+
+    silo_tokens = [
+        MiddlewarePricedToken(
+            token=asset.lower(),
+            via=f"asset of granted Silo {silo}",
+            zero_balance_reverts=True,
+        )
+        for fut in silo_futs
+        for silo, asset in fut.result()
+    ]
+    if silo_tokens:
+        result.setdefault(IporFusionMarkets.SILO_V2, []).extend(silo_tokens)
+
+    return result or None
+
+
+def _dolomite_priced_tokens(subs: list[bytes]) -> list[MiddlewarePricedToken]:
+    return [
+        MiddlewarePricedToken(
+            token=asset.lower(),
+            via="granted Dolomite asset substrate",
+            zero_balance_reverts=False,
+        )
+        for sub in subs
+        if (asset := _substrate_high_address(sub))
+    ]
+
+
+def _aave_v4_priced_tokens(subs: list[bytes]) -> list[MiddlewarePricedToken]:
+    hexes = [s.hex() for s in subs if len(s.hex()) == 64]
+    if not any(int(h[0:2], 16) == 2 for h in hexes):  # no Spoke granted
+        return []
+    return [
+        MiddlewarePricedToken(
+            token=f"0x{h[24:]}".lower(),
+            via="granted Aave V4 Asset substrate",
+            zero_balance_reverts=False,
+        )
+        for h in hexes
+        if int(h[0:2], 16) == 1 and int(h[24:], 16) != 0
+    ]
+
+
+def _aave_v3_mw_priced_tokens(
+    ctx: Web3Context, fuse_addr: str | None, subs: list[bytes]
+) -> list[MiddlewarePricedToken]:
+    if not fuse_addr or not _is_middleware_priced_aave_v3(ctx, fuse_addr):
+        return []
+    return [
+        MiddlewarePricedToken(
+            token=asset.lower(),
+            via="granted substrate asset (middleware-priced Aave V3 balance fuse)",
+            zero_balance_reverts=True,
+        )
+        for sub in subs
+        if (asset := _substrate_low_address(sub))
+    ]
+
+
 def _fetch_vault_data(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -485,15 +779,26 @@ def _fetch_vault_data(
             aave_positions = _fetch_aave_positions(
                 ctx, pool, vault_addr, chain_id, market_substrates
             )
-            token_prices_usd = _fetch_breakdown_token_prices(
-                pool,
-                oracle,
-                _collect_breakdown_token_addresses(morpho_positions, aave_positions),
+            breakdown_addrs = _collect_breakdown_token_addresses(
+                morpho_positions, aave_positions
             )
+            token_prices_usd = _fetch_breakdown_token_prices(
+                pool, oracle, breakdown_addrs
+            )
+            middleware_priced = _fetch_middleware_priced_substrates(
+                ctx, pool, market_substrates, balance_fuses
+            )
+            source_addrs = set(breakdown_addrs)
+            for tokens in (middleware_priced or {}).values():
+                for mpt in tokens:
+                    source_addrs.add(Web3.to_checksum_address(mpt.token))
+            unpriceable_tokens = _fetch_unpriceable_tokens(pool, oracle, source_addrs)
         else:
             morpho_positions = None
             aave_positions = None
             token_prices_usd = None
+            unpriceable_tokens = None
+            middleware_priced = None
             market_substrates = {}
 
         return _VaultData(
@@ -523,6 +828,8 @@ def _fetch_vault_data(
             morpho_positions=morpho_positions,
             aave_positions=aave_positions,
             token_prices_usd=token_prices_usd,
+            unpriceable_tokens=unpriceable_tokens,
+            middleware_priced_substrates=middleware_priced,
             fuse_markets=fuse_markets or None,
             market_substrates=market_substrates or None,
         )

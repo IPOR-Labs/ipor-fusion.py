@@ -69,8 +69,11 @@ class IporFusionMarkets:
     AAVE_V4 = 44
     # substrate type: MidasSubstrateType
     MIDAS = 45
+    # substrate type: address (Napier V2 Principal Tokens / input tokens)
+    NAPIER = 46
     # substrate type: DolomiteSubstrate (asset, subAccountId, canBorrow)
-    DOLOMITE = 46
+    # (was 46 pre-release; renumbered to 47 when Napier took 46 upstream)
+    DOLOMITE = 47
     ERC4626_0001 = 100_001
     ERC4626_0002 = 100_002
     ERC4626_0003 = 100_003
