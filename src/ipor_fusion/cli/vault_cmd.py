@@ -46,6 +46,8 @@ from ipor_fusion.cli.vault_substrate import (
     _format_substrate,
     _market_name,
 )
+from ipor_fusion.config.roles import Roles
+from ipor_fusion.core.access import resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 
@@ -336,6 +338,85 @@ def info(
     data = _fetch_vault_data(ctx, plasma_vault, block_number, chain_id=chain_id)
     _print_vault_info(
         ctx, plasma_vault, cfg, data, vault_address, chain_id, json_output
+    )
+
+
+@vault.command("role-accounts")
+@click.argument("vault_address", type=ADDRESS)
+@click.option(
+    "--role",
+    default="",
+    help="Filter to one role (case-insensitive, '_ROLE' suffix optional); "
+    f"omit to list all. Valid: {Roles.names_str()}.",
+)
+@click.option(
+    "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
+)
+@click.option(
+    "--block-number",
+    type=int,
+    default=None,
+    help="Block number (default: latest).",
+)
+@click.option(
+    "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
+)
+def role_accounts(
+    vault_address: str,
+    role: str,
+    chain_id: int | None,
+    block_number: int | None,
+    json_output: bool,
+) -> None:
+    """List confirmed role holders on the vault's AccessManager."""
+    cfg = load_config()
+    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    provider_url = _resolve_provider(cfg, chain_id)
+
+    ctx = Web3Context.from_url(provider_url)
+    if block_number is not None:
+        ctx.default_block = block_number
+
+    try:
+        role_id = None if not role.strip() else Roles.resolve(role)
+        manager = resolve_access_manager(ctx, vault_address)
+    except ValueError as exc:  # unknown role / no contract / not a vault
+        raise click.UsageError(str(exc)) from exc
+
+    accounts = (
+        manager.get_all_role_accounts()
+        if role_id is None
+        else manager.get_accounts_with_role(role_id)
+    )
+    accounts.sort(key=lambda ra: (ra.account.lower(), ra.role_id))
+
+    if json_output:
+        payload = {
+            "vault": Web3.to_checksum_address(vault_address),
+            "access_manager": manager.address,
+            "chain_id": chain_id,
+            "role_filter": Roles.get_name(role_id) if role_id is not None else None,
+            "accounts": [
+                {
+                    "account": ra.account,
+                    "role_id": ra.role_id,
+                    "role_name": ra.role_name,
+                    "is_member": ra.is_member,
+                    "execution_delay": ra.execution_delay,
+                }
+                for ra in accounts
+            ],
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(f"Access Manager: {manager.address}")
+    _print_table(
+        ("Account", "Role", "Role ID", "Delay (s)"),
+        [
+            (ra.account, ra.role_name, str(ra.role_id), str(ra.execution_delay))
+            for ra in accounts
+        ],
     )
 
 
