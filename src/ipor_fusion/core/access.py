@@ -8,7 +8,10 @@ from web3 import Web3
 from web3.types import LogReceipt
 
 from ipor_fusion.config.roles import Roles
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
 from ipor_fusion.types import Period, RoleId
 
 
@@ -128,3 +131,31 @@ class AccessManager(ContractWrapper):
                 contract_address=self._address, topics=[event_signature_hash]
             )
         )
+
+
+def resolve_access_manager(
+    ctx: Web3Context, vault_address: ChecksumAddress
+) -> AccessManager:
+    """Resolve a vault address to its AccessManager, with typed guards.
+
+    Raises ContractNotFoundError when nothing is deployed at the address, and
+    NotAPlasmaVaultError when the contract does not expose
+    getAccessManagerAddress() (detected via the ABI decode failure on the
+    empty eth_call result).
+    """
+    checksum = Web3.to_checksum_address(vault_address)
+    code = ctx.web3.eth.get_code(checksum)
+    if code in {b"", b"\x00"}:
+        raise ContractNotFoundError(
+            f"No contract found at {checksum} on chain {ctx.chain_id}."
+        )
+    try:
+        manager_address = PlasmaVault(ctx, checksum).get_access_manager_address().call()
+    except Exception as exc:
+        if "Tried to read" in str(exc) and "only got 0 bytes" in str(exc):
+            raise NotAPlasmaVaultError(
+                f"Address {checksum} on chain {ctx.chain_id} does not appear "
+                f"to be a Plasma Vault."
+            ) from exc
+        raise
+    return AccessManager(ctx, manager_address)

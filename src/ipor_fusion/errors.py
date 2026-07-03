@@ -92,6 +92,20 @@ class IporFusionError(Exception):
     """Base exception for all IPOR Fusion SDK errors."""
 
 
+class ContractNotFoundError(IporFusionError, ValueError):
+    """No contract deployed at the given address.
+
+    Also a ValueError so MCP adapters can let it propagate unmapped.
+    """
+
+
+class NotAPlasmaVaultError(IporFusionError, ValueError):
+    """Contract exists but does not implement the Plasma Vault interface.
+
+    Also a ValueError so MCP adapters can let it propagate unmapped.
+    """
+
+
 class TransactionError(IporFusionError):
     def __init__(
         self,

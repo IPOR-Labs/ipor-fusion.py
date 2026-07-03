@@ -1,7 +1,12 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ipor_fusion.config.roles import Roles
-from ipor_fusion.core.access import AccessManager, RoleAccount, RoleStatus
+from ipor_fusion.core.access import (
+    AccessManager,
+    RoleAccount,
+    RoleStatus,
+    resolve_access_manager,
+)
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
@@ -20,7 +25,9 @@ from ipor_fusion.core.withdraw_manager import (
     WithdrawRequestInfo,
 )
 from ipor_fusion.errors import (
+    ContractNotFoundError,
     IporFusionError,
+    NotAPlasmaVaultError,
     TransactionError,
 )
 from ipor_fusion.fuses import (
@@ -120,6 +127,7 @@ __all__ = [
     "AccessManager",
     "RoleAccount",
     "RoleStatus",
+    "resolve_access_manager",
     "RewardsManager",
     "VestingData",
     "ERC20",
@@ -174,7 +182,9 @@ __all__ = [
     "euler_substrate",
     "Roles",
     "IporFusionMarkets",
+    "ContractNotFoundError",
     "IporFusionError",
+    "NotAPlasmaVaultError",
     "TransactionError",
     "Amount",
     "Shares",

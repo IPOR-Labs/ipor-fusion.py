@@ -2,12 +2,20 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from eth_abi import encode
 from web3 import Web3
 
-from ipor_fusion.core.access import AccessManager
+# Top-level imports on purpose — they also exercise the __init__ exports.
+from ipor_fusion import (
+    AccessManager,
+    ContractNotFoundError,
+    NotAPlasmaVaultError,
+    resolve_access_manager,
+)
 
 MANAGER_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
+VAULT_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
 ALICE = Web3.to_checksum_address("0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa")
 BOB = Web3.to_checksum_address("0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB")
 
@@ -84,3 +92,40 @@ class TestGetAccountsWithRole:
         manager = _manager_with([_grant_event(100, BOB), _grant_event(100, BOB)])
 
         assert len(manager.get_accounts_with_role(100)) == 1
+
+
+class TestResolveAccessManager:
+    @staticmethod
+    def _ctx(bytecode: bytes = b"\x60\x80") -> MagicMock:
+        ctx = MagicMock()
+        ctx.web3.eth.get_code.return_value = bytecode
+        return ctx
+
+    def test_no_contract_raises(self):
+        ctx = self._ctx(bytecode=b"")
+
+        with pytest.raises(ContractNotFoundError, match="No contract found"):
+            resolve_access_manager(ctx, VAULT_ADDR)
+
+    def test_not_a_vault_raises(self):
+        ctx = self._ctx()
+        ctx.call.side_effect = Exception("Tried to read 32 bytes, only got 0 bytes.")
+
+        with pytest.raises(NotAPlasmaVaultError, match="does not appear"):
+            resolve_access_manager(ctx, VAULT_ADDR)
+
+    def test_other_errors_propagate_unchanged(self):
+        ctx = self._ctx()
+        ctx.call.side_effect = RuntimeError("rpc down")
+
+        with pytest.raises(RuntimeError, match="rpc down"):
+            resolve_access_manager(ctx, VAULT_ADDR)
+
+    def test_happy_path_returns_manager(self):
+        ctx = self._ctx()
+        ctx.call.return_value = encode(["address"], [MANAGER_ADDR])
+
+        manager = resolve_access_manager(ctx, VAULT_ADDR)
+
+        assert isinstance(manager, AccessManager)
+        assert manager.address == MANAGER_ADDR
