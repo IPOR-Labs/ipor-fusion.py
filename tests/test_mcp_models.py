@@ -10,15 +10,18 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.mcp.models import (
     Amount,
     ConfigShowResponse,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     Reconciliation,
+    RoleAccountsResponse,
     VaultInfoResponse,
     VaultListEntry,
 )
+from ipor_fusion.types import Period, RoleId
 
 
 def _amount(raw: int = 0, formatted: str = "0", usd: float | None = None) -> dict:
@@ -262,6 +265,66 @@ class TestSimpleResponseContracts:
         VaultListEntry.model_validate(
             {"address": "0xA", "label": "x", "chain": "base", "chain_id": 8453}
         )
+
+
+def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:
+    return RoleAccount(
+        account=account,  # type: ignore[arg-type]
+        role_id=RoleId(role_id),
+        is_member=True,
+        execution_delay=Period(delay),
+    )
+
+
+class TestRoleAccountsResponse:
+    def test_from_role_accounts_maps_and_sorts(self):
+        accounts = [
+            _role_account(100, "0xBBBB", delay=60),
+            _role_account(1, "0xaaaa"),
+            _role_account(2, "0xaaaa"),
+        ]
+
+        resp = RoleAccountsResponse.from_role_accounts(
+            accounts,
+            vault="0xVAULT",
+            access_manager="0xAM",
+            chain_id=1,
+            role_filter=None,
+        )
+
+        # Sorted by (account.lower(), role_id); role_name resolved via the enum.
+        assert [(e.account, e.role_id) for e in resp.accounts] == [
+            ("0xaaaa", 1),
+            ("0xaaaa", 2),
+            ("0xBBBB", 100),
+        ]
+        assert resp.accounts[2].role_name == "ATOMIST_ROLE"
+        assert resp.accounts[2].execution_delay == 60
+        assert resp.role_filter is None
+
+    def test_role_filter_echo(self):
+        resp = RoleAccountsResponse.from_role_accounts(
+            [],
+            vault="0xVAULT",
+            access_manager="0xAM",
+            chain_id=1,
+            role_filter="ATOMIST_ROLE",
+        )
+        assert resp.role_filter == "ATOMIST_ROLE"
+        assert resp.accounts == []
+
+    def test_rejects_unknown_field(self):
+        with pytest.raises(ValidationError):
+            RoleAccountsResponse.model_validate(
+                {
+                    "vault": "0xVAULT",
+                    "access_manager": "0xAM",
+                    "chain_id": 1,
+                    "role_filter": None,
+                    "accounts": [],
+                    "extra": "no",
+                }
+            )
 
     def test_morpho_blue_market_full_dict(self):
         d = {

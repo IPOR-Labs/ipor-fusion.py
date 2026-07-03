@@ -17,9 +17,12 @@ Design notes:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from ipor_fusion.core.access import RoleAccount
 
 
 class _Base(BaseModel):
@@ -164,6 +167,70 @@ class ConfigShowResponse(_Base):
         default=None,
         description="Masked ('***') when set, null when unset.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Role-account models
+# ---------------------------------------------------------------------------
+
+
+class RoleAccountEntry(_Base):
+    """One confirmed role membership on a vault's AccessManager."""
+
+    account: str
+    role_id: int
+    role_name: str = Field(
+        description="Canonical enum name; UNKNOWN_ROLE_<id> when unmapped."
+    )
+    is_member: bool
+    execution_delay: int = Field(
+        description="Execution timelock in seconds (0 = immediate)."
+    )
+
+
+class RoleAccountsResponse(_Base):
+    """Role holders on a Plasma Vault's AccessManager."""
+
+    vault: str
+    access_manager: str
+    chain_id: int
+    role_filter: str | None = Field(
+        default=None,
+        description="Canonical role name when filtered; null = all roles.",
+    )
+    accounts: list[RoleAccountEntry]
+
+    @classmethod
+    def from_role_accounts(
+        cls,
+        accounts: list[RoleAccount],
+        *,
+        vault: str,
+        access_manager: str,
+        chain_id: int,
+        role_filter: str | None,
+    ) -> RoleAccountsResponse:
+        """Build the response from SDK dataclasses (sorted for stable output)."""
+        entries = sorted(
+            (
+                RoleAccountEntry(
+                    account=ra.account,
+                    role_id=ra.role_id,
+                    role_name=ra.role_name,
+                    is_member=ra.is_member,
+                    execution_delay=ra.execution_delay,
+                )
+                for ra in accounts
+            ),
+            key=lambda e: (e.account.lower(), e.role_id),
+        )
+        return cls(
+            vault=vault,
+            access_manager=access_manager,
+            chain_id=chain_id,
+            role_filter=role_filter,
+            accounts=entries,
+        )
 
 
 # ---------------------------------------------------------------------------

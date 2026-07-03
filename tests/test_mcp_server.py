@@ -143,6 +143,113 @@ class TestVaultRemove:
         assert "not found" in result.message.lower()
 
 
+# ── vault_role_accounts ───────────────────────────────────────────────
+
+
+import asyncio  # noqa: E402
+
+import pytest  # noqa: E402
+
+from ipor_fusion import NotAPlasmaVaultError, RoleAccount  # noqa: E402
+from ipor_fusion.mcp.server import mcp, vault_role_accounts  # noqa: E402
+from ipor_fusion.types import Period, RoleId  # noqa: E402
+
+VAULT_ADDR = "0x" + "22" * 20
+
+
+def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:
+    return RoleAccount(
+        account=account,  # type: ignore[arg-type]
+        role_id=RoleId(role_id),
+        is_member=True,
+        execution_delay=Period(delay),
+    )
+
+
+def _mock_manager(accounts: list[RoleAccount]) -> MagicMock:
+    manager = MagicMock()
+    manager.address = "0xAM"
+    manager.get_all_role_accounts.return_value = accounts
+    manager.get_accounts_with_role.return_value = accounts
+    return manager
+
+
+class TestVaultRoleAccounts:
+    @patch("ipor_fusion.mcp.server.resolve_access_manager")
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_all_roles(self, _load, _ctx, mock_resolve):
+        manager = _mock_manager(
+            [_role_account(100, "0xBBBB"), _role_account(1, "0xaaaa", delay=60)]
+        )
+        mock_resolve.return_value = manager
+
+        result = vault_role_accounts(vault_address=VAULT_ADDR)
+
+        manager.get_all_role_accounts.assert_called_once()
+        manager.get_accounts_with_role.assert_not_called()
+        assert result.role_filter is None
+        assert result.access_manager == "0xAM"
+        assert result.chain_id == 1  # single-provider fallback
+        assert [
+            (e.account, e.role_id, e.role_name, e.execution_delay)
+            for e in result.accounts
+        ] == [
+            ("0xaaaa", 1, "OWNER_ROLE", 60),
+            ("0xBBBB", 100, "ATOMIST_ROLE", 0),
+        ]
+
+    @patch("ipor_fusion.mcp.server.resolve_access_manager")
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_filtered_by_normalized_name(self, _load, _ctx, mock_resolve):
+        manager = _mock_manager([_role_account(100, "0xBBBB")])
+        mock_resolve.return_value = manager
+
+        result = vault_role_accounts(vault_address=VAULT_ADDR, role="atomist")
+
+        manager.get_accounts_with_role.assert_called_once_with(100)
+        manager.get_all_role_accounts.assert_not_called()
+        assert result.role_filter == "ATOMIST_ROLE"
+
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_unknown_role_fails_before_rpc(self, _load, mock_ctx):
+        with pytest.raises(ValueError, match="Valid: ADMIN_ROLE"):
+            vault_role_accounts(vault_address=VAULT_ADDR, role="archbishop")
+        mock_ctx.assert_not_called()
+
+    @patch(
+        "ipor_fusion.mcp.server.resolve_access_manager",
+        side_effect=NotAPlasmaVaultError("not a vault"),
+    )
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_guard_errors_propagate(self, _load, _ctx, _resolve):
+        with pytest.raises(NotAPlasmaVaultError, match="not a vault"):
+            vault_role_accounts(vault_address=VAULT_ADDR)
+
+    def test_description_lists_roles(self):
+        # Verifies description= reached FastMCP and guards role-list drift.
+        tools = asyncio.run(mcp.list_tools())
+        tool = next(t for t in tools if t.name == "vault_role_accounts")
+        assert tool.description is not None
+        assert "ATOMIST_ROLE" in tool.description
+        assert "PUBLIC_ROLE" in tool.description
+
+
 # ── market tools ──────────────────────────────────────────────────────
 
 

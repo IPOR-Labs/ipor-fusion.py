@@ -29,6 +29,8 @@ from ipor_fusion.cli.vault_fetcher import (
     _fetch_deployment_info,
     _fetch_vault_data,
 )
+from ipor_fusion.config.roles import Roles
+from ipor_fusion.core.access import resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.mcp.models import (
@@ -36,6 +38,7 @@ from ipor_fusion.mcp.models import (
     ConfigShowResponse,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
+    RoleAccountsResponse,
     VaultInfoResponse,
     VaultListEntry,
 )
@@ -141,6 +144,53 @@ def vault_info(
         ctx, plasma_vault, data, vault_address, chain_id, chain_label, api_key
     )
     return VaultInfoResponse.model_validate(result)
+
+
+def _role_accounts_description() -> str:
+    # Generated (not a docstring) so the role list always matches the enum.
+    return (
+        "List confirmed role holders on a Plasma Vault's AccessManager.\n"
+        "Pass `role` to filter to one role — matching is case-insensitive and "
+        "the `_ROLE` suffix is optional; omit it (empty string) to list all "
+        "roles.\n"
+        f"Valid roles: {Roles.names_str()}.\n"
+        "TECH_* roles are held by protocol contracts, not EOAs — expect "
+        "contract addresses for those.\n"
+        "Cost: scans RoleGranted logs + one hasRole read per unique "
+        "(role, account) pair; can be slow on vaults with many grants and "
+        "needs a provider that serves broad eth_getLogs queries.\n"
+        "Returns: vault, access_manager, chain_id, role_filter (canonical "
+        "name or null), and accounts[] of {account, role_id, role_name, "
+        "is_member, execution_delay}."
+    )
+
+
+@mcp.tool(description=_role_accounts_description())
+def vault_role_accounts(
+    vault_address: str,
+    role: str = "",
+    chain_id: int = 0,
+    block_number: int = 0,
+) -> RoleAccountsResponse:
+    cfg = load_config()
+    role_id = None if not role.strip() else Roles.resolve(role)
+    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    ctx, _ = _build_ctx(cfg, chain_id, block_number)
+    checksum = Web3.to_checksum_address(vault_address)
+
+    access_manager = resolve_access_manager(ctx, checksum)
+    accounts = (
+        access_manager.get_all_role_accounts()
+        if role_id is None
+        else access_manager.get_accounts_with_role(role_id)
+    )
+    return RoleAccountsResponse.from_role_accounts(
+        accounts,
+        vault=checksum,
+        access_manager=access_manager.address,
+        chain_id=chain_id,
+        role_filter=Roles.get_name(role_id) if role_id is not None else None,
+    )
 
 
 @mcp.tool()
