@@ -47,7 +47,7 @@ from ipor_fusion.cli.vault_substrate import (
     _market_name,
 )
 from ipor_fusion.config.roles import Roles
-from ipor_fusion.core.access import resolve_access_manager
+from ipor_fusion.core.access import AccessManager, resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 
@@ -322,7 +322,11 @@ def info(
     block_number: int | None,
     json_output: bool,
 ) -> None:
-    """Display full on-chain vault state."""
+    """Display full on-chain vault state.
+
+    The comprehensive vault summary — includes all role accounts on the
+    vault's AccessManager.
+    """
     cfg = load_config()
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
     provider_url = _resolve_provider(cfg, chain_id)
@@ -542,6 +546,49 @@ def _print_health_lines(market: Any, indent: str) -> None:
     click.secho(f"{indent}Status:        {status}", fg=color, bold=bold)
 
 
+def _fetch_role_accounts_json(
+    ctx: Web3Context, data: _VaultData
+) -> list[dict[str, Any]] | None:
+    """All confirmed role holders on the AccessManager, sorted; None when the
+    RoleGranted log scan fails (e.g. provider without broad eth_getLogs)."""
+    accounts = _safe_call(
+        lambda: AccessManager(ctx, data.access_manager).get_all_role_accounts()  # type: ignore[arg-type]
+    )
+    if accounts is None:
+        return None
+    accounts.sort(key=lambda ra: (ra.account.lower(), ra.role_id))
+    return [
+        {
+            "account": ra.account,
+            "role_id": ra.role_id,
+            "role_name": ra.role_name,
+            "is_member": ra.is_member,
+            "execution_delay": ra.execution_delay,
+        }
+        for ra in accounts
+    ]
+
+
+def _print_role_accounts(ctx: Web3Context, data: _VaultData) -> None:
+    click.echo("Role Accounts:")
+    if (role_accounts := _fetch_role_accounts_json(ctx, data)) is None:
+        click.echo("  (unavailable — provider could not serve the log scan)")
+    else:
+        _print_table(
+            ("Account", "Role", "Role ID", "Delay (s)"),
+            [
+                (
+                    entry["account"],
+                    entry["role_name"],
+                    str(entry["role_id"]),
+                    str(entry["execution_delay"]),
+                )
+                for entry in role_accounts
+            ],
+        )
+    click.echo()
+
+
 def _print_vault_info(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -649,6 +696,8 @@ def _print_vault_info(
             click.echo(f"  Last release:   {last_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}")
         _print_pending_requests(data, plasma_vault)
     click.echo()
+
+    _print_role_accounts(ctx, data)
 
     _print_fuse_section(
         "Fuses",
@@ -1268,6 +1317,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             "rewards": data.rewards_manager,
             "withdraw": data.withdraw_manager,
         },
+        "role_accounts": _fetch_role_accounts_json(ctx, data),
         "withdraw_manager_details": _build_withdraw_manager_json(data, plasma_vault),
         "fuses": fuses_json,
         "balance_fuses": balance_fuses_json,

@@ -821,6 +821,8 @@ class TestVaultInfoJson:
         assert data["total_assets"]["raw"] == 1000 * 10**18
         assert data["managers"]["access"] == ADDR_ACCESS
         assert data["managers"]["rewards"] == ADDR_REWARDS
+        # Builder emits role_accounts (empty — the mocked ctx has no grant logs).
+        assert data["role_accounts"] == []
         assert len(data["fuses"]) == 1
         assert data["fuses"][0]["contract"] == "SomeFuse"
         assert len(data["balance_fuses"]) == 1

@@ -192,6 +192,15 @@ def _full_vault_info_dict() -> dict:
             ],
             "worst_ltv_usage_percent": 58.1,
         },
+        "role_accounts": [
+            {
+                "account": "0xOWNER",
+                "role_id": 1,
+                "role_name": "OWNER_ROLE",
+                "is_member": True,
+                "execution_delay": 0,
+            }
+        ],
         "health_check": {"ok": True, "warnings": [], "criticals": []},
     }
 
@@ -214,6 +223,7 @@ class TestVaultInfoResponseContract:
         d["withdraw_manager_details"] = None
         d["dependency_graph"] = None
         d["lending_health"] = None
+        d["role_accounts"] = None
         d["balance_fuses"] = []
         d["substrates"] = {}
         d["erc20_balances"] = []

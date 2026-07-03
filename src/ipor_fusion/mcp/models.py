@@ -372,6 +372,12 @@ class VaultInfoResponse(_Base):
     share_price: dict[str, Any] | None = None
     supply_cap: Amount
     managers: Managers
+    role_accounts: list[RoleAccountEntry] | None = Field(
+        default=None,
+        description="All confirmed role holders on the AccessManager; "
+        "null when the RoleGranted log scan failed (provider without "
+        "broad eth_getLogs support).",
+    )
     withdraw_manager_details: dict[str, Any] | None = None
     fuses: list[FuseEntry]
     balance_fuses: list[BalanceFuseEntry]

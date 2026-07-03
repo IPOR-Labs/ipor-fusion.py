@@ -100,11 +100,11 @@ def vault_info(
     chain_id: int = 0,
     block_number: int = 0,
 ) -> VaultInfoResponse:
-    """Get full on-chain state of a Plasma Vault.
+    """Get full on-chain state of a Plasma Vault — the comprehensive summary.
 
     Returns a structured VaultInfoResponse — see model field descriptions
     for the complete output schema (assets, balance fuses, reconciliation,
-    lending health, substrates, etc.).
+    lending health, substrates, role accounts, etc.).
 
     Args:
         vault_address: Vault address (required).
