@@ -4,12 +4,16 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from click.testing import CliRunner
+from web3.exceptions import Web3RPCError
 
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
+from ipor_fusion.cli.vault_cmd import _fetch_role_accounts_json
 from ipor_fusion.core.access import RoleAccount
+from ipor_fusion.errors import NotAPlasmaVaultError
 from ipor_fusion.types import Period, RoleId
 
 VAULT = "0x2222222222222222222222222222222222222222"
@@ -104,7 +108,9 @@ class TestRoleAccounts:
         manager.get_all_role_accounts.assert_not_called()
         assert json.loads(result.output)["role_filter"] == "ATOMIST_ROLE"
 
-    def test_unknown_role_is_usage_error(self, _ctx, mock_resolve, tmp_config):
+    def test_unknown_role_is_usage_error_before_rpc(
+        self, mock_ctx_cls, mock_resolve, tmp_config
+    ):
         result = CliRunner().invoke(
             cli,
             ["vault", "role-accounts", VAULT, "--chain-id", "1", "--role", "bishop"],
@@ -112,9 +118,81 @@ class TestRoleAccounts:
 
         assert result.exit_code != 0
         assert "Valid: ADMIN_ROLE" in result.output
+        # Pure input validation must not need a provider.
+        mock_ctx_cls.from_url.assert_not_called()
+        mock_resolve.assert_not_called()
 
     def test_unknown_vault_needs_chain_id(self, _ctx, mock_resolve, tmp_config):
         result = CliRunner().invoke(cli, ["vault", "role-accounts", VAULT])
 
         assert result.exit_code != 0
         assert "--chain-id" in result.output
+
+    def test_not_a_vault_is_usage_error(self, _ctx, mock_resolve, tmp_config):
+        mock_resolve.side_effect = NotAPlasmaVaultError("not a Plasma Vault")
+
+        result = CliRunner().invoke(
+            cli, ["vault", "role-accounts", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code != 0
+        assert "not a Plasma Vault" in result.output
+
+    def test_scan_rejection_is_friendly_error(self, _ctx, mock_resolve, tmp_config):
+        manager = _mock_manager([])
+        manager.get_all_role_accounts.side_effect = Web3RPCError(
+            "query returned more than 10000 results"
+        )
+        mock_resolve.return_value = manager
+
+        result = CliRunner().invoke(
+            cli, ["vault", "role-accounts", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code != 0
+        assert "eth_getLogs" in result.output
+        assert "Traceback" not in result.output
+
+    def test_scan_transport_failure_is_friendly_error(
+        self, _ctx, mock_resolve, tmp_config
+    ):
+        manager = _mock_manager([])
+        manager.get_all_role_accounts.side_effect = requests.exceptions.ReadTimeout(
+            "provider timed out"
+        )
+        mock_resolve.return_value = manager
+
+        result = CliRunner().invoke(
+            cli, ["vault", "role-accounts", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code != 0
+        assert "eth_getLogs" in result.output
+        assert "Traceback" not in result.output
+
+
+class TestFetchRoleAccountsJson:
+    @staticmethod
+    def _data() -> MagicMock:
+        data = MagicMock()
+        data.access_manager = MANAGER
+        return data
+
+    def test_transport_failure_degrades_to_none(self):
+        ctx = MagicMock()
+        ctx.get_logs.side_effect = requests.exceptions.ReadTimeout("timed out")
+
+        assert _fetch_role_accounts_json(ctx, self._data()) is None
+
+    def test_rpc_rejection_degrades_to_none(self):
+        ctx = MagicMock()
+        ctx.get_logs.side_effect = Web3RPCError("log range too large")
+
+        assert _fetch_role_accounts_json(ctx, self._data()) is None
+
+    def test_unexpected_errors_propagate(self):
+        ctx = MagicMock()
+        ctx.get_logs.side_effect = RuntimeError("bug, not a provider issue")
+
+        with pytest.raises(RuntimeError, match="bug"):
+            _fetch_role_accounts_json(ctx, self._data())

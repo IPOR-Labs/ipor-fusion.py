@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 import click
+import requests
 from web3 import Web3
+from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 
 from ipor_fusion.cli.config_store import (
     FusionConfig,
@@ -50,6 +52,7 @@ from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import AccessManager, resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
 
 
 class AddressType(click.ParamType):
@@ -383,20 +386,31 @@ def role_accounts(
     json_output: bool,
 ) -> None:
     """List confirmed role holders on the vault's AccessManager."""
+    # Pure input validation first — no RPC needed to reject a bad --role.
+    try:
+        role_id = None if not role.strip() else Roles.resolve(role)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+
     cfg = load_config()
     chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
 
     try:
-        role_id = None if not role.strip() else Roles.resolve(role)
         manager = resolve_access_manager(ctx, vault_address)
-    except ValueError as exc:  # unknown role / no contract / not a vault
+    except (ContractNotFoundError, NotAPlasmaVaultError) as exc:
         raise click.UsageError(str(exc)) from exc
 
-    accounts = (
-        manager.get_all_role_accounts()
-        if role_id is None
-        else manager.get_accounts_with_role(role_id)
-    )
+    try:
+        accounts = (
+            manager.get_all_role_accounts()
+            if role_id is None
+            else manager.get_accounts_with_role(role_id)
+        )
+    except _ROLE_SCAN_ERRORS as exc:
+        raise click.ClickException(
+            f"RoleGranted log scan failed ({type(exc).__name__}: {exc}). "
+            "The provider must serve broad eth_getLogs queries."
+        ) from exc
     accounts.sort(key=lambda ra: (ra.account.lower(), ra.role_id))
 
     if json_output:
@@ -551,15 +565,29 @@ def _print_health_lines(market: Any, indent: str) -> None:
     click.secho(f"{indent}Status:        {status}", fg=color, bold=bold)
 
 
+# Failure modes of the heavy RoleGranted scan: JSON-RPC rejections/limits plus
+# transport-level errors — web3's HTTPProvider re-raises raw requests
+# exceptions (read timeouts, 429/5xx via raise_for_status).
+_ROLE_SCAN_ERRORS = (
+    ContractLogicError,
+    Web3RPCError,
+    TimeExhausted,
+    requests.RequestException,
+)
+
+
 def _fetch_role_accounts_json(
     ctx: Web3Context, data: _VaultData
 ) -> list[dict[str, Any]] | None:
     """All confirmed role holders on the AccessManager, sorted; None when the
-    RoleGranted log scan fails (e.g. provider without broad eth_getLogs)."""
-    accounts = _safe_call(
-        lambda: AccessManager(ctx, data.access_manager).get_all_role_accounts()  # type: ignore[arg-type]
-    )
-    if accounts is None:
+    RoleGranted log scan fails (provider without broad eth_getLogs support,
+    or a transport-level failure on the heavy query)."""
+    try:
+        accounts = AccessManager(
+            ctx,
+            data.access_manager,  # type: ignore[arg-type]
+        ).get_all_role_accounts()
+    except _ROLE_SCAN_ERRORS:
         return None
     accounts.sort(key=lambda ra: (ra.account.lower(), ra.role_id))
     return [
