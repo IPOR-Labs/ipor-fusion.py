@@ -1,15 +1,47 @@
 """Tests for the MCP server tool definitions (direct SDK import)."""
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
+import pytest
+from eth_abi.exceptions import InsufficientDataBytes
+from web3 import Web3
+
+from ipor_fusion import (
+    ContractNotFoundError,
+    NotAPlasmaVaultError,
+    RoleAccount,
+)
+from ipor_fusion.cli.morpho_api import (
+    MorphoApiError,
+    MorphoApiMarket,
+    VaultAllocation,
+    VaultFlowCap,
+    VaultV1Info,
+    VaultV1MarketAllocation,
+    VaultV2Adapter,
+    VaultV2Cap,
+    VaultV2Info,
+)
 from ipor_fusion.mcp.server import (
     config_set_etherscan_key,
     config_set_provider,
     config_show,
+    market_meta_morpho,
+    market_morpho_blue,
+    mcp,
     vault_add,
+    vault_info,
     vault_list,
     vault_remove,
+    vault_role_accounts,
 )
+from ipor_fusion.readers.morpho import (
+    MorphoMarket,
+    MorphoMarketParams,
+    MorphoMarketRates,
+)
+from ipor_fusion.types import Period, RoleId
 
 
 def _empty_config():
@@ -145,20 +177,6 @@ class TestVaultRemove:
 
 # ── vault_role_accounts ───────────────────────────────────────────────
 
-
-import asyncio  # noqa: E402
-
-import pytest  # noqa: E402
-from eth_abi.exceptions import InsufficientDataBytes  # noqa: E402
-from web3 import Web3  # noqa: E402
-
-from ipor_fusion import (  # noqa: E402
-    ContractNotFoundError,
-    NotAPlasmaVaultError,
-    RoleAccount,
-)
-from ipor_fusion.mcp.server import mcp, vault_info, vault_role_accounts  # noqa: E402
-from ipor_fusion.types import Period, RoleId  # noqa: E402
 
 VAULT_ADDR = "0x" + "22" * 20
 
@@ -311,27 +329,6 @@ class TestVaultInfoGuards:
 
 # ── market tools ──────────────────────────────────────────────────────
 
-
-from ipor_fusion.cli.morpho_api import (  # noqa: E402
-    MorphoApiError,
-    MorphoApiMarket,
-    VaultAllocation,
-    VaultFlowCap,
-    VaultV1Info,
-    VaultV1MarketAllocation,
-    VaultV2Adapter,
-    VaultV2Cap,
-    VaultV2Info,
-)
-from ipor_fusion.mcp.server import (  # noqa: E402
-    market_meta_morpho,
-    market_morpho_blue,
-)
-from ipor_fusion.readers.morpho import (  # noqa: E402
-    MorphoMarket,
-    MorphoMarketParams,
-    MorphoMarketRates,
-)
 
 _MARKET_ID = "ad656d430bb3d8c1469bf45c8ad4ebae1b04be04757c69fa424eec78d7b3f4dc"
 _LOAN = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
