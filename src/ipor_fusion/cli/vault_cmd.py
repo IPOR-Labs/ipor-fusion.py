@@ -49,7 +49,11 @@ from ipor_fusion.cli.vault_substrate import (
     _market_name,
 )
 from ipor_fusion.config.roles import Roles
-from ipor_fusion.core.access import AccessManager, resolve_access_manager
+from ipor_fusion.core.access import (
+    AccessManager,
+    resolve_access_manager,
+    role_account_sort_key,
+)
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
@@ -411,7 +415,7 @@ def role_accounts(
             f"RoleGranted log scan failed ({type(exc).__name__}: {exc}). "
             "The provider must serve broad eth_getLogs queries."
         ) from exc
-    accounts.sort(key=lambda ra: (ra.account.lower(), ra.role_id))
+    rows = [ra.to_dict() for ra in sorted(accounts, key=role_account_sort_key)]
 
     if json_output:
         payload = {
@@ -419,28 +423,13 @@ def role_accounts(
             "access_manager": manager.address,
             "chain_id": chain_id,
             "role_filter": Roles.get_name(role_id) if role_id is not None else None,
-            "accounts": [
-                {
-                    "account": ra.account,
-                    "role_id": ra.role_id,
-                    "role_name": ra.role_name,
-                    "is_member": ra.is_member,
-                    "execution_delay": ra.execution_delay,
-                }
-                for ra in accounts
-            ],
+            "accounts": rows,
         }
         click.echo(json.dumps(payload, indent=2))
         return
 
     click.echo(f"Access Manager: {manager.address}")
-    _print_table(
-        ("Account", "Role", "Role ID", "Delay (s)"),
-        [
-            (ra.account, ra.role_name, str(ra.role_id), str(ra.execution_delay))
-            for ra in accounts
-        ],
-    )
+    _print_role_accounts_table(rows)
 
 
 def _print_lending_health(  # noqa: C901
@@ -589,17 +578,22 @@ def _fetch_role_accounts_json(
         ).get_all_role_accounts()
     except _ROLE_SCAN_ERRORS:
         return None
-    accounts.sort(key=lambda ra: (ra.account.lower(), ra.role_id))
-    return [
-        {
-            "account": ra.account,
-            "role_id": ra.role_id,
-            "role_name": ra.role_name,
-            "is_member": ra.is_member,
-            "execution_delay": ra.execution_delay,
-        }
-        for ra in accounts
-    ]
+    return [ra.to_dict() for ra in sorted(accounts, key=role_account_sort_key)]
+
+
+def _print_role_accounts_table(role_accounts: list[dict[str, Any]]) -> None:
+    _print_table(
+        ("Account", "Role", "Role ID", "Delay (s)"),
+        [
+            (
+                entry["account"],
+                entry["role_name"],
+                str(entry["role_id"]),
+                str(entry["execution_delay"]),
+            )
+            for entry in role_accounts
+        ],
+    )
 
 
 def _print_role_accounts(role_accounts: list[dict[str, Any]] | None) -> None:
@@ -607,18 +601,7 @@ def _print_role_accounts(role_accounts: list[dict[str, Any]] | None) -> None:
     if role_accounts is None:
         click.echo("  (unavailable — provider could not serve the log scan)")
     else:
-        _print_table(
-            ("Account", "Role", "Role ID", "Delay (s)"),
-            [
-                (
-                    entry["account"],
-                    entry["role_name"],
-                    str(entry["role_id"]),
-                    str(entry["execution_delay"]),
-                )
-                for entry in role_accounts
-            ],
-        )
+        _print_role_accounts_table(role_accounts)
     click.echo()
 
 

@@ -211,19 +211,19 @@ class RoleAccountsResponse(_Base):
         role_filter: str | None,
     ) -> RoleAccountsResponse:
         """Build the response from SDK dataclasses (sorted for stable output)."""
-        entries = sorted(
-            (
-                RoleAccountEntry(
-                    account=ra.account,
-                    role_id=ra.role_id,
-                    role_name=ra.role_name,
-                    is_member=ra.is_member,
-                    execution_delay=ra.execution_delay,
-                )
-                for ra in accounts
-            ),
-            key=lambda e: (e.account.lower(), e.role_id),
-        )
+        # Deferred import keeps this module's import graph pydantic-only.
+        from ipor_fusion.core.access import role_account_sort_key
+
+        entries = [
+            RoleAccountEntry(
+                account=ra.account,
+                role_id=ra.role_id,
+                role_name=ra.role_name,
+                is_member=ra.is_member,
+                execution_delay=ra.execution_delay,
+            )
+            for ra in sorted(accounts, key=role_account_sort_key)
+        ]
         return cls(
             vault=vault,
             access_manager=access_manager,

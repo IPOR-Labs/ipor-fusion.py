@@ -12,8 +12,11 @@ from ipor_fusion import (
     AccessManager,
     ContractNotFoundError,
     NotAPlasmaVaultError,
+    RoleAccount,
     resolve_access_manager,
+    role_account_sort_key,
 )
+from ipor_fusion.types import Period, RoleId
 
 MANAGER_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 VAULT_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
@@ -93,6 +96,41 @@ class TestGetAccountsWithRole:
         manager = _manager_with([_grant_event(100, BOB), _grant_event(100, BOB)])
 
         assert len(manager.get_accounts_with_role(100)) == 1
+
+
+class TestRoleAccountHelpers:
+    @staticmethod
+    def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:
+        return RoleAccount(
+            account=account,  # type: ignore[arg-type]
+            role_id=RoleId(role_id),
+            is_member=True,
+            execution_delay=Period(delay),
+        )
+
+    def test_to_dict_is_the_canonical_row(self):
+        assert self._role_account(100, ALICE, delay=60).to_dict() == {
+            "account": ALICE,
+            "role_id": 100,
+            "role_name": "ATOMIST_ROLE",
+            "is_member": True,
+            "execution_delay": 60,
+        }
+
+    def test_sort_key_is_case_insensitive_then_by_role(self):
+        accounts = [
+            self._role_account(1, "0xBBBB"),
+            self._role_account(2, "0xaaaa"),
+            self._role_account(1, "0xaaaa"),
+        ]
+
+        ordered = sorted(accounts, key=role_account_sort_key)
+
+        assert [(ra.account, ra.role_id) for ra in ordered] == [
+            ("0xaaaa", 1),
+            ("0xaaaa", 2),
+            ("0xBBBB", 1),
+        ]
 
 
 class TestResolveAccessManager:

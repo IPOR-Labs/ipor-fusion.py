@@ -38,6 +38,21 @@ class RoleAccount:
     def role_name(self) -> str:
         return Roles.get_name(self.role_id)
 
+    def to_dict(self) -> dict[str, str | int | bool]:
+        """Canonical JSON-ready row shape, shared by the CLI surfaces."""
+        return {
+            "account": self.account,
+            "role_id": self.role_id,
+            "role_name": self.role_name,
+            "is_member": self.is_member,
+            "execution_delay": self.execution_delay,
+        }
+
+
+def role_account_sort_key(role_account: RoleAccount) -> tuple[str, int]:
+    """Canonical presentation order: account (case-insensitive), then role id."""
+    return (role_account.account.lower(), role_account.role_id)
+
 
 def _role_status_decoder(values: tuple) -> RoleStatus:
     is_member, execution_delay = values

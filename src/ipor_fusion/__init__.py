@@ -6,6 +6,7 @@ from ipor_fusion.core.access import (
     RoleAccount,
     RoleStatus,
     resolve_access_manager,
+    role_account_sort_key,
 )
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
@@ -128,6 +129,7 @@ __all__ = [
     "RoleAccount",
     "RoleStatus",
     "resolve_access_manager",
+    "role_account_sort_key",
     "RewardsManager",
     "VestingData",
     "ERC20",
