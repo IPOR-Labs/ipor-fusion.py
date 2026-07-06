@@ -187,6 +187,21 @@ def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
     )
 
 
+def _build_ctx(
+    cfg: FusionConfig,
+    vault_address: str,
+    chain_id: int | None,
+    block_number: int | None,
+) -> tuple[int, Web3Context]:
+    """Shared command preamble: resolve chain + provider, build the context."""
+    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    provider_url = _resolve_provider(cfg, chain_id)
+    ctx = Web3Context.from_url(provider_url)
+    if block_number is not None:
+        ctx.default_block = block_number
+    return chain_id, ctx
+
+
 def _auto_save_vault(
     cfg: FusionConfig, vault_address: str, chain_id: int, plasma_vault: PlasmaVault
 ) -> None:
@@ -328,12 +343,7 @@ def info(
     vault's AccessManager.
     """
     cfg = load_config()
-    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
-    provider_url = _resolve_provider(cfg, chain_id)
-
-    ctx = Web3Context.from_url(provider_url)
-    if block_number is not None:
-        ctx.default_block = block_number
+    chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
     checksum_address = Web3.to_checksum_address(vault_address)
     plasma_vault = PlasmaVault(ctx, checksum_address)
 
@@ -374,12 +384,7 @@ def role_accounts(
 ) -> None:
     """List confirmed role holders on the vault's AccessManager."""
     cfg = load_config()
-    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
-    provider_url = _resolve_provider(cfg, chain_id)
-
-    ctx = Web3Context.from_url(provider_url)
-    if block_number is not None:
-        ctx.default_block = block_number
+    chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
 
     try:
         role_id = None if not role.strip() else Roles.resolve(role)
