@@ -2,9 +2,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from eth_abi import decode
+from eth_abi.exceptions import InsufficientDataBytes
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.types import LogReceipt
 
 from ipor_fusion.config.roles import Roles
@@ -138,24 +140,28 @@ def resolve_access_manager(
 ) -> AccessManager:
     """Resolve a vault address to its AccessManager, with typed guards.
 
-    Raises ContractNotFoundError when nothing is deployed at the address, and
-    NotAPlasmaVaultError when the contract does not expose
-    getAccessManagerAddress() (detected via the ABI decode failure on the
-    empty eth_call result).
+    Raises ContractNotFoundError when no code is deployed at the address (as
+    of ctx.default_block), and NotAPlasmaVaultError when the contract does not
+    expose getAccessManagerAddress() — either an empty eth_call return
+    (InsufficientDataBytes on decode) or a revert (ContractLogicError).
+    Provider/transport errors propagate unchanged.
     """
     checksum = Web3.to_checksum_address(vault_address)
-    code = ctx.web3.eth.get_code(checksum)
+    # Same block as the eth_call below, or a pre-deployment pin would pass
+    # this guard and get misdiagnosed as "not a vault".
+    code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
     if code in {b"", b"\x00"}:
+        block_note = (
+            f" at block {ctx.default_block}" if ctx.default_block != "latest" else ""
+        )
         raise ContractNotFoundError(
-            f"No contract found at {checksum} on chain {ctx.chain_id}."
+            f"No contract found at {checksum} on chain {ctx.chain_id}{block_note}."
         )
     try:
         manager_address = PlasmaVault(ctx, checksum).get_access_manager_address().call()
-    except Exception as exc:
-        if "Tried to read" in str(exc) and "only got 0 bytes" in str(exc):
-            raise NotAPlasmaVaultError(
-                f"Address {checksum} on chain {ctx.chain_id} does not appear "
-                f"to be a Plasma Vault."
-            ) from exc
-        raise
+    except (InsufficientDataBytes, ContractLogicError) as exc:
+        raise NotAPlasmaVaultError(
+            f"Address {checksum} on chain {ctx.chain_id} does not appear "
+            f"to be a Plasma Vault."
+        ) from exc
     return AccessManager(ctx, manager_address)

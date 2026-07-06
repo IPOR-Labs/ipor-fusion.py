@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from eth_abi import encode
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
 # Top-level imports on purpose — they also exercise the __init__ exports.
 from ipor_fusion import (
@@ -98,6 +99,7 @@ class TestResolveAccessManager:
     @staticmethod
     def _ctx(bytecode: bytes = b"\x60\x80") -> MagicMock:
         ctx = MagicMock()
+        ctx.default_block = "latest"
         ctx.web3.eth.get_code.return_value = bytecode
         return ctx
 
@@ -107,12 +109,42 @@ class TestResolveAccessManager:
         with pytest.raises(ContractNotFoundError, match="No contract found"):
             resolve_access_manager(ctx, VAULT_ADDR)
 
-    def test_not_a_vault_raises(self):
+    def test_get_code_respects_pinned_block(self):
+        ctx = self._ctx(bytecode=b"")
+        ctx.default_block = 12345
+
+        with pytest.raises(ContractNotFoundError, match="at block 12345"):
+            resolve_access_manager(ctx, VAULT_ADDR)
+        ctx.web3.eth.get_code.assert_called_once_with(
+            VAULT_ADDR, block_identifier=12345
+        )
+
+    def test_empty_return_raises_not_a_vault(self):
+        # Fallback-bearing contracts answer the unknown selector with empty
+        # data; the real eth_abi decode raises InsufficientDataBytes.
         ctx = self._ctx()
-        ctx.call.side_effect = Exception("Tried to read 32 bytes, only got 0 bytes.")
+        ctx.call.return_value = b""
 
         with pytest.raises(NotAPlasmaVaultError, match="does not appear"):
             resolve_access_manager(ctx, VAULT_ADDR)
+
+    def test_revert_raises_not_a_vault(self):
+        # Contracts without a fallback revert on the unknown selector.
+        ctx = self._ctx()
+        ctx.call.side_effect = ContractLogicError("execution reverted")
+
+        with pytest.raises(NotAPlasmaVaultError, match="does not appear"):
+            resolve_access_manager(ctx, VAULT_ADDR)
+
+    def test_message_lookalike_propagates(self):
+        # Detection is typed, not string-matched: a generic exception whose
+        # text mimics the decode error must NOT be misclassified.
+        ctx = self._ctx()
+        ctx.call.side_effect = Exception("Tried to read 32 bytes, only got 0 bytes.")
+
+        with pytest.raises(Exception, match="Tried to read") as excinfo:
+            resolve_access_manager(ctx, VAULT_ADDR)
+        assert not isinstance(excinfo.value, NotAPlasmaVaultError)
 
     def test_other_errors_propagate_unchanged(self):
         ctx = self._ctx()
