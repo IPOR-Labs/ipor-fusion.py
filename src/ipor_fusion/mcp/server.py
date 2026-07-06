@@ -4,6 +4,7 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
+from eth_abi.exceptions import InsufficientDataBytes
 from mcp.server.fastmcp import FastMCP
 from web3 import Web3
 
@@ -33,6 +34,7 @@ from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
 from ipor_fusion.mcp.models import (
     ActionResult,
     ConfigShowResponse,
@@ -116,21 +118,24 @@ def vault_info(
     ctx, effective_block = _build_ctx(cfg, chain_id, block_number)
     checksum = Web3.to_checksum_address(vault_address)
 
-    code = ctx.web3.eth.get_code(checksum)
+    code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
     if code in {b"", b"\x00"}:
-        raise ValueError(f"No contract found at {checksum} on chain {chain_id}.")
+        raise ContractNotFoundError(
+            f"No contract found at {checksum} on chain {chain_id}."
+        )
 
     plasma_vault = PlasmaVault(ctx, checksum)
 
     try:
         data = _fetch_vault_data(ctx, plasma_vault, effective_block, chain_id=chain_id)
-    except Exception as exc:
-        if "Tried to read" in str(exc) and "only got 0 bytes" in str(exc):
-            raise ValueError(
-                f"Address {checksum} on chain {chain_id} does not appear to be "
-                f"a Plasma Vault."
-            ) from exc
-        raise
+    except InsufficientDataBytes as exc:
+        # Unlike resolve_access_manager, no ContractLogicError catch here:
+        # _fetch_vault_data spans many calls, and a revert in one of them on a
+        # real vault must not be misdiagnosed as "not a vault".
+        raise NotAPlasmaVaultError(
+            f"Address {checksum} on chain {chain_id} does not appear to be "
+            f"a Plasma Vault."
+        ) from exc
 
     api_key = cfg.etherscan_api_key
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
