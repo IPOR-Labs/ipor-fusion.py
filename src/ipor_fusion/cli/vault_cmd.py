@@ -602,9 +602,9 @@ def _fetch_role_accounts_json(
     ]
 
 
-def _print_role_accounts(ctx: Web3Context, data: _VaultData) -> None:
+def _print_role_accounts(role_accounts: list[dict[str, Any]] | None) -> None:
     click.echo("Role Accounts:")
-    if (role_accounts := _fetch_role_accounts_json(ctx, data)) is None:
+    if role_accounts is None:
         click.echo("  (unavailable — provider could not serve the log scan)")
     else:
         _print_table(
@@ -646,6 +646,12 @@ def _print_vault_info(
         )
         click.echo(json.dumps(result, indent=2))
         return
+
+    # Start the heavy RoleGranted scan now; joined when its section prints.
+    # shutdown(wait=False) only stops new submissions — the task completes.
+    role_pool = ThreadPoolExecutor(max_workers=1)
+    role_accounts_fut = role_pool.submit(_fetch_role_accounts_json, ctx, data)
+    role_pool.shutdown(wait=False)
 
     total_assets_usd = _format_usd(
         data.total_assets, data.asset_decimals, data.asset_price_usd
@@ -730,7 +736,7 @@ def _print_vault_info(
         _print_pending_requests(data, plasma_vault)
     click.echo()
 
-    _print_role_accounts(ctx, data)
+    _print_role_accounts(role_accounts_fut.result())
 
     _print_fuse_section(
         "Fuses",
@@ -1014,6 +1020,9 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
 
     # Resolve fuse contract names in parallel
     with ThreadPoolExecutor() as pool:
+        # The heavy RoleGranted scan overlaps the fetches below; the with-block
+        # exit waits for it, so .result() in the return dict never blocks.
+        role_accounts_fut = pool.submit(_fetch_role_accounts_json, ctx, data)
         fuse_name_futs = {
             addr: pool.submit(get_contract_name, chain_id, addr, api_key)
             for addr in data.fuses
@@ -1350,7 +1359,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             "rewards": data.rewards_manager,
             "withdraw": data.withdraw_manager,
         },
-        "role_accounts": _fetch_role_accounts_json(ctx, data),
+        "role_accounts": role_accounts_fut.result(),
         "withdraw_manager_details": _build_withdraw_manager_json(data, plasma_vault),
         "fuses": fuses_json,
         "balance_fuses": balance_fuses_json,
