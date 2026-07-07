@@ -9,10 +9,12 @@ Design notes:
   position breakdowns) use dict[str, Any] / list[dict[str, Any]] — modelling
   every variant would be brittle without meaningful LLM-side benefit.
 - Models use extra="forbid": any new field added to _build_json_output that
-  is not declared here will fail VaultInfoResponse.model_validate(). This is
-  intentional — it forces CLI dict-builder and MCP model to stay in sync,
-  catching silent drift and typos at test time. See test_mcp_models.py for
-  the contract test that exercises every top-level field.
+  is not declared here will fail VaultInfoResponse.model_validate(). Drift
+  is caught at test time by the producer contract check in
+  test_cli_commands.py::TestVaultInfoJson::test_json_output, which validates
+  the real _build_json_output dict against this model. The samples in
+  test_mcp_models.py document the expected shape but are hand-maintained —
+  on their own they cannot detect producer drift.
 """
 
 from __future__ import annotations
@@ -70,6 +72,14 @@ class FuseEntry(_Base):
     address: str
     contract: str = Field(
         description="Contract name resolved via Etherscan; '?' if unknown."
+    )
+    market_id: int | None = Field(
+        default=None,
+        description="Market this fuse serves; absent when the fuse exposes none.",
+    )
+    market: str | None = Field(
+        default=None,
+        description="Human-readable market name (falls back to the id as string).",
     )
 
 
@@ -135,7 +145,9 @@ class LendingHealth(_Base):
 
 
 class HealthCheck(_Base):
-    ok: bool
+    ok: list[str] = Field(
+        description="Passing-check lines (one per healthy check), not a boolean."
+    )
     warnings: list[str]
     criticals: list[str]
 

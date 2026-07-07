@@ -11,6 +11,7 @@ from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_config
 from ipor_fusion.cli.main import cli, main
 from ipor_fusion.core.withdraw_manager import AccountRequest
 from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
+from ipor_fusion.mcp.models import VaultInfoResponse
 
 ADDR_1 = "0x1111111111111111111111111111111111111111"
 ADDR_2 = "0x2222222222222222222222222222222222222222"
@@ -952,6 +953,14 @@ class TestVaultInfoJson:
         assert len(wmd["pending_requests"]) == 1
         assert wmd["pending_requests"][0]["account"] == ADDR_USER_1
         assert wmd["pending_requests"][0]["can_withdraw"] is True
+
+        # Producer↔model contract check:
+        # - VaultInfoResponse (extra="forbid") must accept the real
+        #   _build_json_output dict verbatim.
+        # - lives here: only this rig runs the real producer (MCP tests mock it away)
+        # - on failure: declare the field in mcp/models.py, update the
+        #   test_mcp_models.py sample — don't loosen the model
+        VaultInfoResponse.model_validate(data)
 
     @patch(
         "ipor_fusion.cli.vault_fetcher.get_deployment_tx",

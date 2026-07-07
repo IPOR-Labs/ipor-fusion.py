@@ -31,9 +31,11 @@ def _amount(raw: int = 0, formatted: str = "0", usd: float | None = None) -> dic
 def _full_vault_info_dict() -> dict:
     """Mirror of cli/vault_cmd.py::_build_json_output with every optional
     block populated (lending positions, withdraw manager, substrates with
-    address+symbol+contract, balance fuses with both Morpho and Aave
-    position breakdowns, ERC20 with full token detail). Keep in sync with
-    the dict literal at the bottom of _build_json_output."""
+    address+symbol+contract, fuses with optional market info, balance fuses
+    with both Morpho and Aave position breakdowns, ERC20 with full token
+    detail). Keep in sync with the dict literal at the bottom of
+    _build_json_output — the sync itself is enforced by the producer contract
+    check in test_cli_commands.py::TestVaultInfoJson::test_json_output."""
     return {
         "vault": "0xVAULT",
         "name": "Test Vault",
@@ -81,7 +83,14 @@ def _full_vault_info_dict() -> dict:
             "pending_requests": [],
         },
         "fuses": [
-            {"address": "0xFUSE1", "contract": "MorphoSupplyFuse"},
+            {
+                "address": "0xFUSE1",
+                "contract": "MorphoSupplyFuse",
+                "market_id": 1,
+                "market": "MORPHO",
+            },
+            # market_id/market are omitted (not None) for market-less fuses.
+            {"address": "0xFUSE2", "contract": "UniversalTokenSwapperFuse"},
         ],
         "balance_fuses": [
             {
@@ -139,7 +148,12 @@ def _full_vault_info_dict() -> dict:
             },
         ],
         "instant_withdrawal_fuses": [
-            {"address": "0xIW1", "contract": "ERC4626SupplyFuse"},
+            {
+                "address": "0xIW1",
+                "contract": "ERC4626SupplyFuse",
+                "market_id": 5,
+                "market": "ERC4626",
+            },
         ],
         "substrates": {
             "MORPHO (1)": [
@@ -201,7 +215,12 @@ def _full_vault_info_dict() -> dict:
                 "execution_delay": 0,
             }
         ],
-        "health_check": {"ok": True, "warnings": [], "criticals": []},
+        # `ok` is a list of passing-check lines, not a boolean.
+        "health_check": {
+            "ok": ["morpho WETH/USDC: LTV 0.50/0.86, health_factor=1.72"],
+            "warnings": [],
+            "criticals": [],
+        },
     }
 
 
@@ -213,6 +232,12 @@ class TestVaultInfoResponseContract:
         assert result.zero_balance_fuses[0].contract == "ZeroBalanceFuse"
         assert result.lending_health is not None
         assert result.reconciliation.delta.percent == 0.0
+        assert result.fuses[0].market_id == 1
+        assert result.fuses[0].market == "MORPHO"
+        assert result.fuses[1].market_id is None
+        assert result.health_check.ok == [
+            "morpho WETH/USDC: LTV 0.50/0.86, health_factor=1.72"
+        ]
 
     def test_minimal_dict_validates(self):
         """All optional sections set to None/empty."""
