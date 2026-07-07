@@ -4,7 +4,6 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
-from eth_abi.exceptions import InsufficientDataBytes
 from web3 import Web3
 
 from ipor_fusion import (
@@ -275,39 +274,32 @@ class TestVaultRoleAccounts:
 
 
 class TestVaultInfoGuards:
-    @staticmethod
-    def _ctx(bytecode: bytes = b"\x60\x80") -> MagicMock:
-        ctx = MagicMock()
-        ctx.web3.eth.get_code.return_value = bytecode
-        return ctx
-
-    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.resolve_access_manager",
+        side_effect=ContractNotFoundError("No contract found at 0x22... on chain 1."),
+    )
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
     @patch(
         "ipor_fusion.mcp.server.load_config",
         return_value=_config_with_provider(),
     )
-    def test_no_contract_raises_typed(self, _load, mock_build_ctx):
-        ctx = self._ctx(bytecode=b"")
-        mock_build_ctx.return_value = (ctx, None)
-
+    def test_no_contract_raises_typed(self, _load, _ctx, mock_resolve):
         with pytest.raises(ContractNotFoundError, match="No contract found"):
             vault_info(vault_address=VAULT_ADDR, chain_id=1)
-        ctx.web3.eth.get_code.assert_called_once_with(
-            Web3.to_checksum_address(VAULT_ADDR), block_identifier=ctx.default_block
-        )
+        # The probe receives the checksummed address.
+        mock_resolve.assert_called_once()
+        assert mock_resolve.call_args.args[1] == Web3.to_checksum_address(VAULT_ADDR)
 
     @patch(
-        "ipor_fusion.mcp.server._fetch_vault_data",
-        side_effect=InsufficientDataBytes("Tried to read 32 bytes, only got 0 bytes."),
+        "ipor_fusion.mcp.server.resolve_access_manager",
+        side_effect=NotAPlasmaVaultError("does not appear to be a Plasma Vault"),
     )
-    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
     @patch(
         "ipor_fusion.mcp.server.load_config",
         return_value=_config_with_provider(),
     )
-    def test_empty_decode_raises_not_a_vault(self, _load, mock_build_ctx, _fetch):
-        mock_build_ctx.return_value = (self._ctx(), None)
-
+    def test_not_a_vault_raises_typed(self, _load, _ctx, _resolve):
         with pytest.raises(NotAPlasmaVaultError, match="does not appear"):
             vault_info(vault_address=VAULT_ADDR, chain_id=1)
 
@@ -315,14 +307,13 @@ class TestVaultInfoGuards:
         "ipor_fusion.mcp.server._fetch_vault_data",
         side_effect=RuntimeError("some sub-call failed"),
     )
-    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch("ipor_fusion.mcp.server.resolve_access_manager")
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
     @patch(
         "ipor_fusion.mcp.server.load_config",
         return_value=_config_with_provider(),
     )
-    def test_other_fetch_errors_propagate(self, _load, mock_build_ctx, _fetch):
-        mock_build_ctx.return_value = (self._ctx(), None)
-
+    def test_other_fetch_errors_propagate(self, _load, _ctx, _resolve, _fetch):
         with pytest.raises(RuntimeError, match="some sub-call failed"):
             vault_info(vault_address=VAULT_ADDR, chain_id=1)
 
