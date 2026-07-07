@@ -10,6 +10,7 @@ from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_config
 from ipor_fusion.cli.main import cli, main
 from ipor_fusion.core.withdraw_manager import AccountRequest
+from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
 
 ADDR_1 = "0x1111111111111111111111111111111111111111"
 ADDR_2 = "0x2222222222222222222222222222222222222222"
@@ -244,7 +245,87 @@ class TestVaultRemove:
         assert "Vault not found" in result.output
 
 
+class TestVaultInfoGuards:
+    @staticmethod
+    def _setup(mock_ctx_cls) -> None:
+        save_config(FusionConfig(providers={"1": "https://rpc.example.com"}))
+        mock_ctx_cls.from_url.return_value = MagicMock()
+
+    @patch(
+        "ipor_fusion.cli.vault_cmd.resolve_access_manager",
+        side_effect=ContractNotFoundError(
+            f"No contract deployed at {ADDR_1} (as of block 123)."
+        ),
+    )
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_no_contract_is_usage_error(self, mock_ctx_cls, _resolve, tmp_config):
+        self._setup(mock_ctx_cls)
+
+        result = CliRunner().invoke(
+            cli,
+            ["vault", "info", ADDR_1, "--chain-id", "1", "--block-number", "123"],
+        )
+
+        assert result.exit_code != 0
+        assert "No contract deployed" in result.output
+        assert "as of block 123" in result.output
+        assert "Traceback" not in result.output
+
+    @patch(
+        "ipor_fusion.cli.vault_cmd.resolve_access_manager",
+        side_effect=NotAPlasmaVaultError(
+            f"{ADDR_1} does not appear to be a Plasma Vault."
+        ),
+    )
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_not_a_vault_is_usage_error(self, mock_ctx_cls, _resolve, tmp_config):
+        self._setup(mock_ctx_cls)
+
+        result = CliRunner().invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
+
+        assert result.exit_code != 0
+        assert "does not appear to be a Plasma Vault" in result.output
+        assert "Traceback" not in result.output
+
+    @patch(
+        "ipor_fusion.cli.vault_cmd.resolve_access_manager",
+        side_effect=NotAPlasmaVaultError("not a vault"),
+    )
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_probe_runs_before_auto_save(self, mock_ctx_cls, _resolve, tmp_config):
+        # Regression: `vault info <ERC20>` must not auto-save the token as a
+        # vault — the probe rejects it before _auto_save_vault runs.
+        self._setup(mock_ctx_cls)
+
+        result = CliRunner().invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
+
+        assert result.exit_code != 0
+        cfg_data = json.loads(tmp_config[1].read_text(encoding="utf-8"))
+        assert cfg_data["vaults"] == []
+
+    @patch(
+        "ipor_fusion.cli.vault_cmd._fetch_vault_data",
+        side_effect=RuntimeError("sub-call failed"),
+    )
+    @patch("ipor_fusion.cli.vault_cmd.resolve_access_manager")
+    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    def test_other_fetch_errors_not_misdiagnosed(
+        self, mock_ctx_cls, _resolve, _fetch, tmp_config
+    ):
+        self._setup(mock_ctx_cls)
+
+        result = CliRunner().invoke(cli, ["vault", "info", ADDR_1, "--chain-id", "1"])
+
+        assert result.exit_code != 0
+        assert "does not appear" not in result.output
+
+
 class TestVaultInfo:
+    @pytest.fixture(autouse=True)
+    def _pass_vault_probe(self):
+        with patch("ipor_fusion.cli.vault_cmd.resolve_access_manager"):
+            yield
+
     @patch("ipor_fusion.cli.vault_fetcher.WithdrawManager")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
@@ -707,6 +788,11 @@ class TestVaultListJson:
 
 
 class TestVaultInfoJson:
+    @pytest.fixture(autouse=True)
+    def _pass_vault_probe(self):
+        with patch("ipor_fusion.cli.vault_cmd.resolve_access_manager"):
+            yield
+
     @patch("ipor_fusion.cli.vault_fetcher._fetch_aave_positions", return_value=None)
     @patch("ipor_fusion.cli.vault_fetcher._fetch_morpho_positions", return_value=None)
     @patch("ipor_fusion.cli.vault_fetcher.WithdrawManager")

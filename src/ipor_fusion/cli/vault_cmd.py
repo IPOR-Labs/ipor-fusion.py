@@ -352,6 +352,15 @@ def info(
     cfg = load_config()
     chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
     checksum_address = Web3.to_checksum_address(vault_address)
+
+    # Cheap single-call probe: friendly errors for "nothing deployed here" and
+    # "not a Plasma Vault" (revert and empty-return flavors alike) before the
+    # expensive fetch — and before auto-save can store a non-vault.
+    try:
+        resolve_access_manager(ctx, vault_address)
+    except (ContractNotFoundError, NotAPlasmaVaultError) as exc:
+        raise click.UsageError(str(exc)) from exc
+
     plasma_vault = PlasmaVault(ctx, checksum_address)
 
     _auto_save_vault(cfg, vault_address, chain_id, plasma_vault)
