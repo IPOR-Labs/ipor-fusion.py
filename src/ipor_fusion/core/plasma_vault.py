@@ -142,6 +142,18 @@ class PlasmaVault(ContractWrapper):
             "removeBalanceFuse(uint256,address)", market_id, balance_fuse
         )
 
+    def update_dependency_balance_graphs(
+        self, market_ids: list[MarketId], dependencies: list[list[MarketId]]
+    ) -> Call[None]:
+        """FUSE_MANAGER-only: `dependencies[i]` replaces the full dependency list
+        of `market_ids[i]`. After `execute()` touches a market, the vault
+        re-measures it plus its graph neighbours."""
+        return self._write(
+            "updateDependencyBalanceGraphs(uint256[],uint256[][])",
+            list(market_ids),
+            [list(deps) for deps in dependencies],
+        )
+
     def setup_markets_limits(self, limits: list[tuple[MarketId, Amount]]) -> Call[None]:
         """ATOMIST-only: set per-market cap in the underlying asset's smallest unit."""
         return self._write("setupMarketsLimits((uint256,uint256)[])", list(limits))

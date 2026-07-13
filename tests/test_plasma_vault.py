@@ -105,6 +105,40 @@ class TestPlasmaVaultSendMethods:
         sent_to, _ = ctx.send.call_args[0]
         assert sent_to == VAULT_ADDR
 
+    def test_update_dependency_balance_graphs(self):
+        vault, ctx = _make_vault()
+        ctx.send.return_value = {"status": 1}
+
+        result = vault.update_dependency_balance_graphs(
+            [MarketId(1202), MarketId(41)], [[MarketId(7)], [MarketId(7)]]
+        ).send()
+
+        assert result == {"status": 1}
+        ctx.send.assert_called_once()
+        sent_to, sent_data = ctx.send.call_args[0]
+        assert sent_to == VAULT_ADDR
+        selector = Web3.keccak(
+            text="updateDependencyBalanceGraphs(uint256[],uint256[][])"
+        )[:4]
+        assert sent_data == selector + encode(
+            ["uint256[]", "uint256[][]"], [[1202, 41], [[7], [7]]]
+        )
+
+    def test_update_dependency_balance_graphs_empty(self):
+        vault, ctx = _make_vault()
+        ctx.send.return_value = {"status": 1}
+
+        result = vault.update_dependency_balance_graphs([], []).send()
+
+        assert result == {"status": 1}
+        ctx.send.assert_called_once()
+        sent_to, sent_data = ctx.send.call_args[0]
+        assert sent_to == VAULT_ADDR
+        selector = Web3.keccak(
+            text="updateDependencyBalanceGraphs(uint256[],uint256[][])"
+        )[:4]
+        assert sent_data == selector + encode(["uint256[]", "uint256[][]"], [[], []])
+
     def test_set_total_supply_cap(self):
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
