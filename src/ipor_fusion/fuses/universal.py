@@ -1,11 +1,40 @@
+from enum import Enum, auto
+
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import Fuse, FuseAction
 from ipor_fusion.types import Amount
 
 
+class UniversalTokenSwapperAbi(Enum):
+    """ABI revision of the deployed UniversalTokenSwapperFuse contract.
+
+    Deployed fuses are immutable, so both revisions coexist across chains:
+    older deployments (e.g. Base) accept only the LEGACY signature, newer
+    ones (e.g. HyperEVM, markets 12 and 1202) only the MIN_AMOUNT_OUT one.
+    Pick the member matching the fuse address this instance is bound to.
+    """
+
+    LEGACY = auto()
+    MIN_AMOUNT_OUT = auto()
+
+
 class UniversalTokenSwapperFuse(Fuse):
     """Fuse for executing arbitrary token swaps through whitelisted DEX targets."""
+
+    def __init__(
+        self,
+        address: ChecksumAddress,
+        abi: UniversalTokenSwapperAbi = UniversalTokenSwapperAbi.LEGACY,
+    ):
+        super().__init__(address)
+        self._abi = abi
+
+    def __eq__(self, other: object) -> bool:
+        return super().__eq__(other) and self._abi is other._abi  # type: ignore[attr-defined]
+
+    def __hash__(self) -> int:
+        return hash((type(self), self._address, self._abi))
 
     def swap(
         self,
@@ -15,6 +44,7 @@ class UniversalTokenSwapperFuse(Fuse):
         amount_in: Amount,
         targets: list[ChecksumAddress],
         data: list[bytes],
+        min_amount_out: Amount | None = None,
     ) -> FuseAction:
         self._validate_address(token_in, "token_in")
         self._validate_address(token_out, "token_out")
@@ -23,7 +53,25 @@ class UniversalTokenSwapperFuse(Fuse):
             raise ValueError(
                 f"targets and data must have the same length, got {len(targets)} and {len(data)}"
             )
+        if self._abi is UniversalTokenSwapperAbi.LEGACY:
+            if min_amount_out is not None:
+                raise ValueError(
+                    "min_amount_out requires abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT"
+                )
+            return self._action_raw(
+                "enter((address,address,uint256,(address[],bytes[])))",
+                [[token_in, token_out, amount_in, [targets, data]]],
+            )
+        if min_amount_out is None:
+            raise ValueError(
+                "min_amount_out is required with abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT"
+                " (pass 0 to rely on the vault-side slippage cap only)"
+            )
+        if min_amount_out < 0:
+            raise ValueError(
+                f"min_amount_out must not be negative, got {min_amount_out}"
+            )
         return self._action_raw(
-            "enter((address,address,uint256,(address[],bytes[])))",
-            [[token_in, token_out, amount_in, [targets, data]]],
+            "enter((address,address,uint256,uint256,(address[],bytes[])))",
+            [[token_in, token_out, amount_in, min_amount_out, [targets, data]]],
         )

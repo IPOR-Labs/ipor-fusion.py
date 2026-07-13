@@ -97,6 +97,7 @@ from ipor_fusion.fuses import (
     UniswapV3NewPositionEvent,
     UniswapV3NewPositionFuse,
     UniswapV3SwapFuse,
+    UniversalTokenSwapperAbi,
     UniversalTokenSwapperFuse,
     euler_substrate,
 )
@@ -212,6 +213,7 @@ __all__ = [
     "GearboxSupplyFuse",
     "GearboxStakeFuse",
     "ERC4626SupplyFuse",
+    "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "FluidInstadappSupplyFuse",
     "FluidInstadappStakingFuse",
