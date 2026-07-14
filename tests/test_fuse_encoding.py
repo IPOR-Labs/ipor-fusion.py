@@ -54,6 +54,7 @@ from ipor_fusion.fuses.uniswap_v3 import (
 from ipor_fusion.fuses.universal import (
     UniversalTokenSwapperAbi,
     UniversalTokenSwapperFuse,
+    UniversalTokenSwapperSubstrates,
 )
 from ipor_fusion.types import MAX_UINT256
 
@@ -693,6 +694,33 @@ class TestFluidInstadappStakingFuse:
 
 
 # ── UniversalTokenSwapper ──────────────────────────────────────────────
+
+
+class TestUniversalTokenSwapperSubstrates:
+    """Mirror of UniversalTokenSwapperSubstrateLib.sol: tag << 248 | payload."""
+
+    def test_token(self):
+        encoded = UniversalTokenSwapperSubstrates.token(TOKEN_A)
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (1 << 248) | int(TOKEN_A, 16)
+
+    def test_target(self):
+        encoded = UniversalTokenSwapperSubstrates.target(TOKEN_B)
+        assert int.from_bytes(encoded, "big") == (2 << 248) | int(TOKEN_B, 16)
+
+    def test_slippage(self):
+        encoded = UniversalTokenSwapperSubstrates.slippage(10**16)
+        assert int.from_bytes(encoded, "big") == (3 << 248) | 10**16
+
+    def test_slippage_out_of_range(self):
+        with pytest.raises(ValueError, match="out of range"):
+            UniversalTokenSwapperSubstrates.slippage(1 << 248)
+        with pytest.raises(ValueError, match="out of range"):
+            UniversalTokenSwapperSubstrates.slippage(-1)
+
+    def test_malformed_address(self):
+        with pytest.raises(ValueError, match="20-byte"):
+            UniversalTokenSwapperSubstrates.token("0x1234")  # type: ignore[arg-type]
 
 
 class TestUniversalTokenSwapperFuse:
