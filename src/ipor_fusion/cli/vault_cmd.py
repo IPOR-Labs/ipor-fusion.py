@@ -56,7 +56,7 @@ from ipor_fusion.core.access import (
 )
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
+from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
 
 
 class AddressType(click.ParamType):
@@ -358,7 +358,7 @@ def info(
     # expensive fetch — and before auto-save can store a non-vault.
     try:
         resolve_access_manager(ctx, vault_address)
-    except (ContractNotFoundError, NotAPlasmaVaultError) as exc:
+    except (ContractNotFoundError, NotPlasmaVaultError) as exc:
         raise click.UsageError(str(exc)) from exc
 
     plasma_vault = PlasmaVault(ctx, checksum_address)
@@ -410,7 +410,7 @@ def role_accounts(
 
     try:
         manager = resolve_access_manager(ctx, vault_address)
-    except (ContractNotFoundError, NotAPlasmaVaultError) as exc:
+    except (ContractNotFoundError, NotPlasmaVaultError) as exc:
         raise click.UsageError(str(exc)) from exc
 
     try:

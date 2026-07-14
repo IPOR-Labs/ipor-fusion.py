@@ -11,7 +11,7 @@ from web3.exceptions import ContractLogicError
 from ipor_fusion import (
     AccessManager,
     ContractNotFoundError,
-    NotAPlasmaVaultError,
+    NotPlasmaVaultError,
     RoleAccount,
     resolve_access_manager,
     role_account_sort_key,
@@ -163,7 +163,7 @@ class TestResolveAccessManager:
         ctx = self._ctx()
         ctx.call.return_value = b""
 
-        with pytest.raises(NotAPlasmaVaultError, match="does not appear"):
+        with pytest.raises(NotPlasmaVaultError, match="does not appear"):
             resolve_access_manager(ctx, VAULT_ADDR)
 
     def test_revert_raises_not_a_vault(self):
@@ -171,7 +171,7 @@ class TestResolveAccessManager:
         ctx = self._ctx()
         ctx.call.side_effect = ContractLogicError("execution reverted")
 
-        with pytest.raises(NotAPlasmaVaultError, match="does not appear"):
+        with pytest.raises(NotPlasmaVaultError, match="does not appear"):
             resolve_access_manager(ctx, VAULT_ADDR)
 
     def test_message_lookalike_propagates(self):
@@ -182,7 +182,7 @@ class TestResolveAccessManager:
 
         with pytest.raises(Exception, match="Tried to read") as excinfo:
             resolve_access_manager(ctx, VAULT_ADDR)
-        assert not isinstance(excinfo.value, NotAPlasmaVaultError)
+        assert not isinstance(excinfo.value, NotPlasmaVaultError)
 
     def test_other_errors_propagate_unchanged(self):
         ctx = self._ctx()

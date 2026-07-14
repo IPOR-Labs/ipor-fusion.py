@@ -8,7 +8,7 @@ from web3 import Web3
 
 from ipor_fusion import (
     ContractNotFoundError,
-    NotAPlasmaVaultError,
+    NotPlasmaVaultError,
     RoleAccount,
 )
 from ipor_fusion.cli.morpho_api import (
@@ -253,7 +253,7 @@ class TestVaultRoleAccounts:
 
     @patch(
         "ipor_fusion.mcp.server.resolve_access_manager",
-        side_effect=NotAPlasmaVaultError("not a vault"),
+        side_effect=NotPlasmaVaultError("not a vault"),
     )
     @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
     @patch(
@@ -261,7 +261,7 @@ class TestVaultRoleAccounts:
         return_value=_config_with_provider(),
     )
     def test_guard_errors_propagate(self, _load, _ctx, _resolve):
-        with pytest.raises(NotAPlasmaVaultError, match="not a vault"):
+        with pytest.raises(NotPlasmaVaultError, match="not a vault"):
             vault_role_accounts(vault_address=VAULT_ADDR)
 
     def test_description_lists_roles(self):
@@ -292,7 +292,7 @@ class TestVaultInfoGuards:
 
     @patch(
         "ipor_fusion.mcp.server.resolve_access_manager",
-        side_effect=NotAPlasmaVaultError("does not appear to be a Plasma Vault"),
+        side_effect=NotPlasmaVaultError("does not appear to be a Plasma Vault"),
     )
     @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
     @patch(
@@ -300,7 +300,7 @@ class TestVaultInfoGuards:
         return_value=_config_with_provider(),
     )
     def test_not_a_vault_raises_typed(self, _load, _ctx, _resolve):
-        with pytest.raises(NotAPlasmaVaultError, match="does not appear"):
+        with pytest.raises(NotPlasmaVaultError, match="does not appear"):
             vault_info(vault_address=VAULT_ADDR, chain_id=1)
 
     @patch(

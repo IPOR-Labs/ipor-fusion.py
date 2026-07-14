@@ -117,7 +117,7 @@ def vault_info(
     checksum = Web3.to_checksum_address(vault_address)
 
     # Cheap single-call probe: raises the typed ContractNotFoundError /
-    # NotAPlasmaVaultError ("not a vault" in both revert and empty-return
+    # NotPlasmaVaultError ("not a vault" in both revert and empty-return
     # flavors) before the expensive fetch. The fetch itself stays catch-free:
     # once the probe passes, any later failure is a real error on a real
     # vault and must stay loud.

@@ -13,7 +13,7 @@ from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
+from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
 from ipor_fusion.types import Period, RoleId
 
 
@@ -156,7 +156,7 @@ def resolve_access_manager(
     """Resolve a vault address to its AccessManager, with typed guards.
 
     Raises ContractNotFoundError when no code is deployed at the address (as
-    of ctx.default_block), and NotAPlasmaVaultError when the contract does not
+    of ctx.default_block), and NotPlasmaVaultError when the contract does not
     expose getAccessManagerAddress() — either an empty eth_call return
     (InsufficientDataBytes on decode) or a revert (ContractLogicError).
     Provider/transport errors propagate unchanged.
@@ -175,7 +175,7 @@ def resolve_access_manager(
     try:
         manager_address = PlasmaVault(ctx, checksum).get_access_manager_address().call()
     except (InsufficientDataBytes, ContractLogicError) as exc:
-        raise NotAPlasmaVaultError(
+        raise NotPlasmaVaultError(
             f"Address {checksum} on chain {ctx.chain_id} does not appear "
             f"to be a Plasma Vault."
         ) from exc
