@@ -1,15 +1,46 @@
 """Tests for the MCP server tool definitions (direct SDK import)."""
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
+import pytest
+from web3 import Web3
+
+from ipor_fusion import (
+    ContractNotFoundError,
+    NotAPlasmaVaultError,
+    RoleAccount,
+)
+from ipor_fusion.cli.morpho_api import (
+    MorphoApiError,
+    MorphoApiMarket,
+    VaultAllocation,
+    VaultFlowCap,
+    VaultV1Info,
+    VaultV1MarketAllocation,
+    VaultV2Adapter,
+    VaultV2Cap,
+    VaultV2Info,
+)
 from ipor_fusion.mcp.server import (
     config_set_etherscan_key,
     config_set_provider,
     config_show,
+    market_meta_morpho,
+    market_morpho_blue,
+    mcp,
     vault_add,
+    vault_info,
     vault_list,
     vault_remove,
+    vault_role_accounts,
 )
+from ipor_fusion.readers.morpho import (
+    MorphoMarket,
+    MorphoMarketParams,
+    MorphoMarketRates,
+)
+from ipor_fusion.types import Period, RoleId
 
 
 def _empty_config():
@@ -143,29 +174,152 @@ class TestVaultRemove:
         assert "not found" in result.message.lower()
 
 
+# ── vault_role_accounts ───────────────────────────────────────────────
+
+
+VAULT_ADDR = "0x" + "22" * 20
+
+
+def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:
+    return RoleAccount(
+        account=account,  # type: ignore[arg-type]
+        role_id=RoleId(role_id),
+        is_member=True,
+        execution_delay=Period(delay),
+    )
+
+
+def _mock_manager(accounts: list[RoleAccount]) -> MagicMock:
+    manager = MagicMock()
+    manager.address = "0xAM"
+    manager.get_all_role_accounts.return_value = accounts
+    manager.get_accounts_with_role.return_value = accounts
+    return manager
+
+
+class TestVaultRoleAccounts:
+    @patch("ipor_fusion.mcp.server.resolve_access_manager")
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_all_roles(self, _load, _ctx, mock_resolve):
+        manager = _mock_manager(
+            [_role_account(100, "0xBBBB"), _role_account(1, "0xaaaa", delay=60)]
+        )
+        mock_resolve.return_value = manager
+
+        result = vault_role_accounts(vault_address=VAULT_ADDR)
+
+        manager.get_all_role_accounts.assert_called_once()
+        manager.get_accounts_with_role.assert_not_called()
+        assert result.role_filter is None
+        assert result.access_manager == "0xAM"
+        assert result.chain_id == 1  # single-provider fallback
+        assert [
+            (e.account, e.role_id, e.role_name, e.execution_delay)
+            for e in result.accounts
+        ] == [
+            ("0xaaaa", 1, "OWNER_ROLE", 60),
+            ("0xBBBB", 100, "ATOMIST_ROLE", 0),
+        ]
+
+    @patch("ipor_fusion.mcp.server.resolve_access_manager")
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_filtered_by_normalized_name(self, _load, _ctx, mock_resolve):
+        manager = _mock_manager([_role_account(100, "0xBBBB")])
+        mock_resolve.return_value = manager
+
+        result = vault_role_accounts(vault_address=VAULT_ADDR, role="atomist")
+
+        manager.get_accounts_with_role.assert_called_once_with(100)
+        manager.get_all_role_accounts.assert_not_called()
+        assert result.role_filter == "ATOMIST_ROLE"
+
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_unknown_role_fails_before_rpc(self, _load, mock_ctx):
+        with pytest.raises(ValueError, match="Valid: ADMIN_ROLE"):
+            vault_role_accounts(vault_address=VAULT_ADDR, role="archbishop")
+        mock_ctx.assert_not_called()
+
+    @patch(
+        "ipor_fusion.mcp.server.resolve_access_manager",
+        side_effect=NotAPlasmaVaultError("not a vault"),
+    )
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_guard_errors_propagate(self, _load, _ctx, _resolve):
+        with pytest.raises(NotAPlasmaVaultError, match="not a vault"):
+            vault_role_accounts(vault_address=VAULT_ADDR)
+
+    def test_description_lists_roles(self):
+        # Verifies description= reached FastMCP and guards role-list drift.
+        tools = asyncio.run(mcp.list_tools())
+        tool = next(t for t in tools if t.name == "vault_role_accounts")
+        assert tool.description is not None
+        assert "ATOMIST_ROLE" in tool.description
+        assert "PUBLIC_ROLE" in tool.description
+
+
+class TestVaultInfoGuards:
+    @patch(
+        "ipor_fusion.mcp.server.resolve_access_manager",
+        side_effect=ContractNotFoundError("No contract found at 0x22... on chain 1."),
+    )
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_no_contract_raises_typed(self, _load, _ctx, mock_resolve):
+        with pytest.raises(ContractNotFoundError, match="No contract found"):
+            vault_info(vault_address=VAULT_ADDR, chain_id=1)
+        # The probe receives the checksummed address.
+        mock_resolve.assert_called_once()
+        assert mock_resolve.call_args.args[1] == Web3.to_checksum_address(VAULT_ADDR)
+
+    @patch(
+        "ipor_fusion.mcp.server.resolve_access_manager",
+        side_effect=NotAPlasmaVaultError("does not appear to be a Plasma Vault"),
+    )
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_not_a_vault_raises_typed(self, _load, _ctx, _resolve):
+        with pytest.raises(NotAPlasmaVaultError, match="does not appear"):
+            vault_info(vault_address=VAULT_ADDR, chain_id=1)
+
+    @patch(
+        "ipor_fusion.mcp.server._fetch_vault_data",
+        side_effect=RuntimeError("some sub-call failed"),
+    )
+    @patch("ipor_fusion.mcp.server.resolve_access_manager")
+    @patch("ipor_fusion.mcp.server._build_ctx", return_value=(MagicMock(), None))
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_other_fetch_errors_propagate(self, _load, _ctx, _resolve, _fetch):
+        with pytest.raises(RuntimeError, match="some sub-call failed"):
+            vault_info(vault_address=VAULT_ADDR, chain_id=1)
+
+
 # ── market tools ──────────────────────────────────────────────────────
 
-
-from ipor_fusion.cli.morpho_api import (  # noqa: E402
-    MorphoApiError,
-    MorphoApiMarket,
-    VaultAllocation,
-    VaultFlowCap,
-    VaultV1Info,
-    VaultV1MarketAllocation,
-    VaultV2Adapter,
-    VaultV2Cap,
-    VaultV2Info,
-)
-from ipor_fusion.mcp.server import (  # noqa: E402
-    market_meta_morpho,
-    market_morpho_blue,
-)
-from ipor_fusion.readers.morpho import (  # noqa: E402
-    MorphoMarket,
-    MorphoMarketParams,
-    MorphoMarketRates,
-)
 
 _MARKET_ID = "ad656d430bb3d8c1469bf45c8ad4ebae1b04be04757c69fa424eec78d7b3f4dc"
 _LOAN = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"

@@ -10,15 +10,18 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.mcp.models import (
     Amount,
     ConfigShowResponse,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     Reconciliation,
+    RoleAccountsResponse,
     VaultInfoResponse,
     VaultListEntry,
 )
+from ipor_fusion.types import Period, RoleId
 
 
 def _amount(raw: int = 0, formatted: str = "0", usd: float | None = None) -> dict:
@@ -28,9 +31,11 @@ def _amount(raw: int = 0, formatted: str = "0", usd: float | None = None) -> dic
 def _full_vault_info_dict() -> dict:
     """Mirror of cli/vault_cmd.py::_build_json_output with every optional
     block populated (lending positions, withdraw manager, substrates with
-    address+symbol+contract, balance fuses with both Morpho and Aave
-    position breakdowns, ERC20 with full token detail). Keep in sync with
-    the dict literal at the bottom of _build_json_output."""
+    address+symbol+contract, fuses with optional market info, balance fuses
+    with both Morpho and Aave position breakdowns, ERC20 with full token
+    detail). Keep in sync with the dict literal at the bottom of
+    _build_json_output — the sync itself is enforced by the producer contract
+    check in test_cli_commands.py::TestVaultInfoJson::test_json_output."""
     return {
         "vault": "0xVAULT",
         "name": "Test Vault",
@@ -78,7 +83,14 @@ def _full_vault_info_dict() -> dict:
             "pending_requests": [],
         },
         "fuses": [
-            {"address": "0xFUSE1", "contract": "MorphoSupplyFuse"},
+            {
+                "address": "0xFUSE1",
+                "contract": "MorphoSupplyFuse",
+                "market_id": 1,
+                "market": "MORPHO",
+            },
+            # market_id/market are omitted (not None) for market-less fuses.
+            {"address": "0xFUSE2", "contract": "UniversalTokenSwapperFuse"},
         ],
         "balance_fuses": [
             {
@@ -136,7 +148,12 @@ def _full_vault_info_dict() -> dict:
             },
         ],
         "instant_withdrawal_fuses": [
-            {"address": "0xIW1", "contract": "ERC4626SupplyFuse"},
+            {
+                "address": "0xIW1",
+                "contract": "ERC4626SupplyFuse",
+                "market_id": 5,
+                "market": "ERC4626",
+            },
         ],
         "substrates": {
             "MORPHO (1)": [
@@ -189,7 +206,21 @@ def _full_vault_info_dict() -> dict:
             ],
             "worst_ltv_usage_percent": 58.1,
         },
-        "health_check": {"ok": True, "warnings": []},
+        "role_accounts": [
+            {
+                "account": "0xOWNER",
+                "role_id": 1,
+                "role_name": "OWNER_ROLE",
+                "is_member": True,
+                "execution_delay": 0,
+            }
+        ],
+        # `ok` is a list of passing-check lines, not a boolean.
+        "health_check": {
+            "ok": ["morpho WETH/USDC: LTV 0.50/0.86, health_factor=1.72"],
+            "warnings": [],
+            "criticals": [],
+        },
     }
 
 
@@ -201,6 +232,12 @@ class TestVaultInfoResponseContract:
         assert result.zero_balance_fuses[0].contract == "ZeroBalanceFuse"
         assert result.lending_health is not None
         assert result.reconciliation.delta.percent == 0.0
+        assert result.fuses[0].market_id == 1
+        assert result.fuses[0].market == "MORPHO"
+        assert result.fuses[1].market_id is None
+        assert result.health_check.ok == [
+            "morpho WETH/USDC: LTV 0.50/0.86, health_factor=1.72"
+        ]
 
     def test_minimal_dict_validates(self):
         """All optional sections set to None/empty."""
@@ -211,6 +248,7 @@ class TestVaultInfoResponseContract:
         d["withdraw_manager_details"] = None
         d["dependency_graph"] = None
         d["lending_health"] = None
+        d["role_accounts"] = None
         d["balance_fuses"] = []
         d["substrates"] = {}
         d["erc20_balances"] = []
@@ -469,3 +507,63 @@ class TestSimpleResponseContracts:
         }
         recon = Reconciliation.model_validate(d)
         assert recon.implied_market_total.usd is None
+
+
+def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:
+    return RoleAccount(
+        account=account,  # type: ignore[arg-type]
+        role_id=RoleId(role_id),
+        is_member=True,
+        execution_delay=Period(delay),
+    )
+
+
+class TestRoleAccountsResponse:
+    def test_from_role_accounts_maps_and_sorts(self):
+        accounts = [
+            _role_account(100, "0xBBBB", delay=60),
+            _role_account(1, "0xaaaa"),
+            _role_account(2, "0xaaaa"),
+        ]
+
+        resp = RoleAccountsResponse.from_role_accounts(
+            accounts,
+            vault="0xVAULT",
+            access_manager="0xAM",
+            chain_id=1,
+            role_filter=None,
+        )
+
+        # Sorted by (account.lower(), role_id); role_name resolved via the enum.
+        assert [(e.account, e.role_id) for e in resp.accounts] == [
+            ("0xaaaa", 1),
+            ("0xaaaa", 2),
+            ("0xBBBB", 100),
+        ]
+        assert resp.accounts[2].role_name == "ATOMIST_ROLE"
+        assert resp.accounts[2].execution_delay == 60
+        assert resp.role_filter is None
+
+    def test_role_filter_echo(self):
+        resp = RoleAccountsResponse.from_role_accounts(
+            [],
+            vault="0xVAULT",
+            access_manager="0xAM",
+            chain_id=1,
+            role_filter="ATOMIST_ROLE",
+        )
+        assert resp.role_filter == "ATOMIST_ROLE"
+        assert resp.accounts == []
+
+    def test_rejects_unknown_field(self):
+        with pytest.raises(ValidationError):
+            RoleAccountsResponse.model_validate(
+                {
+                    "vault": "0xVAULT",
+                    "access_manager": "0xAM",
+                    "chain_id": 1,
+                    "role_filter": None,
+                    "accounts": [],
+                    "extra": "no",
+                }
+            )

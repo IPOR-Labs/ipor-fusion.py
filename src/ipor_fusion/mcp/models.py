@@ -9,17 +9,22 @@ Design notes:
   position breakdowns) use dict[str, Any] / list[dict[str, Any]] — modelling
   every variant would be brittle without meaningful LLM-side benefit.
 - Models use extra="forbid": any new field added to _build_json_output that
-  is not declared here will fail VaultInfoResponse.model_validate(). This is
-  intentional — it forces CLI dict-builder and MCP model to stay in sync,
-  catching silent drift and typos at test time. See test_mcp_models.py for
-  the contract test that exercises every top-level field.
+  is not declared here will fail VaultInfoResponse.model_validate(). Drift
+  is caught at test time by the producer contract check in
+  test_cli_commands.py::TestVaultInfoJson::test_json_output, which validates
+  the real _build_json_output dict against this model. The samples in
+  test_mcp_models.py document the expected shape but are hand-maintained —
+  on their own they cannot detect producer drift.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from ipor_fusion.core.access import RoleAccount
 
 
 class _Base(BaseModel):
@@ -67,6 +72,14 @@ class FuseEntry(_Base):
     address: str
     contract: str = Field(
         description="Contract name resolved via Etherscan; '?' if unknown."
+    )
+    market_id: int | None = Field(
+        default=None,
+        description="Market this fuse serves; absent when the fuse exposes none.",
+    )
+    market: str | None = Field(
+        default=None,
+        description="Human-readable market name (falls back to the id as string).",
     )
 
 
@@ -132,8 +145,11 @@ class LendingHealth(_Base):
 
 
 class HealthCheck(_Base):
-    ok: bool
+    ok: list[str] = Field(
+        description="Passing-check lines (one per healthy check), not a boolean."
+    )
     warnings: list[str]
+    criticals: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +179,70 @@ class ConfigShowResponse(_Base):
         default=None,
         description="Masked ('***') when set, null when unset.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Role-account models
+# ---------------------------------------------------------------------------
+
+
+class RoleAccountEntry(_Base):
+    """One confirmed role membership on a vault's AccessManager."""
+
+    account: str
+    role_id: int
+    role_name: str = Field(
+        description="Canonical enum name; UNKNOWN_ROLE_<id> when unmapped."
+    )
+    is_member: bool
+    execution_delay: int = Field(
+        description="Execution timelock in seconds (0 = immediate)."
+    )
+
+
+class RoleAccountsResponse(_Base):
+    """Role holders on a Plasma Vault's AccessManager."""
+
+    vault: str
+    access_manager: str
+    chain_id: int
+    role_filter: str | None = Field(
+        default=None,
+        description="Canonical role name when filtered; null = all roles.",
+    )
+    accounts: list[RoleAccountEntry]
+
+    @classmethod
+    def from_role_accounts(
+        cls,
+        accounts: list[RoleAccount],
+        *,
+        vault: str,
+        access_manager: str,
+        chain_id: int,
+        role_filter: str | None,
+    ) -> RoleAccountsResponse:
+        """Build the response from SDK dataclasses (sorted for stable output)."""
+        # Deferred import keeps this module's import graph pydantic-only.
+        from ipor_fusion.core.access import role_account_sort_key
+
+        entries = [
+            RoleAccountEntry(
+                account=ra.account,
+                role_id=ra.role_id,
+                role_name=ra.role_name,
+                is_member=ra.is_member,
+                execution_delay=ra.execution_delay,
+            )
+            for ra in sorted(accounts, key=role_account_sort_key)
+        ]
+        return cls(
+            vault=vault,
+            access_manager=access_manager,
+            chain_id=chain_id,
+            role_filter=role_filter,
+            accounts=entries,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +384,12 @@ class VaultInfoResponse(_Base):
     share_price: dict[str, Any] | None = None
     supply_cap: Amount
     managers: Managers
+    role_accounts: list[RoleAccountEntry] | None = Field(
+        default=None,
+        description="All confirmed role holders on the AccessManager; "
+        "null when the RoleGranted log scan failed (provider without "
+        "broad eth_getLogs support).",
+    )
     withdraw_manager_details: dict[str, Any] | None = None
     fuses: list[FuseEntry]
     balance_fuses: list[BalanceFuseEntry]

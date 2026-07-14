@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 import click
+import requests
 from web3 import Web3
+from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 
 from ipor_fusion.cli.config_store import (
     FusionConfig,
@@ -46,8 +48,15 @@ from ipor_fusion.cli.vault_substrate import (
     _format_substrate,
     _market_name,
 )
+from ipor_fusion.config.roles import Roles
+from ipor_fusion.core.access import (
+    AccessManager,
+    resolve_access_manager,
+    role_account_sort_key,
+)
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
 
 
 class AddressType(click.ParamType):
@@ -185,6 +194,21 @@ def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
     )
 
 
+def _build_ctx(
+    cfg: FusionConfig,
+    vault_address: str,
+    chain_id: int | None,
+    block_number: int | None,
+) -> tuple[int, Web3Context]:
+    """Shared command preamble: resolve chain + provider, build the context."""
+    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    provider_url = _resolve_provider(cfg, chain_id)
+    ctx = Web3Context.from_url(provider_url)
+    if block_number is not None:
+        ctx.default_block = block_number
+    return chain_id, ctx
+
+
 def _auto_save_vault(
     cfg: FusionConfig, vault_address: str, chain_id: int, plasma_vault: PlasmaVault
 ) -> None:
@@ -320,15 +344,23 @@ def info(
     block_number: int | None,
     json_output: bool,
 ) -> None:
-    """Display full on-chain vault state."""
-    cfg = load_config()
-    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
-    provider_url = _resolve_provider(cfg, chain_id)
+    """Display full on-chain vault state.
 
-    ctx = Web3Context.from_url(provider_url)
-    if block_number is not None:
-        ctx.default_block = block_number
+    The comprehensive vault summary — includes all role accounts on the
+    vault's AccessManager.
+    """
+    cfg = load_config()
+    chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
     checksum_address = Web3.to_checksum_address(vault_address)
+
+    # Cheap single-call probe: friendly errors for "nothing deployed here" and
+    # "not a Plasma Vault" (revert and empty-return flavors alike) before the
+    # expensive fetch — and before auto-save can store a non-vault.
+    try:
+        resolve_access_manager(ctx, vault_address)
+    except (ContractNotFoundError, NotAPlasmaVaultError) as exc:
+        raise click.UsageError(str(exc)) from exc
+
     plasma_vault = PlasmaVault(ctx, checksum_address)
 
     _auto_save_vault(cfg, vault_address, chain_id, plasma_vault)
@@ -337,6 +369,76 @@ def info(
     _print_vault_info(
         ctx, plasma_vault, cfg, data, vault_address, chain_id, json_output
     )
+
+
+@vault.command("role-accounts")
+@click.argument("vault_address", type=ADDRESS)
+@click.option(
+    "--role",
+    default="",
+    help="Filter to one role (case-insensitive, '_ROLE' suffix optional); "
+    f"omit to list all. Valid: {Roles.names_str()}.",
+)
+@click.option(
+    "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
+)
+@click.option(
+    "--block-number",
+    type=int,
+    default=None,
+    help="Block number (default: latest).",
+)
+@click.option(
+    "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
+)
+def role_accounts(
+    vault_address: str,
+    role: str,
+    chain_id: int | None,
+    block_number: int | None,
+    json_output: bool,
+) -> None:
+    """List confirmed role holders on the vault's AccessManager."""
+    # Pure input validation first — no RPC needed to reject a bad --role.
+    try:
+        role_id = None if not role.strip() else Roles.resolve(role)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+
+    cfg = load_config()
+    chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
+
+    try:
+        manager = resolve_access_manager(ctx, vault_address)
+    except (ContractNotFoundError, NotAPlasmaVaultError) as exc:
+        raise click.UsageError(str(exc)) from exc
+
+    try:
+        accounts = (
+            manager.get_all_role_accounts()
+            if role_id is None
+            else manager.get_accounts_with_role(role_id)
+        )
+    except _ROLE_SCAN_ERRORS as exc:
+        raise click.ClickException(
+            f"RoleGranted log scan failed ({type(exc).__name__}: {exc}). "
+            "The provider must serve broad eth_getLogs queries."
+        ) from exc
+    rows = [ra.to_dict() for ra in sorted(accounts, key=role_account_sort_key)]
+
+    if json_output:
+        payload = {
+            "vault": Web3.to_checksum_address(vault_address),
+            "access_manager": manager.address,
+            "chain_id": chain_id,
+            "role_filter": Roles.get_name(role_id) if role_id is not None else None,
+            "accounts": rows,
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(f"Access Manager: {manager.address}")
+    _print_role_accounts_table(rows)
 
 
 def _print_lending_health(  # noqa: C901
@@ -461,6 +563,57 @@ def _print_health_lines(market: Any, indent: str) -> None:
     click.secho(f"{indent}Status:        {status}", fg=color, bold=bold)
 
 
+# Failure modes of the heavy RoleGranted scan: JSON-RPC rejections/limits plus
+# transport-level errors — web3's HTTPProvider re-raises raw requests
+# exceptions (read timeouts, 429/5xx via raise_for_status).
+_ROLE_SCAN_ERRORS = (
+    ContractLogicError,
+    Web3RPCError,
+    TimeExhausted,
+    requests.RequestException,
+)
+
+
+def _fetch_role_accounts_json(
+    ctx: Web3Context, data: _VaultData
+) -> list[dict[str, Any]] | None:
+    """All confirmed role holders on the AccessManager, sorted; None when the
+    RoleGranted log scan fails (provider without broad eth_getLogs support,
+    or a transport-level failure on the heavy query)."""
+    try:
+        accounts = AccessManager(
+            ctx,
+            data.access_manager,  # type: ignore[arg-type]
+        ).get_all_role_accounts()
+    except _ROLE_SCAN_ERRORS:
+        return None
+    return [ra.to_dict() for ra in sorted(accounts, key=role_account_sort_key)]
+
+
+def _print_role_accounts_table(role_accounts: list[dict[str, Any]]) -> None:
+    _print_table(
+        ("Account", "Role", "Role ID", "Delay (s)"),
+        [
+            (
+                entry["account"],
+                entry["role_name"],
+                str(entry["role_id"]),
+                str(entry["execution_delay"]),
+            )
+            for entry in role_accounts
+        ],
+    )
+
+
+def _print_role_accounts(role_accounts: list[dict[str, Any]] | None) -> None:
+    click.echo("Role Accounts:")
+    if role_accounts is None:
+        click.echo("  (unavailable — provider could not serve the log scan)")
+    else:
+        _print_role_accounts_table(role_accounts)
+    click.echo()
+
+
 def _print_vault_info(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -485,6 +638,12 @@ def _print_vault_info(
         )
         click.echo(json.dumps(result, indent=2))
         return
+
+    # Start the heavy RoleGranted scan now; joined when its section prints.
+    # shutdown(wait=False) only stops new submissions — the task completes.
+    role_pool = ThreadPoolExecutor(max_workers=1)
+    role_accounts_fut = role_pool.submit(_fetch_role_accounts_json, ctx, data)
+    role_pool.shutdown(wait=False)
 
     total_assets_usd = _format_usd(
         data.total_assets, data.asset_decimals, data.asset_price_usd
@@ -568,6 +727,8 @@ def _print_vault_info(
             click.echo(f"  Last release:   {last_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}")
         _print_pending_requests(data, plasma_vault)
     click.echo()
+
+    _print_role_accounts(role_accounts_fut.result())
 
     _print_fuse_section(
         "Fuses",
@@ -851,6 +1012,9 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
 
     # Resolve fuse contract names in parallel
     with ThreadPoolExecutor() as pool:
+        # The heavy RoleGranted scan overlaps the fetches below; the with-block
+        # exit waits for it, so .result() in the return dict never blocks.
+        role_accounts_fut = pool.submit(_fetch_role_accounts_json, ctx, data)
         fuse_name_futs = {
             addr: pool.submit(get_contract_name, chain_id, addr, api_key)
             for addr in data.fuses
@@ -1187,6 +1351,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             "rewards": data.rewards_manager,
             "withdraw": data.withdraw_manager,
         },
+        "role_accounts": role_accounts_fut.result(),
         "withdraw_manager_details": _build_withdraw_manager_json(data, plasma_vault),
         "fuses": fuses_json,
         "balance_fuses": balance_fuses_json,

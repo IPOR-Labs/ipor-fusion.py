@@ -1,3 +1,5 @@
+import difflib
+import re
 from enum import IntEnum
 
 
@@ -40,3 +42,29 @@ class Roles(IntEnum):
             return cls(value).name
         except ValueError:
             return f"UNKNOWN_ROLE_{value}"
+
+    @classmethod
+    def resolve(cls, name: str) -> int:
+        """Resolve a human-entered role name to its id (fail-closed).
+
+        Case-insensitive; spaces/hyphens map to underscores and the `_ROLE`
+        suffix is optional. Unknown (or blank) names raise `ValueError` listing
+        the valid names, with a "did you mean" hint on a near miss.
+        """
+        key = re.sub(r"[\s\-]+", "_", name.strip()).upper()
+        if not key.endswith("_ROLE"):
+            key += "_ROLE"
+        try:
+            return cls[key].value
+        except KeyError:
+            names = [role.name for role in cls]
+            near = difflib.get_close_matches(key, names, n=1)
+            hint = f" Did you mean {near[0]}?" if near else ""
+            raise ValueError(
+                f"Unknown role {name!r}.{hint} Valid: {cls.names_str()}"
+            ) from None
+
+    @classmethod
+    def names_str(cls) -> str:
+        """Canonical role names, comma-separated — for help texts and errors."""
+        return ", ".join(role.name for role in cls)
