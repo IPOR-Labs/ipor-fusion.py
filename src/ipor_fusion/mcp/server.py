@@ -4,7 +4,10 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
+from typing import Annotated, Literal
+
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 from web3 import Web3
 
 from ipor_fusion.cli.config_store import (
@@ -140,34 +143,56 @@ def vault_info(
     return VaultInfoResponse.model_validate(result)
 
 
-def _role_accounts_description() -> str:
-    # Generated (not a docstring) so the role list always matches the enum.
-    return (
-        "List confirmed role holders on a Plasma Vault's AccessManager.\n"
-        "Pass `role` to filter to one role — matching is case-insensitive and "
-        "the `_ROLE` suffix is optional; omit it (empty string) to list all "
-        "roles.\n"
-        f"Valid roles: {Roles.names_str()}.\n"
-        "TECH_* roles are held by protocol contracts, not EOAs — expect "
-        "contract addresses for those.\n"
-        "Cost: scans RoleGranted logs + one hasRole read per unique "
-        "(role, account) pair; can be slow on vaults with many grants and "
-        "needs a provider that serves broad eth_getLogs queries.\n"
-        "Returns: vault, access_manager, chain_id, role_filter (canonical "
-        "name or null), and accounts[] of {account, role_id, role_name, "
-        "is_member, execution_delay}."
-    )
+# Static mirror of Roles member names: pyright rejects a dynamically built
+# enum in annotations, so the drift guard lives in test_mcp_server.py.
+RoleName = Literal[
+    "ADMIN_ROLE",
+    "OWNER_ROLE",
+    "GUARDIAN_ROLE",
+    "TECH_PLASMA_VAULT_ROLE",
+    "IPOR_DAO_ROLE",
+    "TECH_CONTEXT_MANAGER_ROLE",
+    "TECH_WITHDRAW_MANAGER_ROLE",
+    "TECH_VAULT_TRANSFER_SHARES_ROLE",
+    "ATOMIST_ROLE",
+    "ALPHA_ROLE",
+    "FUSE_MANAGER_ROLE",
+    "PRE_HOOKS_MANAGER_ROLE",
+    "TECH_PERFORMANCE_FEE_MANAGER_ROLE",
+    "TECH_MANAGEMENT_FEE_MANAGER_ROLE",
+    "CLAIM_REWARDS_ROLE",
+    "TECH_REWARDS_CLAIM_MANAGER_ROLE",
+    "TRANSFER_REWARDS_ROLE",
+    "WHITELIST_ROLE",
+    "CONFIG_INSTANT_WITHDRAWAL_FUSES_ROLE",
+    "WITHDRAW_MANAGER_REQUEST_FEE_ROLE",
+    "WITHDRAW_MANAGER_WITHDRAW_FEE_ROLE",
+    "UPDATE_MARKETS_BALANCES_ROLE",
+    "UPDATE_REWARDS_BALANCE_ROLE",
+    "PRICE_ORACLE_MIDDLEWARE_MANAGER_ROLE",
+    "PUBLIC_ROLE",
+]
 
 
-@mcp.tool(description=_role_accounts_description())
+@mcp.tool()
 def vault_role_accounts(
-    vault_address: str,
-    role: str = "",
-    chain_id: int = 0,
-    block_number: int = 0,
+    vault_address: Annotated[str, Field(description="Plasma Vault address.")],
+    role: Annotated[
+        RoleName | None,
+        Field(description="Role to filter by; omit to list all roles."),
+    ] = None,
+    chain_id: Annotated[int, Field(description="Chain ID (auto-detected if 0).")] = 0,
+    block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
 ) -> RoleAccountsResponse:
+    """List confirmed role holders on a Plasma Vault's AccessManager.
+
+    TECH_* roles are held by protocol contracts, not EOAs.
+    Cost: scans RoleGranted logs + one hasRole read per unique
+    (role, account) pair; can be slow on vaults with many grants and
+    needs a provider that serves broad eth_getLogs queries.
+    """
     cfg = load_config()
-    role_id = None if not role.strip() else Roles.resolve(role)
+    role_id = None if role is None else Roles.resolve(role)
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
     checksum = Web3.to_checksum_address(vault_address)

@@ -10,6 +10,7 @@ from ipor_fusion import (
     ContractNotFoundError,
     NotPlasmaVaultError,
     RoleAccount,
+    Roles,
 )
 from ipor_fusion.cli.morpho_api import (
     MorphoApiError,
@@ -264,13 +265,14 @@ class TestVaultRoleAccounts:
         with pytest.raises(NotPlasmaVaultError, match="not a vault"):
             vault_role_accounts(vault_address=VAULT_ADDR)
 
-    def test_description_lists_roles(self):
-        # Verifies description= reached FastMCP and guards role-list drift.
+    def test_role_arg_schema_enum_matches_roles(self):
+        # Guards drift between the static RoleName Literal (advertised as a
+        # schema enum) and the Roles IntEnum.
         tools = asyncio.run(mcp.list_tools())
         tool = next(t for t in tools if t.name == "vault_role_accounts")
-        assert tool.description is not None
-        assert "ATOMIST_ROLE" in tool.description
-        assert "PUBLIC_ROLE" in tool.description
+        role_prop = tool.inputSchema["properties"]["role"]
+        enum_values = next(alt["enum"] for alt in role_prop["anyOf"] if "enum" in alt)
+        assert set(enum_values) == {r.name for r in Roles}
 
 
 class TestVaultInfoGuards:
