@@ -15,6 +15,11 @@ class Web3Context:
 
     DEFAULT_TRANSACTION_MAX_PRIORITY_FEE = 2_000_000_000
     GAS_PRICE_MARGIN = 25
+    # web3's own HTTP default, made explicit so callers can tighten it: against
+    # a degraded RPC every request otherwise blocks for the full 30s, and a
+    # multi-call read (vault fetch, health check) fans that out into minutes of
+    # wall clock. Long-running services should pass something tighter.
+    DEFAULT_RPC_TIMEOUT_S = 30.0
 
     def __init__(
         self,
@@ -63,8 +68,11 @@ class Web3Context:
         url: str,
         private_key: str | None = None,
         gas_multiplier: float = 1.25,
+        request_timeout_s: float = DEFAULT_RPC_TIMEOUT_S,
     ) -> Web3Context:
-        web3 = Web3(Web3.HTTPProvider(url))
+        web3 = Web3(
+            Web3.HTTPProvider(url, request_kwargs={"timeout": request_timeout_s})
+        )
         chain_id = ChainId(web3.eth.chain_id)
 
         return cls(

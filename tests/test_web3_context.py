@@ -81,7 +81,10 @@ class TestFromUrl:
             gas_multiplier=1.5,
         )
 
-        mock_web3_cls.HTTPProvider.assert_called_once_with("http://localhost:8545")
+        mock_web3_cls.HTTPProvider.assert_called_once_with(
+            "http://localhost:8545",
+            request_kwargs={"timeout": Web3Context.DEFAULT_RPC_TIMEOUT_S},
+        )
         mock_web3_cls.assert_called_once_with(mock_provider)
         assert ctx.chain_id == ChainId(42161)
         assert ctx.signer is not None
@@ -95,6 +98,18 @@ class TestFromUrl:
         ctx = Web3Context.from_url("http://localhost:8545")
 
         assert ctx.signer is None
+
+    @patch("ipor_fusion.core.context.Web3")
+    def test_from_url_passes_custom_request_timeout(self, mock_web3_cls):
+        mock_web3_instance = MagicMock()
+        mock_web3_instance.eth.chain_id = 1
+        mock_web3_cls.return_value = mock_web3_instance
+
+        Web3Context.from_url("http://localhost:8545", request_timeout_s=10.0)
+
+        mock_web3_cls.HTTPProvider.assert_called_once_with(
+            "http://localhost:8545", request_kwargs={"timeout": 10.0}
+        )
 
 
 # ── send ────────────────────────────────────────────────────────────────
