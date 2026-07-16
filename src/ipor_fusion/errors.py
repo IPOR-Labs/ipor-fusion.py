@@ -99,7 +99,7 @@ class ContractNotFoundError(IporFusionError, ValueError):
     """
 
 
-class NotAPlasmaVaultError(IporFusionError, ValueError):
+class NotPlasmaVaultError(IporFusionError, ValueError):
     """Contract exists but does not implement the Plasma Vault interface.
 
     Also a ValueError so MCP adapters can let it propagate unmapped.

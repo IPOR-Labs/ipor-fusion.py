@@ -13,7 +13,7 @@ from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
 from ipor_fusion.cli.vault_cmd import _fetch_role_accounts_json
 from ipor_fusion.core.access import RoleAccount
-from ipor_fusion.errors import NotAPlasmaVaultError
+from ipor_fusion.errors import NotPlasmaVaultError
 from ipor_fusion.types import Period, RoleId
 
 VAULT = "0x2222222222222222222222222222222222222222"
@@ -129,7 +129,7 @@ class TestRoleAccounts:
         assert "--chain-id" in result.output
 
     def test_not_a_vault_is_usage_error(self, _ctx, mock_resolve, tmp_config):
-        mock_resolve.side_effect = NotAPlasmaVaultError("not a Plasma Vault")
+        mock_resolve.side_effect = NotPlasmaVaultError("not a Plasma Vault")
 
         result = CliRunner().invoke(
             cli, ["vault", "role-accounts", VAULT, "--chain-id", "1"]

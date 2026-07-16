@@ -28,7 +28,7 @@ from ipor_fusion.core.withdraw_manager import (
 from ipor_fusion.errors import (
     ContractNotFoundError,
     IporFusionError,
-    NotAPlasmaVaultError,
+    NotPlasmaVaultError,
     TransactionError,
 )
 from ipor_fusion.fuses import (
@@ -186,7 +186,7 @@ __all__ = [
     "IporFusionMarkets",
     "ContractNotFoundError",
     "IporFusionError",
-    "NotAPlasmaVaultError",
+    "NotPlasmaVaultError",
     "TransactionError",
     "Amount",
     "Shares",

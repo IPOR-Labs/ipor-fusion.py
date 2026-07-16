@@ -10,7 +10,7 @@ from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_config
 from ipor_fusion.cli.main import cli, main
 from ipor_fusion.core.withdraw_manager import AccountRequest
-from ipor_fusion.errors import ContractNotFoundError, NotAPlasmaVaultError
+from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
 from ipor_fusion.mcp.models import VaultInfoResponse
 
 ADDR_1 = "0x1111111111111111111111111111111111111111"
@@ -274,7 +274,7 @@ class TestVaultInfoGuards:
 
     @patch(
         "ipor_fusion.cli.vault_cmd.resolve_access_manager",
-        side_effect=NotAPlasmaVaultError(
+        side_effect=NotPlasmaVaultError(
             f"{ADDR_1} does not appear to be a Plasma Vault."
         ),
     )
@@ -290,7 +290,7 @@ class TestVaultInfoGuards:
 
     @patch(
         "ipor_fusion.cli.vault_cmd.resolve_access_manager",
-        side_effect=NotAPlasmaVaultError("not a vault"),
+        side_effect=NotPlasmaVaultError("not a vault"),
     )
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
     def test_probe_runs_before_auto_save(self, mock_ctx_cls, _resolve, tmp_config):
