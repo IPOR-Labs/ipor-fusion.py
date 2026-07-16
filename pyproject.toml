@@ -113,7 +113,9 @@ fail_under = 95
 omit = ["src/ipor_fusion/mcp/*"]
 
 [tool.semantic_release]
-build_command = "rm -rf dist/* && uv build"
+# Runs inside the python-semantic-release Docker container, not on the runner
+# host — uv from astral-sh/setup-uv is not on PATH there, so install it first.
+build_command = "rm -rf dist/* && pip install uv && uv build"
 logging_use_named_masks = true
 commit_parser = "angular"
 major_on_zero = true
