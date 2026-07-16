@@ -57,6 +57,12 @@ from ipor_fusion.core.access import (
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
+from ipor_fusion.readers.oracle_mapping import (
+    OracleMapping,
+    OracleNode,
+    OraclePrice,
+    build_oracle_mapping,
+)
 
 
 class AddressType(click.ParamType):
@@ -439,6 +445,108 @@ def role_accounts(
 
     click.echo(f"Access Manager: {manager.address}")
     _print_role_accounts_table(rows)
+
+
+@vault.command("oracle-mapping")
+@click.argument("vault_address", type=ADDRESS)
+@click.option(
+    "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
+)
+@click.option(
+    "--block-number",
+    type=click.IntRange(min=0),
+    default=None,
+    help="Block number (default: latest).",
+)
+@click.option(
+    "--max-depth",
+    type=click.IntRange(min=0),
+    default=6,
+    show_default=True,
+    help="Max recursion depth for feeds derived from other assets.",
+)
+@click.option(
+    "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
+)
+def oracle_mapping(
+    vault_address: str,
+    chain_id: int | None,
+    block_number: int | None,
+    max_depth: int,
+    json_output: bool,
+) -> None:
+    """Map how the vault prices every configured asset at a block.
+
+    For each asset the vault's price oracle knows about, resolves the source
+    price feed, classifies its type by interface probing (Chainlink / ERC4626
+    / Morpho collateral / unknown) and recursively follows feeds that derive
+    their price from another asset. Unknown feeds are reported as partial,
+    never dropped. Historical blocks require an archive node.
+    """
+    cfg = load_config()
+    chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
+
+    # The event-replay fallback and the output both need a concrete block
+    # number, so resolve "latest" up front and pin the context to it.
+    effective_block = (
+        block_number if block_number is not None else ctx.web3.eth.block_number
+    )
+    ctx.default_block = effective_block
+
+    try:
+        resolve_access_manager(ctx, vault_address)
+    except (ContractNotFoundError, NotPlasmaVaultError) as exc:
+        raise click.UsageError(str(exc)) from exc
+
+    mapping = build_oracle_mapping(
+        ctx, Web3.to_checksum_address(vault_address), effective_block, max_depth
+    )
+
+    if json_output:
+        click.echo(json.dumps(mapping.to_dict(), indent=2))
+        return
+    _print_oracle_mapping(mapping)
+
+
+def _format_wad_price(price: OraclePrice) -> str:
+    if price.normalized_wad is None:
+        return "N/A"
+    return _format_amount(int(price.normalized_wad), 18)
+
+
+def _print_oracle_node(node: OracleNode) -> None:
+    click.echo(f"  {node.symbol or '?'} ({node.asset})")
+    click.echo(f"    Path:   {' → '.join(node.path)}")
+    click.echo(f"    Price:  {_format_wad_price(node.price)}")
+    if node.status == "resolved":
+        click.secho("    Status: resolved", fg="green")
+    else:
+        click.secho(f"    Status: partial ({node.reason})", fg="yellow")
+
+
+def _print_oracle_mapping(mapping: OracleMapping) -> None:
+    name_suffix = f" ({mapping.vault_name})" if mapping.vault_name else ""
+    click.echo(f"Vault:        {mapping.vault}{name_suffix}")
+    click.echo(
+        f"Underlying:   {mapping.asset.get('symbol') or '?'} "
+        f"({mapping.asset.get('address')})"
+    )
+    click.echo(f"Price Oracle: {mapping.price_oracle}")
+    click.echo(f"Block:        {mapping.block_number}")
+    click.echo(f"Enumerated:   {mapping.asset_source}")
+    click.echo()
+    click.echo(f"Configured assets ({len(mapping.configured_assets)}):")
+    for node in mapping.configured_assets:
+        _print_oracle_node(node)
+    click.echo()
+    if not mapping.unresolved:
+        click.echo("Unresolved: 0")
+        return
+    click.secho(f"Unresolved: {len(mapping.unresolved)}", fg="yellow")
+    for node in mapping.unresolved:
+        click.secho(
+            f"  {node.symbol or '?'} ({node.asset}): {node.reason}", fg="yellow"
+        )
 
 
 def _print_lending_health(  # noqa: C901
