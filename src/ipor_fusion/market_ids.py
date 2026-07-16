@@ -22,6 +22,9 @@ class IporFusionMarkets:
     EULER_V2 = 11
     # dependence graph: balance of ERC20_VAULT_BALANCE
     UNIVERSAL_TOKEN_SWAPPER = 12
+    # dependence graph: balance of ERC20_VAULT_BALANCE
+    # substrate type: UniversalTokenSwapperSubstrateType (Token, Target or Slippage)
+    UNIVERSAL_TOKEN_SWAPPER_V2 = 12_02
     COMPOUND_V3_USDT = 13
     MORPHO = 14
     SPARK = 15
@@ -65,12 +68,21 @@ class IporFusionMarkets:
     ODOS_SWAPPER = 42
     # substrate type: VeloraSubstrateType (Token or Slippage)
     VELORA_SWAPPER = 43
-    # substrate type: AaveV4SubstrateType (Asset or Spoke)
-    AAVE_V4 = 44
+    # SparkLend via Aave V3 fuses; substrates: underlying asset addresses
+    SPARK_LEND = 44
     # substrate type: MidasSubstrateType
     MIDAS = 45
+    NAPIER = 46
     # substrate type: DolomiteSubstrate (asset, subAccountId, canBorrow)
-    DOLOMITE = 46
+    DOLOMITE = 47
+    LITE_PSM = 48
+    # substrate type: AaveV4SubstrateType (Asset or Spoke)
+    AAVE_V4 = 49
+    # substrate types: RWASubstrateLib (ASSET, BALANCE_ACCOUNT, CUSTODIAN,
+    # TARGET, STALENESS_MAX, BIG_CHANGE_BPS, DUST_THRESHOLD, MIN_UPDATE_INTERVAL)
+    RWA = 50
+    # substrate type: AguaSubstrateLib (VAULT or ASSET)
+    AGUA_GLOBAL_CARRY = 51
     ERC4626_0001 = 100_001
     ERC4626_0002 = 100_002
     ERC4626_0003 = 100_003
@@ -101,6 +113,9 @@ class IporFusionMarkets:
     META_MORPHO_0008 = 200_008
     META_MORPHO_0009 = 200_009
     META_MORPHO_0010 = 200_010
+    # substrates: reward token addresses MerklClaimWrapperFuse may forward
+    # (type(uint256).max - 3 in Solidity; max == 2**256 - 1, hence the shift)
+    MERKL = 2**256 - 4
     EXCHANGE_RATE_VALIDATOR = 2**256 - 3
     ASSETS_BALANCE_VALIDATION = 2**256 - 2
     ZERO_BALANCE_MARKET = 2**256 - 1
