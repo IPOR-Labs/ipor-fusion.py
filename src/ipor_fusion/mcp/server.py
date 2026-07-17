@@ -41,12 +41,14 @@ from ipor_fusion.mcp.models import (
     ConfigShowResponse,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
+    OracleMappingResponse,
     RoleAccountsResponse,
     VaultInfoResponse,
     VaultListEntry,
 )
 from ipor_fusion.readers.lending_health import MORPHO_BLUE_ADDRESS
 from ipor_fusion.readers.morpho import MorphoReader
+from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
 from ipor_fusion.types import MorphoBlueMarketId
 
 mcp = FastMCP("ipor-fusion")
@@ -210,6 +212,46 @@ def vault_role_accounts(
         chain_id=chain_id,
         role_filter=Roles.get_name(role_id) if role_id is not None else None,
     )
+
+
+@mcp.tool()
+def vault_oracle_mapping(
+    vault_address: Annotated[str, Field(description="Plasma Vault address.")],
+    chain_id: Annotated[int, Field(description="Chain ID (auto-detected if 0).")] = 0,
+    block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
+) -> OracleMappingResponse:
+    """Map how a Plasma Vault prices every configured asset at a block.
+
+    For each asset the vault's price oracle knows about, resolves the source
+    price feed, classifies its type by on-chain interface probing, reads the
+    effective price, and recursively resolves feeds that derive their price
+    from another asset. Unknown feeds are reported as partial, never dropped.
+
+    Source types: ChainlinkAggregator (leaf feed), ERC4626PriceFeed
+    (share→asset rate, recurses on the underlying),
+    CollateralTokenOnMorphoMarketPriceFeed (recurses on the loan token),
+    custom_unknown (partial).
+
+    Assets are enumerated via getConfiguredAssets() when the oracle exposes
+    it, else by replaying AssetPriceSourceUpdated logs (asset_source:
+    'events'). Historical blocks require an archive node.
+    """
+    if block_number < 0:
+        raise ValueError("block_number must be >= 0")
+    cfg = load_config()
+    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    ctx, _ = _build_ctx(cfg, chain_id, block_number)
+    checksum = Web3.to_checksum_address(vault_address)
+
+    # The event-replay fallback and the output both need a concrete block
+    # number, so resolve "latest" up front and pin the context to it.
+    effective_block = block_number if block_number else ctx.web3.eth.block_number
+    ctx.default_block = effective_block
+
+    resolve_access_manager(ctx, checksum)
+
+    mapping = build_oracle_mapping(ctx, checksum, effective_block)
+    return OracleMappingResponse.from_mapping(mapping)
 
 
 @mcp.tool()

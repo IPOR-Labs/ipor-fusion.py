@@ -16,11 +16,13 @@ from ipor_fusion.mcp.models import (
     ConfigShowResponse,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
+    OracleMappingResponse,
     Reconciliation,
     RoleAccountsResponse,
     VaultInfoResponse,
     VaultListEntry,
 )
+from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode, OraclePrice
 from ipor_fusion.types import Period, RoleId
 
 
@@ -564,6 +566,118 @@ class TestRoleAccountsResponse:
                     "chain_id": 1,
                     "role_filter": None,
                     "accounts": [],
+                    "extra": "no",
+                }
+            )
+
+
+def _chainlink_node() -> OracleNode:
+    return OracleNode(
+        asset="0xUSDC",  # type: ignore[arg-type]
+        symbol="USDC",
+        decimals=6,
+        source="0xFEED",  # type: ignore[arg-type]
+        price=OraclePrice(
+            raw="99980000",
+            decimals=8,
+            normalized_wad=str(99_980_000 * 10**10),
+        ),
+        source_type="ChainlinkAggregator",
+        path=["USDC", "Chainlink feed"],
+        status="resolved",
+        source_detail={"answer": "99980000", "answer_decimals": 8},
+    )
+
+
+def _erc4626_node() -> OracleNode:
+    return OracleNode(
+        asset="0xWSR",  # type: ignore[arg-type]
+        symbol="wsrUSD",
+        decimals=18,
+        source="0xFEEDW",  # type: ignore[arg-type]
+        price=OraclePrice(raw=str(10**18), decimals=18, normalized_wad=str(10**18)),
+        source_type="ERC4626PriceFeed",
+        path=["wsrUSD", "convertToAssets(1 share)", "USDC", "Chainlink feed"],
+        status="resolved",
+        source_detail={"vault": "0xV", "underlying": "0xUSDC"},
+        dependencies=[_chainlink_node()],
+    )
+
+
+def _partial_node() -> OracleNode:
+    return OracleNode(
+        asset="0xNOPE",  # type: ignore[arg-type]
+        symbol=None,
+        decimals=None,
+        source=None,
+        price=OraclePrice(raw=None, decimals=None, normalized_wad=None),
+        path=["0xNOPE"],
+        status="partial",
+        reason="no_source_configured",
+    )
+
+
+def _oracle_mapping() -> OracleMapping:
+    partial = _partial_node()
+    return OracleMapping(
+        vault="0xVAULT",  # type: ignore[arg-type]
+        vault_name="Reservoir",
+        asset={"address": "0xUSDC", "symbol": "USDC", "decimals": 6},
+        price_oracle="0xORACLE",  # type: ignore[arg-type]
+        block_number=12345,
+        asset_source="events",
+        configured_assets=[_erc4626_node(), partial],
+        unresolved=[partial],
+    )
+
+
+class TestOracleMappingResponse:
+    def test_from_mapping_maps_recursive_dependencies(self):
+        resp = OracleMappingResponse.from_mapping(_oracle_mapping())
+
+        assert resp.vault == "0xVAULT"
+        assert resp.block_number == 12345
+        assert resp.asset_source == "events"
+        node = resp.configured_assets[0]
+        assert node.source_type == "ERC4626PriceFeed"
+        assert node.price.normalized_wad == str(10**18)
+        dep = node.dependencies[0]
+        assert dep.symbol == "USDC"
+        assert dep.source_detail == {"answer": "99980000", "answer_decimals": 8}
+        assert dep.dependencies == []
+
+    def test_partial_node_fields(self):
+        resp = OracleMappingResponse.from_mapping(_oracle_mapping())
+
+        partial = resp.configured_assets[1]
+        assert partial.status == "partial"
+        assert partial.reason == "no_source_configured"
+        assert partial.source_detail is None
+        assert partial.price.raw is None
+        # mirrored into unresolved as the same shape
+        assert resp.unresolved[0] == partial
+
+    def test_model_dump_matches_to_dict(self):
+        # The MCP structured output and the CLI --json output are built from
+        # the same dataclasses; this pins that they serialize identically.
+        mapping = _oracle_mapping()
+
+        resp = OracleMappingResponse.from_mapping(mapping)
+
+        assert resp.model_dump(mode="json") == mapping.to_dict()
+
+    def test_rejects_unknown_field(self):
+        with pytest.raises(ValidationError):
+            OracleMappingResponse.model_validate(
+                {
+                    "vault": "0xVAULT",
+                    "vault_name": None,
+                    "asset": {},
+                    "price_oracle": "0xORACLE",
+                    "block_number": 1,
+                    "asset_source": "getConfiguredAssets",
+                    "configured_assets": [],
+                    "unresolved": [],
                     "extra": "no",
                 }
             )

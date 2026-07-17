@@ -5,6 +5,9 @@ serializes them via model_dump() and exposes their JSON schema to the LLM.
 
 Design notes:
 - Top-level shapes are strictly typed for LLM schema clarity.
+- Runtime imports stay pydantic-only: SDK types appear only under TYPE_CHECKING
+  (or deferred inside methods), and on-chain addresses are plain `str`, not
+  eth_typing NewTypes.
 - Truly dynamic sections (substrates keyed by market label, per-protocol
   position breakdowns) use dict[str, Any] / list[dict[str, Any]] — modelling
   every variant would be brittle without meaningful LLM-side benefit.
@@ -25,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from ipor_fusion.core.access import RoleAccount
+    from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode
 
 
 class _Base(BaseModel):
@@ -242,6 +246,111 @@ class RoleAccountsResponse(_Base):
             chain_id=chain_id,
             role_filter=role_filter,
             accounts=entries,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Oracle-mapping models
+# ---------------------------------------------------------------------------
+
+
+class OraclePriceModel(_Base):
+    """Uniform price block; all fields null together when the read failed."""
+
+    raw: str | None = Field(
+        description="Raw getAssetPrice() answer; null when unreadable."
+    )
+    decimals: int | None = Field(description="Decimals of the raw answer.")
+    normalized_wad: str | None = Field(
+        description="Price rescaled to 18 decimals (integer string)."
+    )
+
+
+class OracleNodeModel(_Base):
+    """One asset's resolved price feed (recursive for derived feeds)."""
+
+    asset: str
+    symbol: str | None = Field(description="ERC-20 symbol; null when unreadable.")
+    decimals: int | None
+    source: str | None = Field(
+        description="Configured price-feed address; null when none/unreadable."
+    )
+    source_type: str = Field(
+        description="ChainlinkAggregator, ERC4626PriceFeed, "
+        "CollateralTokenOnMorphoMarketPriceFeed, or custom_unknown."
+    )
+    price: OraclePriceModel
+    path: list[str] = Field(
+        description="Human-readable resolution chain, e.g. "
+        "['wstETH', 'convertToAssets(1 share)', 'stETH', 'Chainlink feed']."
+    )
+    status: str = Field(description="'resolved' or 'partial'.")
+    reason: str | None = Field(
+        default=None, description="Why the node is partial; null when resolved."
+    )
+    source_detail: dict[str, Any] | None = Field(
+        default=None,
+        description="Type-specific raw reads; null when no probe ran.",
+    )
+    dependencies: list[OracleNodeModel] = Field(
+        default_factory=list,
+        description="Nodes this feed derives its price from (empty for leaves).",
+    )
+
+    @classmethod
+    def from_node(cls, node: OracleNode) -> OracleNodeModel:
+        return cls(
+            asset=node.asset,
+            symbol=node.symbol,
+            decimals=node.decimals,
+            source=node.source,
+            source_type=node.source_type,
+            price=OraclePriceModel(
+                raw=node.price.raw,
+                decimals=node.price.decimals,
+                normalized_wad=node.price.normalized_wad,
+            ),
+            path=node.path,
+            status=node.status,
+            reason=node.reason,
+            source_detail=node.source_detail,
+            dependencies=[cls.from_node(dep) for dep in node.dependencies],
+        )
+
+
+class OracleMappingResponse(_Base):
+    """How a Plasma Vault prices every configured asset at a pinned block."""
+
+    vault: str
+    vault_name: str | None
+    asset: dict[str, Any] = Field(
+        description="Underlying asset: {address, symbol, decimals}."
+    )
+    price_oracle: str
+    block_number: int
+    asset_source: str = Field(
+        description="How assets were enumerated: 'getConfiguredAssets' or "
+        "'events' (AssetPriceSourceUpdated log replay)."
+    )
+    configured_assets: list[OracleNodeModel]
+    unresolved: list[OracleNodeModel] = Field(
+        description="Flat mirror of every node whose status != resolved."
+    )
+
+    @classmethod
+    def from_mapping(cls, mapping: OracleMapping) -> OracleMappingResponse:
+        """Build the response from the SDK dataclass."""
+        return cls(
+            vault=mapping.vault,
+            vault_name=mapping.vault_name,
+            asset=mapping.asset,
+            price_oracle=mapping.price_oracle,
+            block_number=mapping.block_number,
+            asset_source=mapping.asset_source,
+            configured_assets=[
+                OracleNodeModel.from_node(node) for node in mapping.configured_assets
+            ],
+            unresolved=[OracleNodeModel.from_node(node) for node in mapping.unresolved],
         )
 
 
