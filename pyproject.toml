@@ -117,11 +117,16 @@ omit = ["src/ipor_fusion/mcp/*"]
 # host — uv from astral-sh/setup-uv is not on PATH there, so install it first.
 # Drop the host-created .venv too: its interpreter symlinks point at host
 # paths that don't exist in the container, and uv build refuses a broken venv.
-build_command = "rm -rf dist/* .venv && pip install uv && uv build"
+# `uv lock` re-locks the root package after the version stamp lands in
+# pyproject.toml; without it uv.lock keeps the pre-release version and every
+# PR after the release fails `uv sync --locked`. The refreshed uv.lock is
+# committed via `assets` below.
+build_command = "rm -rf dist/* .venv && pip install uv && uv lock && uv build"
 logging_use_named_masks = true
 commit_parser = "angular"
 major_on_zero = true
 version_toml = ["pyproject.toml:project.version"]
+assets = ["uv.lock"]
 
 [tool.semantic_release.branches.main]
 match = "main"
