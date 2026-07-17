@@ -33,6 +33,7 @@ from ipor_fusion.mcp.server import (
     vault_add,
     vault_info,
     vault_list,
+    vault_oracle_mapping,
     vault_remove,
     vault_role_accounts,
 )
@@ -41,6 +42,7 @@ from ipor_fusion.readers.morpho import (
     MorphoMarketParams,
     MorphoMarketRates,
 )
+from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode, OraclePrice
 from ipor_fusion.types import Period, RoleId
 
 
@@ -273,6 +275,125 @@ class TestVaultRoleAccounts:
         role_prop = tool.inputSchema["properties"]["role"]
         enum_values = next(alt["enum"] for alt in role_prop["anyOf"] if "enum" in alt)
         assert set(enum_values) == {r.name for r in Roles}
+
+
+# ── vault_oracle_mapping ──────────────────────────────────────────────
+
+
+def _oracle_node() -> OracleNode:
+    return OracleNode(
+        asset="0xUSDC",  # type: ignore[arg-type]
+        symbol="USDC",
+        decimals=6,
+        source="0xFEED",  # type: ignore[arg-type]
+        price=OraclePrice(
+            raw="99980000",
+            decimals=8,
+            normalized_wad=str(99_980_000 * 10**10),
+        ),
+        source_type="ChainlinkAggregator",
+        path=["USDC", "Chainlink feed"],
+        status="resolved",
+    )
+
+
+def _oracle_mapping(block_number: int = 123) -> OracleMapping:
+    return OracleMapping(
+        vault=VAULT_ADDR,  # type: ignore[arg-type]
+        vault_name="Reservoir",
+        asset={"address": "0xUSDC", "symbol": "USDC", "decimals": 6},
+        price_oracle="0xORACLE",  # type: ignore[arg-type]
+        block_number=block_number,
+        asset_source="getConfiguredAssets",
+        configured_assets=[_oracle_node()],
+        unresolved=[],
+    )
+
+
+def _oracle_ctx(latest_block: int = 777) -> MagicMock:
+    ctx = MagicMock()
+    ctx.web3.eth.block_number = latest_block
+    ctx.default_block = "latest"
+    return ctx
+
+
+class TestVaultOracleMapping:
+    @patch("ipor_fusion.mcp.server.build_oracle_mapping")
+    @patch("ipor_fusion.mcp.server.resolve_access_manager")
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_latest_block_resolved_and_pinned(
+        self, _load, mock_build_ctx, _resolve, mock_build
+    ):
+        ctx = _oracle_ctx(latest_block=777)
+        mock_build_ctx.return_value = (ctx, None)
+        mock_build.return_value = _oracle_mapping(block_number=777)
+
+        result = vault_oracle_mapping(vault_address=VAULT_ADDR)
+
+        # latest resolved to a number, passed to the SDK, and pinned on the ctx
+        assert mock_build.call_args.args[2] == 777
+        assert ctx.default_block == 777
+        assert result.block_number == 777
+        assert result.vault_name == "Reservoir"
+        assert result.asset_source == "getConfiguredAssets"
+        assert [n.symbol for n in result.configured_assets] == ["USDC"]
+        assert result.unresolved == []
+
+    @patch("ipor_fusion.mcp.server.build_oracle_mapping")
+    @patch("ipor_fusion.mcp.server.resolve_access_manager")
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_explicit_block_passed_and_pinned(
+        self, _load, mock_build_ctx, _resolve, mock_build
+    ):
+        ctx = _oracle_ctx()
+        mock_build_ctx.return_value = (ctx, 500)
+        mock_build.return_value = _oracle_mapping(block_number=500)
+
+        vault_oracle_mapping(vault_address=VAULT_ADDR, block_number=500)
+
+        assert mock_build.call_args.args[2] == 500
+        assert ctx.default_block == 500
+
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_negative_block_rejected_before_rpc(self, _load, mock_build_ctx):
+        with pytest.raises(ValueError, match="block_number must be >= 0"):
+            vault_oracle_mapping(vault_address=VAULT_ADDR, block_number=-1)
+        mock_build_ctx.assert_not_called()
+
+    @patch("ipor_fusion.mcp.server.build_oracle_mapping")
+    @patch(
+        "ipor_fusion.mcp.server.resolve_access_manager",
+        side_effect=NotPlasmaVaultError("not a vault"),
+    )
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_guard_errors_propagate_before_build(
+        self, _load, mock_build_ctx, _resolve, mock_build
+    ):
+        mock_build_ctx.return_value = (_oracle_ctx(), None)
+
+        with pytest.raises(NotPlasmaVaultError, match="not a vault"):
+            vault_oracle_mapping(vault_address=VAULT_ADDR)
+        mock_build.assert_not_called()
+
+    def test_tool_registered(self):
+        tools = asyncio.run(mcp.list_tools())
+        assert "vault_oracle_mapping" in {t.name for t in tools}
 
 
 class TestVaultInfoGuards:

@@ -12,6 +12,12 @@ from ipor_fusion.readers.morpho import (
     MorphoPosition,
     MorphoReader,
 )
+from ipor_fusion.readers.oracle_mapping import (
+    OracleMapping,
+    OracleNode,
+    OraclePrice,
+    build_oracle_mapping,
+)
 from ipor_fusion.readers.position_manager import PositionData
 from ipor_fusion.readers.ramses_v2 import RamsesV2Position, RamsesV2Reader
 from ipor_fusion.readers.uniswap_v3 import UniswapV3Position, UniswapV3Reader
@@ -28,6 +34,10 @@ __all__ = [
     "LendingMarketHealth",
     "VaultLendingHealth",
     "fetch_vault_lending_health",
+    "OracleMapping",
+    "OracleNode",
+    "OraclePrice",
+    "build_oracle_mapping",
     "PositionData",
     "UniswapV3Reader",
     "UniswapV3Position",
