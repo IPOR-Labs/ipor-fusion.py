@@ -46,6 +46,7 @@ ASSET_PRICE_SOURCE_UPDATED_TOPIC = (
 TYPE_CHAINLINK = "ChainlinkAggregator"
 TYPE_ERC4626 = "ERC4626PriceFeed"
 TYPE_MORPHO = "CollateralTokenOnMorphoMarketPriceFeed"
+TYPE_DUAL_XREF = "DualCrossReferencePriceFeed"
 TYPE_UNKNOWN = "custom_unknown"
 
 _WAD = 18
@@ -141,6 +142,21 @@ class _MorphoFeed(ContractWrapper):
 class _MorphoOracle(ContractWrapper):
     def price(self) -> Call[int]:
         return self._view("price()", output_types=["uint256"], decoder=int)
+
+
+class _DualXrefFeed(ContractWrapper):
+    def asset_x(self) -> Call[ChecksumAddress]:
+        return self._view("ASSET_X()", output_types=["address"], decoder=_addr)
+
+    def asset_x_asset_y_feed(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "ASSET_X_ASSET_Y_ORACLE_FEED()", output_types=["address"], decoder=_addr
+        )
+
+    def asset_y_usd_feed(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "ASSET_Y_USD_ORACLE_FEED()", output_types=["address"], decoder=_addr
+        )
 
 
 class _Aggregator(ContractWrapper):
@@ -248,6 +264,17 @@ class OracleMappingReader:
 
     def morpho_oracle_price(self, morpho_oracle: ChecksumAddress) -> int | None:
         return self._safe(_MorphoOracle(self._ctx, morpho_oracle).price())
+
+    def feed_asset_x(self, source: ChecksumAddress) -> ChecksumAddress | None:
+        return self._safe(_DualXrefFeed(self._ctx, source).asset_x())
+
+    def feed_asset_x_asset_y_feed(
+        self, source: ChecksumAddress
+    ) -> ChecksumAddress | None:
+        return self._safe(_DualXrefFeed(self._ctx, source).asset_x_asset_y_feed())
+
+    def feed_asset_y_usd_feed(self, source: ChecksumAddress) -> ChecksumAddress | None:
+        return self._safe(_DualXrefFeed(self._ctx, source).asset_y_usd_feed())
 
     # -- ERC4626 vault reads ----------------------------------------------
     def vault_asset(self, vault: ChecksumAddress) -> ChecksumAddress | None:
@@ -423,6 +450,62 @@ def _resolve_morpho(
     return node
 
 
+def _resolve_dual_xref(
+    reader: OracleMappingReader,
+    node: OracleNode,
+    label: str,
+    asset_x: ChecksumAddress,
+    xy_feed: ChecksumAddress,
+    y_usd_feed: ChecksumAddress,
+) -> OracleNode:
+    """Resolve a dual cross-reference feed: X/USD = (X/Y feed) × (Y/USD feed)."""
+    xy_round = reader.feed_latest_round_data(xy_feed)
+    xy_decimals = reader.feed_decimals(xy_feed)
+    y_usd_round = reader.feed_latest_round_data(y_usd_feed)
+    y_usd_decimals = reader.feed_decimals(y_usd_feed)
+
+    derived: str | None = None
+    if (
+        xy_round
+        and y_usd_round
+        and xy_decimals is not None
+        and y_usd_decimals is not None
+    ):
+        derived = str(
+            int(normalize_wad(xy_round[1], xy_decimals))
+            * int(normalize_wad(y_usd_round[1], y_usd_decimals))
+            // 10**_WAD
+        )
+
+    node.source_type = TYPE_DUAL_XREF
+    node.source_detail = {
+        "asset_x": asset_x,
+        "asset_x_asset_y_feed": {
+            "address": xy_feed,
+            "answer": str(xy_round[1]) if xy_round else None,
+            "answer_decimals": xy_decimals,
+        },
+        "asset_y_usd_feed": {
+            "address": y_usd_feed,
+            "answer": str(y_usd_round[1]) if y_usd_round else None,
+            "answer_decimals": y_usd_decimals,
+        },
+        "derived_price_wad": derived,
+    }
+    node.path = [
+        label,
+        "DualCrossReferencePriceFeed",
+        "ASSET_X/ASSET_Y feed",
+        "ASSET_Y/USD feed",
+    ]
+    if derived is None:
+        node.status = "partial"
+        node.reason = "dual_xref_component_unreadable"
+        return node
+    node.status = "resolved"
+    return node
+
+
 def _classify_and_resolve(
     reader: OracleMappingReader,
     node: OracleNode,
@@ -434,6 +517,13 @@ def _classify_and_resolve(
 ) -> OracleNode:
     """Classify the source by interface probing and dispatch to its type resolver."""
     # Probe most specific first; Chainlink's interface is shared by the others.
+    # Partial getter match = wrong type hypothesis, not a broken feed — fall through.
+    asset_x = reader.feed_asset_x(source)
+    if asset_x is not None:
+        xy_feed = reader.feed_asset_x_asset_y_feed(source)
+        y_usd_feed = reader.feed_asset_y_usd_feed(source)
+        if xy_feed is not None and y_usd_feed is not None:
+            return _resolve_dual_xref(reader, node, label, asset_x, xy_feed, y_usd_feed)
     morpho_oracle = reader.feed_morpho_oracle(source)
     if morpho_oracle is not None:
         return _resolve_morpho(

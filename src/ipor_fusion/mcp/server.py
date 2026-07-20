@@ -227,10 +227,13 @@ def vault_oracle_mapping(
     effective price, and recursively resolves feeds that derive their price
     from another asset. Unknown feeds are reported as partial, never dropped.
 
-    Source types: ChainlinkAggregator (leaf feed), ERC4626PriceFeed
-    (share→asset rate, recurses on the underlying),
-    CollateralTokenOnMorphoMarketPriceFeed (recurses on the loan token),
-    custom_unknown (partial).
+    Source types: DualCrossReferencePriceFeed (X/USD composed from an X/Y and
+    a Y/USD component feed, both reported in source_detail),
+    ChainlinkAggregator (leaf feed), ERC4626PriceFeed (share→asset rate,
+    recurses on the underlying), CollateralTokenOnMorphoMarketPriceFeed
+    (recurses on the loan token), custom_unknown (partial). Classification is
+    heuristic interface probing: it grades on-chain evidence and cannot prove
+    a contract's identity or operator.
 
     Assets are enumerated via getConfiguredAssets() when the oracle exposes
     it, else by replaying AssetPriceSourceUpdated logs (asset_source:

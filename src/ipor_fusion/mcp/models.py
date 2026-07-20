@@ -276,8 +276,9 @@ class OracleNodeModel(_Base):
         description="Configured price-feed address; null when none/unreadable."
     )
     source_type: str = Field(
-        description="ChainlinkAggregator, ERC4626PriceFeed, "
-        "CollateralTokenOnMorphoMarketPriceFeed, or custom_unknown."
+        description="DualCrossReferencePriceFeed, ChainlinkAggregator, "
+        "ERC4626PriceFeed, CollateralTokenOnMorphoMarketPriceFeed, "
+        "or custom_unknown."
     )
     price: OraclePriceModel
     path: list[str] = Field(

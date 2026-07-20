@@ -478,10 +478,12 @@ def oracle_mapping(
     """Map how the vault prices every configured asset at a block.
 
     For each asset the vault's price oracle knows about, resolves the source
-    price feed, classifies its type by interface probing (Chainlink / ERC4626
-    / Morpho collateral / unknown) and recursively follows feeds that derive
-    their price from another asset. Unknown feeds are reported as partial,
-    never dropped. Historical blocks require an archive node.
+    price feed, classifies its type by interface probing (dual cross-reference
+    / Chainlink / ERC4626 / Morpho collateral / unknown) and recursively
+    follows feeds that derive their price from another asset. Unknown feeds
+    are reported as partial, never dropped. Classification is heuristic: it
+    grades on-chain evidence, it cannot prove a contract's identity. Historical
+    blocks require an archive node.
     """
     cfg = load_config()
     chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)

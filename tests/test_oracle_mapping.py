@@ -126,6 +126,15 @@ class FakeReader:
     def morpho_oracle_price(self, o: str) -> int | None:
         return self.morpho_prices.get(o)
 
+    def feed_asset_x(self, s: str) -> str | None:
+        return self._f(s).get("asset_x")
+
+    def feed_asset_x_asset_y_feed(self, s: str) -> str | None:
+        return self._f(s).get("xy_feed")
+
+    def feed_asset_y_usd_feed(self, s: str) -> str | None:
+        return self._f(s).get("y_usd_feed")
+
     # erc4626 vault
     def vault_asset(self, v: str) -> str | None:
         return self.vaults.get(v, {}).get("asset")
@@ -232,6 +241,171 @@ class TestResolve:
         assert node.source_detail["morpho_price"] == "1030000"
         assert [d.asset for d in node.dependencies] == [loan]
         assert node.path[:2] == ["COLL", "Morpho collateral/loan oracle"]
+
+    def test_dual_xref_wins_over_chainlink(self):
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            # the dual-xref contract also answers decimals()+latestRoundData();
+            # the generic Chainlink probe must not win
+            "round": (1, 2_600 * 10**8, 0, 0, 1),
+            "feed_decimals": 8,
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        r.feeds[xy_feed] = {
+            "round": (1, 13 * 10**17, 0, 1_700_000_000, 1),
+            "feed_decimals": 18,
+        }
+        r.feeds[y_usd_feed] = {
+            "round": (1, 2_000 * 10**8, 0, 1_700_000_000, 1),
+            "feed_decimals": 8,
+        }
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_DUAL_XREF
+        assert node.path == [
+            "wstETH",
+            "DualCrossReferencePriceFeed",
+            "ASSET_X/ASSET_Y feed",
+            "ASSET_Y/USD feed",
+        ]
+        assert node.source_detail is not None
+        assert node.source_detail["asset_x"] == wsteth
+        assert node.source_detail["asset_x_asset_y_feed"] == {
+            "address": xy_feed,
+            "answer": str(13 * 10**17),
+            "answer_decimals": 18,
+        }
+        assert node.source_detail["asset_y_usd_feed"] == {
+            "address": y_usd_feed,
+            "answer": str(2_000 * 10**8),
+            "answer_decimals": 8,
+        }
+        # 1.3 X/Y × 2000 Y/USD = 2600 USD, rescaled to 18 decimals
+        assert node.source_detail["derived_price_wad"] == str(2_600 * 10**18)
+        assert node.dependencies == []
+
+    def test_dual_xref_component_unreadable_is_partial(self):
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        r.feeds[xy_feed] = {
+            "round": (1, 13 * 10**17, 0, 1_700_000_000, 1),
+            "feed_decimals": 18,
+        }
+        # y_usd_feed unreadable (no round data)
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.source_type == om.TYPE_DUAL_XREF
+        assert node.status == "partial"
+        assert node.reason == "dual_xref_component_unreadable"
+        assert node.source_detail is not None
+        # the readable component is still reported
+        assert node.source_detail["asset_x_asset_y_feed"]["answer"] == str(13 * 10**17)
+        assert node.source_detail["asset_y_usd_feed"]["answer"] is None
+        assert node.source_detail["derived_price_wad"] is None
+        # the authoritative middleware price is carried regardless
+        assert node.price.raw == str(2_600 * 10**8)
+
+    def test_dual_xref_xy_component_unreadable_is_partial(self):
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        # xy_feed unreadable (no round data)
+        r.feeds[y_usd_feed] = {
+            "round": (1, 2_000 * 10**8, 0, 1_700_000_000, 1),
+            "feed_decimals": 8,
+        }
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.source_type == om.TYPE_DUAL_XREF
+        assert node.status == "partial"
+        assert node.reason == "dual_xref_component_unreadable"
+        assert node.source_detail is not None
+        assert node.source_detail["asset_x_asset_y_feed"]["answer"] is None
+        assert node.source_detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
+        assert node.source_detail["derived_price_wad"] is None
+
+    def test_dual_xref_missing_component_decimals_is_partial(self):
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        r.feeds[xy_feed] = {
+            "round": (1, 13 * 10**17, 0, 1_700_000_000, 1),
+            "feed_decimals": 18,
+        }
+        # answer readable but decimals() missing — the answer alone cannot be
+        # scaled, so no derived price may be produced
+        r.feeds[y_usd_feed] = {"round": (1, 2_000 * 10**8, 0, 1_700_000_000, 1)}
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.source_type == om.TYPE_DUAL_XREF
+        assert node.status == "partial"
+        assert node.reason == "dual_xref_component_unreadable"
+        assert node.source_detail is not None
+        assert node.source_detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
+        assert node.source_detail["asset_y_usd_feed"]["answer_decimals"] is None
+        assert node.source_detail["derived_price_wad"] is None
+
+    def test_dual_xref_probe_incomplete_falls_through_to_chainlink(self):
+        r = FakeReader()
+        asset = addr(1)
+        feed = addr(0x11)
+        r.symbols[asset] = "ODD"
+        r.decimals[asset] = 18
+        r.sources[asset] = feed
+        r.prices[asset] = Price(asset=asset, amount=10**8, decimals=8)
+        # ASSET_X() answers but the component-feed getters do not — not a
+        # dual-xref feed, the Chainlink leaf probe must still classify it
+        r.feeds[feed] = {
+            "asset_x": addr(2),
+            "round": (1, 10**8, 0, 1_700_000_000, 1),
+            "feed_decimals": 8,
+        }
+
+        node = om.resolve_asset(r, asset, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK
+        assert node.status == "resolved"
 
     def test_custom_unknown_is_partial(self):
         r = FakeReader()
@@ -525,6 +699,9 @@ class TestOracleMappingReader:
         assert reader.feed_morpho_oracle(feed) == target
         assert reader.feed_collateral_token(feed) == target
         assert reader.feed_loan_token(feed) == target
+        assert reader.feed_asset_x(feed) == target
+        assert reader.feed_asset_x_asset_y_feed(feed) == target
+        assert reader.feed_asset_y_usd_feed(feed) == target
 
         ctx.call.return_value = encode(["uint256"], [1_030_000])
         assert reader.morpho_oracle_price(addr(0x31)) == 1_030_000
