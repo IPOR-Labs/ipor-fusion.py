@@ -15,7 +15,7 @@ from eth_abi import encode
 from web3 import Web3
 
 from ipor_fusion.readers import oracle_mapping as om
-from ipor_fusion.types import Price
+from ipor_fusion.types import NodeStatus, Price
 
 
 def addr(n: int) -> str:
@@ -480,12 +480,16 @@ class TestResolve:
         assert dep.asset == weth
         assert dep.source_type == om.TYPE_CHAINLINK
         assert dep.status == "resolved"
-        # the dep re-reads the price from the underlying middleware itself
+        # the dep re-reads the price from the underlying middleware itself;
+        # 8 = old deployed base middleware (newer ones answer 18 — decimals
+        # are pass-through either way)
         assert dep.price.decimals == 8
 
-    def test_manager_delegation_with_unreadable_price_stays_resolved(self):
-        # resolved = "feed structure explained", not "price obtained" — same
-        # convention as ERC4626/Morpho parents over partial dependencies
+    def test_manager_delegation_with_unreadable_price_demoted_to_partial(self):
+        # On-chain the manager's zero-source getAssetPrice IS the delegation,
+        # so its own read failing is an anomaly — own-price demotion. Doubles
+        # as the precedence case: with the dep partial too, the node reports
+        # its own `partial` + reason, not dependency-driven partially_resolved.
         r = FakeReader()
         weth = addr(1)
         mw = addr(0x51)
@@ -500,7 +504,8 @@ class TestResolve:
 
         node = om.resolve_asset(r, weth, max_depth=6)
 
-        assert node.status == "resolved"
+        assert node.status == "partial"
+        assert node.reason == "manager_price_unreadable"
         assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
         assert node.price == om.OraclePrice(
             raw=None, decimals=None, normalized_wad=None
@@ -578,6 +583,7 @@ class TestResolve:
 
         node = om.resolve_asset(r, weth, max_depth=0)
 
+        assert node.status == "partially_resolved"
         dep = node.dependencies[0]
         assert dep.status == "partial"
         assert dep.reason == "max_depth_exceeded"
@@ -626,6 +632,7 @@ class TestResolve:
 
         node = om.resolve_asset(r, a, max_depth=6)
 
+        assert node.status == "partially_resolved"
         dep = node.dependencies[0]
         assert dep.status == "partial"
         assert dep.reason == "cycle_detected"
@@ -645,6 +652,7 @@ class TestResolve:
 
         node = om.resolve_asset(r, a, max_depth=0)
 
+        assert node.status == "partially_resolved"
         dep = node.dependencies[0]
         assert dep.status == "partial"
         assert dep.reason == "max_depth_exceeded"
@@ -685,8 +693,62 @@ class TestResolve:
         assert node.reason == "morpho_loan_token_unreadable"
         assert node.dependencies == []
 
+    def test_erc4626_rate_unreadable_demoted_to_partial(self):
+        # no derived price without the share→asset rate; the resolved
+        # underlying dep is still attached (readable parts kept)
+        r = FakeReader()
+        wsr, rusd = addr(1), addr(2)
+        feed_w, vault_w, feed_r = addr(0x11), addr(0x21), addr(0x12)
+        r.symbols[wsr] = "wsrUSD"
+        r.decimals[wsr] = 18
+        r.sources[wsr] = feed_w
+        r.prices[wsr] = Price(asset=wsr, amount=10**18, decimals=18)
+        r.feeds[feed_w] = {"vault": vault_w}
+        r.vaults[vault_w] = {"asset": rusd, "decimals": 18}  # no "rate"
+        _chainlink_asset(r, rusd, feed_r, symbol="rUSD")
 
-def _bare_node(status: str, reason: str | None = None, deps: list | None = None):
+        node = om.resolve_asset(r, wsr, max_depth=6)
+
+        assert node.source_type == om.TYPE_ERC4626
+        assert node.status == "partial"
+        assert node.reason == "erc4626_rate_unreadable"
+        assert node.source_detail is not None
+        assert node.source_detail["rate"] is None
+        dep = node.dependencies[0]
+        assert dep.asset == rusd
+        assert dep.status == "resolved"
+
+    def test_partial_leaf_demotes_every_ancestor(self):
+        # A → B (ERC4626 hops) → C (no source): C partial, both ancestors
+        # partially_resolved — propagation is transitive via direct children.
+        r = FakeReader()
+        a, b, c = addr(1), addr(2), addr(3)
+        feed_a, vault_a = addr(0x11), addr(0x21)
+        feed_b, vault_b = addr(0x12), addr(0x22)
+        for asset, sym, feed, vault, under in (
+            (a, "A", feed_a, vault_a, b),
+            (b, "B", feed_b, vault_b, c),
+        ):
+            r.symbols[asset] = sym
+            r.decimals[asset] = 18
+            r.sources[asset] = feed
+            r.prices[asset] = Price(asset=asset, amount=10**18, decimals=18)
+            r.feeds[feed] = {"vault": vault}
+            r.vaults[vault] = {"asset": under, "decimals": 18, "rate": 10**18}
+        r.symbols[c] = "C"
+        r.decimals[c] = 18
+
+        node = om.resolve_asset(r, a, max_depth=6)
+
+        assert node.status == "partially_resolved"
+        mid = node.dependencies[0]
+        assert mid.status == "partially_resolved"
+        leaf = mid.dependencies[0]
+        assert leaf.status == "partial"
+        assert leaf.reason == "no_source_configured"
+
+
+def _bare_node(status: NodeStatus, reason: str | None = None, deps: list | None = None):
     return om.OracleNode(
         asset=addr(1),
         symbol=None,
@@ -711,6 +773,40 @@ class TestCollectUnresolved:
         out = om._collect_unresolved(tree)
         assert len(out) == 1
         assert out[0].reason == "cycle_detected"
+
+    def test_partially_resolved_parent_not_collected(self):
+        # demoted parents self-describe; only own-failure nodes are mirrored
+        tree = [
+            _bare_node(
+                "partially_resolved",
+                deps=[_bare_node("partial", reason="max_depth_exceeded")],
+            ),
+        ]
+        out = om._collect_unresolved(tree)
+        assert [n.status for n in out] == ["partial"]
+
+
+class TestMappingStatus:
+    def test_all_resolved(self):
+        roots = [_bare_node("resolved"), _bare_node("resolved")]
+        assert om._mapping_status(roots) == "resolved"
+
+    def test_empty_is_vacuously_resolved(self):
+        assert om._mapping_status([]) == "resolved"
+
+    def test_mix_is_partially_resolved(self):
+        roots = [_bare_node("resolved"), _bare_node("partial", reason="x")]
+        assert om._mapping_status(roots) == "partially_resolved"
+
+    def test_partially_resolved_root_keeps_mapping_out_of_unresolved(self):
+        # a partially_resolved root still explains its own feed — unresolved
+        # is reserved for total failure
+        roots = [_bare_node("partially_resolved"), _bare_node("partial", reason="x")]
+        assert om._mapping_status(roots) == "partially_resolved"
+
+    def test_all_roots_partial_is_unresolved(self):
+        roots = [_bare_node("partial", reason="x"), _bare_node("partial", reason="y")]
+        assert om._mapping_status(roots) == "unresolved"
 
 
 # ---------------------------------------------------------------------------
@@ -790,6 +886,7 @@ class TestToDict:
             price_oracle=addr(0x99),
             block_number=123,
             asset_source="getConfiguredAssets",
+            status="unresolved",
             configured_assets=[node],
             unresolved=[node],
         )
@@ -802,6 +899,7 @@ class TestToDict:
         assert out["price_oracle"] == addr(0x99)
         assert out["block_number"] == 123
         assert out["asset_source"] == "getConfiguredAssets"
+        assert out["status"] == "unresolved"
         assert out["configured_assets"] == [node.to_dict()]
         assert out["unresolved"] == [node.to_dict()]
 
@@ -1083,6 +1181,8 @@ class TestBuildOracleMapping:
         assert out.asset_source == "getConfiguredAssets"
         assert out.asset == {"address": usdc, "symbol": "USDC", "decimals": 6}
         assert {n.asset for n in out.configured_assets} == {usdc, wsr, nosrc}
+        # two roots resolved, one partial → mapping-level roll-up is a mix
+        assert out.status == "partially_resolved"
         # only the no-source asset is unresolved, mirrored to the top level
         assert [n.reason for n in out.unresolved] == ["no_source_configured"]
         assert out.unresolved[0].asset == nosrc

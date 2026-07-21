@@ -305,6 +305,7 @@ def _oracle_mapping(block_number: int = 123) -> OracleMapping:
         price_oracle="0xORACLE",  # type: ignore[arg-type]
         block_number=block_number,
         asset_source="getConfiguredAssets",
+        status="resolved",
         configured_assets=[_oracle_node()],
         unresolved=[],
     )

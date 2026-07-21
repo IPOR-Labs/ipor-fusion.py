@@ -10,6 +10,15 @@ A zero source is not a dead end: the oracle may be a manager variant that
 delegates such assets to an underlying global middleware — that delegation is
 followed and reported as ``middleware_fallback``.
 
+Statuses: a node is ``resolved`` (own feed explained and every dependency
+resolved), ``partially_resolved`` (own feed explained, but some descendant is
+not resolved), or ``partial`` (the node's own resolution is incomplete —
+``reason`` says why). The mapping-level ``status`` rolls up the roots:
+``resolved`` when every configured asset resolved (vacuously so for zero
+assets), ``unresolved`` when every root is ``partial`` (total failure),
+``partially_resolved`` otherwise. The ``unresolved`` array mirrors
+``partial`` nodes only; demoted parents self-describe.
+
 Design:
 - All network access goes through :class:`OracleMappingReader` (the single
   seam). Every read is "safe": a revert/decode failure yields ``None`` so one
@@ -35,7 +44,7 @@ from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.types import Price
+from ipor_fusion.types import AssetSource, MappingStatus, NodeStatus, Price
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -59,8 +68,8 @@ _WAD = 18
 
 
 # ---------------------------------------------------------------------------
-# Result dataclasses (field names match the historical JSON keys — IL-7779
-# reshapes the schema later, keep them identical here)
+# Result dataclasses (field names are the JSON keys of the CLI --json / MCP
+# output — renaming a field is a client-visible schema change)
 # ---------------------------------------------------------------------------
 
 
@@ -75,7 +84,13 @@ class OraclePrice:
 
 @dataclass(slots=True)
 class OracleNode:
-    """One asset's resolved price feed (recursive for derived feeds)."""
+    """One asset's resolved price feed (recursive for derived feeds).
+
+    ``status``: ``resolved`` — own feed explained and every dependency
+    resolved; ``partially_resolved`` — own feed explained, but some descendant
+    is not resolved; ``partial`` — this node's own resolution is incomplete
+    (``reason`` says why).
+    """
 
     asset: ChecksumAddress
     symbol: str | None
@@ -84,7 +99,7 @@ class OracleNode:
     price: OraclePrice
     source_type: str = TYPE_UNKNOWN
     path: list[str] = field(default_factory=list)
-    status: str = "partial"
+    status: NodeStatus = "partial"
     reason: str | None = None
     source_detail: dict[str, Any] | None = None
     dependencies: list[OracleNode] = field(default_factory=list)
@@ -96,14 +111,23 @@ class OracleNode:
 
 @dataclass(slots=True)
 class OracleMapping:
-    """Full oracle mapping for a vault at a pinned block."""
+    """Full oracle mapping for a vault at a pinned block.
+
+    ``status`` rolls up the configured-asset roots: ``resolved`` — every root
+    resolved (vacuously so with zero assets); ``unresolved`` — every root
+    ``partial`` (total failure); ``partially_resolved`` — anything in
+    between. The ``unresolved`` list mirrors ``partial`` nodes only — parents
+    demoted to ``partially_resolved`` self-describe and are not repeated
+    there.
+    """
 
     vault: ChecksumAddress
     vault_name: str | None
     asset: dict[str, Any]
     price_oracle: ChecksumAddress
     block_number: int
-    asset_source: str
+    asset_source: AssetSource
+    status: MappingStatus
     configured_assets: list[OracleNode]
     unresolved: list[OracleNode]
 
@@ -436,6 +460,12 @@ def _resolve_erc4626(
     dep = _resolve(reader, underlying, depth + 1, visited, max_depth)
     node.dependencies = [dep]
     node.path = [label, "convertToAssets(1 share)", *dep.path]
+    if rate is None:
+        # No derived price without the share→asset rate — same "complete data
+        # or partial" standard as dual-xref; the dep is still attached.
+        node.status = "partial"
+        node.reason = "erc4626_rate_unreadable"
+        return node
     node.status = "resolved"
     return node
 
@@ -592,6 +622,13 @@ def _resolve_middleware_fallback(
             "delegated_to": underlying_middleware,
             "chainlink_feed_registry": None,
         }
+        if price is None:
+            # On-chain the manager's zero-source getAssetPrice IS this
+            # delegation, so its own read failing while the hop answers means
+            # an anomaly (transient read, or a feed answering 0/negative) —
+            # surface it instead of reporting resolved with a null price.
+            node.status = "partial"
+            node.reason = "manager_price_unreadable"
         return node
     # Not a manager, yet the price read succeeded (else the no_source_configured
     # early return above would have fired): the middleware's internal fallback
@@ -682,17 +719,19 @@ def _resolve(
 
     source = reader.source_of(asset)
     if source is None or source.lower() == ZERO_ADDRESS:
-        return _resolve_middleware_fallback(
-            reader,
-            asset,
-            symbol,
-            decimals,
-            source,
-            label,
-            price,
-            depth,
-            visited,
-            max_depth,
+        return _apply_dependency_status(
+            _resolve_middleware_fallback(
+                reader,
+                asset,
+                symbol,
+                decimals,
+                source,
+                label,
+                price,
+                depth,
+                visited,
+                max_depth,
+            )
         )
 
     node = OracleNode(
@@ -704,11 +743,26 @@ def _resolve(
     )
     visited.add(key)
     try:
-        return _classify_and_resolve(
-            reader, node, label, source, depth, visited, max_depth
+        return _apply_dependency_status(
+            _classify_and_resolve(
+                reader, node, label, source, depth, visited, max_depth
+            )
         )
     finally:
         visited.discard(key)
+
+
+def _apply_dependency_status(node: OracleNode) -> OracleNode:
+    """Demote a ``resolved`` parent over any non-``resolved`` direct child.
+
+    Children are already final (post-order recursion), so direct children
+    suffice; an own ``partial`` outranks the dependency-driven demotion.
+    """
+    if node.status == "resolved" and any(
+        dep.status != "resolved" for dep in node.dependencies
+    ):
+        node.status = "partially_resolved"
+    return node
 
 
 def resolve_asset(
@@ -719,15 +773,33 @@ def resolve_asset(
 
 
 def _collect_unresolved(nodes: Iterable[OracleNode]) -> list[OracleNode]:
-    """Flatten the tree to every node whose status is not ``resolved``."""
+    """Flatten the tree to every ``partial`` node (own resolution incomplete).
+
+    ``partially_resolved`` parents are deliberately excluded — they
+    self-describe, and listing them would bury the actual failures.
+    """
     out: list[OracleNode] = []
     stack = list(nodes)
     while stack:
         node = stack.pop()
-        if node.status != "resolved":
+        if node.status == "partial":
             out.append(node)
         stack.extend(node.dependencies)
     return out
+
+
+def _mapping_status(roots: list[OracleNode]) -> MappingStatus:
+    """Roll the root statuses up; empty ``roots`` is vacuously ``resolved``.
+
+    ``unresolved`` is reserved for total failure (every root ``partial``) — a
+    ``partially_resolved`` root still explains its own feed, so it keeps the
+    mapping at ``partially_resolved``.
+    """
+    if all(node.status == "resolved" for node in roots):
+        return "resolved"
+    if all(node.status == "partial" for node in roots):
+        return "unresolved"
+    return "partially_resolved"
 
 
 # ---------------------------------------------------------------------------
@@ -737,7 +809,7 @@ def _collect_unresolved(nodes: Iterable[OracleNode]) -> list[OracleNode]:
 
 def _enumerate_assets(
     reader: OracleMappingReader, effective_block: int
-) -> tuple[list[ChecksumAddress], str]:
+) -> tuple[list[ChecksumAddress], AssetSource]:
     """Configured assets via ``getConfiguredAssets`` or event-replay fallback."""
     assets = reader.configured_assets()
     if assets is not None:
@@ -797,6 +869,7 @@ def build_oracle_mapping(
         price_oracle=oracle_addr,
         block_number=effective_block,
         asset_source=asset_source,
+        status=_mapping_status(configured),
         configured_assets=configured,
         unresolved=_collect_unresolved(configured),
     )

@@ -484,8 +484,18 @@ def oracle_mapping(
     assets priced through the oracle's underlying middleware are reported as
     middleware fallback, not unresolved. Unknown feeds are reported as
     partial, never dropped. Classification is heuristic: it
-    grades on-chain evidence, it cannot prove a contract's identity. Historical
-    blocks require an archive node.
+    grades on-chain evidence, it cannot prove a contract's identity.
+
+    Node status:
+
+    \b
+    - resolved: own feed explained and every dependency resolved
+    - partially_resolved: some descendant is not resolved
+    - partial: the node's own resolution is incomplete (see the reason)
+
+    The unresolved summary lists partial nodes only; the mapping-level
+    status rolls up the roots (resolved / partially_resolved / unresolved).
+    Historical blocks require an archive node.
     """
     cfg = load_config()
     chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
@@ -524,6 +534,8 @@ def _print_oracle_node(node: OracleNode) -> None:
     click.echo(f"    Price:  {_format_wad_price(node.price)}")
     if node.status == "resolved":
         click.secho("    Status: resolved", fg="green")
+    elif node.status == "partially_resolved":
+        click.secho("    Status: partially_resolved", fg="yellow")
     else:
         click.secho(f"    Status: partial ({node.reason})", fg="yellow")
 
@@ -538,6 +550,10 @@ def _print_oracle_mapping(mapping: OracleMapping) -> None:
     click.echo(f"Price Oracle: {mapping.price_oracle}")
     click.echo(f"Block:        {mapping.block_number}")
     click.echo(f"Enumerated:   {mapping.asset_source}")
+    status_color = {"resolved": "green", "partially_resolved": "yellow"}.get(
+        mapping.status, "red"
+    )
+    click.secho(f"Status:       {mapping.status}", fg=status_color)
     click.echo()
     click.echo(f"Configured assets ({len(mapping.configured_assets)}):")
     for node in mapping.configured_assets:

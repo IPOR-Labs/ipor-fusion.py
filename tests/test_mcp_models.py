@@ -17,6 +17,7 @@ from ipor_fusion.mcp.models import (
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     OracleMappingResponse,
+    OracleNodeModel,
     Reconciliation,
     RoleAccountsResponse,
     VaultInfoResponse,
@@ -626,6 +627,7 @@ def _oracle_mapping() -> OracleMapping:
         price_oracle="0xORACLE",  # type: ignore[arg-type]
         block_number=12345,
         asset_source="events",
+        status="partially_resolved",
         configured_assets=[_erc4626_node(), partial],
         unresolved=[partial],
     )
@@ -638,6 +640,7 @@ class TestOracleMappingResponse:
         assert resp.vault == "0xVAULT"
         assert resp.block_number == 12345
         assert resp.asset_source == "events"
+        assert resp.status == "partially_resolved"
         node = resp.configured_assets[0]
         assert node.source_type == "ERC4626PriceFeed"
         assert node.price.normalized_wad == str(10**18)
@@ -676,8 +679,22 @@ class TestOracleMappingResponse:
                     "price_oracle": "0xORACLE",
                     "block_number": 1,
                     "asset_source": "getConfiguredAssets",
+                    "status": "resolved",
                     "configured_assets": [],
                     "unresolved": [],
                     "extra": "no",
                 }
             )
+
+    def test_rejects_unknown_status_values(self):
+        # status / asset_source are Literal-pinned — typos must not validate
+        mapping = _oracle_mapping()
+        payload = OracleMappingResponse.from_mapping(mapping).model_dump()
+
+        for key, bad in (("status", "kinda_resolved"), ("asset_source", "guess")):
+            with pytest.raises(ValidationError):
+                OracleMappingResponse.model_validate({**payload, key: bad})
+        node_payload = payload["configured_assets"][0]
+        # "unresolved" is mapping-level vocabulary — must not validate on a node
+        with pytest.raises(ValidationError):
+            OracleNodeModel.model_validate({**node_payload, "status": "unresolved"})

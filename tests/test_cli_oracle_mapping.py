@@ -57,6 +57,26 @@ def _partial_node() -> OracleNode:
     )
 
 
+def _rollup(nodes: list[OracleNode]):
+    if all(n.status == "resolved" for n in nodes):
+        return "resolved"
+    if all(n.status == "partial" for n in nodes):
+        return "unresolved"
+    return "partially_resolved"
+
+
+def _partials(nodes: list[OracleNode]) -> list[OracleNode]:
+    # mirrors the engine's _collect_unresolved: partial nodes, whole tree
+    out: list[OracleNode] = []
+    stack = list(nodes)
+    while stack:
+        node = stack.pop()
+        if node.status == "partial":
+            out.append(node)
+        stack.extend(node.dependencies)
+    return out
+
+
 def _mapping(nodes: list[OracleNode]) -> OracleMapping:
     return OracleMapping(
         vault=VAULT,  # type: ignore[arg-type]
@@ -65,8 +85,9 @@ def _mapping(nodes: list[OracleNode]) -> OracleMapping:
         price_oracle=ORACLE,  # type: ignore[arg-type]
         block_number=12345,
         asset_source="getConfiguredAssets",
+        status=_rollup(nodes),
         configured_assets=nodes,
-        unresolved=[n for n in nodes if n.status != "resolved"],
+        unresolved=_partials(nodes),
     )
 
 
@@ -95,6 +116,7 @@ class TestOracleMappingCommand:
         assert f"Price Oracle: {ORACLE}" in result.output
         assert "Block:        12345" in result.output
         assert "Enumerated:   getConfiguredAssets" in result.output
+        assert "Status:       partially_resolved" in result.output
         assert "Configured assets (2):" in result.output
         assert "USDC → Chainlink feed" in result.output
         assert "Price:  0.9998" in result.output
@@ -114,7 +136,29 @@ class TestOracleMappingCommand:
         )
 
         assert result.exit_code == 0
+        assert "Status:       resolved" in result.output
         assert "Unresolved: 0" in result.output
+
+    def test_partially_resolved_node_rendering(
+        self, mock_ctx_cls, _resolve, mock_build, tmp_config
+    ):
+        mock_ctx_cls.from_url.return_value = _fake_ctx()
+        parent = _resolved_node()
+        parent.status = "partially_resolved"
+        parent.dependencies = [_partial_node()]
+        mock_build.return_value = _mapping([parent])
+
+        result = CliRunner().invoke(
+            cli, ["vault", "oracle-mapping", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code == 0
+        assert "Status: partially_resolved" in result.output
+        # a partially_resolved root is partial success, not total failure
+        assert "Status:       partially_resolved" in result.output
+        # only the partial dep is mirrored — the demoted parent is not
+        assert "Unresolved: 1" in result.output
+        assert f"wsrUSD ({WSR}): no_source_configured" in result.output
 
     def test_json_output(self, mock_ctx_cls, _resolve, mock_build, tmp_config):
         mock_ctx_cls.from_url.return_value = _fake_ctx()

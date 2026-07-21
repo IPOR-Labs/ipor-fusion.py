@@ -237,6 +237,14 @@ def vault_oracle_mapping(
     heuristic interface probing: it grades on-chain evidence and cannot prove
     a contract's identity or operator.
 
+    Node status: resolved (own feed explained and every dependency resolved),
+    partially_resolved (own feed explained, but some descendant is not
+    resolved), or partial (the node's own resolution is incomplete — see
+    reason). The unresolved array lists partial nodes only; demoted parents
+    self-describe. The mapping-level status rolls up the roots: resolved
+    (every root resolved; vacuously for zero assets), unresolved (every
+    root partial — total failure), else partially_resolved.
+
     Assets are enumerated via getConfiguredAssets() when the oracle exposes
     it, else by replaying AssetPriceSourceUpdated logs (asset_source:
     'events'). Historical blocks require an archive node.
