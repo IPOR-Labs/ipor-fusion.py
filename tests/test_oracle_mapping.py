@@ -82,6 +82,11 @@ class FakeReader:
         self.feeds: dict[str, dict[str, Any]] = {}
         self.vaults: dict[str, dict[str, Any]] = {}
         self.morpho_prices: dict[str, int] = {}
+        # oracle variant (middleware-fallback resolution); "_mw" because the
+        # exact method name would be shadowed by the attribute
+        self.underlying_mw: str | None = None
+        self.registry: str | None = None
+        self.delegated: FakeReader | None = None
         # enumeration (configured_assets / asset_source_events)
         self.configured: list[str] | None = None
         self.events: list[tuple[int, str, str]] = []
@@ -100,6 +105,18 @@ class FakeReader:
 
     def source_of(self, a: str) -> str | None:
         return self.sources.get(a)
+
+    # oracle variant probes
+    def underlying_middleware(self) -> str | None:
+        return self.underlying_mw
+
+    def chainlink_feed_registry(self) -> str | None:
+        return self.registry
+
+    def delegate(self, oracle: str) -> FakeReader:
+        assert oracle == self.underlying_mw  # must delegate to the probed middleware
+        assert self.delegated is not None  # fail fast on a misconfigured test
+        return self.delegated
 
     # feed probes
     def _f(self, s: str) -> dict[str, Any]:
@@ -433,6 +450,169 @@ class TestResolve:
         assert node.status == "partial"
         assert node.reason == "no_source_configured"
 
+    def test_zero_source_with_manager_delegates_to_underlying(self):
+        r = FakeReader()
+        weth = addr(1)
+        mw, feed = addr(0x51), addr(0x11)
+        zero = Web3.to_checksum_address(om.ZERO_ADDRESS)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.sources[weth] = zero  # manager: no per-vault override
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
+        r.underlying_mw = mw
+        delegated = FakeReader()
+        _chainlink_asset(delegated, weth, feed, symbol="WETH")
+        r.delegated = delegated
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert node.source == zero
+        assert node.source_detail == {
+            "delegated_to": mw,
+            "chainlink_feed_registry": None,
+        }
+        # the manager's own (delegated, 18-decimal) price is carried here
+        assert node.price.raw == str(2_000 * 10**18)
+        assert node.path == ["WETH", "middleware fallback", "Chainlink feed"]
+        dep = node.dependencies[0]
+        assert dep.asset == weth
+        assert dep.source_type == om.TYPE_CHAINLINK
+        assert dep.status == "resolved"
+        # the dep re-reads the price from the underlying middleware itself
+        assert dep.price.decimals == 8
+
+    def test_manager_delegation_with_unreadable_price_stays_resolved(self):
+        # resolved = "feed structure explained", not "price obtained" — same
+        # convention as ERC4626/Morpho parents over partial dependencies
+        r = FakeReader()
+        weth = addr(1)
+        mw = addr(0x51)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        # no price on the manager and none on the underlying middleware either
+        r.underlying_mw = mw
+        delegated = FakeReader()
+        delegated.symbols[weth] = "WETH"
+        delegated.decimals[weth] = 18
+        r.delegated = delegated
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert node.price == om.OraclePrice(
+            raw=None, decimals=None, normalized_wad=None
+        )
+        assert node.source_detail is not None
+        assert node.source_detail["delegated_to"] == mw
+        dep = node.dependencies[0]
+        assert dep.status == "partial"
+        assert dep.reason == "no_source_configured"
+
+    def test_zero_source_priced_without_manager_is_middleware_fallback(self):
+        r = FakeReader()
+        weth = addr(1)
+        registry = addr(0x61)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        # no source entry and no manager, but the middleware prices the asset
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**8, decimals=8)
+        r.registry = registry
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert node.path == ["WETH", "middleware fallback"]
+        assert node.source_detail == {
+            "delegated_to": None,
+            "chainlink_feed_registry": registry,
+        }
+        assert node.dependencies == []
+        assert node.price.raw == str(2_000 * 10**8)
+
+    def test_zero_feed_registry_reported_as_null(self):
+        r = FakeReader()
+        weth = addr(1)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**8, decimals=8)
+        # non-mainnet middleware: the registry getter answers the zero address
+        r.registry = Web3.to_checksum_address(om.ZERO_ADDRESS)
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert node.source_detail == {
+            "delegated_to": None,
+            "chainlink_feed_registry": None,
+        }
+
+    def test_zero_underlying_middleware_treated_as_absent(self):
+        r = FakeReader()
+        asset = addr(1)
+        r.symbols[asset] = "NOPE"
+        r.decimals[asset] = 18
+        r.underlying_mw = Web3.to_checksum_address(om.ZERO_ADDRESS)
+        # no price either → genuinely unconfigured, not middleware fallback
+
+        node = om.resolve_asset(r, asset, max_depth=6)
+
+        assert node.status == "partial"
+        assert node.reason == "no_source_configured"
+
+    def test_middleware_fallback_delegation_respects_max_depth(self):
+        r = FakeReader()
+        weth = addr(1)
+        mw, feed = addr(0x51), addr(0x11)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
+        r.underlying_mw = mw
+        delegated = FakeReader()
+        _chainlink_asset(delegated, weth, feed, symbol="WETH")
+        r.delegated = delegated
+
+        node = om.resolve_asset(r, weth, max_depth=0)
+
+        dep = node.dependencies[0]
+        assert dep.status == "partial"
+        assert dep.reason == "max_depth_exceeded"
+        # the underlying middleware's price is still carried on the capped dep
+        assert dep.price.raw == "99980000"
+
+    def test_middleware_fallback_recurses_through_layered_middlewares(self):
+        # manager → global middleware that itself has no source for the asset
+        # but a readable price (its internal FeedRegistry fallback)
+        r = FakeReader()
+        weth = addr(1)
+        mw, registry = addr(0x51), addr(0x61)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
+        r.underlying_mw = mw
+        delegated = FakeReader()
+        delegated.symbols[weth] = "WETH"
+        delegated.decimals[weth] = 18
+        delegated.prices[weth] = Price(asset=weth, amount=2_000 * 10**8, decimals=8)
+        delegated.registry = registry
+        r.delegated = delegated
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        dep = node.dependencies[0]
+        assert dep.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert dep.status == "resolved"
+        assert dep.source_detail == {
+            "delegated_to": None,
+            "chainlink_feed_registry": registry,
+        }
+        assert node.path == ["WETH", "middleware fallback", "middleware fallback"]
+
     def test_cycle_detected(self):
         r = FakeReader()
         a = addr(1)
@@ -653,6 +833,10 @@ class TestOracleMappingReader:
         assert reader.configured_assets() is None
         assert reader.source_of(addr(1)) is None
         assert reader.asset_price(addr(1)) is None
+        # for the variant probes a revert is the normal answer (plain
+        # middleware / manager, respectively) — None is the detection signal
+        assert reader.underlying_middleware() is None
+        assert reader.chainlink_feed_registry() is None
 
     def test_oracle_reads(self):
         reader, ctx = _mock_reader()
@@ -705,6 +889,25 @@ class TestOracleMappingReader:
 
         ctx.call.return_value = encode(["uint256"], [1_030_000])
         assert reader.morpho_oracle_price(addr(0x31)) == 1_030_000
+
+    def test_oracle_variant_probes(self):
+        reader, ctx = _mock_reader()
+        target = addr(0x51)
+        ctx.call.return_value = encode(["address"], [target])
+
+        assert reader.underlying_middleware() == target
+        assert reader.chainlink_feed_registry() == target
+
+    def test_delegate_binds_new_reader_to_oracle(self):
+        other = addr(0x52)
+        ctx = _FakeLogCtx([])
+        delegated = om.OracleMappingReader(ctx, ORACLE).delegate(other)
+
+        # the one reader method whose target contract is observable from
+        # outside (get_logs receives it explicitly); the block is irrelevant
+        delegated.asset_source_events(1337)
+
+        assert ctx.captured["contract_address"] == other
 
     def test_erc4626_vault_reads(self):
         reader, ctx = _mock_reader()

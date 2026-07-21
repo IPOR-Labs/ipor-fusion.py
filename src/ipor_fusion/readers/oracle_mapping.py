@@ -6,6 +6,9 @@ knows about, this walks the *source* price feed, classifies its type by
 interface probing, reads the effective price, and recursively resolves any
 feed that derives its price from another asset (ERC4626 wrappers, Morpho
 collateral feeds). Unknown feeds are reported as partial, never dropped.
+A zero source is not a dead end: the oracle may be a manager variant that
+delegates such assets to an underlying global middleware — that delegation is
+followed and reported as ``middleware_fallback``.
 
 Design:
 - All network access goes through :class:`OracleMappingReader` (the single
@@ -38,6 +41,8 @@ ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 # keccak256("AssetPriceSourceUpdated(address,address)") — both args are in the
 # log data (neither is indexed), so only topic0 is used to filter.
+# Base-middleware event only; managers emit AssetPriceSourceAdded/Removed
+# instead, but expose getConfiguredAssets(), so the replay never runs on one.
 ASSET_PRICE_SOURCE_UPDATED_TOPIC = (
     "0xe6c35d0425da27d8f991ada353619254c33e5094fc7e19154e02feb391937390"
 )
@@ -47,6 +52,7 @@ TYPE_CHAINLINK = "ChainlinkAggregator"
 TYPE_ERC4626 = "ERC4626PriceFeed"
 TYPE_MORPHO = "CollateralTokenOnMorphoMarketPriceFeed"
 TYPE_DUAL_XREF = "DualCrossReferencePriceFeed"
+TYPE_MIDDLEWARE_FALLBACK = "middleware_fallback"
 TYPE_UNKNOWN = "custom_unknown"
 
 _WAD = 18
@@ -120,6 +126,11 @@ class _OracleManager(ContractWrapper):
             "getConfiguredAssets()",
             output_types=["address[]"],
             decoder=lambda lst: [_addr(a) for a in lst],
+        )
+
+    def get_price_oracle_middleware(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "getPriceOracleMiddleware()", output_types=["address"], decoder=_addr
         )
 
 
@@ -233,6 +244,18 @@ class OracleMappingReader:
 
     def asset_price(self, asset: ChecksumAddress) -> Price | None:
         return self._safe(self._oracle.get_asset_price(asset))
+
+    # -- oracle variant probes ---------------------------------------------
+    def underlying_middleware(self) -> ChecksumAddress | None:
+        """Manager variant: the global middleware zero-source assets delegate to."""
+        return self._safe(self._manager.get_price_oracle_middleware())
+
+    def chainlink_feed_registry(self) -> ChecksumAddress | None:
+        return self._safe(self._oracle.chainlink_feed_registry())
+
+    def delegate(self, oracle: ChecksumAddress) -> OracleMappingReader:
+        """Sibling reader bound to another oracle on the same context/block."""
+        return OracleMappingReader(self._ctx, oracle)
 
     # -- token metadata ----------------------------------------------------
     def symbol(self, token: ChecksumAddress) -> str | None:
@@ -506,6 +529,81 @@ def _resolve_dual_xref(
     return node
 
 
+def _resolve_middleware_fallback(
+    reader: OracleMappingReader,
+    asset: ChecksumAddress,
+    symbol: str | None,
+    decimals: int | None,
+    source: ChecksumAddress | None,
+    label: str,
+    price: Price | None,
+    depth: int,
+    visited: set[str],
+    max_depth: int,
+) -> OracleNode:
+    """Explain a zero/unreadable source instead of declaring the asset dead.
+
+    On a ``PriceOracleMiddlewareManager`` a zero source means "no per-vault
+    override" — the price comes from the underlying global middleware, so the
+    asset is re-resolved there to surface the real feed. Without a manager, a
+    readable price means the middleware priced the asset through its own
+    internal fallback (the Chainlink FeedRegistry on mainnet).
+    """
+    underlying_middleware = reader.underlying_middleware()
+    if (
+        underlying_middleware is not None
+        and underlying_middleware.lower() == ZERO_ADDRESS
+    ):
+        underlying_middleware = None
+    if underlying_middleware is None and price is None:
+        return _partial(
+            asset,
+            symbol,
+            decimals,
+            source,
+            TYPE_UNKNOWN,
+            "no_source_configured",
+            [label],
+            price,
+        )
+    node = OracleNode(
+        asset=asset,
+        symbol=symbol,
+        decimals=decimals,
+        source=source,
+        price=_price_block(price),
+    )
+    node.source_type = TYPE_MIDDLEWARE_FALLBACK
+    node.status = "resolved"
+    if underlying_middleware is not None:
+        # Same asset, different oracle — must not be in `visited` yet; runaway
+        # manager→manager chains are bounded by max_depth instead.
+        dep = _resolve(
+            reader.delegate(underlying_middleware),
+            asset,
+            depth + 1,
+            visited,
+            max_depth,
+        )
+        node.dependencies = [dep]
+        # dep re-resolves the same asset, so drop its leading label from the path.
+        node.path = [label, "middleware fallback", *dep.path[1:]]
+        node.source_detail = {
+            "delegated_to": underlying_middleware,
+            "chainlink_feed_registry": None,
+        }
+        return node
+    # Not a manager, yet the price read succeeded (else the no_source_configured
+    # early return above would have fired): the middleware's internal fallback
+    # (FeedRegistry on mainnet) priced it — report a leaf.
+    registry = reader.chainlink_feed_registry()
+    if registry is not None and registry.lower() == ZERO_ADDRESS:
+        registry = None
+    node.path = [label, "middleware fallback"]
+    node.source_detail = {"delegated_to": None, "chainlink_feed_registry": registry}
+    return node
+
+
 def _classify_and_resolve(
     reader: OracleMappingReader,
     node: OracleNode,
@@ -584,15 +682,17 @@ def _resolve(
 
     source = reader.source_of(asset)
     if source is None or source.lower() == ZERO_ADDRESS:
-        return _partial(
+        return _resolve_middleware_fallback(
+            reader,
             asset,
             symbol,
             decimals,
             source,
-            TYPE_UNKNOWN,
-            "no_source_configured",
-            [label],
+            label,
             price,
+            depth,
+            visited,
+            max_depth,
         )
 
     node = OracleNode(

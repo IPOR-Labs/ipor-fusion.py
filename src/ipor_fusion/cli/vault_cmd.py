@@ -480,8 +480,10 @@ def oracle_mapping(
     For each asset the vault's price oracle knows about, resolves the source
     price feed, classifies its type by interface probing (dual cross-reference
     / Chainlink / ERC4626 / Morpho collateral / unknown) and recursively
-    follows feeds that derive their price from another asset. Unknown feeds
-    are reported as partial, never dropped. Classification is heuristic: it
+    follows feeds that derive their price from another asset. Zero-source
+    assets priced through the oracle's underlying middleware are reported as
+    middleware fallback, not unresolved. Unknown feeds are reported as
+    partial, never dropped. Classification is heuristic: it
     grades on-chain evidence, it cannot prove a contract's identity. Historical
     blocks require an archive node.
     """
