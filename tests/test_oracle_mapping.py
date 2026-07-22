@@ -300,12 +300,12 @@ class TestResolve:
         assert node.source_detail["asset_x_asset_y_feed"] == {
             "address": xy_feed,
             "answer": str(13 * 10**17),
-            "answer_decimals": 18,
+            "decimals": 18,
         }
         assert node.source_detail["asset_y_usd_feed"] == {
             "address": y_usd_feed,
             "answer": str(2_000 * 10**8),
-            "answer_decimals": 8,
+            "decimals": 8,
         }
         # 1.3 X/Y × 2000 Y/USD = 2600 USD, rescaled to 18 decimals
         assert node.source_detail["derived_price_wad"] == str(2_600 * 10**18)
@@ -400,7 +400,7 @@ class TestResolve:
         assert node.reason == "dual_xref_component_unreadable"
         assert node.source_detail is not None
         assert node.source_detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
-        assert node.source_detail["asset_y_usd_feed"]["answer_decimals"] is None
+        assert node.source_detail["asset_y_usd_feed"]["decimals"] is None
         assert node.source_detail["derived_price_wad"] is None
 
     def test_dual_xref_probe_incomplete_falls_through_to_chainlink(self):

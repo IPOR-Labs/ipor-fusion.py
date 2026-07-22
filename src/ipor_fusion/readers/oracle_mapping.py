@@ -421,7 +421,7 @@ def _resolve_chainlink(
     node.path = [label, "Chainlink feed"]
     node.source_detail = {
         "answer": str(rnd[1]) if rnd else None,
-        "answer_decimals": feed_decimals,
+        "decimals": feed_decimals,
         "updated_at": int(rnd[3]) if rnd else None,
     }
     node.status = "resolved"
@@ -536,12 +536,12 @@ def _resolve_dual_xref(
         "asset_x_asset_y_feed": {
             "address": xy_feed,
             "answer": str(xy_round[1]) if xy_round else None,
-            "answer_decimals": xy_decimals,
+            "decimals": xy_decimals,
         },
         "asset_y_usd_feed": {
             "address": y_usd_feed,
             "answer": str(y_usd_round[1]) if y_usd_round else None,
-            "answer_decimals": y_usd_decimals,
+            "decimals": y_usd_decimals,
         },
         "derived_price_wad": derived,
     }
