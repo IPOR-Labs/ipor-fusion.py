@@ -11,8 +11,9 @@ delegates such assets to an underlying global middleware — that delegation is
 followed and reported as ``middleware_fallback``. Every aggregator-compatible
 read (Chainlink-tier leaves, dual-cross-reference component feeds) carries
 ``description()`` and the full ``latestRoundData()`` round in
-``source_detail`` — raw values only, no staleness judgment; ``description``
-is null when the feed does not implement it.
+``source_detail`` — raw values plus ISO-8601 UTC twins of the timestamps,
+no staleness judgment; ``description`` is null when the feed does not
+implement it.
 
 Chainlink leaves are graded by on-chain evidence: ``ChainlinkAggregator``
 only when the full AggregatorV3Interface answers (``latestRoundData`` +
@@ -60,6 +61,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from eth_abi import decode
@@ -468,6 +470,18 @@ def _partial(
     )
 
 
+def _utc_twin(epoch: int | None) -> str | None:
+    """ISO-8601 UTC rendering of a round timestamp.
+
+    Null for a missing round (``None`` in) and for epoch 0: wrapper/composed
+    feeds return synthetic zero timestamps, and rendering 1970-01-01 would
+    manufacture a staleness illusion — the raw int keeps full fidelity.
+    """
+    if not epoch:
+        return None
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _aggregator_detail(
     description: str | None,
     rnd: tuple[int, int, int, int, int] | None,
@@ -476,20 +490,25 @@ def _aggregator_detail(
     """Uniform metadata block for one aggregator-compatible feed read.
 
     Raw values only — timestamps are echoed as-is with no staleness judgment
-    (wrapper/composed feeds legitimately return synthetic zeros), and
-    ``description`` is null when the feed does not implement ``description()``.
+    (wrapper/composed feeds legitimately return synthetic zeros; their
+    ``*_utc`` twins are null then), and ``description`` is null when the feed
+    does not implement ``description()``.
     """
     # Round ids are uint80 and exceed 2^53 on proxy feeds (phaseId << 64 | id),
     # so they travel as strings. started_at/updated_at stay ints deliberately:
     # realistic epochs sit far below 2^53, matching the int block_timestamp
     # elsewhere in the output.
+    started_at = int(rnd[2]) if rnd else None
+    updated_at = int(rnd[3]) if rnd else None
     return {
         "description": description,
         "round_id": str(rnd[0]) if rnd else None,
         "answer": str(rnd[1]) if rnd else None,
         "decimals": feed_decimals,
-        "started_at": int(rnd[2]) if rnd else None,
-        "updated_at": int(rnd[3]) if rnd else None,
+        "started_at": started_at,
+        "started_at_utc": _utc_twin(started_at),
+        "updated_at": updated_at,
+        "updated_at_utc": _utc_twin(updated_at),
         "answered_in_round": str(rnd[4]) if rnd else None,
     }
 

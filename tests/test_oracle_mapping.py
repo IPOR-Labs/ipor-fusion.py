@@ -224,7 +224,9 @@ class TestResolve:
             "answer": "99980000",
             "decimals": 8,
             "started_at": 0,
+            "started_at_utc": None,  # synthetic epoch 0 has no UTC form
             "updated_at": 1_700_000_000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
             "answered_in_round": "1",
             "aggregator": None,
             "phase_id": None,
@@ -447,7 +449,9 @@ class TestResolve:
             "answer": str(13 * 10**17),
             "decimals": 18,
             "started_at": 0,
+            "started_at_utc": None,
             "updated_at": 1_700_000_000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
             "answered_in_round": "7",
         }
         assert node.source_detail["asset_y_usd_feed"] == {
@@ -457,7 +461,9 @@ class TestResolve:
             "answer": str(2_000 * 10**8),
             "decimals": 8,
             "started_at": 0,
+            "started_at_utc": None,
             "updated_at": 1_700_000_000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
             "answered_in_round": "9",
         }
         # 1.3 X/Y × 2000 Y/USD = 2600 USD, rescaled to 18 decimals

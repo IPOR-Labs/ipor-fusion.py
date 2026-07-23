@@ -244,12 +244,14 @@ def vault_oracle_mapping(
 
     Every aggregator-compatible read reports description() and the full
     latestRoundData round in source_detail (description, round_id, answer,
-    decimals, started_at, updated_at, answered_in_round); Chainlink-tier
-    leaves add aggregator and phase_id (proxy-deployment evidence; null when
-    unanswered). Raw values only — no staleness judgment is made (composed
-    feeds may return synthetic zero timestamps), and description is null
-    when the feed does not implement it. Use the description to confirm a
-    feed's units before trusting its answer. Registry-resolved fallback
+    decimals, started_at, started_at_utc, updated_at, updated_at_utc,
+    answered_in_round); Chainlink-tier leaves add aggregator and phase_id
+    (proxy-deployment evidence; null when unanswered). Raw values only — no
+    staleness judgment is made (composed feeds may return synthetic zero
+    timestamps; their *_utc twins are null then, while the raw ints keep
+    fidelity), and description is null when the feed does not implement it.
+    Use the description to confirm a feed's units before trusting its
+    answer. Registry-resolved fallback
     prices carry no per-feed metadata — the registry picks the aggregator
     internally; its address is included, so agents can call getFeed on
     demand.

@@ -306,9 +306,11 @@ class OracleNodeModel(_Base):
         description="Type-specific raw reads; null when no probe ran. "
         "Aggregator-compatible reads (Chainlink-tier leaves, dual-xref "
         "component feeds) carry description, round_id, answer, decimals, "
-        "started_at, updated_at, answered_in_round — raw values, no "
-        "staleness judgment; description is null when the feed does not "
-        "implement it. Chainlink-tier leaves add aggregator and phase_id "
+        "started_at, started_at_utc, updated_at, updated_at_utc, "
+        "answered_in_round — raw values, no staleness judgment; description "
+        "is null when the feed does not implement it, and a *_utc twin is "
+        "null for a synthetic epoch-0 timestamp (the raw int keeps "
+        "fidelity). Chainlink-tier leaves add aggregator and phase_id "
         "(proxy-deployment evidence; null when unanswered).",
     )
     dependencies: list[OracleNodeModel] = Field(
