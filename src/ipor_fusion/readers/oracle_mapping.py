@@ -401,8 +401,9 @@ def collapse_sources(
 ) -> dict[ChecksumAddress, ChecksumAddress]:
     """Collapse the event history into the current ``asset -> source`` map.
 
-    Latest block wins per asset (later log wins on a block tie); a source set to
-    the zero address removes the asset. See the IL-7555 plan for the semantics.
+    Mirrors on-chain storage semantics: the latest block wins per asset, and
+    on a same-block tie the later log wins (log order within a block is
+    execution order); a source set to the zero address removes the asset.
     """
     latest: dict[ChecksumAddress, tuple[int, ChecksumAddress]] = {}
     for block, asset, source in events:
