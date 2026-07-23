@@ -533,8 +533,8 @@ def oracle_mapping(
     _print_oracle_mapping(mapping)
 
 
-def _format_wad_price(price: OraclePrice) -> str:
-    if price.normalized_wad is None:
+def _format_wad_price(price: OraclePrice | None) -> str:
+    if price is None:
         return "N/A"
     return _format_amount(int(price.normalized_wad), 18)
 

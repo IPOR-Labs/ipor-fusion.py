@@ -104,11 +104,15 @@ _WAD = 18
 
 @dataclass(slots=True)
 class OraclePrice:
-    """Uniform price block: raw oracle answer plus its 18-decimal rescale."""
+    """Price block: raw oracle answer plus its 18-decimal rescale.
 
-    raw: str | None
-    decimals: int | None
-    normalized_wad: str | None
+    Non-null on a node only when the oracle's ``getAssetPrice()`` read
+    succeeded.
+    """
+
+    raw: str
+    decimals: int
+    normalized_wad: str
 
 
 @dataclass(slots=True)
@@ -125,7 +129,7 @@ class OracleNode:
     symbol: str | None
     decimals: int | None
     source: ChecksumAddress | None
-    price: OraclePrice
+    price: OraclePrice | None
     source_type: str = TYPE_UNKNOWN
     path: list[str] = field(default_factory=list)
     status: NodeStatus = "partial"
@@ -424,10 +428,10 @@ def normalize_wad(amount: int, decimals: int) -> str:
     return str(amount // 10 ** (decimals - _WAD))
 
 
-def _price_block(price: Price | None) -> OraclePrice:
-    """Format a Price (or None) into the uniform :class:`OraclePrice` block."""
+def _price_block(price: Price | None) -> OraclePrice | None:
+    """Format a Price into an :class:`OraclePrice` block; an unread price stays None."""
     if price is None:
-        return OraclePrice(raw=None, decimals=None, normalized_wad=None)
+        return None
     return OraclePrice(
         raw=str(price.amount),
         decimals=int(price.decimals),

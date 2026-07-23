@@ -258,13 +258,11 @@ class RoleAccountsResponse(_Base):
 
 
 class OraclePriceModel(_Base):
-    """Uniform price block; all fields null together when the read failed."""
+    """Price block; non-null only when the getAssetPrice() read succeeded."""
 
-    raw: str | None = Field(
-        description="Raw getAssetPrice() answer; null when unreadable."
-    )
-    decimals: int | None = Field(description="Decimals of the raw answer.")
-    normalized_wad: str | None = Field(
+    raw: str = Field(description="Raw getAssetPrice() answer.")
+    decimals: int = Field(description="Decimals of the raw answer.")
+    normalized_wad: str = Field(
         description="Price rescaled to 18 decimals (integer string)."
     )
 
@@ -287,7 +285,9 @@ class OracleNodeModel(_Base):
         "merely answers latestRoundData — verify the address yourself if "
         "identity matters."
     )
-    price: OraclePriceModel
+    price: OraclePriceModel | None = Field(
+        description="Authoritative getAssetPrice() read; null when the read failed."
+    )
     path: list[str] = Field(
         description="Human-readable resolution chain, e.g. "
         "['wstETH', 'convertToAssets(1 share)', 'stETH', 'Chainlink feed']."
@@ -328,7 +328,9 @@ class OracleNodeModel(_Base):
                 raw=node.price.raw,
                 decimals=node.price.decimals,
                 normalized_wad=node.price.normalized_wad,
-            ),
+            )
+            if node.price is not None
+            else None,
             path=node.path,
             status=node.status,
             reason=node.reason,

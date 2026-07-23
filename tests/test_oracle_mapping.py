@@ -527,6 +527,7 @@ class TestResolve:
         assert node.source_detail["asset_y_usd_feed"]["answer"] is None
         assert node.source_detail["derived_price_wad"] is None
         # the authoritative middleware price is carried regardless
+        assert node.price is not None
         assert node.price.raw == str(2_600 * 10**8)
 
     def test_dual_xref_xy_component_unreadable_is_partial(self):
@@ -666,6 +667,7 @@ class TestResolve:
             "chainlink_feed_registry": None,
         }
         # the manager's own (delegated, 18-decimal) price is carried here
+        assert node.price is not None
         assert node.price.raw == str(2_000 * 10**18)
         assert node.path == ["WETH", "middleware fallback", "Chainlink feed"]
         dep = node.dependencies[0]
@@ -675,6 +677,7 @@ class TestResolve:
         # the dep re-reads the price from the underlying middleware itself;
         # 8 = old deployed base middleware (newer ones answer 18 — decimals
         # are pass-through either way)
+        assert dep.price is not None
         assert dep.price.decimals == 8
 
     def test_manager_delegation_with_unreadable_price_demoted_to_partial(self):
@@ -699,9 +702,7 @@ class TestResolve:
         assert node.status == "partial"
         assert node.reason == "manager_price_unreadable"
         assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
-        assert node.price == om.OraclePrice(
-            raw=None, decimals=None, normalized_wad=None
-        )
+        assert node.price is None
         assert node.source_detail is not None
         assert node.source_detail["delegated_to"] == mw
         dep = node.dependencies[0]
@@ -728,6 +729,7 @@ class TestResolve:
             "chainlink_feed_registry": registry,
         }
         assert node.dependencies == []
+        assert node.price is not None
         assert node.price.raw == str(2_000 * 10**8)
 
     def test_zero_feed_registry_reported_as_null(self):
@@ -780,6 +782,7 @@ class TestResolve:
         assert dep.status == "partial"
         assert dep.reason == "max_depth_exceeded"
         # the underlying middleware's price is still carried on the capped dep
+        assert dep.price is not None
         assert dep.price.raw == "99980000"
 
     def test_middleware_fallback_recurses_through_layered_middlewares(self):
@@ -829,6 +832,7 @@ class TestResolve:
         assert dep.status == "partial"
         assert dep.reason == "cycle_detected"
         # authoritative price is carried even on a cycle-capped node
+        assert dep.price is not None
         assert dep.price.raw == str(10**18)
 
     def test_max_depth_exceeded(self):
@@ -849,6 +853,7 @@ class TestResolve:
         assert dep.status == "partial"
         assert dep.reason == "max_depth_exceeded"
         # authoritative price is carried even on a depth-capped node
+        assert dep.price is not None
         assert dep.price.raw == "99980000"
 
     def test_erc4626_underlying_unreadable(self):
@@ -946,7 +951,7 @@ def _bare_node(status: NodeStatus, reason: str | None = None, deps: list | None 
         symbol=None,
         decimals=None,
         source=None,
-        price=om.OraclePrice(raw=None, decimals=None, normalized_wad=None),
+        price=None,
         status=status,
         reason=reason,
         dependencies=deps or [],
@@ -1050,7 +1055,7 @@ class TestToDict:
         assert out["status"] == "partial"
         assert out["reason"] == "no_source_configured"
         assert out["source_detail"] is None
-        assert out["price"] == {"raw": None, "decimals": None, "normalized_wad": None}
+        assert out["price"] is None
 
     def test_dependencies_serialized_recursively(self):
         r = FakeReader()

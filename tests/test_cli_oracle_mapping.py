@@ -89,7 +89,7 @@ def _partial_node() -> OracleNode:
         symbol="wsrUSD",
         decimals=18,
         source=None,
-        price=OraclePrice(raw=None, decimals=None, normalized_wad=None),
+        price=None,
         path=["wsrUSD"],
         status="partial",
         reason="no_source_configured",

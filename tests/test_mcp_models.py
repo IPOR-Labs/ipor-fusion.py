@@ -621,7 +621,7 @@ def _partial_node() -> OracleNode:
         symbol=None,
         decimals=None,
         source=None,
-        price=OraclePrice(raw=None, decimals=None, normalized_wad=None),
+        price=None,
         path=["0xNOPE"],
         status="partial",
         reason="no_source_configured",
@@ -653,6 +653,7 @@ class TestOracleMappingResponse:
         assert resp.status == "partially_resolved"
         node = resp.configured_assets[0]
         assert node.source_type == "ERC4626PriceFeed"
+        assert node.price is not None
         assert node.price.normalized_wad == str(10**18)
         dep = node.dependencies[0]
         assert dep.symbol == "USDC"
@@ -676,7 +677,7 @@ class TestOracleMappingResponse:
         assert partial.status == "partial"
         assert partial.reason == "no_source_configured"
         assert partial.source_detail is None
-        assert partial.price.raw is None
+        assert partial.price is None
         # mirrored into unresolved as the same shape
         assert resp.unresolved[0] == partial
 
