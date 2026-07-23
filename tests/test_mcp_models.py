@@ -594,6 +594,8 @@ def _chainlink_node() -> OracleNode:
             "started_at": 0,
             "updated_at": 1_700_000_000,
             "answered_in_round": "1",
+            "aggregator": None,
+            "phase_id": None,
         },
     )
 
@@ -662,6 +664,8 @@ class TestOracleMappingResponse:
             "started_at": 0,
             "updated_at": 1_700_000_000,
             "answered_in_round": "1",
+            "aggregator": None,
+            "phase_id": None,
         }
         assert dep.dependencies == []
 

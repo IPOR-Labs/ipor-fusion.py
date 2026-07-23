@@ -58,6 +58,9 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
 from ipor_fusion.readers.oracle_mapping import (
+    TYPE_CHAINLINK,
+    TYPE_CHAINLINK_STYLE,
+    TYPE_DUAL_XREF,
     OracleMapping,
     OracleNode,
     OraclePrice,
@@ -483,7 +486,10 @@ def oracle_mapping(
     follows feeds that derive their price from another asset. Zero-source
     assets priced through the oracle's underlying middleware are reported as
     middleware fallback, not unresolved. Unknown feeds are reported as
-    partial, never dropped. Classification is heuristic: it
+    partial, never dropped. Chainlink leaves are graded: ChainlinkAggregator
+    when the full aggregator interface answers with sane metadata,
+    chainlink_style when the feed merely quacks like one — verify the
+    address yourself if identity matters. Classification is heuristic: it
     grades on-chain evidence, it cannot prove a contract's identity.
 
     Aggregator-compatible feeds report description() and the full
@@ -533,13 +539,32 @@ def _format_wad_price(price: OraclePrice) -> str:
     return _format_amount(int(price.normalized_wad), 18)
 
 
+def _print_feed_line(node: OracleNode) -> None:
+    """The feed's self-declared units — key for confirming what a value means."""
+    detail = node.source_detail or {}
+    if node.source_type in (TYPE_CHAINLINK, TYPE_CHAINLINK_STYLE):
+        if detail.get("description"):
+            click.echo(f"    Feed:   {detail['description']}")
+        else:
+            # only chainlink_style can land here — the confirmed tier
+            # requires a non-empty description
+            click.secho("    Feed:   (no description)", fg="yellow")
+    elif node.source_type == TYPE_DUAL_XREF:
+        rendered = [
+            # quoted — the descriptions themselves contain " / "
+            f'"{d}"' if d else click.style("(no description)", fg="yellow")
+            for d in (
+                (detail.get(key) or {}).get("description")
+                for key in ("asset_x_asset_y_feed", "asset_y_usd_feed")
+            )
+        ]
+        click.echo(f"    Feed:   {' × '.join(rendered)}")
+
+
 def _print_oracle_node(node: OracleNode) -> None:
     click.echo(f"  {node.symbol or '?'} ({node.asset})")
     click.echo(f"    Path:   {' → '.join(node.path)}")
-    # The feed's self-declared units — key for confirming what the value means.
-    description = (node.source_detail or {}).get("description")
-    if description:
-        click.echo(f"    Feed:   {description}")
+    _print_feed_line(node)
     click.echo(f"    Price:  {_format_wad_price(node.price)}")
     if node.status == "resolved":
         click.secho("    Status: resolved", fg="green")

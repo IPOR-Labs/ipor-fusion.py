@@ -280,8 +280,12 @@ class OracleNodeModel(_Base):
     )
     source_type: str = Field(
         description="DualCrossReferencePriceFeed, ChainlinkAggregator, "
-        "ERC4626PriceFeed, CollateralTokenOnMorphoMarketPriceFeed, "
-        "middleware_fallback, or custom_unknown."
+        "chainlink_style, ERC4626PriceFeed, "
+        "CollateralTokenOnMorphoMarketPriceFeed, middleware_fallback, or "
+        "custom_unknown. ChainlinkAggregator is claimed only when the full "
+        "AggregatorV3Interface answers with sane metadata; chainlink_style "
+        "merely answers latestRoundData — verify the address yourself if "
+        "identity matters."
     )
     price: OraclePriceModel
     path: list[str] = Field(
@@ -300,10 +304,12 @@ class OracleNodeModel(_Base):
     source_detail: dict[str, Any] | None = Field(
         default=None,
         description="Type-specific raw reads; null when no probe ran. "
-        "Aggregator-compatible reads (Chainlink leaves, dual-xref component "
-        "feeds) carry description, round_id, answer, decimals, started_at, "
-        "updated_at, answered_in_round — raw values, no staleness judgment; "
-        "description is null when the feed does not implement it.",
+        "Aggregator-compatible reads (Chainlink-tier leaves, dual-xref "
+        "component feeds) carry description, round_id, answer, decimals, "
+        "started_at, updated_at, answered_in_round — raw values, no "
+        "staleness judgment; description is null when the feed does not "
+        "implement it. Chainlink-tier leaves add aggregator and phase_id "
+        "(proxy-deployment evidence; null when unanswered).",
     )
     dependencies: list[OracleNodeModel] = Field(
         default_factory=list,

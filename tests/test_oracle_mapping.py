@@ -143,6 +143,15 @@ class FakeReader:
     def feed_description(self, s: str) -> str | None:
         return self._f(s).get("description")
 
+    def feed_version(self, s: str) -> int | None:
+        return self._f(s).get("version")
+
+    def feed_aggregator(self, s: str) -> str | None:
+        return self._f(s).get("aggregator")
+
+    def feed_phase_id(self, s: str) -> int | None:
+        return self._f(s).get("phase_id")
+
     def morpho_oracle_price(self, o: str) -> int | None:
         return self.morpho_prices.get(o)
 
@@ -179,10 +188,12 @@ def _chainlink_asset(r: FakeReader, asset: str, source: str, *, symbol: str) -> 
     r.decimals[asset] = 6
     r.sources[asset] = source
     r.prices[asset] = Price(asset=asset, amount=99_980_000, decimals=8)
+    # full confirmed-tier evidence: description + version on top of the round
     r.feeds[source] = {
         "round": (1, 99_980_000, 0, 1_700_000_000, 1),
         "feed_decimals": 8,
         "description": f"{symbol} / USD",
+        "version": 4,
     }
 
 
@@ -215,12 +226,15 @@ class TestResolve:
             "started_at": 0,
             "updated_at": 1_700_000_000,
             "answered_in_round": "1",
+            "aggregator": None,
+            "phase_id": None,
         }
         assert node.dependencies == []
 
     def test_chainlink_leaf_without_description_reports_null(self):
         # description() is optional in practice (composed feeds may not
-        # implement it) — null in the uniform block, still resolved
+        # implement it) — null in the uniform block, still resolved, but the
+        # confirmed-tier gate is incomplete → chainlink_style
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
         _chainlink_asset(r, usdc, feed, symbol="USDC")
@@ -229,9 +243,105 @@ class TestResolve:
         node = om.resolve_asset(r, usdc, max_depth=6)
 
         assert node.status == "resolved"
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.reason is None
         assert node.source_detail is not None
         assert node.source_detail["description"] is None
         assert node.source_detail["answer"] == "99980000"
+
+    def test_chainlink_missing_version_demoted_to_style(self):
+        # version() is the last gate probe — without it the full
+        # AggregatorV3Interface is unproven; demotion withholds the confirmed
+        # label only, the node stays resolved with no reason
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        del r.feeds[feed]["version"]
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.path == ["USDC", "Chainlink-style feed"]
+        assert node.status == "resolved"
+        assert node.reason is None
+
+    def test_chainlink_missing_decimals_demoted_to_style(self):
+        # decimals() is part of the confirmed-tier gate; without it the answer
+        # cannot even be scaled — but the node is still resolved (the
+        # authoritative middleware price is what consumers use)
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        del r.feeds[feed]["feed_decimals"]
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.status == "resolved"
+        assert node.reason is None
+        assert node.source_detail is not None
+        assert node.source_detail["decimals"] is None
+
+    def test_chainlink_degenerate_round_demoted_to_style(self):
+        # zero roundId / updatedAt are synthetic values wrapper feeds return;
+        # real aggregators never do — distinct from staleness judgment
+        for rnd in [(1, 99_980_000, 0, 0, 1), (0, 99_980_000, 0, 1_700_000_000, 0)]:
+            r = FakeReader()
+            usdc, feed = addr(1), addr(0x11)
+            _chainlink_asset(r, usdc, feed, symbol="USDC")
+            r.feeds[feed]["round"] = rnd
+
+            node = om.resolve_asset(r, usdc, max_depth=6)
+
+            assert node.source_type == om.TYPE_CHAINLINK_STYLE
+            assert node.status == "resolved"
+            assert node.reason is None
+
+    def test_chainlink_empty_description_demoted_to_style(self):
+        # description() answering "" is evidence against a real aggregator;
+        # the raw value is still echoed in the metadata block
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        r.feeds[feed]["description"] = ""
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.status == "resolved"
+        assert node.source_detail is not None
+        assert node.source_detail["description"] == ""
+
+    def test_chainlink_proxy_evidence_recorded(self):
+        # aggregator()/phaseId() answering is evidence, not a gate — recorded
+        # in source_detail, the tier is unchanged
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        aggregator = addr(0x71)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        r.feeds[feed]["aggregator"] = aggregator
+        r.feeds[feed]["phase_id"] = 3
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK
+        assert node.source_detail is not None
+        assert node.source_detail["aggregator"] == aggregator
+        assert node.source_detail["phase_id"] == 3
+
+    def test_negative_answer_serialized_as_string(self):
+        # int256 answers can be negative; serialization must keep the sign
+        # (the answer's value is never judged, only echoed)
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        r.feeds[feed]["round"] = (1, -5, 0, 1_700_000_000, 1)
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK
+        assert node.source_detail is not None
+        assert node.source_detail["answer"] == "-5"
 
     def test_erc4626_recurses_to_underlying(self):
         r = FakeReader()
@@ -354,6 +464,39 @@ class TestResolve:
         assert node.source_detail["derived_price_wad"] == str(2_600 * 10**18)
         assert node.dependencies == []
 
+    def test_dual_xref_component_without_description_reports_null(self):
+        # dual-xref components legitimately lack description() (the on-chain
+        # exemplar's wstETH/stETH adapter does) — null in the block, and no
+        # bearing on the node status
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        r.feeds[xy_feed] = {
+            "round": (7, 13 * 10**17, 0, 1_700_000_000, 7),
+            "feed_decimals": 18,
+        }
+        r.feeds[y_usd_feed] = {
+            "round": (9, 2_000 * 10**8, 0, 1_700_000_000, 9),
+            "feed_decimals": 8,
+            "description": "ETH / USD",
+        }
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_detail is not None
+        assert node.source_detail["asset_x_asset_y_feed"]["description"] is None
+        assert node.source_detail["asset_y_usd_feed"]["description"] == "ETH / USD"
+
     def test_dual_xref_component_unreadable_is_partial(self):
         r = FakeReader()
         wsteth = addr(1)
@@ -446,7 +589,7 @@ class TestResolve:
         assert node.source_detail["asset_y_usd_feed"]["decimals"] is None
         assert node.source_detail["derived_price_wad"] is None
 
-    def test_dual_xref_probe_incomplete_falls_through_to_chainlink(self):
+    def test_dual_xref_probe_incomplete_falls_through_to_chainlink_style(self):
         r = FakeReader()
         asset = addr(1)
         feed = addr(0x11)
@@ -455,17 +598,23 @@ class TestResolve:
         r.sources[asset] = feed
         r.prices[asset] = Price(asset=asset, amount=10**8, decimals=8)
         # ASSET_X() answers but the component-feed getters do not — not a
-        # dual-xref feed, the Chainlink leaf probe must still classify it
+        # dual-xref feed, the aggregator fallback must still classify it, yet
+        # the foreign getter caps the tier at chainlink_style even though the
+        # rest of the evidence (round, description, version) is confirmed-grade
         r.feeds[feed] = {
             "asset_x": addr(2),
             "round": (1, 10**8, 0, 1_700_000_000, 1),
             "feed_decimals": 8,
+            "description": "ODD / USD",
+            "version": 4,
         }
 
         node = om.resolve_asset(r, asset, max_depth=6)
 
-        assert node.source_type == om.TYPE_CHAINLINK
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.path == ["ODD", "Chainlink-style feed"]
         assert node.status == "resolved"
+        assert node.reason is None
 
     def test_custom_unknown_is_partial(self):
         r = FakeReader()
@@ -1021,6 +1170,12 @@ class TestOracleMappingReader:
             1,
         )
 
+        ctx.call.return_value = encode(["uint256"], [4])
+        assert reader.feed_version(feed) == 4
+
+        ctx.call.return_value = encode(["uint16"], [3])
+        assert reader.feed_phase_id(feed) == 3
+
         target = addr(0x21)
         ctx.call.return_value = encode(["address"], [target])
         assert reader.feed_vault(feed) == target
@@ -1030,6 +1185,7 @@ class TestOracleMappingReader:
         assert reader.feed_asset_x(feed) == target
         assert reader.feed_asset_x_asset_y_feed(feed) == target
         assert reader.feed_asset_y_usd_feed(feed) == target
+        assert reader.feed_aggregator(feed) == target
 
         ctx.call.return_value = encode(["uint256"], [1_030_000])
         assert reader.morpho_oracle_price(addr(0x31)) == 1_030_000

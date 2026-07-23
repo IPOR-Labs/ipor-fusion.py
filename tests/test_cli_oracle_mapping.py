@@ -43,12 +43,42 @@ def _resolved_node() -> OracleNode:
         status="resolved",
         source_detail={
             "description": "USDC / USD",
-            "round_id": 1,
+            "round_id": "1",
             "answer": "99980000",
             "decimals": 8,
             "started_at": 0,
             "updated_at": 1_700_000_000,
-            "answered_in_round": 1,
+            "answered_in_round": "1",
+            "aggregator": None,
+            "phase_id": None,
+        },
+    )
+
+
+def _dual_xref_node() -> OracleNode:
+    return OracleNode(
+        asset=WSR,  # type: ignore[arg-type]
+        symbol="wstETH",
+        decimals=18,
+        source=FEED,  # type: ignore[arg-type]
+        price=OraclePrice(
+            raw=str(2_600 * 10**8),
+            decimals=8,
+            normalized_wad=str(2_600 * 10**18),
+        ),
+        source_type="DualCrossReferencePriceFeed",
+        path=[
+            "wstETH",
+            "DualCrossReferencePriceFeed",
+            "ASSET_X/ASSET_Y feed",
+            "ASSET_Y/USD feed",
+        ],
+        status="resolved",
+        source_detail={
+            "asset_x": USDC,
+            "asset_x_asset_y_feed": {"address": FEED, "description": "wstETH / stETH"},
+            "asset_y_usd_feed": {"address": FEED, "description": "ETH / USD"},
+            "derived_price_wad": str(2_600 * 10**18),
         },
     )
 
@@ -138,12 +168,15 @@ class TestOracleMappingCommand:
         assert "Unresolved: 1" in result.output
         assert f"wsrUSD ({WSR}): no_source_configured" in result.output
 
-    def test_no_feed_line_when_description_missing(
+    def test_chainlink_style_without_description_shows_marker(
         self, mock_ctx_cls, _resolve, mock_build, tmp_config
     ):
-        # source_detail present but the feed does not implement description()
+        # the confirmed tier requires a description, so only chainlink_style
+        # leaves can lack one — flagged instead of silently dropping the line
         mock_ctx_cls.from_url.return_value = _fake_ctx()
         node = _resolved_node()
+        node.source_type = "chainlink_style"
+        node.path = ["USDC", "Chainlink-style feed"]
         assert node.source_detail is not None
         node.source_detail["description"] = None
         mock_build.return_value = _mapping([node])
@@ -153,7 +186,58 @@ class TestOracleMappingCommand:
         )
 
         assert result.exit_code == 0
+        assert "USDC → Chainlink-style feed" in result.output
+        assert "Feed:   (no description)" in result.output
+
+    def test_no_feed_line_for_non_aggregator_source_detail(
+        self, mock_ctx_cls, _resolve, mock_build, tmp_config
+    ):
+        # non-aggregator detail payloads (here: ERC4626) carry no description
+        # and must not render a Feed line at all
+        mock_ctx_cls.from_url.return_value = _fake_ctx()
+        node = _resolved_node()
+        node.source_type = "ERC4626PriceFeed"
+        node.path = ["wsrUSD", "convertToAssets(1 share)", "USDC", "Chainlink feed"]
+        node.source_detail = {"vault": FEED, "underlying": USDC}
+        mock_build.return_value = _mapping([node])
+
+        result = CliRunner().invoke(
+            cli, ["vault", "oracle-mapping", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code == 0
         assert "Feed:" not in result.output
+
+    def test_dual_xref_feed_line_composed(
+        self, mock_ctx_cls, _resolve, mock_build, tmp_config
+    ):
+        # both component descriptions on one line, quoted — the descriptions
+        # themselves contain " / "
+        mock_ctx_cls.from_url.return_value = _fake_ctx()
+        mock_build.return_value = _mapping([_dual_xref_node()])
+
+        result = CliRunner().invoke(
+            cli, ["vault", "oracle-mapping", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code == 0
+        assert 'Feed:   "wstETH / stETH" × "ETH / USD"' in result.output
+
+    def test_dual_xref_feed_line_null_component(
+        self, mock_ctx_cls, _resolve, mock_build, tmp_config
+    ):
+        mock_ctx_cls.from_url.return_value = _fake_ctx()
+        node = _dual_xref_node()
+        assert node.source_detail is not None
+        node.source_detail["asset_x_asset_y_feed"]["description"] = None
+        mock_build.return_value = _mapping([node])
+
+        result = CliRunner().invoke(
+            cli, ["vault", "oracle-mapping", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code == 0
+        assert 'Feed:   (no description) × "ETH / USD"' in result.output
 
     def test_no_unresolved_summary(
         self, mock_ctx_cls, _resolve, mock_build, tmp_config

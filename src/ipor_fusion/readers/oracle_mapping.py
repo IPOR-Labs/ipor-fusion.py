@@ -9,10 +9,17 @@ collateral feeds). Unknown feeds are reported as partial, never dropped.
 A zero source is not a dead end: the oracle may be a manager variant that
 delegates such assets to an underlying global middleware — that delegation is
 followed and reported as ``middleware_fallback``. Every aggregator-compatible
-read (Chainlink leaves, dual-cross-reference component feeds) carries
+read (Chainlink-tier leaves, dual-cross-reference component feeds) carries
 ``description()`` and the full ``latestRoundData()`` round in
 ``source_detail`` — raw values only, no staleness judgment; ``description``
 is null when the feed does not implement it.
+
+Chainlink leaves are graded by on-chain evidence: ``ChainlinkAggregator``
+only when the full AggregatorV3Interface answers (``latestRoundData`` +
+``decimals`` + ``description`` + ``version``) and nothing contradicts it;
+``chainlink_style`` when the feed merely quacks like an aggregator — verify
+the address yourself if identity matters. Grading only ever withholds the
+confirmed label; it cannot prove a contract's identity or operator.
 
 Statuses: a node is ``resolved`` (own feed explained and every dependency
 resolved), ``partially_resolved`` (own feed explained, but some descendant is
@@ -31,6 +38,22 @@ Design:
 - SDK primitives are reused for the reads that already exist
   (``PriceOracleMiddleware``, ``ERC20``, ``PlasmaVault``); only the feed-probe
   reads and ``getConfiguredAssets`` — which they lack — are added here.
+
+Adding a feed type:
+
+1. Wrapper class (``ContractWrapper``) exposing its getters.
+2. Revert-safe reader probes on :class:`OracleMappingReader` (``None`` on
+   failure).
+3. ``TYPE_*`` constant + ``_resolve_*`` function; recurse only into
+   middleware assets — component *feeds* belong in ``source_detail``.
+4. Dispatch entry in ``_classify_and_resolve``, ordered by specificity,
+   above the generic Chainlink-tier fallback.
+5. External doc touchpoints: ``cli/vault_cmd.py`` (command docstring +
+   rendering), ``mcp/server.py`` tool docstring and ``mcp/models.py``
+   ``source_type`` description (the last two are tripwire-tested).
+6. Tests against the fake reader: precedence over the generic aggregator
+   fallback, happy path, per-probe degradation to ``partial``, incomplete
+   gate falling through, and ABI-decode cases for the new reader probes.
 """
 
 from __future__ import annotations
@@ -60,8 +83,10 @@ ASSET_PRICE_SOURCE_UPDATED_TOPIC = (
     "0xe6c35d0425da27d8f991ada353619254c33e5094fc7e19154e02feb391937390"
 )
 
-# source_type values (also the human label in the path / output).
+# source_type values (also the human label in the path / output). Adding a
+# type? Follow the "Adding a feed type" checklist in the module docstring.
 TYPE_CHAINLINK = "ChainlinkAggregator"
+TYPE_CHAINLINK_STYLE = "chainlink_style"
 TYPE_ERC4626 = "ERC4626PriceFeed"
 TYPE_MORPHO = "CollateralTokenOnMorphoMarketPriceFeed"
 TYPE_DUAL_XREF = "DualCrossReferencePriceFeed"
@@ -213,6 +238,15 @@ class _Aggregator(ContractWrapper):
             output_types=["uint80", "int256", "uint256", "uint256", "uint80"],
         )
 
+    def version(self) -> Call[int]:
+        return self._view("version()", output_types=["uint256"], decoder=int)
+
+    def aggregator(self) -> Call[ChecksumAddress]:
+        return self._view("aggregator()", output_types=["address"], decoder=_addr)
+
+    def phase_id(self) -> Call[int]:
+        return self._view("phaseId()", output_types=["uint16"], decoder=int)
+
 
 class _Erc4626Vault(ContractWrapper):
     def asset(self) -> Call[ChecksumAddress]:
@@ -308,6 +342,15 @@ class OracleMappingReader:
         self, source: ChecksumAddress
     ) -> tuple[int, int, int, int, int] | None:
         return self._safe(_Aggregator(self._ctx, source).latest_round_data())
+
+    def feed_version(self, source: ChecksumAddress) -> int | None:
+        return self._safe(_Aggregator(self._ctx, source).version())
+
+    def feed_aggregator(self, source: ChecksumAddress) -> ChecksumAddress | None:
+        return self._safe(_Aggregator(self._ctx, source).aggregator())
+
+    def feed_phase_id(self, source: ChecksumAddress) -> int | None:
+        return self._safe(_Aggregator(self._ctx, source).phase_id())
 
     def feed_vault(self, source: ChecksumAddress) -> ChecksumAddress | None:
         return self._safe(_Erc4626Feed(self._ctx, source).vault())
@@ -432,7 +475,9 @@ def _aggregator_detail(
     ``description`` is null when the feed does not implement ``description()``.
     """
     # Round ids are uint80 and exceed 2^53 on proxy feeds (phaseId << 64 | id),
-    # so they travel as strings like every other big integer in the output.
+    # so they travel as strings. started_at/updated_at stay ints deliberately:
+    # realistic epochs sit far below 2^53, matching the int block_timestamp
+    # elsewhere in the output.
     return {
         "description": description,
         "round_id": str(rnd[0]) if rnd else None,
@@ -449,15 +494,41 @@ def _resolve_chainlink(
     node: OracleNode,
     label: str,
     source: ChecksumAddress,
+    rnd: tuple[int, int, int, int, int],
+    *,
+    foreign_getter: bool,
 ) -> OracleNode:
-    """Resolve a Chainlink-style leaf feed (latestRoundData + decimals)."""
-    node.source_type = TYPE_CHAINLINK
-    node.path = [label, "Chainlink feed"]
-    node.source_detail = _aggregator_detail(
-        reader.feed_description(source),
-        reader.feed_latest_round_data(source),
-        reader.feed_decimals(source),
+    """Resolve an aggregator-compatible leaf, grading the identity evidence.
+
+    ``ChainlinkAggregator`` is claimed only when the full AggregatorV3Interface
+    answers (``latestRoundData`` + ``decimals`` + ``description`` +
+    ``version``) and nothing contradicts it: no foreign getter answered, the
+    round is not degenerate (zero ``roundId``/``updatedAt`` are synthetic
+    values real aggregators never return), and ``description`` is non-empty.
+    Anything weaker is ``chainlink_style`` — still ``resolved`` (the structure
+    is explained), but the label tells consumers to verify the feed's identity
+    themselves if it matters.
+    """
+    description = reader.feed_description(source)
+    feed_decimals = reader.feed_decimals(source)
+    confirmed = (
+        not foreign_getter
+        and feed_decimals is not None
+        and bool(description)  # unimplemented and empty both demote
+        and rnd[0] != 0  # degenerate roundId
+        and rnd[3] != 0  # degenerate updatedAt
+        # gate evidence only, never part of the metadata block; probed last so
+        # the extra read is skipped once anything else already demoted
+        and reader.feed_version(source) is not None
     )
+    node.source_type = TYPE_CHAINLINK if confirmed else TYPE_CHAINLINK_STYLE
+    node.path = [label, "Chainlink feed" if confirmed else "Chainlink-style feed"]
+    node.source_detail = {
+        **_aggregator_detail(description, rnd, feed_decimals),
+        # proxy-deployment evidence — uniform keys, null when unanswered
+        "aggregator": reader.feed_aggregator(source),
+        "phase_id": reader.feed_phase_id(source),
+    }
     node.status = "resolved"
     return node
 
@@ -688,7 +759,9 @@ def _classify_and_resolve(
 ) -> OracleNode:
     """Classify the source by interface probing and dispatch to its type resolver."""
     # Probe most specific first; Chainlink's interface is shared by the others.
-    # Partial getter match = wrong type hypothesis, not a broken feed — fall through.
+    # Partial getter match = wrong type hypothesis, not a broken feed — fall
+    # through (a foreign getter answering caps the leaf at chainlink_style).
+    # New types: see the "Adding a feed type" checklist in the module docstring.
     asset_x = reader.feed_asset_x(source)
     if asset_x is not None:
         xy_feed = reader.feed_asset_x_asset_y_feed(source)
@@ -703,8 +776,11 @@ def _classify_and_resolve(
     vault = reader.feed_vault(source)
     if vault is not None:
         return _resolve_erc4626(reader, node, label, vault, depth, visited, max_depth)
-    if reader.feed_latest_round_data(source) is not None:
-        return _resolve_chainlink(reader, node, label, source)
+    rnd = reader.feed_latest_round_data(source)
+    if rnd is not None:
+        return _resolve_chainlink(
+            reader, node, label, source, rnd, foreign_getter=asset_x is not None
+        )
     node.source_type = TYPE_UNKNOWN
     node.status = "partial"
     node.reason = "unsupported_custom_feed"

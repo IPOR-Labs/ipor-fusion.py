@@ -23,6 +23,7 @@ from ipor_fusion.cli.morpho_api import (
     VaultV2Cap,
     VaultV2Info,
 )
+from ipor_fusion.mcp.models import OracleNodeModel
 from ipor_fusion.mcp.server import (
     config_set_etherscan_key,
     config_set_provider,
@@ -37,6 +38,7 @@ from ipor_fusion.mcp.server import (
     vault_remove,
     vault_role_accounts,
 )
+from ipor_fusion.readers import oracle_mapping
 from ipor_fusion.readers.morpho import (
     MorphoMarket,
     MorphoMarketParams,
@@ -395,6 +397,25 @@ class TestVaultOracleMapping:
     def test_tool_registered(self):
         tools = asyncio.run(mcp.list_tools())
         assert "vault_oracle_mapping" in {t.name for t in tools}
+
+    def test_every_source_type_documented(self):
+        # Tripwire for the "Adding a feed type" checklist: every TYPE_* value
+        # must appear verbatim in the model's source_type description and the
+        # tool docstring — the two LLM-facing doc surfaces.
+        values = [
+            value
+            for name, value in vars(oracle_mapping).items()
+            if name.startswith("TYPE_")
+        ]
+        assert len(values) >= 7  # sanity: the type set as of this writing
+
+        field_description = OracleNodeModel.model_fields["source_type"].description
+        assert field_description is not None
+        tool_doc = vault_oracle_mapping.__doc__
+        assert tool_doc is not None
+        for value in values:
+            assert value in field_description, value
+            assert value in tool_doc, value
 
 
 class TestVaultInfoGuards:
