@@ -299,7 +299,11 @@ class OracleNodeModel(_Base):
     )
     source_detail: dict[str, Any] | None = Field(
         default=None,
-        description="Type-specific raw reads; null when no probe ran.",
+        description="Type-specific raw reads; null when no probe ran. "
+        "Aggregator-compatible reads (Chainlink leaves, dual-xref component "
+        "feeds) carry description, round_id, answer, decimals, started_at, "
+        "updated_at, answered_in_round — raw values, no staleness judgment; "
+        "description is null when the feed does not implement it.",
     )
     dependencies: list[OracleNodeModel] = Field(
         default_factory=list,

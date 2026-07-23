@@ -8,7 +8,11 @@ feed that derives its price from another asset (ERC4626 wrappers, Morpho
 collateral feeds). Unknown feeds are reported as partial, never dropped.
 A zero source is not a dead end: the oracle may be a manager variant that
 delegates such assets to an underlying global middleware — that delegation is
-followed and reported as ``middleware_fallback``.
+followed and reported as ``middleware_fallback``. Every aggregator-compatible
+read (Chainlink leaves, dual-cross-reference component feeds) carries
+``description()`` and the full ``latestRoundData()`` round in
+``source_detail`` — raw values only, no staleness judgment; ``description``
+is null when the feed does not implement it.
 
 Statuses: a node is ``resolved`` (own feed explained and every dependency
 resolved), ``partially_resolved`` (own feed explained, but some descendant is
@@ -101,6 +105,8 @@ class OracleNode:
     path: list[str] = field(default_factory=list)
     status: NodeStatus = "partial"
     reason: str | None = None
+    # Deliberately untyped: the payload differs per source_type. Universal
+    # fixed blocks (price) get dataclasses; this is the one dynamic section.
     source_detail: dict[str, Any] | None = None
     dependencies: list[OracleNode] = field(default_factory=list)
 
@@ -198,6 +204,9 @@ class _Aggregator(ContractWrapper):
     def decimals(self) -> Call[int]:
         return self._view("decimals()", output_types=["uint8"], decoder=int)
 
+    def description(self) -> Call[str]:
+        return self._view("description()", output_types=["string"])
+
     def latest_round_data(self) -> Call[tuple[int, int, int, int, int]]:
         return self._view(
             "latestRoundData()",
@@ -291,6 +300,9 @@ class OracleMappingReader:
     # -- feed probes -------------------------------------------------------
     def feed_decimals(self, source: ChecksumAddress) -> int | None:
         return self._safe(_Aggregator(self._ctx, source).decimals())
+
+    def feed_description(self, source: ChecksumAddress) -> str | None:
+        return self._safe(_Aggregator(self._ctx, source).description())
 
     def feed_latest_round_data(
         self, source: ChecksumAddress
@@ -408,6 +420,30 @@ def _partial(
     )
 
 
+def _aggregator_detail(
+    description: str | None,
+    rnd: tuple[int, int, int, int, int] | None,
+    feed_decimals: int | None,
+) -> dict[str, Any]:
+    """Uniform metadata block for one aggregator-compatible feed read.
+
+    Raw values only — timestamps are echoed as-is with no staleness judgment
+    (wrapper/composed feeds legitimately return synthetic zeros), and
+    ``description`` is null when the feed does not implement ``description()``.
+    """
+    # Round ids are uint80 and exceed 2^53 on proxy feeds (phaseId << 64 | id),
+    # so they travel as strings like every other big integer in the output.
+    return {
+        "description": description,
+        "round_id": str(rnd[0]) if rnd else None,
+        "answer": str(rnd[1]) if rnd else None,
+        "decimals": feed_decimals,
+        "started_at": int(rnd[2]) if rnd else None,
+        "updated_at": int(rnd[3]) if rnd else None,
+        "answered_in_round": str(rnd[4]) if rnd else None,
+    }
+
+
 def _resolve_chainlink(
     reader: OracleMappingReader,
     node: OracleNode,
@@ -415,15 +451,13 @@ def _resolve_chainlink(
     source: ChecksumAddress,
 ) -> OracleNode:
     """Resolve a Chainlink-style leaf feed (latestRoundData + decimals)."""
-    rnd = reader.feed_latest_round_data(source)
-    feed_decimals = reader.feed_decimals(source)
     node.source_type = TYPE_CHAINLINK
     node.path = [label, "Chainlink feed"]
-    node.source_detail = {
-        "answer": str(rnd[1]) if rnd else None,
-        "decimals": feed_decimals,
-        "updated_at": int(rnd[3]) if rnd else None,
-    }
+    node.source_detail = _aggregator_detail(
+        reader.feed_description(source),
+        reader.feed_latest_round_data(source),
+        reader.feed_decimals(source),
+    )
     node.status = "resolved"
     return node
 
@@ -535,13 +569,15 @@ def _resolve_dual_xref(
         "asset_x": asset_x,
         "asset_x_asset_y_feed": {
             "address": xy_feed,
-            "answer": str(xy_round[1]) if xy_round else None,
-            "decimals": xy_decimals,
+            **_aggregator_detail(
+                reader.feed_description(xy_feed), xy_round, xy_decimals
+            ),
         },
         "asset_y_usd_feed": {
             "address": y_usd_feed,
-            "answer": str(y_usd_round[1]) if y_usd_round else None,
-            "decimals": y_usd_decimals,
+            **_aggregator_detail(
+                reader.feed_description(y_usd_feed), y_usd_round, y_usd_decimals
+            ),
         },
         "derived_price_wad": derived,
     }

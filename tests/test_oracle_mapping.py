@@ -140,6 +140,9 @@ class FakeReader:
     def feed_decimals(self, s: str) -> int | None:
         return self._f(s).get("feed_decimals")
 
+    def feed_description(self, s: str) -> str | None:
+        return self._f(s).get("description")
+
     def morpho_oracle_price(self, o: str) -> int | None:
         return self.morpho_prices.get(o)
 
@@ -179,6 +182,7 @@ def _chainlink_asset(r: FakeReader, asset: str, source: str, *, symbol: str) -> 
     r.feeds[source] = {
         "round": (1, 99_980_000, 0, 1_700_000_000, 1),
         "feed_decimals": 8,
+        "description": f"{symbol} / USD",
     }
 
 
@@ -203,10 +207,31 @@ class TestResolve:
             decimals=8,
             normalized_wad=str(99_980_000 * 10**10),
         )
-        assert node.source_detail is not None
-        assert node.source_detail["answer"] == "99980000"
-        assert node.source_detail["updated_at"] == 1_700_000_000
+        assert node.source_detail == {
+            "description": "USDC / USD",
+            "round_id": "1",
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 0,
+            "updated_at": 1_700_000_000,
+            "answered_in_round": "1",
+        }
         assert node.dependencies == []
+
+    def test_chainlink_leaf_without_description_reports_null(self):
+        # description() is optional in practice (composed feeds may not
+        # implement it) — null in the uniform block, still resolved
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        del r.feeds[feed]["description"]
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_detail is not None
+        assert node.source_detail["description"] is None
+        assert node.source_detail["answer"] == "99980000"
 
     def test_erc4626_recurses_to_underlying(self):
         r = FakeReader()
@@ -277,18 +302,26 @@ class TestResolve:
             "y_usd_feed": y_usd_feed,
         }
         r.feeds[xy_feed] = {
-            "round": (1, 13 * 10**17, 0, 1_700_000_000, 1),
+            "round": (7, 13 * 10**17, 0, 1_700_000_000, 7),
             "feed_decimals": 18,
+            "description": "wstETH / stETH",
         }
         r.feeds[y_usd_feed] = {
-            "round": (1, 2_000 * 10**8, 0, 1_700_000_000, 1),
+            "round": (9, 2_000 * 10**8, 0, 1_700_000_000, 9),
             "feed_decimals": 8,
+            "description": "ETH / USD",
         }
 
         node = om.resolve_asset(r, wsteth, max_depth=6)
 
         assert node.status == "resolved"
         assert node.source_type == om.TYPE_DUAL_XREF
+        # the authoritative middleware price rides along with the derivation
+        assert node.price == om.OraclePrice(
+            raw=str(2_600 * 10**8),
+            decimals=8,
+            normalized_wad=str(2_600 * 10**18),
+        )
         assert node.path == [
             "wstETH",
             "DualCrossReferencePriceFeed",
@@ -299,13 +332,23 @@ class TestResolve:
         assert node.source_detail["asset_x"] == wsteth
         assert node.source_detail["asset_x_asset_y_feed"] == {
             "address": xy_feed,
+            "description": "wstETH / stETH",
+            "round_id": "7",
             "answer": str(13 * 10**17),
             "decimals": 18,
+            "started_at": 0,
+            "updated_at": 1_700_000_000,
+            "answered_in_round": "7",
         }
         assert node.source_detail["asset_y_usd_feed"] == {
             "address": y_usd_feed,
+            "description": "ETH / USD",
+            "round_id": "9",
             "answer": str(2_000 * 10**8),
             "decimals": 8,
+            "started_at": 0,
+            "updated_at": 1_700_000_000,
+            "answered_in_round": "9",
         }
         # 1.3 X/Y × 2000 Y/USD = 2600 USD, rescaled to 18 decimals
         assert node.source_detail["derived_price_wad"] == str(2_600 * 10**18)
@@ -962,6 +1005,9 @@ class TestOracleMappingReader:
 
         ctx.call.return_value = encode(["uint8"], [8])
         assert reader.feed_decimals(feed) == 8
+
+        ctx.call.return_value = encode(["string"], ["ETH / USD"])
+        assert reader.feed_description(feed) == "ETH / USD"
 
         ctx.call.return_value = encode(
             ["uint80", "int256", "uint256", "uint256", "uint80"],

@@ -237,6 +237,14 @@ def vault_oracle_mapping(
     heuristic interface probing: it grades on-chain evidence and cannot prove
     a contract's identity or operator.
 
+    Every aggregator-compatible read reports description() and the full
+    latestRoundData round in source_detail (description, round_id, answer,
+    decimals, started_at, updated_at, answered_in_round). Raw values only —
+    no staleness judgment is made (composed feeds may return synthetic zero
+    timestamps), and description is null when the feed does not implement
+    it. Use the description to confirm a feed's units before trusting its
+    answer.
+
     Node status: resolved (own feed explained and every dependency resolved),
     partially_resolved (own feed explained, but some descendant is not
     resolved), or partial (the node's own resolution is incomplete — see

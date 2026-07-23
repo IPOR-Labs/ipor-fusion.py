@@ -586,7 +586,15 @@ def _chainlink_node() -> OracleNode:
         source_type="ChainlinkAggregator",
         path=["USDC", "Chainlink feed"],
         status="resolved",
-        source_detail={"answer": "99980000", "decimals": 8},
+        source_detail={
+            "description": "USDC / USD",
+            "round_id": "1",
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 0,
+            "updated_at": 1_700_000_000,
+            "answered_in_round": "1",
+        },
     )
 
 
@@ -646,7 +654,15 @@ class TestOracleMappingResponse:
         assert node.price.normalized_wad == str(10**18)
         dep = node.dependencies[0]
         assert dep.symbol == "USDC"
-        assert dep.source_detail == {"answer": "99980000", "decimals": 8}
+        assert dep.source_detail == {
+            "description": "USDC / USD",
+            "round_id": "1",
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 0,
+            "updated_at": 1_700_000_000,
+            "answered_in_round": "1",
+        }
         assert dep.dependencies == []
 
     def test_partial_node_fields(self):

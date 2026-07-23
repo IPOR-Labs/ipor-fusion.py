@@ -41,6 +41,15 @@ def _resolved_node() -> OracleNode:
         source_type="ChainlinkAggregator",
         path=["USDC", "Chainlink feed"],
         status="resolved",
+        source_detail={
+            "description": "USDC / USD",
+            "round_id": 1,
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 0,
+            "updated_at": 1_700_000_000,
+            "answered_in_round": 1,
+        },
     )
 
 
@@ -119,11 +128,32 @@ class TestOracleMappingCommand:
         assert "Status:       partially_resolved" in result.output
         assert "Configured assets (2):" in result.output
         assert "USDC → Chainlink feed" in result.output
+        # feed description shown for the aggregator node, absent for the
+        # source-less partial node
+        assert "Feed:   USDC / USD" in result.output
+        assert result.output.count("Feed:") == 1
         assert "Price:  0.9998" in result.output
         assert "Status: resolved" in result.output
         assert "Status: partial (no_source_configured)" in result.output
         assert "Unresolved: 1" in result.output
         assert f"wsrUSD ({WSR}): no_source_configured" in result.output
+
+    def test_no_feed_line_when_description_missing(
+        self, mock_ctx_cls, _resolve, mock_build, tmp_config
+    ):
+        # source_detail present but the feed does not implement description()
+        mock_ctx_cls.from_url.return_value = _fake_ctx()
+        node = _resolved_node()
+        assert node.source_detail is not None
+        node.source_detail["description"] = None
+        mock_build.return_value = _mapping([node])
+
+        result = CliRunner().invoke(
+            cli, ["vault", "oracle-mapping", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code == 0
+        assert "Feed:" not in result.output
 
     def test_no_unresolved_summary(
         self, mock_ctx_cls, _resolve, mock_build, tmp_config

@@ -486,6 +486,11 @@ def oracle_mapping(
     partial, never dropped. Classification is heuristic: it
     grades on-chain evidence, it cannot prove a contract's identity.
 
+    Aggregator-compatible feeds report description() and the full
+    latestRoundData round in source_detail (see --json); raw values only,
+    no staleness judgment. The human output shows the description — the
+    feed's own statement of its units — when the feed provides one.
+
     Node status:
 
     \b
@@ -531,6 +536,10 @@ def _format_wad_price(price: OraclePrice) -> str:
 def _print_oracle_node(node: OracleNode) -> None:
     click.echo(f"  {node.symbol or '?'} ({node.asset})")
     click.echo(f"    Path:   {' → '.join(node.path)}")
+    # The feed's self-declared units — key for confirming what the value means.
+    description = (node.source_detail or {}).get("description")
+    if description:
+        click.echo(f"    Feed:   {description}")
     click.echo(f"    Price:  {_format_wad_price(node.price)}")
     if node.status == "resolved":
         click.secho("    Status: resolved", fg="green")
