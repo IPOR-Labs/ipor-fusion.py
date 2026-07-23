@@ -17,6 +17,7 @@ from ipor_fusion.mcp.models import (
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     OracleMappingResponse,
+    OracleNodeModel,
     Reconciliation,
     RoleAccountsResponse,
     VaultInfoResponse,
@@ -585,7 +586,19 @@ def _chainlink_node() -> OracleNode:
         source_type="ChainlinkAggregator",
         path=["USDC", "Chainlink feed"],
         status="resolved",
-        source_detail={"answer": "99980000", "answer_decimals": 8},
+        source_detail={
+            "description": "USDC / USD",
+            "round_id": "1",
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 0,
+            "started_at_utc": None,
+            "updated_at": 1_700_000_000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
+            "answered_in_round": "1",
+            "aggregator": None,
+            "phase_id": None,
+        },
     )
 
 
@@ -610,7 +623,7 @@ def _partial_node() -> OracleNode:
         symbol=None,
         decimals=None,
         source=None,
-        price=OraclePrice(raw=None, decimals=None, normalized_wad=None),
+        price=None,
         path=["0xNOPE"],
         status="partial",
         reason="no_source_configured",
@@ -626,6 +639,7 @@ def _oracle_mapping() -> OracleMapping:
         price_oracle="0xORACLE",  # type: ignore[arg-type]
         block_number=12345,
         asset_source="events",
+        status="partially_resolved",
         configured_assets=[_erc4626_node(), partial],
         unresolved=[partial],
     )
@@ -638,12 +652,26 @@ class TestOracleMappingResponse:
         assert resp.vault == "0xVAULT"
         assert resp.block_number == 12345
         assert resp.asset_source == "events"
+        assert resp.status == "partially_resolved"
         node = resp.configured_assets[0]
         assert node.source_type == "ERC4626PriceFeed"
+        assert node.price is not None
         assert node.price.normalized_wad == str(10**18)
         dep = node.dependencies[0]
         assert dep.symbol == "USDC"
-        assert dep.source_detail == {"answer": "99980000", "answer_decimals": 8}
+        assert dep.source_detail == {
+            "description": "USDC / USD",
+            "round_id": "1",
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 0,
+            "started_at_utc": None,
+            "updated_at": 1_700_000_000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
+            "answered_in_round": "1",
+            "aggregator": None,
+            "phase_id": None,
+        }
         assert dep.dependencies == []
 
     def test_partial_node_fields(self):
@@ -653,7 +681,7 @@ class TestOracleMappingResponse:
         assert partial.status == "partial"
         assert partial.reason == "no_source_configured"
         assert partial.source_detail is None
-        assert partial.price.raw is None
+        assert partial.price is None
         # mirrored into unresolved as the same shape
         assert resp.unresolved[0] == partial
 
@@ -676,8 +704,22 @@ class TestOracleMappingResponse:
                     "price_oracle": "0xORACLE",
                     "block_number": 1,
                     "asset_source": "getConfiguredAssets",
+                    "status": "resolved",
                     "configured_assets": [],
                     "unresolved": [],
                     "extra": "no",
                 }
             )
+
+    def test_rejects_unknown_status_values(self):
+        # status / asset_source are Literal-pinned — typos must not validate
+        mapping = _oracle_mapping()
+        payload = OracleMappingResponse.from_mapping(mapping).model_dump()
+
+        for key, bad in (("status", "kinda_resolved"), ("asset_source", "guess")):
+            with pytest.raises(ValidationError):
+                OracleMappingResponse.model_validate({**payload, key: bad})
+        node_payload = payload["configured_assets"][0]
+        # "unresolved" is mapping-level vocabulary — must not validate on a node
+        with pytest.raises(ValidationError):
+            OracleNodeModel.model_validate({**node_payload, "status": "unresolved"})

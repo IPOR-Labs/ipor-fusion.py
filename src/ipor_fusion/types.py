@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import ClassVar, NewType
+from typing import ClassVar, Literal, NewType, TypeAlias
 
 from eth_typing import ChecksumAddress
 
@@ -17,6 +17,14 @@ ChainId = NewType("ChainId", int)
 MorphoBlueMarketId = NewType("MorphoBlueMarketId", str)
 
 MAX_UINT256 = (1 << 256) - 1
+
+# Oracle-mapping status vocabulary — semantics documented in the
+# readers/oracle_mapping.py module docstring. Lives here so the MCP models
+# (pydantic-only runtime imports) can share the values without importing
+# the reader stack.
+NodeStatus: TypeAlias = Literal["resolved", "partially_resolved", "partial"]
+MappingStatus: TypeAlias = Literal["resolved", "partially_resolved", "unresolved"]
+AssetSource: TypeAlias = Literal["getConfiguredAssets", "events"]
 
 
 @dataclass(slots=True)

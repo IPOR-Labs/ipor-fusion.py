@@ -15,7 +15,7 @@ from eth_abi import encode
 from web3 import Web3
 
 from ipor_fusion.readers import oracle_mapping as om
-from ipor_fusion.types import Price
+from ipor_fusion.types import NodeStatus, Price
 
 
 def addr(n: int) -> str:
@@ -82,6 +82,11 @@ class FakeReader:
         self.feeds: dict[str, dict[str, Any]] = {}
         self.vaults: dict[str, dict[str, Any]] = {}
         self.morpho_prices: dict[str, int] = {}
+        # oracle variant (middleware-fallback resolution); "_mw" because the
+        # exact method name would be shadowed by the attribute
+        self.underlying_mw: str | None = None
+        self.registry: str | None = None
+        self.delegated: FakeReader | None = None
         # enumeration (configured_assets / asset_source_events)
         self.configured: list[str] | None = None
         self.events: list[tuple[int, str, str]] = []
@@ -100,6 +105,18 @@ class FakeReader:
 
     def source_of(self, a: str) -> str | None:
         return self.sources.get(a)
+
+    # oracle variant probes
+    def underlying_middleware(self) -> str | None:
+        return self.underlying_mw
+
+    def chainlink_feed_registry(self) -> str | None:
+        return self.registry
+
+    def delegate(self, oracle: str) -> FakeReader:
+        assert oracle == self.underlying_mw  # must delegate to the probed middleware
+        assert self.delegated is not None  # fail fast on a misconfigured test
+        return self.delegated
 
     # feed probes
     def _f(self, s: str) -> dict[str, Any]:
@@ -123,8 +140,29 @@ class FakeReader:
     def feed_decimals(self, s: str) -> int | None:
         return self._f(s).get("feed_decimals")
 
+    def feed_description(self, s: str) -> str | None:
+        return self._f(s).get("description")
+
+    def feed_version(self, s: str) -> int | None:
+        return self._f(s).get("version")
+
+    def feed_aggregator(self, s: str) -> str | None:
+        return self._f(s).get("aggregator")
+
+    def feed_phase_id(self, s: str) -> int | None:
+        return self._f(s).get("phase_id")
+
     def morpho_oracle_price(self, o: str) -> int | None:
         return self.morpho_prices.get(o)
+
+    def feed_asset_x(self, s: str) -> str | None:
+        return self._f(s).get("asset_x")
+
+    def feed_asset_x_asset_y_feed(self, s: str) -> str | None:
+        return self._f(s).get("xy_feed")
+
+    def feed_asset_y_usd_feed(self, s: str) -> str | None:
+        return self._f(s).get("y_usd_feed")
 
     # erc4626 vault
     def vault_asset(self, v: str) -> str | None:
@@ -150,9 +188,12 @@ def _chainlink_asset(r: FakeReader, asset: str, source: str, *, symbol: str) -> 
     r.decimals[asset] = 6
     r.sources[asset] = source
     r.prices[asset] = Price(asset=asset, amount=99_980_000, decimals=8)
+    # full confirmed-tier evidence: description + version on top of the round
     r.feeds[source] = {
         "round": (1, 99_980_000, 0, 1_700_000_000, 1),
         "feed_decimals": 8,
+        "description": f"{symbol} / USD",
+        "version": 4,
     }
 
 
@@ -177,10 +218,132 @@ class TestResolve:
             decimals=8,
             normalized_wad=str(99_980_000 * 10**10),
         )
-        assert node.source_detail is not None
-        assert node.source_detail["answer"] == "99980000"
-        assert node.source_detail["updated_at"] == 1_700_000_000
+        assert node.source_detail == {
+            "description": "USDC / USD",
+            "round_id": "1",
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 0,
+            "started_at_utc": None,  # synthetic epoch 0 has no UTC form
+            "updated_at": 1_700_000_000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
+            "answered_in_round": "1",
+            "aggregator": None,
+            "phase_id": None,
+        }
         assert node.dependencies == []
+
+    def test_chainlink_leaf_without_description_reports_null(self):
+        # description() is optional in practice (composed feeds may not
+        # implement it) — null in the uniform block, still resolved, but the
+        # confirmed-tier gate is incomplete → chainlink_style
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        del r.feeds[feed]["description"]
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.reason is None
+        assert node.source_detail is not None
+        assert node.source_detail["description"] is None
+        assert node.source_detail["answer"] == "99980000"
+
+    def test_chainlink_missing_version_demoted_to_style(self):
+        # version() is the last gate probe — without it the full
+        # AggregatorV3Interface is unproven; demotion withholds the confirmed
+        # label only, the node stays resolved with no reason
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        del r.feeds[feed]["version"]
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.path == ["USDC", "Chainlink-style feed"]
+        assert node.status == "resolved"
+        assert node.reason is None
+
+    def test_chainlink_missing_decimals_demoted_to_style(self):
+        # decimals() is part of the confirmed-tier gate; without it the answer
+        # cannot even be scaled — but the node is still resolved (the
+        # authoritative middleware price is what consumers use)
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        del r.feeds[feed]["feed_decimals"]
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.status == "resolved"
+        assert node.reason is None
+        assert node.source_detail is not None
+        assert node.source_detail["decimals"] is None
+
+    def test_chainlink_degenerate_round_demoted_to_style(self):
+        # zero roundId / updatedAt are synthetic values wrapper feeds return;
+        # real aggregators never do — distinct from staleness judgment
+        for rnd in [(1, 99_980_000, 0, 0, 1), (0, 99_980_000, 0, 1_700_000_000, 0)]:
+            r = FakeReader()
+            usdc, feed = addr(1), addr(0x11)
+            _chainlink_asset(r, usdc, feed, symbol="USDC")
+            r.feeds[feed]["round"] = rnd
+
+            node = om.resolve_asset(r, usdc, max_depth=6)
+
+            assert node.source_type == om.TYPE_CHAINLINK_STYLE
+            assert node.status == "resolved"
+            assert node.reason is None
+
+    def test_chainlink_empty_description_demoted_to_style(self):
+        # description() answering "" is evidence against a real aggregator;
+        # the raw value is still echoed in the metadata block
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        r.feeds[feed]["description"] = ""
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.status == "resolved"
+        assert node.source_detail is not None
+        assert node.source_detail["description"] == ""
+
+    def test_chainlink_proxy_evidence_recorded(self):
+        # aggregator()/phaseId() answering is evidence, not a gate — recorded
+        # in source_detail, the tier is unchanged
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        aggregator = addr(0x71)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        r.feeds[feed]["aggregator"] = aggregator
+        r.feeds[feed]["phase_id"] = 3
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK
+        assert node.source_detail is not None
+        assert node.source_detail["aggregator"] == aggregator
+        assert node.source_detail["phase_id"] == 3
+
+    def test_negative_answer_serialized_as_string(self):
+        # int256 answers can be negative; serialization must keep the sign
+        # (the answer's value is never judged, only echoed)
+        r = FakeReader()
+        usdc, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        r.feeds[feed]["round"] = (1, -5, 0, 1_700_000_000, 1)
+
+        node = om.resolve_asset(r, usdc, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK
+        assert node.source_detail is not None
+        assert node.source_detail["answer"] == "-5"
 
     def test_erc4626_recurses_to_underlying(self):
         r = FakeReader()
@@ -233,6 +396,233 @@ class TestResolve:
         assert [d.asset for d in node.dependencies] == [loan]
         assert node.path[:2] == ["COLL", "Morpho collateral/loan oracle"]
 
+    def test_dual_xref_wins_over_chainlink(self):
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            # the dual-xref contract also answers decimals()+latestRoundData();
+            # the generic Chainlink probe must not win
+            "round": (1, 2_600 * 10**8, 0, 0, 1),
+            "feed_decimals": 8,
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        r.feeds[xy_feed] = {
+            "round": (7, 13 * 10**17, 0, 1_700_000_000, 7),
+            "feed_decimals": 18,
+            "description": "wstETH / stETH",
+        }
+        r.feeds[y_usd_feed] = {
+            "round": (9, 2_000 * 10**8, 0, 1_700_000_000, 9),
+            "feed_decimals": 8,
+            "description": "ETH / USD",
+        }
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_DUAL_XREF
+        # the authoritative middleware price rides along with the derivation
+        assert node.price == om.OraclePrice(
+            raw=str(2_600 * 10**8),
+            decimals=8,
+            normalized_wad=str(2_600 * 10**18),
+        )
+        assert node.path == [
+            "wstETH",
+            "DualCrossReferencePriceFeed",
+            "ASSET_X/ASSET_Y feed",
+            "ASSET_Y/USD feed",
+        ]
+        assert node.source_detail is not None
+        assert node.source_detail["asset_x"] == wsteth
+        assert node.source_detail["asset_x_asset_y_feed"] == {
+            "address": xy_feed,
+            "description": "wstETH / stETH",
+            "round_id": "7",
+            "answer": str(13 * 10**17),
+            "decimals": 18,
+            "started_at": 0,
+            "started_at_utc": None,
+            "updated_at": 1_700_000_000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
+            "answered_in_round": "7",
+        }
+        assert node.source_detail["asset_y_usd_feed"] == {
+            "address": y_usd_feed,
+            "description": "ETH / USD",
+            "round_id": "9",
+            "answer": str(2_000 * 10**8),
+            "decimals": 8,
+            "started_at": 0,
+            "started_at_utc": None,
+            "updated_at": 1_700_000_000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
+            "answered_in_round": "9",
+        }
+        # 1.3 X/Y × 2000 Y/USD = 2600 USD, rescaled to 18 decimals
+        assert node.source_detail["derived_price_wad"] == str(2_600 * 10**18)
+        assert node.dependencies == []
+
+    def test_dual_xref_component_without_description_reports_null(self):
+        # dual-xref components legitimately lack description() (the on-chain
+        # exemplar's wstETH/stETH adapter does) — null in the block, and no
+        # bearing on the node status
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        r.feeds[xy_feed] = {
+            "round": (7, 13 * 10**17, 0, 1_700_000_000, 7),
+            "feed_decimals": 18,
+        }
+        r.feeds[y_usd_feed] = {
+            "round": (9, 2_000 * 10**8, 0, 1_700_000_000, 9),
+            "feed_decimals": 8,
+            "description": "ETH / USD",
+        }
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_detail is not None
+        assert node.source_detail["asset_x_asset_y_feed"]["description"] is None
+        assert node.source_detail["asset_y_usd_feed"]["description"] == "ETH / USD"
+
+    def test_dual_xref_component_unreadable_is_partial(self):
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        r.feeds[xy_feed] = {
+            "round": (1, 13 * 10**17, 0, 1_700_000_000, 1),
+            "feed_decimals": 18,
+        }
+        # y_usd_feed unreadable (no round data)
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.source_type == om.TYPE_DUAL_XREF
+        assert node.status == "partial"
+        assert node.reason == "dual_xref_component_unreadable"
+        assert node.source_detail is not None
+        # the readable component is still reported
+        assert node.source_detail["asset_x_asset_y_feed"]["answer"] == str(13 * 10**17)
+        assert node.source_detail["asset_y_usd_feed"]["answer"] is None
+        assert node.source_detail["derived_price_wad"] is None
+        # the authoritative middleware price is carried regardless
+        assert node.price is not None
+        assert node.price.raw == str(2_600 * 10**8)
+
+    def test_dual_xref_xy_component_unreadable_is_partial(self):
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        # xy_feed unreadable (no round data)
+        r.feeds[y_usd_feed] = {
+            "round": (1, 2_000 * 10**8, 0, 1_700_000_000, 1),
+            "feed_decimals": 8,
+        }
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.source_type == om.TYPE_DUAL_XREF
+        assert node.status == "partial"
+        assert node.reason == "dual_xref_component_unreadable"
+        assert node.source_detail is not None
+        assert node.source_detail["asset_x_asset_y_feed"]["answer"] is None
+        assert node.source_detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
+        assert node.source_detail["derived_price_wad"] is None
+
+    def test_dual_xref_missing_component_decimals_is_partial(self):
+        r = FakeReader()
+        wsteth = addr(1)
+        feed, xy_feed, y_usd_feed = addr(0x11), addr(0x12), addr(0x13)
+        r.symbols[wsteth] = "wstETH"
+        r.decimals[wsteth] = 18
+        r.sources[wsteth] = feed
+        r.prices[wsteth] = Price(asset=wsteth, amount=2_600 * 10**8, decimals=8)
+        r.feeds[feed] = {
+            "asset_x": wsteth,
+            "xy_feed": xy_feed,
+            "y_usd_feed": y_usd_feed,
+        }
+        r.feeds[xy_feed] = {
+            "round": (1, 13 * 10**17, 0, 1_700_000_000, 1),
+            "feed_decimals": 18,
+        }
+        # answer readable but decimals() missing — the answer alone cannot be
+        # scaled, so no derived price may be produced
+        r.feeds[y_usd_feed] = {"round": (1, 2_000 * 10**8, 0, 1_700_000_000, 1)}
+
+        node = om.resolve_asset(r, wsteth, max_depth=6)
+
+        assert node.source_type == om.TYPE_DUAL_XREF
+        assert node.status == "partial"
+        assert node.reason == "dual_xref_component_unreadable"
+        assert node.source_detail is not None
+        assert node.source_detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
+        assert node.source_detail["asset_y_usd_feed"]["decimals"] is None
+        assert node.source_detail["derived_price_wad"] is None
+
+    def test_dual_xref_probe_incomplete_falls_through_to_chainlink_style(self):
+        r = FakeReader()
+        asset = addr(1)
+        feed = addr(0x11)
+        r.symbols[asset] = "ODD"
+        r.decimals[asset] = 18
+        r.sources[asset] = feed
+        r.prices[asset] = Price(asset=asset, amount=10**8, decimals=8)
+        # ASSET_X() answers but the component-feed getters do not — not a
+        # dual-xref feed, the aggregator fallback must still classify it, yet
+        # the foreign getter caps the tier at chainlink_style even though the
+        # rest of the evidence (round, description, version) is confirmed-grade
+        r.feeds[feed] = {
+            "asset_x": addr(2),
+            "round": (1, 10**8, 0, 1_700_000_000, 1),
+            "feed_decimals": 8,
+            "description": "ODD / USD",
+            "version": 4,
+        }
+
+        node = om.resolve_asset(r, asset, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.path == ["ODD", "Chainlink-style feed"]
+        assert node.status == "resolved"
+        assert node.reason is None
+
     def test_custom_unknown_is_partial(self):
         r = FakeReader()
         asset, feed = addr(1), addr(0x11)
@@ -259,6 +649,177 @@ class TestResolve:
         assert node.status == "partial"
         assert node.reason == "no_source_configured"
 
+    def test_zero_source_with_manager_delegates_to_underlying(self):
+        r = FakeReader()
+        weth = addr(1)
+        mw, feed = addr(0x51), addr(0x11)
+        zero = Web3.to_checksum_address(om.ZERO_ADDRESS)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.sources[weth] = zero  # manager: no per-vault override
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
+        r.underlying_mw = mw
+        delegated = FakeReader()
+        _chainlink_asset(delegated, weth, feed, symbol="WETH")
+        r.delegated = delegated
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert node.source == zero
+        assert node.source_detail == {
+            "delegated_to": mw,
+            "chainlink_feed_registry": None,
+        }
+        # the manager's own (delegated, 18-decimal) price is carried here
+        assert node.price is not None
+        assert node.price.raw == str(2_000 * 10**18)
+        assert node.path == ["WETH", "middleware fallback", "Chainlink feed"]
+        dep = node.dependencies[0]
+        assert dep.asset == weth
+        assert dep.source_type == om.TYPE_CHAINLINK
+        assert dep.status == "resolved"
+        # the dep re-reads the price from the underlying middleware itself;
+        # 8 = old deployed base middleware (newer ones answer 18 — decimals
+        # are pass-through either way)
+        assert dep.price is not None
+        assert dep.price.decimals == 8
+
+    def test_manager_delegation_with_unreadable_price_demoted_to_partial(self):
+        # On-chain the manager's zero-source getAssetPrice IS the delegation,
+        # so its own read failing is an anomaly — own-price demotion. Doubles
+        # as the precedence case: with the dep partial too, the node reports
+        # its own `partial` + reason, not dependency-driven partially_resolved.
+        r = FakeReader()
+        weth = addr(1)
+        mw = addr(0x51)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        # no price on the manager and none on the underlying middleware either
+        r.underlying_mw = mw
+        delegated = FakeReader()
+        delegated.symbols[weth] = "WETH"
+        delegated.decimals[weth] = 18
+        r.delegated = delegated
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "partial"
+        assert node.reason == "manager_price_unreadable"
+        assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert node.price is None
+        assert node.source_detail is not None
+        assert node.source_detail["delegated_to"] == mw
+        dep = node.dependencies[0]
+        assert dep.status == "partial"
+        assert dep.reason == "no_source_configured"
+
+    def test_zero_source_priced_without_manager_is_middleware_fallback(self):
+        r = FakeReader()
+        weth = addr(1)
+        registry = addr(0x61)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        # no source entry and no manager, but the middleware prices the asset
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**8, decimals=8)
+        r.registry = registry
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert node.path == ["WETH", "middleware fallback"]
+        assert node.source_detail == {
+            "delegated_to": None,
+            "chainlink_feed_registry": registry,
+        }
+        assert node.dependencies == []
+        assert node.price is not None
+        assert node.price.raw == str(2_000 * 10**8)
+
+    def test_zero_feed_registry_reported_as_null(self):
+        r = FakeReader()
+        weth = addr(1)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**8, decimals=8)
+        # non-mainnet middleware: the registry getter answers the zero address
+        r.registry = Web3.to_checksum_address(om.ZERO_ADDRESS)
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert node.source_detail == {
+            "delegated_to": None,
+            "chainlink_feed_registry": None,
+        }
+
+    def test_zero_underlying_middleware_treated_as_absent(self):
+        r = FakeReader()
+        asset = addr(1)
+        r.symbols[asset] = "NOPE"
+        r.decimals[asset] = 18
+        r.underlying_mw = Web3.to_checksum_address(om.ZERO_ADDRESS)
+        # no price either → genuinely unconfigured, not middleware fallback
+
+        node = om.resolve_asset(r, asset, max_depth=6)
+
+        assert node.status == "partial"
+        assert node.reason == "no_source_configured"
+
+    def test_middleware_fallback_delegation_respects_max_depth(self):
+        r = FakeReader()
+        weth = addr(1)
+        mw, feed = addr(0x51), addr(0x11)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
+        r.underlying_mw = mw
+        delegated = FakeReader()
+        _chainlink_asset(delegated, weth, feed, symbol="WETH")
+        r.delegated = delegated
+
+        node = om.resolve_asset(r, weth, max_depth=0)
+
+        assert node.status == "partially_resolved"
+        dep = node.dependencies[0]
+        assert dep.status == "partial"
+        assert dep.reason == "max_depth_exceeded"
+        # the underlying middleware's price is still carried on the capped dep
+        assert dep.price is not None
+        assert dep.price.raw == "99980000"
+
+    def test_middleware_fallback_recurses_through_layered_middlewares(self):
+        # manager → global middleware that itself has no source for the asset
+        # but a readable price (its internal FeedRegistry fallback)
+        r = FakeReader()
+        weth = addr(1)
+        mw, registry = addr(0x51), addr(0x61)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
+        r.underlying_mw = mw
+        delegated = FakeReader()
+        delegated.symbols[weth] = "WETH"
+        delegated.decimals[weth] = 18
+        delegated.prices[weth] = Price(asset=weth, amount=2_000 * 10**8, decimals=8)
+        delegated.registry = registry
+        r.delegated = delegated
+
+        node = om.resolve_asset(r, weth, max_depth=6)
+
+        assert node.status == "resolved"
+        dep = node.dependencies[0]
+        assert dep.source_type == om.TYPE_MIDDLEWARE_FALLBACK
+        assert dep.status == "resolved"
+        assert dep.source_detail == {
+            "delegated_to": None,
+            "chainlink_feed_registry": registry,
+        }
+        assert node.path == ["WETH", "middleware fallback", "middleware fallback"]
+
     def test_cycle_detected(self):
         r = FakeReader()
         a = addr(1)
@@ -272,10 +833,12 @@ class TestResolve:
 
         node = om.resolve_asset(r, a, max_depth=6)
 
+        assert node.status == "partially_resolved"
         dep = node.dependencies[0]
         assert dep.status == "partial"
         assert dep.reason == "cycle_detected"
         # authoritative price is carried even on a cycle-capped node
+        assert dep.price is not None
         assert dep.price.raw == str(10**18)
 
     def test_max_depth_exceeded(self):
@@ -291,10 +854,12 @@ class TestResolve:
 
         node = om.resolve_asset(r, a, max_depth=0)
 
+        assert node.status == "partially_resolved"
         dep = node.dependencies[0]
         assert dep.status == "partial"
         assert dep.reason == "max_depth_exceeded"
         # authoritative price is carried even on a depth-capped node
+        assert dep.price is not None
         assert dep.price.raw == "99980000"
 
     def test_erc4626_underlying_unreadable(self):
@@ -331,14 +896,68 @@ class TestResolve:
         assert node.reason == "morpho_loan_token_unreadable"
         assert node.dependencies == []
 
+    def test_erc4626_rate_unreadable_demoted_to_partial(self):
+        # no derived price without the share→asset rate; the resolved
+        # underlying dep is still attached (readable parts kept)
+        r = FakeReader()
+        wsr, rusd = addr(1), addr(2)
+        feed_w, vault_w, feed_r = addr(0x11), addr(0x21), addr(0x12)
+        r.symbols[wsr] = "wsrUSD"
+        r.decimals[wsr] = 18
+        r.sources[wsr] = feed_w
+        r.prices[wsr] = Price(asset=wsr, amount=10**18, decimals=18)
+        r.feeds[feed_w] = {"vault": vault_w}
+        r.vaults[vault_w] = {"asset": rusd, "decimals": 18}  # no "rate"
+        _chainlink_asset(r, rusd, feed_r, symbol="rUSD")
 
-def _bare_node(status: str, reason: str | None = None, deps: list | None = None):
+        node = om.resolve_asset(r, wsr, max_depth=6)
+
+        assert node.source_type == om.TYPE_ERC4626
+        assert node.status == "partial"
+        assert node.reason == "erc4626_rate_unreadable"
+        assert node.source_detail is not None
+        assert node.source_detail["rate"] is None
+        dep = node.dependencies[0]
+        assert dep.asset == rusd
+        assert dep.status == "resolved"
+
+    def test_partial_leaf_demotes_every_ancestor(self):
+        # A → B (ERC4626 hops) → C (no source): C partial, both ancestors
+        # partially_resolved — propagation is transitive via direct children.
+        r = FakeReader()
+        a, b, c = addr(1), addr(2), addr(3)
+        feed_a, vault_a = addr(0x11), addr(0x21)
+        feed_b, vault_b = addr(0x12), addr(0x22)
+        for asset, sym, feed, vault, under in (
+            (a, "A", feed_a, vault_a, b),
+            (b, "B", feed_b, vault_b, c),
+        ):
+            r.symbols[asset] = sym
+            r.decimals[asset] = 18
+            r.sources[asset] = feed
+            r.prices[asset] = Price(asset=asset, amount=10**18, decimals=18)
+            r.feeds[feed] = {"vault": vault}
+            r.vaults[vault] = {"asset": under, "decimals": 18, "rate": 10**18}
+        r.symbols[c] = "C"
+        r.decimals[c] = 18
+
+        node = om.resolve_asset(r, a, max_depth=6)
+
+        assert node.status == "partially_resolved"
+        mid = node.dependencies[0]
+        assert mid.status == "partially_resolved"
+        leaf = mid.dependencies[0]
+        assert leaf.status == "partial"
+        assert leaf.reason == "no_source_configured"
+
+
+def _bare_node(status: NodeStatus, reason: str | None = None, deps: list | None = None):
     return om.OracleNode(
         asset=addr(1),
         symbol=None,
         decimals=None,
         source=None,
-        price=om.OraclePrice(raw=None, decimals=None, normalized_wad=None),
+        price=None,
         status=status,
         reason=reason,
         dependencies=deps or [],
@@ -357,6 +976,40 @@ class TestCollectUnresolved:
         out = om._collect_unresolved(tree)
         assert len(out) == 1
         assert out[0].reason == "cycle_detected"
+
+    def test_partially_resolved_parent_not_collected(self):
+        # demoted parents self-describe; only own-failure nodes are mirrored
+        tree = [
+            _bare_node(
+                "partially_resolved",
+                deps=[_bare_node("partial", reason="max_depth_exceeded")],
+            ),
+        ]
+        out = om._collect_unresolved(tree)
+        assert [n.status for n in out] == ["partial"]
+
+
+class TestMappingStatus:
+    def test_all_resolved(self):
+        roots = [_bare_node("resolved"), _bare_node("resolved")]
+        assert om._mapping_status(roots) == "resolved"
+
+    def test_empty_is_vacuously_resolved(self):
+        assert om._mapping_status([]) == "resolved"
+
+    def test_mix_is_partially_resolved(self):
+        roots = [_bare_node("resolved"), _bare_node("partial", reason="x")]
+        assert om._mapping_status(roots) == "partially_resolved"
+
+    def test_partially_resolved_root_keeps_mapping_out_of_unresolved(self):
+        # a partially_resolved root still explains its own feed — unresolved
+        # is reserved for total failure
+        roots = [_bare_node("partially_resolved"), _bare_node("partial", reason="x")]
+        assert om._mapping_status(roots) == "partially_resolved"
+
+    def test_all_roots_partial_is_unresolved(self):
+        roots = [_bare_node("partial", reason="x"), _bare_node("partial", reason="y")]
+        assert om._mapping_status(roots) == "unresolved"
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +1061,7 @@ class TestToDict:
         assert out["status"] == "partial"
         assert out["reason"] == "no_source_configured"
         assert out["source_detail"] is None
-        assert out["price"] == {"raw": None, "decimals": None, "normalized_wad": None}
+        assert out["price"] is None
 
     def test_dependencies_serialized_recursively(self):
         r = FakeReader()
@@ -436,6 +1089,7 @@ class TestToDict:
             price_oracle=addr(0x99),
             block_number=123,
             asset_source="getConfiguredAssets",
+            status="unresolved",
             configured_assets=[node],
             unresolved=[node],
         )
@@ -448,6 +1102,7 @@ class TestToDict:
         assert out["price_oracle"] == addr(0x99)
         assert out["block_number"] == 123
         assert out["asset_source"] == "getConfiguredAssets"
+        assert out["status"] == "unresolved"
         assert out["configured_assets"] == [node.to_dict()]
         assert out["unresolved"] == [node.to_dict()]
 
@@ -479,6 +1134,10 @@ class TestOracleMappingReader:
         assert reader.configured_assets() is None
         assert reader.source_of(addr(1)) is None
         assert reader.asset_price(addr(1)) is None
+        # for the variant probes a revert is the normal answer (plain
+        # middleware / manager, respectively) — None is the detection signal
+        assert reader.underlying_middleware() is None
+        assert reader.chainlink_feed_registry() is None
 
     def test_oracle_reads(self):
         reader, ctx = _mock_reader()
@@ -507,6 +1166,9 @@ class TestOracleMappingReader:
         ctx.call.return_value = encode(["uint8"], [8])
         assert reader.feed_decimals(feed) == 8
 
+        ctx.call.return_value = encode(["string"], ["ETH / USD"])
+        assert reader.feed_description(feed) == "ETH / USD"
+
         ctx.call.return_value = encode(
             ["uint80", "int256", "uint256", "uint256", "uint80"],
             [1, 99_980_000, 0, 1_700_000_000, 1],
@@ -519,15 +1181,44 @@ class TestOracleMappingReader:
             1,
         )
 
+        ctx.call.return_value = encode(["uint256"], [4])
+        assert reader.feed_version(feed) == 4
+
+        ctx.call.return_value = encode(["uint16"], [3])
+        assert reader.feed_phase_id(feed) == 3
+
         target = addr(0x21)
         ctx.call.return_value = encode(["address"], [target])
         assert reader.feed_vault(feed) == target
         assert reader.feed_morpho_oracle(feed) == target
         assert reader.feed_collateral_token(feed) == target
         assert reader.feed_loan_token(feed) == target
+        assert reader.feed_asset_x(feed) == target
+        assert reader.feed_asset_x_asset_y_feed(feed) == target
+        assert reader.feed_asset_y_usd_feed(feed) == target
+        assert reader.feed_aggregator(feed) == target
 
         ctx.call.return_value = encode(["uint256"], [1_030_000])
         assert reader.morpho_oracle_price(addr(0x31)) == 1_030_000
+
+    def test_oracle_variant_probes(self):
+        reader, ctx = _mock_reader()
+        target = addr(0x51)
+        ctx.call.return_value = encode(["address"], [target])
+
+        assert reader.underlying_middleware() == target
+        assert reader.chainlink_feed_registry() == target
+
+    def test_delegate_binds_new_reader_to_oracle(self):
+        other = addr(0x52)
+        ctx = _FakeLogCtx([])
+        delegated = om.OracleMappingReader(ctx, ORACLE).delegate(other)
+
+        # the one reader method whose target contract is observable from
+        # outside (get_logs receives it explicitly); the block is irrelevant
+        delegated.asset_source_events(1337)
+
+        assert ctx.captured["contract_address"] == other
 
     def test_erc4626_vault_reads(self):
         reader, ctx = _mock_reader()
@@ -703,6 +1394,8 @@ class TestBuildOracleMapping:
         assert out.asset_source == "getConfiguredAssets"
         assert out.asset == {"address": usdc, "symbol": "USDC", "decimals": 6}
         assert {n.asset for n in out.configured_assets} == {usdc, wsr, nosrc}
+        # two roots resolved, one partial → mapping-level roll-up is a mix
+        assert out.status == "partially_resolved"
         # only the no-source asset is unresolved, mirrored to the top level
         assert [n.reason for n in out.unresolved] == ["no_source_configured"]
         assert out.unresolved[0].asset == nosrc

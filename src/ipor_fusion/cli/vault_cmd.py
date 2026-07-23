@@ -58,6 +58,9 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
 from ipor_fusion.readers.oracle_mapping import (
+    TYPE_CHAINLINK,
+    TYPE_CHAINLINK_STYLE,
+    TYPE_DUAL_XREF,
     OracleMapping,
     OracleNode,
     OraclePrice,
@@ -478,10 +481,32 @@ def oracle_mapping(
     """Map how the vault prices every configured asset at a block.
 
     For each asset the vault's price oracle knows about, resolves the source
-    price feed, classifies its type by interface probing (Chainlink / ERC4626
-    / Morpho collateral / unknown) and recursively follows feeds that derive
-    their price from another asset. Unknown feeds are reported as partial,
-    never dropped. Historical blocks require an archive node.
+    price feed, classifies its type by interface probing (dual cross-reference
+    / Chainlink / ERC4626 / Morpho collateral / unknown) and recursively
+    follows feeds that derive their price from another asset. Zero-source
+    assets priced through the oracle's underlying middleware are reported as
+    middleware fallback, not unresolved. Unknown feeds are reported as
+    partial, never dropped. Chainlink leaves are graded: ChainlinkAggregator
+    when the full aggregator interface answers with sane metadata,
+    chainlink_style when the feed merely quacks like one — verify the
+    address yourself if identity matters. Classification is heuristic: it
+    grades on-chain evidence, it cannot prove a contract's identity.
+
+    Aggregator-compatible feeds report description() and the full
+    latestRoundData round in source_detail (see --json); raw values only,
+    no staleness judgment. The human output shows the description — the
+    feed's own statement of its units — when the feed provides one.
+
+    Node status:
+
+    \b
+    - resolved: own feed explained and every dependency resolved
+    - partially_resolved: some descendant is not resolved
+    - partial: the node's own resolution is incomplete (see the reason)
+
+    The unresolved summary lists partial nodes only; the mapping-level
+    status rolls up the roots (resolved / partially_resolved / unresolved).
+    Historical blocks require an archive node.
     """
     cfg = load_config()
     chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
@@ -508,18 +533,43 @@ def oracle_mapping(
     _print_oracle_mapping(mapping)
 
 
-def _format_wad_price(price: OraclePrice) -> str:
-    if price.normalized_wad is None:
+def _format_wad_price(price: OraclePrice | None) -> str:
+    if price is None:
         return "N/A"
     return _format_amount(int(price.normalized_wad), 18)
+
+
+def _print_feed_line(node: OracleNode) -> None:
+    """The feed's self-declared units — key for confirming what a value means."""
+    detail = node.source_detail or {}
+    if node.source_type in (TYPE_CHAINLINK, TYPE_CHAINLINK_STYLE):
+        if detail.get("description"):
+            click.echo(f"    Feed:   {detail['description']}")
+        else:
+            # only chainlink_style can land here — the confirmed tier
+            # requires a non-empty description
+            click.secho("    Feed:   (no description)", fg="yellow")
+    elif node.source_type == TYPE_DUAL_XREF:
+        rendered = [
+            # quoted — the descriptions themselves contain " / "
+            f'"{d}"' if d else click.style("(no description)", fg="yellow")
+            for d in (
+                (detail.get(key) or {}).get("description")
+                for key in ("asset_x_asset_y_feed", "asset_y_usd_feed")
+            )
+        ]
+        click.echo(f"    Feed:   {' × '.join(rendered)}")
 
 
 def _print_oracle_node(node: OracleNode) -> None:
     click.echo(f"  {node.symbol or '?'} ({node.asset})")
     click.echo(f"    Path:   {' → '.join(node.path)}")
+    _print_feed_line(node)
     click.echo(f"    Price:  {_format_wad_price(node.price)}")
     if node.status == "resolved":
         click.secho("    Status: resolved", fg="green")
+    elif node.status == "partially_resolved":
+        click.secho("    Status: partially_resolved", fg="yellow")
     else:
         click.secho(f"    Status: partial ({node.reason})", fg="yellow")
 
@@ -534,6 +584,10 @@ def _print_oracle_mapping(mapping: OracleMapping) -> None:
     click.echo(f"Price Oracle: {mapping.price_oracle}")
     click.echo(f"Block:        {mapping.block_number}")
     click.echo(f"Enumerated:   {mapping.asset_source}")
+    status_color = {"resolved": "green", "partially_resolved": "yellow"}.get(
+        mapping.status, "red"
+    )
+    click.secho(f"Status:       {mapping.status}", fg=status_color)
     click.echo()
     click.echo(f"Configured assets ({len(mapping.configured_assets)}):")
     for node in mapping.configured_assets:

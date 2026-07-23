@@ -227,10 +227,42 @@ def vault_oracle_mapping(
     effective price, and recursively resolves feeds that derive their price
     from another asset. Unknown feeds are reported as partial, never dropped.
 
-    Source types: ChainlinkAggregator (leaf feed), ERC4626PriceFeed
-    (share→asset rate, recurses on the underlying),
-    CollateralTokenOnMorphoMarketPriceFeed (recurses on the loan token),
-    custom_unknown (partial).
+    Source types: DualCrossReferencePriceFeed (X/USD composed from an X/Y and
+    a Y/USD component feed, both reported in source_detail),
+    ChainlinkAggregator (leaf feed confirmed by the full AggregatorV3Interface
+    — latestRoundData, decimals, description, version — with sane metadata),
+    chainlink_style (leaf that merely answers latestRoundData, or whose
+    evidence is contradicted: synthetic zero roundId/updatedAt, empty
+    description, a foreign getter answering; still resolved, but verify the
+    address yourself if identity matters), ERC4626PriceFeed (share→asset
+    rate, recurses on the underlying), CollateralTokenOnMorphoMarketPriceFeed
+    (recurses on the loan token), middleware_fallback (no per-vault source;
+    priced by the oracle's underlying global middleware, followed as a
+    dependency when discoverable), custom_unknown (partial). Classification is
+    heuristic interface probing: it grades on-chain evidence and cannot prove
+    a contract's identity or operator.
+
+    Every aggregator-compatible read reports description() and the full
+    latestRoundData round in source_detail (description, round_id, answer,
+    decimals, started_at, started_at_utc, updated_at, updated_at_utc,
+    answered_in_round); Chainlink-tier leaves add aggregator and phase_id
+    (proxy-deployment evidence; null when unanswered). Raw values only — no
+    staleness judgment is made (composed feeds may return synthetic zero
+    timestamps; their *_utc twins are null then, while the raw ints keep
+    fidelity), and description is null when the feed does not implement it.
+    Use the description to confirm a feed's units before trusting its
+    answer. Registry-resolved fallback
+    prices carry no per-feed metadata — the registry picks the aggregator
+    internally; its address is included, so agents can call getFeed on
+    demand.
+
+    Node status: resolved (own feed explained and every dependency resolved),
+    partially_resolved (own feed explained, but some descendant is not
+    resolved), or partial (the node's own resolution is incomplete — see
+    reason). The unresolved array lists partial nodes only; demoted parents
+    self-describe. The mapping-level status rolls up the roots: resolved
+    (every root resolved; vacuously for zero assets), unresolved (every
+    root partial — total failure), else partially_resolved.
 
     Assets are enumerated via getConfiguredAssets() when the oracle exposes
     it, else by replaying AssetPriceSourceUpdated logs (asset_source:

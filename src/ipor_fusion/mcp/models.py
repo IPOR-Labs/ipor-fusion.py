@@ -5,9 +5,10 @@ serializes them via model_dump() and exposes their JSON schema to the LLM.
 
 Design notes:
 - Top-level shapes are strictly typed for LLM schema clarity.
-- Runtime imports stay pydantic-only: SDK types appear only under TYPE_CHECKING
-  (or deferred inside methods), and on-chain addresses are plain `str`, not
-  eth_typing NewTypes.
+- Runtime imports stay pydantic-only — plus `ipor_fusion.types`, a
+  dependency-light typing leaf (shared Literal vocabularies live there).
+  Heavier SDK types appear only under TYPE_CHECKING (or deferred inside
+  methods), and on-chain addresses are plain `str`, not eth_typing NewTypes.
 - Truly dynamic sections (substrates keyed by market label, per-protocol
   position breakdowns) use dict[str, Any] / list[dict[str, Any]] — modelling
   every variant would be brittle without meaningful LLM-side benefit.
@@ -25,6 +26,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ipor_fusion.types import AssetSource, MappingStatus, NodeStatus
 
 if TYPE_CHECKING:
     from ipor_fusion.core.access import RoleAccount
@@ -255,13 +258,11 @@ class RoleAccountsResponse(_Base):
 
 
 class OraclePriceModel(_Base):
-    """Uniform price block; all fields null together when the read failed."""
+    """Price block; non-null only when the getAssetPrice() read succeeded."""
 
-    raw: str | None = Field(
-        description="Raw getAssetPrice() answer; null when unreadable."
-    )
-    decimals: int | None = Field(description="Decimals of the raw answer.")
-    normalized_wad: str | None = Field(
+    raw: str = Field(description="Raw getAssetPrice() answer.")
+    decimals: int = Field(description="Decimals of the raw answer.")
+    normalized_wad: str = Field(
         description="Price rescaled to 18 decimals (integer string)."
     )
 
@@ -276,21 +277,41 @@ class OracleNodeModel(_Base):
         description="Configured price-feed address; null when none/unreadable."
     )
     source_type: str = Field(
-        description="ChainlinkAggregator, ERC4626PriceFeed, "
-        "CollateralTokenOnMorphoMarketPriceFeed, or custom_unknown."
+        description="DualCrossReferencePriceFeed, ChainlinkAggregator, "
+        "chainlink_style, ERC4626PriceFeed, "
+        "CollateralTokenOnMorphoMarketPriceFeed, middleware_fallback, or "
+        "custom_unknown. ChainlinkAggregator is claimed only when the full "
+        "AggregatorV3Interface answers with sane metadata; chainlink_style "
+        "merely answers latestRoundData — verify the address yourself if "
+        "identity matters."
     )
-    price: OraclePriceModel
+    price: OraclePriceModel | None = Field(
+        description="Authoritative getAssetPrice() read; null when the read failed."
+    )
     path: list[str] = Field(
         description="Human-readable resolution chain, e.g. "
         "['wstETH', 'convertToAssets(1 share)', 'stETH', 'Chainlink feed']."
     )
-    status: str = Field(description="'resolved' or 'partial'.")
+    status: NodeStatus = Field(
+        description="resolved: own feed explained and every dependency "
+        "resolved. partially_resolved: own feed explained, but some "
+        "descendant is not resolved. partial: this node's own resolution is "
+        "incomplete — see reason."
+    )
     reason: str | None = Field(
-        default=None, description="Why the node is partial; null when resolved."
+        default=None, description="Why the node is partial; null otherwise."
     )
     source_detail: dict[str, Any] | None = Field(
         default=None,
-        description="Type-specific raw reads; null when no probe ran.",
+        description="Type-specific raw reads; null when no probe ran. "
+        "Aggregator-compatible reads (Chainlink-tier leaves, dual-xref "
+        "component feeds) carry description, round_id, answer, decimals, "
+        "started_at, started_at_utc, updated_at, updated_at_utc, "
+        "answered_in_round — raw values, no staleness judgment; description "
+        "is null when the feed does not implement it, and a *_utc twin is "
+        "null for a synthetic epoch-0 timestamp (the raw int keeps "
+        "fidelity). Chainlink-tier leaves add aggregator and phase_id "
+        "(proxy-deployment evidence; null when unanswered).",
     )
     dependencies: list[OracleNodeModel] = Field(
         default_factory=list,
@@ -309,7 +330,9 @@ class OracleNodeModel(_Base):
                 raw=node.price.raw,
                 decimals=node.price.decimals,
                 normalized_wad=node.price.normalized_wad,
-            ),
+            )
+            if node.price is not None
+            else None,
             path=node.path,
             status=node.status,
             reason=node.reason,
@@ -328,13 +351,21 @@ class OracleMappingResponse(_Base):
     )
     price_oracle: str
     block_number: int
-    asset_source: str = Field(
+    asset_source: AssetSource = Field(
         description="How assets were enumerated: 'getConfiguredAssets' or "
         "'events' (AssetPriceSourceUpdated log replay)."
     )
+    status: MappingStatus = Field(
+        description="Roll-up of the configured-asset roots: resolved when "
+        "every root resolved (vacuously for zero assets), unresolved when "
+        "every root is partial (total failure), partially_resolved "
+        "otherwise."
+    )
     configured_assets: list[OracleNodeModel]
     unresolved: list[OracleNodeModel] = Field(
-        description="Flat mirror of every node whose status != resolved."
+        description="Flat mirror of every partial node (own resolution "
+        "incomplete). partially_resolved parents are not repeated here — "
+        "they self-describe."
     )
 
     @classmethod
@@ -347,6 +378,7 @@ class OracleMappingResponse(_Base):
             price_oracle=mapping.price_oracle,
             block_number=mapping.block_number,
             asset_source=mapping.asset_source,
+            status=mapping.status,
             configured_assets=[
                 OracleNodeModel.from_node(node) for node in mapping.configured_assets
             ],
