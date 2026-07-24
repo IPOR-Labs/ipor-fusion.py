@@ -97,7 +97,8 @@ TYPE_DUAL_XREF = "DualCrossReferencePriceFeed"
 TYPE_MIDDLEWARE_FALLBACK = "middleware_fallback"
 TYPE_UNKNOWN = "custom_unknown"
 
-_WAD = 18
+# The 18-decimal fixed-point scale normalized prices are rescaled to.
+WAD_DECIMALS = 18
 
 
 # ---------------------------------------------------------------------------
@@ -436,9 +437,9 @@ def collapse_sources(
 
 def normalize_wad(amount: int, decimals: int) -> str:
     """Rescale ``amount`` (with ``decimals`` decimals) to an 18-decimal integer."""
-    if decimals <= _WAD:
-        return str(amount * 10 ** (_WAD - decimals))
-    return str(amount // 10 ** (decimals - _WAD))
+    if decimals <= WAD_DECIMALS:
+        return str(amount * 10 ** (WAD_DECIMALS - decimals))
+    return str(amount // 10 ** (decimals - WAD_DECIMALS))
 
 
 def _price_block(price: Price | None) -> OraclePrice | None:
@@ -657,7 +658,7 @@ def _resolve_dual_xref(
         derived = str(
             int(normalize_wad(xy_round[1], xy_decimals))
             * int(normalize_wad(y_usd_round[1], y_usd_decimals))
-            // 10**_WAD
+            // 10**WAD_DECIMALS
         )
 
     node.source_type = TYPE_DUAL_XREF

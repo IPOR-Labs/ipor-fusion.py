@@ -61,6 +61,7 @@ from ipor_fusion.readers.oracle_mapping import (
     TYPE_CHAINLINK,
     TYPE_CHAINLINK_STYLE,
     TYPE_DUAL_XREF,
+    WAD_DECIMALS,
     OracleMapping,
     OracleNode,
     OraclePrice,
@@ -536,7 +537,7 @@ def oracle_mapping(
 def _format_wad_price(price: OraclePrice | None) -> str:
     if price is None:
         return "N/A"
-    return _format_amount(int(price.normalized_wad), 18)
+    return _format_amount(int(price.normalized_wad), WAD_DECIMALS)
 
 
 def _print_feed_line(node: OracleNode) -> None:
