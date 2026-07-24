@@ -78,7 +78,7 @@ class _VaultData:
     # Underlying asset balance held directly on the vault (raw). Part of
     # totalAssets via ERC4626 base accounting; by design NOT tracked as an
     # ERC20_VAULT_BALANCE substrate, so it is read directly in
-    # _fetch_vault_data rather than derived from substrates (IL-7463).
+    # _fetch_vault_data rather than derived from substrates.
     underlying_balance_on_vault: int = 0
     vault_name: str = ""
     deployment_block: int | None = None

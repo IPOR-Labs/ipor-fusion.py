@@ -873,8 +873,8 @@ class TestPrintErc20Balances:
         assert "(none)" in captured.out
 
 
-class TestUnderlyingOnVaultIL7463:
-    """IL-7463 regression.
+class TestUnderlyingOnVault:
+    """Idle-underlying reconciliation regression.
 
     Idle underlying held directly on the vault is part of ``totalAssets`` via
     ERC4626 base accounting, but by design it is NOT registered as an
