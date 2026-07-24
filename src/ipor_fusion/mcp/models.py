@@ -9,6 +9,7 @@ Design notes:
   dependency-light typing leaf (shared Literal vocabularies live there).
   Heavier SDK types appear only under TYPE_CHECKING (or deferred inside
   methods), and on-chain addresses are plain `str`, not eth_typing NewTypes.
+  Enforced by test_mcp_models.py::TestModelsImportGraph.
 - Truly dynamic sections (substrates keyed by market label, per-protocol
   position breakdowns) use dict[str, Any] / list[dict[str, Any]] — modelling
   every variant would be brittle without meaningful LLM-side benefit.

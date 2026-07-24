@@ -7,10 +7,13 @@ there, this test will fail until the model is updated. That is the point.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from ipor_fusion.core.access import RoleAccount
+from ipor_fusion.mcp import models as mcp_models
 from ipor_fusion.mcp.models import (
     Amount,
     ConfigShowResponse,
@@ -735,3 +738,19 @@ class TestOracleMappingResponse:
         # "unresolved" is mapping-level vocabulary — must not validate on a node
         with pytest.raises(ValidationError):
             OracleNodeModel.model_validate({**node_payload, "status": "unresolved"})
+
+
+class TestModelsImportGraph:
+    def test_no_runtime_sdk_imports(self):
+        """models.py rule: runtime imports stay pydantic-only, plus the
+        ipor_fusion.types leaf."""
+        # Column-0 anchoring scopes this to runtime module-level imports —
+        # TYPE_CHECKING-block and method-deferred imports are indented.
+        lines = Path(mcp_models.__file__).read_text().splitlines()
+        offending = [
+            line
+            for line in lines
+            if line.startswith(("import ipor_fusion", "from ipor_fusion"))
+            and not line.startswith("from ipor_fusion.types import")
+        ]
+        assert offending == []
