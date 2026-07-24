@@ -44,7 +44,12 @@ from ipor_fusion.readers.morpho import (
     MorphoMarketParams,
     MorphoMarketRates,
 )
-from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode, OraclePrice
+from ipor_fusion.readers.oracle_mapping import (
+    OracleAsset,
+    OracleMapping,
+    OracleNode,
+    OraclePrice,
+)
 from ipor_fusion.types import Period, RoleId
 
 
@@ -303,7 +308,11 @@ def _oracle_mapping(block_number: int = 123) -> OracleMapping:
     return OracleMapping(
         vault=VAULT_ADDR,  # type: ignore[arg-type]
         vault_name="Reservoir",
-        asset={"address": "0xUSDC", "symbol": "USDC", "decimals": 6},
+        asset=OracleAsset(
+            address="0xUSDC",  # type: ignore[arg-type]
+            symbol="USDC",
+            decimals=6,
+        ),
         price_oracle="0xORACLE",  # type: ignore[arg-type]
         block_number=block_number,
         asset_source="getConfiguredAssets",

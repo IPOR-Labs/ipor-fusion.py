@@ -23,7 +23,12 @@ from ipor_fusion.mcp.models import (
     VaultInfoResponse,
     VaultListEntry,
 )
-from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode, OraclePrice
+from ipor_fusion.readers.oracle_mapping import (
+    OracleAsset,
+    OracleMapping,
+    OracleNode,
+    OraclePrice,
+)
 from ipor_fusion.types import Period, RoleId
 
 
@@ -635,7 +640,11 @@ def _oracle_mapping() -> OracleMapping:
     return OracleMapping(
         vault="0xVAULT",  # type: ignore[arg-type]
         vault_name="Reservoir",
-        asset={"address": "0xUSDC", "symbol": "USDC", "decimals": 6},
+        asset=OracleAsset(
+            address="0xUSDC",  # type: ignore[arg-type]
+            symbol="USDC",
+            decimals=6,
+        ),
         price_oracle="0xORACLE",  # type: ignore[arg-type]
         block_number=12345,
         asset_source="events",
@@ -650,6 +659,9 @@ class TestOracleMappingResponse:
         resp = OracleMappingResponse.from_mapping(_oracle_mapping())
 
         assert resp.vault == "0xVAULT"
+        assert resp.asset.address == "0xUSDC"
+        assert resp.asset.symbol == "USDC"
+        assert resp.asset.decimals == 6
         assert resp.block_number == 12345
         assert resp.asset_source == "events"
         assert resp.status == "partially_resolved"
@@ -700,7 +712,7 @@ class TestOracleMappingResponse:
                 {
                     "vault": "0xVAULT",
                     "vault_name": None,
-                    "asset": {},
+                    "asset": {"address": "0xUSDC", "symbol": "USDC", "decimals": 6},
                     "price_oracle": "0xORACLE",
                     "block_number": 1,
                     "asset_source": "getConfiguredAssets",

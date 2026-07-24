@@ -341,14 +341,20 @@ class OracleNodeModel(_Base):
         )
 
 
+class OracleAssetModel(_Base):
+    """The vault's underlying ERC-20 asset."""
+
+    address: str
+    symbol: str | None = Field(description="ERC-20 symbol; null when unreadable.")
+    decimals: int | None
+
+
 class OracleMappingResponse(_Base):
     """How a Plasma Vault prices every configured asset at a pinned block."""
 
     vault: str
     vault_name: str | None
-    asset: dict[str, Any] = Field(
-        description="Underlying asset: {address, symbol, decimals}."
-    )
+    asset: OracleAssetModel
     price_oracle: str
     block_number: int
     asset_source: AssetSource = Field(
@@ -374,7 +380,11 @@ class OracleMappingResponse(_Base):
         return cls(
             vault=mapping.vault,
             vault_name=mapping.vault_name,
-            asset=mapping.asset,
+            asset=OracleAssetModel(
+                address=mapping.asset.address,
+                symbol=mapping.asset.symbol,
+                decimals=mapping.asset.decimals,
+            ),
             price_oracle=mapping.price_oracle,
             block_number=mapping.block_number,
             asset_source=mapping.asset_source,

@@ -1116,7 +1116,7 @@ class TestToDict:
         mapping = om.OracleMapping(
             vault=addr(0xAA),
             vault_name="V",
-            asset={"address": addr(1), "symbol": "USDC", "decimals": 6},
+            asset=om.OracleAsset(address=addr(1), symbol="USDC", decimals=6),
             price_oracle=addr(0x99),
             block_number=123,
             asset_source="getConfiguredAssets",
@@ -1423,7 +1423,7 @@ class TestBuildOracleMapping:
         assert out.price_oracle == oracle
         assert out.block_number == 123
         assert out.asset_source == "getConfiguredAssets"
-        assert out.asset == {"address": usdc, "symbol": "USDC", "decimals": 6}
+        assert out.asset == om.OracleAsset(address=usdc, symbol="USDC", decimals=6)
         assert {n.asset for n in out.configured_assets} == {usdc, wsr, nosrc}
         # two roots resolved, one partial → mapping-level roll-up is a mix
         assert out.status == "partially_resolved"

@@ -149,6 +149,15 @@ class OracleNode:
 
 
 @dataclass(slots=True)
+class OracleAsset:
+    """The vault's underlying ERC-20 asset."""
+
+    address: ChecksumAddress
+    symbol: str | None
+    decimals: int | None
+
+
+@dataclass(slots=True)
 class OracleMapping:
     """Full oracle mapping for a vault at a pinned block.
 
@@ -162,7 +171,7 @@ class OracleMapping:
 
     vault: ChecksumAddress
     vault_name: str | None
-    asset: dict[str, Any]
+    asset: OracleAsset
     price_oracle: ChecksumAddress
     block_number: int
     asset_source: AssetSource
@@ -1010,11 +1019,11 @@ def build_oracle_mapping(
     return OracleMapping(
         vault=vault_address,
         vault_name=vault_name,
-        asset={
-            "address": asset_addr,
-            "symbol": reader.symbol(asset_addr),
-            "decimals": reader.token_decimals(asset_addr),
-        },
+        asset=OracleAsset(
+            address=asset_addr,
+            symbol=reader.symbol(asset_addr),
+            decimals=reader.token_decimals(asset_addr),
+        ),
         price_oracle=oracle_addr,
         block_number=effective_block,
         asset_source=asset_source,
