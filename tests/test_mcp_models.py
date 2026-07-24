@@ -7,10 +7,13 @@ there, this test will fail until the model is updated. That is the point.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from ipor_fusion.core.access import RoleAccount
+from ipor_fusion.mcp import models as mcp_models
 from ipor_fusion.mcp.models import (
     Amount,
     ConfigShowResponse,
@@ -23,7 +26,12 @@ from ipor_fusion.mcp.models import (
     VaultInfoResponse,
     VaultListEntry,
 )
-from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode, OraclePrice
+from ipor_fusion.readers.oracle_mapping import (
+    OracleAsset,
+    OracleMapping,
+    OracleNode,
+    OraclePrice,
+)
 from ipor_fusion.types import Period, RoleId
 
 
@@ -635,7 +643,11 @@ def _oracle_mapping() -> OracleMapping:
     return OracleMapping(
         vault="0xVAULT",  # type: ignore[arg-type]
         vault_name="Reservoir",
-        asset={"address": "0xUSDC", "symbol": "USDC", "decimals": 6},
+        asset=OracleAsset(
+            address="0xUSDC",  # type: ignore[arg-type]
+            symbol="USDC",
+            decimals=6,
+        ),
         price_oracle="0xORACLE",  # type: ignore[arg-type]
         block_number=12345,
         asset_source="events",
@@ -650,6 +662,9 @@ class TestOracleMappingResponse:
         resp = OracleMappingResponse.from_mapping(_oracle_mapping())
 
         assert resp.vault == "0xVAULT"
+        assert resp.asset.address == "0xUSDC"
+        assert resp.asset.symbol == "USDC"
+        assert resp.asset.decimals == 6
         assert resp.block_number == 12345
         assert resp.asset_source == "events"
         assert resp.status == "partially_resolved"
@@ -700,7 +715,7 @@ class TestOracleMappingResponse:
                 {
                     "vault": "0xVAULT",
                     "vault_name": None,
-                    "asset": {},
+                    "asset": {"address": "0xUSDC", "symbol": "USDC", "decimals": 6},
                     "price_oracle": "0xORACLE",
                     "block_number": 1,
                     "asset_source": "getConfiguredAssets",
@@ -723,3 +738,19 @@ class TestOracleMappingResponse:
         # "unresolved" is mapping-level vocabulary — must not validate on a node
         with pytest.raises(ValidationError):
             OracleNodeModel.model_validate({**node_payload, "status": "unresolved"})
+
+
+class TestModelsImportGraph:
+    def test_no_runtime_sdk_imports(self):
+        """models.py rule: runtime imports stay pydantic-only, plus the
+        ipor_fusion.types leaf."""
+        # Column-0 anchoring scopes this to runtime module-level imports —
+        # TYPE_CHECKING-block and method-deferred imports are indented.
+        lines = Path(mcp_models.__file__).read_text().splitlines()
+        offending = [
+            line
+            for line in lines
+            if line.startswith(("import ipor_fusion", "from ipor_fusion"))
+            and not line.startswith("from ipor_fusion.types import")
+        ]
+        assert offending == []

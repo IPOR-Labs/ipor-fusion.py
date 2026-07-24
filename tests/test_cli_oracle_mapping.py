@@ -10,7 +10,12 @@ from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
 from ipor_fusion.errors import NotPlasmaVaultError
-from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode, OraclePrice
+from ipor_fusion.readers.oracle_mapping import (
+    OracleAsset,
+    OracleMapping,
+    OracleNode,
+    OraclePrice,
+)
 
 VAULT = "0x2222222222222222222222222222222222222222"
 ORACLE = "0x9999999999999999999999999999999999999999"
@@ -122,7 +127,11 @@ def _mapping(nodes: list[OracleNode]) -> OracleMapping:
     return OracleMapping(
         vault=VAULT,  # type: ignore[arg-type]
         vault_name="Reservoir",
-        asset={"address": USDC, "symbol": "USDC", "decimals": 6},
+        asset=OracleAsset(
+            address=USDC,  # type: ignore[arg-type]
+            symbol="USDC",
+            decimals=6,
+        ),
         price_oracle=ORACLE,  # type: ignore[arg-type]
         block_number=12345,
         asset_source="getConfiguredAssets",

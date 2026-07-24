@@ -61,6 +61,7 @@ from ipor_fusion.readers.oracle_mapping import (
     TYPE_CHAINLINK,
     TYPE_CHAINLINK_STYLE,
     TYPE_DUAL_XREF,
+    WAD_DECIMALS,
     OracleMapping,
     OracleNode,
     OraclePrice,
@@ -536,7 +537,7 @@ def oracle_mapping(
 def _format_wad_price(price: OraclePrice | None) -> str:
     if price is None:
         return "N/A"
-    return _format_amount(int(price.normalized_wad), 18)
+    return _format_amount(int(price.normalized_wad), WAD_DECIMALS)
 
 
 def _print_feed_line(node: OracleNode) -> None:
@@ -577,10 +578,7 @@ def _print_oracle_node(node: OracleNode) -> None:
 def _print_oracle_mapping(mapping: OracleMapping) -> None:
     name_suffix = f" ({mapping.vault_name})" if mapping.vault_name else ""
     click.echo(f"Vault:        {mapping.vault}{name_suffix}")
-    click.echo(
-        f"Underlying:   {mapping.asset.get('symbol') or '?'} "
-        f"({mapping.asset.get('address')})"
-    )
+    click.echo(f"Underlying:   {mapping.asset.symbol or '?'} ({mapping.asset.address})")
     click.echo(f"Price Oracle: {mapping.price_oracle}")
     click.echo(f"Block:        {mapping.block_number}")
     click.echo(f"Enumerated:   {mapping.asset_source}")

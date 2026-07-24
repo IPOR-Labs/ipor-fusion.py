@@ -1,4 +1,4 @@
-"""IL-7463 on-chain regression test (read-only, real BASE state).
+"""Idle-underlying on-chain regression test (read-only, real BASE state).
 
 Drives the real SDK/CLI compute path — ``_fetch_vault_data`` →
 ``_compute_erc20_balances`` → ``_compute_health_check`` — against the live BASE

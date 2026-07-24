@@ -862,7 +862,10 @@ class TestResolve:
         assert dep.price is not None
         assert dep.price.raw == "99980000"
 
-    def test_erc4626_underlying_unreadable(self):
+    def test_erc4626_gate_incomplete_falls_through(self):
+        # vault() answers but that vault has no asset() — the ERC4626
+        # hypothesis is unproven, so no type claim is made; with no other
+        # probe matching, the node lands on unknown
         r = FakeReader()
         wsr = addr(1)
         feed, vault = addr(0x11), addr(0x21)
@@ -870,16 +873,32 @@ class TestResolve:
         r.decimals[wsr] = 18
         r.sources[wsr] = feed
         r.feeds[feed] = {"vault": vault}
-        r.vaults[vault] = {"decimals": 18, "rate": 10**18}  # no "asset" → unreadable
+        r.vaults[vault] = {"decimals": 18, "rate": 10**18}  # no "asset"
 
         node = om.resolve_asset(r, wsr, max_depth=6)
 
-        assert node.source_type == om.TYPE_ERC4626
+        assert node.source_type == om.TYPE_UNKNOWN
         assert node.status == "partial"
-        assert node.reason == "erc4626_underlying_unreadable"
+        assert node.reason == "unsupported_custom_feed"
         assert node.dependencies == []
 
-    def test_morpho_loan_token_unreadable(self):
+    def test_erc4626_false_matcher_demoted_to_chainlink_style(self):
+        # a feed with a foreign vault() getter and otherwise confirmed-grade
+        # aggregator evidence must not earn the confirmed label
+        r = FakeReader()
+        asset, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, asset, feed, symbol="ODD")
+        r.feeds[feed]["vault"] = addr(0x21)  # gate incomplete: vault has no asset()
+
+        node = om.resolve_asset(r, asset, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.status == "resolved"
+        assert node.reason is None
+
+    def test_morpho_gate_incomplete_falls_through(self):
+        # morphoOracle() answers but loanToken() does not — same clean
+        # fall-through as an incomplete dual-xref gate
         r = FakeReader()
         coll = addr(1)
         feed, m_oracle = addr(0x11), addr(0x31)
@@ -891,10 +910,22 @@ class TestResolve:
 
         node = om.resolve_asset(r, coll, max_depth=6)
 
-        assert node.source_type == om.TYPE_MORPHO
+        assert node.source_type == om.TYPE_UNKNOWN
         assert node.status == "partial"
-        assert node.reason == "morpho_loan_token_unreadable"
+        assert node.reason == "unsupported_custom_feed"
         assert node.dependencies == []
+
+    def test_morpho_false_matcher_demoted_to_chainlink_style(self):
+        r = FakeReader()
+        asset, feed = addr(1), addr(0x11)
+        _chainlink_asset(r, asset, feed, symbol="ODD")
+        r.feeds[feed]["morpho_oracle"] = addr(0x31)  # gate incomplete: no loanToken()
+
+        node = om.resolve_asset(r, asset, max_depth=6)
+
+        assert node.source_type == om.TYPE_CHAINLINK_STYLE
+        assert node.status == "resolved"
+        assert node.reason is None
 
     def test_erc4626_rate_unreadable_demoted_to_partial(self):
         # no derived price without the share→asset rate; the resolved
@@ -1085,7 +1116,7 @@ class TestToDict:
         mapping = om.OracleMapping(
             vault=addr(0xAA),
             vault_name="V",
-            asset={"address": addr(1), "symbol": "USDC", "decimals": 6},
+            asset=om.OracleAsset(address=addr(1), symbol="USDC", decimals=6),
             price_oracle=addr(0x99),
             block_number=123,
             asset_source="getConfiguredAssets",
@@ -1392,7 +1423,7 @@ class TestBuildOracleMapping:
         assert out.price_oracle == oracle
         assert out.block_number == 123
         assert out.asset_source == "getConfiguredAssets"
-        assert out.asset == {"address": usdc, "symbol": "USDC", "decimals": 6}
+        assert out.asset == om.OracleAsset(address=usdc, symbol="USDC", decimals=6)
         assert {n.asset for n in out.configured_assets} == {usdc, wsr, nosrc}
         # two roots resolved, one partial → mapping-level roll-up is a mix
         assert out.status == "partially_resolved"

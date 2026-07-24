@@ -13,6 +13,7 @@ from ipor_fusion.readers.morpho import (
     MorphoReader,
 )
 from ipor_fusion.readers.oracle_mapping import (
+    OracleAsset,
     OracleMapping,
     OracleNode,
     OraclePrice,
@@ -34,6 +35,7 @@ __all__ = [
     "LendingMarketHealth",
     "VaultLendingHealth",
     "fetch_vault_lending_health",
+    "OracleAsset",
     "OracleMapping",
     "OracleNode",
     "OraclePrice",
