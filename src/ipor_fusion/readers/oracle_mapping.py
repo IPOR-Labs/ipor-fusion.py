@@ -522,7 +522,7 @@ def _resolve_chainlink(
     source: ChecksumAddress,
     rnd: tuple[int, int, int, int, int],
     *,
-    foreign_getter: bool,
+    has_foreign_getter: bool,
 ) -> OracleNode:
     """Resolve an aggregator-compatible leaf, grading the identity evidence.
 
@@ -538,7 +538,7 @@ def _resolve_chainlink(
     description = reader.feed_description(source)
     feed_decimals = reader.feed_decimals(source)
     confirmed = (
-        not foreign_getter
+        not has_foreign_getter
         and feed_decimals is not None
         and bool(description)  # unimplemented and empty both demote
         and rnd[0] != 0  # degenerate roundId
@@ -812,9 +812,11 @@ def _classify_and_resolve(
             )
     rnd = reader.feed_latest_round_data(source)
     if rnd is not None:
-        foreign = asset_x is not None or morpho_oracle is not None or vault is not None
+        has_foreign_getter = (
+            asset_x is not None or morpho_oracle is not None or vault is not None
+        )
         return _resolve_chainlink(
-            reader, node, label, source, rnd, foreign_getter=foreign
+            reader, node, label, source, rnd, has_foreign_getter=has_foreign_getter
         )
     node.source_type = TYPE_UNKNOWN
     node.status = "partial"
