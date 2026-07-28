@@ -9,6 +9,8 @@ from click.testing import CliRunner
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_config
 from ipor_fusion.cli.main import cli, main
+from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
+from ipor_fusion.core.plasma_vault import ManagementFeeData, PerformanceFeeData
 from ipor_fusion.core.withdraw_manager import AccountRequest
 from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
 from ipor_fusion.mcp.models import VaultInfoResponse
@@ -22,6 +24,94 @@ ADDR_WITHDRAW = "0x7777777777777777777777777777777777777777"
 ADDR_FUSE_1 = "0x8888888888888888888888888888888888888888"
 ADDR_FUSE_2 = "0x9999999999999999999999999999999999999999"
 ADDR_USER_1 = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+ADDR_FEE_ACCOUNT = "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+ADDR_FEE_MANAGER = "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+ADDR_FEE_RECIPIENT = "0xDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+ADDR_DAO_RECIPIENT = "0xEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+
+
+def _configure_fee_mocks(mock_pv) -> None:
+    """Give a mocked PlasmaVault fee data pointing at a fee account.
+
+    Without this the getters return bare MagicMocks and the FeeAccount hop in
+    `_fetch_fee_data` fails on a non-address. Paired with the
+    `mock_fee_contracts` fixture, which stubs the far side of that hop.
+    """
+    mock_pv.get_performance_fee_data.return_value.call.return_value = (
+        PerformanceFeeData(fee_account=ADDR_FEE_ACCOUNT, fee_in_percentage=1000)
+    )
+    mock_pv.get_management_fee_data.return_value.call.return_value = ManagementFeeData(
+        fee_account=ADDR_FEE_ACCOUNT,
+        fee_in_percentage=100,
+        last_update_timestamp=1699999000,
+    )
+    mock_pv.get_unrealized_management_fee.return_value.call.return_value = 5 * 10**6
+
+
+def _assert_fees_json(data: dict) -> None:
+    """Assert the `fees` object built from the `mock_fee_contracts` values."""
+    fees = data["fees"]
+    assert fees is not None
+    assert data["managers"]["fee"] == ADDR_FEE_MANAGER
+    assert fees["fee_manager"] == ADDR_FEE_MANAGER
+    assert fees["ipor_dao_fee_recipient"] == ADDR_DAO_RECIPIENT
+    # Two different on-chain scales normalize to the same percent unit: WAD
+    # for the deposit/exit fees, basis points for perf/management.
+    assert fees["deposit_fee_percent"] == 1.0
+    assert fees["request_fee_percent"] == 0.1
+    assert fees["withdraw_fee_percent"] == 0.2
+    assert fees["performance_fee_percent"] == 10.0
+    assert fees["management_fee_percent"] == 1.0
+    assert fees["performance_fee_recipients"] == [
+        {"recipient": ADDR_FEE_RECIPIENT, "fee_percent": 8.0, "fee_bps": 800}
+    ]
+    assert fees["high_water_mark"]["high_water_mark"] == 10**6
+    assert fees["unrealized_management_fee"]["raw"] == 5 * 10**6
+    # Every timestamp carries a rendered companion; 1699999000 is the value
+    # `_configure_fee_mocks` puts on the management fee.
+    assert fees["management_fee_last_update_timestamp"] == 1699999000
+    assert fees["management_fee_last_update_utc"] == "2023-11-14T21:56:40Z"
+    # Descriptions use the IPOR app's terms and must flag the two offboarding
+    # paths as exclusive, so a consumer never sums request_fee + withdraw_fee.
+    request_note = fees["request_fee_percent_note"].lower()
+    withdraw_note = fees["withdraw_fee_percent_note"].lower()
+    assert "offboarding contribution for scheduled withdrawals" in request_note
+    assert "offboarding contribution for instant withdrawals" in withdraw_note
+    assert "never both" in request_note
+    assert "never both" in withdraw_note
+    assert "onboarding contribution" in fees["deposit_fee_percent_note"].lower()
+
+
+@pytest.fixture
+def mock_fee_contracts():
+    """Stub the FeeAccount -> FeeManager hop that `vault info` walks."""
+    with (
+        patch("ipor_fusion.cli.vault_fetcher.FeeAccount") as fee_account_cls,
+        patch("ipor_fusion.cli.vault_fetcher.FeeManager") as fee_manager_cls,
+    ):
+        fee_account_cls.return_value.fee_manager.return_value.call.return_value = (
+            ADDR_FEE_MANAGER
+        )
+        manager = fee_manager_cls.return_value
+        manager.get_deposit_fee.return_value.call.return_value = 10**16
+        manager.get_total_performance_fee.return_value.call.return_value = 1000
+        manager.get_total_management_fee.return_value.call.return_value = 100
+        manager.get_performance_fee_recipients.return_value.call.return_value = [
+            RecipientFee(recipient=ADDR_FEE_RECIPIENT, fee_value=800)
+        ]
+        manager.get_management_fee_recipients.return_value.call.return_value = []
+        manager.get_ipor_dao_fee_recipient_address.return_value.call.return_value = (
+            ADDR_DAO_RECIPIENT
+        )
+        hwm_getter = manager.get_plasma_vault_high_water_mark_performance_fee
+        hwm_getter.return_value.call.return_value = HighWaterMarkPerformanceFee(
+            # Asset units per whole share, so 6 decimals for the USDC vault
+            # these fixtures model — not the vault's 18 share decimals.
+            high_water_mark=10**6,
+            last_update=1699999000,
+            update_interval=86400,
+        )
+        yield manager
 
 
 @pytest.fixture
@@ -321,6 +411,7 @@ class TestVaultInfoGuards:
         assert "does not appear" not in result.output
 
 
+@pytest.mark.usefixtures("mock_fee_contracts")
 class TestVaultInfo:
     @pytest.fixture(autouse=True)
     def _pass_vault_probe(self):
@@ -384,6 +475,7 @@ class TestVaultInfo:
         mock_pv.get_market_substrates.return_value.call.return_value = []
         mock_pv.total_assets_in_market.return_value.call.return_value = 500 * 10**18
         mock_pv.convert_to_assets.return_value.call.return_value = 111 * 10**6
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -400,8 +492,10 @@ class TestVaultInfo:
 
         mock_wm = MagicMock()
         mock_wm.get_withdraw_window.return_value.call.return_value = 86400
-        mock_wm.get_request_fee.return_value.call.return_value = 0
-        mock_wm.get_withdraw_fee.return_value.call.return_value = 0
+        # Distinct values: equal ones would let the two exit-fee lines be
+        # swapped without any test noticing.
+        mock_wm.get_request_fee.return_value.call.return_value = 10**15
+        mock_wm.get_withdraw_fee.return_value.call.return_value = 2 * 10**15
         mock_wm.get_shares_to_release.return_value.call.return_value = 50 * 10**18
         mock_wm.get_last_release_funds_timestamp.return_value.call.return_value = (
             1699999000
@@ -433,6 +527,20 @@ class TestVaultInfo:
         assert "Pending requests (1):" in result.output
         assert ADDR_USER_1 in result.output
         assert "waiting" in result.output
+        # Fees live in their own section; the withdraw-manager block only
+        # points at it.
+        assert 'see the "Fees" section' in result.output
+        assert "Fees:" in result.output
+        assert ADDR_FEE_MANAGER in result.output
+        assert ADDR_DAO_RECIPIENT in result.output
+        # Labels must match the IPOR app's Fees And Limits table verbatim.
+        assert "Onboarding Contribution (depositFee): 1.0000%" in result.output
+        assert "for Instant Withdrawals (withdrawFee):   0.2000%" in result.output
+        assert "for Scheduled Withdrawals (requestFee):  0.1000%" in result.output
+        assert "Performance Fee: 10.0000%" in result.output
+        assert "Management Fee: 1.0000%" in result.output
+        assert f"      {ADDR_FEE_RECIPIENT}  8.0000%" in result.output
+        assert "accrued, uncollected: 5" in result.output
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
@@ -477,6 +585,7 @@ class TestVaultInfo:
         mock_pv.withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -549,6 +658,7 @@ class TestVaultInfo:
         mock_pv.withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -609,6 +719,7 @@ class TestVaultInfo:
         mock_pv.withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -682,6 +793,7 @@ class TestVaultInfo:
         mock_pv.withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -743,6 +855,7 @@ class TestVaultInfo:
         mock_pv.withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -788,6 +901,7 @@ class TestVaultListJson:
         assert data[1]["address"] == ADDR_2
 
 
+@pytest.mark.usefixtures("mock_fee_contracts")
 class TestVaultInfoJson:
     @pytest.fixture(autouse=True)
     def _pass_vault_probe(self):
@@ -857,6 +971,7 @@ class TestVaultInfoJson:
         mock_pv.get_market_substrates.return_value.call.return_value = [morpho_sub]
         mock_pv.total_assets_in_market.return_value.call.return_value = 500 * 10**18
         mock_pv.convert_to_assets.return_value.call.return_value = 111 * 10**6
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -936,13 +1051,12 @@ class TestVaultInfoJson:
         assert wmd["total_pending_shares"]["raw"] == 100 * 10**18
         assert wmd["shares_to_release"]["raw"] == 50 * 10**18
         assert wmd["last_release_funds_timestamp"] == 1699999000
-        assert wmd["request_fee_percent"] == 0.1
-        assert wmd["withdraw_fee_percent"] == 0.2
-        # Each field carries a short _note disambiguating its semantics; the
-        # fee notes must flag the two exit paths as mutually exclusive so a
-        # consumer never sums request_fee + withdraw_fee.
-        assert "mutually exclusive" in wmd["request_fee_percent_note"].lower()
-        assert "mutually exclusive" in wmd["withdraw_fee_percent_note"].lower()
+        # Exit fees moved to the top-level `fees` object; what stays behind is
+        # a cross-reference, so a reader of this block cannot conclude the
+        # vault charges nothing on exit.
+        assert "request_fee_percent" not in wmd
+        assert "withdraw_fee_percent" not in wmd
+        assert "fees" in wmd["fees_note"]
         for key in (
             "withdraw_window_seconds",
             "shares_to_release",
@@ -952,7 +1066,10 @@ class TestVaultInfoJson:
             assert wmd[f"{key}_note"]
         assert len(wmd["pending_requests"]) == 1
         assert wmd["pending_requests"][0]["account"] == ADDR_USER_1
+
         assert wmd["pending_requests"][0]["can_withdraw"] is True
+
+        _assert_fees_json(data)
 
         # Producer↔model contract check:
         # - VaultInfoResponse (extra="forbid") must accept the real
@@ -1012,6 +1129,7 @@ class TestVaultInfoJson:
         mock_pv.withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()
@@ -1097,6 +1215,7 @@ class TestVaultInfoJson:
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
         mock_pv.total_assets_in_market.return_value.call.return_value = 0
+        _configure_fee_mocks(mock_pv)
         mock_pv_cls.return_value = mock_pv
 
         mock_erc20 = MagicMock()

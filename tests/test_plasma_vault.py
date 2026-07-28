@@ -3,11 +3,17 @@
 from unittest.mock import MagicMock
 
 from eth_abi import encode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.types import Timestamp
 
-from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.core.plasma_vault import (
+    ManagementFeeData,
+    PerformanceFeeData,
+    PlasmaVault,
+)
 from ipor_fusion.fuses.base import FuseAction
-from ipor_fusion.types import Amount, Decimals, MarketId, Shares
+from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 USER_ADDR = Web3.to_checksum_address("0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa")
@@ -20,6 +26,7 @@ PRICE_ORACLE = Web3.to_checksum_address("0x5555555555555555555555555555555555555
 WITHDRAW_MANAGER = Web3.to_checksum_address(
     "0x6666666666666666666666666666666666666666"
 )
+FEE_ACCOUNT = Web3.to_checksum_address("0x7777777777777777777777777777777777777777")
 
 
 def _make_vault() -> tuple[PlasmaVault, MagicMock]:
@@ -495,3 +502,53 @@ class TestPlasmaVaultEventDecoding:
         result = vault.withdraw_manager_address()
 
         assert result == WITHDRAW_MANAGER
+
+
+class TestPlasmaVaultFeeData:
+    """Governance fee-data getters (structs decoded to dataclasses)."""
+
+    def test_get_performance_fee_data(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = encode(["(address,uint16)"], [(FEE_ACCOUNT, 1000)])
+
+        result = vault.get_performance_fee_data().call()
+
+        assert result == PerformanceFeeData(
+            fee_account=FEE_ACCOUNT, fee_in_percentage=Fee(1000)
+        )
+
+    def test_get_management_fee_data(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = encode(
+            ["(address,uint16,uint32)"], [(FEE_ACCOUNT, 100, 1_750_000_000)]
+        )
+
+        result = vault.get_management_fee_data().call()
+
+        assert result == ManagementFeeData(
+            fee_account=FEE_ACCOUNT,
+            fee_in_percentage=Fee(100),
+            last_update_timestamp=Timestamp(1_750_000_000),
+        )
+
+    def test_get_unrealized_management_fee(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = encode(["uint256"], [123_456])
+
+        result = vault.get_unrealized_management_fee().call()
+
+        assert result == Amount(123_456)
+
+    def test_selectors(self):
+        encoder = PlasmaVault.encoder()
+        for call, signature in [
+            (encoder.get_performance_fee_data(), "getPerformanceFeeData()"),
+            (encoder.get_management_fee_data(), "getManagementFeeData()"),
+            (
+                encoder.get_unrealized_management_fee(),
+                "getUnrealizedManagementFee()",
+            ),
+        ]:
+            assert call.calldata == function_signature_to_4byte_selector(signature), (
+                signature
+            )

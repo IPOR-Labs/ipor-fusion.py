@@ -7,6 +7,7 @@ import pytest
 from web3 import Web3
 
 from ipor_fusion import (
+    DOCS,
     ContractNotFoundError,
     NotPlasmaVaultError,
     RoleAccount,
@@ -23,7 +24,11 @@ from ipor_fusion.cli.morpho_api import (
     VaultV2Cap,
     VaultV2Info,
 )
-from ipor_fusion.mcp.models import OracleNodeModel
+from ipor_fusion.mcp.models import (
+    FeesSection,
+    OracleNodeModel,
+    WithdrawManagerDetails,
+)
 from ipor_fusion.mcp.server import (
     config_set_etherscan_key,
     config_set_provider,
@@ -418,6 +423,17 @@ class TestVaultOracleMapping:
             assert value in tool_doc, value
 
 
+# Mirrors of the constants in test_mcp_models.py, where their rationale is
+# written out. Duplicated rather than shared across test modules, but not
+# silently: both files parametrize over DOCS and assert against these, so a
+# block or cross-reference added to one alone fails in the other.
+_MODEL_BY_BLOCK = {
+    "fees": FeesSection,
+    "withdraw_manager_details": WithdrawManagerDetails,
+}
+_CROSS_REFERENCES = {("withdraw_manager_details", "fees")}
+
+
 class TestVaultInfoGuards:
     @patch(
         "ipor_fusion.mcp.server.resolve_access_manager",
@@ -461,6 +477,29 @@ class TestVaultInfoGuards:
     def test_other_fetch_errors_propagate(self, _load, _ctx, _resolve, _fetch):
         with pytest.raises(RuntimeError, match="some sub-call failed"):
             vault_info(vault_address=VAULT_ADDR, chain_id=1)
+
+    @pytest.mark.parametrize("block", sorted(DOCS))
+    def test_output_schema_publishes_field_docs(self, block):
+        # Typing the fee and withdraw blocks only buys anything if FastMCP
+        # actually publishes their descriptions. A lossy serialization path
+        # would leave the models right and the clients back where they were:
+        # an object with no documentation. TestFieldDocsWiring in
+        # test_mcp_models.py guards the models themselves.
+        tools = asyncio.run(mcp.list_tools())
+        tool = next(t for t in tools if t.name == "vault_info")
+        assert tool.outputSchema is not None
+        model = _MODEL_BY_BLOCK[block]
+        properties = tool.outputSchema["$defs"][model.__name__]["properties"]
+        skipped = set()
+        for key, text in DOCS[block].items():
+            if key not in properties:
+                skipped.add((block, key))
+                continue
+            assert properties[key]["description"] == text, f"{model.__name__}.{key}"
+        # Only the pinned cross-references may be missing; anything else means
+        # a documented property was dropped on the way to the client, which an
+        # unpinned skip would turn into a pass.
+        assert skipped == {c for c in _CROSS_REFERENCES if c[0] == block}
 
 
 # ── market tools ──────────────────────────────────────────────────────

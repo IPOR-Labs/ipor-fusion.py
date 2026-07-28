@@ -10,10 +10,12 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from ipor_fusion import DOCS
 from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.mcp.models import (
     Amount,
     ConfigShowResponse,
+    FeesSection,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     OracleMappingResponse,
@@ -22,6 +24,7 @@ from ipor_fusion.mcp.models import (
     RoleAccountsResponse,
     VaultInfoResponse,
     VaultListEntry,
+    WithdrawManagerDetails,
 )
 from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode, OraclePrice
 from ipor_fusion.types import Period, RoleId
@@ -29,6 +32,11 @@ from ipor_fusion.types import Period, RoleId
 
 def _amount(raw: int = 0, formatted: str = "0", usd: float | None = None) -> dict:
     return {"raw": raw, "formatted": formatted, "usd": usd}
+
+
+# The producer copies these into the payload verbatim; so does the fixture.
+_FEE_NOTES = DOCS["fees"]
+_WM_NOTES = DOCS["withdraw_manager_details"]
 
 
 def _full_vault_info_dict() -> dict:
@@ -74,16 +82,87 @@ def _full_vault_info_dict() -> dict:
             "price_oracle": "0xORACLE",
             "rewards": "0xREWARDS",
             "withdraw": "0xWITHDRAW",
+            "fee": "0xFEEMANAGER",
         },
+        "fees": {
+            "fee_manager": "0xFEEMANAGER",
+            "fee_manager_note": _FEE_NOTES["fee_manager"],
+            "ipor_dao_fee_recipient": "0xDAO",
+            "ipor_dao_fee_recipient_note": _FEE_NOTES["ipor_dao_fee_recipient"],
+            "deposit_fee_percent": 1.0,
+            "deposit_fee_wad": 10**16,
+            "deposit_fee_percent_note": _FEE_NOTES["deposit_fee_percent"],
+            "request_fee_percent": 0.1,
+            "request_fee_wad": 10**15,
+            "request_fee_percent_note": _FEE_NOTES["request_fee_percent"],
+            "withdraw_fee_percent": 0.2,
+            "withdraw_fee_wad": 2 * 10**15,
+            "withdraw_fee_percent_note": _FEE_NOTES["withdraw_fee_percent"],
+            "performance_fee_percent": 10.0,
+            "performance_fee_bps": 1000,
+            "performance_fee_percent_note": _FEE_NOTES["performance_fee_percent"],
+            "performance_fee_manager_percent": 10.0,
+            "performance_fee_manager_percent_note": _FEE_NOTES[
+                "performance_fee_manager_percent"
+            ],
+            "performance_fee_recipients": [
+                {"recipient": "0xRECIPIENT", "fee_percent": 8.0, "fee_bps": 800}
+            ],
+            "performance_fee_recipients_note": _FEE_NOTES["performance_fee_recipients"],
+            "high_water_mark": {
+                # Asset units per whole share: 6 decimals here, not the 18
+                # share decimals this fixture's vault has.
+                "high_water_mark": 10**6,
+                "last_update_timestamp": 1700000000,
+                "last_update_utc": "2023-11-14T22:13:20Z",
+                "update_interval_seconds": 86400,
+            },
+            "high_water_mark_note": _FEE_NOTES["high_water_mark"],
+            "management_fee_percent": 1.0,
+            "management_fee_bps": 100,
+            "management_fee_percent_note": _FEE_NOTES["management_fee_percent"],
+            "management_fee_manager_percent": 1.0,
+            "management_fee_manager_percent_note": _FEE_NOTES[
+                "management_fee_manager_percent"
+            ],
+            "management_fee_recipients": [
+                {"recipient": "0xRECIPIENT", "fee_percent": 0.8, "fee_bps": 80}
+            ],
+            "management_fee_recipients_note": _FEE_NOTES["management_fee_recipients"],
+            "management_fee_last_update_timestamp": 1699999000,
+            "management_fee_last_update_utc": "2023-11-14T21:56:40Z",
+            "management_fee_last_update_timestamp_note": _FEE_NOTES[
+                "management_fee_last_update_timestamp"
+            ],
+            "unrealized_management_fee": _amount(5 * 10**6, "5.0", 5.0),
+            "unrealized_management_fee_note": _FEE_NOTES["unrealized_management_fee"],
+        },
+        # Exit fees moved to the top-level `fees` object; they must not
+        # reappear here.
         "withdraw_manager_details": {
             "withdraw_window_seconds": 86400,
-            "request_fee_wad": 0,
-            "withdraw_fee_wad": 0,
+            "withdraw_window_seconds_note": _WM_NOTES["withdraw_window_seconds"],
+            "fees_note": _WM_NOTES["fees"],
             "shares_to_release": _amount(0, "0"),
+            "shares_to_release_note": _WM_NOTES["shares_to_release"],
             "last_release_funds_timestamp": 1700000000,
-            "last_release_funds_timestamp_utc": "2023-11-14T22:13:20Z",
-            "total_pending_shares": _amount(0, "0"),
-            "pending_requests": [],
+            "last_release_funds_utc": "2023-11-14T22:13:20Z",
+            "last_release_funds_timestamp_note": _WM_NOTES[
+                "last_release_funds_timestamp"
+            ],
+            "pending_requests": [
+                {
+                    "account": "0xREQUESTER",
+                    "shares": {"raw": 100 * 10**18, "formatted": "100.0"},
+                    "end_withdraw_window_timestamp": 1700086400,
+                    "end_withdraw_window_utc": "2023-11-15T22:13:20Z",
+                    "remaining_seconds": 86400,
+                    "can_withdraw": False,
+                    "assets": _amount(111 * 10**6, "111.0", 111.0),
+                }
+            ],
+            "total_pending_shares": _amount(100 * 10**18, "100.0"),
+            "total_pending_shares_note": _WM_NOTES["total_pending_shares"],
         },
         "fuses": [
             {
@@ -277,6 +356,60 @@ class TestVaultInfoResponseContract:
         round_tripped = model.model_dump(mode="json")
         assert round_tripped["balance_fuses"][0]["balance"]["usd"] == 500.0
         assert round_tripped["reconciliation"]["delta"]["percent"] == 0.0
+
+
+# The model publishing each documented block. Tests parametrize over DOCS
+# itself and look the model up here, so documenting a block without typing
+# it raises KeyError rather than going quietly unchecked.
+_MODEL_BY_BLOCK = {
+    "fees": FeesSection,
+    "withdraw_manager_details": WithdrawManagerDetails,
+}
+
+# Documented keys with deliberately no field of their own: they point at
+# another block rather than describing a value here. Pinned, because the
+# tests below have to skip them - and an unpinned skip would swallow a
+# dropped field instead of failing on it.
+_CROSS_REFERENCES = {("withdraw_manager_details", "fees")}
+
+
+@pytest.mark.parametrize("block", sorted(DOCS))
+class TestFieldDocsWiring:
+    """Guard the DOCS -> model half of `vault info` field documentation.
+
+    DOCS feeds two channels: the payload's `<field>_note` keys, written by
+    the CLI producer, and these models' schema descriptions. What follows
+    pins the model half - key sets, and identity with DOCS rather than the
+    prose itself, which is editorial. The producer half is enforced
+    elsewhere: `*_note` fields are required, so a producer that stops
+    emitting one fails the contract check in
+    test_cli_commands.py::TestVaultInfoJson::test_json_output.
+    """
+
+    def test_every_docs_key_has_a_note_field(self, block):
+        model = _MODEL_BY_BLOCK[block]
+        missing = {k for k in DOCS[block] if f"{k}_note" not in model.model_fields}
+        assert not missing, f"documented but absent from the model: {sorted(missing)}"
+
+    def test_every_note_field_is_documented(self, block):
+        model = _MODEL_BY_BLOCK[block]
+        orphans = {
+            name
+            for name in model.model_fields
+            if name.endswith("_note") and name.removesuffix("_note") not in DOCS[block]
+        }
+        assert not orphans, f"note fields with no DOCS entry: {sorted(orphans)}"
+
+    def test_documented_fields_carry_their_docs_string(self, block):
+        model = _MODEL_BY_BLOCK[block]
+        skipped = set()
+        for key, text in DOCS[block].items():
+            field = model.model_fields.get(key)
+            if field is None:
+                skipped.add((block, key))
+                continue
+            assert field.description == text, key
+        assert skipped == {c for c in _CROSS_REFERENCES if c[0] == block}
 
 
 class TestSimpleResponseContracts:

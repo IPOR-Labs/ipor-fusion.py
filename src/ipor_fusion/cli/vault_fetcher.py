@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from eth_abi import decode
+from eth_abi.exceptions import DecodingError
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
@@ -21,6 +22,12 @@ from ipor_fusion.cli.config_store import (
 from ipor_fusion.cli.explorer import get_deployment_tx
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
+from ipor_fusion.core.fee_manager import (
+    FeeAccount,
+    FeeManager,
+    HighWaterMarkPerformanceFee,
+    RecipientFee,
+)
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
@@ -42,14 +49,50 @@ _logger = logging.getLogger(__name__)
 
 _NO_CONTRACT = "no contract"
 
+_ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+
+@dataclass
+class _FeeData:
+    """Vault fee configuration: vault-level fee data plus FeeManager state.
+
+    Every field is optional because each degrades independently: a vault may
+    have no fee account configured (no FeeManager at all), and FeeManagers
+    predating the deposit fee / high-water mark revert on those getters.
+    Scales differ per source, so every field names its own: `*_bps` is basis
+    points (10000 = 100%), `*_wad` is WAD (1e18 = 100%). Pair each with the
+    matching converter — `_bps_to_percent` / `_wad_to_percent` — and a
+    mismatch reads wrong at the call site.
+
+    `*_vault_bps` and `*_manager_bps` are the SAME fee read from two places:
+    the vault charges the former, the FeeManager believes it configured the
+    latter. They agree in a healthy deployment; a difference means the two
+    configurations have drifted.
+    """
+
+    performance_fee_vault_bps: int | None = None
+    management_fee_vault_bps: int | None = None
+    management_fee_last_update: int | None = None
+    unrealized_management_fee: int | None = None
+    fee_manager: str | None = None
+    ipor_dao_fee_recipient: str | None = None
+    deposit_fee_wad: int | None = None
+    performance_fee_manager_bps: int | None = None
+    management_fee_manager_bps: int | None = None
+    performance_fee_recipients: list[RecipientFee] | None = None
+    management_fee_recipients: list[RecipientFee] | None = None
+    high_water_mark: HighWaterMarkPerformanceFee | None = None
+
 
 @dataclass
 class _WithdrawManagerData:
     """On-chain state snapshot from the WithdrawManager contract."""
 
     withdraw_window: int
-    request_fee: int
-    withdraw_fee: int
+    # None (not 0) when the getter failed: a zero fee and an unreadable fee
+    # are different facts, and the fees section reports both.
+    request_fee: int | None
+    withdraw_fee: int | None
     shares_to_release: int
     last_release_funds_timestamp: int
     pending_requests: list[AccountRequest]
@@ -89,6 +132,7 @@ class _VaultData:
     # "no deployment exists" (e.g. `etherscan-paid-tier-required` on Base).
     deployment_error: str | None = None
     withdraw_manager_data: _WithdrawManagerData | None = None
+    fee_data: _FeeData | None = None
     dependency_graph: dict[int, list[int]] | None = None
     lending_health: VaultLendingHealth | None = None
     # Morpho per-substrate position breakdown (collateral / borrow / supply),
@@ -202,12 +246,103 @@ def _fetch_withdraw_manager_data(
     f_requests = pool.submit(_safe_call, wm_contract.get_pending_requests)
     return _WithdrawManagerData(
         withdraw_window=f_window.result() or 0,
-        request_fee=f_req_fee.result() or 0,
-        withdraw_fee=f_wd_fee.result() or 0,
+        request_fee=f_req_fee.result(),
+        withdraw_fee=f_wd_fee.result(),
         shares_to_release=f_shares.result() or 0,
         last_release_funds_timestamp=f_last_ts.result() or 0,
         pending_requests=f_requests.result() or [],
     )
+
+
+def _fetch_fee_manager_address(
+    ctx: Web3Context, fee_account: ChecksumAddress
+) -> str | None:
+    """Resolve FeeAccount.FEE_MANAGER(); None when it is not a FeeAccount.
+
+    The fee account reported by a vault is not guaranteed to be a FeeAccount
+    contract — older deployments can name a plain recipient address. An EOA
+    answers eth_call with empty data, which fails ABI decoding instead of
+    reverting, so `_safe_call` alone does not cover it.
+    """
+    try:
+        return _safe_call(FeeAccount(ctx, fee_account).fee_manager().call)
+    except DecodingError:
+        return None
+
+
+def _fetch_fee_data(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    plasma_vault: PlasmaVault,
+) -> _FeeData:
+    """Fetch the vault's fee configuration, including the FeeManager hop.
+
+    Three dependent phases (reads inside each run in parallel): vault-level
+    fee data, then FeeAccount.FEE_MANAGER() to discover the FeeManager, then
+    the FeeManager getters. Nothing raises — every read degrades to ``None``,
+    so vaults without a fee account and FeeManagers predating the deposit fee
+    or high-water mark still produce a usable snapshot.
+    """
+    f_perf = pool.submit(_safe_call, plasma_vault.get_performance_fee_data().call)
+    f_mgmt = pool.submit(_safe_call, plasma_vault.get_management_fee_data().call)
+    f_unrealized = pool.submit(
+        _safe_call, plasma_vault.get_unrealized_management_fee().call
+    )
+
+    perf = f_perf.result()
+    mgmt = f_mgmt.result()
+    result = _FeeData(
+        performance_fee_vault_bps=perf.fee_in_percentage if perf else None,
+        management_fee_vault_bps=mgmt.fee_in_percentage if mgmt else None,
+        management_fee_last_update=mgmt.last_update_timestamp if mgmt else None,
+        unrealized_management_fee=f_unrealized.result(),
+    )
+
+    # A FeeManager deploys two separate escrow accounts (performance and
+    # management) but is itself the FEE_MANAGER of both, so either hop
+    # resolves to the same address; take whichever is configured.
+    fee_account = next(
+        (
+            data.fee_account
+            for data in (perf, mgmt)
+            if data is not None and data.fee_account != _ZERO_ADDRESS
+        ),
+        None,
+    )
+    if fee_account is None:
+        return result
+
+    fee_manager_addr = _fetch_fee_manager_address(ctx, fee_account)
+    if not fee_manager_addr or fee_manager_addr == _ZERO_ADDRESS:
+        return result
+    result.fee_manager = fee_manager_addr
+
+    fee_manager = FeeManager(ctx, fee_manager_addr)
+    f_deposit = pool.submit(_safe_call, fee_manager.get_deposit_fee().call)
+    f_perf_total = pool.submit(_safe_call, fee_manager.get_total_performance_fee().call)
+    f_mgmt_total = pool.submit(_safe_call, fee_manager.get_total_management_fee().call)
+    f_perf_recipients = pool.submit(
+        _safe_call, fee_manager.get_performance_fee_recipients().call
+    )
+    f_mgmt_recipients = pool.submit(
+        _safe_call, fee_manager.get_management_fee_recipients().call
+    )
+    f_dao = pool.submit(
+        _safe_call, fee_manager.get_ipor_dao_fee_recipient_address().call
+    )
+    f_hwm = pool.submit(
+        _safe_call,
+        fee_manager.get_plasma_vault_high_water_mark_performance_fee().call,
+    )
+
+    result.deposit_fee_wad = f_deposit.result()
+    result.performance_fee_manager_bps = f_perf_total.result()
+    result.management_fee_manager_bps = f_mgmt_total.result()
+    result.performance_fee_recipients = f_perf_recipients.result()
+    result.management_fee_recipients = f_mgmt_recipients.result()
+    result.ipor_dao_fee_recipient = f_dao.result()
+    result.high_water_mark = f_hwm.result()
+    return result
 
 
 def _collect_morpho_substrates(
@@ -422,8 +557,10 @@ def _fetch_vault_data(
         asset_price = f_price.result()
         withdraw_mgr_addr = f_withdraw.result()
 
-        # Phase 3: withdraw manager details (needs address from phase 1)
+        # Phase 3: withdraw manager details (needs address from phase 1) and
+        # fee configuration (own internal FeeAccount -> FeeManager hop)
         wm_data = _fetch_withdraw_manager_data(ctx, pool, withdraw_mgr_addr)
+        fee_data = _fetch_fee_data(ctx, pool, plasma_vault)
 
         # Phase 4: dependency balance graph per market
         balance_fuses = f_balance_fuses.result()
@@ -518,6 +655,7 @@ def _fetch_vault_data(
             balance_fuses=balance_fuses,
             instant_fuses=instant_fuses_list,
             withdraw_manager_data=wm_data,
+            fee_data=fee_data,
             dependency_graph=dep_graph or None,
             lending_health=lending_health,
             morpho_positions=morpho_positions,

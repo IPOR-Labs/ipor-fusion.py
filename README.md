@@ -142,7 +142,7 @@ Available tools:
 | `config_show` | Show current configuration (providers, vaults, API key status) |
 | `config_set_provider` | Set RPC provider URL for a chain (auto-detects chain ID) |
 | `config_set_etherscan_key` | Set Etherscan API key (enables contract name resolution) |
-| `vault_info` | Full on-chain vault state — assets, fuses, balances, lending health, reconciliation |
+| `vault_info` | Full on-chain vault state — assets, fuses, balances, fees, lending health, reconciliation |
 | `vault_list` | List all saved vaults |
 | `vault_add` | Save a vault to the local config (auto-fetches on-chain name) |
 | `vault_remove` | Remove a vault from the local config |
@@ -170,6 +170,8 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 | `AccessManager` | Role-based access control |
 | `RewardsManager` | Claim and vest rewards |
 | `WithdrawManager` | Time-windowed withdrawal requests |
+| `FeeManager` | Deposit, performance, and management fee configuration |
+| `FeeAccount` | Fee escrow account, resolves its `FeeManager` |
 | `PriceOracleMiddleware` | Asset price feeds |
 
 ### Supported protocols (`ipor_fusion.fuses`)

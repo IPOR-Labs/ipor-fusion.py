@@ -6,11 +6,11 @@ from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import LogReceipt
+from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.fuses.base import FuseAction
-from ipor_fusion.types import Amount, Decimals, MarketId, Shares
+from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
 
 @dataclass(slots=True)
@@ -21,12 +21,49 @@ class BalanceFuse:
     fuse: ChecksumAddress
 
 
+@dataclass(slots=True)
+class PerformanceFeeData:
+    """Vault-level performance fee config; fee_account is a FeeAccount whose
+    FEE_MANAGER() leads to the vault's FeeManager. Percentage with 2 decimals
+    (10000 = 100%)."""
+
+    fee_account: ChecksumAddress
+    fee_in_percentage: Fee
+
+
+@dataclass(slots=True)
+class ManagementFeeData:
+    """Vault-level management fee config; same conventions as
+    PerformanceFeeData."""
+
+    fee_account: ChecksumAddress
+    fee_in_percentage: Fee
+    last_update_timestamp: Timestamp
+
+
 def _market_id_list_decoder(value: list) -> list[MarketId]:
     return [MarketId(v) for v in value]
 
 
 def _address_list_decoder(value: list) -> list[ChecksumAddress]:
     return [Web3.to_checksum_address(item) for item in value]
+
+
+def _performance_fee_data_decoder(value: tuple) -> PerformanceFeeData:
+    fee_account, fee_in_percentage = value
+    return PerformanceFeeData(
+        fee_account=Web3.to_checksum_address(fee_account),
+        fee_in_percentage=Fee(fee_in_percentage),
+    )
+
+
+def _management_fee_data_decoder(value: tuple) -> ManagementFeeData:
+    fee_account, fee_in_percentage, last_update_timestamp = value
+    return ManagementFeeData(
+        fee_account=Web3.to_checksum_address(fee_account),
+        fee_in_percentage=Fee(fee_in_percentage),
+        last_update_timestamp=Timestamp(last_update_timestamp),
+    )
 
 
 class PlasmaVault(ContractWrapper):
@@ -205,6 +242,26 @@ class PlasmaVault(ContractWrapper):
             "getRewardsClaimManagerAddress()",
             output_types=["address"],
             decoder=Web3.to_checksum_address,
+        )
+
+    def get_performance_fee_data(self) -> Call[PerformanceFeeData]:
+        return self._view(
+            "getPerformanceFeeData()",
+            output_types=["(address,uint16)"],
+            decoder=_performance_fee_data_decoder,
+        )
+
+    def get_management_fee_data(self) -> Call[ManagementFeeData]:
+        return self._view(
+            "getManagementFeeData()",
+            output_types=["(address,uint16,uint32)"],
+            decoder=_management_fee_data_decoder,
+        )
+
+    def get_unrealized_management_fee(self) -> Call[Amount]:
+        """Accrued-but-uncollected management fee, in underlying asset units."""
+        return self._view(
+            "getUnrealizedManagementFee()", output_types=["uint256"], decoder=Amount
         )
 
     def get_price_oracle_middleware_address(self) -> Call[ChecksumAddress]:

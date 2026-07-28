@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import click
 import pytest
 from click.testing import CliRunner
+from eth_abi.exceptions import DecodingError
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
@@ -14,11 +15,13 @@ from ipor_fusion.cli.vault_cmd import (
     ADDRESS,
     CHAIN,
     _build_dependency_graph_json,
+    _build_fees_json,
     _build_share_price_json,
     _index_lending_health,
     _partition_balance_fuses,
     _print_balance_fuses_table,
     _print_dependency_graph,
+    _print_fees,
     _print_fuse_section,
     _print_health_lines,
     _print_lending_health,
@@ -31,8 +34,10 @@ from ipor_fusion.cli.vault_fetcher import (
     _collect_aave_substrate_assets,
     _collect_breakdown_token_addresses,
     _collect_morpho_substrates,
+    _FeeData,
     _fetch_aave_positions,
     _fetch_breakdown_token_prices,
+    _fetch_fee_data,
     _fetch_fuse_market_id,
     _fetch_morpho_positions,
     _resolve_token_symbol,
@@ -62,6 +67,7 @@ from ipor_fusion.cli.vault_substrate import (
     _market_name,
 )
 from ipor_fusion.config.roles import Roles
+from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.lending_health import (
@@ -2015,3 +2021,280 @@ class TestPartitionBalanceFuses:
         )
         assert len(venues) == 1
         assert zero_balance == []
+
+
+def _fee_vault_data(**overrides) -> _VaultData:
+    """Minimal _VaultData for exercising the fees JSON builder."""
+    base = {
+        "block_number": 1,
+        "is_latest": True,
+        "block_timestamp": 0,
+        "share_decimals": 18,
+        "asset_decimals": 6,
+        "total_assets": 0,
+        "total_supply": 0,
+        "supply_cap": 0,
+        "asset": ADDR_2,
+        "asset_symbol": "USDC",
+        "access_manager": ADDR_1,
+        "price_oracle_addr": ADDR_ORACLE,
+        "rewards_manager": None,
+        "withdraw_manager": None,
+        "asset_price_usd": None,
+        "fuses": [],
+        "balance_fuses": [],
+        "instant_fuses": [],
+    }
+    return _VaultData(**{**base, **overrides})
+
+
+class TestBuildFeesJson:
+    def test_returns_none_without_fee_data(self):
+        assert _build_fees_json(_fee_vault_data()) is None
+
+    def test_exit_fees_are_null_without_a_withdraw_manager(self):
+        # Every key stays present so a consumer can tell "no withdraw manager"
+        # from "the field was never emitted".
+        fees = _build_fees_json(_fee_vault_data(fee_data=_FeeData()))
+        assert fees is not None
+        assert fees["request_fee_percent"] is None
+        assert fees["withdraw_fee_wad"] is None
+        assert "request_fee_percent_note" in fees
+
+    def test_unsupported_getters_degrade_to_null(self):
+        # Old FeeManagers revert on getDepositFee / the high-water mark; the
+        # fetcher turns that into None and the section must still build.
+        fees = _build_fees_json(
+            _fee_vault_data(fee_data=_FeeData(performance_fee_vault_bps=1000))
+        )
+        assert fees is not None
+        assert fees["deposit_fee_percent"] is None
+        assert fees["high_water_mark"] is None
+        assert fees["performance_fee_percent"] == 10.0
+
+    def test_percent_scales(self):
+        # WAD (1e18 = 100%) and 2-decimals basis (10000 = 100%) both land on
+        # the same percent unit — the trap this section has to get right.
+        fees = _build_fees_json(
+            _fee_vault_data(
+                fee_data=_FeeData(
+                    deposit_fee_wad=5 * 10**15,
+                    performance_fee_vault_bps=1250,
+                    management_fee_vault_bps=50,
+                ),
+                withdraw_manager_data=_WithdrawManagerData(
+                    withdraw_window=0,
+                    request_fee=10**15,
+                    withdraw_fee=2 * 10**15,
+                    shares_to_release=0,
+                    last_release_funds_timestamp=0,
+                    pending_requests=[],
+                ),
+            )
+        )
+        assert fees is not None
+        assert fees["deposit_fee_percent"] == 0.5
+        assert fees["request_fee_percent"] == 0.1
+        assert fees["withdraw_fee_percent"] == 0.2
+        assert fees["performance_fee_percent"] == 12.5
+        assert fees["management_fee_percent"] == 0.5
+
+    def test_failed_exit_fee_read_is_null_not_zero(self):
+        # A fee that is genuinely not charged reads 0; an unreadable one must
+        # read null, or "free exit" and "unknown" become indistinguishable.
+        fees = _build_fees_json(
+            _fee_vault_data(
+                fee_data=_FeeData(),
+                withdraw_manager_data=_WithdrawManagerData(
+                    withdraw_window=0,
+                    request_fee=None,
+                    withdraw_fee=0,
+                    shares_to_release=0,
+                    last_release_funds_timestamp=0,
+                    pending_requests=[],
+                ),
+            )
+        )
+        assert fees is not None
+        assert fees["request_fee_percent"] is None
+        assert fees["request_fee_wad"] is None
+        assert fees["withdraw_fee_percent"] == 0.0
+
+    def test_recipient_shares_leave_the_dao_remainder(self):
+        # FeeManager.sol computes totalFee = daoFee + sum(recipients), and
+        # getPerformanceFeeRecipients() excludes the DAO — so the named
+        # shares must fall short of the total by exactly the DAO's cut.
+        fees = _build_fees_json(
+            _fee_vault_data(
+                fee_data=_FeeData(
+                    performance_fee_manager_bps=1000,
+                    performance_fee_recipients=[
+                        RecipientFee(recipient=ADDR_1, fee_value=600),
+                        RecipientFee(recipient=ADDR_2, fee_value=200),
+                    ],
+                )
+            )
+        )
+        assert fees is not None
+        named = sum(r["fee_percent"] for r in fees["performance_fee_recipients"])
+        assert named == 8.0
+        assert fees["performance_fee_manager_percent"] == 10.0
+        assert named < fees["performance_fee_manager_percent"]
+
+    def test_unrealized_fee_gets_usd_when_price_known(self):
+        fees = _build_fees_json(
+            _fee_vault_data(
+                asset_price_usd=2.0,
+                fee_data=_FeeData(unrealized_management_fee=3 * 10**6),
+            )
+        )
+        assert fees is not None
+        assert fees["unrealized_management_fee"]["usd"] == 6.0
+
+
+class TestPrintFees:
+    def test_no_output_without_fee_data(self, capsys):
+        _print_fees(_fee_vault_data())
+        assert capsys.readouterr().out == ""
+
+    def test_tiny_fee_is_not_shown_as_zero(self, capsys):
+        # 1e12 WAD is 0.0001% — below that, four decimals would print
+        # 0.0000% and a real fee would look like no fee at all.
+        _print_fees(_fee_vault_data(fee_data=_FeeData(deposit_fee_wad=10**11)))
+        out = capsys.readouterr().out
+        assert "Onboarding Contribution (depositFee): <0.0001%" in out
+
+    def test_smallest_possible_fee_is_not_shown_as_zero(self, capsys):
+        # 1 wei of WAD is absurd but representable; the percent conversion
+        # must not round it away, or "<0.0001%" degrades back to "0.0000%".
+        _print_fees(_fee_vault_data(fee_data=_FeeData(deposit_fee_wad=1)))
+        out = capsys.readouterr().out
+        assert "Onboarding Contribution (depositFee): <0.0001%" in out
+
+    def test_zero_fee_still_reads_zero(self, capsys):
+        _print_fees(_fee_vault_data(fee_data=_FeeData(deposit_fee_wad=0)))
+        out = capsys.readouterr().out
+        assert "Onboarding Contribution (depositFee): 0.0000%" in out
+
+    def test_never_updated_high_water_mark_says_so(self, capsys):
+        _print_fees(
+            _fee_vault_data(
+                fee_data=_FeeData(
+                    high_water_mark=HighWaterMarkPerformanceFee(
+                        high_water_mark=10**18, last_update=0, update_interval=86400
+                    )
+                )
+            )
+        )
+        assert "(never updated)" in capsys.readouterr().out
+
+    def test_flags_vault_feemanager_drift(self, capsys):
+        # The vault charges what its own fee data says; a FeeManager total
+        # that disagrees is a misconfiguration and must be visible.
+        _print_fees(
+            _fee_vault_data(
+                fee_data=_FeeData(
+                    performance_fee_vault_bps=1000, performance_fee_manager_bps=1500
+                )
+            )
+        )
+        out = capsys.readouterr().out
+        # The headline is the vault's own value - what a depositor actually
+        # pays - and the FeeManager's disagreeing value must be shown too, or
+        # the reader cannot tell how far apart the two configurations are.
+        assert "Performance Fee: 10.0000%" in out
+        assert "(FeeManager total: 15.0000% - MISMATCH)" in out
+
+    def test_no_drift_flag_when_vault_value_is_unknown(self, capsys):
+        # A failed vault-side read is not configuration drift; flagging it
+        # would report a partial fetch as a misconfiguration.
+        _print_fees(
+            _fee_vault_data(
+                fee_data=_FeeData(
+                    performance_fee_vault_bps=None, performance_fee_manager_bps=1500
+                )
+            )
+        )
+        out = capsys.readouterr().out
+        assert "Performance Fee: N/A" in out
+        assert "MISMATCH" not in out
+
+    def test_quiet_when_totals_agree(self, capsys):
+        _print_fees(
+            _fee_vault_data(
+                fee_data=_FeeData(
+                    performance_fee_vault_bps=1000, performance_fee_manager_bps=1000
+                )
+            )
+        )
+        assert "MISMATCH" not in capsys.readouterr().out
+
+
+class TestFetchFeeData:
+    def test_no_fee_account_skips_the_fee_manager_hop(self):
+        vault = MagicMock()
+        vault.get_performance_fee_data.return_value.call.return_value = None
+        vault.get_management_fee_data.return_value.call.return_value = None
+        vault.get_unrealized_management_fee.return_value.call.return_value = 7
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_fee_data(MagicMock(), pool, vault)
+        assert result.fee_manager is None
+        assert result.deposit_fee_wad is None
+        assert result.unrealized_management_fee == 7
+
+    def test_non_fee_account_address_does_not_crash(self):
+        # A fee account that is an EOA (or any contract without
+        # FEE_MANAGER()) answers eth_call with empty data, which fails ABI
+        # decoding rather than reverting — _safe_call alone would not catch
+        # it and `vault info` would die instead of degrading.
+        perf = MagicMock(fee_account=ADDR_1, fee_in_percentage=1000)
+        vault = MagicMock()
+        vault.get_performance_fee_data.return_value.call.return_value = perf
+        vault.get_management_fee_data.return_value.call.return_value = None
+        vault.get_unrealized_management_fee.return_value.call.return_value = 0
+
+        def empty_return():
+            raise DecodingError("Tried to read 32 bytes, only got 0 bytes.")
+
+        with (
+            patch("ipor_fusion.cli.vault_fetcher.FeeAccount") as account_cls,
+            ThreadPoolExecutor() as pool,
+        ):
+            account_cls.return_value.fee_manager.return_value.call = empty_return
+            result = _fetch_fee_data(MagicMock(), pool, vault)
+
+        assert result.fee_manager is None
+        assert result.performance_fee_vault_bps == 1000
+
+    def test_reverting_getters_leave_fields_null(self):
+        perf = MagicMock(fee_account=ADDR_1, fee_in_percentage=1000)
+        vault = MagicMock()
+        vault.get_performance_fee_data.return_value.call.return_value = perf
+        vault.get_management_fee_data.return_value.call.return_value = None
+        vault.get_unrealized_management_fee.return_value.call.return_value = 0
+
+        def revert():
+            raise ContractLogicError("execution reverted")
+
+        with (
+            patch("ipor_fusion.cli.vault_fetcher.FeeAccount") as account_cls,
+            patch("ipor_fusion.cli.vault_fetcher.FeeManager") as manager_cls,
+            ThreadPoolExecutor() as pool,
+        ):
+            account_cls.return_value.fee_manager.return_value.call.return_value = ADDR_2
+            manager = manager_cls.return_value
+            manager.get_deposit_fee.return_value.call = revert
+            hwm_getter = manager.get_plasma_vault_high_water_mark_performance_fee
+            hwm_getter.return_value.call = revert
+            manager.get_total_performance_fee.return_value.call.return_value = 1000
+            manager.get_total_management_fee.return_value.call.return_value = 100
+            manager.get_performance_fee_recipients.return_value.call.return_value = []
+            manager.get_management_fee_recipients.return_value.call.return_value = []
+            dao_getter = manager.get_ipor_dao_fee_recipient_address
+            dao_getter.return_value.call.return_value = ADDR_1
+            result = _fetch_fee_data(MagicMock(), pool, vault)
+
+        assert result.fee_manager == ADDR_2
+        assert result.deposit_fee_wad is None
+        assert result.high_water_mark is None
+        assert result.performance_fee_manager_bps == 1000
