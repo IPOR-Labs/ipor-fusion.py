@@ -108,8 +108,9 @@ def vault_info(
     """Get full on-chain state of a Plasma Vault — the comprehensive summary.
 
     Returns a structured VaultInfoResponse — see model field descriptions
-    for the complete output schema (assets, balance fuses, reconciliation,
-    lending health, substrates, role accounts, etc.).
+    for the complete output schema (assets, balance fuses, fees, withdraw
+    manager, reconciliation, lending health, substrates, role accounts,
+    etc.).
 
     Args:
         vault_address: Vault address (required).

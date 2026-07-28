@@ -5,8 +5,9 @@ serializes them via model_dump() and exposes their JSON schema to the LLM.
 
 Design notes:
 - Top-level shapes are strictly typed for LLM schema clarity.
-- Runtime imports stay pydantic-only — plus `ipor_fusion.types`, a
-  dependency-light typing leaf (shared Literal vocabularies live there).
+- Runtime imports stay pydantic-only — plus `ipor_fusion.types` and
+  `ipor_fusion.field_docs`, dependency-light leaves (shared Literal
+  vocabularies and shared field documentation live there).
   Heavier SDK types appear only under TYPE_CHECKING (or deferred inside
   methods), and on-chain addresses are plain `str`, not eth_typing NewTypes.
 - Truly dynamic sections (substrates keyed by market label, per-protocol
@@ -27,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ipor_fusion.field_docs import DOCS
 from ipor_fusion.types import AssetSource, MappingStatus, NodeStatus
 
 if TYPE_CHECKING:
@@ -78,6 +80,185 @@ class Managers(_Base):
         description="FeeManager address; null when the vault has no fee "
         "account configured or the FeeManager could not be resolved from it.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Fees
+# ---------------------------------------------------------------------------
+
+_FEE_DOCS = DOCS["fees"]
+
+
+class FeeRecipientEntry(_Base):
+    """One named recipient of a performance or management fee."""
+
+    recipient: str
+    fee_percent: float = Field(description="This recipient's cut, as a percent.")
+    fee_bps: int = Field(description="The same cut in basis points (10000 = 100%).")
+
+
+class HighWaterMark(_Base):
+    """Performance-fee high-water mark and its update schedule."""
+
+    high_water_mark: int = Field(
+        description="Exchange rate the performance fee is measured against: the "
+        "assets one whole share converts to, in underlying-asset units scaled "
+        "by 10**asset_decimals."
+    )
+    last_update_timestamp: int = Field(
+        description="Unix timestamp of the last high-water-mark update; 0 if "
+        "never updated."
+    )
+    last_update_utc: str | None = Field(
+        description="last_update_timestamp as an ISO-8601 UTC string; null when "
+        "that timestamp is 0."
+    )
+    update_interval_seconds: int = Field(
+        description="Minimum interval between high-water-mark updates."
+    )
+
+
+class FeesSection(_Base):
+    """Every fee the vault can charge, entry and exit sides included.
+
+    Every key is always present. On a fee value, `null` means "not known" —
+    the vault has no withdraw manager, or its FeeManager predates the getter;
+    a fee that is genuinely not charged reads 0, never null. On the two
+    address fields it also covers a genuine absence, i.e. no fee account
+    configured. Scale suffixes: `*_wad` is WAD (1e18 = 100%), `*_bps` is
+    basis points (10000 = 100%).
+
+    Each `*_note` field repeats its sibling's description as payload text, for
+    consumers that never see this schema. Both are read from
+    `ipor_fusion.field_docs.DOCS`, so the producer emits exactly the prose
+    this schema publishes; the notes carry no descriptions of their own
+    precisely because they *are* the description.
+    """
+
+    fee_manager: str | None = Field(description=_FEE_DOCS["fee_manager"])
+    fee_manager_note: str
+    ipor_dao_fee_recipient: str | None = Field(
+        description=_FEE_DOCS["ipor_dao_fee_recipient"]
+    )
+    ipor_dao_fee_recipient_note: str
+
+    deposit_fee_percent: float | None = Field(
+        description=_FEE_DOCS["deposit_fee_percent"]
+    )
+    deposit_fee_wad: int | None
+    deposit_fee_percent_note: str
+
+    request_fee_percent: float | None = Field(
+        description=_FEE_DOCS["request_fee_percent"]
+    )
+    request_fee_wad: int | None
+    request_fee_percent_note: str
+
+    withdraw_fee_percent: float | None = Field(
+        description=_FEE_DOCS["withdraw_fee_percent"]
+    )
+    withdraw_fee_wad: int | None
+    withdraw_fee_percent_note: str
+
+    performance_fee_percent: float | None = Field(
+        description=_FEE_DOCS["performance_fee_percent"]
+    )
+    performance_fee_bps: int | None
+    performance_fee_percent_note: str
+    performance_fee_manager_percent: float | None = Field(
+        description=_FEE_DOCS["performance_fee_manager_percent"]
+    )
+    performance_fee_manager_percent_note: str
+    performance_fee_recipients: list[FeeRecipientEntry] | None = Field(
+        description=_FEE_DOCS["performance_fee_recipients"]
+    )
+    performance_fee_recipients_note: str
+    high_water_mark: HighWaterMark | None = Field(
+        description=_FEE_DOCS["high_water_mark"]
+    )
+    high_water_mark_note: str
+
+    management_fee_percent: float | None = Field(
+        description=_FEE_DOCS["management_fee_percent"]
+    )
+    management_fee_bps: int | None
+    management_fee_percent_note: str
+    management_fee_manager_percent: float | None = Field(
+        description=_FEE_DOCS["management_fee_manager_percent"]
+    )
+    management_fee_manager_percent_note: str
+    management_fee_recipients: list[FeeRecipientEntry] | None = Field(
+        description=_FEE_DOCS["management_fee_recipients"]
+    )
+    management_fee_recipients_note: str
+    management_fee_last_update_timestamp: int | None = Field(
+        description=_FEE_DOCS["management_fee_last_update_timestamp"]
+    )
+    management_fee_last_update_utc: str | None
+    management_fee_last_update_timestamp_note: str
+    unrealized_management_fee: Amount | None = Field(
+        description=_FEE_DOCS["unrealized_management_fee"]
+    )
+    unrealized_management_fee_note: str
+
+
+# ---------------------------------------------------------------------------
+# Withdraw manager
+# ---------------------------------------------------------------------------
+
+_WM_DOCS = DOCS["withdraw_manager_details"]
+
+
+class PendingRequestEntry(_Base):
+    """One scheduled withdrawal awaiting execution."""
+
+    account: str
+    shares: Amount
+    end_withdraw_window_timestamp: int = Field(
+        description="Unix timestamp at which this request's withdrawal window closes."
+    )
+    end_withdraw_window_utc: str
+    remaining_seconds: int = Field(
+        description="Seconds of window left at the queried block; 0 once closed."
+    )
+    can_withdraw: bool = Field(
+        description="True when the request can be executed at the queried block: "
+        "the window is open and a releaseFunds() call has happened since the "
+        "request was made."
+    )
+    assets: Amount | None = Field(
+        default=None,
+        description="What `shares` currently converts to; null when the "
+        "conversion read failed.",
+    )
+
+
+class WithdrawManagerDetails(_Base):
+    """Scheduled-withdrawal state: the release window and what is queued in it.
+
+    The exit fees a user pays are NOT here; they live in the top-level `fees`
+    object alongside the entry-side fee, so one object answers what the vault
+    costs. `fees_note` is that cross-reference, and is the one `*_note` field
+    with no sibling of its own.
+    """
+
+    withdraw_window_seconds: int = Field(
+        description=_WM_DOCS["withdraw_window_seconds"]
+    )
+    withdraw_window_seconds_note: str
+    fees_note: str
+    shares_to_release: Amount = Field(description=_WM_DOCS["shares_to_release"])
+    shares_to_release_note: str
+    last_release_funds_timestamp: int = Field(
+        description=_WM_DOCS["last_release_funds_timestamp"]
+    )
+    last_release_funds_utc: str | None
+    last_release_funds_timestamp_note: str
+    pending_requests: list[PendingRequestEntry] = Field(
+        description="Requests whose window has not yet closed, one per account."
+    )
+    total_pending_shares: Amount = Field(description=_WM_DOCS["total_pending_shares"])
+    total_pending_shares_note: str
 
 
 class FuseEntry(_Base):
@@ -502,9 +683,8 @@ class VaultInfoResponse(_Base):
 
     Top-level fields are typed; deeply nested protocol-specific blocks
     (substrates, position breakdowns inside balance_fuses, dependency_graph,
-    deployment, withdraw_manager_details, share_price, fees) keep
-    dict[str, Any] typing because their shape is conditional on which
-    protocols and managers a given vault uses.
+    deployment, share_price) keep dict[str, Any] typing because their shape
+    is conditional on which protocols and managers a given vault uses.
     """
 
     vault: str
@@ -536,8 +716,8 @@ class VaultInfoResponse(_Base):
         "null when the RoleGranted log scan failed (provider without "
         "broad eth_getLogs support).",
     )
-    fees: dict[str, Any] | None = None
-    withdraw_manager_details: dict[str, Any] | None = None
+    fees: FeesSection | None = None
+    withdraw_manager_details: WithdrawManagerDetails | None = None
     fuses: list[FuseEntry]
     balance_fuses: list[BalanceFuseEntry]
     zero_balance_fuses: list[BalanceFuseEntry] = Field(
