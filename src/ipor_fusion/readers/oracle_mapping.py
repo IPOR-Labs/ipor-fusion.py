@@ -48,7 +48,9 @@ Adding a feed type:
 3. ``TYPE_*`` constant + ``_resolve_*`` function; recurse only into
    middleware assets — component *feeds* belong in ``source_detail``.
 4. Dispatch entry in ``_classify_and_resolve``, ordered by specificity,
-   above the generic Chainlink-tier fallback.
+   above the generic Chainlink-tier fallback. Gate on the type-defining
+   reads, not a single common-named getter (false-matcher magnet); an
+   incomplete gate falls through with no type claim.
 5. External doc touchpoints: ``cli/vault_cmd.py`` (command docstring +
    rendering), ``mcp/server.py`` tool docstring and ``mcp/models.py``
    ``source_type`` description (the last two are tripwire-tested).
@@ -95,7 +97,8 @@ TYPE_DUAL_XREF = "DualCrossReferencePriceFeed"
 TYPE_MIDDLEWARE_FALLBACK = "middleware_fallback"
 TYPE_UNKNOWN = "custom_unknown"
 
-_WAD = 18
+# The 18-decimal fixed-point scale normalized prices are rescaled to.
+WAD_DECIMALS = 18
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +150,15 @@ class OracleNode:
 
 
 @dataclass(slots=True)
+class OracleAsset:
+    """The vault's underlying ERC-20 asset."""
+
+    address: ChecksumAddress
+    symbol: str | None
+    decimals: int | None
+
+
+@dataclass(slots=True)
 class OracleMapping:
     """Full oracle mapping for a vault at a pinned block.
 
@@ -160,7 +172,7 @@ class OracleMapping:
 
     vault: ChecksumAddress
     vault_name: str | None
-    asset: dict[str, Any]
+    asset: OracleAsset
     price_oracle: ChecksumAddress
     block_number: int
     asset_source: AssetSource
@@ -425,9 +437,9 @@ def collapse_sources(
 
 def normalize_wad(amount: int, decimals: int) -> str:
     """Rescale ``amount`` (with ``decimals`` decimals) to an 18-decimal integer."""
-    if decimals <= _WAD:
-        return str(amount * 10 ** (_WAD - decimals))
-    return str(amount // 10 ** (decimals - _WAD))
+    if decimals <= WAD_DECIMALS:
+        return str(amount * 10 ** (WAD_DECIMALS - decimals))
+    return str(amount // 10 ** (decimals - WAD_DECIMALS))
 
 
 def _price_block(price: Price | None) -> OraclePrice | None:
@@ -520,7 +532,7 @@ def _resolve_chainlink(
     source: ChecksumAddress,
     rnd: tuple[int, int, int, int, int],
     *,
-    foreign_getter: bool,
+    has_foreign_getter: bool,
 ) -> OracleNode:
     """Resolve an aggregator-compatible leaf, grading the identity evidence.
 
@@ -536,7 +548,7 @@ def _resolve_chainlink(
     description = reader.feed_description(source)
     feed_decimals = reader.feed_decimals(source)
     confirmed = (
-        not foreign_getter
+        not has_foreign_getter
         and feed_decimals is not None
         and bool(description)  # unimplemented and empty both demote
         and rnd[0] != 0  # degenerate roundId
@@ -562,12 +574,12 @@ def _resolve_erc4626(
     node: OracleNode,
     label: str,
     vault: ChecksumAddress,
+    underlying: ChecksumAddress,
     depth: int,
     visited: set[str],
     max_depth: int,
 ) -> OracleNode:
     """Resolve an ERC4626 feed: share→underlying rate, then recurse on the underlying."""
-    underlying = reader.vault_asset(vault)
     share_decimals = reader.vault_decimals(vault)
     rate = (
         reader.vault_convert_to_assets(vault, 10**share_decimals)
@@ -581,11 +593,6 @@ def _resolve_erc4626(
         "share_decimals": share_decimals,
         "rate": str(rate) if rate is not None else None,
     }
-    if underlying is None:
-        node.status = "partial"
-        node.reason = "erc4626_underlying_unreadable"
-        node.path = [label, "convertToAssets(1 share)"]
-        return node
     dep = _resolve(reader, underlying, depth + 1, visited, max_depth)
     node.dependencies = [dep]
     node.path = [label, "convertToAssets(1 share)", *dep.path]
@@ -605,13 +612,13 @@ def _resolve_morpho(
     label: str,
     source: ChecksumAddress,
     morpho_oracle: ChecksumAddress,
+    loan: ChecksumAddress,
     depth: int,
     visited: set[str],
     max_depth: int,
 ) -> OracleNode:
     """Resolve a Morpho collateral feed: market price, then recurse on the loan token."""
     collateral = reader.feed_collateral_token(source)
-    loan = reader.feed_loan_token(source)
     price = reader.morpho_oracle_price(morpho_oracle)
     node.source_type = TYPE_MORPHO
     node.source_detail = {
@@ -620,11 +627,6 @@ def _resolve_morpho(
         "loan_token": loan,
         "morpho_price": str(price) if price is not None else None,
     }
-    if loan is None:
-        node.status = "partial"
-        node.reason = "morpho_loan_token_unreadable"
-        node.path = [label, "Morpho collateral/loan oracle"]
-        return node
     dep = _resolve(reader, loan, depth + 1, visited, max_depth)
     node.dependencies = [dep]
     node.path = [label, "Morpho collateral/loan oracle", *dep.path]
@@ -656,7 +658,7 @@ def _resolve_dual_xref(
         derived = str(
             int(normalize_wad(xy_round[1], xy_decimals))
             * int(normalize_wad(y_usd_round[1], y_usd_decimals))
-            // 10**_WAD
+            // 10**WAD_DECIMALS
         )
 
     node.source_type = TYPE_DUAL_XREF
@@ -794,16 +796,37 @@ def _classify_and_resolve(
             return _resolve_dual_xref(reader, node, label, asset_x, xy_feed, y_usd_feed)
     morpho_oracle = reader.feed_morpho_oracle(source)
     if morpho_oracle is not None:
-        return _resolve_morpho(
-            reader, node, label, source, morpho_oracle, depth, visited, max_depth
-        )
+        # gate: the type-defining loanToken() must answer too — a lone
+        # morphoOracle() hit is a false matcher, not a broken Morpho feed
+        loan = reader.feed_loan_token(source)
+        if loan is not None:
+            return _resolve_morpho(
+                reader,
+                node,
+                label,
+                source,
+                morpho_oracle,
+                loan,
+                depth,
+                visited,
+                max_depth,
+            )
     vault = reader.feed_vault(source)
     if vault is not None:
-        return _resolve_erc4626(reader, node, label, vault, depth, visited, max_depth)
+        # gate: vault() is a common method name — only a vault answering
+        # asset() defines the ERC4626 hypothesis
+        underlying = reader.vault_asset(vault)
+        if underlying is not None:
+            return _resolve_erc4626(
+                reader, node, label, vault, underlying, depth, visited, max_depth
+            )
     rnd = reader.feed_latest_round_data(source)
     if rnd is not None:
+        has_foreign_getter = (
+            asset_x is not None or morpho_oracle is not None or vault is not None
+        )
         return _resolve_chainlink(
-            reader, node, label, source, rnd, foreign_getter=asset_x is not None
+            reader, node, label, source, rnd, has_foreign_getter=has_foreign_getter
         )
     node.source_type = TYPE_UNKNOWN
     node.status = "partial"
@@ -997,11 +1020,11 @@ def build_oracle_mapping(
     return OracleMapping(
         vault=vault_address,
         vault_name=vault_name,
-        asset={
-            "address": asset_addr,
-            "symbol": reader.symbol(asset_addr),
-            "decimals": reader.token_decimals(asset_addr),
-        },
+        asset=OracleAsset(
+            address=asset_addr,
+            symbol=reader.symbol(asset_addr),
+            decimals=reader.token_decimals(asset_addr),
+        ),
         price_oracle=oracle_addr,
         block_number=effective_block,
         asset_source=asset_source,

@@ -76,7 +76,7 @@ def _compute_erc20_balances(  # noqa: C901
     # base accounting, but by design it is NOT an ERC20_VAULT_BALANCE substrate.
     # _fetch_vault_data reads it once (see _VaultData.underlying_balance_on_vault);
     # surface it here so reconciliation counts idle underlying regardless of
-    # substrate configuration — or whether an ERC20 market exists (IL-7463).
+    # substrate configuration — or whether an ERC20 market exists.
     totals.underlying_balance_raw = data.underlying_balance_on_vault
 
     erc20_market = None
