@@ -11,8 +11,19 @@ from ipor_fusion.core.access import (
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
+from ipor_fusion.core.fee_manager import (
+    FeeAccount,
+    FeeManager,
+    HighWaterMarkPerformanceFee,
+    RecipientFee,
+)
 from ipor_fusion.core.oracle import AssetPriceSource, PriceOracleMiddleware
-from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
+from ipor_fusion.core.plasma_vault import (
+    BalanceFuse,
+    ManagementFeeData,
+    PerformanceFeeData,
+    PlasmaVault,
+)
 from ipor_fusion.core.rewards_manager import RewardsManager, VestingData
 from ipor_fusion.core.simulation import (
     SimulatedCallResult,
@@ -31,6 +42,7 @@ from ipor_fusion.errors import (
     NotPlasmaVaultError,
     TransactionError,
 )
+from ipor_fusion.field_docs import DOCS
 from ipor_fusion.fuses import (
     AaveV3BorrowFuse,
     AaveV3SupplyFuse,
@@ -141,6 +153,12 @@ __all__ = [
     "VestingData",
     "ERC20",
     "WithdrawManager",
+    "FeeAccount",
+    "FeeManager",
+    "RecipientFee",
+    "HighWaterMarkPerformanceFee",
+    "PerformanceFeeData",
+    "ManagementFeeData",
     "WithdrawRequestInfo",
     "PendingRequestsInfo",
     "BalanceFuse",
@@ -191,6 +209,7 @@ __all__ = [
     "euler_substrate",
     "Roles",
     "IporFusionMarkets",
+    "DOCS",
     "ContractNotFoundError",
     "IporFusionError",
     "NotPlasmaVaultError",

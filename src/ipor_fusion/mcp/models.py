@@ -73,6 +73,11 @@ class Managers(_Base):
     price_oracle: str | None
     rewards: str | None
     withdraw: str | None
+    fee: str | None = Field(
+        default=None,
+        description="FeeManager address; null when the vault has no fee "
+        "account configured or the FeeManager could not be resolved from it.",
+    )
 
 
 class FuseEntry(_Base):
@@ -497,9 +502,9 @@ class VaultInfoResponse(_Base):
 
     Top-level fields are typed; deeply nested protocol-specific blocks
     (substrates, position breakdowns inside balance_fuses, dependency_graph,
-    deployment, withdraw_manager_details, share_price) keep dict[str, Any]
-    typing because their shape is conditional on which protocols and managers
-    a given vault uses.
+    deployment, withdraw_manager_details, share_price, fees) keep
+    dict[str, Any] typing because their shape is conditional on which
+    protocols and managers a given vault uses.
     """
 
     vault: str
@@ -531,6 +536,7 @@ class VaultInfoResponse(_Base):
         "null when the RoleGranted log scan failed (provider without "
         "broad eth_getLogs support).",
     )
+    fees: dict[str, Any] | None = None
     withdraw_manager_details: dict[str, Any] | None = None
     fuses: list[FuseEntry]
     balance_fuses: list[BalanceFuseEntry]

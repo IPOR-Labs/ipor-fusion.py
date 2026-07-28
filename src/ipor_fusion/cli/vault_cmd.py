@@ -19,6 +19,7 @@ from ipor_fusion.cli.config_store import (
 )
 from ipor_fusion.cli.explorer import get_contract_name
 from ipor_fusion.cli.vault_fetcher import (
+    _ZERO_ADDRESS,
     _fetch_deployment_info,
     _fetch_vault_data,
     _resolve_token_decimals,
@@ -55,8 +56,10 @@ from ipor_fusion.core.access import (
     role_account_sort_key,
 )
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
+from ipor_fusion.field_docs import DOCS
 from ipor_fusion.readers.oracle_mapping import (
     TYPE_CHAINLINK,
     TYPE_CHAINLINK_STYLE,
@@ -154,6 +157,10 @@ BLOCK_EXPLORER_URLS: dict[int, str] = {
 
 IPOR_APP_URL = "https://app.ipor.io/fusion"
 
+# Per-block shorthands into the shared documentation table.
+_FEE_DOCS = DOCS["fees"]
+_WM_DOCS = DOCS["withdraw_manager_details"]
+
 UINT256_MAX = 2**256 - 1
 
 # Balance fuses whose ``balanceOf()`` is structurally zero (``pure`` → 0). Their
@@ -161,6 +168,17 @@ UINT256_MAX = 2**256 - 1
 # admin plumbing), not a *venue* where assets actually sit. Anything backed by a
 # real ``*BalanceFuse`` is a venue.
 _CAPABILITY_BALANCE_FUSES: frozenset[str] = frozenset({"ZeroBalanceFuse"})
+
+
+def _unix_to_iso(timestamp: int) -> str:
+    """Unix seconds as the ISO-8601 UTC string every `*_utc` key carries.
+
+    Renders 0 as the epoch. Callers for which 0 is the contract's "never"
+    sentinel must guard and emit null themselves.
+    """
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
 
 def _partition_balance_fuses(entries: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -819,12 +837,10 @@ def _print_vault_info(
     click.echo(f"Chain:            {chain_label} (chain-id={chain_id})")
     block_suffix = " (latest)" if data.is_latest else ""
     click.echo(f"Block:            {data.block_number}{block_suffix}")
-    block_dt = datetime.fromtimestamp(data.block_timestamp, tz=timezone.utc)
-    block_iso = block_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    block_iso = _unix_to_iso(data.block_timestamp)
     click.echo(f"Block time:       {data.block_timestamp} ({block_iso})")
     if data.deployment_block is not None and data.deployment_timestamp is not None:
-        deploy_dt = datetime.fromtimestamp(data.deployment_timestamp, tz=timezone.utc)
-        deploy_iso = deploy_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        deploy_iso = _unix_to_iso(data.deployment_timestamp)
         age = _format_age(data.deployment_timestamp)
         click.echo(
             f"Deployed at:      block {data.deployment_block} ({deploy_iso}, {age})"
@@ -876,18 +892,16 @@ def _print_vault_info(
         wmd = data.withdraw_manager_data
         window_h = wmd.withdraw_window / 3600
         click.echo(f"  Window:         {wmd.withdraw_window}s ({window_h:.1f}h)")
-        click.echo(
-            f"  Request fee:    {wmd.request_fee / 1e18:.4%}"
-            f"   Withdraw fee: {wmd.withdraw_fee / 1e18:.4%}"
-        )
+        click.echo('  Fees:           see the "Fees" section below')
         release_fmt = _format_amount(wmd.shares_to_release, data.share_decimals)
         click.echo(f"  Shares to release: {release_fmt}")
         if wmd.last_release_funds_timestamp > 0:
-            last_dt = datetime.fromtimestamp(
-                wmd.last_release_funds_timestamp, tz=timezone.utc
-            )
-            click.echo(f"  Last release:   {last_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+            last_iso = _unix_to_iso(wmd.last_release_funds_timestamp)
+            click.echo(f"  Last release:   {last_iso}")
         _print_pending_requests(data, plasma_vault)
+    click.echo()
+
+    _print_fees(data)
     click.echo()
 
     _print_role_accounts(role_accounts_fut.result())
@@ -951,6 +965,96 @@ def _print_vault_info(
     )
 
 
+def _format_fee_percent(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    # Four decimals would render a small-but-real fee as a flat 0.0000%, which
+    # reads as "free". Flag it instead; --json carries the exact raw value.
+    if 0 < value < 0.0001:
+        return "<0.0001%"
+    return f"{value:.4f}%"
+
+
+def _print_fee_with_recipients(
+    label: str,
+    charged_bps: int | None,
+    total_bps: int | None,
+    recipients: list[RecipientFee] | None,
+) -> None:
+    charged = _bps_to_percent(charged_bps)
+    total = _bps_to_percent(total_bps)
+    line = f"  {label}: {_format_fee_percent(charged)}"
+    # Vault and FeeManager should agree; only the disagreement is worth
+    # printing, since it means the two configurations have drifted. A missing
+    # vault-side value is a failed read, not drift, so it must not flag.
+    if charged is not None and total is not None and total != charged:
+        line += f"   (FeeManager total: {_format_fee_percent(total)} - MISMATCH)"
+    click.echo(line)
+    if recipients:
+        click.echo("    recipients:")
+    for recipient_fee in recipients or []:
+        share = _format_fee_percent(_bps_to_percent(recipient_fee.fee_value))
+        click.echo(f"      {recipient_fee.recipient}  {share}")
+
+
+def _print_fees(data: _VaultData) -> None:
+    """Human rendering of the `fees` JSON object.
+
+    Labels follow the IPOR app's Fees And Limits table so the CLI and the app
+    name the same thing the same way; the on-chain getter is shown alongside
+    because the JSON keys mirror the contracts, not the app.
+    """
+    if (fees := data.fee_data) is None:
+        return
+    wmd = data.withdraw_manager_data
+
+    click.echo("Fees:")
+    click.echo(f"  Fee Manager:      {fees.fee_manager or 'N/A'}")
+    dao_payee = fees.ipor_dao_fee_recipient
+    if not dao_payee or dao_payee == _ZERO_ADDRESS:
+        dao_payee = "N/A"
+    click.echo(f"  IPOR DAO payee:   {dao_payee}")
+    onboarding_fee = _format_fee_percent(_wad_to_percent(fees.deposit_fee_wad))
+    instant_fee = _format_fee_percent(
+        _wad_to_percent(wmd.withdraw_fee) if wmd else None
+    )
+    scheduled_fee = _format_fee_percent(
+        _wad_to_percent(wmd.request_fee) if wmd else None
+    )
+    click.echo(f"  Onboarding Contribution (depositFee): {onboarding_fee}")
+    click.echo("  Offboarding Contribution - charged on one path only, never both:")
+    click.echo(f"    for Instant Withdrawals (withdrawFee):   {instant_fee}")
+    click.echo(
+        f"    for Scheduled Withdrawals (requestFee):  "
+        f"{scheduled_fee}   charged at request time"
+    )
+
+    _print_fee_with_recipients(
+        "Performance Fee",
+        fees.performance_fee_vault_bps,
+        fees.performance_fee_manager_bps,
+        fees.performance_fee_recipients,
+    )
+    if hwm := fees.high_water_mark:
+        hwm_line = f"    high-water mark: {hwm.high_water_mark}"
+        if hwm.last_update > 0:
+            hwm_line += f" (updated {_unix_to_iso(hwm.last_update)})"
+        else:
+            # 0 is the contract's "never" sentinel, common on a fresh vault.
+            hwm_line += " (never updated)"
+        click.echo(hwm_line)
+
+    _print_fee_with_recipients(
+        "Management Fee",
+        fees.management_fee_vault_bps,
+        fees.management_fee_manager_bps,
+        fees.management_fee_recipients,
+    )
+    if fees.unrealized_management_fee is not None:
+        accrued = _format_amount(fees.unrealized_management_fee, data.asset_decimals)
+        click.echo(f"    accrued, uncollected: {accrued} {data.asset_symbol}")
+
+
 def _build_share_price_json(data: _VaultData) -> dict | None:
     if data.total_supply == 0:
         return None
@@ -973,13 +1077,143 @@ def _build_deployment_json(data: _VaultData) -> dict | None:
     return {
         "block": data.deployment_block,
         "timestamp": data.deployment_timestamp,
-        "timestamp_utc": datetime.fromtimestamp(
-            data.deployment_timestamp, tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp_utc": _unix_to_iso(data.deployment_timestamp),
         "age_days": (
             datetime.now(tz=timezone.utc)
             - datetime.fromtimestamp(data.deployment_timestamp, tz=timezone.utc)
         ).days,
+    }
+
+
+def _wad_to_percent(value: int | None) -> float | None:
+    """WAD (1e18 = 100%) to a percent float. Pairs with `*_wad`.
+
+    Deliberately unrounded: both divisors are powers of ten, so every value
+    in the plausible fee range already reprs exactly, and rounding would only
+    flatten a tiny-but-real fee to 0.0 — the one case worth not lying about.
+    """
+    return None if value is None else value / 1e16
+
+
+def _bps_to_percent(value: int | None) -> float | None:
+    """Basis points (10000 = 100%) to a percent float. Pairs with `*_bps`."""
+    return None if value is None else value / 100
+
+
+def _build_recipient_fees_json(
+    recipients: list[RecipientFee] | None,
+) -> list[dict] | None:
+    if recipients is None:
+        return None
+    return [
+        {
+            "recipient": rf.recipient,
+            "fee_percent": _bps_to_percent(rf.fee_value),
+            "fee_bps": rf.fee_value,
+        }
+        for rf in recipients
+    ]
+
+
+def _build_high_water_mark_json(hwm: HighWaterMarkPerformanceFee | None) -> dict | None:
+    if hwm is None:
+        return None
+    return {
+        "high_water_mark": hwm.high_water_mark,
+        "last_update_timestamp": hwm.last_update,
+        "last_update_utc": (
+            _unix_to_iso(hwm.last_update) if hwm.last_update > 0 else None
+        ),
+        "update_interval_seconds": hwm.update_interval,
+    }
+
+
+def _build_fees_json(data: _VaultData) -> dict | None:
+    """Every fee the vault can charge, entry and exit sides included.
+
+    Exit fees live here rather than in `withdraw_manager_details` so that a
+    single object answers "what does this vault cost?". Keys are always
+    present, and `null` uniformly means "not known": either the vault has no
+    withdraw manager, or the getter is unsupported on this deployment (the
+    deposit fee and high-water mark postdate some FeeManagers). A fee that is
+    genuinely not charged reads 0, never null.
+    """
+    if (fees := data.fee_data) is None:
+        return None
+    wmd = data.withdraw_manager_data
+    request_fee = wmd.request_fee if wmd else None
+    withdraw_fee = wmd.withdraw_fee if wmd else None
+
+    unrealized: dict | None = None
+    if fees.unrealized_management_fee is not None:
+        unrealized = {
+            "raw": fees.unrealized_management_fee,
+            "formatted": _format_amount(
+                fees.unrealized_management_fee, data.asset_decimals
+            ),
+        }
+        if data.asset_price_usd is not None:
+            unrealized["usd"] = round(
+                (fees.unrealized_management_fee / 10**data.asset_decimals)
+                * data.asset_price_usd,
+                2,
+            )
+
+    return {
+        "fee_manager": fees.fee_manager,
+        "fee_manager_note": _FEE_DOCS["fee_manager"],
+        "ipor_dao_fee_recipient": fees.ipor_dao_fee_recipient,
+        "ipor_dao_fee_recipient_note": _FEE_DOCS["ipor_dao_fee_recipient"],
+        "deposit_fee_percent": _wad_to_percent(fees.deposit_fee_wad),
+        "deposit_fee_wad": fees.deposit_fee_wad,
+        "deposit_fee_percent_note": _FEE_DOCS["deposit_fee_percent"],
+        "request_fee_percent": _wad_to_percent(request_fee),
+        "request_fee_wad": request_fee,
+        "request_fee_percent_note": _FEE_DOCS["request_fee_percent"],
+        "withdraw_fee_percent": _wad_to_percent(withdraw_fee),
+        "withdraw_fee_wad": withdraw_fee,
+        "withdraw_fee_percent_note": _FEE_DOCS["withdraw_fee_percent"],
+        "performance_fee_percent": _bps_to_percent(fees.performance_fee_vault_bps),
+        "performance_fee_bps": fees.performance_fee_vault_bps,
+        "performance_fee_percent_note": _FEE_DOCS["performance_fee_percent"],
+        "performance_fee_manager_percent": _bps_to_percent(
+            fees.performance_fee_manager_bps
+        ),
+        "performance_fee_manager_percent_note": _FEE_DOCS[
+            "performance_fee_manager_percent"
+        ],
+        "performance_fee_recipients": _build_recipient_fees_json(
+            fees.performance_fee_recipients
+        ),
+        "performance_fee_recipients_note": _FEE_DOCS["performance_fee_recipients"],
+        "high_water_mark": _build_high_water_mark_json(fees.high_water_mark),
+        "high_water_mark_note": _FEE_DOCS["high_water_mark"],
+        "management_fee_percent": _bps_to_percent(fees.management_fee_vault_bps),
+        "management_fee_bps": fees.management_fee_vault_bps,
+        "management_fee_percent_note": _FEE_DOCS["management_fee_percent"],
+        "management_fee_manager_percent": _bps_to_percent(
+            fees.management_fee_manager_bps
+        ),
+        "management_fee_manager_percent_note": _FEE_DOCS[
+            "management_fee_manager_percent"
+        ],
+        "management_fee_recipients": _build_recipient_fees_json(
+            fees.management_fee_recipients
+        ),
+        "management_fee_recipients_note": _FEE_DOCS["management_fee_recipients"],
+        "management_fee_last_update_timestamp": fees.management_fee_last_update,
+        # Falsy covers both 0 (never accrued) and None (read failed); the
+        # timestamp itself keeps the two apart.
+        "management_fee_last_update_utc": (
+            _unix_to_iso(fees.management_fee_last_update)
+            if fees.management_fee_last_update
+            else None
+        ),
+        "management_fee_last_update_timestamp_note": _FEE_DOCS[
+            "management_fee_last_update_timestamp"
+        ],
+        "unrealized_management_fee": unrealized,
+        "unrealized_management_fee_note": _FEE_DOCS["unrealized_management_fee"],
     }
 
 
@@ -1006,9 +1240,7 @@ def _build_withdraw_manager_json(
                 "formatted": _format_amount(req.shares, sdec),
             },
             "end_withdraw_window_timestamp": req.end_withdraw_window_timestamp,
-            "end_withdraw_window_utc": datetime.fromtimestamp(
-                req.end_withdraw_window_timestamp, tz=timezone.utc
-            ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "end_withdraw_window_utc": _unix_to_iso(req.end_withdraw_window_timestamp),
             "remaining_seconds": max(
                 0, req.end_withdraw_window_timestamp - data.block_timestamp
             ),
@@ -1027,31 +1259,27 @@ def _build_withdraw_manager_json(
 
     result: dict = {
         "withdraw_window_seconds": wmd.withdraw_window,
-        "withdraw_window_seconds_note": "Length of the window, starting at request time, in which a scheduled withdrawal can be executed (also requires the vault Alpha to release funds after the request).",
-        "request_fee_wad": wmd.request_fee,
-        "request_fee_percent": round(wmd.request_fee / 1e18 * 100, 4),
-        "request_fee_percent_note": "Scheduled-exit fee, charged once at request. Mutually exclusive with withdraw_fee — a user pays one path, never summed.",
-        "withdraw_fee_wad": wmd.withdraw_fee,
-        "withdraw_fee_percent": round(wmd.withdraw_fee / 1e18 * 100, 4),
-        "withdraw_fee_percent_note": "Instant-exit fee on standard redeem/withdraw from unallocated balance. Mutually exclusive with request_fee — a user pays one path, never summed.",
+        "withdraw_window_seconds_note": _WM_DOCS["withdraw_window_seconds"],
+        "fees_note": _WM_DOCS["fees"],
         "shares_to_release": {
             "raw": wmd.shares_to_release,
             "formatted": _format_amount(wmd.shares_to_release, sdec),
         },
-        "shares_to_release_note": "Current shares the vault Alpha has approved for release via releaseFunds().",
+        "shares_to_release_note": _WM_DOCS["shares_to_release"],
         "last_release_funds_timestamp": wmd.last_release_funds_timestamp,
-        "last_release_funds_timestamp_note": "Release timestamp set by the last releaseFunds() call; 0 if never released.",
+        "last_release_funds_utc": (
+            _unix_to_iso(wmd.last_release_funds_timestamp)
+            if wmd.last_release_funds_timestamp > 0
+            else None
+        ),
+        "last_release_funds_timestamp_note": _WM_DOCS["last_release_funds_timestamp"],
         "pending_requests": requests_json,
         "total_pending_shares": {
             "raw": total_pending_shares,
             "formatted": _format_amount(total_pending_shares, sdec),
         },
-        "total_pending_shares_note": "Sum of shares across all pending withdrawal requests.",
+        "total_pending_shares_note": _WM_DOCS["total_pending_shares"],
     }
-    if wmd.last_release_funds_timestamp > 0:
-        result["last_release_funds_utc"] = datetime.fromtimestamp(
-            wmd.last_release_funds_timestamp, tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
     return result
 
 
@@ -1478,9 +1706,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
         "block": data.block_number,
         "is_latest": data.is_latest,
         "block_timestamp": data.block_timestamp,
-        "block_timestamp_utc": datetime.fromtimestamp(
-            data.block_timestamp, tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "block_timestamp_utc": _unix_to_iso(data.block_timestamp),
         "deployment": _build_deployment_json(data),
         "asset": {
             "address": data.asset,
@@ -1512,8 +1738,10 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             "price_oracle": data.price_oracle_addr,
             "rewards": data.rewards_manager,
             "withdraw": data.withdraw_manager,
+            "fee": data.fee_data.fee_manager if data.fee_data else None,
         },
         "role_accounts": role_accounts_fut.result(),
+        "fees": _build_fees_json(data),
         "withdraw_manager_details": _build_withdraw_manager_json(data, plasma_vault),
         "fuses": fuses_json,
         "balance_fuses": balance_fuses_json,
@@ -1555,9 +1783,7 @@ def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None
         if assets is not None and data.asset_price_usd is not None:
             usd_val = (assets / 10**data.asset_decimals) * data.asset_price_usd
             usd_str = f" (${usd_val:,.2f})"
-        end_dt = datetime.fromtimestamp(
-            req.end_withdraw_window_timestamp, tz=timezone.utc
-        )
+        end_iso = _unix_to_iso(req.end_withdraw_window_timestamp)
         remaining = req.end_withdraw_window_timestamp - data.block_timestamp
         remaining_str = _format_remaining(remaining)
         status = "can_withdraw" if req.can_withdraw else "waiting"
@@ -1566,7 +1792,7 @@ def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None
                 req.account,
                 f"{_format_amount(req.shares, data.share_decimals)} shares",
                 f"{assets_str}{usd_str}",
-                f"{end_dt.strftime('%Y-%m-%dT%H:%M:%SZ')} ({remaining_str})",
+                f"{end_iso} ({remaining_str})",
                 status,
             )
         )
