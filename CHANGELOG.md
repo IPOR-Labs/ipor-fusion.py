@@ -1,5 +1,7 @@
 # CHANGELOG
 
+<!-- version list -->
+
 
 ## v3.0.1 (2026-05-26)
 
