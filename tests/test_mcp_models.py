@@ -7,6 +7,8 @@ there, this test will fail until the model is updated. That is the point.
 
 from __future__ import annotations
 
+import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -874,16 +876,43 @@ class TestOracleMappingResponse:
 
 
 class TestModelsImportGraph:
-    def test_no_runtime_sdk_imports(self):
-        """models.py rule: runtime imports stay pydantic-only, plus the
-        ipor_fusion.types leaf."""
-        # Column-0 anchoring scopes this to runtime module-level imports —
-        # TYPE_CHECKING-block and method-deferred imports are indented.
-        lines = Path(mcp_models.__file__).read_text().splitlines()
-        offending = [
-            line
-            for line in lines
-            if line.startswith(("import ipor_fusion", "from ipor_fusion"))
-            and not line.startswith("from ipor_fusion.types import")
-        ]
+    # What models.py may import at runtime: stdlib (exempt, not listed), plus
+    # exactly the three below — pydantic, ipor_fusion.types (shared Literal
+    # vocabularies) and ipor_fusion.field_docs (shared field documentation).
+    # The two SDK entries are import-free data/typing leaves, which is the bar
+    # for extending this whitelist. Everything else — readers/, core/, web3,
+    # eth_* — must sit under TYPE_CHECKING or be deferred into a method.
+    #
+    # Why: models.py defines the LLM-facing wire shape, and keeping it a leaf
+    # keeps that shape decoupled from SDK implementation types (addresses are
+    # plain str, not eth_typing NewTypes), so an SDK refactor cannot silently
+    # reshape the published schema. It also keeps importing the schema layer
+    # cheap — server.py, not models.py, pays for web3/eth_*. SDK types are used
+    # only in classmethod signatures, which pydantic never resolves, so the
+    # TYPE_CHECKING imports cost nothing at runtime.
+    RUNTIME_IMPORT_WHITELIST = frozenset(
+        {
+            "pydantic",
+            "ipor_fusion.types",
+            "ipor_fusion.field_docs",
+        }
+    )
+
+    # Column-0 anchoring scopes this to runtime module-level imports —
+    # TYPE_CHECKING-block and method-deferred imports are indented. A relative
+    # import keeps its leading dots in the capture, so it matches neither a
+    # whitelist entry nor a stdlib name and is always reported.
+    IMPORT_RE = re.compile(r"^(?:import|from) +([\w.]+)", re.MULTILINE)
+
+    def test_runtime_imports_are_whitelisted(self):
+        """models.py rule: runtime imports stay within the whitelist."""
+        source = Path(mcp_models.__file__).read_text()
+        offending = sorted(
+            {
+                name
+                for name in self.IMPORT_RE.findall(source)
+                if name.split(".")[0] not in sys.stdlib_module_names
+                and name not in self.RUNTIME_IMPORT_WHITELIST
+            }
+        )
         assert offending == []
