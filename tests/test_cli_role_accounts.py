@@ -122,6 +122,20 @@ class TestRoleAccounts:
         mock_ctx_cls.from_url.assert_not_called()
         mock_resolve.assert_not_called()
 
+    def test_unsupported_chain_is_usage_error_before_provider(
+        self, mock_ctx_cls, mock_resolve, tmp_config
+    ):
+        result = CliRunner().invoke(
+            cli, ["vault", "role-accounts", VAULT, "--chain-id", "optimism"]
+        )
+
+        assert result.exit_code != 0
+        assert "not supported yet" in result.output
+        # The gate fires in _build_ctx before provider resolution — no
+        # "no provider configured" noise, no RPC.
+        mock_ctx_cls.from_url.assert_not_called()
+        mock_resolve.assert_not_called()
+
     def test_unknown_vault_needs_chain_id(self, _ctx, mock_resolve, tmp_config):
         result = CliRunner().invoke(cli, ["vault", "role-accounts", VAULT])
 

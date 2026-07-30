@@ -1,5 +1,11 @@
 from importlib.metadata import PackageNotFoundError, version
 
+from ipor_fusion.chains import (
+    CHAIN_NAME_TO_ID,
+    CHAIN_NAMES,
+    SUPPORTED_CHAIN_IDS,
+    ensure_supported_chain,
+)
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import (
     AccessManager,
@@ -41,6 +47,7 @@ from ipor_fusion.errors import (
     IporFusionError,
     NotPlasmaVaultError,
     TransactionError,
+    UnsupportedChainError,
 )
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.fuses import (
@@ -215,6 +222,11 @@ __all__ = [
     "IporFusionError",
     "NotPlasmaVaultError",
     "TransactionError",
+    "UnsupportedChainError",
+    "CHAIN_NAMES",
+    "CHAIN_NAME_TO_ID",
+    "SUPPORTED_CHAIN_IDS",
+    "ensure_supported_chain",
     "Amount",
     "Shares",
     "Decimals",

@@ -31,6 +31,7 @@ from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappSupplyFuse,
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
+from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
     MorphoBorrowFuse,
     MorphoClaimFuse,
@@ -276,6 +277,87 @@ class TestMorphoClaimFuse:
             ["address", "address", "uint256", "bytes32[]"], action.data[4:]
         )
         assert proofs[0] == bytes.fromhex("ab" * 32)
+
+
+# ── Merkl ───────────────────────────────────────────────────────────────
+
+
+class TestMerklClaimWrapperFuse:
+    def test_claim_encodes_all_arrays(self):
+        proof = ["0x" + "ab" * 32, "cd" * 32]  # with and without 0x prefix
+        action = MerklClaimWrapperFuse(FUSE_ADDR).claim(
+            tokens=[TOKEN_A],
+            amounts=[123],
+            proofs=[proof],
+            received_tokens=[TOKEN_B, VAULT_ADDR],
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == _selector(
+            "claim(address[],uint256[],bytes32[][],address[])"
+        )
+        (tokens, amounts, proofs, received) = decode(
+            ["address[]", "uint256[]", "bytes32[][]", "address[]"], action.data[4:]
+        )
+        assert [t.lower() for t in tokens] == [TOKEN_A_LOW]
+        assert list(amounts) == [123]
+        assert len(proofs) == 1
+        assert proofs[0][0] == bytes.fromhex("ab" * 32)
+        assert proofs[0][1] == bytes.fromhex("cd" * 32)
+        assert [r.lower() for r in received] == [TOKEN_B_LOW, VAULT_ADDR_LOW]
+
+    def test_claim_rejects_mismatched_lengths(self):
+        with pytest.raises(ValueError, match="equal lengths"):
+            MerklClaimWrapperFuse(FUSE_ADDR).claim(
+                tokens=[TOKEN_A],
+                amounts=[],
+                proofs=[[]],
+                received_tokens=[TOKEN_B],
+            )
+
+    def test_claim_rejects_empty_tokens(self):
+        with pytest.raises(ValueError, match="tokens must not be empty"):
+            MerklClaimWrapperFuse(FUSE_ADDR).claim(
+                tokens=[],
+                amounts=[],
+                proofs=[],
+                received_tokens=[TOKEN_B],
+            )
+
+    def test_claim_rejects_empty_received_tokens(self):
+        with pytest.raises(ValueError, match="received_tokens must not be empty"):
+            MerklClaimWrapperFuse(FUSE_ADDR).claim(
+                tokens=[TOKEN_A],
+                amounts=[1],
+                proofs=[[]],
+                received_tokens=[],
+            )
+
+    def test_claim_rejects_zero_address_received_token(self):
+        with pytest.raises(ValueError, match=r"received_tokens\[0\]"):
+            MerklClaimWrapperFuse(FUSE_ADDR).claim(
+                tokens=[TOKEN_A],
+                amounts=[1],
+                proofs=[[]],
+                received_tokens=[ZERO_ADDRESS],
+            )
+
+    def test_claim_rejects_zero_address_token(self):
+        with pytest.raises(ValueError, match=r"tokens\[0\]"):
+            MerklClaimWrapperFuse(FUSE_ADDR).claim(
+                tokens=[ZERO_ADDRESS],
+                amounts=[1],
+                proofs=[[]],
+                received_tokens=[TOKEN_B],
+            )
+
+    def test_claim_rejects_non_positive_amount(self):
+        with pytest.raises(ValueError, match=r"amounts\[0\]"):
+            MerklClaimWrapperFuse(FUSE_ADDR).claim(
+                tokens=[TOKEN_A],
+                amounts=[0],
+                proofs=[[]],
+                received_tokens=[TOKEN_B],
+            )
 
 
 # ── CompoundV3 ──────────────────────────────────────────────────────────

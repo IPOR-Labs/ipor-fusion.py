@@ -2,7 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from eth_abi import encode
+from eth_abi import decode, encode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.core.rewards_manager import RewardsManager
@@ -127,6 +128,23 @@ class TestGetRewardsFuses:
         result = mgr.get_rewards_fuses().call()
 
         assert result == []
+
+
+class TestAddRewardFuses:
+    # On-chain behavior (the call actually registering the fuse) is verified at
+    # a pinned block by test_simulate_claim_merkl_wrapper_base.py; this only
+    # pins the calldata shape.
+    def test_encodes_selector_and_fuses(self):
+        mgr, _ = _make_manager()
+
+        call = mgr.add_reward_fuses([FUSE_ADDR, TOKEN_A])
+
+        assert call.to == CONTRACT_ADDR
+        assert call.data[:4] == function_signature_to_4byte_selector(
+            "addRewardFuses(address[])"
+        )
+        (fuses,) = decode(["address[]"], call.data[4:])
+        assert [f.lower() for f in fuses] == [FUSE_ADDR.lower(), TOKEN_A.lower()]
 
 
 class TestClaimRewards:

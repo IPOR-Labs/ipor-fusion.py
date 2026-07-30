@@ -69,6 +69,18 @@ class AccessManager(ContractWrapper):
             "grantRole(uint64,address,uint32)", role_id, account, execution_delay
         )
 
+    def get_target_function_role(
+        self, target: ChecksumAddress, selector: bytes
+    ) -> Call[RoleId]:
+        """Role id required to call the 4-byte `selector` on `target`."""
+        return self._view(
+            "getTargetFunctionRole(address,bytes4)",
+            target,
+            selector,
+            output_types=["uint64"],
+            decoder=RoleId,
+        )
+
     def has_role(self, role_id: int, account: ChecksumAddress) -> Call[RoleStatus]:
         return self._view(
             "hasRole(uint64,address)",

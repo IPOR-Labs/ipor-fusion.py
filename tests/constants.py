@@ -144,6 +144,9 @@ BASE_MORPHO_BORROW_FUSE = Web3.to_checksum_address(
 BASE_UNIVERSAL_SWAP_FUSE = Web3.to_checksum_address(
     "0xdbc5f9962ce85749f1b3c51ba0473909229e3807"
 )
+BASE_MERKL_CLAIM_WRAPPER_FUSE = Web3.to_checksum_address(
+    "0xb1c12A239a72ee518A065dA79E62dAE97Cb21A5B"
+)
 
 # Ethereum fuse addresses (chain 1)
 ETHEREUM_AAVE_V3_SUPPLY_FUSE = Web3.to_checksum_address(

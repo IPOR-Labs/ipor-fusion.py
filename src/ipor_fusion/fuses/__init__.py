@@ -22,6 +22,7 @@ from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappSupplyFuse,
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
+from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
     MorphoBorrowFuse,
     MorphoClaimFuse,
@@ -59,6 +60,7 @@ __all__ = [
     "MorphoBorrowFuse",
     "MorphoFlashLoanFuse",
     "MorphoClaimFuse",
+    "MerklClaimWrapperFuse",
     "UniswapV3SwapFuse",
     "UniswapV3NewPositionFuse",
     "UniswapV3ModifyPositionFuse",

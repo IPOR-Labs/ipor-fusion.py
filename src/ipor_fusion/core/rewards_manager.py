@@ -63,6 +63,10 @@ class RewardsManager(ContractWrapper):
     def is_reward_fuse_supported(self, fuse: ChecksumAddress) -> Call[bool]:
         return self._view("isRewardFuseSupported(address)", fuse, output_types=["bool"])
 
+    def add_reward_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
+        """FUSE_MANAGER-only: register reward fuses executable via claimRewards."""
+        return self._write("addRewardFuses(address[])", fuses)
+
     def claim_rewards(self, claims: list[FuseAction]) -> Call[None]:
         data = FuseAction.encode_execute_payload(
             claims, "claimRewards((address,bytes)[])"

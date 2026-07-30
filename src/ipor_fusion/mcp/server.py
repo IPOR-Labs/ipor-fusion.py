@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from web3 import Web3
 
+from ipor_fusion.chains import CHAIN_NAMES, ensure_supported_chain
 from ipor_fusion.cli.config_store import (
     FusionConfig,
     VaultEntry,
@@ -25,7 +26,6 @@ from ipor_fusion.cli.morpho_api import (
     fetch_vault,
 )
 from ipor_fusion.cli.vault_cmd import (
-    CHAIN_NAMES,
     _build_json_output,
 )
 from ipor_fusion.cli.vault_fetcher import (
@@ -119,6 +119,9 @@ def vault_info(
     """
     cfg = load_config()
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    # Fail fast (before any RPC) on chains the vault tooling can't handle;
+    # UnsupportedChainError doubles as ValueError so FastMCP surfaces it.
+    ensure_supported_chain(chain_id)
     ctx, effective_block = _build_ctx(cfg, chain_id, block_number)
     checksum = Web3.to_checksum_address(vault_address)
 
@@ -197,6 +200,9 @@ def vault_role_accounts(
     cfg = load_config()
     role_id = None if role is None else Roles.resolve(role)
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    # The RoleGranted scan needs broad eth_getLogs — fail fast (before any
+    # RPC) on chains the vault tooling is not validated on.
+    ensure_supported_chain(chain_id)
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
     checksum = Web3.to_checksum_address(vault_address)
 
@@ -273,6 +279,9 @@ def vault_oracle_mapping(
         raise ValueError("block_number must be >= 0")
     cfg = load_config()
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    # The asset-source event replay scans logs from block 0 — fail fast
+    # (before any RPC) on chains the vault tooling is not validated on.
+    ensure_supported_chain(chain_id)
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
     checksum = Web3.to_checksum_address(vault_address)
 

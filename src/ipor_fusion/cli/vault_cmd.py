@@ -11,6 +11,7 @@ import requests
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 
+from ipor_fusion.chains import CHAIN_NAME_TO_ID, CHAIN_NAMES, ensure_supported_chain
 from ipor_fusion.cli.config_store import (
     FusionConfig,
     VaultEntry,
@@ -58,7 +59,11 @@ from ipor_fusion.core.access import (
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
+from ipor_fusion.errors import (
+    ContractNotFoundError,
+    NotPlasmaVaultError,
+    UnsupportedChainError,
+)
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.readers.oracle_mapping import (
     TYPE_CHAINLINK,
@@ -103,20 +108,6 @@ class AddressType(click.ParamType):
 
 
 ADDRESS = AddressType()
-
-
-CHAIN_NAMES: dict[int, str] = {
-    1: "ethereum",
-    42161: "arbitrum",
-    8453: "base",
-    10: "optimism",
-    137: "polygon",
-    56: "bsc",
-    43114: "avalanche",
-    250: "fantom",
-}
-
-CHAIN_NAME_TO_ID: dict[str, int] = {name: cid for cid, name in CHAIN_NAMES.items()}
 
 
 class ChainType(click.ParamType):
@@ -230,11 +221,24 @@ def _build_ctx(
 ) -> tuple[int, Web3Context]:
     """Shared command preamble: resolve chain + provider, build the context."""
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    # Every _build_ctx command does heavy on-chain reads (vault fetch,
+    # RoleGranted scan, asset-source event replay from block 0) — gate to
+    # validated chains before even resolving a provider.
+    _require_supported_chain(chain_id)
     provider_url = _resolve_provider(cfg, chain_id)
     ctx = Web3Context.from_url(provider_url)
     if block_number is not None:
         ctx.default_block = block_number
     return chain_id, ctx
+
+
+def _require_supported_chain(chain_id: int) -> None:
+    """UnsupportedChainError → UsageError, so the CLI prints a clean message
+    instead of a traceback before any heavy on-chain work starts."""
+    try:
+        ensure_supported_chain(chain_id)
+    except UnsupportedChainError as exc:
+        raise click.UsageError(str(exc)) from exc
 
 
 def _auto_save_vault(

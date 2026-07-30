@@ -339,7 +339,7 @@ class VaultSimulator:
             status = int(raw.get("status", "0x1"), 16)
             success = status == 1
             gas_used = int(raw.get("gasUsed", "0x0"), 16)
-            error = raw.get("error")
+            error, return_data = _normalize_call_error(raw.get("error"), return_data)
             logs = raw.get("logs", []) or []
 
             decoded: Any | None = None
@@ -361,7 +361,7 @@ class VaultSimulator:
                     success=success,
                     return_data=return_data,
                     gas_used=gas_used,
-                    error=error if isinstance(error, str) else None,
+                    error=error,
                     logs=logs,
                     decoded=decoded,
                 )
@@ -393,6 +393,23 @@ class VaultSimulator:
             calls=parsed,
             failed_calls=failed_calls,
         )
+
+
+def _normalize_call_error(
+    error_raw: object, return_data: HexBytes
+) -> tuple[str | None, HexBytes]:
+    """Normalize a per-call `error` into (message, revert payload).
+
+    Per the eth_simulateV1 spec, a failed call carries a JSON-RPC error object
+    `{code, message, data}` — the revert payload is in `error.data`, and some
+    clients leave `returnData` empty in that case. Other clients report the
+    error as a plain string and put the revert payload in `returnData`.
+    """
+    if isinstance(error_raw, dict):
+        if not return_data and error_raw.get("data"):
+            return_data = HexBytes(error_raw["data"])
+        return error_raw.get("message"), return_data
+    return (error_raw if isinstance(error_raw, str) else None), return_data
 
 
 def _decode_revert(return_data: HexBytes, error: str | None) -> str | None:
