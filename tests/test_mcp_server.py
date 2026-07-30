@@ -12,6 +12,7 @@ from ipor_fusion import (
     NotPlasmaVaultError,
     RoleAccount,
     Roles,
+    UnsupportedChainError,
 )
 from ipor_fusion.cli.morpho_api import (
     MorphoApiError,
@@ -279,6 +280,16 @@ class TestVaultRoleAccounts:
         with pytest.raises(NotPlasmaVaultError, match="not a vault"):
             vault_role_accounts(vault_address=VAULT_ADDR)
 
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_unsupported_chain_fails_before_rpc(self, _load, mock_ctx):
+        with pytest.raises(UnsupportedChainError, match=r"chain 10 \(optimism\)"):
+            vault_role_accounts(vault_address=VAULT_ADDR, chain_id=10)
+        mock_ctx.assert_not_called()
+
     def test_role_arg_schema_enum_matches_roles(self):
         # Guards drift between the static RoleName Literal (advertised as a
         # schema enum) and the Roles IntEnum.
@@ -408,6 +419,16 @@ class TestVaultOracleMapping:
             vault_oracle_mapping(vault_address=VAULT_ADDR)
         mock_build.assert_not_called()
 
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_unsupported_chain_fails_before_rpc(self, _load, mock_build_ctx):
+        with pytest.raises(UnsupportedChainError, match=r"chain 10 \(optimism\)"):
+            vault_oracle_mapping(vault_address=VAULT_ADDR, chain_id=10)
+        mock_build_ctx.assert_not_called()
+
     def test_tool_registered(self):
         tools = asyncio.run(mcp.list_tools())
         assert "vault_oracle_mapping" in {t.name for t in tools}
@@ -486,6 +507,16 @@ class TestVaultInfoGuards:
     def test_other_fetch_errors_propagate(self, _load, _ctx, _resolve, _fetch):
         with pytest.raises(RuntimeError, match="some sub-call failed"):
             vault_info(vault_address=VAULT_ADDR, chain_id=1)
+
+    @patch("ipor_fusion.mcp.server._build_ctx")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_unsupported_chain_fails_before_rpc(self, _load, mock_build_ctx):
+        with pytest.raises(UnsupportedChainError, match=r"chain 10 \(optimism\)"):
+            vault_info(vault_address=VAULT_ADDR, chain_id=10)
+        mock_build_ctx.assert_not_called()
 
     @pytest.mark.parametrize("block", sorted(DOCS))
     def test_output_schema_publishes_field_docs(self, block):

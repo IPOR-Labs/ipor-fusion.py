@@ -106,6 +106,13 @@ class NotPlasmaVaultError(IporFusionError, ValueError):
     """
 
 
+class UnsupportedChainError(IporFusionError, ValueError):
+    """Chain is not (yet) supported by the on-chain vault tooling.
+
+    Also a ValueError so MCP adapters can let it propagate unmapped.
+    """
+
+
 class TransactionError(IporFusionError):
     def __init__(
         self,

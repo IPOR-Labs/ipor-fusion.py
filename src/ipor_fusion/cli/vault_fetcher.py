@@ -13,6 +13,7 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import ChecksumAddress, HexStr
 
+from ipor_fusion.chains import ensure_supported_chain
 from ipor_fusion.cli.config_store import (
     load_contract_cache,
     load_deployment_cache,
@@ -515,6 +516,10 @@ def _fetch_vault_data(
     block_number: int | None,
     chain_id: int = 0,
 ) -> _VaultData:
+    # Fail fast with a client-mappable typed error instead of letting the
+    # fetch die deep in the stack (e.g. eth_getLogs range caps) on chains
+    # the tooling is not validated on.
+    ensure_supported_chain(chain_id or ctx.chain_id)
     with ThreadPoolExecutor() as pool:
         # Phase 1: all independent vault reads in parallel
         f_block = pool.submit(lambda: ctx.web3.eth.block_number)
