@@ -147,6 +147,68 @@ jobs:
           vcs_release: true
           force: ${{ inputs.force-semver-part }}
 
+      # semantic-release reports success even when it writes no changelog at
+      # all (update mode silently no-ops when the insertion flag is missing),
+      # so the release commit quietly loses CHANGELOG.md. Assert it moved.
+      - name: Verify changelog updated
+        # `released` is the string "false" when nothing was released, and any
+        # non-empty string is truthy in a GH expression - compare explicitly.
+        if: inputs.publish-enabled && !inputs.skip-version-bump && steps.release.outputs.released == 'true'
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          SHA="${{ steps.release.outputs.commit_sha }}"
+          # 0 = unchanged (the regression), 1 = changed (expected), anything
+          # else = git itself failed and must not be read as "changed".
+          # `|| rc=$?` keeps the non-zero exit from tripping the step's `bash -e`.
+          rc=0
+          git diff --quiet HEAD~1 HEAD -- CHANGELOG.md || rc=$?
+          if [ "${rc}" -eq 0 ]; then
+            echo "::error::Release ${TAG} did not update CHANGELOG.md - aborting before publish."
+            cat <<EOF
+          semantic-release exited 0 but wrote no changelog. Find the cause before
+          re-running - it is usually one of:
+
+            a) python-semantic-release was upgraded and a default changed.
+               Diff the fully-resolved config across the old and new versions:
+                 semantic-release generate-config | sed -n '/\[semantic_release.changelog\]/,/^$/p'
+               changelog.mode, insertion_flag and changelog_file all silently
+               alter or disable changelog writing. This is the cause of the
+               silent regression this guard was added to catch.
+            b) CHANGELOG.md no longer contains the insertion_flag string that the
+               CURRENT psr version expects (default "<!-- version list -->").
+               In "update" mode a missing flag is a silent no-op.
+            c) a templates/ directory was added. A non-empty template_dir
+               REPLACES the built-in templates entirely; without a
+               CHANGELOG.md.j2 inside it, no changelog is written at all.
+
+          PyPI was NOT reached, so ${TAG} is still an unused version number.
+          The version commit, the tag and the GitHub release ARE already
+          created. To recover:
+
+            1. delete the GitHub release for ${TAG} - the version step above
+               created it, and a release outliving its tag blocks re-creating
+               that tag later, so remove it before step 2
+            2. git push --delete origin ${TAG}
+            3. git revert ${SHA} on main - the "${TAG}" version commit
+            4. fix the cause identified above. If it is (b), the flag is the
+               literal line "<!-- version list -->" and belongs between the
+               "# CHANGELOG" title and the newest version heading:
+
+                   # CHANGELOG
+
+                   <!-- version list -->
+
+                   ## v1.2.3 (2026-01-01)
+
+               semantic-release inserts each new release directly after it.
+            5. re-run this workflow
+          EOF
+            exit 1
+          elif [ "${rc}" -ne 1 ]; then
+            echo "::error::Cannot tell whether release ${TAG} updated CHANGELOG.md: git diff exited ${rc}. Refusing to publish unverified."
+            exit 1
+          fi
+
       - name: Version release (from pyproject.toml)
         if: inputs.publish-enabled && inputs.skip-version-bump
         id: release-current

@@ -123,7 +123,7 @@ omit = ["src/ipor_fusion/mcp/*"]
 # committed via `assets` below.
 build_command = "rm -rf dist/* .venv && pip install uv && uv lock && uv build"
 logging_use_named_masks = true
-commit_parser = "angular"
+commit_parser = "conventional"
 major_on_zero = true
 version_toml = ["pyproject.toml:project.version"]
 assets = ["uv.lock"]
