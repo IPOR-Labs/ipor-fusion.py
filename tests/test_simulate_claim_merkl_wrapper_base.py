@@ -7,19 +7,23 @@ aToken `aBascbETH`. The fuse must forward the unwrapped token in full to the
 RewardsClaimManager — it must NOT linger on the PlasmaVault, which would
 inflate share price (the aToken is a market substrate).
 
-The pinned block is critical: the merkle proof only verifies against the
-Merkl Distributor root active at that block, and the claim must not have been
-executed yet. The fuse contract was deployed AFTER the pinned block, so the
-simulation injects its current runtime code (immutables baked in: VERSION =
-its own address, DISTRIBUTOR, MARKET_ID) at the same address via a state
-override, then drives the normal on-chain flow:
+The pinned block captures live production state, so no overrides or setup
+pranks are needed for the claim itself: the fuse is registered in the
+RewardsClaimManager, the alpha holds CLAIM_REWARDS_ROLE, and the aToken is
+granted as a MERKL substrate. The block matters because a Merkl claim is
+valid only under three block-coupled conditions: the merkle root rotates
+every few hours (the proof verifies only against the root active at the
+pinned block), the claim amount is CUMULATIVE (the forwarded delta is the
+amount minus claimed(vault, wrapper) at the block), and the wrapper pays out
+via transferFrom on the aToken funder, whose standing allowance must cover
+the delta.
 
-  - `RewardsClaimManager.addRewardFuses` and `grantMarketSubstrates` pranked
-    as the real on-chain FUSE_MANAGER_ROLE holder (no role minting);
-  - `claimRewards` as the vault's real alpha, granted CLAIM_REWARDS role via
-    an AccessManager storage-slot override — the same technique as the
-    Solidity test's `_grantRoleViaStorage` (no active role holder exists at
-    the pinned block).
+Rather than hunting for a block satisfying all three, the claim data
+(amount, proof) is lifted from the calldata of a real successful production
+claim — tx 0xff3331617fbf22669300b5a87f388ac9450ea4d446d5a6b4a57bdd94f1d8f88d
+(block 49185303), which went through this exact alpha → RewardsClaimManager
+→ fuse path — and the simulation replays it one block earlier, where the
+real execution proves every condition held.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ from dataclasses import dataclass
 
 from _simulate import address_substrate, assert_all_success
 from constants import BASE_MERKL_CLAIM_WRAPPER_FUSE
-from eth_abi import decode, encode
+from eth_abi import decode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
@@ -51,7 +55,8 @@ log = logging.getLogger(__name__)
 
 VAULT_ADDRESS = Web3.to_checksum_address("0xe883426B4fc84A7f5cc86415CAbBef43E73a4CC8")
 ALPHA_ADDRESS = Web3.to_checksum_address("0x48d3615d78B152819ea0367adF7b9944e399ac9a")
-# Existing on-chain holder of FUSE_MANAGER_ROLE (300) for this vault.
+# On-chain holder of FUSE_MANAGER_ROLE (300) — only used by the zero-delta
+# test to grant an extra substrate; the claim itself needs no governance.
 FUSE_MANAGER_HOLDER = Web3.to_checksum_address(
     "0xd556a9FA4dd83aDE79B89f4A431c57169D00D4a6"
 )
@@ -61,19 +66,18 @@ WRAPPER = Web3.to_checksum_address("0xa1A67b55a88ab8Dcc86B765C1Cd85887e24ad7AA")
 # the Aave Base cbETH aToken (REBASING). Shares its symbol with WRAPPER above.
 A_BAS_CB_ETH = Web3.to_checksum_address("0xcf3D55c10DB69f28fD1A75Bd73f3D8A2d9c595ad")
 
-PINNED_BLOCK = 46766277
-CLAIM_AMOUNT = 480280871240291748
+# One block before the real production claim tx (see module docstring).
+PINNED_BLOCK = 49185302
+# Merkl claims are cumulative: the Distributor is called with the lifetime
+# amount and pays out the difference vs claimed(vault, WRAPPER) at the block.
+CLAIM_AMOUNT = 8668124815864949902
+CLAIMED_BEFORE = 7874776391985530632
+EXPECTED_FORWARD = CLAIM_AMOUNT - CLAIMED_BEFORE
 
-# The Solidity fork test measures the forwarded delta as exactly
-# CLAIM_AMOUNT + 1 wei (aToken rebasing balanceOf rounding) at the fork-block
-# timestamp. eth_simulateV1 executes in a fresh next block whose timestamp is
-# slightly later, so the liquidity index differs and the rounding can shift by
-# a wei — hence a small absolute tolerance instead of strict equality.
+# The wrapper transfers the aToken 1:1, but the aToken's rebasing balanceOf
+# rounds the measured delta by a wei around the transferred amount — hence a
+# small absolute tolerance instead of strict equality.
 REBASE_TOLERANCE_WEI = 2
-
-# OZ AccessManager (non-upgradeable, as used by IporFusionAccessManager):
-# `_roles` is the 2nd state variable => slot 1.
-ACCESS_MANAGER_ROLES_SLOT = 1
 
 CLAIM_REWARDS_SELECTOR = function_signature_to_4byte_selector(
     "claimRewards((address,bytes)[])"
@@ -85,57 +89,48 @@ UNSUPPORTED_TOKEN_SELECTOR = bytes(
     Web3.keccak(text="MerklClaimWrapperFuseUnsupportedReceivedToken(address)")[:4]
 ).hex()
 
-# Merkle proof for (vault, WRAPPER, CLAIM_AMOUNT) — valid only at PINNED_BLOCK.
+# Merkle proof for (vault, WRAPPER, CLAIM_AMOUNT) — from the real claim tx
+# calldata; valid only against the Distributor root active at PINNED_BLOCK.
 PROOF: list[str] = [
-    "0x8881ed89944863e9fa4444106149b612b72d52a6fe527e9b423a0c971e56903f",
-    "0x47cc40690a04f7e483aec30fd75ba3f201f535cfdfddfb4f4f16b7765ed01fbc",
-    "0x30869b377f2897d0d381e80f1b68797f28656e4ca306b8e765f76c558505b67e",
-    "0x62d20777c8bf3688fb72868bb60ef1e24c8a99c317d5100c84cf2ae61f4c40c9",
-    "0x0fd393a7b8ed13e8ec313ab44c0f408996f14fd5d3ae42fad3fe043bf3f4a246",
-    "0x0bac710962a5711f07174c62375758cda642db0e130af21058cd8db0b296cb23",
-    "0x8ba60e3f51a6072226b0f65eb506cb82835296bf57cba1459cc80731fec7d8dd",
-    "0x40de0d9c12d8a4578649171b85aa44f1e98ffbdb56b2020bfac3f2b15e27fc97",
-    "0x23dad8d9155505c61345e33d382b2964a414191f404f0b86a94f9684b23528d1",
-    "0x9e318c333d30d9aaeb48906088febf824caad6fb3b0613d38af2d5f5e8dc7f7b",
-    "0xe6ad5d2d3a3c000792c2ce568178355b09793819bc34892dc85cadda2e17467a",
-    "0x584bb3a00cf9167d00867e88562798f024b4c1ad6f0eb89230353c45cc9d22e7",
-    "0x739c138837f9cca36fef2c9f8e827f7ef73e3885c4fdd948a2be710c8fe214b4",
-    "0xdad9299e5e627735ad13124d1ddabdf504b4d5dcce8ce1f40d6dfea6b52a261e",
-    "0x762459f1d0ff419029a8c3fc429bcb3fb73378e10cae65e84f765f348ca32be4",
-    "0x7e861a3d59aba2f9bdcb8cc9df6002ca939a5777c0734d6e53ee2b9cbe0a47da",
-    "0x4e97f332c6f947fd4a0c876916eba7bd55e7d6491484cccfccf5fa959c9bd678",
-    "0x4cb561cb4c2fb897721d536ad161997d0aadb00040d6ae4ed3316de09e56a1ca",
-    "0x41715bd59cfae1d86c8c4ecba32d39be6babb3130ef626a2fb4646d5f9b27ac2",
-    "0xb4df1dbeb127166522caaf08a4a78fcb7346ce69eb5864d4a5fbc5eaa5a1d49c",
+    "0xa0124096e89cc96a016c3d48328a3dc998e9fba4e2c11f6c21b592abdcc4d247",
+    "0x5ea1dbd4cf3fd6b2e26c927b6eb2b796bdf64e38b00962030fcf4352fe3621c7",
+    "0x6469130aacf38c61b04cc956d6ed8286902fe0d3b8c62a825276099ec7ea4e42",
+    "0x6d52dbd7910af4dbdc61780ec66ffe8cca809ef6d1afd666d8cdb89caab10863",
+    "0x21cc43c0fecc6b855387f6a03c64066abf58b4492a06eb915cb2a9590b2a8fca",
+    "0xaacd2babfb82ef4ad67d00cb7dc9c36604a1cc1b4faf1688969cc7608737eea8",
+    "0x54f64f5bdf27742b07987bb2fc06c3c8844585e46bef2223fb3a301db8ddcc79",
+    "0x5579657217f8525060949cfb220d18b74e9ec7ef3806f18a8e58f9459f52d7e2",
+    "0x0a180f6af7be3caa3429c1827822d06e3fbe4c76a0e472f4ccd9403a257c4e6c",
+    "0x4676bb1123d500e6d02159b4bb92feef5b427a74da270fe3294abded2e8350e7",
+    "0xaae6c1e3bc8d7cf8d8e7759b88583289e6063ebb66c2f51b09057c4b21e9f040",
+    "0x41c8427a247f8481873e4213ad78aab4e2a29675c1c2aeb57dc597b10b22499d",
+    "0xfcb184d7d5d63431aa4e2d741cc6db158b4354c0a6f675ff3e2e7ff1da310371",
+    "0x08a6688fd5973ba0400c887424dd64cafcd0be628be0759153c6cb303cc981a7",
+    "0x78c49b9378c3b6fb98a25e9362696ec659c47b9d39ae4b86a2cecb419644cc4d",
+    "0xe48edeb8e23835c042d5e59ab3fce3404ee252c20a5398a61fe9f806fd2de912",
+    "0xefbfbd13bd1916f5b66a884e6972ff89acdf65e9b30d662c12d69454c0d04da6",
+    "0xf2c7e7b048279d48a4bf499fc83df46c68f0b3fcc6354ac53d2720422f541881",
+    "0x580aa265208af72a2479cf70ac01a4ed71d63cf038594053723d3727fedededa",
+    "0xd66d0487e358878f795c2e8524e7490af382da7977e7b5d35a7deed39d8a3d75",
 ]
 
 
 @dataclass(slots=True)
 class _Setup:
     sim: VaultSimulator
+    plasma_vault: PlasmaVault
     rewards: RewardsManager
     reward_token: ERC20
     wrapper_token: ERC20
 
 
-def _role_member_slot(role_id: int, account: str) -> str:
-    """AccessManager storage slot of `_roles[role_id].members[account]`.
+def _prepared_sim(web3_base: Web3) -> _Setup:
+    """Simulator over untouched production state at PINNED_BLOCK.
 
-    Writing 1 there packs {since=1, delay=0} — a past timepoint, so the role
-    is active immediately (mirrors the Solidity test's `_grantRoleViaStorage`).
-    """
-    role_base = Web3.keccak(
-        encode(["uint256", "uint256"], [role_id, ACCESS_MANAGER_ROLES_SLOT])
-    )
-    return Web3.keccak(encode(["address", "bytes32"], [account, role_base])).to_0x_hex()
-
-
-def _prepared_sim(web3_base: Web3, granted_tokens: list) -> _Setup:
-    """Simulator at PINNED_BLOCK with the fuse injected and governance queued.
-
-    `granted_tokens` is the FULL set of received tokens allowed on the MERKL
-    market — `grantMarketSubstrates` replaces the existing list, so callers
-    must pass everything in one call.
+    Everything the claim needs is already configured on-chain: the fuse is
+    registered, the alpha holds the claimRewards role, and the aToken is a
+    granted MERKL substrate. The wiring asserts below are real pinned-block
+    reads documenting those preconditions.
     """
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
@@ -148,19 +143,12 @@ def _prepared_sim(web3_base: Web3, granted_tokens: list) -> _Setup:
         ctx, plasma_vault.get_access_manager_address().call()
     )
 
-    # claimRewards has no active role holder at the pinned block, so grant its
-    # target role to the vault's real alpha via a storage-slot state override.
-    # Real pinned-block read — also asserts the on-chain wiring: the
-    # claimRewards target role on this vault is the canonical CLAIM_REWARDS_ROLE.
     claim_role = access_manager.get_target_function_role(
         rewards.address, CLAIM_REWARDS_SELECTOR
     ).call()
     assert claim_role == Roles.CLAIM_REWARDS_ROLE
-
-    # The fuse was deployed after PINNED_BLOCK — inject its live runtime code
-    # at the same address so the pinned-block simulation can execute it.
-    fuse_code = web3_base.eth.get_code(BASE_MERKL_CLAIM_WRAPPER_FUSE)
-    assert len(fuse_code) > 0, "MerklClaimWrapperFuse not deployed at latest block"
+    assert access_manager.has_role(claim_role, ALPHA_ADDRESS).call().is_member
+    assert rewards.is_reward_fuse_supported(BASE_MERKL_CLAIM_WRAPPER_FUSE).call()
 
     sim = VaultSimulator(
         web3=web3_base,
@@ -168,42 +156,9 @@ def _prepared_sim(web3_base: Web3, granted_tokens: list) -> _Setup:
         alpha=ALPHA_ADDRESS,
         block=hex(PINNED_BLOCK),
     )
-    sim.with_state_override(BASE_MERKL_CLAIM_WRAPPER_FUSE, code=fuse_code.to_0x_hex())
-    sim.with_state_override(
-        access_manager.address,
-        stateDiff={
-            _role_member_slot(claim_role, ALPHA_ADDRESS): "0x" + f"{1:064x}",
-        },
-    )
-
-    # Normal governance flow, pranked as the existing on-chain FUSE_MANAGER_ROLE
-    # holder (eth_simulateV1 without validation allows any `from`). The
-    # before/after observations prove against real chain state that our
-    # addRewardFuses calldata actually registers the fuse.
-    sim.observe(
-        "fuse_supported_before",
-        rewards.is_reward_fuse_supported(BASE_MERKL_CLAIM_WRAPPER_FUSE),
-    )
-    sim.add_call(
-        rewards.add_reward_fuses([BASE_MERKL_CLAIM_WRAPPER_FUSE]),
-        from_=FUSE_MANAGER_HOLDER,
-        label="add_reward_fuses",
-    )
-    sim.observe(
-        "fuse_supported_after",
-        rewards.is_reward_fuse_supported(BASE_MERKL_CLAIM_WRAPPER_FUSE),
-    )
-    sim.add_call(
-        plasma_vault.grant_market_substrates(
-            IporFusionMarkets.MERKL,
-            [address_substrate(token) for token in granted_tokens],
-        ),
-        from_=FUSE_MANAGER_HOLDER,
-        label="grant_market_substrates",
-    )
-
     return _Setup(
         sim=sim,
+        plasma_vault=plasma_vault,
         rewards=rewards,
         reward_token=ERC20(ctx, A_BAS_CB_ETH),
         wrapper_token=ERC20(ctx, WRAPPER),
@@ -211,7 +166,7 @@ def _prepared_sim(web3_base: Web3, granted_tokens: list) -> _Setup:
 
 
 def _claim_action(received_tokens: list) -> object:
-    """The example claim: one wrapper token, its pinned amount and proof."""
+    """The example claim: one wrapper token, its cumulative amount and proof."""
     fuse = MerklClaimWrapperFuse(BASE_MERKL_CLAIM_WRAPPER_FUSE)
     return fuse.claim(
         tokens=[WRAPPER],
@@ -230,7 +185,7 @@ def _claimed_event_count(execute_logs: list[dict]) -> int:
 
 
 def test_simulate_merkl_wrapper_claim_forwards_unwrapped_token(web3_base):
-    setup = _prepared_sim(web3_base, granted_tokens=[A_BAS_CB_ETH])
+    setup = _prepared_sim(web3_base)
     sim, rewards, reward_token = setup.sim, setup.rewards, setup.reward_token
 
     sim.observe("rcm_before", reward_token.balance_of(rewards.address))
@@ -250,10 +205,6 @@ def test_simulate_merkl_wrapper_claim_forwards_unwrapped_token(web3_base):
     log.info("observations=%s", result.observations)
     assert_all_success(result)
 
-    # The fuse was not registered at the pinned block; addRewardFuses did it.
-    assert result.get("fuse_supported_before") is False
-    assert result.get("fuse_supported_after") is True
-
     # KEY regression assertion: the unwrapped aToken must NOT stay on the
     # vault (lingering would inflate share price — it is a market substrate).
     vault_delta = result.get("vault_after") - result.get("vault_before")
@@ -261,10 +212,11 @@ def test_simulate_merkl_wrapper_claim_forwards_unwrapped_token(web3_base):
         f"vault underlying must not grow, delta={vault_delta}"
     )
 
-    # The full claim (modulo aToken rebase rounding) lands on the manager.
+    # The unclaimed remainder (cumulative amount minus what the vault had
+    # already claimed at the pinned block) lands on the manager in full.
     forwarded = result.get("rcm_after") - result.get("rcm_before")
-    assert abs(forwarded - CLAIM_AMOUNT) <= REBASE_TOLERANCE_WEI, (
-        f"forwarded amount mismatch: {forwarded} vs {CLAIM_AMOUNT}"
+    assert abs(forwarded - EXPECTED_FORWARD) <= REBASE_TOLERANCE_WEI, (
+        f"forwarded amount mismatch: {forwarded} vs {EXPECTED_FORWARD}"
     )
 
     # Exactly one forwarding event — for the received aToken.
@@ -272,10 +224,9 @@ def test_simulate_merkl_wrapper_claim_forwards_unwrapped_token(web3_base):
 
 
 def test_simulate_merkl_wrapper_claim_rejects_ungranted_received_token(web3_base):
-    # WRAPPER is intentionally NOT granted on the MERKL market — only the
-    # aToken is — so listing it as a received token must trip the substrate
-    # gate and revert the whole claim.
-    setup = _prepared_sim(web3_base, granted_tokens=[A_BAS_CB_ETH])
+    # Only the aToken is granted on the MERKL market in production, so listing
+    # the WRAPPER as a received token must trip the substrate gate and revert.
+    setup = _prepared_sim(web3_base)
     sim, rewards = setup.sim, setup.rewards
 
     sim.execute_call(call=rewards.claim_rewards([_claim_action([WRAPPER])]))
@@ -296,11 +247,23 @@ def test_simulate_merkl_wrapper_claim_rejects_ungranted_received_token(web3_base
 
 
 def test_simulate_merkl_wrapper_claim_zero_delta_received_token_is_noop(web3_base):
-    # Both received tokens must be granted in ONE grantMarketSubstrates call
-    # (the grant replaces the list). WRAPPER self-unwraps during the claim, so
-    # its balance delta is zero — the fuse must skip it: no transfer, no event.
-    setup = _prepared_sim(web3_base, granted_tokens=[A_BAS_CB_ETH, WRAPPER])
+    # WRAPPER self-unwraps during the claim, so its balance delta is zero —
+    # the fuse must skip it: no transfer, no event. Listing it as a received
+    # token first requires granting it as a MERKL substrate; the grant
+    # replaces the whole list, so pass the aToken and the WRAPPER together
+    # (pranked as the on-chain FUSE_MANAGER_ROLE holder — eth_simulateV1
+    # without validation allows any `from`).
+    setup = _prepared_sim(web3_base)
     sim, rewards = setup.sim, setup.rewards
+
+    sim.add_call(
+        setup.plasma_vault.grant_market_substrates(
+            IporFusionMarkets.MERKL,
+            [address_substrate(token) for token in (A_BAS_CB_ETH, WRAPPER)],
+        ),
+        from_=FUSE_MANAGER_HOLDER,
+        label="grant_market_substrates",
+    )
 
     sim.observe("rcm_wrapper_before", setup.wrapper_token.balance_of(rewards.address))
     sim.observe("rcm_reward_before", setup.reward_token.balance_of(rewards.address))
@@ -321,7 +284,7 @@ def test_simulate_merkl_wrapper_claim_zero_delta_received_token_is_noop(web3_bas
 
     # The positive-delta aToken is forwarded as in the happy path.
     forwarded = result.get("rcm_reward_after") - result.get("rcm_reward_before")
-    assert abs(forwarded - CLAIM_AMOUNT) <= REBASE_TOLERANCE_WEI
+    assert abs(forwarded - EXPECTED_FORWARD) <= REBASE_TOLERANCE_WEI
 
     # Only the positive-delta token emits MerklClaimWrapperFuseRewardsClaimed.
     assert _claimed_event_count(result.execute_logs) == 1
