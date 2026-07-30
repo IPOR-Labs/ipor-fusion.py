@@ -40,13 +40,13 @@ from web3 import Web3
 from ipor_fusion import (
     ERC20,
     AccessManager,
+    MerklClaimWrapperFuse,
     PlasmaVault,
     RewardsManager,
     VaultSimulator,
     Web3Context,
 )
 from ipor_fusion.config.roles import Roles
-from ipor_fusion.fuses import MerklClaimWrapperFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId
 
