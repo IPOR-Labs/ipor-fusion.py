@@ -4,6 +4,7 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
+from importlib.metadata import version
 from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -51,7 +52,18 @@ from ipor_fusion.readers.morpho import MorphoReader
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
 from ipor_fusion.types import MorphoBlueMarketId
 
-mcp = FastMCP("ipor-fusion")
+mcp = FastMCP(
+    "ipor-fusion",
+    instructions=(
+        "Inspection and configuration tools for IPOR Fusion Plasma Vaults. "
+        "Start with config_show / vault_list; vault_info is the "
+        "comprehensive per-vault summary."
+    ),
+    website_url="https://github.com/IPOR-Labs/ipor-fusion.py",
+)
+# FastMCP exposes no version kwarg; left unset, the initialize handshake
+# reports the mcp library's version as serverInfo.version.
+mcp._mcp_server.version = version("ipor-fusion")
 
 
 # ---------------------------------------------------------------------------

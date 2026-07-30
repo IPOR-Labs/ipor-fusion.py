@@ -1,6 +1,7 @@
 """Tests for the MCP server tool definitions (direct SDK import)."""
 
 import asyncio
+import importlib.metadata
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -78,6 +79,17 @@ def _config_with_vault():
         providers={"1": "https://rpc.example.com"},
         vaults=[VaultEntry(address="0xABC", label="Test", chain_id=1)],
     )
+
+
+class TestServerMetadata:
+    def test_handshake_reports_package_version(self):
+        opts = mcp._mcp_server.create_initialization_options()
+        assert opts.server_version == importlib.metadata.version("ipor-fusion")
+
+    def test_handshake_carries_instructions_and_website_url(self):
+        opts = mcp._mcp_server.create_initialization_options()
+        assert opts.instructions
+        assert opts.website_url == "https://github.com/IPOR-Labs/ipor-fusion.py"
 
 
 class TestConfigShow:
