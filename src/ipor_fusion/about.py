@@ -9,11 +9,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from importlib import resources
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import PackageNotFoundError, metadata, version
 from pathlib import Path
 
 _DISTRIBUTION = "ipor-fusion"
 _CHANGELOG_NAME = "CHANGELOG.md"
+_REPOSITORY_LABEL = "repository"
 
 # One heading per release, newest first, e.g. `## v3.5.0 (2026-07-30)`.
 # The date group is optional so a hand-edited heading still parses.
@@ -45,6 +46,23 @@ def package_version() -> str:
         return version(_DISTRIBUTION)
     except PackageNotFoundError:
         return "0.0.0"
+
+
+def repository_url() -> str:
+    """Repository URL from package metadata, or `""` when it is unavailable.
+
+    Keeps pyproject's `[project.urls]` the single source of the URL: the build
+    backend writes each entry into the distribution as `"<label>, <url>"`.
+    """
+    try:
+        entries = metadata(_DISTRIBUTION).get_all("Project-URL") or []
+    except PackageNotFoundError:
+        return ""
+    for entry in entries:
+        label, _, url = str(entry).partition(",")
+        if label.strip().lower() == _REPOSITORY_LABEL:
+            return url.strip()
+    return ""
 
 
 def read_changelog(since_version: str = "") -> list[ChangelogEntry]:

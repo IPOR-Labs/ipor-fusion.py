@@ -6,7 +6,12 @@ from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ipor_fusion import ChangelogEntry, package_version, read_changelog
+from ipor_fusion import (
+    ChangelogEntry,
+    package_version,
+    read_changelog,
+    repository_url,
+)
 from ipor_fusion.about import _changelog_text, _parse_entries, _version_key
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +57,20 @@ def _pyproject_version() -> str:
     return found.group(1)
 
 
+def _pyproject_repository() -> str:
+    """Read project.urls.repository without tomllib (absent on Python 3.10)."""
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    found = re.search(r'^repository = "([^"]+)"', text, re.MULTILINE)
+    assert found, "pyproject.toml has no project.urls.repository"
+    return found.group(1)
+
+
+def _project_urls(*entries: str) -> MagicMock:
+    distribution = MagicMock()
+    distribution.get_all.return_value = list(entries) or None
+    return distribution
+
+
 class TestPackageVersion:
     def test_matches_distribution_metadata(self):
         assert package_version() == importlib.metadata.version("ipor-fusion")
@@ -59,6 +78,40 @@ class TestPackageVersion:
     @patch("ipor_fusion.about.version", side_effect=PackageNotFoundError)
     def test_falls_back_when_not_installed(self, _version):
         assert package_version() == "0.0.0"
+
+
+class TestRepositoryUrl:
+    def test_matches_pyproject(self):
+        assert repository_url() == _pyproject_repository()
+
+    @patch("ipor_fusion.about.metadata")
+    def test_picks_the_repository_entry_among_the_others(self, metadata):
+        metadata.return_value = _project_urls(
+            "homepage, https://ipor.io",
+            "repository, https://github.com/IPOR-Labs/ipor-fusion.py",
+            "documentation, https://docs.ipor.io/",
+        )
+        assert repository_url() == "https://github.com/IPOR-Labs/ipor-fusion.py"
+
+    @patch("ipor_fusion.about.metadata")
+    def test_tolerates_a_capitalized_label(self, metadata):
+        # hatchling writes the label verbatim; other backends title-case it.
+        metadata.return_value = _project_urls("Repository, https://example.test/repo")
+        assert repository_url() == "https://example.test/repo"
+
+    @patch("ipor_fusion.about.metadata")
+    def test_returns_empty_when_no_entry_is_labeled_repository(self, metadata):
+        metadata.return_value = _project_urls("homepage, https://ipor.io")
+        assert repository_url() == ""
+
+    @patch("ipor_fusion.about.metadata")
+    def test_returns_empty_when_the_distribution_declares_no_urls(self, metadata):
+        metadata.return_value = _project_urls()
+        assert repository_url() == ""
+
+    @patch("ipor_fusion.about.metadata", side_effect=PackageNotFoundError)
+    def test_returns_empty_when_not_installed(self, _metadata):
+        assert repository_url() == ""
 
 
 class TestChangelogText:

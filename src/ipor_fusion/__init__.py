@@ -1,4 +1,9 @@
-from ipor_fusion.about import ChangelogEntry, package_version, read_changelog
+from ipor_fusion.about import (
+    ChangelogEntry,
+    package_version,
+    read_changelog,
+    repository_url,
+)
 from ipor_fusion.chains import (
     CHAIN_NAME_TO_ID,
     CHAIN_NAMES,
@@ -145,6 +150,7 @@ __all__ = [
     "ChangelogEntry",
     "package_version",
     "read_changelog",
+    "repository_url",
     "Web3Context",
     "Call",
     "VaultSimulator",
