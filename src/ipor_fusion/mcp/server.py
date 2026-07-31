@@ -114,10 +114,10 @@ def _build_ctx(
 
 
 # Named after the server rather than the data — a deliberate break from the
-# kebab-to-snake naming parity the other tools keep with their CLI
-# counterparts. The initialize handshake never reaches the model, so a tool is
-# the only reliable answer to "which server is this", and version/repository
-# ride along with the changelog.
+# kebab-to-snake naming parity the other tools keep with the CLI, whose sibling
+# command is `fusion changelog`. The initialize handshake never reaches the
+# model, so a tool is the only reliable answer to "which server is this", and
+# version/repository ride along with the changelog.
 @mcp.tool()
 def server_info(
     changelog_since: Annotated[
