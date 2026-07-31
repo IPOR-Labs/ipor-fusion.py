@@ -4,13 +4,13 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
-from importlib.metadata import version
 from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from web3 import Web3
 
+from ipor_fusion.about import package_version, read_changelog, repository_url
 from ipor_fusion.chains import CHAIN_NAMES, ensure_supported_chain
 from ipor_fusion.cli.config_store import (
     FusionConfig,
@@ -39,11 +39,13 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.mcp.models import (
     ActionResult,
+    ChangelogEntryModel,
     ConfigShowResponse,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     OracleMappingResponse,
     RoleAccountsResponse,
+    ServerInfoResponse,
     VaultInfoResponse,
     VaultListEntry,
 )
@@ -59,11 +61,11 @@ mcp = FastMCP(
         "Start with config_show / vault_list; vault_info is the "
         "comprehensive per-vault summary."
     ),
-    website_url="https://github.com/IPOR-Labs/ipor-fusion.py",
+    website_url=repository_url() or None,
 )
 # FastMCP exposes no version kwarg; left unset, the initialize handshake
 # reports the mcp library's version as serverInfo.version.
-mcp._mcp_server.version = version("ipor-fusion")
+mcp._mcp_server.version = package_version()
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +106,39 @@ def _build_ctx(
     if effective_block is not None:
         ctx.default_block = effective_block
     return ctx, effective_block
+
+
+# ---------------------------------------------------------------------------
+# Server tools
+# ---------------------------------------------------------------------------
+
+
+# Named after the server rather than the data — a deliberate break from the
+# kebab-to-snake naming parity the other tools keep with their CLI
+# counterparts. The initialize handshake never reaches the model, so a tool is
+# the only reliable answer to "which server is this", and version/repository
+# ride along with the changelog.
+@mcp.tool()
+def server_info(
+    changelog_since: Annotated[
+        str,
+        Field(
+            description="Return every release newer than this version, e.g. "
+            "'3.1.0'. Expects a version, not a date. Default returns only the "
+            "running version's entry."
+        ),
+    ] = "",
+) -> ServerInfoResponse:
+    """Identify this MCP server and report what changed in its releases."""
+    return ServerInfoResponse(
+        name=mcp.name,
+        version=package_version(),
+        repository=repository_url(),
+        changelog=[
+            ChangelogEntryModel.from_entry(entry)
+            for entry in read_changelog(changelog_since)
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
