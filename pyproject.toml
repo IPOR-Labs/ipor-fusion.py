@@ -143,3 +143,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ipor_fusion"]
+
+# Ship the changelog inside the wheel so `ipor_fusion.about.read_changelog()`
+# reports what the installed version actually contains, offline. Written by
+# semantic-release before `build_command`, so each wheel carries its own entry.
+[tool.hatch.build.targets.wheel.force-include]
+"CHANGELOG.md" = "ipor_fusion/CHANGELOG.md"

@@ -1,6 +1,7 @@
 """Tests for the MCP server tool definitions (direct SDK import)."""
 
 import asyncio
+import importlib.metadata
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,6 +9,7 @@ from web3 import Web3
 
 from ipor_fusion import (
     DOCS,
+    ChangelogEntry,
     ContractNotFoundError,
     NotPlasmaVaultError,
     RoleAccount,
@@ -37,6 +39,7 @@ from ipor_fusion.mcp.server import (
     market_meta_morpho,
     market_morpho_blue,
     mcp,
+    server_info,
     vault_add,
     vault_info,
     vault_list,
@@ -78,6 +81,59 @@ def _config_with_vault():
         providers={"1": "https://rpc.example.com"},
         vaults=[VaultEntry(address="0xABC", label="Test", chain_id=1)],
     )
+
+
+class TestServerMetadata:
+    def test_handshake_reports_package_version(self):
+        opts = mcp._mcp_server.create_initialization_options()
+        assert opts.server_version == importlib.metadata.version("ipor-fusion")
+
+    def test_handshake_carries_instructions_and_website_url(self):
+        opts = mcp._mcp_server.create_initialization_options()
+        assert opts.instructions
+        assert opts.website_url == "https://github.com/IPOR-Labs/ipor-fusion.py"
+
+
+class TestServerInfo:
+    def test_reports_the_server_name(self):
+        # Version and repository are covered by the agreement test below,
+        # which chains to the handshake tests' literals.
+        assert server_info().name == "ipor-fusion"
+
+    def test_handshake_and_tool_agree_on_version_and_repository(self):
+        # Two channels, one source: the handshake the client reads and the
+        # tool the model calls must report the same facts. They encode an
+        # unknown repository differently on purpose — the tool returns "" to
+        # keep its response shape flat, the handshake gets None because an
+        # empty websiteUrl would advertise a link to nowhere — so normalize
+        # before comparing.
+        opts = mcp._mcp_server.create_initialization_options()
+        result = server_info()
+        assert result.version == opts.server_version
+        assert result.repository == (opts.website_url or "")
+
+    def test_default_returns_only_the_running_version(self):
+        result = server_info()
+        assert [entry.version for entry in result.changelog] == [result.version]
+
+    @patch("ipor_fusion.mcp.server.read_changelog", return_value=[])
+    def test_changelog_since_is_passed_through(self, read):
+        server_info(changelog_since="3.1.0")
+        read.assert_called_once_with("3.1.0")
+
+    @patch(
+        "ipor_fusion.mcp.server.read_changelog",
+        return_value=[
+            ChangelogEntry("3.5.0", "2026-07-30", "### Bug Fixes\n\n- **sdk**: Fix"),
+            ChangelogEntry("3.4.1", None, ""),
+        ],
+    )
+    def test_maps_entries_including_a_dateless_empty_release(self, _read):
+        changelog = server_info().changelog
+        assert [(e.version, e.date, e.notes) for e in changelog] == [
+            ("3.5.0", "2026-07-30", "### Bug Fixes\n\n- **sdk**: Fix"),
+            ("3.4.1", None, ""),
+        ]
 
 
 class TestConfigShow:

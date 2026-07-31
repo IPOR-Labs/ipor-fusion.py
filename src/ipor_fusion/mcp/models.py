@@ -33,6 +33,7 @@ from ipor_fusion.field_docs import DOCS
 from ipor_fusion.types import AssetSource, MappingStatus, NodeStatus
 
 if TYPE_CHECKING:
+    from ipor_fusion.about import ChangelogEntry
     from ipor_fusion.core.access import RoleAccount
     from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode
 
@@ -746,3 +747,44 @@ class VaultInfoResponse(_Base):
     reconciliation: Reconciliation
     lending_health: LendingHealth | None = None
     health_check: HealthCheck
+
+
+# ---------------------------------------------------------------------------
+# Server-info models
+# ---------------------------------------------------------------------------
+
+
+class ChangelogEntryModel(_Base):
+    """One release section of the changelog shipped inside the package."""
+
+    version: str = Field(
+        description="Release version, without the changelog heading's leading 'v'."
+    )
+    date: str | None = Field(
+        description="Release date (YYYY-MM-DD); null when the heading carries none."
+    )
+    notes: str = Field(
+        description="Raw markdown for the release, heading excluded; empty "
+        "for a release that carried no entries of its own."
+    )
+
+    @classmethod
+    def from_entry(cls, entry: ChangelogEntry) -> ChangelogEntryModel:
+        return cls(version=entry.version, date=entry.date, notes=entry.notes)
+
+
+class ServerInfoResponse(_Base):
+    """Identity of the running MCP server, plus what changed in its releases."""
+
+    name: str = Field(description="MCP server name as sent in the handshake.")
+    version: str = Field(description="Installed ipor-fusion package version.")
+    repository: str = Field(
+        description="Source repository URL; empty when the package metadata "
+        "declares none."
+    )
+    changelog: list[ChangelogEntryModel] = Field(
+        description="Newest first, and only a slice of the release history: "
+        "the running version's entry alone unless changelog_since asked for "
+        "more. Empty when nothing matches: no section for the running "
+        "version, or no release newer than changelog_since."
+    )

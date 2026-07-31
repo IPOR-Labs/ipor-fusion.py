@@ -1,5 +1,9 @@
-from importlib.metadata import PackageNotFoundError, version
-
+from ipor_fusion.about import (
+    ChangelogEntry,
+    package_version,
+    read_changelog,
+    repository_url,
+)
 from ipor_fusion.chains import (
     CHAIN_NAME_TO_ID,
     CHAIN_NAMES,
@@ -139,13 +143,14 @@ from ipor_fusion.types import (
     TokenId,
 )
 
-try:
-    __version__ = version("ipor_fusion")
-except PackageNotFoundError:
-    __version__ = "0.0.0"
+__version__ = package_version()
 
 __all__ = [
     "__version__",
+    "ChangelogEntry",
+    "package_version",
+    "read_changelog",
+    "repository_url",
     "Web3Context",
     "Call",
     "VaultSimulator",
