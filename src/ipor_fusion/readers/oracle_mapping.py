@@ -37,8 +37,8 @@ Design:
   bad asset never aborts the whole map. The pure logic (classification,
   recursion, event collapse) takes a reader and is unit-testable with a fake.
 - SDK primitives are reused for the reads that already exist
-  (``PriceOracleMiddleware``, ``ERC20``, ``PlasmaVault``); only the feed-probe
-  reads and ``getConfiguredAssets`` — which they lack — are added here.
+  (``PriceOracleMiddleware``, ``PriceOracleMiddlewareManager``, ``ERC20``,
+  ``PlasmaVault``); only the feed-probe reads are added here.
 
 Adding a feed type:
 
@@ -73,7 +73,7 @@ from web3 import Web3
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.oracle import PriceOracleMiddleware
+from ipor_fusion.core.oracle import PriceOracleMiddleware, PriceOracleMiddlewareManager
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.types import AssetSource, MappingStatus, NodeStatus, Price
 
@@ -193,20 +193,6 @@ def _addr(value: object) -> ChecksumAddress:
     return Web3.to_checksum_address(value)  # type: ignore[arg-type]
 
 
-class _OracleManager(ContractWrapper):
-    def get_configured_assets(self) -> Call[list[ChecksumAddress]]:
-        return self._view(
-            "getConfiguredAssets()",
-            output_types=["address[]"],
-            decoder=lambda lst: [_addr(a) for a in lst],
-        )
-
-    def get_price_oracle_middleware(self) -> Call[ChecksumAddress]:
-        return self._view(
-            "getPriceOracleMiddleware()", output_types=["address"], decoder=_addr
-        )
-
-
 class _Erc4626Feed(ContractWrapper):
     def vault(self) -> Call[ChecksumAddress]:
         return self._view("vault()", output_types=["address"], decoder=_addr)
@@ -294,7 +280,7 @@ class OracleMappingReader:
         self._ctx = ctx
         self._oracle_addr = oracle
         self._oracle = PriceOracleMiddleware(ctx, oracle)
-        self._manager = _OracleManager(ctx, oracle)
+        self._manager = PriceOracleMiddlewareManager(ctx, oracle)
 
     @staticmethod
     def _safe(call: Call[Any]) -> Any:

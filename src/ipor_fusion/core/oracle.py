@@ -74,3 +74,68 @@ class PriceOracleMiddleware(ContractWrapper):
                 contract_address=self._address, topics=[event_signature_hash]
             )
         )
+
+
+class PriceOracleMiddlewareManager(ContractWrapper):
+    """Per-vault price-source overrides (`PriceOracleMiddlewareManager`).
+
+    A zero source for an asset is not a missing price: it means "no override",
+    so the read falls through to the global `PriceOracleMiddleware` this
+    manager points at. Deliberately a sibling of `PriceOracleMiddleware` rather
+    than a subclass — the two contracts share read signatures but emit
+    different events (`AssetPriceSourceAdded`/`Removed` here), and the manager
+    has no feed registry. Enumerate its overrides with `get_configured_assets`
+    plus `get_source_of_asset_price`.
+    """
+
+    def set_assets_price_sources(
+        self, assets: list[ChecksumAddress], sources: list[ChecksumAddress]
+    ) -> Call[None]:
+        """PRICE_ORACLE_MIDDLEWARE_MANAGER-only: point each asset at its price
+        source. `sources[i]` overrides `assets[i]`; the contract rejects empty
+        and length-mismatched arrays."""
+        return self._write(
+            "setAssetsPriceSources(address[],address[])", list(assets), list(sources)
+        )
+
+    def remove_assets_price_sources(self, assets: list[ChecksumAddress]) -> Call[None]:
+        """PRICE_ORACLE_MIDDLEWARE_MANAGER-only inverse of
+        `set_assets_price_sources`: drops the override, so the assets fall back
+        to the global middleware."""
+        return self._write("removeAssetsPriceSources(address[])", list(assets))
+
+    def get_source_of_asset_price(
+        self, asset: ChecksumAddress
+    ) -> Call[ChecksumAddress]:
+        """The override source, or the zero address when there is none."""
+        return self._view(
+            "getSourceOfAssetPrice(address)",
+            asset,
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
+    def get_asset_price(self, asset_address: ChecksumAddress) -> Call[Price]:
+        """Effective price, normalized to WAD regardless of what the feed reports."""
+        return self._view(
+            "getAssetPrice(address)",
+            asset_address,
+            output_types=["uint256", "uint256"],
+            decoder=partial(_price_decoder, asset_address),
+        )
+
+    def get_configured_assets(self) -> Call[list[ChecksumAddress]]:
+        """Assets carrying an override on this manager."""
+        return self._view(
+            "getConfiguredAssets()",
+            output_types=["address[]"],
+            decoder=lambda lst: [Web3.to_checksum_address(a) for a in lst],
+        )
+
+    def get_price_oracle_middleware(self) -> Call[ChecksumAddress]:
+        """The global middleware that zero-source assets delegate to."""
+        return self._view(
+            "getPriceOracleMiddleware()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )

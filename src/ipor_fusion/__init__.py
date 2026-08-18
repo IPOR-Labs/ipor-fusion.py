@@ -27,7 +27,11 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
-from ipor_fusion.core.oracle import AssetPriceSource, PriceOracleMiddleware
+from ipor_fusion.core.oracle import (
+    AssetPriceSource,
+    PriceOracleMiddleware,
+    PriceOracleMiddlewareManager,
+)
 from ipor_fusion.core.plasma_vault import (
     BalanceFuse,
     ManagementFeeData,
@@ -185,6 +189,7 @@ __all__ = [
     "PendingRequestsInfo",
     "BalanceFuse",
     "PriceOracleMiddleware",
+    "PriceOracleMiddlewareManager",
     "AssetPriceSource",
     "FuseAction",
     "Fuse",

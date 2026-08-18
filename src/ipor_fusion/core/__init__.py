@@ -8,7 +8,11 @@ from ipor_fusion.core.fee_manager import (
     RecipientFee,
 )
 from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInstance
-from ipor_fusion.core.oracle import AssetPriceSource, PriceOracleMiddleware
+from ipor_fusion.core.oracle import (
+    AssetPriceSource,
+    PriceOracleMiddleware,
+    PriceOracleMiddlewareManager,
+)
 from ipor_fusion.core.plasma_vault import (
     BalanceFuse,
     ManagementFeeData,
@@ -42,6 +46,7 @@ __all__ = [
     "PerformanceFeeData",
     "ManagementFeeData",
     "PriceOracleMiddleware",
+    "PriceOracleMiddlewareManager",
     "AssetPriceSource",
     "FusionFactory",
     "FusionInstance",
