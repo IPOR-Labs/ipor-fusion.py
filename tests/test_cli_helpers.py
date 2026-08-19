@@ -62,10 +62,6 @@ from ipor_fusion.cli.vault_rendering import (
     _format_usd,
     _substrate_details,
 )
-from ipor_fusion.cli.vault_substrate import (
-    _format_substrate,
-    _market_name,
-)
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -75,6 +71,7 @@ from ipor_fusion.readers.lending_health import (
     VaultLendingHealth,
 )
 from ipor_fusion.readers.morpho import MorphoPositionBreakdown
+from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import Amount, MorphoBlueMarketId
 
 VALID_ADDR_LOWER = "0x" + "ab" * 20
@@ -214,13 +211,13 @@ class TestFormatSubstrate:
 
     def test_no_market_returns_raw_hex(self):
         raw = bytes.fromhex("ff" * 32)
-        info = _format_substrate(raw)
+        info = decode_substrate(raw)
         assert info.raw_hex == "0x" + "ff" * 32
         assert info.address == ""
 
     def test_wrong_length(self):
         raw = bytes.fromhex("aabb")
-        info = _format_substrate(raw)
+        info = decode_substrate(raw)
         assert info.raw_hex == "0xaabb"
         assert info.is_error is True
 
@@ -232,7 +229,7 @@ class TestFormatSubstratePerMarket:
     def test_aave_v3_plain_address(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex("00" * 12 + addr_hex)
-        info = _format_substrate(raw, market_id=1)
+        info = decode_substrate(raw, market_id=1)
         assert info.address == f"0x{addr_hex}"
         assert info.type_label == ""
 
@@ -240,14 +237,14 @@ class TestFormatSubstratePerMarket:
     def test_ebisu_zapper(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex("00" * 11 + "01" + addr_hex)
-        info = _format_substrate(raw, market_id=39)
+        info = decode_substrate(raw, market_id=39)
         assert info.address == f"0x{addr_hex}"
         assert info.type_label == "ZAPPER"
 
     def test_ebisu_registry(self):
         addr_hex = "cd" * 20
         raw = bytes.fromhex("00" * 11 + "02" + addr_hex)
-        info = _format_substrate(raw, market_id=39)
+        info = decode_substrate(raw, market_id=39)
         assert info.address == f"0x{addr_hex}"
         assert info.type_label == "REGISTRY"
 
@@ -255,64 +252,64 @@ class TestFormatSubstratePerMarket:
     def test_midas_m_token(self):
         addr_hex = "cd" * 20
         raw = bytes.fromhex("00" * 11 + "01" + addr_hex)
-        info = _format_substrate(raw, market_id=45)
+        info = decode_substrate(raw, market_id=45)
         assert info.address == f"0x{addr_hex}"
         assert info.type_label == "M_TOKEN"
 
     def test_midas_deposit_vault(self):
         addr_hex = "cd" * 20
         raw = bytes.fromhex("00" * 11 + "02" + addr_hex)
-        info = _format_substrate(raw, market_id=45)
+        info = decode_substrate(raw, market_id=45)
         assert info.type_label == "DEPOSIT_VAULT"
 
     # Balancer (type<<160)
     def test_balancer_gauge(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex("00" * 11 + "01" + addr_hex)
-        info = _format_substrate(raw, market_id=36)
+        info = decode_substrate(raw, market_id=36)
         assert info.type_label == "GAUGE"
 
     def test_balancer_pool(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex("00" * 11 + "02" + addr_hex)
-        info = _format_substrate(raw, market_id=36)
+        info = decode_substrate(raw, market_id=36)
         assert info.type_label == "POOL"
 
     # Aave V4 (type<<248)
     def test_aave_v4_asset(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex("01" + "00" * 11 + addr_hex)
-        info = _format_substrate(raw, market_id=44)
+        info = decode_substrate(raw, market_id=49)
         assert info.address == f"0x{addr_hex}"
         assert info.type_label == "Asset"
 
     def test_aave_v4_spoke(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex("02" + "00" * 11 + addr_hex)
-        info = _format_substrate(raw, market_id=44)
+        info = decode_substrate(raw, market_id=49)
         assert info.type_label == "Spoke"
 
     # Odos (type<<248)
     def test_odos_token(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex("01" + "00" * 11 + addr_hex)
-        info = _format_substrate(raw, market_id=42)
+        info = decode_substrate(raw, market_id=42)
         assert info.address == f"0x{addr_hex}"
         assert info.type_label == "Token"
 
     def test_odos_slippage(self):
         raw = bytes.fromhex("02" + "00" * 27 + "000003e8")
-        info = _format_substrate(raw, market_id=42)
+        info = decode_substrate(raw, market_id=42)
         assert info.type_label == "Slippage"
         assert info.address == ""
-        assert info.extra["value"] == "1000"
+        assert info.extra["slippage"] == "1000"
 
     # Morpho (raw bytes32)
     def test_morpho_market_id(self):
         raw = bytes.fromhex(
             "32e253d33f1594a67fc6ef51bf7a39cc4bf2d14904998dee769706fcde489ed9"
         )
-        info = _format_substrate(raw, market_id=14)
+        info = decode_substrate(raw, market_id=14)
         assert info.raw_hex.startswith("0x32e253")
         assert info.type_label == "morpho_market_id"
         assert info.address == ""
@@ -322,7 +319,7 @@ class TestFormatSubstratePerMarket:
         addr_hex = "ab" * 20
         selector = "12345678"
         raw = bytes.fromhex(addr_hex + selector + "00" * 8)
-        info = _format_substrate(raw, market_id=38)
+        info = decode_substrate(raw, market_id=38)
         assert info.address == f"0x{addr_hex}"
         assert info.extra["selector"] == f"0x{selector}"
 
@@ -330,7 +327,7 @@ class TestFormatSubstratePerMarket:
     def test_dolomite(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex(addr_hex + "05" + "01" + "00" * 10)
-        info = _format_substrate(raw, market_id=46)
+        info = decode_substrate(raw, market_id=47)
         assert info.address == f"0x{addr_hex}"
         assert info.extra["sub_account_id"] == "5"
         assert info.extra["can_borrow"] == "True"
@@ -339,7 +336,7 @@ class TestFormatSubstratePerMarket:
     def test_euler_v2_supply_only(self):
         addr_hex = "ab" * 20
         raw = bytes.fromhex(addr_hex + "00" + "00" + "00" + "00" * 9)
-        info = _format_substrate(raw, market_id=11)
+        info = decode_substrate(raw, market_id=11)
         assert info.address == f"0x{addr_hex}"
         assert info.extra["is_collateral"] == "False"
         assert info.extra["can_borrow"] == "False"
@@ -348,7 +345,7 @@ class TestFormatSubstratePerMarket:
     def test_euler_v2_collateral_borrow_subaccount(self):
         addr_hex = "cd" * 20
         raw = bytes.fromhex(addr_hex + "01" + "01" + "07" + "00" * 9)
-        info = _format_substrate(raw, market_id=11)
+        info = decode_substrate(raw, market_id=11)
         assert info.address == f"0x{addr_hex}"
         assert info.extra["is_collateral"] == "True"
         assert info.extra["can_borrow"] == "True"
@@ -357,13 +354,13 @@ class TestFormatSubstratePerMarket:
     # Unknown market — raw hex with no_decoder label
     def test_unknown_market(self):
         raw = bytes.fromhex("ff" * 32)
-        info = _format_substrate(raw, market_id=99999)
+        info = decode_substrate(raw, market_id=99999)
         assert info.raw_hex == "0x" + "ff" * 32
         assert "no_decoder" in info.type_label
 
     def test_non_address_32_bytes(self):
         raw = bytes.fromhex("ff" * 32)
-        info = _format_substrate(raw)
+        info = decode_substrate(raw)
         assert info.raw_hex == "0x" + "ff" * 32
         assert info.address == ""
 
@@ -371,11 +368,11 @@ class TestFormatSubstratePerMarket:
 class TestMarketName:
     def test_known_market(self):
         assert (
-            _market_name(IporFusionMarkets.ERC20_VAULT_BALANCE) == "ERC20_VAULT_BALANCE"
+            market_name(IporFusionMarkets.ERC20_VAULT_BALANCE) == "ERC20_VAULT_BALANCE"
         )
 
     def test_unknown_market(self):
-        assert _market_name(999_999_999) == "UNKNOWN"
+        assert market_name(999_999_999) == "UNKNOWN"
 
 
 class TestResolveChainId:

@@ -20,6 +20,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.morpho import MorphoReader
+from ipor_fusion.substrates import market_name
 from ipor_fusion.types import MorphoBlueMarketId
 
 _logger = logging.getLogger(__name__)
@@ -288,13 +289,11 @@ def fetch_vault_lending_health(  # noqa: C901
         balance_fuse_market_ids: List of market IDs from balance fuses.
         market_substrates: Map of market_id -> list of raw substrate bytes.
     """
-    from ipor_fusion.cli.vault_substrate import _market_name  # avoid circular
-
     morpho_markets: list[tuple[int, str, MorphoBlueMarketId]] = []
     aave_market_ids: list[tuple[int, str]] = []
 
     for mid in balance_fuse_market_ids:
-        name = _market_name(mid)
+        name = market_name(mid)
         if mid in MORPHO_MARKET_IDS:
             substrates = market_substrates.get(mid, [])
             for sub in substrates:

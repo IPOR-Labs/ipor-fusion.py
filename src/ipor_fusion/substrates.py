@@ -1,3 +1,15 @@
+"""Public per-market decoding of PlasmaVault bytes32 market substrates.
+
+Each Fusion market stores its substrate grants as raw ``bytes32`` values whose
+internal layout is market-specific (plain padded address, typed structs,
+Morpho market ids, ...). This module is the canonical decoder registry used by
+the CLI/MCP rendering and importable by external services (e.g. the fusion
+registry) via :func:`decode_substrate` (re-exported from :mod:`ipor_fusion`).
+
+Encodings are sourced from the Solidity fuse libraries in the ipor-fusion
+contracts repo; every non-trivial decoder cites its library.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -7,7 +19,7 @@ from ipor_fusion.market_ids import IporFusionMarkets
 
 
 @dataclass
-class _SubstrateInfo:
+class SubstrateInfo:
     address: str = ""
     raw_hex: str = ""
     type_label: str = ""
@@ -25,55 +37,55 @@ class _SubstrateInfo:
 #   Slippage variant: [2 type chars][62 value chars]
 
 
-def _decode_type_lshift160(hex_str: str, types: dict[int, str]) -> _SubstrateInfo:
+def _decode_type_lshift160(hex_str: str, types: dict[int, str]) -> SubstrateInfo:
     """Decode type<<160 | address (Ebisu, Midas, Balancer, Velodrome)."""
     type_byte = int(hex_str[22:24], 16)
     addr = f"0x{hex_str[24:]}"
     label = types.get(type_byte, f"type={type_byte}")
-    return _SubstrateInfo(address=addr, type_label=label)
+    return SubstrateInfo(address=addr, type_label=label)
 
 
-def _decode_type_lshift248(hex_str: str, types: dict[int, str]) -> _SubstrateInfo:
+def _decode_type_lshift248(hex_str: str, types: dict[int, str]) -> SubstrateInfo:
     """Decode type<<248 | address_or_value (Odos, Velora, UTS, Aave V4)."""
     type_byte = int(hex_str[0:2], 16)
     if (label := types.get(type_byte, f"type={type_byte}")) == "Slippage":
         value = int(hex_str[2:], 16)
-        return _SubstrateInfo(
-            raw_hex=f"0x{hex_str}", type_label=label, extra={"value": str(value)}
+        return SubstrateInfo(
+            raw_hex=f"0x{hex_str}", type_label=label, extra={"slippage": str(value)}
         )
     addr = f"0x{hex_str[24:]}"
-    return _SubstrateInfo(address=addr, type_label=label)
+    return SubstrateInfo(address=addr, type_label=label)
 
 
-def _decode_plain_address(hex_str: str) -> _SubstrateInfo:
+def _decode_plain_address(hex_str: str) -> SubstrateInfo:
     """Decode zero-padded address: 12 zero bytes + 20 address bytes."""
-    return _SubstrateInfo(address=f"0x{hex_str[24:]}")
+    return SubstrateInfo(address=f"0x{hex_str[24:]}")
 
 
-def _decode_morpho(hex_str: str) -> _SubstrateInfo:
+def _decode_morpho(hex_str: str) -> SubstrateInfo:
     """Raw bytes32 Morpho market ID — no structure."""
-    return _SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="morpho_market_id")
+    return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="morpho_market_id")
 
 
-def _decode_enso(hex_str: str) -> _SubstrateInfo:
+def _decode_enso(hex_str: str) -> SubstrateInfo:
     """Decode address<<96 | selector<<64 (Enso)."""
     addr = f"0x{hex_str[0:40]}"
     selector = f"0x{hex_str[40:48]}"
-    return _SubstrateInfo(address=addr, extra={"selector": selector})
+    return SubstrateInfo(address=addr, extra={"selector": selector})
 
 
-def _decode_dolomite(hex_str: str) -> _SubstrateInfo:
+def _decode_dolomite(hex_str: str) -> SubstrateInfo:
     """Decode asset<<96 | subAccountId<<88 | canBorrow<<80 (Dolomite)."""
     addr = f"0x{hex_str[0:40]}"
     sub_account_id = int(hex_str[40:42], 16)
     can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
-    return _SubstrateInfo(
+    return SubstrateInfo(
         address=addr,
         extra={"sub_account_id": str(sub_account_id), "can_borrow": str(can_borrow)},
     )
 
 
-def _decode_euler_v2(hex_str: str) -> _SubstrateInfo:
+def _decode_euler_v2(hex_str: str) -> SubstrateInfo:
     """Decode eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72.
 
     Source: EulerFuseLib.substrateToBytes32 — address occupies the high 20 bytes
@@ -85,7 +97,7 @@ def _decode_euler_v2(hex_str: str) -> _SubstrateInfo:
     is_collateral = (int(hex_str[40:42], 16) & 0x01) == 1
     can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
     sub_account = f"0x{hex_str[44:46]}"
-    return _SubstrateInfo(
+    return SubstrateInfo(
         address=addr,
         extra={
             "is_collateral": str(is_collateral),
@@ -95,12 +107,45 @@ def _decode_euler_v2(hex_str: str) -> _SubstrateInfo:
     )
 
 
+def _decode_async_action(hex_str: str) -> SubstrateInfo:
+    """Decode AsyncActionFuse typed substrates.
+
+    Source: AsyncActionFuseLib.sol — layout [substrateType 1 byte | data 31 bytes]:
+    - ALLOWED_AMOUNT_TO_OUTSIDE (0): data = asset<<88 | uint88 amount, so the
+      asset address sits directly after the type byte and the cap amount (in
+      token decimals) is baked into the substrate key itself.
+    - ALLOWED_TARGETS (1): data = target<<32 | bytes4 selector (7 high bytes
+      of the data are zero).
+    - ALLOWED_EXIT_SLIPPAGE (2): data = uint248 slippage, WAD (1e18 = 100%).
+    """
+    type_byte = int(hex_str[0:2], 16)
+    if type_byte == 0:
+        return SubstrateInfo(
+            address=f"0x{hex_str[2:42]}",
+            type_label="ALLOWED_AMOUNT_TO_OUTSIDE",
+            extra={"amount": str(int(hex_str[42:64], 16))},
+        )
+    if type_byte == 1:
+        return SubstrateInfo(
+            address=f"0x{hex_str[16:56]}",
+            type_label="ALLOWED_TARGETS",
+            extra={"selector": f"0x{hex_str[56:64]}"},
+        )
+    if type_byte == 2:
+        return SubstrateInfo(
+            raw_hex=f"0x{hex_str}",
+            type_label="ALLOWED_EXIT_SLIPPAGE",
+            extra={"slippage": str(int(hex_str[2:64], 16))},
+        )
+    return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=f"type={type_byte}")
+
+
 # Market ID → decoder function.  Markets not listed here get raw hex output.
-_SUBSTRATE_DECODERS: dict[int, Callable[[str], _SubstrateInfo]] = {}
+_SUBSTRATE_DECODERS: dict[int, Callable[[str], SubstrateInfo]] = {}
 
 
 def _register_markets(
-    market_ids: list[int], decoder: Callable[[str], _SubstrateInfo]
+    market_ids: list[int], decoder: Callable[[str], SubstrateInfo]
 ) -> None:
     for mid in market_ids:
         _SUBSTRATE_DECODERS[mid] = decoder
@@ -138,8 +183,7 @@ _register_markets(
         34,
         35,
         37,
-        40,
-        47,
+        46,  # NAPIER — isSubstrateAsAssetGranted, plain asset addresses
         *range(100_001, 100_021),  # ERC4626_0001 .. ERC4626_0020
     ],
     _decode_plain_address,
@@ -178,9 +222,10 @@ _register_markets(
     [32],
     lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "Gauge", 2: "Pool"}),
 )
-# Aave V4
+# Aave V4 (id 49 per IporFusionMarkets.sol; 44 is SPARK_LEND, which has no
+# fuse of its own and stays undecoded rather than guessed)
 _register_markets(
-    [44],
+    [49],
     lambda h: _decode_type_lshift248(h, {0: "Undefined", 1: "Asset", 2: "Spoke"}),
 )
 # Odos
@@ -202,10 +247,12 @@ _register_markets(
 )
 # Enso
 _register_markets([38], _decode_enso)
-# Dolomite
-_register_markets([46], _decode_dolomite)
+# Dolomite (id 47 per IporFusionMarkets.sol)
+_register_markets([47], _decode_dolomite)
 # Euler V2 (eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72)
 _register_markets([11], _decode_euler_v2)
+# Async Action (typed: amount-to-outside / target+selector / exit slippage)
+_register_markets([40], _decode_async_action)
 
 
 def _build_market_lookup() -> dict[int, str]:
@@ -221,40 +268,51 @@ def _build_market_lookup() -> dict[int, str]:
 _MARKET_LOOKUP: dict[int, str] = _build_market_lookup()
 
 
-def _market_name(market_id: int) -> str:
+def market_name(market_id: int) -> str:
     return _MARKET_LOOKUP.get(market_id, "UNKNOWN")
 
 
 _UINT256_MAX = 2**256 - 1
 
 
-def _format_market_label(market_id: int) -> str:
+def format_market_label(market_id: int) -> str:
     """Render a market id as ``NAME (id)`` for display.
 
     Special-cases the ``uint256.max`` sentinel used by burn-fee fuses
     (ZERO_BALANCE_MARKET) — printing the full 78-digit number is noisy.
     """
     if market_id == _UINT256_MAX:
-        name = _market_name(market_id)
+        name = market_name(market_id)
         return f"{name} (uint256.max)" if name != "UNKNOWN" else "uint256.max"
-    label = _market_name(market_id)
+    label = market_name(market_id)
     return f"{label} ({market_id})" if label != "UNKNOWN" else str(market_id)
 
 
-def _format_substrate(raw: bytes, market_id: int | None = None) -> _SubstrateInfo:
+def decode_substrate(raw: bytes | str, market_id: int | None = None) -> SubstrateInfo:
+    """Decode one bytes32 substrate in the context of ``market_id``.
+
+    ``raw`` is the 32-byte value either as ``bytes`` or as a hex string
+    (``0x``-prefixed or bare). Anything that is not exactly 32 bytes comes
+    back as ``is_error=True``; a market without a registered decoder comes
+    back raw with a ``no_decoder(NAME)`` label — never a guessed address.
+    """
+    if isinstance(raw, str):
+        try:
+            raw = bytes.fromhex(raw.removeprefix("0x"))
+        except ValueError:
+            return SubstrateInfo(raw_hex=raw, is_error=True)
     hex_str = raw.hex()
     if len(hex_str) != 64:
-        return _SubstrateInfo(raw_hex=f"0x{hex_str}", is_error=True)
+        return SubstrateInfo(raw_hex=f"0x{hex_str}", is_error=True)
 
     if market_id is not None:
         if decoder := _SUBSTRATE_DECODERS.get(market_id):
             return decoder(hex_str)
         # Known-length but no decoder — show raw with warning
-        market_name = _market_name(market_id)
-        return _SubstrateInfo(
+        return SubstrateInfo(
             raw_hex=f"0x{hex_str}",
-            type_label=f"no_decoder({market_name})",
+            type_label=f"no_decoder({market_name(market_id)})",
         )
 
     # No market context — show raw hex
-    return _SubstrateInfo(raw_hex=f"0x{hex_str}")
+    return SubstrateInfo(raw_hex=f"0x{hex_str}")

@@ -1,0 +1,131 @@
+"""Tests for the public substrate decode API (ipor_fusion.substrates).
+
+The ASYNC_ACTION fixtures are the live substrate set granted on Ethereum
+mainnet by tx 0x9321732ec456e44a46d6f10ba9eee956333c13f5a45fec3bd242218ce8c3ce93
+(TESS USDe sUSDe Loop Vault, market 40, 2026-08-19).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from ipor_fusion.substrates import SubstrateInfo, decode_substrate
+
+SUSDE = "0x9d39a5de30e57443bff2a8307a4256c8797a3497"
+USDE = "0x4c9edd5852cd905f086c759e8383e09bff1e68b3"
+
+ASYNC_AMOUNT_TO_OUTSIDE = (
+    "0x009d39a5de30e57443bff2a8307a4256c8797a349701a784379d99db42000000"
+)
+ASYNC_TARGET_COOLDOWN_SHARES = (
+    "0x01000000000000009d39a5de30e57443bff2a8307a4256c8797a34979343d9e1"
+)
+ASYNC_TARGET_UNSTAKE_USDE = (
+    "0x01000000000000004c9edd5852cd905f086c759e8383e09bff1e68b3f2888dbb"
+)
+ASYNC_EXIT_SLIPPAGE = (
+    "0x02000000000000000000000000000000000000000000000000038d7ea4c68000"
+)
+
+
+def test_async_action_allowed_amount_to_outside():
+    info = decode_substrate(ASYNC_AMOUNT_TO_OUTSIDE, market_id=40)
+    assert info.type_label == "ALLOWED_AMOUNT_TO_OUTSIDE"
+    assert info.address == SUSDE
+    assert info.extra == {"amount": str(2_000_000 * 10**18)}
+    assert not info.is_error
+
+
+def test_async_action_allowed_targets():
+    info = decode_substrate(ASYNC_TARGET_COOLDOWN_SHARES, market_id=40)
+    assert info.type_label == "ALLOWED_TARGETS"
+    assert info.address == SUSDE
+    assert info.extra == {"selector": "0x9343d9e1"}  # cooldownShares(uint256)
+
+    info = decode_substrate(ASYNC_TARGET_UNSTAKE_USDE, market_id=40)
+    assert info.address == USDE
+    assert info.extra == {"selector": "0xf2888dbb"}  # unstake(address)
+
+
+def test_async_action_allowed_exit_slippage():
+    info = decode_substrate(ASYNC_EXIT_SLIPPAGE, market_id=40)
+    assert info.type_label == "ALLOWED_EXIT_SLIPPAGE"
+    assert info.address == ""
+    assert info.extra == {"slippage": str(10**15)}  # 0.1% WAD
+
+
+def test_async_action_unknown_type_byte_falls_back_to_raw():
+    raw = "0x07" + "00" * 31
+    info = decode_substrate(raw, market_id=40)
+    assert info.type_label == "type=7"
+    assert info.raw_hex == raw
+    assert info.address == ""
+
+
+def test_async_action_not_decoded_as_plain_address():
+    """Regression: market 40 used to run through the plain-address decoder,
+    rendering the low 20 bytes (amount tail included) as a bogus address."""
+    info = decode_substrate(ASYNC_AMOUNT_TO_OUTSIDE, market_id=40)
+    assert info.address != "0x" + ASYNC_AMOUNT_TO_OUTSIDE[-40:]
+
+
+def test_bytes_and_hex_str_inputs_are_equivalent():
+    raw_hex = ASYNC_AMOUNT_TO_OUTSIDE
+    from_bytes = decode_substrate(bytes.fromhex(raw_hex[2:]), market_id=40)
+    from_prefixed = decode_substrate(raw_hex, market_id=40)
+    from_bare = decode_substrate(raw_hex[2:], market_id=40)
+    assert from_bytes == from_prefixed == from_bare
+
+
+def test_plain_address_market():
+    raw = "0x" + "00" * 12 + SUSDE[2:]
+    info = decode_substrate(raw, market_id=1)
+    assert info == SubstrateInfo(address=SUSDE)
+
+
+def test_morpho_market_is_raw():
+    raw = "0x" + "ab" * 32
+    info = decode_substrate(raw, market_id=19)
+    assert info.type_label == "morpho_market_id"
+    assert info.raw_hex == raw
+
+
+def test_market_without_decoder_is_labelled_not_guessed():
+    info = decode_substrate("0x" + "11" * 32, market_id=31)
+    assert info.address == ""
+    assert info.type_label == "no_decoder(VELODROME_SUPERCHAIN)"
+
+
+def test_no_market_context_returns_raw():
+    info = decode_substrate("0x" + "22" * 32)
+    assert info == SubstrateInfo(raw_hex="0x" + "22" * 32)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["0x1234", "0x" + "00" * 33, "not-hex", b"\x00" * 31],
+)
+def test_wrong_length_or_malformed_input_is_error(bad: str | bytes):
+    assert decode_substrate(bad, market_id=1).is_error
+
+
+def test_market_id_registrations_follow_ipor_fusion_markets_sol():
+    """Regression for stale registrations: DOLOMITE=47 (not 46), NAPIER=46
+    (plain assets), AAVE_V4=49 (44 is SPARK_LEND, no substrate semantics)."""
+    dolomite = "0x" + SUSDE[2:] + "0201" + "00" * 10
+    info = decode_substrate(dolomite, market_id=47)
+    assert info.address == SUSDE
+    assert info.extra == {"sub_account_id": "2", "can_borrow": "True"}
+
+    napier = "0x" + "00" * 12 + SUSDE[2:]
+    assert decode_substrate(napier, market_id=46) == SubstrateInfo(address=SUSDE)
+
+    aave_v4_spoke = "0x02" + "00" * 11 + SUSDE[2:]
+    info = decode_substrate(aave_v4_spoke, market_id=49)
+    assert info.type_label == "Spoke"
+    assert info.address == SUSDE
+
+    assert (
+        decode_substrate("0x" + "33" * 32, market_id=44).type_label
+        == "no_decoder(SPARK_LEND)"
+    )

@@ -123,6 +123,12 @@ from ipor_fusion.readers import (
     build_oracle_mapping,
     fetch_vault_lending_health,
 )
+from ipor_fusion.substrates import (
+    SubstrateInfo,
+    decode_substrate,
+    format_market_label,
+    market_name,
+)
 from ipor_fusion.types import (
     MAX_UINT256,
     Amount,
@@ -224,6 +230,10 @@ __all__ = [
     "euler_substrate",
     "Roles",
     "IporFusionMarkets",
+    "SubstrateInfo",
+    "decode_substrate",
+    "format_market_label",
+    "market_name",
     "DOCS",
     "ContractNotFoundError",
     "IporFusionError",
