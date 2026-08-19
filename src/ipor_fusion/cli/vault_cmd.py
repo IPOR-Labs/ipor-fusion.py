@@ -45,11 +45,6 @@ from ipor_fusion.cli.vault_rendering import (
     _print_table,
     _substrate_details,
 )
-from ipor_fusion.cli.vault_substrate import (
-    _format_market_label,
-    _format_substrate,
-    _market_name,
-)
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import (
     AccessManager,
@@ -74,6 +69,11 @@ from ipor_fusion.readers.oracle_mapping import (
     OracleNode,
     OraclePrice,
     build_oracle_mapping,
+)
+from ipor_fusion.substrates import (
+    decode_substrate,
+    format_market_label,
+    market_name,
 )
 
 
@@ -640,7 +640,7 @@ def _print_lending_health(  # noqa: C901
     prices = data.token_prices_usd or {}
 
     for ipor_mid, positions in (data.morpho_positions or {}).items():
-        click.echo(f"  {_format_market_label(ipor_mid)}:")
+        click.echo(f"  {format_market_label(ipor_mid)}:")
         for pb in positions:
             coll_sym = _resolve_token_symbol(ctx, pb.collateral_token) or "?"
             loan_sym = _resolve_token_symbol(ctx, pb.loan_token) or "?"
@@ -660,7 +660,7 @@ def _print_lending_health(  # noqa: C901
                 _print_health_lines(m, indent="      ")
 
     for ipor_mid, aave_positions in (data.aave_positions or {}).items():
-        click.echo(f"  {_format_market_label(ipor_mid)}:")
+        click.echo(f"  {format_market_label(ipor_mid)}:")
         for ab in aave_positions:
             asset_symbol = _resolve_token_symbol(ctx, ab.asset) or "?"
             click.echo(f"    asset {ab.asset} ({asset_symbol}):")
@@ -681,12 +681,12 @@ def _print_lending_health(  # noqa: C901
     # Orphan health rows (no breakdown matched — e.g. read failure or supply-only)
     for sid, m in morpho_health.items():
         if sid not in consumed_morpho_subs:
-            click.echo(f"  {_format_market_label(m.market_id)}:")
+            click.echo(f"  {format_market_label(m.market_id)}:")
             click.echo(f"    morpho market 0x{sid}:")
             _print_health_lines(m, indent="      ")
     for mid, m in aave_health.items():
         if mid not in consumed_aave_mids:
-            click.echo(f"  {_format_market_label(mid)}:")
+            click.echo(f"  {format_market_label(mid)}:")
             _print_health_lines(m, indent="    ")
 
 
@@ -1341,8 +1341,8 @@ def _print_dependency_graph(data: _VaultData) -> None:
 
     click.echo("Dependency Balance Graph:")
     for market_id, deps in data.dependency_graph.items():
-        label = _format_market_label(market_id)
-        dep_labels = ", ".join(_format_market_label(d) for d in deps)
+        label = format_market_label(market_id)
+        dep_labels = ", ".join(format_market_label(d) for d in deps)
         click.echo(f"  {label} → {dep_labels}")
     click.echo()
 
@@ -1350,8 +1350,8 @@ def _print_dependency_graph(data: _VaultData) -> None:
     if reach:
         click.echo("  Update reach (calling updateMarketsBalances for root market):")
         for market_id, reachable in sorted(reach.items(), key=lambda kv: -len(kv[1])):
-            label = _format_market_label(market_id)
-            targets = ", ".join(_format_market_label(r) for r in sorted(reachable))
+            label = format_market_label(market_id)
+            targets = ", ".join(format_market_label(r) for r in sorted(reachable))
             click.echo(f"    {label} refreshes: {targets}")
         click.echo()
 
@@ -1366,18 +1366,18 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     )
 
     edges = {
-        _format_market_label(mid): [_format_market_label(d) for d in deps]
+        format_market_label(mid): [format_market_label(d) for d in deps]
         for mid, deps in data.dependency_graph.items()
     }
 
     reach = compute_update_reach(data.dependency_graph)
     reach_json = {
-        _format_market_label(mid): sorted(_format_market_label(r) for r in reachable)
+        format_market_label(mid): sorted(format_market_label(r) for r in reachable)
         for mid, reachable in reach.items()
     }
 
     groups = compute_update_groups(data.dependency_graph)
-    groups_json = [sorted(_format_market_label(m) for m in group) for group in groups]
+    groups_json = [sorted(format_market_label(m) for m in group) for group in groups]
 
     return {
         "edges": edges,
@@ -1434,7 +1434,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             entry: dict = {"address": addr, "contract": contract or "?"}
             if (mid := fuse_markets.get(addr)) is not None:
                 entry["market_id"] = mid
-                label = _market_name(mid)
+                label = market_name(mid)
                 entry["market"] = label if label != "UNKNOWN" else str(mid)
             return entry
 
@@ -1448,7 +1448,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
 
         balance_fuses_json = []
         for i, bf in enumerate(data.balance_fuses):
-            market_label = _market_name(bf.market_id)
+            market_label = market_name(bf.market_id)
             market_str = (
                 market_label if market_label != "UNKNOWN" else str(bf.market_id)
             )
@@ -1470,7 +1470,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
                 )
             if data.dependency_graph and bf.market_id in data.dependency_graph:
                 deps = data.dependency_graph[bf.market_id]
-                bf_entry["depends_on"] = [_format_market_label(d) for d in deps]
+                bf_entry["depends_on"] = [format_market_label(d) for d in deps]
             if data.morpho_positions and bf.market_id in data.morpho_positions:
                 bf_entry["position_breakdown"] = [
                     {
@@ -1535,11 +1535,11 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
         all_sub_addresses: set[str] = set()
         market_subs_raw: list[tuple[str, int, list]] = []
         for i, bf in enumerate(data.balance_fuses):
-            market_str = _format_market_label(bf.market_id)
+            market_str = format_market_label(bf.market_id)
             if subs := substrate_futs[i].result():
                 market_subs_raw.append((market_str, bf.market_id, subs))
                 for sub in subs:
-                    sub_info = _format_substrate(sub, market_id=bf.market_id)
+                    sub_info = decode_substrate(sub, market_id=bf.market_id)
                     if sub_info.address:
                         all_sub_addresses.add(sub_info.address)
 
@@ -1556,7 +1556,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
         for market_str, mid, subs in market_subs_raw:
             entries = []
             for sub in subs:
-                sub_info = _format_substrate(sub, market_id=mid)
+                sub_info = decode_substrate(sub, market_id=mid)
                 if sub_info.address:
                     entry: dict = {"address": sub_info.address}
                     symbol = sym_futs[sub_info.address].result()
@@ -1850,7 +1850,7 @@ def _print_fuse_section(
             market_label = "?"
             substrate_count = "?"
             if fuse_markets and (mid := fuse_markets.get(addr)) is not None:
-                market_label = _format_market_label(mid)
+                market_label = format_market_label(mid)
                 substrate_count = str(len((market_substrates or {}).get(mid, [])))
             rows.append(
                 (
@@ -1878,7 +1878,7 @@ def _print_balance_fuses_table(
     with ThreadPoolExecutor() as pool:
         futures: list[tuple[int, int, str, Future, Future]] = []
         for idx, balance_fuse in enumerate(balance_fuses, 1):
-            market_id_str = _format_market_label(balance_fuse.market_id)
+            market_id_str = format_market_label(balance_fuse.market_id)
             f_balance = pool.submit(
                 plasma_vault.total_assets_in_market(balance_fuse.market_id).call
             )
@@ -1941,7 +1941,7 @@ def _print_substrates(  # noqa: C901
     with ThreadPoolExecutor() as pool:
         substrate_futures: list[tuple[str, int, Future]] = []
         for balance_fuse in balance_fuses:
-            market_id_str = _format_market_label(balance_fuse.market_id)
+            market_id_str = format_market_label(balance_fuse.market_id)
             fut = pool.submit(
                 plasma_vault.get_market_substrates(balance_fuse.market_id).call
             )
@@ -1955,7 +1955,7 @@ def _print_substrates(  # noqa: C901
             continue
         market_substrates.append((market_id_str, mid, substrates))
         for sub in substrates:
-            sub_info = _format_substrate(sub, market_id=mid)
+            sub_info = decode_substrate(sub, market_id=mid)
             if sub_info.address:
                 all_addresses.add(sub_info.address)
 
@@ -1981,7 +1981,7 @@ def _print_substrates(  # noqa: C901
     for market_id_str, mid, substrates in market_substrates:
         click.echo(f"  {market_id_str}:")
         for sub in substrates:
-            sub_info = _format_substrate(sub, market_id=mid)
+            sub_info = decode_substrate(sub, market_id=mid)
             if sub_info.address:
                 symbol = resolved_symbols.get(sub_info.address, "")
                 contract = resolved_contracts.get(sub_info.address, "")

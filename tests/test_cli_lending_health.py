@@ -472,7 +472,7 @@ class TestFetchVaultLendingHealth:
         assert IporFusionMarkets.AAVE_V3 in AAVE_V3_MARKET_IDS
         assert IporFusionMarkets.AAVE_V3_LIDO in AAVE_V3_MARKET_IDS
 
-    @patch("ipor_fusion.cli.vault_substrate._market_name", return_value="Morpho")
+    @patch("ipor_fusion.readers.lending_health.market_name", return_value="Morpho")
     @patch(
         "ipor_fusion.readers.lending_health._compute_morpho_market_health",
         return_value=LendingMarketHealth(

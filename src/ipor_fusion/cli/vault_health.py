@@ -17,16 +17,16 @@ from ipor_fusion.cli.vault_fetcher import (
     _VaultData,
 )
 from ipor_fusion.cli.vault_rendering import _format_amount, _format_usd, _print_table
-from ipor_fusion.cli.vault_substrate import (
-    _format_market_label,
-    _format_substrate,
-    _market_name,
-)
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.market_ids import IporFusionMarkets
+from ipor_fusion.substrates import (
+    decode_substrate,
+    format_market_label,
+    market_name,
+)
 from ipor_fusion.types import Shares
 
 
@@ -81,7 +81,7 @@ def _compute_erc20_balances(  # noqa: C901
 
     erc20_market = None
     for balance_fuse in data.balance_fuses:
-        if _market_name(balance_fuse.market_id) == "ERC20_VAULT_BALANCE":
+        if market_name(balance_fuse.market_id) == "ERC20_VAULT_BALANCE":
             erc20_market = balance_fuse.market_id
             break
     if erc20_market is None:
@@ -98,7 +98,7 @@ def _compute_erc20_balances(  # noqa: C901
     erc20_substrate_addrs: set[str] = set()
     token_addrs: list[str] = []
     for sub in substrates:
-        sub_info = _format_substrate(sub, market_id=erc20_market)
+        sub_info = decode_substrate(sub, market_id=erc20_market)
         if sub_info.address:
             token_addrs.append(sub_info.address)
             erc20_substrate_addrs.add(sub_info.address.lower())
@@ -214,7 +214,7 @@ def _print_erc20_balances(
     totals = _compute_erc20_balances(ctx, plasma_vault, data)
     if not totals.token_details:
         has_erc20_market = any(
-            _market_name(bf.market_id) == "ERC20_VAULT_BALANCE"
+            market_name(bf.market_id) == "ERC20_VAULT_BALANCE"
             for bf in data.balance_fuses
         )
         click.echo(
@@ -446,7 +446,7 @@ def _compute_orphan_fuse_criticals(data: _VaultData) -> list[str]:
     orphans = find_orphan_fuse_markets(data.fuse_markets, balance_market_ids)
     lines: list[str] = []
     for orphan_mid, fuse_addrs in orphans.items():
-        market_str = _format_market_label(orphan_mid)
+        market_str = format_market_label(orphan_mid)
         fuse_list = ", ".join(fuse_addrs)
         lines.append(
             f"CRITICAL — action fuse(s) registered for market {market_str} "
@@ -494,7 +494,7 @@ def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
         balance_market_ids, data.dependency_graph or {}
     )
     return [
-        f"CRITICAL — market {_format_market_label(mid)} has a balance fuse "
+        f"CRITICAL — market {format_market_label(mid)} has a balance fuse "
         f"but its dependency graph omits ERC20_VAULT_BALANCE — "
         f"updateMarketsBalances({mid}) will not refresh the ERC20 cache, "
         f"causing totalAssets drift after deposits/withdrawals through this "
