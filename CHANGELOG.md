@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.6.1 (2026-08-20)
+
+### Features
+
+- **sdk**: Name the address-pack substrate decoders
+  ([`9b95106`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9b95106d19bfdc7387679c5c45175389d6ca0ffd))
+
+
 ## v3.6.0 (2026-08-20)
 
 ### Bug Fixes
