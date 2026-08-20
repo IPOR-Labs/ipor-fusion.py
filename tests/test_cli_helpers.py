@@ -321,6 +321,7 @@ class TestFormatSubstratePerMarket:
         raw = bytes.fromhex(addr_hex + selector + "00" * 8)
         info = decode_substrate(raw, market_id=38)
         assert info.address == f"0x{addr_hex}"
+        assert info.type_label == "ENSO_TARGET"
         assert info.extra["selector"] == f"0x{selector}"
 
     # Dolomite (asset<<96 | subAccountId<<88 | canBorrow<<80)
@@ -329,6 +330,7 @@ class TestFormatSubstratePerMarket:
         raw = bytes.fromhex(addr_hex + "05" + "01" + "00" * 10)
         info = decode_substrate(raw, market_id=47)
         assert info.address == f"0x{addr_hex}"
+        assert info.type_label == "DOLOMITE_ASSET"
         assert info.extra["sub_account_id"] == "5"
         assert info.extra["can_borrow"] == "True"
 
@@ -338,6 +340,7 @@ class TestFormatSubstratePerMarket:
         raw = bytes.fromhex(addr_hex + "00" + "00" + "00" + "00" * 9)
         info = decode_substrate(raw, market_id=11)
         assert info.address == f"0x{addr_hex}"
+        assert info.type_label == "EULER_VAULT"
         assert info.extra["is_collateral"] == "False"
         assert info.extra["can_borrow"] == "False"
         assert info.extra["sub_account"] == "0x00"
