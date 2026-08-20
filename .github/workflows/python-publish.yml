@@ -237,8 +237,9 @@ jobs:
 
       - name: Publish PyPI
         if: inputs.publish-enabled && (steps.release.outputs.released || steps.release-current.outputs.released)
-        # from tag: v1.14.0
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        # from tag: v1.14.2 (twine 7 — knows Metadata-Version 2.5; the v1.14.0
+        # twine rejected 2.5 wheels from hatchling >=1.32 and killed 3.6.0)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         with:
           print-hash: true
           verify-metadata: true

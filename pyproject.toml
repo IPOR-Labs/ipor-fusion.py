@@ -138,10 +138,12 @@ type = "github"
 token = { env = "GH_TOKEN" }
 
 [build-system]
-# <1.32: hatchling 1.32.0 emits Metadata-Version 2.5, which the twine check in
-# the pinned pypa/gh-action-pypi-publish (v1.14.0) rejects — the 3.6.0 release
-# died exactly there. Lift the cap together with a publish-action bump.
-requires = ["hatchling>=1.27,<1.32"]
+# hatchling >=1.32 emits Metadata-Version 2.5 — fine since the publish action
+# moved to v1.14.2 (twine 7). If a release ever dies on "not a valid metadata
+# version" again, the bundled twine fell behind the build backend: bump the
+# pypa/gh-action-pypi-publish pin in python-publish.yml first, cap here only
+# as a last resort (that pairing is how the 3.6.0 release was recovered).
+requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
