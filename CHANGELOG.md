@@ -2,6 +2,49 @@
 
 <!-- version list -->
 
+## v3.6.0 (2026-08-20)
+
+### Bug Fixes
+
+- **mcp**: Report package version in MCP handshake
+  ([`d54e490`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d54e490082e31b67cc48aa9e76d948dc8e0bd333))
+
+- **sdk**: Export MerklClaimWrapperFuse at top level
+  ([`0a09488`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0a0948868043120da1b18c49dfe9f6b343627b4f))
+
+### Build System
+
+- Switch semantic-release to the conventional parser
+  ([`833f9ea`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/833f9eac675db9bc70a35b29987e838d680f1a62))
+
+### Continuous Integration
+
+- Restore changelog generation, assert it on release
+  ([`32d115d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/32d115d8862c007d81a3ac50a3bbb23f0b542cb7))
+
+### Documentation
+
+- Regenerate changelog from git history
+  ([`01a3a45`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/01a3a4545a5441318a67f470c0578d472cf47250))
+
+### Features
+
+- **cli**: Add a changelog command
+  ([`26e118a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/26e118aa125282da4f83358c495df5bd1004b0f7))
+
+- **mcp**: Add a server_info tool reporting version and changelog
+  ([`643e0dd`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/643e0dd0b2273ca5208daa80e170ec776e92621d))
+
+- **sdk**: Expose package version and changelog via about.py
+  ([`b7f950b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b7f950be0f1cd7e6ebb9c2372218708f590ca493))
+
+- **sdk**: Expose repository URL from package metadata
+  ([`c348611`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c348611b1f9bdd85e646093776db0a37946af1ed))
+
+- **sdk**: Public substrate decode API with AsyncAction decoder
+  ([`3add238`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3add238db1ad51e0679a6f403a5a914a33ee5452))
+
+
 ## v3.5.0 (2026-07-30)
 
 ### Bug Fixes
