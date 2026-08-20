@@ -71,7 +71,9 @@ def _decode_enso(hex_str: str) -> SubstrateInfo:
     """Decode address<<96 | selector<<64 (Enso)."""
     addr = f"0x{hex_str[0:40]}"
     selector = f"0x{hex_str[40:48]}"
-    return SubstrateInfo(address=addr, extra={"selector": selector})
+    return SubstrateInfo(
+        address=addr, type_label="ENSO_TARGET", extra={"selector": selector}
+    )
 
 
 def _decode_dolomite(hex_str: str) -> SubstrateInfo:
@@ -81,6 +83,7 @@ def _decode_dolomite(hex_str: str) -> SubstrateInfo:
     can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
     return SubstrateInfo(
         address=addr,
+        type_label="DOLOMITE_ASSET",
         extra={"sub_account_id": str(sub_account_id), "can_borrow": str(can_borrow)},
     )
 
@@ -99,6 +102,7 @@ def _decode_euler_v2(hex_str: str) -> SubstrateInfo:
     sub_account = f"0x{hex_str[44:46]}"
     return SubstrateInfo(
         address=addr,
+        type_label="EULER_VAULT",
         extra={
             "is_collateral": str(is_collateral),
             "can_borrow": str(can_borrow),
