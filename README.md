@@ -173,6 +173,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 | `FeeManager` | Deposit, performance, and management fee configuration |
 | `FeeAccount` | Fee escrow account, resolves its `FeeManager` |
 | `PriceOracleMiddleware` | Asset price feeds |
+| `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
 
 ### Supported protocols (`ipor_fusion.fuses`)
 

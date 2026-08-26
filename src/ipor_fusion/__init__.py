@@ -27,7 +27,11 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
-from ipor_fusion.core.oracle import AssetPriceSource, PriceOracleMiddleware
+from ipor_fusion.core.oracle import (
+    AssetPriceSource,
+    PriceOracleMiddleware,
+    PriceOracleMiddlewareManager,
+)
 from ipor_fusion.core.plasma_vault import (
     BalanceFuse,
     ManagementFeeData,
@@ -97,7 +101,9 @@ from ipor_fusion.fuses import (
     UniswapV3NewPositionEvent,
     UniswapV3NewPositionFuse,
     UniswapV3SwapFuse,
+    UniversalTokenSwapperAbi,
     UniversalTokenSwapperFuse,
+    UniversalTokenSwapperSubstrates,
     euler_substrate,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -183,6 +189,7 @@ __all__ = [
     "PendingRequestsInfo",
     "BalanceFuse",
     "PriceOracleMiddleware",
+    "PriceOracleMiddlewareManager",
     "AssetPriceSource",
     "FuseAction",
     "Fuse",
@@ -212,7 +219,9 @@ __all__ = [
     "GearboxSupplyFuse",
     "GearboxStakeFuse",
     "ERC4626SupplyFuse",
+    "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
+    "UniversalTokenSwapperSubstrates",
     "FluidInstadappSupplyFuse",
     "FluidInstadappStakingFuse",
     "EulerV2SupplyFuse",

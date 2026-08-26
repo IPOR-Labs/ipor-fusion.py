@@ -51,7 +51,11 @@ from ipor_fusion.fuses.uniswap_v3 import (
     UniswapV3NewPositionFuse,
     UniswapV3SwapFuse,
 )
-from ipor_fusion.fuses.universal import UniversalTokenSwapperFuse
+from ipor_fusion.fuses.universal import (
+    UniversalTokenSwapperAbi,
+    UniversalTokenSwapperFuse,
+    UniversalTokenSwapperSubstrates,
+)
 from ipor_fusion.types import MAX_UINT256
 
 # Deterministic test addresses
@@ -692,6 +696,33 @@ class TestFluidInstadappStakingFuse:
 # ── UniversalTokenSwapper ──────────────────────────────────────────────
 
 
+class TestUniversalTokenSwapperSubstrates:
+    """Mirror of UniversalTokenSwapperSubstrateLib.sol: tag << 248 | payload."""
+
+    def test_token(self):
+        encoded = UniversalTokenSwapperSubstrates.token(TOKEN_A)
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (1 << 248) | int(TOKEN_A, 16)
+
+    def test_target(self):
+        encoded = UniversalTokenSwapperSubstrates.target(TOKEN_B)
+        assert int.from_bytes(encoded, "big") == (2 << 248) | int(TOKEN_B, 16)
+
+    def test_slippage(self):
+        encoded = UniversalTokenSwapperSubstrates.slippage(10**16)
+        assert int.from_bytes(encoded, "big") == (3 << 248) | 10**16
+
+    def test_slippage_out_of_range(self):
+        with pytest.raises(ValueError, match="out of range"):
+            UniversalTokenSwapperSubstrates.slippage(1 << 248)
+        with pytest.raises(ValueError, match="out of range"):
+            UniversalTokenSwapperSubstrates.slippage(-1)
+
+    def test_malformed_address(self):
+        with pytest.raises(ValueError, match="20-byte"):
+            UniversalTokenSwapperSubstrates.token("0x1234")  # type: ignore[arg-type]
+
+
 class TestUniversalTokenSwapperFuse:
     def test_swap(self):
         targets = [TOKEN_A, TOKEN_B]
@@ -725,6 +756,90 @@ class TestUniversalTokenSwapperFuse:
         )
         assert len(decoded_tuple[3][0]) == 0
         assert len(decoded_tuple[3][1]) == 0
+
+    def test_swap_min_amount_out_abi(self):
+        action = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
+        ).swap(
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            amount_in=5000,
+            targets=[TOKEN_A],
+            data=[b"\xaa\xbb"],
+            min_amount_out=4900,
+        )
+        assert action.data[:4] == _selector(
+            "enter((address,address,uint256,uint256,(address[],bytes[])))"
+        )
+        (decoded_tuple,) = decode(
+            ["(address,address,uint256,uint256,(address[],bytes[]))"], action.data[4:]
+        )
+        assert decoded_tuple[0].lower() == TOKEN_A_LOW
+        assert decoded_tuple[1].lower() == TOKEN_B_LOW
+        assert decoded_tuple[2] == 5000
+        assert decoded_tuple[3] == 4900
+        assert decoded_tuple[4][1][0] == b"\xaa\xbb"
+
+    def test_swap_min_amount_out_zero_allowed(self):
+        action = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
+        ).swap(
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            amount_in=100,
+            targets=[],
+            data=[],
+            min_amount_out=0,
+        )
+        (decoded_tuple,) = decode(
+            ["(address,address,uint256,uint256,(address[],bytes[]))"], action.data[4:]
+        )
+        assert decoded_tuple[3] == 0
+
+    def test_swap_min_amount_out_negative_rejected(self):
+        with pytest.raises(ValueError, match="min_amount_out"):
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
+            ).swap(
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=100,
+                targets=[],
+                data=[],
+                min_amount_out=-1,
+            )
+
+    def test_legacy_abi_rejects_min_amount_out(self):
+        with pytest.raises(ValueError, match="min_amount_out"):
+            UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=100,
+                targets=[],
+                data=[],
+                min_amount_out=1,
+            )
+
+    def test_min_amount_out_abi_requires_min_amount_out(self):
+        with pytest.raises(ValueError, match="min_amount_out"):
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
+            ).swap(
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=100,
+                targets=[],
+                data=[],
+            )
+
+    def test_eq_distinguishes_abi(self):
+        legacy = UniversalTokenSwapperFuse(FUSE_ADDR)
+        modern = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
+        )
+        assert legacy != modern
+        assert hash(legacy) != hash(modern)
+        assert legacy == UniversalTokenSwapperFuse(FUSE_ADDR)
 
 
 # ── Input Validation ──────────────────────────────────────────────────
