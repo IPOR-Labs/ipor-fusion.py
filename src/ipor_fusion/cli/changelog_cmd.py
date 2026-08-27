@@ -29,7 +29,10 @@ from ipor_fusion.about import ChangelogEntry, package_version, read_changelog
 )
 def changelog(since: str, json_output: bool) -> None:
     """Show release notes for the installed ipor-fusion package."""
-    entries = read_changelog(since)
+    try:
+        entries = read_changelog(since)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="'--since'") from exc
     if json_output:
         click.echo(json.dumps([asdict(entry) for entry in entries], indent=2))
         return

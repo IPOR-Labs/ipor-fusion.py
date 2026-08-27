@@ -22,6 +22,12 @@ _VERSION_HEADING = re.compile(r"^## v(\S+?)(?: \(([^)\n]*)\))?[ \t]*$", re.MULTI
 
 _LEADING_DIGITS = re.compile(r"\d+")
 
+# A since_version we can rank against the headings: an optional `v`, then
+# dot-separated decimal segments. Anything else — a date, a codename, a
+# prerelease suffix — has no place in this ordering, so read_changelog rejects
+# it rather than silently widening or mis-sorting the result.
+_VERSION_SPEC = re.compile(r"v?\d+(?:\.\d+)*", re.ASCII)
+
 
 @dataclass(frozen=True, slots=True)
 class ChangelogEntry:
@@ -66,11 +72,16 @@ def repository_url() -> str:
 
 
 def read_changelog(since_version: str = "") -> list[ChangelogEntry]:
-    """Changelog entries, newest first. Never raises; `[]` when unreadable.
+    """Changelog entries, newest first. `[]` when the changelog is unreadable.
 
     The default returns only the running version's entry, so a caller that
     omits the argument cannot pull the full history by accident. Pass a
     version to get everything strictly newer than it.
+
+    A non-empty `since_version` must be a dotted version number (optionally
+    `v`-prefixed); anything else raises `ValueError` instead of silently
+    widening the result. An unreadable changelog file still yields `[]` — only
+    a bad argument raises.
 
     A version with no section yields `[]`; a release whose section is present
     but empty yields one entry with `notes == ""`. Keep those distinguishable
@@ -80,6 +91,11 @@ def read_changelog(since_version: str = "") -> list[ChangelogEntry]:
     if not since_version:
         current = package_version()
         return [entry for entry in entries if entry.version == current]
+    if not _VERSION_SPEC.fullmatch(since_version.strip()):
+        raise ValueError(
+            f"{since_version!r} is not a valid version "
+            "(expected a dotted number like 3.4.1, optionally v-prefixed)"
+        )
     floor = _version_key(since_version)
     return [entry for entry in entries if _version_key(entry.version) > floor]
 
