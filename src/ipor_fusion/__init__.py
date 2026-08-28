@@ -61,6 +61,7 @@ from ipor_fusion.field_docs import DOCS
 from ipor_fusion.fuses import (
     AaveV3BorrowFuse,
     AaveV3SupplyFuse,
+    AsyncActionFuse,
     CompoundV3SupplyFuse,
     ERC4626SupplyFuse,
     EulerSwapDynamicParams,
@@ -198,6 +199,7 @@ __all__ = [
     "StakeFuse",
     "AaveV3SupplyFuse",
     "AaveV3BorrowFuse",
+    "AsyncActionFuse",
     "MorphoSupplyFuse",
     "MorphoCollateralFuse",
     "MorphoBorrowFuse",
