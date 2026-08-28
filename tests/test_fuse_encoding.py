@@ -26,6 +26,7 @@ from ipor_fusion.fuses.euler_v2 import (
     EulerV2SwapRegistryFuse,
     euler_substrate,
 )
+from ipor_fusion.fuses.external_state import ExternalStateOperationFuse
 from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappStakingFuse,
     FluidInstadappSupplyFuse,
@@ -1514,4 +1515,76 @@ class TestEulerV2BorrowFuse:
         with pytest.raises(ValueError):
             EulerV2BorrowFuse(FUSE_ADDR).borrow(
                 euler_vault=ZERO_ADDRESS, asset_amount=1, sub_account=0x01
+            )
+
+
+# ── ExternalState (market 50) ───────────────────────────────────────────
+
+
+class TestExternalStateOperationFuse:
+    _TUPLE = "(address,uint256,address,(address,bytes)[])"
+
+    def test_enter_selector_and_roundtrip(self):
+        actions = [(TOKEN_B, b"\xde\xad\xbe\xef")]
+        action = ExternalStateOperationFuse(FUSE_ADDR).enter(
+            asset=TOKEN_A, amount=1_000_000, balance_account=VAULT_ADDR, actions=actions
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == _selector(f"enter({self._TUPLE})")
+
+        ((asset, amount, ba, decoded_actions),) = decode([self._TUPLE], action.data[4:])
+        assert asset.lower() == TOKEN_A_LOW
+        assert amount == 1_000_000
+        assert ba.lower() == VAULT_ADDR_LOW
+        assert len(decoded_actions) == 1
+        assert decoded_actions[0][0].lower() == TOKEN_B_LOW
+        assert decoded_actions[0][1] == b"\xde\xad\xbe\xef"
+
+    def test_exit_selector_and_multiple_actions(self):
+        actions = [(TOKEN_A, b"\x01"), (TOKEN_B, b"\x02\x03")]
+        action = ExternalStateOperationFuse(FUSE_ADDR).exit(
+            asset=TOKEN_A, amount=42, balance_account=VAULT_ADDR, actions=actions
+        )
+        assert action.data[:4] == _selector(f"exit({self._TUPLE})")
+        ((_, _, _, decoded_actions),) = decode([self._TUPLE], action.data[4:])
+        assert [payload for _, payload in decoded_actions] == [
+            b"\x01",
+            b"\x02\x03",
+        ]
+
+    def test_actions_only_enter_allows_zero_asset_and_empty_actions(self):
+        # amount == 0 is a valid "actions-only" call; asset may be the zero address.
+        action = ExternalStateOperationFuse(FUSE_ADDR).enter(
+            asset=ZERO_ADDRESS, amount=0, balance_account=VAULT_ADDR, actions=[]
+        )
+        ((asset, amount, _, decoded_actions),) = decode([self._TUPLE], action.data[4:])
+        assert amount == 0
+        assert int(asset, 16) == 0
+        assert len(decoded_actions) == 0
+
+    def test_negative_amount_rejected(self):
+        with pytest.raises(ValueError, match="must not be negative"):
+            ExternalStateOperationFuse(FUSE_ADDR).enter(
+                asset=TOKEN_A, amount=-1, balance_account=VAULT_ADDR, actions=[]
+            )
+
+    def test_zero_balance_account_rejected(self):
+        with pytest.raises(ValueError, match="balance_account"):
+            ExternalStateOperationFuse(FUSE_ADDR).enter(
+                asset=TOKEN_A, amount=1, balance_account=ZERO_ADDRESS, actions=[]
+            )
+
+    def test_zero_asset_rejected_when_amount_positive(self):
+        with pytest.raises(ValueError, match="asset"):
+            ExternalStateOperationFuse(FUSE_ADDR).enter(
+                asset=ZERO_ADDRESS, amount=1, balance_account=VAULT_ADDR, actions=[]
+            )
+
+    def test_zero_action_target_rejected(self):
+        with pytest.raises(ValueError, match=r"actions\[0\]"):
+            ExternalStateOperationFuse(FUSE_ADDR).exit(
+                asset=TOKEN_A,
+                amount=1,
+                balance_account=VAULT_ADDR,
+                actions=[(ZERO_ADDRESS, b"\x00")],
             )

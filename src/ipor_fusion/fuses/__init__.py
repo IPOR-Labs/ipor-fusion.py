@@ -17,6 +17,10 @@ from ipor_fusion.fuses.euler_v2 import (
     EulerV2SwapRegistryFuse,
     euler_substrate,
 )
+from ipor_fusion.fuses.external_state import (
+    ExternalStateAction,
+    ExternalStateOperationFuse,
+)
 from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappStakingFuse,
     FluidInstadappSupplyFuse,
@@ -82,6 +86,8 @@ __all__ = [
     "GearboxSupplyFuse",
     "GearboxStakeFuse",
     "ERC4626SupplyFuse",
+    "ExternalStateAction",
+    "ExternalStateOperationFuse",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",
