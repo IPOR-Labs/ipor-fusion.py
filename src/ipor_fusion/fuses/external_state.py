@@ -65,8 +65,7 @@ class ExternalStateOperationFuse(Fuse):
         balance_account: ChecksumAddress,
         actions: list[ExternalStateAction],
     ) -> FuseAction:
-        if amount < 0:
-            raise ValueError(f"amount must not be negative, got {amount}")
+        self._validate_non_negative(amount, "amount")
         self._validate_address(balance_account, "balance_account")
         # asset only moves when amount > 0; an actions-only call may omit it.
         if amount > 0:

@@ -105,10 +105,7 @@ class UniversalTokenSwapperFuse(Fuse):
                 "min_amount_out is required with abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT"
                 " (pass 0 to rely on the vault-side slippage cap only)"
             )
-        if min_amount_out < 0:
-            raise ValueError(
-                f"min_amount_out must not be negative, got {min_amount_out}"
-            )
+        self._validate_non_negative(min_amount_out, "min_amount_out")
         return self._action_raw(
             "enter((address,address,uint256,uint256,(address[],bytes[])))",
             [[token_in, token_out, amount_in, min_amount_out, [targets, data]]],
