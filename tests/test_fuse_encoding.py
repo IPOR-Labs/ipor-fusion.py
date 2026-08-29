@@ -8,7 +8,7 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
-from ipor_fusion.fuses.async_action import AsyncActionFuse
+from ipor_fusion.fuses.async_action import AsyncActionFuse, AsyncActionSubstrates
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
@@ -58,6 +58,7 @@ from ipor_fusion.fuses.universal import (
     UniversalTokenSwapperFuse,
     UniversalTokenSwapperSubstrates,
 )
+from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import MAX_UINT256
 
 # Deterministic test addresses
@@ -1782,3 +1783,81 @@ class TestAsyncActionFuse:
         ((assets, fetch),) = decode([self._EXIT], action.data[4:])
         assert len(assets) == 0
         assert len(fetch) == 0
+
+
+class TestAsyncActionSubstrates:
+    """Mirror of AsyncActionFuseLib.sol: type << 248 | payload."""
+
+    def test_allowed_amount_to_outside_layout(self):
+        encoded = AsyncActionSubstrates.allowed_amount_to_outside(TOKEN_A, 1_000_000)
+        assert len(encoded) == 32
+        assert (
+            int.from_bytes(encoded, "big")
+            == (0 << 248) | (int(TOKEN_A, 16) << 88) | 1_000_000
+        )
+        # round-trip through the real decoder (offset-sensitive layout)
+        info = decode_substrate(encoded, market_id=40)
+        assert info.type_label == "ALLOWED_AMOUNT_TO_OUTSIDE"
+        assert info.address.lower() == TOKEN_A_LOW
+        assert info.extra["amount"] == "1000000"
+
+    def test_target_layout(self):
+        selector = _selector("transfer(address,uint256)")
+        encoded = AsyncActionSubstrates.target(TOKEN_B, selector)
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (1 << 248) | (
+            int(TOKEN_B, 16) << 32
+        ) | int.from_bytes(selector, "big")
+        info = decode_substrate(encoded, market_id=40)
+        assert info.type_label == "ALLOWED_TARGETS"
+        assert info.address.lower() == TOKEN_B_LOW
+        assert info.extra["selector"] == "0x" + selector.hex()
+
+    def test_exit_slippage_layout(self):
+        encoded = AsyncActionSubstrates.exit_slippage(5 * 10**16)  # 5%
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (2 << 248) | (5 * 10**16)
+        info = decode_substrate(encoded, market_id=40)
+        assert info.type_label == "ALLOWED_EXIT_SLIPPAGE"
+        assert info.extra["slippage"] == str(5 * 10**16)
+
+    @pytest.mark.parametrize("amount", [0, (1 << 88) - 1])
+    def test_amount_boundary_encodes(self, amount):
+        # 0 and the uint88 max both encode and round-trip.
+        encoded = AsyncActionSubstrates.allowed_amount_to_outside(TOKEN_A, amount)
+        assert len(encoded) == 32
+        info = decode_substrate(encoded, market_id=40)
+        assert info.extra["amount"] == str(amount)
+
+    @pytest.mark.parametrize("wad", [0, (1 << 248) - 1])
+    def test_slippage_boundary_encodes(self, wad):
+        # 0 and the uint248 max both encode within the field.
+        encoded = AsyncActionSubstrates.exit_slippage(wad)
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (2 << 248) | wad
+
+    def test_amount_out_of_uint88_range(self):
+        with pytest.raises(ValueError, match="uint88"):
+            AsyncActionSubstrates.allowed_amount_to_outside(TOKEN_A, 1 << 88)
+        with pytest.raises(ValueError, match="uint88"):
+            AsyncActionSubstrates.allowed_amount_to_outside(TOKEN_A, -1)
+
+    def test_slippage_out_of_range(self):
+        with pytest.raises(ValueError, match="out of range"):
+            AsyncActionSubstrates.exit_slippage(1 << 248)
+        with pytest.raises(ValueError, match="out of range"):
+            AsyncActionSubstrates.exit_slippage(-1)
+
+    def test_target_bad_selector_length(self):
+        with pytest.raises(ValueError, match="4 bytes"):
+            AsyncActionSubstrates.target(TOKEN_B, b"\x01\x02\x03")  # too short
+        with pytest.raises(ValueError, match="4 bytes"):
+            AsyncActionSubstrates.target(TOKEN_B, b"\x01\x02\x03\x04\x05")  # too long
+
+    def test_malformed_address(self):
+        with pytest.raises(ValueError, match="20-byte"):
+            AsyncActionSubstrates.allowed_amount_to_outside("0x1234", 1)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="20-byte"):
+            AsyncActionSubstrates.target(
+                "0x1234", _selector("transfer(address,uint256)")
+            )  # type: ignore[arg-type]

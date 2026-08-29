@@ -1,5 +1,5 @@
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
-from ipor_fusion.fuses.async_action import AsyncActionFuse
+from ipor_fusion.fuses.async_action import AsyncActionFuse, AsyncActionSubstrates
 from ipor_fusion.fuses.base import Fuse, FuseAction, StakeFuse
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
@@ -65,6 +65,7 @@ __all__ = [
     "AaveV3SupplyFuse",
     "AaveV3BorrowFuse",
     "AsyncActionFuse",
+    "AsyncActionSubstrates",
     "MorphoSupplyFuse",
     "MorphoCollateralFuse",
     "MorphoBorrowFuse",

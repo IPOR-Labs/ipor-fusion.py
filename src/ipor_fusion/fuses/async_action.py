@@ -156,3 +156,62 @@ class AsyncActionFuse(Fuse):
             f"exit({self._EXIT_TUPLE})",
             [[list(assets), list(fetch)]],
         )
+
+
+class AsyncActionSubstrates:
+    """Typed bytes32 substrate encoders for the async-action market (40).
+
+    Mirrors `AsyncActionFuseLib.sol`: each substrate is
+    ``bytes32(uint256(type) << 248 | payload)`` -- a one-byte type tag in the
+    high byte, then a 31-byte payload whose layout depends on the type.
+    """
+
+    _ALLOWED_AMOUNT_TO_OUTSIDE = 0
+    _ALLOWED_TARGETS = 1
+    _ALLOWED_EXIT_SLIPPAGE = 2
+
+    @staticmethod
+    def _address_bytes(address: ChecksumAddress) -> bytes:
+        payload = bytes.fromhex(address.removeprefix("0x"))
+        if len(payload) != 20:
+            raise ValueError(f"not a 20-byte address: {address}")
+        return payload
+
+    @classmethod
+    def allowed_amount_to_outside(cls, asset: ChecksumAddress, amount: Amount) -> bytes:
+        """Cap how much of ``asset`` may leave the vault to the executor.
+
+        ``amount`` is in the asset's own decimals and must fit uint88. Layout:
+        type byte, then the 20-byte asset, then the amount as a uint88.
+        """
+        if not 0 <= amount < (1 << 88):
+            raise ValueError(f"amount out of uint88 range: {amount}")
+        return (
+            bytes([cls._ALLOWED_AMOUNT_TO_OUTSIDE])
+            + cls._address_bytes(asset)
+            + amount.to_bytes(11, "big")
+        )
+
+    @classmethod
+    def target(cls, target: ChecksumAddress, selector: bytes) -> bytes:
+        """Allow the executor to call ``target`` with ``selector`` (a 4-byte
+        function selector). On exit the same ``(asset, selector)`` pair is the
+        carrier checked for a fetched asset -- see ``AsyncActionFuse.exit``.
+        Layout: type byte, 7 zero bytes, the 20-byte target, the 4-byte selector.
+        """
+        if len(selector) != 4:
+            raise ValueError(f"selector must be 4 bytes, got {len(selector)}")
+        return (
+            bytes([cls._ALLOWED_TARGETS])
+            + b"\x00" * 7
+            + cls._address_bytes(target)
+            + selector
+        )
+
+    @classmethod
+    def exit_slippage(cls, slippage_wad: int) -> bytes:
+        """Maximum value drop tolerated on exit, as a WAD fraction (1e18 = 100%).
+        On-chain a value above 1e18 is rejected when exit runs."""
+        if not 0 <= slippage_wad < (1 << 248):
+            raise ValueError(f"slippage WAD out of range: {slippage_wad}")
+        return bytes([cls._ALLOWED_EXIT_SLIPPAGE]) + slippage_wad.to_bytes(31, "big")
