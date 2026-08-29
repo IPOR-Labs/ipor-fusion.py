@@ -214,3 +214,27 @@ class TestSendFailedReceipt:
 
         with pytest.raises(TransactionError):
             ctx.send(TO_ADDR, b"\x01")
+
+
+class TestGetStorageAt:
+    def test_delegates_with_default_block(self):
+        ctx = _make_ctx()
+        slot_value = HexBytes(b"\x00" * 31 + b"\x2a")
+        ctx.web3.eth.get_storage_at.return_value = slot_value
+
+        result = ctx.get_storage_at(ADDR, 0x1234)
+
+        assert result == slot_value
+        ctx.web3.eth.get_storage_at.assert_called_once_with(
+            ADDR, 0x1234, block_identifier="latest"
+        )
+
+    def test_honors_explicit_block(self):
+        ctx = _make_ctx()
+        ctx.web3.eth.get_storage_at.return_value = HexBytes(b"\x00" * 32)
+
+        ctx.get_storage_at(ADDR, 7, block=123)
+
+        ctx.web3.eth.get_storage_at.assert_called_once_with(
+            ADDR, 7, block_identifier=123
+        )

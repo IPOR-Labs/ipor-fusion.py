@@ -32,6 +32,7 @@ from ipor_fusion.core.oracle import (
     PriceOracleMiddleware,
     PriceOracleMiddlewareManager,
 )
+from ipor_fusion.core.external_state_executor import ExternalStateExecutor
 from ipor_fusion.core.plasma_vault import (
     BalanceFuse,
     ManagementFeeData,
@@ -195,6 +196,7 @@ __all__ = [
     "PriceOracleMiddleware",
     "PriceOracleMiddlewareManager",
     "AssetPriceSource",
+    "ExternalStateExecutor",
     "FuseAction",
     "Fuse",
     "StakeFuse",
