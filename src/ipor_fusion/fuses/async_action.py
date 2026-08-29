@@ -22,7 +22,12 @@ from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.core.contract import _encode_calldata
-from ipor_fusion.fuses.base import Fuse, FuseAction
+from ipor_fusion.fuses.base import (
+    Fuse,
+    FuseAction,
+    _encode_uint248_substrate,
+    _substrate_address_bytes,
+)
 from ipor_fusion.types import Amount
 
 
@@ -170,13 +175,6 @@ class AsyncActionSubstrates:
     _ALLOWED_TARGETS = 1
     _ALLOWED_EXIT_SLIPPAGE = 2
 
-    @staticmethod
-    def _address_bytes(address: ChecksumAddress) -> bytes:
-        payload = bytes.fromhex(address.removeprefix("0x"))
-        if len(payload) != 20:
-            raise ValueError(f"not a 20-byte address: {address}")
-        return payload
-
     @classmethod
     def allowed_amount_to_outside(cls, asset: ChecksumAddress, amount: Amount) -> bytes:
         """Cap how much of ``asset`` may leave the vault to the executor.
@@ -188,7 +186,7 @@ class AsyncActionSubstrates:
             raise ValueError(f"amount out of uint88 range: {amount}")
         return (
             bytes([cls._ALLOWED_AMOUNT_TO_OUTSIDE])
-            + cls._address_bytes(asset)
+            + _substrate_address_bytes(asset)
             + amount.to_bytes(11, "big")
         )
 
@@ -204,7 +202,7 @@ class AsyncActionSubstrates:
         return (
             bytes([cls._ALLOWED_TARGETS])
             + b"\x00" * 7
-            + cls._address_bytes(target)
+            + _substrate_address_bytes(target)
             + selector
         )
 
@@ -212,6 +210,6 @@ class AsyncActionSubstrates:
     def exit_slippage(cls, slippage_wad: int) -> bytes:
         """Maximum value drop tolerated on exit, as a WAD fraction (1e18 = 100%).
         On-chain a value above 1e18 is rejected when exit runs."""
-        if not 0 <= slippage_wad < (1 << 248):
-            raise ValueError(f"slippage WAD out of range: {slippage_wad}")
-        return bytes([cls._ALLOWED_EXIT_SLIPPAGE]) + slippage_wad.to_bytes(31, "big")
+        return _encode_uint248_substrate(
+            cls._ALLOWED_EXIT_SLIPPAGE, slippage_wad, "slippage WAD"
+        )

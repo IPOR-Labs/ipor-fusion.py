@@ -98,3 +98,19 @@ class StakeFuse(Fuse):
             "exit((uint256,address))",
             [[amount, self._staking_address]],
         )
+
+
+def _substrate_address_bytes(address: ChecksumAddress) -> bytes:
+    """The 20 raw bytes of a checksum address, for packing into a substrate."""
+    payload = bytes.fromhex(address.removeprefix("0x"))
+    if len(payload) != 20:
+        raise ValueError(f"not a 20-byte address: {address}")
+    return payload
+
+
+def _encode_uint248_substrate(tag: int, value: int, name: str) -> bytes:
+    """A bytes32 substrate: a one-byte type ``tag`` then a uint248 ``value``
+    (e.g. a WAD fraction). ``name`` labels ``value`` in the range error."""
+    if not 0 <= value < (1 << 248):
+        raise ValueError(f"{name} out of range: {value}")
+    return bytes([tag]) + value.to_bytes(31, "big")
