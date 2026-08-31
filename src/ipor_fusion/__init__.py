@@ -21,6 +21,7 @@ from ipor_fusion.core.access import (
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
+from ipor_fusion.core.external_state_executor import ExternalStateExecutor, NavMark
 from ipor_fusion.core.fee_manager import (
     FeeAccount,
     FeeManager,
@@ -32,7 +33,6 @@ from ipor_fusion.core.oracle import (
     PriceOracleMiddleware,
     PriceOracleMiddlewareManager,
 )
-from ipor_fusion.core.external_state_executor import ExternalStateExecutor
 from ipor_fusion.core.plasma_vault import (
     BalanceFuse,
     ManagementFeeData,
@@ -197,6 +197,7 @@ __all__ = [
     "PriceOracleMiddlewareManager",
     "AssetPriceSource",
     "ExternalStateExecutor",
+    "NavMark",
     "FuseAction",
     "Fuse",
     "StakeFuse",

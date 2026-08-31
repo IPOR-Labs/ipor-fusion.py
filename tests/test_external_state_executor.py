@@ -4,19 +4,21 @@ executor-address resolution, `nonce()` decode, and the pure `proposal_hash`."""
 from unittest.mock import MagicMock
 
 import pytest
-from eth_abi import encode
+from eth_abi import decode, encode
 from eth_abi.exceptions import NonEmptyPaddingBytes, ValueOutOfBounds
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
 
-from ipor_fusion.core.external_state_executor import ExternalStateExecutor
-from ipor_fusion.types import Amount, ChainId
+from ipor_fusion.core.external_state_executor import ExternalStateExecutor, NavMark
+from ipor_fusion.market_ids import IporFusionMarkets
+from ipor_fusion.types import Amount, ChainId, MarketId
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 EXECUTOR_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
 BALANCE_ACCOUNT = Web3.to_checksum_address("0x3333333333333333333333333333333333333333")
 PROPOSER = Web3.to_checksum_address("0x4444444444444444444444444444444444444444")
+CONFIRMER = Web3.to_checksum_address("0x6666666666666666666666666666666666666666")
 
 
 def _slot_bytes(address: str) -> HexBytes:
@@ -242,3 +244,277 @@ class TestProposalHash:
             ExternalStateExecutor.proposal_hash(**{**base, "value": Amount(-1)})
         with pytest.raises(ValueOutOfBounds):
             ExternalStateExecutor.proposal_hash(**{**base, "nonce": -1})
+
+
+_PROPOSE_SELECTOR = Web3.keccak(text="proposeBalance(address,uint256)")[:4]
+_CONFIRM_SELECTOR = Web3.keccak(text="confirmBalance(address,bytes32)")[:4]
+
+
+class TestProposeBalance:
+    def test_encodes_selector_and_args(self):
+        executor, _ = _make_executor()
+
+        call = executor.propose_balance(BALANCE_ACCOUNT, Amount(1_000_000))
+
+        assert call.to == EXECUTOR_ADDR
+        assert call.data[:4] == _PROPOSE_SELECTOR
+        ba, value = decode(["address", "uint256"], call.data[4:])
+        assert Web3.to_checksum_address(ba) == BALANCE_ACCOUNT
+        assert value == 1_000_000
+
+
+class TestConfirmBalance:
+    def test_encodes_selector_and_args(self):
+        executor, _ = _make_executor()
+        proposal_hash = b"\x11" * 32
+
+        call = executor.confirm_balance(BALANCE_ACCOUNT, proposal_hash)
+
+        assert call.to == EXECUTOR_ADDR
+        assert call.data[:4] == _CONFIRM_SELECTOR
+        ba, got = decode(["address", "bytes32"], call.data[4:])
+        assert Web3.to_checksum_address(ba) == BALANCE_ACCOUNT
+        assert got == proposal_hash
+
+
+_BALANCE_PROPOSED_TOPIC = Web3.keccak(
+    text="BalanceProposed(address,address,uint256,uint256,uint64,bytes32)"
+)
+
+
+class TestMarkNav:
+    PROPOSED_AT = 1_700_000_000
+    NONCE = 7
+    PROPOSAL_HASH = b"\xab" * 32
+    BLOCK = 111
+
+    def _propose_receipt(self, *, address=EXECUTOR_ADDR):
+        # A propose receipt carrying the executor's BalanceProposed log, from
+        # which mark_nav reads nonce / proposedAt / proposalHash.
+        data = encode(
+            ["address", "address", "uint256", "uint256", "uint64", "bytes32"],
+            [
+                BALANCE_ACCOUNT,
+                PROPOSER,
+                1_000_000,
+                self.NONCE,
+                self.PROPOSED_AT,
+                self.PROPOSAL_HASH,
+            ],
+        )
+        return {
+            "blockNumber": self.BLOCK,
+            "logs": [
+                {"address": address, "topics": [_BALANCE_PROPOSED_TOPIC], "data": data}
+            ],
+        }
+
+    def _setup(self):
+        executor = ExternalStateExecutor(MagicMock(), EXECUTOR_ADDR)
+
+        proposer_ctx = MagicMock()
+        proposer_ctx.signer = PROPOSER
+        proposer_ctx.send.return_value = self._propose_receipt()
+
+        confirmer_ctx = MagicMock()
+        confirmer_ctx.signer = CONFIRMER
+        confirmer_ctx.send.return_value = {"status": 1}
+        return executor, proposer_ctx, confirmer_ctx
+
+    def test_runs_propose_confirm_and_returns_navmark(self):
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+
+        result = executor.mark_nav(
+            value=Amount(1_000_000),
+            balance_account=BALANCE_ACCOUNT,
+            proposer_ctx=proposer_ctx,
+            confirmer_ctx=confirmer_ctx,
+        )
+
+        # Propose signed by the proposer context, with the forwarded args.
+        prop_to, prop_data = proposer_ctx.send.call_args.args
+        assert prop_to == EXECUTOR_ADDR
+        assert prop_data[:4] == _PROPOSE_SELECTOR
+        prop_ba, prop_value = decode(["address", "uint256"], prop_data[4:])
+        assert Web3.to_checksum_address(prop_ba) == BALANCE_ACCOUNT
+        assert prop_value == 1_000_000
+
+        # Confirm signed by the confirmer context, carrying the hash FROM THE
+        # EVENT (not recomputed).
+        conf_to, conf_data = confirmer_ctx.send.call_args.args
+        assert conf_to == EXECUTOR_ADDR
+        assert conf_data[:4] == _CONFIRM_SELECTOR
+        conf_ba, got_hash = decode(["address", "bytes32"], conf_data[4:])
+        assert Web3.to_checksum_address(conf_ba) == BALANCE_ACCOUNT
+        assert got_hash == self.PROPOSAL_HASH
+
+        assert result == NavMark(
+            proposed_at=self.PROPOSED_AT,
+            nonce=self.NONCE,
+            proposal_hash=self.PROPOSAL_HASH,
+            propose_receipt=proposer_ctx.send.return_value,
+            confirm_receipt=confirmer_ctx.send.return_value,
+            refresh_receipt=None,
+        )
+
+    def test_propose_precedes_confirm(self):
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        manager = MagicMock()
+        manager.attach_mock(proposer_ctx.send, "propose_send")
+        manager.attach_mock(confirmer_ctx.send, "confirm_send")
+        proposer_ctx.send.return_value = self._propose_receipt()
+        confirmer_ctx.send.return_value = {"status": 1}
+
+        executor.mark_nav(
+            value=Amount(1_000_000),
+            balance_account=BALANCE_ACCOUNT,
+            proposer_ctx=proposer_ctx,
+            confirmer_ctx=confirmer_ctx,
+        )
+
+        names = [name for name, _, _ in manager.mock_calls]
+        assert names.index("propose_send") < names.index("confirm_send")
+
+    def test_refreshes_when_vault_given(self):
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        vault = MagicMock()
+        refresh_call = MagicMock()
+        vault.update_markets_balances.return_value = refresh_call
+        refresh_call.send.return_value = {"status": 1, "refresh": True}
+
+        result = executor.mark_nav(
+            value=Amount(1_000_000),
+            balance_account=BALANCE_ACCOUNT,
+            proposer_ctx=proposer_ctx,
+            confirmer_ctx=confirmer_ctx,
+            vault=vault,
+        )
+
+        vault.update_markets_balances.assert_called_once_with(
+            [MarketId(IporFusionMarkets.EXTERNAL_STATE)]
+        )
+        refresh_call.send.assert_called_once_with(confirmer_ctx)
+        assert result.refresh_receipt == {"status": 1, "refresh": True}
+
+    def test_raises_when_propose_receipt_has_no_event(self):
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        proposer_ctx.send.return_value = {"blockNumber": self.BLOCK, "logs": []}
+
+        with pytest.raises(ValueError, match="no BalanceProposed log"):
+            executor.mark_nav(
+                value=Amount(1_000_000),
+                balance_account=BALANCE_ACCOUNT,
+                proposer_ctx=proposer_ctx,
+                confirmer_ctx=confirmer_ctx,
+            )
+        confirmer_ctx.send.assert_not_called()
+
+    def test_ignores_event_from_other_contract(self):
+        # A BalanceProposed log emitted by a different address is not ours.
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        other = Web3.to_checksum_address("0x7777777777777777777777777777777777777777")
+        proposer_ctx.send.return_value = self._propose_receipt(address=other)
+
+        with pytest.raises(ValueError, match="no BalanceProposed log"):
+            executor.mark_nav(
+                value=Amount(1_000_000),
+                balance_account=BALANCE_ACCOUNT,
+                proposer_ctx=proposer_ctx,
+                confirmer_ctx=confirmer_ctx,
+            )
+        confirmer_ctx.send.assert_not_called()
+
+    def test_scans_past_foreign_log_to_find_event(self):
+        # A foreign log ahead of ours must be skipped, not stop the scan. Give it
+        # a DISTINCT payload so the assertions fail if the wrong log is picked.
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        real_log = self._propose_receipt()["logs"][0]
+        other = Web3.to_checksum_address("0x7777777777777777777777777777777777777777")
+        foreign_data = encode(
+            ["address", "address", "uint256", "uint256", "uint64", "bytes32"],
+            [BALANCE_ACCOUNT, PROPOSER, 1_000_000, 999, self.PROPOSED_AT, b"\xcc" * 32],
+        )
+        foreign_log = {
+            "address": other,
+            "topics": [_BALANCE_PROPOSED_TOPIC],
+            "data": foreign_data,
+        }
+        proposer_ctx.send.return_value = {
+            "blockNumber": self.BLOCK,
+            "logs": [foreign_log, real_log],
+        }
+
+        result = executor.mark_nav(
+            value=Amount(1_000_000),
+            balance_account=BALANCE_ACCOUNT,
+            proposer_ctx=proposer_ctx,
+            confirmer_ctx=confirmer_ctx,
+        )
+
+        # The real log's values, not the foreign log's (nonce 999 / hash 0xcc..).
+        assert result.nonce == self.NONCE
+        assert result.proposal_hash == self.PROPOSAL_HASH
+        _, got_hash = decode(
+            ["address", "bytes32"], confirmer_ctx.send.call_args.args[1][4:]
+        )
+        assert got_hash == self.PROPOSAL_HASH
+
+    def test_rejects_same_custodian(self):
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        confirmer_ctx.signer = PROPOSER
+
+        with pytest.raises(ValueError, match="different custodians"):
+            executor.mark_nav(
+                value=Amount(1_000_000),
+                balance_account=BALANCE_ACCOUNT,
+                proposer_ctx=proposer_ctx,
+                confirmer_ctx=confirmer_ctx,
+            )
+        proposer_ctx.send.assert_not_called()
+        confirmer_ctx.send.assert_not_called()
+
+    def test_rejects_same_custodian_case_insensitive(self):
+        # A signer stored un-checksummed (built via `signer=`) must not slip the
+        # guard just because its casing differs.
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        same = Web3.to_checksum_address("0xabcdef0123456789abcdef0123456789abcdef01")
+        proposer_ctx.signer = same
+        confirmer_ctx.signer = same.lower()
+
+        with pytest.raises(ValueError, match="different custodians"):
+            executor.mark_nav(
+                value=Amount(1_000_000),
+                balance_account=BALANCE_ACCOUNT,
+                proposer_ctx=proposer_ctx,
+                confirmer_ctx=confirmer_ctx,
+            )
+        proposer_ctx.send.assert_not_called()
+        confirmer_ctx.send.assert_not_called()
+
+    def test_rejects_missing_proposer_signer(self):
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        proposer_ctx.signer = None
+
+        with pytest.raises(ValueError, match="proposer_ctx must have a signer"):
+            executor.mark_nav(
+                value=Amount(1_000_000),
+                balance_account=BALANCE_ACCOUNT,
+                proposer_ctx=proposer_ctx,
+                confirmer_ctx=confirmer_ctx,
+            )
+        proposer_ctx.send.assert_not_called()
+        confirmer_ctx.send.assert_not_called()
+
+    def test_rejects_missing_confirmer_signer(self):
+        executor, proposer_ctx, confirmer_ctx = self._setup()
+        confirmer_ctx.signer = None
+
+        with pytest.raises(ValueError, match="confirmer_ctx must have a signer"):
+            executor.mark_nav(
+                value=Amount(1_000_000),
+                balance_account=BALANCE_ACCOUNT,
+                proposer_ctx=proposer_ctx,
+                confirmer_ctx=confirmer_ctx,
+            )
+        proposer_ctx.send.assert_not_called()
+        confirmer_ctx.send.assert_not_called()
