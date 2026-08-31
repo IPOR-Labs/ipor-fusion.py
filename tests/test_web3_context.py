@@ -134,6 +134,7 @@ class TestSend:
         # Mock chain of calls in send
         web3.eth.get_transaction_count.return_value = 5
         web3.eth.gas_price = 20_000_000_000
+        web3.eth.get_block.return_value = {"baseFeePerGas": 15_000_000_000}
         web3.eth.estimate_gas.return_value = 21000
 
         signed = MagicMock()
@@ -147,6 +148,73 @@ class TestSend:
         receipt = ctx.send(TO_ADDR, b"\x01\x02")
         assert receipt["status"] == 1
         web3.eth.send_raw_transaction.assert_called_once_with(b"\xf8")
+
+
+# ── maxFeePerGas construction ────────────────────────────────────────────
+
+
+GWEI = 1_000_000_000
+
+
+def _build_tx(ctx, *, gas_price, block):
+    """Drive _build_transaction with stubbed nonce/gas_price/block/gas."""
+    web3 = ctx.web3
+    web3.eth.get_transaction_count.return_value = 0
+    web3.eth.gas_price = gas_price
+    web3.eth.get_block.return_value = block
+    web3.eth.estimate_gas.return_value = 21000
+    return ctx._build_transaction(TO_ADDR, b"\x01\x02")
+
+
+class TestMaxFeePerGas:
+    def test_eip1559_ceiling_uses_base_fee_headroom(self):
+        ctx = _make_ctx(signer=ADDR)
+        tx = _build_tx(ctx, gas_price=20 * GWEI, block={"baseFeePerGas": 15 * GWEI})
+
+        # priority = min(2 gwei default, gas_price // 10 = 2 gwei) = 2 gwei
+        # ceiling = base_fee * 2 + priority
+        assert tx["maxPriorityFeePerGas"] == 2 * GWEI
+        assert tx["maxFeePerGas"] == 15 * GWEI * 2 + 2 * GWEI
+
+    def test_priority_fee_folded_into_ceiling_is_capped(self):
+        ctx = _make_ctx(signer=ADDR)
+        # gas_price // 10 (10 gwei) exceeds the 2 gwei cap, so the priority fee
+        # in the ceiling must be the cap, not the raw gas_price // 10.
+        tx = _build_tx(ctx, gas_price=100 * GWEI, block={"baseFeePerGas": 15 * GWEI})
+
+        cap = Web3Context.DEFAULT_TRANSACTION_MAX_PRIORITY_FEE
+        assert tx["maxPriorityFeePerGas"] == cap
+        assert tx["maxFeePerGas"] == 15 * GWEI * 2 + cap
+
+    def test_zero_base_fee_still_takes_the_eip1559_branch(self):
+        ctx = _make_ctx(signer=ADDR)
+        # base_fee 0 is falsy but not None: the branch keys on `is None`, so a
+        # zero base fee collapses the ceiling to just the priority fee.
+        tx = _build_tx(ctx, gas_price=20 * GWEI, block={"baseFeePerGas": 0})
+
+        assert tx["maxFeePerGas"] == tx["maxPriorityFeePerGas"]
+
+    def test_falls_back_to_gas_price_margin_without_base_fee(self):
+        ctx = _make_ctx(signer=ADDR)
+        # A pre-EIP-1559 block carries no baseFeePerGas key.
+        tx = _build_tx(ctx, gas_price=20 * GWEI, block={})
+
+        assert tx["maxFeePerGas"] == 20 * GWEI + (20 * GWEI * 25 // 100)
+
+    def test_ceiling_clears_a_base_fee_that_the_old_formula_would_miss(self):
+        # Regression guard: on Arbitrum-like fees the pre-fix ceiling
+        # (gas_price + 25%) fell below a base fee that ticked up before
+        # broadcast; the base-fee-relative ceiling clears it.
+        ctx = _make_ctx(signer=ADDR)
+        gas_price = 10_000_000  # 0.01 gwei, Arbitrum floor at read time
+        tx = _build_tx(ctx, gas_price=gas_price, block={"baseFeePerGas": gas_price})
+
+        bumped_base_fee = 15_000_000  # +50% by broadcast time
+        old_ceiling = gas_price + gas_price * 25 // 100
+        priority = gas_price // 10  # below the 2 gwei cap at this gas price
+        assert old_ceiling < bumped_base_fee  # would have been rejected
+        assert tx["maxFeePerGas"] == gas_price * 2 + priority  # exact new ceiling
+        assert tx["maxFeePerGas"] >= bumped_base_fee  # now clears it
 
 
 # ── _handle_receipt ─────────────────────────────────────────────────────
@@ -199,6 +267,7 @@ class TestSendFailedReceipt:
 
         web3.eth.get_transaction_count.return_value = 0
         web3.eth.gas_price = 10_000_000_000
+        web3.eth.get_block.return_value = {"baseFeePerGas": 8_000_000_000}
         web3.eth.estimate_gas.return_value = 21000
 
         signed = MagicMock()

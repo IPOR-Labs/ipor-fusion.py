@@ -15,6 +15,12 @@ class Web3Context:
 
     DEFAULT_TRANSACTION_MAX_PRIORITY_FEE = 2_000_000_000
     GAS_PRICE_MARGIN = 25
+    # maxFeePerGas ceiling as a multiple of the current base fee. EIP-1559
+    # charges min(maxFeePerGas, baseFee + priority), so a high ceiling is free
+    # insurance against the base fee rising between this read and the broadcast
+    # (Arbitrum's base fee moves every block); too tight and the node rejects
+    # the tx with "max fee per gas less than block base fee".
+    BASE_FEE_HEADROOM_MULTIPLIER = 2
     # web3's own HTTP default, made explicit so callers can tighten it: against
     # a degraded RPC every request otherwise blocks for the full 30s, and a
     # multi-call read (vault fetch, health check) fans that out into minutes of
@@ -99,8 +105,11 @@ class Web3Context:
         assert self.signer is not None  # noqa: S101  # signer ensured by callers
         nonce = self.web3.eth.get_transaction_count(self.signer)
         gas_price = self.web3.eth.gas_price
-        max_fee_per_gas = self._calculate_max_fee_per_gas(gas_price)
         max_priority_fee_per_gas = self._get_max_priority_fee(gas_price)
+        base_fee = self.get_block().get("baseFeePerGas")
+        max_fee_per_gas = self._calculate_max_fee_per_gas(
+            gas_price, base_fee, max_priority_fee_per_gas
+        )
         data_hex = f"0x{data.hex()}"
         estimated_gas = self._estimate_gas(to, data_hex, self.signer)
         return {
@@ -169,8 +178,14 @@ class Web3Context:
         )
         return int(self._gas_multiplier * estimated)
 
-    def _calculate_max_fee_per_gas(self, gas_price: int) -> int:
-        return gas_price + self._percent_of(gas_price, self.GAS_PRICE_MARGIN)
+    def _calculate_max_fee_per_gas(
+        self, gas_price: int, base_fee: int | None, max_priority_fee_per_gas: int
+    ) -> int:
+        # Prefer a base-fee-relative ceiling on EIP-1559 chains; fall back to a
+        # gas-price margin where the block carries no base fee.
+        if base_fee is None:
+            return gas_price + self._percent_of(gas_price, self.GAS_PRICE_MARGIN)
+        return base_fee * self.BASE_FEE_HEADROOM_MULTIPLIER + max_priority_fee_per_gas
 
     def _get_max_priority_fee(self, gas_price: int) -> int:
         return min(self.DEFAULT_TRANSACTION_MAX_PRIORITY_FEE, gas_price // 10)
