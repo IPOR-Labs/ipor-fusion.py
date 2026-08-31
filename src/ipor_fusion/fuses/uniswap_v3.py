@@ -94,7 +94,7 @@ class UniswapV3ModifyPositionFuse(Fuse):
     ) -> FuseAction:
         self._validate_address(token0, "token0")
         self._validate_address(token1, "token1")
-        self._validate_token_id(token_id, "token_id")
+        self._validate_non_negative(token_id, "token_id")
         self._validate_amount(amount0_desired, "amount0_desired")
         self._validate_amount(amount1_desired, "amount1_desired")
         return self._action_raw(
@@ -122,7 +122,7 @@ class UniswapV3ModifyPositionFuse(Fuse):
         amount1_min: Amount,
         deadline: Timestamp,
     ) -> FuseAction:
-        self._validate_token_id(token_id, "token_id")
+        self._validate_non_negative(token_id, "token_id")
         self._validate_amount(liquidity, "liquidity")
         return self._action_raw(
             "exit((uint256,uint128,uint256,uint256,uint256))",

@@ -2,7 +2,12 @@ from enum import Enum, auto
 
 from eth_typing import ChecksumAddress
 
-from ipor_fusion.fuses.base import Fuse, FuseAction
+from ipor_fusion.fuses.base import (
+    Fuse,
+    FuseAction,
+    _encode_uint248_substrate,
+    _substrate_address_bytes,
+)
 from ipor_fusion.types import Amount
 
 
@@ -33,10 +38,7 @@ class UniversalTokenSwapperSubstrates:
 
     @staticmethod
     def _encode_address(tag: int, address: ChecksumAddress) -> bytes:
-        payload = bytes.fromhex(address.removeprefix("0x"))
-        if len(payload) != 20:
-            raise ValueError(f"not a 20-byte address: {address}")
-        return bytes([tag]) + b"\x00" * 11 + payload
+        return bytes([tag]) + b"\x00" * 11 + _substrate_address_bytes(address)
 
     @classmethod
     def token(cls, address: ChecksumAddress) -> bytes:
@@ -52,9 +54,7 @@ class UniversalTokenSwapperSubstrates:
     @classmethod
     def slippage(cls, wad: int) -> bytes:
         """Vault-side slippage cap as a WAD fraction (1e16 = 1%)."""
-        if not 0 <= wad < 1 << 248:
-            raise ValueError(f"slippage WAD out of range: {wad}")
-        return bytes([cls._SLIPPAGE]) + wad.to_bytes(31, "big")
+        return _encode_uint248_substrate(cls._SLIPPAGE, wad, "slippage WAD")
 
 
 class UniversalTokenSwapperFuse(Fuse):
@@ -105,10 +105,7 @@ class UniversalTokenSwapperFuse(Fuse):
                 "min_amount_out is required with abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT"
                 " (pass 0 to rely on the vault-side slippage cap only)"
             )
-        if min_amount_out < 0:
-            raise ValueError(
-                f"min_amount_out must not be negative, got {min_amount_out}"
-            )
+        self._validate_non_negative(min_amount_out, "min_amount_out")
         return self._action_raw(
             "enter((address,address,uint256,uint256,(address[],bytes[])))",
             [[token_in, token_out, amount_in, min_amount_out, [targets, data]]],

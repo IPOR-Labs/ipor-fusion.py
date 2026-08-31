@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import SubstrateInfo, decode_substrate
 
 SUSDE = "0x9d39a5de30e57443bff2a8307a4256c8797a3497"
@@ -94,6 +95,15 @@ def test_market_without_decoder_is_labelled_not_guessed():
     info = decode_substrate("0x" + "11" * 32, market_id=31)
     assert info.address == ""
     assert info.type_label == "no_decoder(VELODROME_SUPERCHAIN)"
+
+
+def test_external_state_is_canonical_name_and_rwa_is_alias():
+    # Market 50 is EXTERNAL_STATE; RWA remains a backward-compatible alias of
+    # the same value, but the canonical name is what id->name lookups display.
+    assert IporFusionMarkets.EXTERNAL_STATE == 50
+    assert IporFusionMarkets.RWA == IporFusionMarkets.EXTERNAL_STATE
+    info = decode_substrate("0x" + "11" * 32, market_id=50)
+    assert info.type_label == "no_decoder(EXTERNAL_STATE)"
 
 
 def test_no_market_context_returns_raw():

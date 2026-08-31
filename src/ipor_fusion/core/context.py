@@ -88,10 +88,12 @@ class Web3Context:
         data: bytes,
         block: BlockIdentifier | None = None,
     ) -> HexBytes:
-        effective_block = block if block is not None else self._default_block
         return self.web3.eth.call(
-            {"to": to, "data": data}, block_identifier=effective_block
+            {"to": to, "data": data}, block_identifier=self._resolve_block(block)
         )
+
+    def _resolve_block(self, block: BlockIdentifier | None) -> BlockIdentifier:
+        return block if block is not None else self._default_block
 
     def _build_transaction(self, to: ChecksumAddress, data: bytes) -> dict:
         assert self.signer is not None  # noqa: S101  # signer ensured by callers
@@ -150,6 +152,16 @@ class Web3Context:
 
     def get_block(self, block: BlockIdentifier = "latest"):
         return self.web3.eth.get_block(block)
+
+    def get_storage_at(
+        self,
+        address: ChecksumAddress,
+        slot: int,
+        block: BlockIdentifier | None = None,
+    ) -> HexBytes:
+        return self.web3.eth.get_storage_at(
+            address, slot, block_identifier=self._resolve_block(block)
+        )
 
     def _estimate_gas(self, to: ChecksumAddress, data: str, from_address: str) -> int:
         estimated = self.web3.eth.estimate_gas(

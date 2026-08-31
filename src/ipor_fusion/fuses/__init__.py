@@ -1,4 +1,5 @@
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
+from ipor_fusion.fuses.async_action import AsyncActionFuse, AsyncActionSubstrates
 from ipor_fusion.fuses.base import Fuse, FuseAction, StakeFuse
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
@@ -16,6 +17,10 @@ from ipor_fusion.fuses.euler_v2 import (
     EulerV2SwapReconfigureFuse,
     EulerV2SwapRegistryFuse,
     euler_substrate,
+)
+from ipor_fusion.fuses.external_state import (
+    ExternalStateAction,
+    ExternalStateOperationFuse,
 )
 from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappStakingFuse,
@@ -59,6 +64,8 @@ __all__ = [
     "StakeFuse",
     "AaveV3SupplyFuse",
     "AaveV3BorrowFuse",
+    "AsyncActionFuse",
+    "AsyncActionSubstrates",
     "MorphoSupplyFuse",
     "MorphoCollateralFuse",
     "MorphoBorrowFuse",
@@ -82,6 +89,8 @@ __all__ = [
     "GearboxSupplyFuse",
     "GearboxStakeFuse",
     "ERC4626SupplyFuse",
+    "ExternalStateAction",
+    "ExternalStateOperationFuse",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",

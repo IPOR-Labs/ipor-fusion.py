@@ -78,9 +78,19 @@ class IporFusionMarkets:
     LITE_PSM = 48
     # substrate type: AaveV4SubstrateType (Asset or Spoke)
     AAVE_V4 = 49
-    # substrate types: RWASubstrateLib (ASSET, BALANCE_ACCOUNT, CUSTODIAN,
-    # TARGET, STALENESS_MAX, BIG_CHANGE_BPS, DUST_THRESHOLD, MIN_UPDATE_INTERVAL)
+    # External-state market (id 50): off-vault capital via the external-state
+    # operation fuse (e.g. Hyperliquid / Boros margin legs). On-chain substrate
+    # types: ExternalStateSubstrateLib (1 ASSET, 2 TARGET, 3 CUSTODIAN,
+    # 4 BALANCE_ACCOUNT, 5 STALENESS_MAX, 6 BIG_CHANGE_BPS, 7 DUST_THRESHOLD,
+    # 8 MIN_UPDATE_INTERVAL).
+    EXTERNAL_STATE = 50
+    # Deprecated alias of EXTERNAL_STATE, kept for backward compatibility.
+    # Reverse id->name lookups skip aliases (see _DEPRECATED_ALIASES) so the
+    # canonical name is the one displayed.
     RWA = 50
+    # Deprecated member names that alias a canonical member of the same value;
+    # reverse id->name lookups skip these so the canonical name wins.
+    _DEPRECATED_ALIASES = frozenset({"RWA"})
     # substrate type: AguaSubstrateLib (VAULT or ASSET)
     AGUA_GLOBAL_CARRY = 51
     ERC4626_0001 = 100_001

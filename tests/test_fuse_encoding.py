@@ -8,6 +8,7 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
+from ipor_fusion.fuses.async_action import AsyncActionFuse, AsyncActionSubstrates
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
@@ -26,6 +27,7 @@ from ipor_fusion.fuses.euler_v2 import (
     EulerV2SwapRegistryFuse,
     euler_substrate,
 )
+from ipor_fusion.fuses.external_state import ExternalStateOperationFuse
 from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappStakingFuse,
     FluidInstadappSupplyFuse,
@@ -56,6 +58,7 @@ from ipor_fusion.fuses.universal import (
     UniversalTokenSwapperFuse,
     UniversalTokenSwapperSubstrates,
 )
+from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import MAX_UINT256
 
 # Deterministic test addresses
@@ -1515,3 +1518,346 @@ class TestEulerV2BorrowFuse:
             EulerV2BorrowFuse(FUSE_ADDR).borrow(
                 euler_vault=ZERO_ADDRESS, asset_amount=1, sub_account=0x01
             )
+
+
+# ── ExternalState (market 50) ───────────────────────────────────────────
+
+
+class TestExternalStateOperationFuse:
+    _TUPLE = "(address,uint256,address,(address,bytes)[])"
+
+    def test_enter_selector_and_roundtrip(self):
+        actions = [(TOKEN_B, b"\xde\xad\xbe\xef")]
+        action = ExternalStateOperationFuse(FUSE_ADDR).enter(
+            asset=TOKEN_A, amount=1_000_000, balance_account=VAULT_ADDR, actions=actions
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == _selector(f"enter({self._TUPLE})")
+
+        ((asset, amount, ba, decoded_actions),) = decode([self._TUPLE], action.data[4:])
+        assert asset.lower() == TOKEN_A_LOW
+        assert amount == 1_000_000
+        assert ba.lower() == VAULT_ADDR_LOW
+        assert len(decoded_actions) == 1
+        assert decoded_actions[0][0].lower() == TOKEN_B_LOW
+        assert decoded_actions[0][1] == b"\xde\xad\xbe\xef"
+
+    def test_exit_selector_and_multiple_actions(self):
+        actions = [(TOKEN_A, b"\x01"), (TOKEN_B, b"\x02\x03")]
+        action = ExternalStateOperationFuse(FUSE_ADDR).exit(
+            asset=TOKEN_A, amount=42, balance_account=VAULT_ADDR, actions=actions
+        )
+        assert action.data[:4] == _selector(f"exit({self._TUPLE})")
+        ((_, _, _, decoded_actions),) = decode([self._TUPLE], action.data[4:])
+        assert [payload for _, payload in decoded_actions] == [
+            b"\x01",
+            b"\x02\x03",
+        ]
+
+    def test_actions_only_enter_allows_zero_asset_and_empty_actions(self):
+        # amount == 0 is a valid "actions-only" call; asset may be the zero address.
+        action = ExternalStateOperationFuse(FUSE_ADDR).enter(
+            asset=ZERO_ADDRESS, amount=0, balance_account=VAULT_ADDR, actions=[]
+        )
+        ((asset, amount, _, decoded_actions),) = decode([self._TUPLE], action.data[4:])
+        assert amount == 0
+        assert int(asset, 16) == 0
+        assert len(decoded_actions) == 0
+
+    def test_negative_amount_rejected(self):
+        with pytest.raises(ValueError, match="must not be negative"):
+            ExternalStateOperationFuse(FUSE_ADDR).enter(
+                asset=TOKEN_A, amount=-1, balance_account=VAULT_ADDR, actions=[]
+            )
+
+    def test_zero_balance_account_rejected(self):
+        with pytest.raises(ValueError, match="balance_account"):
+            ExternalStateOperationFuse(FUSE_ADDR).enter(
+                asset=TOKEN_A, amount=1, balance_account=ZERO_ADDRESS, actions=[]
+            )
+
+    def test_zero_asset_rejected_when_amount_positive(self):
+        with pytest.raises(ValueError, match="asset"):
+            ExternalStateOperationFuse(FUSE_ADDR).enter(
+                asset=ZERO_ADDRESS, amount=1, balance_account=VAULT_ADDR, actions=[]
+            )
+
+    def test_zero_action_target_rejected(self):
+        with pytest.raises(ValueError, match=r"actions\[0\]"):
+            ExternalStateOperationFuse(FUSE_ADDR).exit(
+                asset=TOKEN_A,
+                amount=1,
+                balance_account=VAULT_ADDR,
+                actions=[(ZERO_ADDRESS, b"\x00")],
+            )
+
+
+# ── AsyncAction (market 40) ─────────────────────────────────────────────
+
+
+class TestAsyncActionFuse:
+    _ENTER = "(address,uint256,address[],bytes[],uint256[],address[])"
+    _EXIT = "(address[],bytes[])"
+
+    def test_enter_selector_and_defaults(self):
+        action = AsyncActionFuse(FUSE_ADDR).enter(
+            token_out=TOKEN_A,
+            amount_out=1000,
+            targets=[TOKEN_B],
+            call_datas=[b"\xaa\xbb"],
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == _selector(f"enter({self._ENTER})")
+        ((tok, amt, targets, cds, eths, dust),) = decode([self._ENTER], action.data[4:])
+        assert tok.lower() == TOKEN_A_LOW
+        assert amt == 1000
+        assert [t.lower() for t in targets] == [TOKEN_B_LOW]
+        assert list(cds) == [b"\xaa\xbb"]
+        assert list(eths) == [0]  # default zeros, one per target
+        assert list(dust) == []  # default empty
+
+    def test_enter_explicit_eth_and_dust(self):
+        action = AsyncActionFuse(FUSE_ADDR).enter(
+            token_out=TOKEN_A,
+            amount_out=5,
+            targets=[TOKEN_B, VAULT_ADDR],
+            call_datas=[b"\x01", b"\x02"],
+            eth_amounts=[7, 8],
+            tokens_dust_to_check=[TOKEN_A],
+        )
+        ((_, _, _, _, eths, dust),) = decode([self._ENTER], action.data[4:])
+        assert list(eths) == [7, 8]
+        assert [d.lower() for d in dust] == [TOKEN_A_LOW]
+
+    def test_enter_rejects_mismatched_targets_calldatas(self):
+        with pytest.raises(ValueError, match="same length"):
+            AsyncActionFuse(FUSE_ADDR).enter(
+                token_out=TOKEN_A, amount_out=1, targets=[TOKEN_B], call_datas=[]
+            )
+
+    def test_enter_rejects_mismatched_eth_amounts(self):
+        with pytest.raises(ValueError, match="eth_amounts"):
+            AsyncActionFuse(FUSE_ADDR).enter(
+                token_out=TOKEN_A,
+                amount_out=1,
+                targets=[TOKEN_B],
+                call_datas=[b"\x01"],
+                eth_amounts=[1, 2],
+            )
+
+    def test_enter_rejects_zero_token_out(self):
+        with pytest.raises(ValueError, match="token_out"):
+            AsyncActionFuse(FUSE_ADDR).enter(
+                token_out=ZERO_ADDRESS, amount_out=1, targets=[], call_datas=[]
+            )
+
+    def test_enter_rejects_negative_amount(self):
+        with pytest.raises(ValueError, match="must not be negative"):
+            AsyncActionFuse(FUSE_ADDR).enter(
+                token_out=TOKEN_A, amount_out=-1, targets=[], call_datas=[]
+            )
+
+    def test_enter_actions_only_zero_amount(self):
+        # amount_out == 0 is a documented actions-only enter.
+        action = AsyncActionFuse(FUSE_ADDR).enter(
+            token_out=TOKEN_A, amount_out=0, targets=[TOKEN_B], call_datas=[b"\x01"]
+        )
+        ((_, amt, _, _, _, _),) = decode([self._ENTER], action.data[4:])
+        assert amt == 0
+
+    def test_enter_fund_only_empty_targets(self):
+        # Fund the executor with a real amount but run no actions.
+        action = AsyncActionFuse(FUSE_ADDR).enter(
+            token_out=TOKEN_A, amount_out=1000, targets=[], call_datas=[]
+        )
+        ((tok, amt, targets, cds, eths, dust),) = decode([self._ENTER], action.data[4:])
+        assert tok.lower() == TOKEN_A_LOW
+        assert amt == 1000
+        assert len(targets) == 0
+        assert len(cds) == 0
+        assert len(eths) == 0
+        assert len(dust) == 0
+
+    def test_enter_rejects_zero_target(self):
+        with pytest.raises(ValueError, match=r"targets\[0\]"):
+            AsyncActionFuse(FUSE_ADDR).enter(
+                token_out=TOKEN_A,
+                amount_out=1,
+                targets=[ZERO_ADDRESS],
+                call_datas=[b"\x01"],
+            )
+
+    def test_enter_rejects_negative_eth_amount(self):
+        with pytest.raises(ValueError, match=r"eth_amounts\[0\]"):
+            AsyncActionFuse(FUSE_ADDR).enter(
+                token_out=TOKEN_A,
+                amount_out=1,
+                targets=[TOKEN_B],
+                call_datas=[b"\x01"],
+                eth_amounts=[-1],
+            )
+
+    def test_transfer_out_builds_single_transfer(self):
+        action = AsyncActionFuse(FUSE_ADDR).transfer_out(
+            token_out=TOKEN_A, amount_out=500, destination=VAULT_ADDR
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == _selector(f"enter({self._ENTER})")
+        ((tok, amt, targets, cds, eths, _),) = decode([self._ENTER], action.data[4:])
+        assert tok.lower() == TOKEN_A_LOW
+        assert amt == 500
+        assert [t.lower() for t in targets] == [TOKEN_A_LOW]  # target is token_out
+        assert cds[0][:4] == _selector("transfer(address,uint256)")
+        (dest, transferred) = decode(["address", "uint256"], cds[0][4:])
+        assert dest.lower() == VAULT_ADDR_LOW
+        assert transferred == 500
+        assert list(eths) == [0]
+
+    def test_transfer_out_rejects_zero_amount(self):
+        with pytest.raises(ValueError, match="amount_out"):
+            AsyncActionFuse(FUSE_ADDR).transfer_out(
+                token_out=TOKEN_A, amount_out=0, destination=VAULT_ADDR
+            )
+
+    def test_transfer_out_rejects_zero_destination(self):
+        with pytest.raises(ValueError, match="destination"):
+            AsyncActionFuse(FUSE_ADDR).transfer_out(
+                token_out=TOKEN_A, amount_out=1, destination=ZERO_ADDRESS
+            )
+
+    def test_transfer_out_many_sums_and_splits(self):
+        action = AsyncActionFuse(FUSE_ADDR).transfer_out_many(
+            token_out=TOKEN_A, transfers=[(VAULT_ADDR, 100), (TOKEN_B, 250)]
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == _selector(f"enter({self._ENTER})")
+        ((_, amt, targets, cds, _, _),) = decode([self._ENTER], action.data[4:])
+        assert amt == 350  # funded with the sum
+        assert [t.lower() for t in targets] == [TOKEN_A_LOW, TOKEN_A_LOW]
+        (d0, a0) = decode(["address", "uint256"], cds[0][4:])
+        (d1, a1) = decode(["address", "uint256"], cds[1][4:])
+        assert (d0.lower(), a0) == (VAULT_ADDR_LOW, 100)
+        assert (d1.lower(), a1) == (TOKEN_B_LOW, 250)
+
+    def test_transfer_out_many_rejects_empty(self):
+        with pytest.raises(ValueError, match="transfers"):
+            AsyncActionFuse(FUSE_ADDR).transfer_out_many(
+                token_out=TOKEN_A, transfers=[]
+            )
+
+    def test_transfer_out_many_rejects_zero_amount(self):
+        with pytest.raises(ValueError, match=r"transfers\[1\]"):
+            AsyncActionFuse(FUSE_ADDR).transfer_out_many(
+                token_out=TOKEN_A, transfers=[(VAULT_ADDR, 100), (TOKEN_B, 0)]
+            )
+
+    def test_transfer_out_many_rejects_zero_destination(self):
+        with pytest.raises(ValueError, match=r"transfers\[1\]\.destination"):
+            AsyncActionFuse(FUSE_ADDR).transfer_out_many(
+                token_out=TOKEN_A, transfers=[(VAULT_ADDR, 100), (ZERO_ADDRESS, 50)]
+            )
+
+    def test_exit_default_balanceof_carrier(self):
+        action = AsyncActionFuse(FUSE_ADDR).exit(assets=[TOKEN_A, TOKEN_B])
+        assert action.data[:4] == _selector(f"exit({self._EXIT})")
+        ((assets, fetch),) = decode([self._EXIT], action.data[4:])
+        assert [a.lower() for a in assets] == [TOKEN_A_LOW, TOKEN_B_LOW]
+        balance_of = _selector("balanceOf(address)")
+        assert list(fetch) == [balance_of, balance_of]
+
+    def test_exit_explicit_fetch(self):
+        action = AsyncActionFuse(FUSE_ADDR).exit(
+            assets=[TOKEN_A], fetch_call_datas=[b"\xde\xad\xbe\xef"]
+        )
+        ((_, fetch),) = decode([self._EXIT], action.data[4:])
+        assert list(fetch) == [b"\xde\xad\xbe\xef"]
+
+    def test_exit_rejects_mismatched_fetch(self):
+        with pytest.raises(ValueError, match="fetch_call_datas"):
+            AsyncActionFuse(FUSE_ADDR).exit(
+                assets=[TOKEN_A, TOKEN_B], fetch_call_datas=[b"\x01"]
+            )
+
+    def test_exit_empty_assets(self):
+        action = AsyncActionFuse(FUSE_ADDR).exit(assets=[])
+        ((assets, fetch),) = decode([self._EXIT], action.data[4:])
+        assert len(assets) == 0
+        assert len(fetch) == 0
+
+
+class TestAsyncActionSubstrates:
+    """Mirror of AsyncActionFuseLib.sol: type << 248 | payload."""
+
+    def test_allowed_amount_to_outside_layout(self):
+        encoded = AsyncActionSubstrates.allowed_amount_to_outside(TOKEN_A, 1_000_000)
+        assert len(encoded) == 32
+        assert (
+            int.from_bytes(encoded, "big")
+            == (0 << 248) | (int(TOKEN_A, 16) << 88) | 1_000_000
+        )
+        # round-trip through the real decoder (offset-sensitive layout)
+        info = decode_substrate(encoded, market_id=40)
+        assert info.type_label == "ALLOWED_AMOUNT_TO_OUTSIDE"
+        assert info.address.lower() == TOKEN_A_LOW
+        assert info.extra["amount"] == "1000000"
+
+    def test_target_layout(self):
+        selector = _selector("transfer(address,uint256)")
+        encoded = AsyncActionSubstrates.target(TOKEN_B, selector)
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (1 << 248) | (
+            int(TOKEN_B, 16) << 32
+        ) | int.from_bytes(selector, "big")
+        info = decode_substrate(encoded, market_id=40)
+        assert info.type_label == "ALLOWED_TARGETS"
+        assert info.address.lower() == TOKEN_B_LOW
+        assert info.extra["selector"] == "0x" + selector.hex()
+
+    def test_exit_slippage_layout(self):
+        encoded = AsyncActionSubstrates.exit_slippage(5 * 10**16)  # 5%
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (2 << 248) | (5 * 10**16)
+        info = decode_substrate(encoded, market_id=40)
+        assert info.type_label == "ALLOWED_EXIT_SLIPPAGE"
+        assert info.extra["slippage"] == str(5 * 10**16)
+
+    @pytest.mark.parametrize("amount", [0, (1 << 88) - 1])
+    def test_amount_boundary_encodes(self, amount):
+        # 0 and the uint88 max both encode and round-trip.
+        encoded = AsyncActionSubstrates.allowed_amount_to_outside(TOKEN_A, amount)
+        assert len(encoded) == 32
+        info = decode_substrate(encoded, market_id=40)
+        assert info.extra["amount"] == str(amount)
+
+    @pytest.mark.parametrize("wad", [0, (1 << 248) - 1])
+    def test_slippage_boundary_encodes(self, wad):
+        # 0 and the uint248 max both encode within the field.
+        encoded = AsyncActionSubstrates.exit_slippage(wad)
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (2 << 248) | wad
+
+    def test_amount_out_of_uint88_range(self):
+        with pytest.raises(ValueError, match="uint88"):
+            AsyncActionSubstrates.allowed_amount_to_outside(TOKEN_A, 1 << 88)
+        with pytest.raises(ValueError, match="uint88"):
+            AsyncActionSubstrates.allowed_amount_to_outside(TOKEN_A, -1)
+
+    def test_slippage_out_of_range(self):
+        with pytest.raises(ValueError, match="out of range"):
+            AsyncActionSubstrates.exit_slippage(1 << 248)
+        with pytest.raises(ValueError, match="out of range"):
+            AsyncActionSubstrates.exit_slippage(-1)
+
+    def test_target_bad_selector_length(self):
+        with pytest.raises(ValueError, match="4 bytes"):
+            AsyncActionSubstrates.target(TOKEN_B, b"\x01\x02\x03")  # too short
+        with pytest.raises(ValueError, match="4 bytes"):
+            AsyncActionSubstrates.target(TOKEN_B, b"\x01\x02\x03\x04\x05")  # too long
+
+    def test_malformed_address(self):
+        with pytest.raises(ValueError, match="20-byte"):
+            AsyncActionSubstrates.allowed_amount_to_outside("0x1234", 1)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="20-byte"):
+            AsyncActionSubstrates.target(
+                "0x1234", _selector("transfer(address,uint256)")
+            )  # type: ignore[arg-type]

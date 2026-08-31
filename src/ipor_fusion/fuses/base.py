@@ -6,7 +6,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.core.contract import _parse_param_types
-from ipor_fusion.types import MAX_UINT256, Amount, TokenId
+from ipor_fusion.types import MAX_UINT256, Amount
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -62,7 +62,7 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
             raise ValueError(f"{name} must not be empty")
 
     @staticmethod
-    def _validate_token_id(value: TokenId, name: str) -> None:
+    def _validate_non_negative(value: int, name: str) -> None:
         if value < 0:
             raise ValueError(f"{name} must not be negative, got {value}")
 
@@ -98,3 +98,19 @@ class StakeFuse(Fuse):
             "exit((uint256,address))",
             [[amount, self._staking_address]],
         )
+
+
+def _substrate_address_bytes(address: ChecksumAddress) -> bytes:
+    """The 20 raw bytes of a checksum address, for packing into a substrate."""
+    payload = bytes.fromhex(address.removeprefix("0x"))
+    if len(payload) != 20:
+        raise ValueError(f"not a 20-byte address: {address}")
+    return payload
+
+
+def _encode_uint248_substrate(tag: int, value: int, name: str) -> bytes:
+    """A bytes32 substrate: a one-byte type ``tag`` then a uint248 ``value``
+    (e.g. a WAD fraction). ``name`` labels ``value`` in the range error."""
+    if not 0 <= value < (1 << 248):
+        raise ValueError(f"{name} out of range: {value}")
+    return bytes([tag]) + value.to_bytes(31, "big")

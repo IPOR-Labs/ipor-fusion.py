@@ -260,12 +260,14 @@ _register_markets([40], _decode_async_action)
 
 
 def _build_market_lookup() -> dict[int, str]:
+    aliases = IporFusionMarkets._DEPRECATED_ALIASES
     lookup: dict[int, str] = {}
     for name in dir(IporFusionMarkets):
-        if not name.startswith("_"):
-            val = getattr(IporFusionMarkets, name)
-            if isinstance(val, int):
-                lookup[val] = name
+        if name.startswith("_") or name in aliases:
+            continue
+        val = getattr(IporFusionMarkets, name)
+        if isinstance(val, int):
+            lookup[val] = name
     return lookup
 
 

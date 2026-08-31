@@ -21,6 +21,7 @@ from ipor_fusion.core.access import (
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
+from ipor_fusion.core.external_state_executor import ExternalStateExecutor, NavMark
 from ipor_fusion.core.fee_manager import (
     FeeAccount,
     FeeManager,
@@ -61,6 +62,8 @@ from ipor_fusion.field_docs import DOCS
 from ipor_fusion.fuses import (
     AaveV3BorrowFuse,
     AaveV3SupplyFuse,
+    AsyncActionFuse,
+    AsyncActionSubstrates,
     CompoundV3SupplyFuse,
     ERC4626SupplyFuse,
     EulerSwapDynamicParams,
@@ -75,6 +78,8 @@ from ipor_fusion.fuses import (
     EulerV2SwapDeployFuse,
     EulerV2SwapReconfigureFuse,
     EulerV2SwapRegistryFuse,
+    ExternalStateAction,
+    ExternalStateOperationFuse,
     FluidInstadappStakingFuse,
     FluidInstadappSupplyFuse,
     Fuse,
@@ -191,11 +196,15 @@ __all__ = [
     "PriceOracleMiddleware",
     "PriceOracleMiddlewareManager",
     "AssetPriceSource",
+    "ExternalStateExecutor",
+    "NavMark",
     "FuseAction",
     "Fuse",
     "StakeFuse",
     "AaveV3SupplyFuse",
     "AaveV3BorrowFuse",
+    "AsyncActionFuse",
+    "AsyncActionSubstrates",
     "MorphoSupplyFuse",
     "MorphoCollateralFuse",
     "MorphoBorrowFuse",
@@ -219,6 +228,8 @@ __all__ = [
     "GearboxSupplyFuse",
     "GearboxStakeFuse",
     "ERC4626SupplyFuse",
+    "ExternalStateAction",
+    "ExternalStateOperationFuse",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",
