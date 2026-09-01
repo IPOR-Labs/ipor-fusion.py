@@ -66,3 +66,17 @@ def test_encoder_send_without_ctx_raises():
     call = PlasmaVault.encoder(SAMPLE_ADDRESS).convert_to_public_vault()
     with pytest.raises(ValueError, match="Web3Context required"):
         call.send()
+
+
+def test_encoder_build_transaction_without_ctx_raises():
+    """`.build_transaction()` on an encoder-built Call also requires a ctx."""
+    call = PlasmaVault.encoder(SAMPLE_ADDRESS).convert_to_public_vault()
+    with pytest.raises(ValueError, match="Web3Context required"):
+        call.build_transaction()
+
+
+def test_encoder_estimate_gas_without_ctx_raises():
+    """`.estimate_gas()` on an encoder-built Call also requires a ctx."""
+    call = PlasmaVault.encoder(SAMPLE_ADDRESS).convert_to_public_vault()
+    with pytest.raises(ValueError, match="Web3Context required"):
+        call.estimate_gas()

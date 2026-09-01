@@ -8,6 +8,7 @@ from hexbytes import HexBytes
 from web3 import Web3
 
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import Call
 from ipor_fusion.errors import TransactionError
 from ipor_fusion.types import ChainId
 
@@ -134,6 +135,7 @@ class TestSend:
         # Mock chain of calls in send
         web3.eth.get_transaction_count.return_value = 5
         web3.eth.gas_price = 20_000_000_000
+        web3.eth.get_block.return_value = {"baseFeePerGas": 15_000_000_000}
         web3.eth.estimate_gas.return_value = 21000
 
         signed = MagicMock()
@@ -147,6 +149,73 @@ class TestSend:
         receipt = ctx.send(TO_ADDR, b"\x01\x02")
         assert receipt["status"] == 1
         web3.eth.send_raw_transaction.assert_called_once_with(b"\xf8")
+
+
+# ── maxFeePerGas construction ────────────────────────────────────────────
+
+
+GWEI = 1_000_000_000
+
+
+def _build_tx(ctx, *, gas_price, block):
+    """Drive build_transaction with stubbed nonce/gas_price/block/gas."""
+    web3 = ctx.web3
+    web3.eth.get_transaction_count.return_value = 0
+    web3.eth.gas_price = gas_price
+    web3.eth.get_block.return_value = block
+    web3.eth.estimate_gas.return_value = 21000
+    return ctx.build_transaction(TO_ADDR, b"\x01\x02")
+
+
+class TestMaxFeePerGas:
+    def test_eip1559_ceiling_uses_base_fee_headroom(self):
+        ctx = _make_ctx(signer=ADDR)
+        tx = _build_tx(ctx, gas_price=20 * GWEI, block={"baseFeePerGas": 15 * GWEI})
+
+        # priority = min(2 gwei default, gas_price // 10 = 2 gwei) = 2 gwei
+        # ceiling = base_fee * 2 + priority
+        assert tx["maxPriorityFeePerGas"] == 2 * GWEI
+        assert tx["maxFeePerGas"] == 15 * GWEI * 2 + 2 * GWEI
+
+    def test_priority_fee_folded_into_ceiling_is_capped(self):
+        ctx = _make_ctx(signer=ADDR)
+        # gas_price // 10 (10 gwei) exceeds the 2 gwei cap, so the priority fee
+        # in the ceiling must be the cap, not the raw gas_price // 10.
+        tx = _build_tx(ctx, gas_price=100 * GWEI, block={"baseFeePerGas": 15 * GWEI})
+
+        cap = Web3Context.DEFAULT_TRANSACTION_MAX_PRIORITY_FEE
+        assert tx["maxPriorityFeePerGas"] == cap
+        assert tx["maxFeePerGas"] == 15 * GWEI * 2 + cap
+
+    def test_zero_base_fee_still_takes_the_eip1559_branch(self):
+        ctx = _make_ctx(signer=ADDR)
+        # base_fee 0 is falsy but not None: the branch keys on `is None`, so a
+        # zero base fee collapses the ceiling to just the priority fee.
+        tx = _build_tx(ctx, gas_price=20 * GWEI, block={"baseFeePerGas": 0})
+
+        assert tx["maxFeePerGas"] == tx["maxPriorityFeePerGas"]
+
+    def test_falls_back_to_gas_price_margin_without_base_fee(self):
+        ctx = _make_ctx(signer=ADDR)
+        # A pre-EIP-1559 block carries no baseFeePerGas key.
+        tx = _build_tx(ctx, gas_price=20 * GWEI, block={})
+
+        assert tx["maxFeePerGas"] == 20 * GWEI + (20 * GWEI * 25 // 100)
+
+    def test_ceiling_clears_a_base_fee_that_the_old_formula_would_miss(self):
+        # Regression guard: on Arbitrum-like fees the pre-fix ceiling
+        # (gas_price + 25%) fell below a base fee that ticked up before
+        # broadcast; the base-fee-relative ceiling clears it.
+        ctx = _make_ctx(signer=ADDR)
+        gas_price = 10_000_000  # 0.01 gwei, Arbitrum floor at read time
+        tx = _build_tx(ctx, gas_price=gas_price, block={"baseFeePerGas": gas_price})
+
+        bumped_base_fee = 15_000_000  # +50% by broadcast time
+        old_ceiling = gas_price + gas_price * 25 // 100
+        priority = gas_price // 10  # below the 2 gwei cap at this gas price
+        assert old_ceiling < bumped_base_fee  # would have been rejected
+        assert tx["maxFeePerGas"] == gas_price * 2 + priority  # exact new ceiling
+        assert tx["maxFeePerGas"] >= bumped_base_fee  # now clears it
 
 
 # ── _handle_receipt ─────────────────────────────────────────────────────
@@ -199,6 +268,7 @@ class TestSendFailedReceipt:
 
         web3.eth.get_transaction_count.return_value = 0
         web3.eth.gas_price = 10_000_000_000
+        web3.eth.get_block.return_value = {"baseFeePerGas": 8_000_000_000}
         web3.eth.estimate_gas.return_value = 21000
 
         signed = MagicMock()
@@ -238,3 +308,93 @@ class TestGetStorageAt:
         ctx.web3.eth.get_storage_at.assert_called_once_with(
             ADDR, 7, block_identifier=123
         )
+
+
+# ── build_transaction / estimate_gas preview (item 4) ───────────────────────
+
+
+class TestPreview:
+    def test_build_transaction_returns_tx_without_sending(self):
+        ctx = _make_ctx(signer=ADDR)
+        web3 = ctx.web3
+        web3.eth.get_transaction_count.return_value = 7
+        web3.eth.gas_price = 20 * GWEI
+        web3.eth.get_block.return_value = {"baseFeePerGas": 15 * GWEI}
+        web3.eth.estimate_gas.return_value = 21000
+
+        tx = ctx.build_transaction(TO_ADDR, b"\x01\x02")
+
+        # Same dict send() would submit — including the base-fee-relative ceiling.
+        assert tx["to"] == TO_ADDR
+        assert tx["from"] == ADDR
+        assert tx["nonce"] == 7
+        assert tx["maxFeePerGas"] == 15 * GWEI * 2 + 2 * GWEI
+        assert tx["gas"] == int(1.25 * 21000)
+        # from/to/data reach estimate_gas intact (0x-prefixed calldata).
+        web3.eth.estimate_gas.assert_called_once_with(
+            {"to": TO_ADDR, "from": ADDR, "data": "0x0102"}
+        )
+        web3.eth.send_raw_transaction.assert_not_called()
+
+    def test_build_transaction_requires_signer(self):
+        ctx = _make_ctx()  # no signer
+        with pytest.raises(ValueError, match="Signer required"):
+            ctx.build_transaction(TO_ADDR, b"\x01\x02")
+
+    def test_build_transaction_propagates_revert(self):
+        # Gas estimation executes the call, so a would-revert tx raises here too.
+        # The earlier fee reads need real values for the path to reach it.
+        ctx = _make_ctx(signer=ADDR)
+        web3 = ctx.web3
+        web3.eth.get_transaction_count.return_value = 0
+        web3.eth.gas_price = 20 * GWEI
+        web3.eth.get_block.return_value = {"baseFeePerGas": 15 * GWEI}
+        web3.eth.estimate_gas.side_effect = ValueError("execution reverted")
+        with pytest.raises(ValueError, match="execution reverted"):
+            ctx.build_transaction(TO_ADDR, b"\x01\x02")
+
+    def test_estimate_gas_applies_multiplier(self):
+        # A non-default multiplier proves the value is read from the ctx rather
+        # than hardcoded.
+        ctx = _make_ctx(signer=ADDR, gas_multiplier=2.0)
+        ctx.web3.eth.estimate_gas.return_value = 21000
+
+        assert ctx.estimate_gas(TO_ADDR, b"\x01\x02") == int(2.0 * 21000)
+        ctx.web3.eth.estimate_gas.assert_called_once_with(
+            {"to": TO_ADDR, "from": ADDR, "data": "0x0102"}
+        )
+        # The cheap path skips the nonce / base-fee reads build_transaction makes.
+        ctx.web3.eth.get_transaction_count.assert_not_called()
+        ctx.web3.eth.get_block.assert_not_called()
+        ctx.web3.eth.send_raw_transaction.assert_not_called()
+
+    def test_estimate_gas_requires_signer(self):
+        ctx = _make_ctx()  # no signer
+        with pytest.raises(ValueError, match="Signer required"):
+            ctx.estimate_gas(TO_ADDR, b"\x01\x02")
+
+    def test_estimate_gas_propagates_revert(self):
+        # A would-revert tx surfaces the underlying revert rather than a number.
+        ctx = _make_ctx(signer=ADDR)
+        ctx.web3.eth.estimate_gas.side_effect = ValueError("execution reverted")
+        with pytest.raises(ValueError, match="execution reverted"):
+            ctx.estimate_gas(TO_ADDR, b"\x01\x02")
+
+
+class TestCallPreviewDelegation:
+    def test_estimate_gas_delegates_to_ctx(self):
+        ctx = MagicMock(spec=Web3Context)
+        ctx.estimate_gas.return_value = 12345
+        call = Call(to=TO_ADDR, data=b"\x01\x02", ctx=ctx)
+
+        assert call.estimate_gas() == 12345
+        ctx.estimate_gas.assert_called_once_with(TO_ADDR, b"\x01\x02")
+
+    def test_build_transaction_delegates_to_ctx(self):
+        ctx = MagicMock(spec=Web3Context)
+        sentinel = {"gas": 1}
+        ctx.build_transaction.return_value = sentinel
+        call = Call(to=TO_ADDR, data=b"\x03", ctx=ctx)
+
+        assert call.build_transaction() is sentinel
+        ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03")
