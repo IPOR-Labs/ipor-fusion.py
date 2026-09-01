@@ -6,6 +6,8 @@ from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from ipor_fusion import (
     ChangelogEntry,
     package_version,
@@ -235,25 +237,14 @@ class TestReadChangelog:
         assert read_changelog() == []
         assert read_changelog("1.0.0") == []
 
-    # Two accepted limitations, pinned so they stay visible: a since_version
-    # that is not a version at all widens the result instead of narrowing it,
-    # and a prerelease excludes the release it precedes. Only a caller reaches
-    # either — the changelog never supplies such a string — and the schema asks
-    # for a version, so both were left as they are.
+    # A since_version that is not a dotted number cannot be ranked against the
+    # headings, so it is rejected rather than silently widening (a codename or
+    # date) or mis-ordering (a prerelease suffix) the result.
+    @pytest.mark.parametrize("bad", ["latest", "3.x.1", "3.5.0-rc.1", "2026-07-30"])
     @patch("ipor_fusion.about._changelog_text", return_value=SAMPLE)
-    def test_unparseable_since_version_returns_everything(self, _text):
-        assert [entry.version for entry in read_changelog("latest")] == [
-            "3.5.0",
-            "3.4.1",
-            "3.4.0",
-            "0.2.0",
-        ]
-
-    @patch("ipor_fusion.about._changelog_text", return_value=SAMPLE)
-    def test_prerelease_since_version_sorts_above_its_own_release(self, _text):
-        # "0-rc" yields 0 and the trailing "1" becomes a fourth segment, so
-        # (3, 5, 0, 1) > (3, 5, 0) and 3.5.0 itself is excluded.
-        assert read_changelog("3.5.0-rc.1") == []
+    def test_non_version_since_raises(self, _text, bad):
+        with pytest.raises(ValueError, match="not a valid version"):
+            read_changelog(bad)
 
 
 class TestVersionKey:

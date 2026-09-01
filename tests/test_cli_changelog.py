@@ -90,6 +90,17 @@ class TestChangelog:
         assert result.exit_code == 0
         assert "(no releases newer than 3.5.0)" in result.output
 
+    @patch(
+        "ipor_fusion.cli.changelog_cmd.read_changelog",
+        side_effect=ValueError("'latest' is not a valid version"),
+    )
+    def test_invalid_since_is_a_usage_error(self, _mock_read):
+        result = CliRunner().invoke(cli, ["changelog", "--since", "latest"])
+
+        assert result.exit_code == 2
+        assert "not a valid version" in result.output
+        assert "--since" in result.output
+
 
 class TestChangelogJson:
     @patch("ipor_fusion.cli.changelog_cmd.read_changelog")
