@@ -28,6 +28,14 @@ ASYNC_EXIT_SLIPPAGE = (
     "0x02000000000000000000000000000000000000000000000000038d7ea4c68000"
 )
 
+# Live Aave V4 substrate granted on Ethereum mainnet (ETH-weETH Liquidity
+# Optimizer 0x7fd6b3b8…, market 49, 2026-09-01): Reserve on spoke
+# 0x94e7a5dc… (reserve 0 = WETH), supply-only.
+AAVE_V4_SPOKE = "0x94e7a5dcbe816e498b89ab752661904e2f56c485"
+AAVE_V4_WETH_SUPPLY_ONLY = (
+    "0x0194e7a5dcbe816e498b89ab752661904e2f56c4850000000000000000000000"
+)
+
 
 def test_async_action_allowed_amount_to_outside():
     info = decode_substrate(ASYNC_AMOUNT_TO_OUTSIDE, market_id=40)
@@ -68,6 +76,50 @@ def test_async_action_not_decoded_as_plain_address():
     rendering the low 20 bytes (amount tail included) as a bogus address."""
     info = decode_substrate(ASYNC_AMOUNT_TO_OUTSIDE, market_id=40)
     assert info.address != "0x" + ASYNC_AMOUNT_TO_OUTSIDE[-40:]
+
+
+def test_aave_v4_reserve():
+    info = decode_substrate(AAVE_V4_WETH_SUPPLY_ONLY, market_id=49)
+    assert info.type_label == "AAVE_V4_RESERVE"
+    assert info.address == AAVE_V4_SPOKE
+    assert info.extra == {
+        "reserve_id": "0",
+        "is_collateral": "False",
+        "can_borrow": "False",
+    }
+    assert not info.is_error
+
+
+def test_aave_v4_reserve_id_and_flags():
+    # spoke | reserveId=7 | flags=0x03 (isCollateral + canBorrow)
+    raw = "0x01" + SUSDE[2:] + "00000007" + "03" + "00" * 6
+    info = decode_substrate(raw, market_id=49)
+    assert info.address == SUSDE
+    assert info.extra == {
+        "reserve_id": "7",
+        "is_collateral": "True",
+        "can_borrow": "True",
+    }
+
+
+def test_aave_v4_non_reserve_types_stay_raw():
+    undefined = "0x" + "00" * 32
+    info = decode_substrate(undefined, market_id=49)
+    assert info.type_label == "Undefined"
+    assert info.address == ""
+
+    unknown = "0x05" + "00" * 31
+    info = decode_substrate(unknown, market_id=49)
+    assert info.type_label == "type=5"
+    assert info.address == ""
+
+
+def test_aave_v4_not_decoded_from_the_low_bytes():
+    """Regression: market 49 used to run through the generic type<<248 helper
+    (address in the low 20 bytes), rendering a left-aligned Reserve word as a
+    garbage address built from the reserveId/flags/padding tail."""
+    info = decode_substrate(AAVE_V4_WETH_SUPPLY_ONLY, market_id=49)
+    assert info.address != "0x" + AAVE_V4_WETH_SUPPLY_ONLY[-40:]
 
 
 def test_bytes_and_hex_str_inputs_are_equivalent():
@@ -121,7 +173,7 @@ def test_wrong_length_or_malformed_input_is_error(bad: str | bytes):
 
 def test_market_id_registrations_follow_ipor_fusion_markets_sol():
     """Regression for stale registrations: DOLOMITE=47 (not 46), NAPIER=46
-    (plain assets), AAVE_V4=49 (44 is SPARK_LEND, no substrate semantics)."""
+    (plain assets), SPARK_LEND=44 (reuses AaveV3SupplyFuse, plain assets)."""
     dolomite = "0x" + SUSDE[2:] + "0201" + "00" * 10
     info = decode_substrate(dolomite, market_id=47)
     assert info.address == SUSDE
@@ -130,12 +182,5 @@ def test_market_id_registrations_follow_ipor_fusion_markets_sol():
     napier = "0x" + "00" * 12 + SUSDE[2:]
     assert decode_substrate(napier, market_id=46) == SubstrateInfo(address=SUSDE)
 
-    aave_v4_spoke = "0x02" + "00" * 11 + SUSDE[2:]
-    info = decode_substrate(aave_v4_spoke, market_id=49)
-    assert info.type_label == "Spoke"
-    assert info.address == SUSDE
-
-    assert (
-        decode_substrate("0x" + "33" * 32, market_id=44).type_label
-        == "no_decoder(SPARK_LEND)"
-    )
+    spark = "0x" + "00" * 12 + SUSDE[2:]
+    assert decode_substrate(spark, market_id=44) == SubstrateInfo(address=SUSDE)

@@ -88,6 +88,33 @@ def _decode_dolomite(hex_str: str) -> SubstrateInfo:
     )
 
 
+def _decode_aave_v4(hex_str: str) -> SubstrateInfo:
+    """Decode type<<248 | spoke<<88 | reserveId<<56 | flags<<48 (Aave V4).
+
+    Source: AaveV4SubstrateLib.sol — type flag 1 = Reserve; the spoke address
+    is left-aligned right after the type byte (bits 247..88), followed by a
+    uint32 reserveId and a flags byte (bit0 isCollateral, bit1 canBorrow);
+    bits 47..0 are reserved. The (spoke, reserveId) pair — not an asset
+    address — identifies the market in Aave V4's Hub & Spoke design, so the
+    generic type<<248 helper (address in the low 20 bytes) rendered these as
+    garbage addresses.
+    """
+    type_byte = int(hex_str[0:2], 16)
+    if type_byte != 1:
+        label = "Undefined" if type_byte == 0 else f"type={type_byte}"
+        return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label)
+    flags = int(hex_str[50:52], 16)
+    return SubstrateInfo(
+        address=f"0x{hex_str[2:42]}",
+        type_label="AAVE_V4_RESERVE",
+        extra={
+            "reserve_id": str(int(hex_str[42:50], 16)),
+            "is_collateral": str((flags & 0x01) == 1),
+            "can_borrow": str((flags & 0x02) == 2),
+        },
+    )
+
+
 def _decode_euler_v2(hex_str: str) -> SubstrateInfo:
     """Decode eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72.
 
@@ -187,6 +214,7 @@ _register_markets(
         34,
         35,
         37,
+        44,  # SPARK_LEND — reuses AaveV3SupplyFuse (isSubstrateAsAssetGranted)
         46,  # NAPIER — isSubstrateAsAssetGranted, plain asset addresses
         *range(100_001, 100_021),  # ERC4626_0001 .. ERC4626_0020
     ],
@@ -226,12 +254,10 @@ _register_markets(
     [32],
     lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "Gauge", 2: "Pool"}),
 )
-# Aave V4 (id 49 per IporFusionMarkets.sol; 44 is SPARK_LEND, which has no
-# fuse of its own and stays undecoded rather than guessed)
-_register_markets(
-    [49],
-    lambda h: _decode_type_lshift248(h, {0: "Undefined", 1: "Asset", 2: "Spoke"}),
-)
+# Aave V4 (id 49 per IporFusionMarkets.sol) — typed Reserve substrates per
+# AaveV4SubstrateLib.sol; an earlier draft enum (Asset/Spoke, address in the
+# low bytes) shipped here and decoded live substrates to garbage addresses
+_register_markets([49], _decode_aave_v4)
 # Odos
 _register_markets(
     [42],
