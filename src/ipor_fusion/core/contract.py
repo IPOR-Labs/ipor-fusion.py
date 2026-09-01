@@ -69,6 +69,18 @@ class Call(Generic[T]):
         actual = self._resolve_ctx(ctx)
         return actual.send(self.to, self.data)
 
+    def build_transaction(self, ctx: Web3Context | None = None) -> dict:
+        """Build the transaction dict for this Call without signing or sending —
+        mirrors `.send()`, delegating to `Web3Context.build_transaction`. Returns
+        the dict a signer would submit; needs a signer address, no key."""
+        return self._resolve_ctx(ctx).build_transaction(self.to, self.data)
+
+    def estimate_gas(self, ctx: Web3Context | None = None) -> int:
+        """Estimate gas for this Call without signing or sending — mirrors
+        `.send()`, delegating to `Web3Context.estimate_gas`. A would-revert
+        Call raises the underlying revert."""
+        return self._resolve_ctx(ctx).estimate_gas(self.to, self.data)
+
     def _resolve_ctx(self, ctx: Web3Context | None) -> Web3Context:
         actual = ctx or self.ctx
         if actual is None:
