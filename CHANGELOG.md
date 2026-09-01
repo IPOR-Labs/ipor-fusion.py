@@ -2,6 +2,68 @@
 
 <!-- version list -->
 
+## v3.6.2 (2026-09-01)
+
+### Bug Fixes
+
+- **core**: Use EIP-1559 base-fee headroom for maxFeePerGas
+  ([`ebbfe49`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ebbfe4981ae471f3231a4a9609210d76e67a39bd))
+
+- **sdk**: Decode AAVE_V4 substrates per the deployed AaveV4SubstrateLib
+  ([`9438f6b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9438f6bd69447a1c9af8b1af492cfce17a4bfcd2))
+
+- **sdk**: Reject invalid changelog_since versions
+  ([`6fb5ec2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6fb5ec2ef234b2fdc83e53416f3fd8fe0ca7964c))
+
+### Continuous Integration
+
+- Bump pypi publish action to v1.14.2, lift the hatchling cap
+  ([`b3c6047`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b3c60473e7a36f5e560a1a3e253cb96fd9bc02ff))
+
+### Features
+
+- **core**: Add external-state NAV propose/confirm + mark_nav
+  ([`f124430`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f1244309659d1040066d77ea14e1f54cdd0ceb4b))
+
+- **core**: Add gas-estimate / build-transaction on Web3Context
+  ([`22d4c11`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/22d4c11facfcd10e0157744c769fa12aab21de9d))
+
+- **core**: Resolve external-state executor + NAV proposal hash
+  ([`4504030`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/450403093dc8be9994d9e73eef07cf3522aeecb1))
+
+- **sdk**: Add AsyncActionFuse (market 40 enter/exit)
+  ([`613ee09`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/613ee0955011538f69bee6cf3769446edcd2223b))
+
+- **sdk**: Add AsyncActionSubstrates encoders (market 40)
+  ([`9db48cc`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9db48ccf7084adcbb841e0b57bfde11cf48a2b64))
+
+- **sdk**: Add EXTERNAL_STATE name for market 50 (RWA alias)
+  ([`72a3229`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/72a32294d647a0079610cb0a2d2d8495f725bd1d))
+
+- **sdk**: Add ExternalStateOperationFuse (market 50 enter/exit)
+  ([`62dfa39`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/62dfa39f5058ad9027b6284ba247264129cbdc0f))
+
+- **sdk**: Add PriceOracleMiddlewareManager write methods
+  ([`c6d4692`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c6d4692964bf0e4931cf6161c5ff72c5750b3c93))
+
+- **sdk**: Add typed substrate encoders for universal token swapper
+  ([`00849b7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/00849b76de07bfdf2966ad69af41883c9c966623))
+
+- **sdk**: Add updateDependencyBalanceGraphs setter to PlasmaVault
+  ([`7a2684e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7a2684ee76a9981830e51b7e80a8882c7e47c096))
+
+- **sdk**: Support minAmountOut ABI revision in UniversalTokenSwapperFuse
+  ([`fc6fc52`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fc6fc5262707d35842b47cb91dd999ee19b5b3bb))
+
+### Refactoring
+
+- **sdk**: Share substrate-encoding helpers across fuses
+  ([`42fd17f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/42fd17fddd6abd5dc8049b7e0c19064e901ddaca))
+
+- **sdk**: Unify non-negative validation across fuses
+  ([`5ed454d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5ed454d2d42cca2e1eca1f7d4335482c13050fc0))
+
+
 ## v3.6.1 (2026-08-20)
 
 ### Features
