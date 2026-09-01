@@ -275,19 +275,18 @@ class TestFormatSubstratePerMarket:
         info = decode_substrate(raw, market_id=36)
         assert info.type_label == "POOL"
 
-    # Aave V4 (type<<248)
-    def test_aave_v4_asset(self):
+    # Aave V4 (type<<248 | spoke<<88 | reserveId<<56 | flags<<48)
+    def test_aave_v4_reserve(self):
         addr_hex = "ab" * 20
-        raw = bytes.fromhex("01" + "00" * 11 + addr_hex)
+        raw = bytes.fromhex("01" + addr_hex + "00000003" + "01" + "00" * 6)
         info = decode_substrate(raw, market_id=49)
         assert info.address == f"0x{addr_hex}"
-        assert info.type_label == "Asset"
-
-    def test_aave_v4_spoke(self):
-        addr_hex = "ab" * 20
-        raw = bytes.fromhex("02" + "00" * 11 + addr_hex)
-        info = decode_substrate(raw, market_id=49)
-        assert info.type_label == "Spoke"
+        assert info.type_label == "AAVE_V4_RESERVE"
+        assert info.extra == {
+            "reserve_id": "3",
+            "is_collateral": "True",
+            "can_borrow": "False",
+        }
 
     # Odos (type<<248)
     def test_odos_token(self):
