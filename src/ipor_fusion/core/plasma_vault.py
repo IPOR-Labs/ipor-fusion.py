@@ -9,7 +9,7 @@ from web3 import Web3
 from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.fuses.base import FuseAction
+from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
 
@@ -347,14 +347,21 @@ class PlasmaVault(ContractWrapper):
         return list(state.values())
 
     def withdraw_manager_address(self) -> ChecksumAddress | None:
+        """Latest ``WithdrawManagerChanged`` address, or None when unset.
+
+        Vaults deployed without a withdraw manager emit the event with
+        ``address(0)`` (e.g. legacy Base vaults), so the zero address means
+        "none" — it is not a contract that can be queried.
+        """
         events = self._get_withdraw_manager_changed_events()
         sorted_events = sorted(
             events, key=lambda event: event["blockNumber"], reverse=True
         )
-        if sorted_events:
-            (decoded_address,) = decode(["address"], sorted_events[0]["data"])
-            return Web3.to_checksum_address(decoded_address)
-        return None
+        if not sorted_events:
+            return None
+        (decoded_address,) = decode(["address"], sorted_events[0]["data"])
+        checksum = Web3.to_checksum_address(decoded_address)
+        return None if checksum == ZERO_ADDRESS else checksum
 
     def _get_withdraw_manager_changed_events(self) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
