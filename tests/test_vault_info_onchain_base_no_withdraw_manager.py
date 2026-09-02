@@ -5,8 +5,8 @@ The live BASE PlasmaVault ``0x45aa96f0b3188D47a1DaFdbefCE1db6B37f58216``
 its only ``WithdrawManagerChanged`` event (block 22140976) carries
 ``address(0)``. The buggy SDK reported that zero address as a real manager, the
 fetcher then queried ``getWithdrawWindow()`` on an address with no code, and the
-empty ``eth_call`` data failed ABI decoding — taking the whole ``vault info``
-down with a misleading "not a Plasma Vault" error.
+empty ``eth_call`` data failed ABI decoding (``InsufficientDataBytes``) — taking
+the whole ``vault info`` fetch down.
 
 Drives the real ``PlasmaVault`` event replay and ``_fetch_vault_data`` against
 live chain data at a pinned block; assertions are on typed values. Only provider
