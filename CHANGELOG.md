@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.6.3 (2026-09-02)
+
+### Bug Fixes
+
+- **sdk**: Treat zero-address WithdrawManagerChanged as no withdraw manager
+  ([`5d97493`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5d974932872578ce5c57bbb16a97b83dd5896b6d))
+
+### Testing
+
+- **sdk**: Describe the zero-address withdraw manager regression in SDK terms
+  ([`25bdb59`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/25bdb59bb4df90665978beb12680e78554c821c0))
+
+
 ## v3.6.2 (2026-09-01)
 
 ### Bug Fixes
