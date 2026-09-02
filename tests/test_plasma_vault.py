@@ -12,7 +12,7 @@ from ipor_fusion.core.plasma_vault import (
     PerformanceFeeData,
     PlasmaVault,
 )
-from ipor_fusion.fuses.base import FuseAction
+from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
@@ -536,6 +536,19 @@ class TestPlasmaVaultEventDecoding:
         result = vault.withdraw_manager_address()
 
         assert result == WITHDRAW_MANAGER
+
+    def test_withdraw_manager_address_zero_address_means_unset(self):
+        # Legacy vaults emit WithdrawManagerChanged(address(0)) at init;
+        # the zero address must not be reported as a queryable manager.
+        vault, ctx = _make_vault()
+        event_data = encode(["address"], [ZERO_ADDRESS])
+        ctx.get_logs.return_value = [
+            {"data": event_data, "blockNumber": 50},
+        ]
+
+        result = vault.withdraw_manager_address()
+
+        assert result is None
 
 
 class TestPlasmaVaultFeeData:
