@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.6.5 (2026-09-03)
+
+### Bug Fixes
+
+- **sdk**: Resolve Morpho Blue per chain and reject unknown market IDs
+  ([`eb1e01f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/eb1e01feec616b1051028c87db910754c1066479))
+
+
 ## v3.6.4 (2026-09-03)
 
 ### Bug Fixes
