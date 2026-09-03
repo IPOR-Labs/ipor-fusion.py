@@ -67,6 +67,16 @@ def _decode_morpho(hex_str: str) -> SubstrateInfo:
     return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="morpho_market_id")
 
 
+def _decode_uniswap_v4(hex_str: str) -> SubstrateInfo:
+    """Uniswap V4 two-level whitelist (UniswapV4SubstrateLib.sol): a PoolId
+    (raw bytes32, keccak256(abi.encode(PoolKey)) — carries the hook, fee tier
+    and tick spacing, unrecoverable offline) or a pool currency granted as
+    substrate-as-asset (12 zero bytes + address)."""
+    if hex_str[:24] == "0" * 24:
+        return SubstrateInfo(address=f"0x{hex_str[24:]}", type_label="uniswap_v4_token")
+    return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="uniswap_v4_pool_id")
+
+
 def _decode_enso(hex_str: str) -> SubstrateInfo:
     """Decode address<<96 | selector<<64 (Enso)."""
     addr = f"0x{hex_str[0:40]}"
@@ -200,6 +210,7 @@ _register_markets(
         16,
         17,
         18,
+        19,  # MORPHO_FLASH_LOAN — flash-loanable tokens (isSubstrateAsAssetGranted)
         20,
         21,
         23,
@@ -220,8 +231,11 @@ _register_markets(
     ],
     _decode_plain_address,
 )
-# Morpho markets — raw bytes32
-_register_markets([14, 19, 22, 41], _decode_morpho)
+# Morpho markets — raw bytes32 market ids. MORPHO_FLASH_LOAN (19) is NOT one:
+# MorphoFlashLoanFuse gates the loan token via isSubstrateAsAssetGranted, and
+# every live market-19 substrate is the zero-padded address form (registry
+# census 2026-09-03: 111 of 111 rows on Ethereum, Base and Arbitrum)
+_register_markets([14, 22, 41], _decode_morpho)
 # Ebisu
 _register_markets(
     [39],
@@ -268,9 +282,12 @@ _register_markets(
     [43],
     lambda h: _decode_type_lshift248(h, {0: "Unknown", 1: "Token", 2: "Slippage"}),
 )
-# Universal Token Swapper
+# Universal Token Swapper — UniversalTokenSwapperSubstrateLib.sol, shared by
+# UNIVERSAL_TOKEN_SWAPPER (12) and UNIVERSAL_TOKEN_SWAPPER_V2 (1202): the V2
+# market granted exactly this layout live (weETH Enhanced Yield, Ethereum
+# 0x2775e695…, 10 rows) and decoded as no_decoder while only 12 was registered
 _register_markets(
-    [12],
+    [12, 1202],
     lambda h: _decode_type_lshift248(
         h, {0: "Unknown", 1: "Token", 2: "Target", 3: "Slippage"}
     ),
@@ -283,6 +300,10 @@ _register_markets([47], _decode_dolomite)
 _register_markets([11], _decode_euler_v2)
 # Async Action (typed: amount-to-outside / target+selector / exit slippage)
 _register_markets([40], _decode_async_action)
+# Uniswap V4 (id 53 per IporFusionMarkets.sol): PoolId or pool currency.
+# TERM_FINANCE (52) stays unregistered on purpose — its substrate library is
+# not mirrored here yet, and no_decoder(TERM_FINANCE) is the honest answer
+_register_markets([53], _decode_uniswap_v4)
 
 
 def _build_market_lookup() -> dict[int, str]:

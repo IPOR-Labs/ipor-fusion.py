@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.substrates import SubstrateInfo, decode_substrate
+from ipor_fusion.substrates import SubstrateInfo, decode_substrate, market_name
 
 SUSDE = "0x9d39a5de30e57443bff2a8307a4256c8797a3497"
 USDE = "0x4c9edd5852cd905f086c759e8383e09bff1e68b3"
@@ -138,9 +138,63 @@ def test_plain_address_market():
 
 def test_morpho_market_is_raw():
     raw = "0x" + "ab" * 32
-    info = decode_substrate(raw, market_id=19)
+    info = decode_substrate(raw, market_id=14)
     assert info.type_label == "morpho_market_id"
     assert info.raw_hex == raw
+
+
+def test_morpho_flash_loan_substrate_is_a_token_address():
+    # MorphoFlashLoanFuse gates the loan token via isSubstrateAsAssetGranted;
+    # the substrate is the plain address form, never a Morpho market id
+    raw = "0x" + "00" * 12 + USDE[2:]
+    assert decode_substrate(raw, market_id=19) == SubstrateInfo(address=USDE)
+
+
+@pytest.mark.parametrize(
+    ("raw", "label"),
+    [
+        ("0x01" + "00" * 11 + SUSDE[2:], "Token"),
+        ("0x02" + "00" * 11 + SUSDE[2:], "Target"),
+        ("0x03" + "00" * 24 + "2386f26fc10000", "Slippage"),
+    ],
+)
+def test_universal_token_swapper_v2_shares_the_v1_layout(raw: str, label: str):
+    v2 = decode_substrate(raw, market_id=IporFusionMarkets.UNIVERSAL_TOKEN_SWAPPER_V2)
+    assert v2 == decode_substrate(raw, market_id=12)
+    assert v2.type_label == label
+    assert not v2.is_error
+
+
+# Live Uniswap V4 PoolId granted on Ethereum mainnet (rETH Liquity LP Carry
+# 0xb9e806e8…, market 53): the BOLD/USDC 0.05% pool, no hook.
+UNISWAP_V4_BOLD_USDC = (
+    "0x5d0ed52610c76d7bf729130ce7ddc0488b2f4bd0a0db1f12adbe6a32deaff893"
+)
+BOLD = "0x6440f144b7e50d6a8439336510312d2f54beb01d"
+
+
+def test_uniswap_v4_pool_id_is_labelled_raw():
+    info = decode_substrate(UNISWAP_V4_BOLD_USDC, market_id=53)
+    assert info.type_label == "uniswap_v4_pool_id"
+    assert info.raw_hex == UNISWAP_V4_BOLD_USDC
+    assert info.address == ""
+
+
+def test_uniswap_v4_pool_currency_is_a_plain_address():
+    raw = "0x" + "00" * 12 + BOLD[2:]
+    info = decode_substrate(raw, market_id=53)
+    assert info == SubstrateInfo(address=BOLD, type_label="uniswap_v4_token")
+
+
+def test_market_ids_52_and_53_follow_ipor_fusion_markets_sol():
+    assert IporFusionMarkets.TERM_FINANCE == 52
+    assert IporFusionMarkets.UNISWAP_V4 == 53
+    assert market_name(52) == "TERM_FINANCE"
+    assert market_name(53) == "UNISWAP_V4"
+    # no substrate library mirrored for Term Finance yet: loud, never guessed
+    info = decode_substrate("0x" + "11" * 32, market_id=52)
+    assert info.address == ""
+    assert info.type_label == "no_decoder(TERM_FINANCE)"
 
 
 def test_market_without_decoder_is_labelled_not_guessed():

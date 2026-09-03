@@ -93,6 +93,13 @@ class IporFusionMarkets:
     _DEPRECATED_ALIASES = frozenset({"RWA"})
     # substrate type: AguaSubstrateLib (VAULT or ASSET)
     AGUA_GLOBAL_CARRY = 51
+    # dependence graph: balance of ERC20_VAULT_BALANCE (purchase tokens return
+    # to the vault on every position exit)
+    TERM_FINANCE = 52
+    # substrate type: UniswapV4SubstrateLib — PoolId (raw bytes32,
+    # keccak256(abi.encode(PoolKey))) plus both pool currencies as
+    # substrate-as-asset; native-currency pools are not supported
+    UNISWAP_V4 = 53
     ERC4626_0001 = 100_001
     ERC4626_0002 = 100_002
     ERC4626_0003 = 100_003
