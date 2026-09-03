@@ -70,7 +70,7 @@ from ipor_fusion.readers.lending_health import (
     LendingMarketHealth,
     VaultLendingHealth,
 )
-from ipor_fusion.readers.morpho import MorphoPositionBreakdown
+from ipor_fusion.readers.morpho import MORPHO_BLUE_ADDRESSES, MorphoPositionBreakdown
 from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import Amount, MorphoBlueMarketId
 
@@ -1754,12 +1754,14 @@ class TestFetchMorphoPositions:
         mock_reader.position_breakdown.return_value = _morpho_breakdown()
         mock_reader_cls.return_value = mock_reader
 
+        ctx = MagicMock()
+        ctx.chain_id = 42161
         morpho_sub = bytes.fromhex("ab" * 32)
         with ThreadPoolExecutor() as pool:
-            result = _fetch_morpho_positions(
-                MagicMock(), pool, _VAULT_ADDR, {14: [morpho_sub]}
-            )
+            result = _fetch_morpho_positions(ctx, pool, _VAULT_ADDR, {14: [morpho_sub]})
         assert result == {14: [_morpho_breakdown()]}
+        # Arbitrum has its own Morpho deployment — never the Ethereum address.
+        mock_reader_cls.assert_called_once_with(ctx, MORPHO_BLUE_ADDRESSES[42161])
 
 
 class TestBreakdownTokenPrices:

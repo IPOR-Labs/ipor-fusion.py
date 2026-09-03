@@ -34,13 +34,13 @@ from ipor_fusion.cli.vault_cmd import (
 )
 from ipor_fusion.cli.vault_rendering import _format_amount, _print_table
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.readers.lending_health import MORPHO_BLUE_ADDRESS
 from ipor_fusion.readers.morpho import (
     WAD,
     MorphoMarket,
     MorphoMarketParams,
     MorphoMarketRates,
     MorphoReader,
+    morpho_blue_address,
 )
 from ipor_fusion.types import MorphoBlueMarketId
 
@@ -125,10 +125,9 @@ def morpho_blue(
     ctx = Web3Context.from_url(provider_url)
     if block is not None:
         ctx.default_block = block
-    reader = MorphoReader(ctx, MORPHO_BLUE_ADDRESS)
+    reader = MorphoReader(ctx, morpho_blue_address(chain_id))
     mid = MorphoBlueMarketId(market_id)
-    params = reader.market_params(mid).call()
-    state = reader.market(mid).call()
+    params, state = reader.require_market(mid)
     rates = reader.rates_from(state, params)
 
     api_market: MorphoApiMarket | None = None

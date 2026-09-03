@@ -1,18 +1,58 @@
 import math
 from dataclasses import dataclass
 
-from eth_abi import decode, encode
+from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import Timestamp
 
+from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.errors import MorphoMarketNotFoundError, UnsupportedChainError
 from ipor_fusion.types import Amount, Fee, MorphoBlueMarketId, Shares
 
 WAD = 10**18
 SECONDS_PER_YEAR = 365 * 24 * 60 * 60  # matches Morpho IRM YEAR constant
+
+_ZERO_ADDRESS = Web3.to_checksum_address("0x" + "00" * 20)
+_addr = Web3.to_checksum_address
+
+# Morpho Blue sits at its CREATE2 address (0xBBBB…EEFFCb) on Ethereum and Base
+# only; every other chain carries an independent deployment. Keyed by chain ID.
+MORPHO_BLUE_ADDRESSES: dict[int, ChecksumAddress] = {
+    1: _addr("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"),  # Ethereum
+    8453: _addr("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"),  # Base
+    42161: _addr("0x6c247b1F6182318877311737BaC0844bAa518F5e"),  # Arbitrum One
+    130: _addr("0x8f5ae9CddB9f68de460C77730b018Ae7E04a140A"),  # Unichain
+    143: _addr("0xD5D960E8C380B724a48AC59E2DfF1b2CB4a1eAee"),  # Monad
+    999: _addr("0x68e37dE8d93d3496ae143F2E900490f6280C57cD"),  # HyperEVM
+    4663: _addr("0x9D53d5E3bd5E8d4Cbfa6DB1ca238AEA02E651010"),  # Robinhood
+    747474: _addr("0xD50F2DffFd62f94Ee4AEd9ca05C61d0753268aBc"),  # Katana
+}
+
+
+def _chain_label(chain_id: int) -> str:
+    name = CHAIN_NAMES.get(chain_id)
+    return f"{chain_id} ({name})" if name else str(chain_id)
+
+
+def morpho_blue_address(chain_id: int) -> ChecksumAddress:
+    """Morpho Blue core contract address for ``chain_id``.
+
+    Raises :class:`UnsupportedChainError` when no deployment is known —
+    reading the Ethereum address on such a chain hits empty code and only
+    fails at ABI-decode time, with no hint about the cause.
+    """
+    address = MORPHO_BLUE_ADDRESSES.get(chain_id)
+    if address is not None:
+        return address
+    known = ", ".join(_chain_label(cid) for cid in sorted(MORPHO_BLUE_ADDRESSES))
+    raise UnsupportedChainError(
+        f"Morpho Blue address unknown for chain {_chain_label(chain_id)}; "
+        f"known chains: {known}"
+    )
 
 
 @dataclass(slots=True)
@@ -173,6 +213,25 @@ class MorphoReader(ContractWrapper):
             decoder=_market_params_decoder,
         )
 
+    def require_market(
+        self, market_id: MorphoBlueMarketId
+    ) -> tuple[MorphoMarketParams, MorphoMarket]:
+        """Read `idToMarketParams` + `market`, rejecting IDs never created here.
+
+        Morpho itself treats `lastUpdate == 0` as "market does not exist". An
+        unknown ID otherwise decodes to all-zero params and state, and the
+        first downstream use (e.g. calling the zero-address IRM) fails with an
+        unrelated decode error.
+        """
+        params = self.market_params(market_id).call()
+        market = self.market(market_id).call()
+        if market.last_update == 0:
+            raise MorphoMarketNotFoundError(
+                f"Morpho Blue market {market_id} does not exist on chain "
+                f"{self._ctx.chain_id} (Morpho at {self.address})"
+            )
+        return params, market
+
     def rates(self, market_id: MorphoBlueMarketId) -> MorphoMarketRates:
         """Read the IRM and derive supply/borrow APYs for the market.
 
@@ -192,7 +251,12 @@ class MorphoReader(ContractWrapper):
         Use this when the caller has already read `market()` and `market_params()`
         to avoid two redundant RPC roundtrips.
         """
-        rate_wad = _irm_borrow_rate_view(self._ctx, params, market)
+        if params.irm == _ZERO_ADDRESS:
+            # Morpho skips the IRM when irm == address(0) (MetaMorpho "idle"
+            # markets): no interest accrues, so every rate is zero.
+            rate_wad = 0
+        else:
+            rate_wad = _irm_borrow_rate_view(self._ctx, params, market)
         rate = rate_wad / WAD
         borrow_apy = math.expm1(rate * SECONDS_PER_YEAR)
         if market.total_supply_assets > 0:
@@ -245,6 +309,7 @@ def _irm_borrow_rate_view(
             ),
         ],
     )
-    raw = ctx.call(params.irm, selector + payload)
-    (rate,) = decode(["uint256"], raw)
-    return rate
+    call: Call[int] = Call(
+        to=params.irm, data=selector + payload, output_types=["uint256"], ctx=ctx
+    )
+    return call.call()

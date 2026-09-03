@@ -16,6 +16,10 @@ CHAIN_NAMES: dict[int, str] = {
     9745: "plasma",
     43114: "avalanche",
     250: "fantom",
+    143: "monad",
+    999: "hyperevm",
+    4663: "robinhood",
+    747474: "katana",
 }
 
 CHAIN_NAME_TO_ID: dict[str, int] = {name: cid for cid, name in CHAIN_NAMES.items()}

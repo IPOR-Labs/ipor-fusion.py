@@ -36,12 +36,15 @@ from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown, AaveV3Reader
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
     AAVE_V3_POOL,
-    MORPHO_BLUE_ADDRESS,
     MORPHO_MARKET_IDS,
     VaultLendingHealth,
     fetch_vault_lending_health,
 )
-from ipor_fusion.readers.morpho import MorphoPositionBreakdown, MorphoReader
+from ipor_fusion.readers.morpho import (
+    MorphoPositionBreakdown,
+    MorphoReader,
+    morpho_blue_address,
+)
 from ipor_fusion.types import MorphoBlueMarketId
 
 T = TypeVar("T")
@@ -379,7 +382,7 @@ def _fetch_morpho_positions(
     if not per_market_substrates:
         return None
 
-    reader = MorphoReader(ctx, MORPHO_BLUE_ADDRESS)
+    reader = MorphoReader(ctx, morpho_blue_address(ctx.chain_id))
     futures: dict[int, list[Future]] = {
         mid: [
             pool.submit(

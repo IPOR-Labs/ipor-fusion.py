@@ -19,7 +19,11 @@ from web3 import Web3
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
-from ipor_fusion.readers.morpho import MorphoReader
+from ipor_fusion.readers.morpho import (
+    MORPHO_BLUE_ADDRESSES,
+    MorphoReader,
+    morpho_blue_address,
+)
 from ipor_fusion.substrates import market_name
 from ipor_fusion.types import MorphoBlueMarketId
 
@@ -28,10 +32,9 @@ _logger = logging.getLogger(__name__)
 WAD = 10**18
 ORACLE_PRICE_SCALE = 10**36
 
-# Morpho Blue is deployed at the same address across all supported chains.
-MORPHO_BLUE_ADDRESS: ChecksumAddress = Web3.to_checksum_address(
-    "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"
-)
+# Deprecated: only valid on Ethereum and Base — use `morpho_blue_address(chain_id)`.
+# Kept so existing imports keep resolving.
+MORPHO_BLUE_ADDRESS: ChecksumAddress = MORPHO_BLUE_ADDRESSES[1]
 
 # Aave V3 Pool addresses per chain.
 AAVE_V3_POOL: dict[int, ChecksumAddress] = {
@@ -309,7 +312,7 @@ def fetch_vault_lending_health(  # noqa: C901
         futures = []
 
         if morpho_markets:
-            morpho_reader = MorphoReader(ctx, MORPHO_BLUE_ADDRESS)
+            morpho_reader = MorphoReader(ctx, morpho_blue_address(ctx.chain_id))
             for ipor_mid, name, morpho_mid in morpho_markets:
                 futures.append(
                     pool.submit(
