@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from eth_abi import decode as abi_decode
+from eth_abi.exceptions import InsufficientDataBytes
 from web3 import Web3
 from web3.types import TxReceipt
 
@@ -108,6 +109,24 @@ class NotPlasmaVaultError(IporFusionError, ValueError):
 
 class UnsupportedChainError(IporFusionError, ValueError):
     """Chain is not (yet) supported by the on-chain vault tooling.
+
+    Also a ValueError so MCP adapters can let it propagate unmapped.
+    """
+
+
+class EmptyCallResultError(IporFusionError, InsufficientDataBytes):
+    """`eth_call` returned no data for a call that declares return values.
+
+    Almost always there is no contract at the target address on the connected
+    chain (or at the requested block); a contract whose catch-all fallback
+    returns nothing looks the same. Subclasses eth_abi's InsufficientDataBytes
+    — the error the ABI decoder used to raise — so existing handlers still
+    catch it.
+    """
+
+
+class MorphoMarketNotFoundError(IporFusionError, ValueError):
+    """Morpho Blue market ID was never created on the connected chain.
 
     Also a ValueError so MCP adapters can let it propagate unmapped.
     """

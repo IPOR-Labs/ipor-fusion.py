@@ -53,7 +53,9 @@ from ipor_fusion.core.withdraw_manager import (
 )
 from ipor_fusion.errors import (
     ContractNotFoundError,
+    EmptyCallResultError,
     IporFusionError,
+    MorphoMarketNotFoundError,
     NotPlasmaVaultError,
     TransactionError,
     UnsupportedChainError,
@@ -256,7 +258,9 @@ __all__ = [
     "market_name",
     "DOCS",
     "ContractNotFoundError",
+    "EmptyCallResultError",
     "IporFusionError",
+    "MorphoMarketNotFoundError",
     "NotPlasmaVaultError",
     "TransactionError",
     "UnsupportedChainError",

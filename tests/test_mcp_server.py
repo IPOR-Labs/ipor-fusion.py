@@ -27,6 +27,7 @@ from ipor_fusion.cli.morpho_api import (
     VaultV2Cap,
     VaultV2Info,
 )
+from ipor_fusion.errors import MorphoMarketNotFoundError
 from ipor_fusion.mcp.models import (
     FeesSection,
     OracleNodeModel,
@@ -72,6 +73,12 @@ def _config_with_provider():
     from ipor_fusion.cli.config_store import FusionConfig
 
     return FusionConfig(providers={"1": "https://rpc.example.com"})
+
+
+def _config_with_provider_for(chain_id: int):
+    from ipor_fusion.cli.config_store import FusionConfig
+
+    return FusionConfig(providers={str(chain_id): "https://rpc.example.com"})
 
 
 def _config_with_vault():
@@ -611,14 +618,14 @@ _VAULT = "0xf9bDdD4A9b3a45F980E11Fdde96E16364DDBec49"
 
 def _stub_reader_instance():
     reader = MagicMock()
-    reader.market_params.return_value.call.return_value = MorphoMarketParams(
+    params = MorphoMarketParams(
         loan_token=_LOAN,
         collateral_token=_COLLAT,
         oracle=_ORACLE,
         irm=_IRM,
         lltv=915 * 10**15,
     )
-    reader.market.return_value.call.return_value = MorphoMarket(
+    market = MorphoMarket(
         total_supply_assets=1_008_277,
         total_supply_shares=1_008_277_000_000,
         total_borrow_assets=908_170,
@@ -626,6 +633,7 @@ def _stub_reader_instance():
         last_update=1700000000,
         fee=0,
     )
+    reader.require_market.return_value = (params, market)
     reader.rates_from.return_value = MorphoMarketRates(
         rate_per_second_wad=10**9,
         utilization=0.9,
@@ -770,6 +778,40 @@ class TestMarketMorphoBlue:
             assert "No provider for chain" in str(exc)
         else:
             raise AssertionError("expected ValueError")
+
+    @patch("ipor_fusion.mcp.server.MorphoReader")
+    @patch("ipor_fusion.mcp.server.Web3Context")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider_for(137),
+    )
+    def test_chain_without_morpho_deployment_rejected(
+        self, _load, mock_ctx_cls, mock_reader_cls
+    ):
+        """A provider alone is not enough — Morpho Blue must be deployed there."""
+        mock_ctx_cls.from_url.return_value = MagicMock()
+
+        with pytest.raises(UnsupportedChainError, match=r"chain 137 \(polygon\)"):
+            market_morpho_blue(market_id=_MARKET_ID, chain_id=137)
+
+        mock_reader_cls.assert_not_called()
+
+    @patch("ipor_fusion.mcp.server.MorphoReader")
+    @patch("ipor_fusion.mcp.server.Web3Context")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_unknown_market_id_surfaces_not_found(
+        self, _load, mock_ctx_cls, mock_reader_cls
+    ):
+        mock_ctx_cls.from_url.return_value = MagicMock()
+        reader = _stub_reader_instance()
+        reader.require_market.side_effect = MorphoMarketNotFoundError("no such market")
+        mock_reader_cls.return_value = reader
+
+        with pytest.raises(MorphoMarketNotFoundError, match="no such market"):
+            market_morpho_blue(market_id=_MARKET_ID, chain_id=1)
 
 
 def _v1_info():

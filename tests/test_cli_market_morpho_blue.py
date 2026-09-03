@@ -19,6 +19,7 @@ from ipor_fusion.cli.morpho_api import (
     fetch_market,
     fetch_vault,
 )
+from ipor_fusion.errors import MorphoMarketNotFoundError
 
 MARKET_ID = "ad656d430bb3d8c1469bf45c8ad4ebae1b04be04757c69fa424eec78d7b3f4dc"
 LOAN_TOKEN = Web3.to_checksum_address("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
@@ -169,6 +170,33 @@ class TestMorphoBlueCommand:
         assert "PublicAllocator admin" in result.output
         # Reallocate hint
         assert "Reallocate parameters" in result.output
+
+    def test_unknown_market_id_reports_not_found(
+        self, mock_ctx_cls, mock_fetch, tmp_path, monkeypatch
+    ):
+        _setup_provider(tmp_path, monkeypatch)
+        ctx = MagicMock()
+        ctx.chain_id = 1
+        zero_params = encode(
+            ["address", "address", "address", "address", "uint256"],
+            ["0x" + "00" * 20] * 4 + [0],
+        )
+        zero_market = encode(
+            ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+            [0, 0, 0, 0, 0, 0],
+        )
+        ctx.call.side_effect = [zero_params, zero_market]
+        mock_ctx_cls.from_url.return_value = ctx
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["market", "morpho-blue", MARKET_ID, "--chain", "ethereum"]
+        )
+
+        assert result.exit_code != 0
+        assert isinstance(result.exception, MorphoMarketNotFoundError)
+        assert f"market {MARKET_ID} does not exist on chain 1" in str(result.exception)
+        mock_fetch.assert_not_called()
 
     def test_no_api_skips_vault_section(
         self, mock_ctx_cls, mock_fetch, tmp_path, monkeypatch

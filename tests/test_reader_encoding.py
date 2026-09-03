@@ -2,9 +2,11 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from eth_abi import encode
 from web3 import Web3
 
+from ipor_fusion.errors import MorphoMarketNotFoundError, UnsupportedChainError
 from ipor_fusion.readers.aave_v3 import (
     AaveV3PositionBreakdown,
     AaveV3Reader,
@@ -13,12 +15,14 @@ from ipor_fusion.readers.aave_v3 import (
 )
 from ipor_fusion.readers.compound_v3 import CompoundV3Reader
 from ipor_fusion.readers.morpho import (
+    MORPHO_BLUE_ADDRESSES,
     MorphoMarket,
     MorphoMarketParams,
     MorphoMarketRates,
     MorphoPosition,
     MorphoPositionBreakdown,
     MorphoReader,
+    morpho_blue_address,
 )
 from ipor_fusion.readers.ramses_v2 import RamsesV2Position, RamsesV2Reader
 from ipor_fusion.readers.uniswap_v3 import UniswapV3Position, UniswapV3Reader
@@ -320,7 +324,102 @@ class TestMorphoReaderPositionBreakdown:
         assert result.collateral == 0
 
 
+class TestMorphoBlueAddress:
+    def test_ethereum_and_base_share_the_create2_address(self):
+        assert morpho_blue_address(1) == morpho_blue_address(8453)
+        assert morpho_blue_address(1) == Web3.to_checksum_address(
+            "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"
+        )
+
+    def test_arbitrum_has_its_own_deployment(self):
+        assert morpho_blue_address(42161) != morpho_blue_address(1)
+        assert morpho_blue_address(42161) == MORPHO_BLUE_ADDRESSES[42161]
+
+    def test_every_entry_is_checksummed(self):
+        for address in MORPHO_BLUE_ADDRESSES.values():
+            assert Web3.is_checksum_address(address)
+
+    def test_unknown_chain_raises_with_known_chains_listed(self):
+        with pytest.raises(UnsupportedChainError) as exc_info:
+            morpho_blue_address(137)
+        message = str(exc_info.value)
+        assert "chain 137 (polygon)" in message
+        assert "1 (ethereum)" in message
+        assert "42161 (arbitrum)" in message
+
+    def test_unknown_unnamed_chain_shows_plain_id(self):
+        with pytest.raises(UnsupportedChainError, match=r"chain 999999;"):
+            morpho_blue_address(999999)
+
+
+class TestMorphoReaderRequireMarket:
+    def test_returns_params_and_state_for_existing_market(self):
+        reader, ctx = _make_reader(MorphoReader)
+        params_raw = encode(
+            ["address", "address", "address", "address", "uint256"],
+            [TOKEN_A, TOKEN_B, ORACLE, IRM, 860000000000000000],
+        )
+        market_raw = encode(
+            ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+            [1000, 2000, 3000, 4000, 1700000000, 500],
+        )
+        ctx.call.side_effect = [params_raw, market_raw]
+
+        params, market = reader.require_market(MARKET_ID)
+
+        assert params.irm == IRM
+        assert market.last_update == 1700000000
+
+    def test_never_created_market_raises_not_found(self):
+        reader, ctx = _make_reader(MorphoReader)
+        ctx.chain_id = 42161
+        # Unknown ID: Morpho returns zeroed params and state (lastUpdate == 0).
+        params_raw = encode(
+            ["address", "address", "address", "address", "uint256"],
+            ["0x" + "00" * 20] * 4 + [0],
+        )
+        market_raw = encode(
+            ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+            [0, 0, 0, 0, 0, 0],
+        )
+        ctx.call.side_effect = [params_raw, market_raw]
+
+        with pytest.raises(MorphoMarketNotFoundError) as exc_info:
+            reader.require_market(MARKET_ID)
+
+        message = str(exc_info.value)
+        assert MARKET_ID in message
+        assert "chain 42161" in message
+        assert CONTRACT_ADDR in message
+
+
 class TestMorphoReaderRates:
+    def test_zero_irm_market_has_zero_rates_without_calling_irm(self):
+        """Morpho skips the IRM for irm == address(0) (MetaMorpho idle markets)."""
+        reader, ctx = _make_reader(MorphoReader)
+        market = MorphoMarket(
+            total_supply_assets=Amount(1_000_000),
+            total_supply_shares=1_000_000,
+            total_borrow_assets=Amount(0),
+            total_borrow_shares=0,
+            last_update=1700000000,
+            fee=0,
+        )
+        params = MorphoMarketParams(
+            loan_token=TOKEN_A,
+            collateral_token=Web3.to_checksum_address("0x" + "00" * 20),
+            oracle=Web3.to_checksum_address("0x" + "00" * 20),
+            irm=Web3.to_checksum_address("0x" + "00" * 20),
+            lltv=0,
+        )
+
+        result = reader.rates_from(market, params)
+
+        assert result == MorphoMarketRates(
+            rate_per_second_wad=0, utilization=0.0, borrow_apy=0.0, supply_apy=0.0
+        )
+        ctx.call.assert_not_called()
+
     def test_rates_computes_apy_and_utilization(self):
         reader, ctx = _make_reader(MorphoReader)
         # market(): 90% utilization, 0 protocol fee

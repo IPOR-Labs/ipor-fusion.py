@@ -11,6 +11,7 @@ from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.errors import EmptyCallResultError
 
 T = TypeVar("T")
 
@@ -58,6 +59,13 @@ class Call(Generic[T]):
                 "(no output_types declared)."
             )
         raw = actual.call(self.to, self.data)
+        if len(raw) == 0:
+            raise EmptyCallResultError(
+                f"eth_call to {self.to} on chain {actual.chain_id} returned no "
+                f"data (selector 0x{self.data[:4].hex()}): no contract at this "
+                "address at the requested block, or it does not implement the "
+                "function."
+            )
         values = tuple(decode(self.output_types, bytes(raw)))
         single: Any = values[0] if len(values) == 1 else values
         if self.decoder is not None:

@@ -489,6 +489,7 @@ class TestFetchVaultLendingHealth:
     )
     def test_morpho_returns_result_via_threadpool(self, mock_compute, mock_name):
         ctx = MagicMock()
+        ctx.chain_id = 1
         morpho_mid = IporFusionMarkets.MORPHO
         substrate = bytes.fromhex("ab" * 32)
 

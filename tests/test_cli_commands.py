@@ -935,6 +935,7 @@ class TestVaultInfoJson:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.chain_id = 1
         mock_ctx.web3.eth.block_number = 12345678
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx_cls.from_url.return_value = mock_ctx

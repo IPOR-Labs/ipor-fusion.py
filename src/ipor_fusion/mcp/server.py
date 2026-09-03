@@ -49,8 +49,7 @@ from ipor_fusion.mcp.models import (
     VaultInfoResponse,
     VaultListEntry,
 )
-from ipor_fusion.readers.lending_health import MORPHO_BLUE_ADDRESS
-from ipor_fusion.readers.morpho import MorphoReader
+from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
 from ipor_fusion.types import MorphoBlueMarketId
 
@@ -520,10 +519,9 @@ def market_morpho_blue(
 
     cfg = load_config()
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
-    reader = MorphoReader(ctx, MORPHO_BLUE_ADDRESS)
+    reader = MorphoReader(ctx, morpho_blue_address(chain_id))
     mid = MorphoBlueMarketId(raw)
-    params = reader.market_params(mid).call()
-    state = reader.market(mid).call()
+    params, state = reader.require_market(mid)
     rates = reader.rates_from(state, params)
 
     api_market = None
