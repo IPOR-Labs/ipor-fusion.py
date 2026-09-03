@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.6.4 (2026-09-03)
+
+### Bug Fixes
+
+- **sdk**: Substrate decoders for swapper v2, flash-loan tokens and Uniswap V4
+  ([`0c98151`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0c98151e20faa05a9967ff6b25396a66969e364a))
+
+
 ## v3.6.3 (2026-09-02)
 
 ### Bug Fixes
