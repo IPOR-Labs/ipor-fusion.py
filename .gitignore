@@ -18,6 +18,8 @@
 
 ### Confidential ###
 .env
+.env.*
+!.env.example
 
 ### Build Artifacts ###
 dist
