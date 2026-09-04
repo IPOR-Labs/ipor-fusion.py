@@ -16,8 +16,13 @@
 ### VS Code ###
 .vscode/
 
+### Agent local settings ###
+.claude/settings.local.json
+
 ### Confidential ###
 .env
+.env.*
+!.env.example
 
 ### Build Artifacts ###
 dist
