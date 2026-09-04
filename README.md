@@ -89,8 +89,8 @@ action = fuse.supply(
     amount=1_000_000,  # 1 USDC (6 decimals)
 )
 
-# 4. Execute on-chain
-receipt = vault.execute([action])
+# 4. Execute on-chain (execute() returns a Call; .send() signs and submits it)
+receipt = vault.execute([action]).send()
 ```
 
 ## CLI Quickstart
@@ -111,6 +111,10 @@ fusion vault info 0xB8a451107A9f87FDe481D4D686247D6e43Ed715e --chain-id ethereum
 
 # List saved vaults
 fusion vault list
+
+# Inspect a Morpho Blue market or MetaMorpho vault
+fusion market morpho-blue 0xMARKET_ID --chain ethereum
+fusion market meta-morpho 0xVAULT_ADDRESS --chain ethereum
 ```
 
 ## MCP Server
@@ -139,13 +143,18 @@ Available tools:
 
 | Tool | Description |
 |------|-------------|
+| `server_info` | Server name, running version and changelog entries |
 | `config_show` | Show current configuration (providers, vaults, API key status) |
 | `config_set_provider` | Set RPC provider URL for a chain (auto-detects chain ID) |
 | `config_set_etherscan_key` | Set Etherscan API key (enables contract name resolution) |
 | `vault_info` | Full on-chain vault state — assets, fuses, balances, fees, lending health, reconciliation |
+| `vault_role_accounts` | Accounts holding each AccessManager role on a vault |
+| `vault_oracle_mapping` | Price-oracle sources per asset for a vault |
 | `vault_list` | List all saved vaults |
 | `vault_add` | Save a vault to the local config (auto-fetches on-chain name) |
 | `vault_remove` | Remove a vault from the local config |
+| `market_morpho_blue` | Morpho Blue market parameters and state |
+| `market_meta_morpho` | MetaMorpho V1 or Morpho Vault V2 allocations and caps (Morpho API) |
 
 Configure providers and vaults via `fusion config` or the MCP config tools first.
 
@@ -212,6 +221,8 @@ Integration tests need provider URLs in `.env` (eth_simulateV1 at a pinned fork 
 cp .env.example .env
 # Edit .env with ARBITRUM_PROVIDER_URL, ETHEREUM_PROVIDER_URL, BASE_PROVIDER_URL
 ```
+
+Contributor and coding-agent instructions (commands, conventions, invariants, domain rules) live in [AGENTS.md](AGENTS.md).
 
 ## Examples
 
