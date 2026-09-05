@@ -1,4 +1,8 @@
+import importlib.util
 import os
+from collections.abc import Callable
+from pathlib import Path
+from types import ModuleType
 
 import pytest
 from dotenv import load_dotenv
@@ -8,6 +12,23 @@ from ipor_fusion import is_simulate_v1_supported
 
 load_dotenv()
 
+_EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+
+@pytest.fixture
+def load_example() -> Callable[[str], ModuleType]:
+    """Import an example module by filename, straight from examples/."""
+
+    def _load(module_filename: str) -> ModuleType:
+        path = _EXAMPLES / module_filename
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    return _load
+
 
 def pytest_collection_modifyitems(items):
     for item in items:
@@ -16,6 +37,8 @@ def pytest_collection_modifyitems(items):
             item.add_marker(pytest.mark.cli)
         elif "test_mcp_" in path:
             item.add_marker(pytest.mark.mcp)
+        elif "test_examples_" in path:
+            item.add_marker(pytest.mark.examples)
         else:
             item.add_marker(pytest.mark.sdk)
 
