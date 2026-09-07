@@ -3,6 +3,7 @@
   "owner": {
     "name": "IPOR Labs"
   },
+  "description": "Skills and the hosted read-only MCP server for building on IPOR Fusion vaults",
   "plugins": [
     {
       "name": "ipor-fusion",
