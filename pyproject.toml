@@ -45,7 +45,7 @@ mcp = ["mcp[cli]>=1.0,<2", "click>=8.0,<9", "requests>=2.31.0,<3", "pydantic>=2.
 [project.urls]
 homepage = "https://ipor.io"
 repository = "https://github.com/IPOR-Labs/ipor-fusion.py"
-documentation = "https://docs.ipor.io/ipor-fusion/fusion-introduction"
+documentation = "https://docs.ipor.io/build-on-fusion/alpha/sdk"
 
 [project.scripts]
 fusion = "ipor_fusion.entry_cli:main"
