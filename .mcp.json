@@ -3,6 +3,10 @@
     "ipor-fusion": {
       "type": "http",
       "url": "https://mcp.ipor.io/mcp"
+    },
+    "ipor-fusion-local": {
+      "type": "stdio",
+      "command": "fusion-mcp"
     }
   }
 }

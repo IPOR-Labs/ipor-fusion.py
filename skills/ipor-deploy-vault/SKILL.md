@@ -38,9 +38,10 @@ greppable.
    granted through the vault's access manager: `ATOMIST_ROLE` (100) first,
    because it administers the others, then `FUSE_MANAGER_ROLE` (300) for
    configuration and `ALPHA_ROLE` (200) for `execute`.
-3. **Configure a market in this order, all three before the first `execute`:**
-   `add_fuses([...])`, then `grant_market_substrates(market_id, [...])`, then
-   `add_balance_fuse(market_id, balance_fuse)`. `execute` on a market with no
+3. **Register all three before the first `execute` on a market:**
+   `add_fuses([...])`, `grant_market_substrates(market_id, [...])` and
+   `add_balance_fuse(market_id, balance_fuse)`. Any order between them works;
+   what is not optional is that all three precede `execute`. `execute` on a market with no
    balance fuse reverts `AddressEmptyCode(address)` (`0x9996b315`) with the
    zero address; an action outside the granted substrates reverts inside the
    fuse.
@@ -53,9 +54,10 @@ greppable.
 5. **Fuses are immutable and addresses are per chain.** A fuse cannot be
    upgraded; a new strategy means adding a new fuse. Factory, fuse and token
    addresses differ on every chain and so may the registry names for the same
-   role (`BalanceFuseAaveV3` on Base, `AaveV3WithPriceOracleMiddlewareBalanceFuse`
-   on Arbitrum). Resolve `(chain, name)` in `ipor-abi`; never reuse an
-   address across chains.
+   role: Base publishes both `BalanceFuseAaveV3` and
+   `AaveV3WithPriceOracleMiddlewareBalanceFuse`, Arbitrum only the latter, so a
+   name that resolves on one chain may not exist on the next. Resolve
+   `(chain, name)` in `ipor-abi`; never reuse an address across chains.
 6. **`.send()` signs locally and needs a private key in the `Web3Context`;
    `.call()` previews without one.** Sending through a context built with
    `signer=` alone raises `ValueError("Private key required for sending
@@ -98,6 +100,8 @@ through `deposit()`, and its aToken balance rises after `execute`. Swap the
 four addresses for another chain or market; keep the order.
 
 ```python
+import os
+
 from eth_account import Account
 from web3 import Web3
 
@@ -114,7 +118,7 @@ from ipor_fusion.fuses import AaveV3SupplyFuse
 
 # A Base RPC, or an anvil fork of Base: anvil --fork-url <BASE_RPC_URL> --chain-id 8453
 w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-OWNER_PRIVATE_KEY = "0x..."  # .send() signs locally; .call() previews need no key
+OWNER_PRIVATE_KEY = os.environ["OWNER_PRIVATE_KEY"]  # .send() signs locally; .call() previews need no key
 owner = Account.from_key(OWNER_PRIVATE_KEY).address  # owns, configures and operates the vault
 ctx = Web3Context(w3, chain_id=8453, signer=owner, private_key=OWNER_PRIVATE_KEY)
 
@@ -218,4 +222,5 @@ for a registry name swaps the parts: `SupplyFuseAaveV3` is `AaveV3SupplyFuse`.
 - Read-only inspection of any live vault, no key needed:
   `https://mcp.ipor.io/mcp`. The `fusion-mcp` server bundled with the SDK
   (`pip install 'ipor-fusion[mcp]'`) serves this guide as the resources
-  `fusion://glossary`, `fusion://architecture` and `fusion://invariants`
+  `fusion://glossary`, `fusion://architecture`, `fusion://invariants` and
+  `fusion://quickstart`

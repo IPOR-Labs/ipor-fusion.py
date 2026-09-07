@@ -6,7 +6,13 @@ import re
 from pathlib import Path
 
 import pytest
+from _euler_v2 import BASE_FUSION_FACTORY
+from _guide import GUIDE_ADDRESSES
+from addresses import BASE_USDC
 
+from ipor_fusion import ERC20, AccessManager, Call, PlasmaVault
+from ipor_fusion.core import FusionFactory
+from ipor_fusion.fuses import AaveV3SupplyFuse
 from ipor_fusion.guide import (
     ARCHITECTURE,
     GLOSSARY,
@@ -75,6 +81,14 @@ class TestResources:
         with pytest.raises(KeyError):
             guide_text("changelog")
 
+    def test_walk_addresses_match_the_repository_constants(self):
+        # The fuse pair is deployment-specific and exercised by the from-scratch
+        # simulation; the factory and the token must simply agree with the
+        # constants the rest of the suite runs against.
+        assert GUIDE_ADDRESSES["FACTORY_PROXY"] == BASE_FUSION_FACTORY
+        assert GUIDE_ADDRESSES["USDC"] == BASE_USDC
+        assert {"SUPPLY_FUSE", "BALANCE_FUSE"} <= set(GUIDE_ADDRESSES)
+
     def test_invariants_name_every_deploy_path_revert(self):
         text = INVARIANTS.text
         for selector, name in [
@@ -129,6 +143,10 @@ class TestSkill:
             for node in ast.walk(tree)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
         }
+        # Every step the walk depends on, checked against the real classes:
+        # renaming one in the SDK fails here instead of shipping a guide that
+        # tells an agent to call a method that no longer exists.
+        api = (FusionFactory, PlasmaVault, AccessManager, ERC20, AaveV3SupplyFuse, Call)
         for step in [
             "clone",
             "grant_role",
@@ -141,6 +159,13 @@ class TestSkill:
             "send",
         ]:
             assert step in calls, step
+            assert any(hasattr(cls, step) for cls in api), step
+
+    def test_lists_every_shipped_resource_uri(self):
+        # The skill points a reader at the MCP resources; a new document that
+        # never reaches this list is a document nobody finds.
+        text = SKILL.read_text(encoding="utf-8")
+        assert {r.uri for r in RESOURCES if r.uri in text} == {r.uri for r in RESOURCES}
 
 
 class TestPluginManifests:
@@ -157,8 +182,11 @@ class TestPluginManifests:
         assert [p["name"] for p in marketplace["plugins"]] == [plugin["name"]]
         assert marketplace["plugins"][0]["source"] == "./"
 
-    def test_mcp_config_points_at_the_hosted_server(self):
+    def test_mcp_config_ships_the_hosted_and_the_bundled_server(self):
+        # The hosted server inspects live vaults; only the bundled one serves
+        # the `fusion://` resources and the prompts, so the plugin needs both.
         config = json.loads(MCP_CONFIG.read_text(encoding="utf-8"))
         assert config["mcpServers"] == {
-            "ipor-fusion": {"type": "http", "url": "https://mcp.ipor.io/mcp"}
+            "ipor-fusion": {"type": "http", "url": "https://mcp.ipor.io/mcp"},
+            "ipor-fusion-local": {"type": "stdio", "command": "fusion-mcp"},
         }

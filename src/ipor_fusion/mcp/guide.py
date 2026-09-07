@@ -85,13 +85,18 @@ def trace_oracle_pricing(
     """Explain how a vault prices one asset, or every asset, through its price
     oracle middleware."""
     scope = f"the asset {asset}" if asset else "every configured asset"
-    asset_arg = f" and asset={asset}" if asset else ""
+    narrowing = (
+        f"\n   The tool maps every configured asset in one call and takes no asset "
+        f"argument; pick {asset} out of its result yourself."
+        if asset
+        else ""
+    )
     return f"""Explain how the IPOR Fusion Plasma Vault {vault_address} on chain \
 {chain_id} prices {scope}.
 
 1. Call `vault_oracle_mapping` with chain_id={chain_id} and \
-vault_address={vault_address}{asset_arg}.
-2. For each asset, walk the chain from the vault's price oracle middleware to \
+vault_address={vault_address}.{narrowing}
+2. For each asset in scope, walk the chain from the vault's price oracle middleware to \
 the leaf feed: which oracle contract, which feed, which quote currency, how \
 many decimals, and the timestamp of the latest answer if reported.
 3. Point out anything that affects safety: a fallback or hand-entered price, a \

@@ -26,6 +26,8 @@ through `deposit()`, and its aToken balance rises after `execute`. Swap the
 four addresses for another chain or market; keep the order.
 
 ```python
+import os
+
 from eth_account import Account
 from web3 import Web3
 
@@ -42,7 +44,7 @@ from ipor_fusion.fuses import AaveV3SupplyFuse
 
 # A Base RPC, or an anvil fork of Base: anvil --fork-url <BASE_RPC_URL> --chain-id 8453
 w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-OWNER_PRIVATE_KEY = "0x..."  # .send() signs locally; .call() previews need no key
+OWNER_PRIVATE_KEY = os.environ["OWNER_PRIVATE_KEY"]  # .send() signs locally; .call() previews need no key
 owner = Account.from_key(OWNER_PRIVATE_KEY).address  # owns, configures and operates the vault
 ctx = Web3Context(w3, chain_id=8453, signer=owner, private_key=OWNER_PRIVATE_KEY)
 

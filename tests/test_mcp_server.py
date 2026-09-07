@@ -177,7 +177,16 @@ class TestGuide:
         )
         text = result.messages[0].content.text  # type: ignore[union-attr]
         assert "vault_oracle_mapping" in text
-        assert "asset=0xAsset" in text
+        # The asset narrows what the answer covers, but it is never handed to
+        # the tool: `vault_oracle_mapping` takes vault_address, chain_id and
+        # block_number only, and an invented argument fails schema validation.
+        assert "0xAsset" in text
+        assert "asset=0xAsset" not in text
+
+        result = asyncio.run(mcp.get_prompt("trace_oracle_pricing", args))
+        every_asset = result.messages[0].content.text  # type: ignore[union-attr]
+        assert "every configured asset" in every_asset
+        assert "0xAsset" not in every_asset
 
         result = asyncio.run(
             mcp.get_prompt(

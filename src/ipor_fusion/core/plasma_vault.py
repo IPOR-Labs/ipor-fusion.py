@@ -120,7 +120,7 @@ class PlasmaVault(ContractWrapper):
     def grant_market_substrates(
         self, market_id: MarketId, substrates: list[bytes]
     ) -> Call[None]:
-        """Atomist-only configuration call. Each substrate is bytes32 (an address
+        """FUSE_MANAGER-only configuration call. Each substrate is bytes32 (an address
         left-padded to 32 bytes, or a typed substrate prefix-encoded by the vault).
         """
         return self._write(
