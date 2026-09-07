@@ -7,6 +7,8 @@
 
 Maintained by <a href="https://ipor.io">IPOR Labs AG</a>.
 
+[Documentation](https://docs.ipor.io/build-on-fusion) · [SDK docs](https://docs.ipor.io/build-on-fusion/alpha/sdk) · [Hosted MCP server](https://mcp.ipor.io/mcp) · [Example bot](https://github.com/IPOR-Labs/ipor-fusion-alpha-example)
+
 <table>
   <tr>
     <td><strong>Workflow</strong></td>
@@ -146,7 +148,32 @@ fusion market meta-morpho 0xVAULT_ADDRESS --chain ethereum
 
 ## MCP Server
 
-The SDK includes an [MCP](https://modelcontextprotocol.io/) server that exposes CLI tools to any MCP-compatible AI assistant (Claude Code, Cursor, Windsurf, etc.).
+Two ways to reach IPOR Fusion from an MCP-compatible AI assistant (Claude Code, Cursor, Windsurf, etc.).
+
+### Hosted server (no install)
+
+`https://mcp.ipor.io/mcp` is public, unauthenticated and read-only — inspect any Fusion vault without your own RPC key.
+
+```bash
+claude mcp add --transport http ipor-fusion https://mcp.ipor.io/mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "ipor-fusion": {
+      "type": "http",
+      "url": "https://mcp.ipor.io/mcp"
+    }
+  }
+}
+```
+
+Tools: `vaults_list`, `vault_info`, `vault_oracle_mapping`, `fusion_addresses_list`, `fusion_address_names`, `fusion_address_lookup`, `market_morpho_blue`, `market_meta_morpho`.
+
+### Local server (from the SDK)
+
+The SDK ships a `fusion-mcp` server that exposes the CLI over MCP, against your own RPC providers and local config.
 
 ```bash
 # Install with MCP extras (pipx keeps dependencies isolated)
@@ -184,6 +211,32 @@ Available tools:
 | `market_meta_morpho` | MetaMorpho V1 or Morpho Vault V2 allocations and caps (Morpho API) |
 
 Configure providers and vaults via `fusion config` or the MCP config tools first.
+
+## Common errors
+
+Reverts on the deploy-and-configure path, keyed by selector so a failed transaction is greppable.
+
+| Selector | Revert | What happened | Fix |
+|---|---|---|---|
+| `0x8745fbfd` | `DaoFeePackagesArrayEmpty()` | `clone()` was sent to `IporFusionFactoryImpl`, which carries no fee configuration | Send it to `IporFusionFactoryProxy` (Base: `0x1455717668fA96534f675856347A973fA907e922`); for other chains resolve `IporFusionFactoryProxy` in [ipor-abi](https://github.com/IPOR-Labs/ipor-abi) or via the hosted MCP `fusion_address_lookup` |
+| `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse registered — the vault delegated to the zero address | Call `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
+| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the target function requires; a fresh clone grants the owner only `OWNER_ROLE` | Grant the role with `AccessManager.grant_role(role, account, 0)` from the `OWNER_ROLE` holder |
+
+A freshly cloned vault is unconfigured. `OWNER_ROLE` must grant itself `ATOMIST_ROLE` first, because ATOMIST administers the operating roles:
+
+| Role | Id | Required by |
+|---|---|---|
+| `Roles.OWNER_ROLE` | 1 | granted by `clone()` to the `owner` argument; grants the roles below |
+| `Roles.ATOMIST_ROLE` | 100 | administers `ALPHA`, `FUSE_MANAGER`, `WHITELIST`, `UPDATE_MARKETS_BALANCES` |
+| `Roles.ALPHA_ROLE` | 200 | `execute` |
+| `Roles.FUSE_MANAGER_ROLE` | 300 | `add_fuses`, `grant_market_substrates`, `add_balance_fuse` |
+| `Roles.WHITELIST_ROLE` | 800 | `deposit` while the vault is not open to the public |
+
+Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` → `add_balance_fuse` → `execute`. All three configuration steps are mandatory; `execute` reverts without them.
+
+`.send()` signs locally and needs a private key in the `Web3Context` (`Web3Context.from_url(url, private_key=...)`); `.call()` previews work without one.
+
+The full clone-configure-deposit-execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
 
 ## Architecture
 
