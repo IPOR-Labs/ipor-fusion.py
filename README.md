@@ -93,6 +93,33 @@ action = fuse.supply(
 receipt = vault.execute([action]).send()
 ```
 
+Fuse, factory and manager addresses per chain are published in
+[ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`).
+A fuse must also be registered on the vault; `vault.get_fuses().call()` lists the registered ones.
+
+Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK never scales by decimals.
+
+### Read, send, or simulate
+
+Every wrapper method returns a `Call` instead of executing. The same `Call` powers all three modes:
+
+```python
+from ipor_fusion import VaultSimulator
+
+total = vault.total_assets().call()          # eth_call -> Amount
+receipt = vault.execute([action]).send()     # signed tx -> TxReceipt
+payload = vault.execute([action]).calldata   # raw bytes for an external signer
+
+# Simulate first via eth_simulateV1 (no local node); alpha is the account allowed to call execute()
+sim = VaultSimulator(ctx.web3, vault=vault.address, alpha=Web3.to_checksum_address("0xALPHA"))
+sim.observe("before", vault.total_assets())
+sim.execute([action])
+sim.observe("after", vault.total_assets())
+result = sim.run()
+if result.all_success:
+    print(result.get("after") - result.get("before"))
+```
+
 ## CLI Quickstart
 
 The SDK ships with a `fusion` CLI for inspecting and managing Plasma Vaults from the terminal.
@@ -163,19 +190,23 @@ Configure providers and vaults via `fusion config` or the MCP config tools first
 The SDK uses a **fuse adapter pattern**:
 
 - **Fuses** encode protocol-specific calls into `FuseAction` objects (pure calldata, no state)
-- **PlasmaVault** batches and executes `FuseAction` sequences on-chain via `execute()`
+- **PlasmaVault** batches and executes `FuseAction` sequences on-chain via `execute()`; a batch is atomic
 - **Web3Context** manages provider connections, signing, and transaction dispatch
+- **Call** is the lazy result of every wrapper method: `.call()`, `.send()`, `.calldata`, or feed it to `VaultSimulator`
 
 ```
-Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-chain tx
+Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  -->  .send() / simulate
 ```
 
 ### Core modules (`ipor_fusion.core`)
 
 | Module | Purpose |
 |--------|---------|
-| `Web3Context` | Provider connection, signing, tx dispatch |
-| `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw |
+| `Web3Context` | Provider connection, signing, tx dispatch, gas estimation |
+| `Call` | Pre-encoded contract call; `.call()`, `.send()`, `.calldata`, `.build_transaction()` |
+| `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw, fuse and market configuration |
+| `VaultSimulator` | Batch `execute` + reads through `eth_simulateV1`, multi-block, no local node |
+| `FusionFactory` | Deploy a new vault (`clone`, `clone_supervised`) |
 | `AccessManager` | Role-based access control |
 | `RewardsManager` | Claim and vest rewards |
 | `WithdrawManager` | Time-windowed withdrawal requests |
@@ -183,6 +214,8 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 | `FeeAccount` | Fee escrow account, resolves its `FeeManager` |
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
+| `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50) |
+| `ERC20` | Token reads and approvals |
 
 ### Supported protocols (`ipor_fusion.fuses`)
 
@@ -190,13 +223,27 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 |----------|-------|
 | Aave V3 | `AaveV3SupplyFuse`, `AaveV3BorrowFuse` |
 | Morpho | `MorphoSupplyFuse`, `MorphoCollateralFuse`, `MorphoBorrowFuse`, `MorphoFlashLoanFuse`, `MorphoClaimFuse` |
+| Euler V2 | `EulerV2SupplyFuse`, `EulerV2CollateralFuse`, `EulerV2ControllerFuse`, `EulerV2BorrowFuse`, `EulerV2BatchFuse`, `EulerV2SwapDeployFuse`, `EulerV2SwapReconfigureFuse`, `EulerV2SwapRegistryFuse` |
 | Uniswap V3 | `UniswapV3SwapFuse`, `UniswapV3NewPositionFuse`, `UniswapV3ModifyPositionFuse`, `UniswapV3CollectFuse` |
 | Ramses V2 | `RamsesV2NewPositionFuse`, `RamsesV2ModifyPositionFuse`, `RamsesV2CollectFuse`, `RamsesClaimFuse` |
 | Compound V3 | `CompoundV3SupplyFuse` |
 | Gearbox V3 | `GearboxSupplyFuse`, `GearboxStakeFuse` |
 | ERC-4626 | `ERC4626SupplyFuse` |
 | Fluid Instadapp | `FluidInstadappSupplyFuse`, `FluidInstadappStakingFuse` |
+| Merkl | `MerklClaimWrapperFuse` |
 | Universal | `UniversalTokenSwapperFuse` |
+| Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
+
+### Readers (`ipor_fusion.readers`)
+
+Read-only aggregators over positions and health, no fuses involved:
+
+| Reader | Purpose |
+|--------|---------|
+| `MorphoReader`, `AaveV3Reader`, `CompoundV3Reader` | Market params, rates and vault positions per lending protocol |
+| `UniswapV3Reader`, `RamsesV2Reader` | LP position details |
+| `fetch_vault_lending_health` | Health factor per lending market a vault is in |
+| `build_oracle_mapping` | How the vault prices every configured asset |
 
 ### Supported networks
 

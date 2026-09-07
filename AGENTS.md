@@ -99,6 +99,38 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
 - `mcp/` — `server.py` tools call the SDK directly (no subprocess); `models.py` pydantic output
 - Entry points: `entry_cli.py`, `entry_mcp.py` via `[project.scripts]`
 
+## SDK usage model
+
+Two patterns explain most of the code; know both before writing SDK code
+or examples.
+
+- `Call[T]` (`core/contract.py`): every `ContractWrapper` method (one per
+  Solidity function) returns a `Call` instead of executing. `.call()` runs
+  `eth_call` and decodes to `T`; `.send()` signs and submits, returning a
+  `TxReceipt`; `.calldata` hands the bytes to an external signer;
+  `.build_transaction()` / `Web3Context.estimate_gas` preview without signing.
+  A `Call` without `output_types` (a write) raises on `.call()`. The same
+  `Call` feeds `VaultSimulator.observe`, so reads, sends and simulations share
+  one definition.
+- Fuses (`fuses/`) are stateless encoders: a method returns an immutable
+  `FuseAction(fuse_address, calldata)` and touches no chain. `Fuse` builds it
+  via `self._action_raw(solidity_signature, values)`; the shared `_validate_*`
+  helpers raise before encoding. `PlasmaVault.execute([actions])` runs the
+  batch atomically.
+- Simulate before sending: `VaultSimulator(web3, vault=, alpha=)` batches
+  `execute` and `observe` calls into one `eth_simulateV1` round trip, across
+  blocks via `next_block`. Integration tests and examples use it instead of a
+  local node.
+- Amounts are raw on-chain integers; `types.py` `NewType`s (`Amount`, `Shares`,
+  `MarketId`, ...) name the unit, and nothing scales by decimals.
+- Addresses: fuse, factory and manager addresses per chain come from
+  `ipor-abi` `addresses.json`; a fuse must be registered on the vault
+  (`PlasmaVault.get_fuses()`) and its market granted substrates before an
+  action can succeed.
+- Adding a protocol: new module in `fuses/`, re-export from `fuses/__init__.py`
+  and the top-level `__all__`, encoding test in `test_fuse_encoding.py`, and a
+  row in the README protocol table.
+
 ## Substrate decoders: source of truth
 
 Sync `market_ids.py`, `config/roles.py` and the `substrates.py` registry from
