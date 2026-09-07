@@ -37,6 +37,7 @@ from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.mcp.guide import register_guide
 from ipor_fusion.mcp.models import (
     ActionResult,
     ChangelogEntryModel,
@@ -58,13 +59,15 @@ mcp = FastMCP(
     instructions=(
         "Inspection and configuration tools for IPOR Fusion Plasma Vaults. "
         "Start with config_show / vault_list; vault_info is the "
-        "comprehensive per-vault summary."
+        "comprehensive per-vault summary. Read the fusion://invariants "
+        "resource before writing code that deploys or configures a vault."
     ),
     website_url=repository_url() or None,
 )
 # FastMCP exposes no version kwarg; left unset, the initialize handshake
 # reports the mcp library's version as serverInfo.version.
 mcp._mcp_server.version = package_version()
+register_guide(mcp)
 
 
 # ---------------------------------------------------------------------------

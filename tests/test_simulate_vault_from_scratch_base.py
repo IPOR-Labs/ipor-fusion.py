@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+from _guide import guide_address
 from _simulate import address_substrate, assert_all_success
 from addresses import BASE_USDC
 from constants import ANVIL_WALLET, BASE_AAVE_V3_SUPPLY_FUSE
@@ -66,6 +68,14 @@ PINNED_BLOCK: int = 46538100
 # value the position. Read from an existing BASE vault's `get_balance_fuses()`.
 BASE_AAVE_V3_BALANCE_FUSE: str = "0x952573Ec1B6895a88a95CA523097083d4da4D8e5"
 
+# The same walk, run a second time with the addresses the shipped guide
+# publishes (`fusion://quickstart`, the registry-named SupplyFuseAaveV3 /
+# BalanceFuseAaveV3): a different Aave V3 deployment pair from the one above.
+# Both are live on Base; running both is what keeps the guide honest and
+# answers which pair a fresh clone accepts. The guide pair needs a later block
+# than the constants above, which predate its deployment.
+GUIDE_PINNED_BLOCK: int = 50988559
+
 # A BASE address holding ample USDC, used to fund the depositor via impersonated
 # transfer. Morpho Blue (~150M USDC) — deliberately a different protocol from
 # Aave so funding doesn't perturb the market our strategy supplies into.
@@ -87,12 +97,30 @@ def _clone_args() -> dict:
     }
 
 
-def test_simulate_vault_from_scratch_supply_aave_v3(web3_base):
-    balance_fuse = Web3.to_checksum_address(BASE_AAVE_V3_BALANCE_FUSE)
+@pytest.mark.parametrize(
+    ("block", "supply_fuse", "balance_fuse"),
+    [
+        pytest.param(
+            PINNED_BLOCK,
+            BASE_AAVE_V3_SUPPLY_FUSE,
+            Web3.to_checksum_address(BASE_AAVE_V3_BALANCE_FUSE),
+            id="live_vault_pair",
+        ),
+        pytest.param(
+            GUIDE_PINNED_BLOCK,
+            guide_address("SUPPLY_FUSE"),
+            guide_address("BALANCE_FUSE"),
+            id="guide_pair",
+        ),
+    ],
+)
+def test_simulate_vault_from_scratch_supply_aave_v3(
+    web3_base, block, supply_fuse, balance_fuse
+):
     whale = Web3.to_checksum_address(BASE_USDC_WHALE)
 
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
-    ctx.default_block = PINNED_BLOCK
+    ctx.default_block = block
     factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
 
     # ── 1. Predict the deterministic addresses ──────────────────────────────
@@ -109,10 +137,10 @@ def test_simulate_vault_from_scratch_supply_aave_v3(web3_base):
     plasma_vault = PlasmaVault(ctx, vault_address)
     access_manager = AccessManager(ctx, access_manager_address)
     usdc = ERC20(ctx, BASE_USDC)
-    aave = AaveV3SupplyFuse(BASE_AAVE_V3_SUPPLY_FUSE)
+    aave = AaveV3SupplyFuse(supply_fuse)
 
     sim = VaultSimulator(
-        web3=web3_base, vault=vault_address, alpha=ANVIL_WALLET, block=hex(PINNED_BLOCK)
+        web3=web3_base, vault=vault_address, alpha=ANVIL_WALLET, block=hex(block)
     )
 
     # ── 2. Create the vault (MUST be the first call → index matches preview) ─
@@ -143,7 +171,7 @@ def test_simulate_vault_from_scratch_supply_aave_v3(web3_base):
         from_=OWNER,
     )
     # Wire the Aave market: action fuse + balance fuse + the USDC substrate.
-    sim.add_call(call=plasma_vault.add_fuses([BASE_AAVE_V3_SUPPLY_FUSE]), from_=OWNER)
+    sim.add_call(call=plasma_vault.add_fuses([supply_fuse]), from_=OWNER)
     sim.add_call(
         call=plasma_vault.add_balance_fuse(AAVE_MARKET, balance_fuse), from_=OWNER
     )

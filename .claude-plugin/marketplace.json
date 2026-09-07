@@ -1,0 +1,14 @@
+{
+  "name": "ipor-fusion",
+  "owner": {
+    "name": "IPOR Labs"
+  },
+  "description": "Skills and the hosted read-only MCP server for building on IPOR Fusion vaults",
+  "plugins": [
+    {
+      "name": "ipor-fusion",
+      "source": "./",
+      "description": "Skills for building on IPOR Fusion vaults with the ipor-fusion Python SDK, plus the hosted read-only inspection server"
+    }
+  ]
+}

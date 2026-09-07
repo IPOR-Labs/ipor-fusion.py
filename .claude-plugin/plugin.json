@@ -1,0 +1,13 @@
+{
+  "name": "ipor-fusion",
+  "version": "3.6.5",
+  "description": "Skills for building on IPOR Fusion vaults with the ipor-fusion Python SDK, plus the hosted read-only inspection server",
+  "author": {
+    "name": "IPOR Labs",
+    "url": "https://ipor.io"
+  },
+  "homepage": "https://docs.ipor.io/build-on-fusion",
+  "repository": "https://github.com/IPOR-Labs/ipor-fusion.py",
+  "license": "BSD-3-Clause",
+  "keywords": ["ipor", "fusion", "defi", "vault", "erc-4626", "web3"]
+}

@@ -126,6 +126,9 @@ logging_use_named_masks = true
 commit_parser = "conventional"
 major_on_zero = true
 version_toml = ["pyproject.toml:project.version"]
+# The Claude Code plugin manifest carries the same version so the shipped
+# skills version with the SDK they describe.
+version_variables = [".claude-plugin/plugin.json:version"]
 assets = ["uv.lock"]
 
 [tool.semantic_release.branches.main]

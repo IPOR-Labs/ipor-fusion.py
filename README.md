@@ -212,31 +212,48 @@ Available tools:
 
 Configure providers and vaults via `fusion config` or the MCP config tools first.
 
+Besides the tools, `fusion-mcp` serves the guide from `ipor_fusion.guide` as the
+resources `fusion://glossary`, `fusion://architecture`, `fusion://invariants` and
+`fusion://quickstart` (the executed deploy-and-operate walk), and the prompts
+`quickstart`, `deploy_vault`, `analyze_vault`, `trace_oracle_pricing` and
+`explain_fuse` (slash commands in clients that support MCP prompts).
+
+## Agent skills
+
+[`skills/ipor-deploy-vault/SKILL.md`](skills/ipor-deploy-vault/SKILL.md) teaches a
+coding agent the full clone → roles → market → access posture → deposit → execute
+walk, with the invariants and the revert selectors, before it writes vault code.
+Its body is `fusion://invariants` and `fusion://quickstart` from `ipor_fusion.guide`
+verbatim (a test keeps them identical), so the skill and the MCP resources are one
+text with two delivery paths. It follows the
+[Agent Skills](https://agentskills.io/specification) format and versions with the
+SDK. One install per machine:
+
+```bash
+# Claude Code — plugin with the skill and the hosted MCP server
+/plugin marketplace add IPOR-Labs/ipor-fusion.py
+/plugin install ipor-fusion@ipor-fusion
+
+# Codex CLI, Gemini CLI, Cursor — the skill; add the MCP server as shown above
+npx skills add IPOR-Labs/ipor-fusion.py -g -a codex      # or gemini-cli, cursor
+```
+
 ## Common errors
 
-Reverts on the deploy-and-configure path, keyed by selector so a failed transaction is greppable.
+Reverts on the deploy-and-configure path, keyed by selector so a failed transaction is greppable. This table and the full invariants ship in the wheel as [`ipor_fusion.guide`](src/ipor_fusion/guide/invariants.md), which `fusion-mcp` serves as `fusion://invariants`.
 
 | Selector | Revert | What happened | Fix |
 |---|---|---|---|
-| `0x8745fbfd` | `DaoFeePackagesArrayEmpty()` | `clone()` was sent to `IporFusionFactoryImpl`, which carries no fee configuration | Send it to `IporFusionFactoryProxy` (Base: `0x1455717668fA96534f675856347A973fA907e922`); for other chains resolve `IporFusionFactoryProxy` in [ipor-abi](https://github.com/IPOR-Labs/ipor-abi) or via the hosted MCP `fusion_address_lookup` |
-| `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse registered — the vault delegated to the zero address | Call `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
-| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the target function requires; a fresh clone grants the owner only `OWNER_ROLE` | Grant the role with `AccessManager.grant_role(role, account, 0)` from the `OWNER_ROLE` holder |
+| `0x8745fbfd` | `DaoFeePackagesArrayEmpty()` | `clone()` was sent to `IporFusionFactoryImpl` | Send it to `IporFusionFactoryProxy` for that chain |
+| `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse | `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
+| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, 0)` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
+| `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send()` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
 
-A freshly cloned vault is unconfigured. `OWNER_ROLE` must grant itself `ATOMIST_ROLE` first, because ATOMIST administers the operating roles:
+`clone()` grants the owner only `Roles.OWNER_ROLE` (1). OWNER grants `Roles.ATOMIST_ROLE` (100), which administers `Roles.FUSE_MANAGER_ROLE` (300, configuration), `Roles.ALPHA_ROLE` (200, `execute`) and `Roles.WHITELIST_ROLE` (800, `deposit` on a private vault).
 
-| Role | Id | Required by |
-|---|---|---|
-| `Roles.OWNER_ROLE` | 1 | granted by `clone()` to the `owner` argument; grants the roles below |
-| `Roles.ATOMIST_ROLE` | 100 | administers `ALPHA`, `FUSE_MANAGER`, `WHITELIST`, `UPDATE_MARKETS_BALANCES` |
-| `Roles.ALPHA_ROLE` | 200 | `execute` |
-| `Roles.FUSE_MANAGER_ROLE` | 300 | `add_fuses`, `grant_market_substrates`, `add_balance_fuse` |
-| `Roles.WHITELIST_ROLE` | 800 | `deposit` while the vault is not open to the public |
+Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` → `add_balance_fuse` → `execute`; all three configuration steps are mandatory.
 
-Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` → `add_balance_fuse` → `execute`. All three configuration steps are mandatory; `execute` reverts without them.
-
-`.send()` signs locally and needs a private key in the `Web3Context` (`Web3Context.from_url(url, private_key=...)`); `.call()` previews work without one.
-
-The full clone-configure-deposit-execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
+The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
 
 ## Architecture
 
