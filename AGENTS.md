@@ -6,7 +6,8 @@ built on the same SDK. Published to PyPI. It is a library and inspection
 tooling, not an automation service: nothing here runs on a schedule.
 
 Related repositories (siblings, referenced by name; clone paths vary):
-- `ipor-fusion` — Solidity contracts, the source of truth for market ids, roles and substrates.
+- [ipor-fusion](https://github.com/IPOR-Labs/ipor-fusion) — Solidity contracts, the source of truth for market ids, roles and substrates.
+- [ipor-abi](https://github.com/IPOR-Labs/ipor-abi) — deployed addresses and ABIs per chain (`mainnet/mainnet-<chain>-fusion/addresses.json`); the place to look up fuse, factory and manager addresses.
 - [ipor-fusion-alpha-example](https://github.com/IPOR-Labs/ipor-fusion-alpha-example) — end-to-end SDK usage patterns.
 
 ## Commands
@@ -24,7 +25,7 @@ uv lock --check                                               # uv.lock in sync 
 
 Run format, check, pyright and pytest after every code change; that is exactly
 the sequence in `.github/workflows/python-build.yml`. When ruff `C901` trips,
-extract helpers, never suppress. Poetry, black, pylint and mypy are gone.
+extract helpers, never suppress.
 
 **Offline vs network.** `test_cli_*` and `test_mcp_*` need no network
 (auto-tagged `cli` / `mcp` in `conftest.py`; everything else is `sdk`).
@@ -42,11 +43,21 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
   `test(sdk):`, `ci:`, `build:`, `chore:`, `docs:`. `python-semantic-release`
   derives the version from them. Never hand-bump `project.version`; the
   release workflow stamps it and re-locks `uv.lock`.
+- Release notes render only the commit subject; body prose is dropped. Two
+  footers survive: `BREAKING CHANGE: <what breaks, what to do instead>` is
+  required whenever the subject carries `!` (the `!` bumps the version but
+  renders nothing), and `NOTICE: <what the reader must do>` is for changes that
+  need action (a migration, a new env var or config key). Omit it otherwise.
 - No AI attribution trailers or "generated with" lines in commits or PRs.
 - Branch and open a PR; `main` only moves through PRs and the release workflow.
 - Dependencies: `>=x,<next-major` ranges in `pyproject.toml`, resolved by
   `uv.lock`; `pyright` is pinned exactly.
-- English only in code. Comments only for edge cases and non-obvious logic.
+- English only, US spelling, in code, comments, docstrings and user-facing
+  strings (`field_docs.py` ships as API documentation). Comments only for edge
+  cases and non-obvious logic.
+- Public symbols are re-exported from `src/ipor_fusion/__init__.py` (import +
+  `__all__`); fuse classes also from `fuses/__init__.py`. The package is
+  `py.typed`, so public APIs stay fully annotated.
 
 ## Invariants that must change together
 
@@ -57,26 +68,34 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
 | `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/` |
 | substrate decoders | `substrates.py` registry mirrors each market's `contracts/fuses/<protocol>/*SubstrateLib.sol` or `*FuseLib.sol` |
 | `vault_info` JSON shape | `_build_json_output` in `cli/vault_cmd.py`, models in `mcp/models.py` (`extra="forbid"`), `_full_vault_info_dict` fixture in `test_mcp_models.py` |
-| CLI command set | every CLI command has a matching tool in `mcp/server.py` |
+| CLI command set | every CLI command has a matching tool in `mcp/server.py` (`changelog` maps to `server_info`) |
 
 ## Layout (`src/ipor_fusion/`)
 
 - `chains.py` chain registry; `market_ids.py` `IporFusionMarkets`; `types.py`, `errors.py`
+- `about.py` — package version, repository URL, CHANGELOG parsing (`fusion changelog`,
+  `server_info`); `field_docs.py` — `DOCS`, the JSON field descriptions shared by CLI
+  output and MCP models
 - `substrates.py` — public per-market bytes32 substrate decoding (`decode_substrate`,
   `SubstrateInfo`, `format_market_label`, `market_name`; re-exported from `ipor_fusion`),
   used by the CLI, MCP and `readers/lending_health`
 - `config/roles.py` — `Roles` IntEnum
-- `core/` — `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`,
-  `simulation` (eth_simulateV1), `oracle`, `fusion_factory`, `context`, `contract`, `erc20`
-- `fuses/` — per-protocol fuse encoders (aave_v3, compound_v3, erc4626, euler_v2,
-  fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2, uniswap_v3, universal, `events.py`)
+- `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
+  `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
+  `simulation` (`VaultSimulator`, eth_simulateV1), `oracle`, `fusion_factory`,
+  `external_state_executor` (NAV marks for market 50), `erc20`
+- `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, erc4626,
+  euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
+  uniswap_v3, universal, `events.py`); `base.py` holds `Fuse`, `FuseAction` and the
+  shared validators
 - `readers/` — read side: lending_health, oracle_mapping, position_manager, aave_v3,
   compound_v3, morpho, ramses_v2, uniswap_v3
-- `cli/` — `main.py` root group; `config_cmd.py`, `market_cmd.py` (+ `morpho_api.py`),
-  `vault_cmd.py` orchestration; `vault_fetcher.py` on-chain fetch (`_fetch_vault_data`,
-  `_safe_call`); `vault_health.py` checks + reconciliation; `vault_rendering.py` pure
-  formatting; `vault_dep_graph.py`; `config_store.py` (XDG `~/.config/ipor-fusion/`,
-  `~/.cache/ipor-fusion/`); `explorer.py` Etherscan V2 (single endpoint, needs API key)
+- `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`
+  (+ `morpho_api.py`), `vault_cmd.py` orchestration; `vault_fetcher.py` on-chain fetch
+  (`_fetch_vault_data`, `_safe_call`); `vault_health.py` checks + reconciliation;
+  `vault_rendering.py` pure formatting; `vault_dep_graph.py`; `config_store.py` (XDG
+  `~/.config/ipor-fusion/`, `~/.cache/ipor-fusion/`); `explorer.py` Etherscan V2
+  (single endpoint, needs API key)
 - `mcp/` — `server.py` tools call the SDK directly (no subprocess); `models.py` pydantic output
 - Entry points: `entry_cli.py`, `entry_mcp.py` via `[project.scripts]`
 
@@ -92,10 +111,11 @@ Plain-address decoding only when the fuses check `isSubstrateAsAssetGranted`;
 typed layouts get their own decoder with the enum labels carried over. A
 market with no substrate semantics stays unregistered ON PURPOSE and renders
 as a loud `no_decoder(NAME)` (e.g. LITE_PSM=48). Never default to
-plain-address: markets 40/46/49 once decoded silently to garbage addresses
-that way, and downstream consumers alert off these decodes, so a wrong decoder
-is worse than none. `decode_substrate` handles plain addresses (12 zero bytes)
-and typed substrates (11 zero bytes + type byte, e.g. Ebisu ZAPPER/REGISTRY).
+plain-address or guess a layout: a wrong decoder renders plausible-looking
+garbage addresses that consumers act on, so it is worse than none (Aave V4,
+id 49, is the documented case in `substrates.py`). `decode_substrate` handles
+plain addresses (12 zero bytes) and typed substrates (11 zero bytes + type
+byte, e.g. Ebisu ZAPPER/REGISTRY).
 
 ## CLI and MCP
 
@@ -105,12 +125,17 @@ role-accounts, oracle-mapping). `vault info` fans out RPC and API calls with a
 `ThreadPoolExecutor`; contract names and token symbols are cached in
 `~/.cache/ipor-fusion/contract_cache.json`.
 
-MCP tools are 1:1 with CLI commands. Read-only: `vault_info`, `vault_list`,
+Every CLI command has an MCP tool (`fusion changelog` maps to `server_info`;
+the rest share names). Read-only: `vault_info`, `vault_list`,
 `vault_role_accounts`, `vault_oracle_mapping`, `market_morpho_blue`,
 `market_meta_morpho`, `config_show`, `server_info`. Mutating: `vault_add`,
 `vault_remove`, `config_set_provider`, `config_set_etherscan_key`. Every new
-CLI command gets a matching MCP tool. Tool docstrings must list all returned
-JSON fields so an agent knows what is available without calling the tool.
+CLI command gets a matching MCP tool. Put every fact in its structured home:
+the return shape is the Pydantic return type (it becomes `outputSchema`),
+per-argument semantics go in `Annotated[..., Field(description=...)]`, closed
+value sets are `Literal` enums. The docstring keeps only what has no
+structured home: a one-line summary, behavioral notes, cost warnings. Do not
+repeat schema content as prose; it drifts.
 
 `mcp/models.py` forbids extra keys. Adding a top-level field to
 `_build_json_output` requires adding it to the matching model (with a default
