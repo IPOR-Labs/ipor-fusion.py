@@ -213,8 +213,9 @@ Available tools:
 Configure providers and vaults via `fusion config` or the MCP config tools first.
 
 Besides the tools, `fusion-mcp` serves the guide from `ipor_fusion.guide` as the
-resources `fusion://glossary`, `fusion://architecture` and `fusion://invariants`,
-and the prompts `quickstart`, `analyze_vault`, `trace_oracle_pricing` and
+resources `fusion://glossary`, `fusion://architecture`, `fusion://invariants` and
+`fusion://quickstart` (the executed deploy-and-operate walk), and the prompts
+`quickstart`, `deploy_vault`, `analyze_vault`, `trace_oracle_pricing` and
 `explain_fuse` (slash commands in clients that support MCP prompts).
 
 ## Agent skills
@@ -222,8 +223,11 @@ and the prompts `quickstart`, `analyze_vault`, `trace_oracle_pricing` and
 [`skills/ipor-deploy-vault/SKILL.md`](skills/ipor-deploy-vault/SKILL.md) teaches a
 coding agent the full clone → roles → market → access posture → deposit → execute
 walk, with the invariants and the revert selectors, before it writes vault code.
-It follows the [Agent Skills](https://agentskills.io/specification) format and
-versions with the SDK. One install per machine:
+Its body is `fusion://invariants` and `fusion://quickstart` from `ipor_fusion.guide`
+verbatim (a test keeps them identical), so the skill and the MCP resources are one
+text with two delivery paths. It follows the
+[Agent Skills](https://agentskills.io/specification) format and versions with the
+SDK. One install per machine:
 
 ```bash
 # Claude Code — plugin with the skill and the hosted MCP server

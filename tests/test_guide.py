@@ -11,6 +11,7 @@ from ipor_fusion.guide import (
     ARCHITECTURE,
     GLOSSARY,
     INVARIANTS,
+    QUICKSTART,
     RESOURCES,
     guide_text,
 )
@@ -54,12 +55,13 @@ def _public_texts() -> dict[str, str]:
 
 
 class TestResources:
-    def test_three_documents_under_the_fusion_scheme(self):
-        assert RESOURCES == (GLOSSARY, ARCHITECTURE, INVARIANTS)
+    def test_four_documents_under_the_fusion_scheme(self):
+        assert RESOURCES == (GLOSSARY, ARCHITECTURE, INVARIANTS, QUICKSTART)
         assert [doc.uri for doc in RESOURCES] == [
             "fusion://glossary",
             "fusion://architecture",
             "fusion://invariants",
+            "fusion://quickstart",
         ]
 
     @pytest.mark.parametrize("doc", RESOURCES, ids=lambda d: d.name)
@@ -110,15 +112,17 @@ class TestSkill:
         assert fields["name"].strip() == SKILL_DIR.name
         assert len(fields["description"].strip()) > 100
 
-    def test_embeds_the_invariants_verbatim(self):
+    @pytest.mark.parametrize("doc", [INVARIANTS, QUICKSTART], ids=lambda d: d.name)
+    def test_embeds_the_guide_documents_verbatim(self, doc):
         # One text, two carriers: the resource served over MCP and the skill.
         # Anyone editing one is forced by this test to edit the other.
-        body = INVARIANTS.text.split("\n", 1)[1].strip()
+        body = doc.text.split("\n", 1)[1].strip()
         assert body in SKILL.read_text(encoding="utf-8")
 
     def test_walk_is_valid_python_using_the_public_api(self):
-        blocks = _PY_BLOCK.findall(SKILL.read_text(encoding="utf-8"))
+        blocks = _PY_BLOCK.findall(QUICKSTART.text)
         assert len(blocks) == 1
+        assert _PY_BLOCK.findall(SKILL.read_text(encoding="utf-8")) == blocks
         tree = ast.parse(blocks[0])
         calls = {
             node.func.attr

@@ -120,6 +120,7 @@ class TestGuide:
         prompts = {p.name: p for p in asyncio.run(mcp.list_prompts())}
         assert set(prompts) == {
             "quickstart",
+            "deploy_vault",
             "analyze_vault",
             "trace_oracle_pricing",
             "explain_fuse",
@@ -131,6 +132,11 @@ class TestGuide:
             for name, p in prompts.items()
         }
         assert arguments["quickstart"] == {}
+        assert arguments["deploy_vault"] == {
+            "chain_id": True,
+            "asset": True,
+            "market": False,
+        }
         assert arguments["analyze_vault"] == {"chain_id": True, "vault_address": True}
         assert arguments["trace_oracle_pricing"] == {
             "chain_id": True,
@@ -145,8 +151,19 @@ class TestGuide:
         text = message.content.text  # type: ignore[union-attr]
         assert message.role == "user"
         assert "fusion://invariants" in text
+        assert "fusion://quickstart" in text
         assert "read-only" in text
         assert "pip install ipor-fusion" in text
+
+    def test_deploy_prompt_sends_the_agent_to_the_quickstart(self):
+        result = asyncio.run(
+            mcp.get_prompt("deploy_vault", {"chain_id": "42161", "asset": "USDC"})
+        )
+        text = result.messages[0].content.text  # type: ignore[union-attr]
+        assert "fusion://quickstart" in text and "fusion://invariants" in text
+        assert "chain 42161" in text and "USDC" in text and "AAVE_V3" in text
+        assert "IporFusionFactoryProxy" in text
+        assert "convert_to_public_vault" in text
 
     def test_prompts_carry_their_arguments_into_the_text(self):
         args = {"chain_id": "8453", "vault_address": "0xVault"}

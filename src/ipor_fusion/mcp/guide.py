@@ -45,7 +45,9 @@ nothing on-chain.
 What it does not do: deploy, configure, deposit or execute. Those go through \
 the `ipor-fusion` Python SDK with a `Web3Context` that carries a private key \
 (`pip install ipor-fusion`, {_SDK_URL}). Say so explicitly when a user asks \
-this server to change something.
+this server to change something. To write that code, read `fusion://quickstart`: \
+the executed walk from clone to the first execute, with the factory proxy for \
+every chain. Keep its steps and their order; change only addresses and names.
 
 Addresses are per chain. Resolve factory and fuse addresses by contract name in \
 the ipor-abi registry ({_REGISTRY_URL}); never reuse an address from one chain \
@@ -123,8 +125,44 @@ and the class name swap their parts: `SupplyFuseAaveV3` is `AaveV3SupplyFuse`.
 the address is chain-specific, balance fuse before the first execute."""
 
 
+def deploy_vault(
+    chain_id: ChainIdArg,
+    asset: Annotated[
+        str, Field(description="Underlying asset, symbol or address, e.g. USDC")
+    ],
+    market: Annotated[
+        str,
+        Field(description="Market for the first strategy step, e.g. AAVE_V3 or MORPHO"),
+    ] = "AAVE_V3",
+) -> str:
+    """Write the code that deploys, configures, funds and operates a new Plasma
+    Vault on a chain, adapted from the executed quickstart walk."""
+    return f"""Write the code that deploys and operates a new IPOR Fusion Plasma Vault on \
+chain {chain_id} for the asset {asset}, with a first strategy step on the \
+{market} market.
+
+1. Read `fusion://invariants` and `fusion://quickstart`. The quickstart is \
+executed code: keep every step and its order, change only addresses and names.
+2. Resolve for chain {chain_id}, by contract name in the ipor-abi registry \
+({_REGISTRY_URL}) or with an address-lookup tool if this server has one: \
+`IporFusionFactoryProxy`, the action fuse and the balance fuse for {market}, \
+and the token address of {asset}. Say which registry names you used; balance \
+fuse names differ per chain. If a name does not resolve for chain {chain_id}, \
+stop and say so instead of guessing.
+3. Ask which access posture the user wants and default to the private one: \
+whitelist the depositor with `WHITELIST_ROLE`, or `convert_to_public_vault()` \
+only for a vault that takes outside money, because that switch is one-way.
+4. Tell the user what the signer needs before running it: the private key in \
+the `Web3Context`, gas on chain {chain_id}, and the deposit amount of {asset} \
+in the depositor's wallet. Recommend a fork run first \
+(`anvil --fork-url <RPC_URL> --chain-id {chain_id}`).
+
+Do not invent addresses, and do not present a step as optional."""
+
+
 PROMPTS: tuple[Callable[..., str], ...] = (
     quickstart,
+    deploy_vault,
     analyze_vault,
     trace_oracle_pricing,
     explain_fuse,

@@ -1,8 +1,8 @@
 """Reference text about IPOR Fusion for AI agents and other automated readers.
 
-Three markdown documents ship inside the wheel next to this module — a
-glossary, an architecture overview and the invariants whose violation is a
-revert. Anything that puts text in front of an agent (the bundled MCP server,
+Four markdown documents ship inside the wheel next to this module — a
+glossary, an architecture overview, the invariants whose violation is a
+revert, and the quickstart that deploys and operates a vault. Anything that puts text in front of an agent (the bundled MCP server,
 a skill, a docs page) reads them from here so there is one copy to keep true.
 
 Plain dataclasses and stdlib only, importable without the optional extras.
@@ -74,12 +74,24 @@ INVARIANTS = GuideResource(
     filename="invariants.md",
 )
 
-RESOURCES: tuple[GuideResource, ...] = (GLOSSARY, ARCHITECTURE, INVARIANTS)
+QUICKSTART = GuideResource(
+    name="quickstart",
+    title="IPOR Fusion quickstart: deploy and operate a vault",
+    description=(
+        "The executed walk from nothing to a vault with a live position: "
+        "clone from the factory proxy, grant the roles, add fuses, substrates "
+        "and the balance fuse, choose the access posture, deposit, execute. "
+        "Runnable code plus the factory proxy address for every chain."
+    ),
+    filename="quickstart.md",
+)
+
+RESOURCES: tuple[GuideResource, ...] = (GLOSSARY, ARCHITECTURE, INVARIANTS, QUICKSTART)
 
 
 def guide_text(name: str) -> str:
     """Return the shipped document called `name` (`glossary`, `architecture`,
-    `invariants`). Raises `KeyError` for any other name."""
+    `invariants`, `quickstart`). Raises `KeyError` for any other name."""
     for resource in RESOURCES:
         if resource.name == name:
             return resource.text
@@ -90,6 +102,7 @@ __all__ = [
     "ARCHITECTURE",
     "GLOSSARY",
     "INVARIANTS",
+    "QUICKSTART",
     "RESOURCES",
     "GuideResource",
     "guide_text",
