@@ -1,0 +1,13 @@
+{
+  "name": "ipor-fusion",
+  "owner": {
+    "name": "IPOR Labs"
+  },
+  "plugins": [
+    {
+      "name": "ipor-fusion",
+      "source": "./",
+      "description": "Skills for building on IPOR Fusion vaults with the ipor-fusion Python SDK, plus the hosted read-only inspection server"
+    }
+  ]
+}

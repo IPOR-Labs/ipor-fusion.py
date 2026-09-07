@@ -28,6 +28,7 @@ from ipor_fusion.cli.morpho_api import (
     VaultV2Info,
 )
 from ipor_fusion.errors import MorphoMarketNotFoundError
+from ipor_fusion.guide import RESOURCES
 from ipor_fusion.mcp.models import (
     FeesSection,
     OracleNodeModel,
@@ -99,6 +100,75 @@ class TestServerMetadata:
         opts = mcp._mcp_server.create_initialization_options()
         assert opts.instructions
         assert opts.website_url == "https://github.com/IPOR-Labs/ipor-fusion.py"
+
+
+class TestGuide:
+    def test_handshake_points_at_the_invariants(self):
+        opts = mcp._mcp_server.create_initialization_options()
+        assert "fusion://invariants" in (opts.instructions or "")
+
+    def test_serves_every_guide_document_as_a_resource(self):
+        listed = {str(r.uri): r for r in asyncio.run(mcp.list_resources())}
+        assert set(listed) == {doc.uri for doc in RESOURCES}
+        for doc in RESOURCES:
+            assert listed[doc.uri].description == doc.description
+            assert listed[doc.uri].mimeType == "text/markdown"
+            (content,) = asyncio.run(mcp.read_resource(doc.uri))
+            assert content.content == doc.text
+
+    def test_lists_the_guide_prompts_with_their_arguments(self):
+        prompts = {p.name: p for p in asyncio.run(mcp.list_prompts())}
+        assert set(prompts) == {
+            "quickstart",
+            "analyze_vault",
+            "trace_oracle_pricing",
+            "explain_fuse",
+        }
+        for prompt in prompts.values():
+            assert prompt.description and "\n" not in prompt.description
+        arguments = {
+            name: {a.name: a.required for a in (p.arguments or [])}
+            for name, p in prompts.items()
+        }
+        assert arguments["quickstart"] == {}
+        assert arguments["analyze_vault"] == {"chain_id": True, "vault_address": True}
+        assert arguments["trace_oracle_pricing"] == {
+            "chain_id": True,
+            "vault_address": True,
+            "asset": False,
+        }
+        assert arguments["explain_fuse"] == {"chain_id": True, "fuse": True}
+
+    def test_quickstart_names_the_read_write_split(self):
+        result = asyncio.run(mcp.get_prompt("quickstart"))
+        (message,) = result.messages
+        text = message.content.text  # type: ignore[union-attr]
+        assert message.role == "user"
+        assert "fusion://invariants" in text
+        assert "read-only" in text
+        assert "pip install ipor-fusion" in text
+
+    def test_prompts_carry_their_arguments_into_the_text(self):
+        args = {"chain_id": "8453", "vault_address": "0xVault"}
+        result = asyncio.run(mcp.get_prompt("analyze_vault", args))
+        text = result.messages[0].content.text  # type: ignore[union-attr]
+        assert "vault_info" in text
+        assert "chain_id=8453" in text and "vault_address=0xVault" in text
+
+        result = asyncio.run(
+            mcp.get_prompt("trace_oracle_pricing", {**args, "asset": "0xAsset"})
+        )
+        text = result.messages[0].content.text  # type: ignore[union-attr]
+        assert "vault_oracle_mapping" in text
+        assert "asset=0xAsset" in text
+
+        result = asyncio.run(
+            mcp.get_prompt(
+                "explain_fuse", {"chain_id": "8453", "fuse": "SupplyFuseAaveV3"}
+            )
+        )
+        text = result.messages[0].content.text  # type: ignore[union-attr]
+        assert "SupplyFuseAaveV3" in text and "AaveV3SupplyFuse" in text
 
 
 class TestServerInfo:

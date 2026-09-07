@@ -181,6 +181,28 @@ Available tools:
 
 Configure providers and vaults via `fusion config` or the MCP config tools first.
 
+Besides the tools, `fusion-mcp` serves the guide from `ipor_fusion.guide` as the
+resources `fusion://glossary`, `fusion://architecture` and `fusion://invariants`,
+and the prompts `quickstart`, `analyze_vault`, `trace_oracle_pricing` and
+`explain_fuse` (slash commands in clients that support MCP prompts).
+
+## Agent skills
+
+[`skills/ipor-deploy-vault/SKILL.md`](skills/ipor-deploy-vault/SKILL.md) teaches a
+coding agent the full clone → roles → market → access posture → deposit → execute
+walk, with the invariants and the revert selectors, before it writes vault code.
+It follows the [Agent Skills](https://agentskills.io/specification) format and
+versions with the SDK. One install per machine:
+
+```bash
+# Claude Code — plugin with the skill and the hosted MCP server
+/plugin marketplace add IPOR-Labs/ipor-fusion.py
+/plugin install ipor-fusion@ipor-fusion
+
+# Codex CLI, Gemini CLI, Cursor — the skill; add the MCP server as shown above
+npx skills add IPOR-Labs/ipor-fusion.py -g -a codex      # or gemini-cli, cursor
+```
+
 ## Common errors
 
 Reverts on the deploy-and-configure path, keyed by selector so a failed transaction is greppable.
