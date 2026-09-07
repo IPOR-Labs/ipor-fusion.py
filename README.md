@@ -91,8 +91,35 @@ action = fuse.supply(
     amount=1_000_000,  # 1 USDC (6 decimals)
 )
 
-# 4. Execute on-chain — execute() builds the call, .send() signs and broadcasts
+# 4. Execute on-chain (execute() returns a Call; .send() signs and submits it)
 receipt = vault.execute([action]).send()
+```
+
+Fuse, factory and manager addresses per chain are published in
+[ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`).
+A fuse must also be registered on the vault; `vault.get_fuses().call()` lists the registered ones.
+
+Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK never scales by decimals.
+
+### Read, send, or simulate
+
+Every wrapper method returns a `Call` instead of executing. The same `Call` powers all three modes:
+
+```python
+from ipor_fusion import VaultSimulator
+
+total = vault.total_assets().call()          # eth_call -> Amount
+receipt = vault.execute([action]).send()     # signed tx -> TxReceipt
+payload = vault.execute([action]).calldata   # raw bytes for an external signer
+
+# Simulate first via eth_simulateV1 (no local node); alpha is the account allowed to call execute()
+sim = VaultSimulator(ctx.web3, vault=vault.address, alpha=Web3.to_checksum_address("0xALPHA"))
+sim.observe("before", vault.total_assets())
+sim.execute([action])
+sim.observe("after", vault.total_assets())
+result = sim.run()
+if result.all_success:
+    print(result.get("after") - result.get("before"))
 ```
 
 ## CLI Quickstart
@@ -113,6 +140,10 @@ fusion vault info 0xB8a451107A9f87FDe481D4D686247D6e43Ed715e --chain-id ethereum
 
 # List saved vaults
 fusion vault list
+
+# Inspect a Morpho Blue market or MetaMorpho vault
+fusion market morpho-blue 0xMARKET_ID --chain ethereum
+fusion market meta-morpho 0xVAULT_ADDRESS --chain ethereum
 ```
 
 ## MCP Server
@@ -166,18 +197,18 @@ Available tools:
 
 | Tool | Description |
 |------|-------------|
-| `server_info` | Identify this server and report what changed in its releases |
-| `vault_info` | Full on-chain vault state — assets, fuses, balances, fees, lending health, reconciliation |
-| `vault_role_accounts` | Confirmed role holders on a vault's AccessManager |
-| `vault_oracle_mapping` | How a vault prices every configured asset at a block |
-| `vault_list` | List all saved vaults |
-| `vault_add` | Save a vault to the local config (auto-fetches on-chain name) |
-| `vault_remove` | Remove a vault from the local config |
+| `server_info` | Server name, running version and changelog entries |
 | `config_show` | Show current configuration (providers, vaults, API key status) |
 | `config_set_provider` | Set RPC provider URL for a chain (auto-detects chain ID) |
 | `config_set_etherscan_key` | Set Etherscan API key (enables contract name resolution) |
-| `market_morpho_blue` | Inspect a Morpho Blue market by its 32-byte market ID |
-| `market_meta_morpho` | Inspect a MetaMorpho V1 or Morpho Vault V2 by address |
+| `vault_info` | Full on-chain vault state — assets, fuses, balances, fees, lending health, reconciliation |
+| `vault_role_accounts` | Accounts holding each AccessManager role on a vault |
+| `vault_oracle_mapping` | Price-oracle sources per asset for a vault |
+| `vault_list` | List all saved vaults |
+| `vault_add` | Save a vault to the local config (auto-fetches on-chain name) |
+| `vault_remove` | Remove a vault from the local config |
+| `market_morpho_blue` | Morpho Blue market parameters and state |
+| `market_meta_morpho` | MetaMorpho V1 or Morpho Vault V2 allocations and caps (Morpho API) |
 
 Configure providers and vaults via `fusion config` or the MCP config tools first.
 
@@ -205,48 +236,43 @@ npx skills add IPOR-Labs/ipor-fusion.py -g -a codex      # or gemini-cli, cursor
 
 ## Common errors
 
-Reverts on the deploy-and-configure path, keyed by selector so a failed transaction is greppable.
+Reverts on the deploy-and-configure path, keyed by selector so a failed transaction is greppable. This table and the full invariants ship in the wheel as [`ipor_fusion.guide`](src/ipor_fusion/guide/invariants.md), which `fusion-mcp` serves as `fusion://invariants`.
 
 | Selector | Revert | What happened | Fix |
 |---|---|---|---|
-| `0x8745fbfd` | `DaoFeePackagesArrayEmpty()` | `clone()` was sent to `IporFusionFactoryImpl`, which carries no fee configuration | Send it to `IporFusionFactoryProxy` (Base: `0x1455717668fA96534f675856347A973fA907e922`); for other chains resolve `IporFusionFactoryProxy` in [ipor-abi](https://github.com/IPOR-Labs/ipor-abi) or via the hosted MCP `fusion_address_lookup` |
-| `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse registered — the vault delegated to the zero address | Call `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
-| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the target function requires; a fresh clone grants the owner only `OWNER_ROLE` | Grant the role with `AccessManager.grant_role(role, account, 0)` from the `OWNER_ROLE` holder |
+| `0x8745fbfd` | `DaoFeePackagesArrayEmpty()` | `clone()` was sent to `IporFusionFactoryImpl` | Send it to `IporFusionFactoryProxy` for that chain |
+| `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse | `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
+| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, 0)` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
+| `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send()` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
 
-A freshly cloned vault is unconfigured. `OWNER_ROLE` must grant itself `ATOMIST_ROLE` first, because ATOMIST administers the operating roles:
+`clone()` grants the owner only `Roles.OWNER_ROLE` (1). OWNER grants `Roles.ATOMIST_ROLE` (100), which administers `Roles.FUSE_MANAGER_ROLE` (300, configuration), `Roles.ALPHA_ROLE` (200, `execute`) and `Roles.WHITELIST_ROLE` (800, `deposit` on a private vault).
 
-| Role | Id | Required by |
-|---|---|---|
-| `Roles.OWNER_ROLE` | 1 | granted by `clone()` to the `owner` argument; grants the roles below |
-| `Roles.ATOMIST_ROLE` | 100 | administers `ALPHA`, `FUSE_MANAGER`, `WHITELIST`, `UPDATE_MARKETS_BALANCES` |
-| `Roles.ALPHA_ROLE` | 200 | `execute` |
-| `Roles.FUSE_MANAGER_ROLE` | 300 | `add_fuses`, `grant_market_substrates`, `add_balance_fuse` |
-| `Roles.WHITELIST_ROLE` | 800 | `deposit` while the vault is not open to the public |
+Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` → `add_balance_fuse` → `execute`; all three configuration steps are mandatory.
 
-Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` → `add_balance_fuse` → `execute`. All three configuration steps are mandatory; `execute` reverts without them.
-
-`.send()` signs locally and needs a private key in the `Web3Context` (`Web3Context.from_url(url, private_key=...)`); `.call()` previews work without one.
-
-The full clone-configure-deposit-execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
+The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
 
 ## Architecture
 
 The SDK uses a **fuse adapter pattern**:
 
 - **Fuses** encode protocol-specific calls into `FuseAction` objects (pure calldata, no state)
-- **PlasmaVault** batches and executes `FuseAction` sequences on-chain via `execute()`
+- **PlasmaVault** batches and executes `FuseAction` sequences on-chain via `execute()`; a batch is atomic
 - **Web3Context** manages provider connections, signing, and transaction dispatch
+- **Call** is the lazy result of every wrapper method: `.call()`, `.send()`, `.calldata`, or feed it to `VaultSimulator`
 
 ```
-Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-chain tx
+Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  -->  .send() / simulate
 ```
 
 ### Core modules (`ipor_fusion.core`)
 
 | Module | Purpose |
 |--------|---------|
-| `Web3Context` | Provider connection, signing, tx dispatch |
-| `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw |
+| `Web3Context` | Provider connection, signing, tx dispatch, gas estimation |
+| `Call` | Pre-encoded contract call; `.call()`, `.send()`, `.calldata`, `.build_transaction()` |
+| `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw, fuse and market configuration |
+| `VaultSimulator` | Batch `execute` + reads through `eth_simulateV1`, multi-block, no local node |
+| `FusionFactory` | Deploy a new vault (`clone`, `clone_supervised`) |
 | `AccessManager` | Role-based access control |
 | `RewardsManager` | Claim and vest rewards |
 | `WithdrawManager` | Time-windowed withdrawal requests |
@@ -254,6 +280,8 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 | `FeeAccount` | Fee escrow account, resolves its `FeeManager` |
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
+| `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50) |
+| `ERC20` | Token reads and approvals |
 
 ### Supported protocols (`ipor_fusion.fuses`)
 
@@ -261,13 +289,27 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  on-cha
 |----------|-------|
 | Aave V3 | `AaveV3SupplyFuse`, `AaveV3BorrowFuse` |
 | Morpho | `MorphoSupplyFuse`, `MorphoCollateralFuse`, `MorphoBorrowFuse`, `MorphoFlashLoanFuse`, `MorphoClaimFuse` |
+| Euler V2 | `EulerV2SupplyFuse`, `EulerV2CollateralFuse`, `EulerV2ControllerFuse`, `EulerV2BorrowFuse`, `EulerV2BatchFuse`, `EulerV2SwapDeployFuse`, `EulerV2SwapReconfigureFuse`, `EulerV2SwapRegistryFuse` |
 | Uniswap V3 | `UniswapV3SwapFuse`, `UniswapV3NewPositionFuse`, `UniswapV3ModifyPositionFuse`, `UniswapV3CollectFuse` |
 | Ramses V2 | `RamsesV2NewPositionFuse`, `RamsesV2ModifyPositionFuse`, `RamsesV2CollectFuse`, `RamsesClaimFuse` |
 | Compound V3 | `CompoundV3SupplyFuse` |
 | Gearbox V3 | `GearboxSupplyFuse`, `GearboxStakeFuse` |
 | ERC-4626 | `ERC4626SupplyFuse` |
 | Fluid Instadapp | `FluidInstadappSupplyFuse`, `FluidInstadappStakingFuse` |
+| Merkl | `MerklClaimWrapperFuse` |
 | Universal | `UniversalTokenSwapperFuse` |
+| Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
+
+### Readers (`ipor_fusion.readers`)
+
+Read-only aggregators over positions and health, no fuses involved:
+
+| Reader | Purpose |
+|--------|---------|
+| `MorphoReader`, `AaveV3Reader`, `CompoundV3Reader` | Market params, rates and vault positions per lending protocol |
+| `UniswapV3Reader`, `RamsesV2Reader` | LP position details |
+| `fetch_vault_lending_health` | Health factor per lending market a vault is in |
+| `build_oracle_mapping` | How the vault prices every configured asset |
 
 ### Supported networks
 
@@ -292,6 +334,8 @@ Integration tests need provider URLs in `.env` (eth_simulateV1 at a pinned fork 
 cp .env.example .env
 # Edit .env with ARBITRUM_PROVIDER_URL, ETHEREUM_PROVIDER_URL, BASE_PROVIDER_URL
 ```
+
+Contributor and coding-agent instructions (commands, conventions, invariants, domain rules) live in [AGENTS.md](AGENTS.md).
 
 ## Examples
 
