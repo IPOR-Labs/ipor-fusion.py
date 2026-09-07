@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v3.6.6 (2026-09-07)
+
+### Bug Fixes
+
+- **sdk**: Repoint the PyPI documentation URL and add agent entry points
+  ([`9b032e9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9b032e94169333ffa862d728111d59e53f733573))
+
+- **sdk**: Run the guide's addresses in the test, drop the invalid prompt argument
+  ([`41249cf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/41249cf354c6f66e72cf3359cb532960e4ec3ee9))
+
+### Chores
+
+- Describe the plugin marketplace
+  ([`5f60f4b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5f60f4bef29547cc7c18a1c36b042b6725e5cd2d))
+
+### Documentation
+
+- Add AGENTS.md as the single agent instructions file
+  ([`ab78b94`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ab78b94e227272c7cfa182ab85701dccede42b1c))
+
+- Correct AGENTS.md against the current tree
+  ([`a58274b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a58274b5e97f6a06f08fdb230fc05d6dedcb47b3))
+
+- Document the SDK usage model for consumers
+  ([`681cf2b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/681cf2b04ad73a1bbca602823584f9bdac5d5f77))
+
+### Features
+
+- **sdk**: Serve the deploy walk as fusion://quickstart and a deploy_vault prompt
+  ([`9038e81`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9038e8103adc61b07669c22612b2e7eedf073a94))
+
+- **sdk**: Ship an agent guide as fusion-mcp resources and prompts, and the first skill
+  ([`aaac49d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/aaac49d4e2556a76b20a1a0f22318148125456dc))
+
+
 ## v3.6.5 (2026-09-03)
 
 ### Bug Fixes
