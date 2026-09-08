@@ -255,6 +255,20 @@ Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` 
 
 The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
 
+## Vault construction examples
+
+Runnable, canonical examples for building and configuring a vault from scratch live in
+[`examples`](examples). They preview and simulate through `eth_simulateV1` — nothing is
+ever signed or broadcast.
+
+- [Simple Aave V3 supply vault](examples/simple_aave_v3_supply_base.py) — start here for vault
+  creation, role bootstrap, and configuring a single supported market.
+
+```bash
+export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
+uv run python examples/simple_aave_v3_supply_base.py
+```
+
 ## Architecture
 
 The SDK uses a **fuse adapter pattern**:
