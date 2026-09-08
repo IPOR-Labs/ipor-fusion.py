@@ -11,6 +11,12 @@ from ipor_fusion.types import MAX_UINT256, Amount
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
+def _validate_not_zero_address(value: str, name: str) -> None:
+    """Reject an empty or zero address; ``name`` labels it in the error."""
+    if not value or value == ZERO_ADDRESS:
+        raise ValueError(f"{name} must not be zero address")
+
+
 @dataclass(frozen=True, slots=True)
 class FuseAction:
     """Immutable calldata payload targeting a specific fuse contract."""
@@ -53,8 +59,7 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
 
     @staticmethod
     def _validate_address(value: str, name: str) -> None:
-        if not value or value == ZERO_ADDRESS:
-            raise ValueError(f"{name} must not be zero address")
+        _validate_not_zero_address(value, name)
 
     @staticmethod
     def _validate_non_empty_list(value: list, name: str) -> None:
@@ -106,6 +111,19 @@ def _substrate_address_bytes(address: ChecksumAddress) -> bytes:
     if len(payload) != 20:
         raise ValueError(f"not a 20-byte address: {address}")
     return payload
+
+
+def _encode_address_substrate(tag: int, address: ChecksumAddress) -> bytes:
+    """A bytes32 substrate: a one-byte type ``tag``, 11 zero bytes, then the
+    20-byte ``address``. Pure packing; validation is the caller's responsibility.
+    """
+    return bytes([tag]) + b"\x00" * 11 + _substrate_address_bytes(address)
+
+
+def _validate_selector(selector: bytes) -> None:
+    """A substrate-packed function selector is exactly 4 bytes."""
+    if len(selector) != 4:
+        raise ValueError(f"selector must be 4 bytes, got {len(selector)}")
 
 
 def _encode_uint248_substrate(tag: int, value: int, name: str) -> bytes:

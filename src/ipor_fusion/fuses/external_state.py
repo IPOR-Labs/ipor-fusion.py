@@ -22,8 +22,11 @@ from eth_typing import ChecksumAddress
 from ipor_fusion.fuses.base import (
     Fuse,
     FuseAction,
+    _encode_address_substrate,
     _encode_uint248_substrate,
     _substrate_address_bytes,
+    _validate_not_zero_address,
+    _validate_selector,
 )
 from ipor_fusion.types import Amount
 
@@ -117,8 +120,8 @@ class ExternalStateSubstrates:
     @staticmethod
     def _address_substrate(tag: int, address: ChecksumAddress, name: str) -> bytes:
         """Type byte, 11 zero bytes, then the 20-byte address."""
-        Fuse._validate_address(address, name)
-        return bytes([tag]) + b"\x00" * 11 + _substrate_address_bytes(address)
+        _validate_not_zero_address(address, name)
+        return _encode_address_substrate(tag, address)
 
     @classmethod
     def asset(cls, asset: ChecksumAddress) -> bytes:
@@ -162,9 +165,8 @@ class ExternalStateSubstrates:
         target -- the selector sits *above* the address, unlike the
         async-action market's TARGET substrate.
         """
-        if len(selector) != 4:
-            raise ValueError(f"selector must be 4 bytes, got {len(selector)}")
-        Fuse._validate_address(target, "target")
+        _validate_selector(selector)
+        _validate_not_zero_address(target, "target")
         return (
             bytes([cls._TARGET])
             + b"\x00" * 7

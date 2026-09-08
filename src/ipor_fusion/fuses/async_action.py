@@ -27,6 +27,7 @@ from ipor_fusion.fuses.base import (
     FuseAction,
     _encode_uint248_substrate,
     _substrate_address_bytes,
+    _validate_selector,
 )
 from ipor_fusion.types import Amount
 
@@ -197,8 +198,7 @@ class AsyncActionSubstrates:
         carrier checked for a fetched asset -- see ``AsyncActionFuse.exit``.
         Layout: type byte, 7 zero bytes, the 20-byte target, the 4-byte selector.
         """
-        if len(selector) != 4:
-            raise ValueError(f"selector must be 4 bytes, got {len(selector)}")
+        _validate_selector(selector)
         return (
             bytes([cls._ALLOWED_TARGETS])
             + b"\x00" * 7

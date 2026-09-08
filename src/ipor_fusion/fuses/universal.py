@@ -5,8 +5,8 @@ from eth_typing import ChecksumAddress
 from ipor_fusion.fuses.base import (
     Fuse,
     FuseAction,
+    _encode_address_substrate,
     _encode_uint248_substrate,
-    _substrate_address_bytes,
 )
 from ipor_fusion.types import Amount
 
@@ -36,20 +36,16 @@ class UniversalTokenSwapperSubstrates:
     _TARGET = 2
     _SLIPPAGE = 3
 
-    @staticmethod
-    def _encode_address(tag: int, address: ChecksumAddress) -> bytes:
-        return bytes([tag]) + b"\x00" * 11 + _substrate_address_bytes(address)
-
     @classmethod
     def token(cls, address: ChecksumAddress) -> bytes:
         """Asset allowed as swap input/output."""
-        return cls._encode_address(cls._TOKEN, address)
+        return _encode_address_substrate(cls._TOKEN, address)
 
     @classmethod
     def target(cls, address: ChecksumAddress) -> bytes:
         """Contract the swap executor may call (router, or a token that
         receives an `approve` call as part of the swap batch)."""
-        return cls._encode_address(cls._TARGET, address)
+        return _encode_address_substrate(cls._TARGET, address)
 
     @classmethod
     def slippage(cls, wad: int) -> bytes:
