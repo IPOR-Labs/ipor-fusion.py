@@ -123,10 +123,13 @@ def _substrate_address_bytes(address: ChecksumAddress) -> bytes:
     return payload
 
 
-def _encode_address_substrate(tag: int, address: ChecksumAddress) -> bytes:
+def _encode_address_substrate(tag: int, address: ChecksumAddress, name: str) -> bytes:
     """A bytes32 substrate: a one-byte type ``tag``, 11 zero bytes, then the
-    20-byte ``address``. Pure packing; validation is the caller's responsibility.
+    20-byte ``address``, which must not be the zero address. ``name`` labels it
+    in the error. Markets that permit a zero address do not share this layout
+    and pack their own.
     """
+    _validate_not_zero_address(address, name)
     return bytes([tag]) + b"\x00" * 11 + _substrate_address_bytes(address)
 
 

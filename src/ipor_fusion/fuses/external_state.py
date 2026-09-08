@@ -117,30 +117,24 @@ class ExternalStateSubstrates:
     _DUST_THRESHOLD = 7
     _MIN_UPDATE_INTERVAL = 8
 
-    @staticmethod
-    def _address_substrate(tag: int, address: ChecksumAddress, name: str) -> bytes:
-        """Type byte, 11 zero bytes, then the 20-byte address."""
-        _validate_not_zero_address(address, name)
-        return _encode_address_substrate(tag, address)
-
     @classmethod
     def asset(cls, asset: ChecksumAddress) -> bytes:
         """Allow ``asset`` to move between the vault and the executor and to be
         accounted for on enter/exit."""
-        return cls._address_substrate(cls._ASSET, asset, "asset")
+        return _encode_address_substrate(cls._ASSET, asset, "asset")
 
     @classmethod
     def custodian(cls, custodian: ChecksumAddress) -> bytes:
         """Allow ``custodian`` to propose and confirm off-venue balances. A
         proposal and its confirmation must come from two different custodians,
         so grant at least two."""
-        return cls._address_substrate(cls._CUSTODIAN, custodian, "custodian")
+        return _encode_address_substrate(cls._CUSTODIAN, custodian, "custodian")
 
     @classmethod
     def balance_account(cls, balance_account: ChecksumAddress) -> bytes:
         """Allow ``balance_account`` as the bucket the executor books enter/exit
         amounts against -- the same address the custodians report values for."""
-        return cls._address_substrate(
+        return _encode_address_substrate(
             cls._BALANCE_ACCOUNT, balance_account, "balance_account"
         )
 
