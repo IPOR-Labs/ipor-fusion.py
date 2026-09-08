@@ -170,6 +170,11 @@ class AsyncActionSubstrates:
     Mirrors `AsyncActionFuseLib.sol`: each substrate is
     ``bytes32(uint256(type) << 248 | payload)`` -- a one-byte type tag in the
     high byte, then a 31-byte payload whose layout depends on the type.
+
+    These encoders accept the zero address, unlike their external-state and
+    universal-token-swapper counterparts: `AsyncActionFuseLib.sol` has no
+    zero-address check, and the SDK mirrors the library rather than adding a
+    rule the chain does not enforce.
     """
 
     _ALLOWED_AMOUNT_TO_OUTSIDE = 0

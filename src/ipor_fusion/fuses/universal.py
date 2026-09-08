@@ -7,6 +7,7 @@ from ipor_fusion.fuses.base import (
     FuseAction,
     _encode_address_substrate,
     _encode_uint248_substrate,
+    _validate_not_zero_address,
 )
 from ipor_fusion.types import Amount
 
@@ -39,12 +40,14 @@ class UniversalTokenSwapperSubstrates:
     @classmethod
     def token(cls, address: ChecksumAddress) -> bytes:
         """Asset allowed as swap input/output."""
+        _validate_not_zero_address(address, "token")
         return _encode_address_substrate(cls._TOKEN, address)
 
     @classmethod
     def target(cls, address: ChecksumAddress) -> bytes:
         """Contract the swap executor may call (router, or a token that
         receives an `approve` call as part of the swap batch)."""
+        _validate_not_zero_address(address, "target")
         return _encode_address_substrate(cls._TARGET, address)
 
     @classmethod

@@ -728,6 +728,14 @@ class TestUniversalTokenSwapperSubstrates:
         with pytest.raises(ValueError, match="20-byte"):
             UniversalTokenSwapperSubstrates.token("0x1234")  # type: ignore[arg-type]
 
+    def test_zero_address_rejected(self):
+        # Mirrors UniversalTokenSwapperSubstrateLibZeroAddress on-chain. The
+        # error names the field, so a guard wired to the wrong one would show.
+        with pytest.raises(ValueError, match="token must not be zero address"):
+            UniversalTokenSwapperSubstrates.token(ZERO_ADDRESS)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="target must not be zero address"):
+            UniversalTokenSwapperSubstrates.target(ZERO_ADDRESS)  # type: ignore[arg-type]
+
 
 class TestUniversalTokenSwapperFuse:
     def test_swap(self):
@@ -1864,6 +1872,20 @@ class TestAsyncActionSubstrates:
             AsyncActionSubstrates.target(
                 "0x1234", _selector("transfer(address,uint256)")
             )  # type: ignore[arg-type]
+
+    def test_zero_address_accepted(self):
+        """AsyncActionFuseLib.sol has no zero-address check, so these encoders
+        mirror it and accept one -- unlike the external-state and
+        universal-token-swapper markets. Pinned so that harmonizing the three
+        has to be a deliberate decision rather than a silent drift."""
+        encoded = AsyncActionSubstrates.allowed_amount_to_outside(ZERO_ADDRESS, 1)
+        assert int.from_bytes(encoded, "big") == 1  # tag 0, zero asset, amount 1
+
+        selector = _selector("transfer(address,uint256)")
+        encoded = AsyncActionSubstrates.target(ZERO_ADDRESS, selector)
+        assert int.from_bytes(encoded, "big") == (1 << 248) | int.from_bytes(
+            selector, "big"
+        )
 
 
 class TestExternalStateSubstrates:
