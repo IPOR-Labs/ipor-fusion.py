@@ -29,9 +29,10 @@ greppable.
    address and cannot be reverted. A vault run by its owner's own bot
    whitelists the depositor; only a vault that takes outside money goes public.
 5. **Fuses are immutable and addresses are per chain.** A fuse cannot be
-   upgraded; a new strategy means adding a new fuse. Factory, fuse and token
-   addresses differ on every chain and so may the registry names for the same
-   role: Base publishes both `BalanceFuseAaveV3` and
+   upgraded; new strategies are composed from already-registered fuses, and a
+   new fuse is needed only for an action no registered fuse covers. Factory,
+   fuse and token addresses differ on every chain and so may the registry
+   names for the same role: Base publishes both `BalanceFuseAaveV3` and
    `AaveV3WithPriceOracleMiddlewareBalanceFuse`, Arbitrum only the latter, so a
    name that resolves on one chain may not exist on the next. Resolve
    `(chain, name)` in `ipor-abi`; never reuse an address across chains.
