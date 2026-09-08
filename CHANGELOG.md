@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v3.6.7 (2026-09-08)
+
+### Bug Fixes
+
+- **guide**: Strategies compose registered fuses
+  ([`4d1b098`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4d1b09871a850411c559414285fe715109f1e1c8))
+
+### Documentation
+
+- Point agents at the ipor.io llms.txt index
+  ([`a5e6a8f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a5e6a8f95c25ef7c8f1351bdbb3e3e427aae06d3))
+
+- **sdk**: Add advanced Euler V2 credit-market vault example
+  ([`8b1938b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8b1938b011e679b27361401dd89299e1f6262e09))
+
+- **sdk**: Add simple Aave V3 vault-from-scratch example
+  ([`0a3ac07`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0a3ac07f27688007a51536130e8f5e2b9d01ab9e))
+
+
 ## v3.6.6 (2026-09-07)
 
 ### Bug Fixes
