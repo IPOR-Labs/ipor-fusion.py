@@ -73,6 +73,8 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
+# Examples use `assert` as didactic post-conditions, same as tests.
+"examples/**" = ["S101"]
 
 [tool.ruff.lint.pylint]
 max-args = 15
@@ -84,7 +86,7 @@ max-statements = 100
 max-complexity = 10
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "examples"]
 pythonVersion = "3.10"
 typeCheckingMode = "basic"
 # Resolve imports against the uv-managed ./.venv so an editor-launched pyright (eglot, etc.)
