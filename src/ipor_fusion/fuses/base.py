@@ -12,8 +12,19 @@ ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
 def _validate_not_zero_address(value: str, name: str) -> None:
-    """Reject an empty or zero address; ``name`` labels it in the error."""
-    if not value or value == ZERO_ADDRESS:
+    """Reject an empty or zero address; ``name`` labels it in the error.
+
+    Compares the parsed bytes rather than the text, so every spelling of the
+    zero address is caught -- ``0x``-prefixed or bare. Input that is not hex at
+    all falls through to the encoder, which reports the malformed address.
+    """
+    if not value:
+        raise ValueError(f"{name} is required and must not be zero address")
+    try:
+        payload = bytes.fromhex(value.removeprefix("0x"))
+    except ValueError:
+        return
+    if payload == bytes(20):
         raise ValueError(f"{name} must not be zero address")
 
 
@@ -44,8 +55,7 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
     """Abstract base class for all protocol fuse adapters."""
 
     def __init__(self, address: ChecksumAddress):
-        if not address or address == ZERO_ADDRESS:
-            raise ValueError("Fuse address is required and must not be zero address")
+        _validate_not_zero_address(address, "fuse address")
         self._address = address
 
     @property

@@ -728,13 +728,14 @@ class TestUniversalTokenSwapperSubstrates:
         with pytest.raises(ValueError, match="20-byte"):
             UniversalTokenSwapperSubstrates.token("0x1234")  # type: ignore[arg-type]
 
-    def test_zero_address_rejected(self):
+    @pytest.mark.parametrize("spelling", [ZERO_ADDRESS, "0" * 40])
+    def test_zero_address_rejected(self, spelling):
         # Mirrors UniversalTokenSwapperSubstrateLibZeroAddress on-chain. The
         # error names the field, so a guard wired to the wrong one would show.
         with pytest.raises(ValueError, match="token must not be zero address"):
-            UniversalTokenSwapperSubstrates.token(ZERO_ADDRESS)  # type: ignore[arg-type]
+            UniversalTokenSwapperSubstrates.token(spelling)  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="target must not be zero address"):
-            UniversalTokenSwapperSubstrates.target(ZERO_ADDRESS)  # type: ignore[arg-type]
+            UniversalTokenSwapperSubstrates.target(spelling)  # type: ignore[arg-type]
 
 
 class TestUniversalTokenSwapperFuse:
@@ -1041,9 +1042,11 @@ class TestSlippageParamsAllowZero:
 class TestFuseConstructorValidation:
     """Fuse constructor must reject zero and empty addresses."""
 
-    def test_zero_address_rejected(self):
+    @pytest.mark.parametrize("spelling", [ZERO_ADDR, "0" * 40])
+    def test_zero_address_rejected(self, spelling):
+        # Prefixed and un-prefixed name the same address; both must be caught.
         with pytest.raises(ValueError, match="zero address"):
-            AaveV3SupplyFuse(ZERO_ADDR)
+            AaveV3SupplyFuse(spelling)
 
     def test_none_address_rejected(self):
         with pytest.raises(ValueError):
@@ -1999,25 +2002,37 @@ class TestExternalStateSubstrates:
 
     # Every public entry point that takes an address, so a future refactor
     # special-casing one of them cannot slip past the guard tests.
+    # Paired with the field name each encoder's error must carry.
     _ADDRESS_ENCODERS = [
-        pytest.param(ExternalStateSubstrates.asset, id="asset"),
-        pytest.param(ExternalStateSubstrates.custodian, id="custodian"),
-        pytest.param(ExternalStateSubstrates.balance_account, id="balance_account"),
-        pytest.param(
+        (ExternalStateSubstrates.asset, "asset"),
+        (ExternalStateSubstrates.custodian, "custodian"),
+        (ExternalStateSubstrates.balance_account, "balance_account"),
+        (
             lambda address: ExternalStateSubstrates.target(
                 address, _selector("transfer(address,uint256)")
             ),
-            id="target",
+            "target",
         ),
     ]
+    _ADDRESS_ENCODER_IDS = ["asset", "custodian", "balance_account", "target"]
 
-    @pytest.mark.parametrize("encoder", _ADDRESS_ENCODERS)
-    def test_zero_address_rejected(self, encoder):
-        # Mirrors ExternalStateErrors.ExternalStateZeroAddress on-chain.
-        with pytest.raises(ValueError, match="zero address"):
-            encoder(ZERO_ADDRESS)
+    @pytest.mark.parametrize(
+        ("encoder", "field"), _ADDRESS_ENCODERS, ids=_ADDRESS_ENCODER_IDS
+    )
+    @pytest.mark.parametrize("spelling", [ZERO_ADDRESS, "0" * 40])
+    def test_zero_address_rejected(self, encoder, field, spelling):
+        # Mirrors ExternalStateErrors.ExternalStateZeroAddress on-chain. The
+        # bare spelling matters: config files and CSV exports drop the 0x, and
+        # a text-only guard would encode a live-looking grant for address 0.
+        # Matching the field name catches an encoder wired to the wrong one.
+        with pytest.raises(ValueError, match=f"{field} must not be zero address"):
+            encoder(spelling)
 
-    @pytest.mark.parametrize("encoder", _ADDRESS_ENCODERS)
+    @pytest.mark.parametrize(
+        "encoder", [e for e, _ in _ADDRESS_ENCODERS], ids=_ADDRESS_ENCODER_IDS
+    )
     def test_malformed_address(self, encoder):
+        # The packer raises here, and its message names the address, not the
+        # field -- so there is nothing field-specific to assert.
         with pytest.raises(ValueError, match="20-byte"):
             encoder("0x1234")
