@@ -69,3 +69,11 @@ read-only and need no key. Anything that changes state — cloning, granting
 roles, configuring markets, depositing, executing — goes through the Python SDK
 with a `Web3Context` that carries a private key. `.call()` previews any call
 without a key; `.send()` signs locally and needs one.
+
+## The wider index
+
+The canonical machine-readable overview of IPOR Fusion for AI agents is
+https://ipor.io/llms.txt: vocabulary, agent rules, the deploy path, the public
+API, MCP access and every relevant repository, with
+https://ipor.io/llms-full.txt inlining the linked documentation pages. Read it
+when a question reaches beyond these resources.

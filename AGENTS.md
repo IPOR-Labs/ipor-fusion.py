@@ -10,6 +10,10 @@ Related repositories (siblings, referenced by name; clone paths vary):
 - [ipor-abi](https://github.com/IPOR-Labs/ipor-abi) — deployed addresses and ABIs per chain (`mainnet/mainnet-<chain>-fusion/addresses.json`); the place to look up fuse, factory and manager addresses.
 - [ipor-fusion-alpha-example](https://github.com/IPOR-Labs/ipor-fusion-alpha-example) — end-to-end SDK usage patterns.
 
+The canonical machine-readable overview of IPOR Fusion for AI agents is
+https://ipor.io/llms.txt (with https://ipor.io/llms-full.txt inlining the
+docs); read it before answering protocol-level questions.
+
 ## Commands
 
 ```bash
