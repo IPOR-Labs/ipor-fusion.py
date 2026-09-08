@@ -27,7 +27,10 @@ from ipor_fusion.fuses.euler_v2 import (
     EulerV2SwapRegistryFuse,
     euler_substrate,
 )
-from ipor_fusion.fuses.external_state import ExternalStateOperationFuse
+from ipor_fusion.fuses.external_state import (
+    ExternalStateOperationFuse,
+    ExternalStateSubstrates,
+)
 from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappStakingFuse,
     FluidInstadappSupplyFuse,
@@ -1861,3 +1864,138 @@ class TestAsyncActionSubstrates:
             AsyncActionSubstrates.target(
                 "0x1234", _selector("transfer(address,uint256)")
             )  # type: ignore[arg-type]
+
+
+class TestExternalStateSubstrates:
+    """Mirror of ExternalStateSubstrateLib.sol: type << 248 | payload."""
+
+    @pytest.mark.parametrize(
+        ("encoder", "tag", "label"),
+        [
+            (ExternalStateSubstrates.asset, 1, "ASSET"),
+            (ExternalStateSubstrates.custodian, 3, "CUSTODIAN"),
+            (ExternalStateSubstrates.balance_account, 4, "BALANCE_ACCOUNT"),
+        ],
+    )
+    def test_address_substrate_layout(self, encoder, tag, label):
+        encoded = encoder(TOKEN_A)
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (tag << 248) | int(TOKEN_A, 16)
+        info = decode_substrate(encoded, market_id=50)
+        assert info.type_label == label
+        assert info.address.lower() == TOKEN_A_LOW
+
+    def test_target_layout(self):
+        selector = _selector("transfer(address,uint256)")
+        encoded = ExternalStateSubstrates.target(TOKEN_B, selector)
+        assert len(encoded) == 32
+        # The selector sits ABOVE the address here, unlike market 40's TARGET.
+        assert int.from_bytes(encoded, "big") == (2 << 248) | (
+            int.from_bytes(selector, "big") << 160
+        ) | int(TOKEN_B, 16)
+        info = decode_substrate(encoded, market_id=50)
+        assert info.type_label == "TARGET"
+        assert info.address.lower() == TOKEN_B_LOW
+        assert info.extra["selector"] == "0x" + selector.hex()
+
+    # Each guard decodes under its own unit key, not a shared "value".
+    _SCALAR_GUARDS = [
+        (ExternalStateSubstrates.staleness_max, 5, "STALENESS_MAX", "seconds"),
+        (ExternalStateSubstrates.big_change_bps, 6, "BIG_CHANGE_BPS", "bps"),
+        (ExternalStateSubstrates.dust_threshold, 7, "DUST_THRESHOLD", "percent"),
+        (
+            ExternalStateSubstrates.min_update_interval,
+            8,
+            "MIN_UPDATE_INTERVAL",
+            "seconds",
+        ),
+    ]
+
+    @pytest.mark.parametrize(("encoder", "tag", "label", "unit"), _SCALAR_GUARDS)
+    def test_scalar_substrate_layout(self, encoder, tag, label, unit):
+        encoded = encoder(3600)
+        assert len(encoded) == 32
+        assert int.from_bytes(encoded, "big") == (tag << 248) | 3600
+        info = decode_substrate(encoded, market_id=50)
+        assert info.type_label == label
+        assert info.extra == {unit: "3600"}
+
+    @pytest.mark.parametrize(("encoder", "tag", "label", "unit"), _SCALAR_GUARDS)
+    def test_scalar_upper_boundary_encodes(self, encoder, tag, label, unit):
+        # The uint248 max encodes within the payload field for every guard.
+        value = (1 << 248) - 1
+        encoded = encoder(value)
+        assert int.from_bytes(encoded, "big") == (tag << 248) | value
+        info = decode_substrate(encoded, market_id=50)
+        assert info.type_label == label
+        assert info.extra == {unit: str(value)}
+
+    @pytest.mark.parametrize(
+        ("encoder", "tag", "unit"),
+        [
+            (ExternalStateSubstrates.dust_threshold, 7, "percent"),
+            (ExternalStateSubstrates.min_update_interval, 8, "seconds"),
+        ],
+    )
+    def test_optional_guards_accept_zero(self, encoder, tag, unit):
+        # Zero is meaningful for these two: no dust allowed, no minimum delay.
+        encoded = encoder(0)
+        assert int.from_bytes(encoded, "big") == tag << 248
+        assert decode_substrate(encoded, market_id=50).extra == {unit: "0"}
+
+    @pytest.mark.parametrize(
+        "encoder",
+        [ExternalStateSubstrates.staleness_max, ExternalStateSubstrates.big_change_bps],
+    )
+    def test_mandatory_singletons_reject_zero(self, encoder):
+        # The executor's cache rebuild reads a zero singleton as unset and
+        # reverts with ExternalStateMandatorySingletonMissing, so a zero grant
+        # can never be part of a working configuration.
+        with pytest.raises(ValueError, match="must not be zero"):
+            encoder(0)
+
+    @pytest.mark.parametrize(
+        "encoder",
+        [
+            ExternalStateSubstrates.staleness_max,
+            ExternalStateSubstrates.big_change_bps,
+            ExternalStateSubstrates.dust_threshold,
+            ExternalStateSubstrates.min_update_interval,
+        ],
+    )
+    def test_scalar_out_of_range(self, encoder):
+        with pytest.raises(ValueError, match="out of range"):
+            encoder(1 << 248)
+        with pytest.raises(ValueError, match="out of range"):
+            encoder(-1)
+
+    def test_target_bad_selector_length(self):
+        with pytest.raises(ValueError, match="4 bytes"):
+            ExternalStateSubstrates.target(TOKEN_B, b"\x01\x02\x03")
+        with pytest.raises(ValueError, match="4 bytes"):
+            ExternalStateSubstrates.target(TOKEN_B, b"\x01\x02\x03\x04\x05")
+
+    # Every public entry point that takes an address, so a future refactor
+    # special-casing one of them cannot slip past the guard tests.
+    _ADDRESS_ENCODERS = [
+        pytest.param(ExternalStateSubstrates.asset, id="asset"),
+        pytest.param(ExternalStateSubstrates.custodian, id="custodian"),
+        pytest.param(ExternalStateSubstrates.balance_account, id="balance_account"),
+        pytest.param(
+            lambda address: ExternalStateSubstrates.target(
+                address, _selector("transfer(address,uint256)")
+            ),
+            id="target",
+        ),
+    ]
+
+    @pytest.mark.parametrize("encoder", _ADDRESS_ENCODERS)
+    def test_zero_address_rejected(self, encoder):
+        # Mirrors ExternalStateErrors.ExternalStateZeroAddress on-chain.
+        with pytest.raises(ValueError, match="zero address"):
+            encoder(ZERO_ADDRESS)
+
+    @pytest.mark.parametrize("encoder", _ADDRESS_ENCODERS)
+    def test_malformed_address(self, encoder):
+        with pytest.raises(ValueError, match="20-byte"):
+            encoder("0x1234")

@@ -7,7 +7,7 @@
 
 Maintained by <a href="https://ipor.io">IPOR Labs AG</a>.
 
-[Documentation](https://docs.ipor.io/build-on-fusion) · [SDK docs](https://docs.ipor.io/build-on-fusion/alpha/sdk) · [llms.txt for AI agents](https://ipor.io/llms.txt) · [Hosted MCP server](https://mcp.ipor.io/mcp) · [Example bot](https://github.com/IPOR-Labs/ipor-fusion-alpha-example)
+[Documentation](https://docs.ipor.io/build-on-fusion) · [SDK docs](https://docs.ipor.io/build-on-fusion/alpha/sdk) · [llms.txt for AI agents](https://ipor.io/llms.txt) · [Hosted MCP server](https://mcp.ipor.io/mcp) · [Example bot](https://github.com/IPOR-Labs/ipor-fusion-alpha-example) · [Contracts](https://github.com/IPOR-Labs/ipor-fusion)
 
 <table>
   <tr>
