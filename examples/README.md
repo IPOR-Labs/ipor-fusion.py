@@ -15,10 +15,14 @@ transaction.
   here. Creates a vault on Base, bootstraps its roles, wires a single market
   (Aave V3 supply fuse + balance fuse), grants only the USDC substrate, verifies
   oracle coverage, deposits, and runs one alpha-driven supply.
-
-More examples (e.g. an advanced Euler V2 credit-market vault covering typed
-substrates, collateral and borrowing) will land here following the same
-conventions below.
+- [`advanced_euler_v2_credit_market_base.py`](advanced_euler_v2_credit_market_base.py) --
+  continue here. Composes four Euler V2 functional fuses (supply, collateral,
+  controller, borrow) with the Euler balance fuse, grants two narrow typed
+  substrates on one sub-account (cbETH usable as collateral, WETH as a borrow),
+  and runs the full credit lifecycle: supply collateral, enable collateral and
+  controller, borrow WETH, repay, then unwind (controller before collateral) and
+  withdraw the collateral, reading the outstanding debt from the eVault's
+  `debtOf` to confirm the position fully closed.
 
 ## Prerequisites
 

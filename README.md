@@ -263,11 +263,19 @@ ever signed or broadcast.
 
 - [Simple Aave V3 supply vault](examples/simple_aave_v3_supply_base.py) — start here for vault
   creation, role bootstrap, and configuring a single supported market.
+- [Advanced Euler V2 credit-market vault](examples/advanced_euler_v2_credit_market_base.py) —
+  continue here for composing multiple functional fuses, typed Euler substrates and sub-accounts,
+  and an ordered collateral → borrow → repay → unwind lifecycle.
 
 ```bash
 export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
+uv run python examples/advanced_euler_v2_credit_market_base.py
 ```
+
+No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs both examples out of
+the box — it supports `eth_simulateV1` and serves the pinned block. It is rate-limited, so use a
+dedicated archive node for repeated or CI runs.
 
 ## Architecture
 
