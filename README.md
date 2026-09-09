@@ -253,6 +253,8 @@ Reverts on the deploy-and-configure path, keyed by selector so a failed transact
 
 Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` → `add_balance_fuse` → `execute`; all three configuration steps are mandatory.
 
+Fuses whose protocol calls back into the vault mid-`execute` (Morpho Blue flash loans, Uniswap V3 mints) additionally need `update_callback_handler(handler, protocol, "onMorphoFlashLoan(uint256,bytes)")` before their first `execute`.
+
 The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
 
 ## Vault construction examples
