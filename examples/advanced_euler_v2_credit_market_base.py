@@ -57,6 +57,7 @@ from ipor_fusion import (
     SimulationResult,
     VaultSimulator,
     Web3Context,
+    addresses,
     is_simulate_v1_supported,
 )
 from ipor_fusion.core import FusionFactory
@@ -84,9 +85,7 @@ BASE_CHAIN_ID = ChainId(8453)
 EULER_MARKET = MarketId(IporFusionMarkets.EULER_V2)
 
 # IporFusionFactoryProxy on Base. Its clone(...) takes the six args in clone_args().
-BASE_FUSION_FACTORY = Web3.to_checksum_address(
-    "0x1455717668fA96534f675856347A973fA907e922"
-)
+BASE_FUSION_FACTORY = addresses.factory_proxy(8453)  # IporFusionFactoryProxy
 
 # The four Euler V2 *functional* fuses (registry names quoted). Each is a
 # stateless encoder for one EVC operation; the balance fuse below is what values

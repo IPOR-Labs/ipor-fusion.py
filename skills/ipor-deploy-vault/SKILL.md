@@ -207,9 +207,12 @@ registry is the source of truth and is regenerated on release.
 and matches the registry's `IporFusionFactoryImpl`; "registry only" means the
 pair was taken from `ipor-abi` without an on-chain read.
 
-Fuse addresses are not in the SDK. Resolve them by registry name and chain
-in `ipor-abi` (`SupplyFuseAaveV3`, `BalanceFuseAaveV3`, ...), or with the
-hosted server's `fusion_address_lookup(name, chain_id=...)`. The SDK class
+Fuse, factory and manager addresses ship inside the SDK as a snapshot of
+the `ipor-abi` registry: `ipor_fusion.addresses.factory_proxy(chain_id)`,
+`resolve(chain_id, "SupplyFuseAaveV3")`, `balance_fuse(chain_id, "AAVE_V3")`
+and `lookup(query, chain_id=...)`; `FusionFactory(ctx)` with no address uses
+the proxy for `ctx.chain_id`. `addresses.source()` reports the registry
+commit. The same lookup is the `fusion_address_lookup` MCP tool. The SDK class
 for a registry name swaps the parts: `SupplyFuseAaveV3` is `AaveV3SupplyFuse`.
 
 ## Pointers
