@@ -27,6 +27,8 @@ from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
+from ipor_fusion import addresses
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.types import Period
 
@@ -146,7 +148,26 @@ _CLONE_ARG_TYPES = ["string", "string", "address", "uint256", "address", "uint25
 
 class FusionFactory(ContractWrapper):
     """Wraps IporFusionFactoryProxy. Use `clone()` for a permissionless
-    deploy, `clone_supervised()` for the maintenance-manager-gated path."""
+    deploy, `clone_supervised()` for the maintenance-manager-gated path.
+
+    `FusionFactory(ctx)` resolves the proxy for `ctx.chain_id` from the
+    shipped ipor-abi snapshot (`ipor_fusion.addresses.factory_proxy`). Passing
+    the chain's `IporFusionFactoryImpl` raises before anything is sent: the
+    implementation reverts `DaoFeePackagesArrayEmpty()` on `clone()`.
+    """
+
+    def __init__(self, ctx: Web3Context, address: ChecksumAddress | None = None):
+        if address is None:
+            address = addresses.factory_proxy(int(ctx.chain_id))
+        elif addresses.is_factory_impl(int(ctx.chain_id), address):
+            raise ValueError(
+                f"{address} is IporFusionFactoryImpl on chain {ctx.chain_id}; "
+                "clone() on the implementation reverts DaoFeePackagesArrayEmpty(). "
+                f"Use IporFusionFactoryProxy "
+                f"{addresses.factory_proxy(int(ctx.chain_id))} "
+                "(FusionFactory(ctx) resolves it for you)"
+            )
+        super().__init__(ctx, address)
 
     #: Solidity signature of the deployed `clone(...)` entry-point. Exported
     #: so off-context flows (decoders, audit logs, signer UIs) can reference

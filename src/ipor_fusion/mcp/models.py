@@ -25,7 +25,7 @@ Design notes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -787,4 +787,57 @@ class ServerInfoResponse(_Base):
         "the running version's entry alone unless changelog_since asked for "
         "more. Empty when nothing matches: no section for the running "
         "version, or no release newer than changelog_since."
+    )
+
+
+class AddressMatch(_Base):
+    """One deployment-registry entry returned by `fusion_address_lookup`."""
+
+    chain_id: int
+    chain: str
+    name: str = Field(description="Registry name, as in ipor-abi addresses.json.")
+    address: str = Field(description="EIP-55 checksum address.")
+    role: str | None = Field(
+        default=None,
+        description="'deploy-entry-point' on IporFusionFactoryProxy, the "
+        "contract clone() must be sent to; null otherwise.",
+    )
+    note: str | None = Field(
+        default=None,
+        description="Set on IporFusionFactoryImpl: calling the implementation "
+        "directly reverts; use the proxy.",
+    )
+
+
+class AddressLookupResponse(_Base):
+    """Result of `fusion_address_lookup`."""
+
+    query: str
+    query_type: Literal["address", "name"]
+    match_count: int
+    registry_commit: str = Field(
+        description="ipor-abi commit the shipped snapshot was generated from."
+    )
+    matches: list[AddressMatch]
+
+
+class AddressNameEntry(_Base):
+    name: str
+    chain_ids: list[int]
+
+
+class AddressNamesResponse(_Base):
+    """Result of `fusion_address_names`."""
+
+    chain_id: int = Field(description="0 when the union across chains was asked for.")
+    chain: str | None = None
+    supported_chain_ids: list[int]
+    registry_commit: str
+    count: int
+    names: list[str] = Field(
+        description="Sorted registry names on the chain; empty for chain_id=0."
+    )
+    union: list[AddressNameEntry] = Field(
+        description="For chain_id=0: every name with the chains it is deployed "
+        "on; empty otherwise."
     )

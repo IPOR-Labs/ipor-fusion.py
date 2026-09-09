@@ -38,6 +38,8 @@ from ipor_fusion.mcp.server import (
     config_set_etherscan_key,
     config_set_provider,
     config_show,
+    fusion_address_lookup,
+    fusion_address_names,
     market_meta_morpho,
     market_morpho_blue,
     mcp,
@@ -1025,3 +1027,42 @@ class TestMarketMetaMorpho:
             assert "not found" in str(exc)
         else:
             raise AssertionError("expected ValueError")
+
+
+class TestAddressTools:
+    def test_lookup_tags_the_factory_pair(self):
+        result = fusion_address_lookup("IporFusionFactory", chain_id=8453)
+        assert result.query_type == "name"
+        assert result.match_count == 2
+        assert len(result.registry_commit) == 40
+        by_name = {m.name: m for m in result.matches}
+        assert by_name["IporFusionFactoryProxy"].role == "deploy-entry-point"
+        assert by_name["IporFusionFactoryProxy"].note is None
+        assert by_name["IporFusionFactoryImpl"].role is None
+        assert "DaoFeePackagesArrayEmpty" in (
+            by_name["IporFusionFactoryImpl"].note or ""
+        )
+
+    def test_factory_query_returns_a_tagged_entry(self):
+        result = fusion_address_lookup("factory")
+        assert any(m.role == "deploy-entry-point" for m in result.matches)
+
+    def test_address_query(self):
+        proxy = fusion_address_lookup("IporFusionFactoryProxy", chain_id=8453).matches[
+            0
+        ]
+        result = fusion_address_lookup(proxy.address.lower())
+        assert result.query_type == "address"
+        assert [(m.chain_id, m.name) for m in result.matches] == [
+            (8453, "IporFusionFactoryProxy")
+        ]
+
+    def test_names_per_chain_and_union(self):
+        per_chain = fusion_address_names(8453)
+        assert per_chain.chain == "base"
+        assert per_chain.count == len(per_chain.names) > 0
+        assert "IporFusionFactoryProxy" in per_chain.names
+        union = fusion_address_names()
+        assert union.chain_id == 0 and union.names == []
+        entry = next(e for e in union.union if e.name == "IporFusionFactoryProxy")
+        assert entry.chain_ids == union.supported_chain_ids

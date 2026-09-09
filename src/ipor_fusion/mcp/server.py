@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from web3 import Web3
 
+from ipor_fusion import addresses
 from ipor_fusion.about import package_version, read_changelog, repository_url
 from ipor_fusion.chains import CHAIN_NAMES, ensure_supported_chain
 from ipor_fusion.cli.config_store import (
@@ -40,6 +41,10 @@ from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.mcp.guide import register_guide
 from ipor_fusion.mcp.models import (
     ActionResult,
+    AddressLookupResponse,
+    AddressMatch,
+    AddressNameEntry,
+    AddressNamesResponse,
     ChangelogEntryModel,
     ConfigShowResponse,
     MetaMorphoVaultResponse,
@@ -575,6 +580,99 @@ def market_meta_morpho(
         raise ValueError(str(exc)) from exc
     payload = _meta_morpho_json(info, chain_id)
     return MetaMorphoVaultResponse.model_validate(payload)
+
+
+# ---------------------------------------------------------------------------
+# Deployment registry (ipor-abi snapshot shipped in the package)
+# ---------------------------------------------------------------------------
+
+
+def _address_match(hit: addresses.ResolvedAddress) -> AddressMatch:
+    return AddressMatch(
+        chain_id=hit.chain_id,
+        chain=hit.chain,
+        name=hit.name,
+        address=hit.address,
+        role=hit.role,
+        note=hit.note,
+    )
+
+
+@mcp.tool()
+def fusion_address_lookup(
+    query: Annotated[
+        str,
+        Field(
+            description="Contract name substring (case-insensitive) or a 20-byte "
+            "hex address. An address query searches every chain."
+        ),
+    ],
+    chain_id: Annotated[
+        int,
+        Field(description="Restrict a name query to this chain; 0 = all chains."),
+    ] = 0,
+) -> AddressLookupResponse:
+    """Resolve a Fusion contract by name or address across the deployment registry.
+
+    The two `IporFusionFactory*` entries are told apart for you: the Proxy
+    carries role 'deploy-entry-point' (send `clone()` there), the Impl carries
+    a note saying it reverts when called directly. Data is the ipor-abi
+    snapshot shipped with this package; `registry_commit` says which one.
+    """
+    query = query.strip()
+    by_address = len(query) == 42 and query.startswith("0x") and Web3.is_address(query)
+    hits = addresses.lookup(query, chain_id=chain_id)
+    return AddressLookupResponse(
+        query=query,
+        query_type="address" if by_address else "name",
+        match_count=len(hits),
+        registry_commit=addresses.source().commit,
+        matches=[_address_match(hit) for hit in hits],
+    )
+
+
+@mcp.tool()
+def fusion_address_names(
+    chain_id: Annotated[
+        int,
+        Field(description="EVM chain id, or 0 for the union across all chains."),
+    ] = 0,
+) -> AddressNamesResponse:
+    """List the contract names in the deployment registry, per chain or as a union.
+
+    Use it to discover what `fusion_address_lookup` and
+    `ipor_fusion.addresses.resolve` accept.
+    """
+    supported = addresses.chain_ids()
+    commit = addresses.source().commit
+    if chain_id:
+        names = addresses.names(chain_id)
+        return AddressNamesResponse(
+            chain_id=chain_id,
+            chain=addresses.chain_name(chain_id),
+            supported_chain_ids=supported,
+            registry_commit=commit,
+            count=len(names),
+            names=names,
+            union=[],
+        )
+    by_name: dict[str, list[int]] = {}
+    for cid in supported:
+        for name in addresses.names(cid):
+            by_name.setdefault(name, []).append(cid)
+    union = [
+        AddressNameEntry(name=name, chain_ids=cids)
+        for name, cids in sorted(by_name.items())
+    ]
+    return AddressNamesResponse(
+        chain_id=0,
+        chain=None,
+        supported_chain_ids=supported,
+        registry_commit=commit,
+        count=len(union),
+        names=[],
+        union=union,
+    )
 
 
 def main() -> None:

@@ -96,7 +96,22 @@ receipt = vault.execute([action]).send()
 ```
 
 Fuse, factory and manager addresses per chain are published in
-[ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`).
+[ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`)
+and ship inside the package as a snapshot, so no address has to be copied by hand:
+
+```python
+from ipor_fusion import addresses
+
+addresses.factory_proxy(8453)  # IporFusionFactoryProxy on Base
+addresses.resolve(8453, "SupplyFuseAaveV3").address
+addresses.balance_fuse(8453, "AAVE_V3")  # registry name differs per chain
+addresses.lookup("IporFusionFactory", chain_id=8453)  # Proxy flagged deploy_entry_point
+addresses.source()  # ipor-abi commit of the snapshot
+```
+
+`FusionFactory(ctx)` with no address resolves the proxy for `ctx.chain_id`; passing
+the `IporFusionFactoryImpl` address raises before any transaction. Refresh the
+snapshot with `python scripts/sync_ipor_abi_addresses.py <ipor-abi checkout>`.
 A fuse must also be registered on the vault; `vault.get_fuses().call()` lists the registered ones.
 
 Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK never scales by decimals.
@@ -108,12 +123,14 @@ Every wrapper method returns a `Call` instead of executing. The same `Call` powe
 ```python
 from ipor_fusion import VaultSimulator
 
-total = vault.total_assets().call()          # eth_call -> Amount
-receipt = vault.execute([action]).send()     # signed tx -> TxReceipt
-payload = vault.execute([action]).calldata   # raw bytes for an external signer
+total = vault.total_assets().call()  # eth_call -> Amount
+receipt = vault.execute([action]).send()  # signed tx -> TxReceipt
+payload = vault.execute([action]).calldata  # raw bytes for an external signer
 
 # Simulate first via eth_simulateV1 (no local node); alpha is the account allowed to call execute()
-sim = VaultSimulator(ctx.web3, vault=vault.address, alpha=Web3.to_checksum_address("0xALPHA"))
+sim = VaultSimulator(
+    ctx.web3, vault=vault.address, alpha=Web3.to_checksum_address("0xALPHA")
+)
 sim.observe("before", vault.total_assets())
 sim.execute([action])
 sim.observe("after", vault.total_assets())
