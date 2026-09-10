@@ -350,8 +350,12 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.observe("aave_value_t0", plasma_vault.total_assets_in_market(AAVE_MARKET))
     sim.observe("vault_usdc_after_supply", usdc.balance_of(preview.plasma_vault))
 
-    # Fast-forward a year and refresh the cached market balance so the accrued
-    # interest surfaces into the vault's stored NAV.
+    # SIMULATION ONLY (time advancement): next_block shifts block.timestamp so a
+    # year of Aave interest accrues inside one batch. There is no production
+    # equivalent -- you wait, then re-read the position from a later block.
+    # The update_markets_balances call below is NOT simulation-only: it is a real alpha
+    # transaction, needed because the market value is cached and advancing time
+    # alone would not move the vault's stored NAV.
     sim.next_block(time_shift_seconds=ONE_YEAR_SECONDS)
     sim.add_call(call=plasma_vault.update_markets_balances([AAVE_MARKET]), from_=ALPHA)
     sim.observe("aave_value_t1", plasma_vault.total_assets_in_market(AAVE_MARKET))
