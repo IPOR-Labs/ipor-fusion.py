@@ -122,6 +122,84 @@ def test_aave_v4_not_decoded_from_the_low_bytes():
     assert info.address != "0x" + AAVE_V4_WETH_SUPPLY_ONLY[-40:]
 
 
+# The EXTERNAL_STATE substrates below are built from the layout documented in
+# ExternalStateSubstrateLib.sol; the live vaults granting them sit on HyperEVM,
+# which the SDK does not reach, so there is no on-chain fixture to cite.
+def test_external_state_address_types():
+    for type_byte, label in ((1, "ASSET"), (3, "CUSTODIAN"), (4, "BALANCE_ACCOUNT")):
+        raw = f"0x0{type_byte}" + "00" * 11 + SUSDE[2:]
+        info = decode_substrate(raw, market_id=50)
+        assert info.type_label == label
+        assert info.address == SUSDE
+        assert not info.is_error
+
+
+def test_external_state_target():
+    # transfer(address,uint256) allowed on USDe: selector above the address.
+    raw = "0x02" + "00" * 7 + "a9059cbb" + USDE[2:]
+    info = decode_substrate(raw, market_id=50)
+    assert info.type_label == "TARGET"
+    assert info.address == USDE
+    assert info.extra == {"selector": "0xa9059cbb"}
+
+
+def test_external_state_scalar_guards():
+    # The extra key names the unit: the four guards share a payload shape but
+    # measure seconds, basis points and percent of one token respectively.
+    for type_byte, label, unit in (
+        (5, "STALENESS_MAX", "seconds"),
+        (6, "BIG_CHANGE_BPS", "bps"),
+        (7, "DUST_THRESHOLD", "percent"),
+        (8, "MIN_UPDATE_INTERVAL", "seconds"),
+    ):
+        raw = f"0x0{type_byte}" + f"{3600:062x}"
+        info = decode_substrate(raw, market_id=50)
+        assert info.type_label == label
+        assert info.address == ""
+        assert info.extra == {unit: "3600"}
+
+
+def test_external_state_unknown_type_byte_falls_back_to_raw():
+    raw = "0x09" + "00" * 31
+    info = decode_substrate(raw, market_id=50)
+    assert info.type_label == "type=9"
+    assert info.raw_hex == raw
+    assert info.address == ""
+
+
+def test_external_state_undefined_type_is_named():
+    # Type 0 is the enum's invalid member; it must not render an address.
+    raw = "0x00" + "00" * 11 + SUSDE[2:]
+    info = decode_substrate(raw, market_id=50)
+    assert info.type_label == "UNDEFINED"
+    assert info.raw_hex == raw
+    assert info.address == ""
+
+
+def test_external_state_and_async_action_target_layouts_are_mirrored():
+    """Market 40 packs TARGET as target<<32 | selector; market 50 inverts it
+    (selector<<160 | target). The same (target, selector) pair is therefore a
+    different bytes32 per market, and reading one at the other's offsets
+    recovers a garbage address."""
+    # The market-40 side is the live fixture; only its market-50 counterpart
+    # is built here, from the same (target, selector) pair.
+    selector = "f2888dbb"  # unstake(address)
+    async_action = ASYNC_TARGET_UNSTAKE_USDE
+    external_state = "0x02" + "00" * 7 + selector + USDE[2:]
+    assert external_state != async_action
+
+    es = decode_substrate(external_state, market_id=50)
+    aa = decode_substrate(async_action, market_id=40)
+    assert es.address == aa.address == USDE
+    assert es.extra["selector"] == aa.extra["selector"] == f"0x{selector}"
+
+    # A market-40 TARGET read at market-50 offsets yields the target's tail
+    # concatenated with the selector -- a well-formed, wrong address.
+    crossed = decode_substrate(async_action, market_id=50)
+    assert crossed.type_label == "ASSET"
+    assert crossed.address == f"0x{USDE[10:]}{selector}"
+
+
 def test_bytes_and_hex_str_inputs_are_equivalent():
     raw_hex = ASYNC_AMOUNT_TO_OUTSIDE
     from_bytes = decode_substrate(bytes.fromhex(raw_hex[2:]), market_id=40)
@@ -208,8 +286,7 @@ def test_external_state_is_canonical_name_and_rwa_is_alias():
     # the same value, but the canonical name is what id->name lookups display.
     assert IporFusionMarkets.EXTERNAL_STATE == 50
     assert IporFusionMarkets.RWA == IporFusionMarkets.EXTERNAL_STATE
-    info = decode_substrate("0x" + "11" * 32, market_id=50)
-    assert info.type_label == "no_decoder(EXTERNAL_STATE)"
+    assert market_name(50) == "EXTERNAL_STATE"
 
 
 def test_no_market_context_returns_raw():

@@ -181,6 +181,55 @@ def _decode_async_action(hex_str: str) -> SubstrateInfo:
     return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=f"type={type_byte}")
 
 
+_EXTERNAL_STATE_ADDRESS_TYPES = {1: "ASSET", 3: "CUSTODIAN", 4: "BALANCE_ACCOUNT"}
+# Scalar guards carry their unit in the extra key, since the four types share
+# one payload shape but not one unit.
+_EXTERNAL_STATE_SCALAR_TYPES = {
+    5: ("STALENESS_MAX", "seconds"),
+    6: ("BIG_CHANGE_BPS", "bps"),
+    7: ("DUST_THRESHOLD", "percent"),
+    8: ("MIN_UPDATE_INTERVAL", "seconds"),
+}
+
+
+def _decode_external_state(hex_str: str) -> SubstrateInfo:
+    """Decode ExternalState typed substrates.
+
+    Source: ExternalStateSubstrateLib.sol — layout [substrateType 1 byte |
+    payload 31 bytes]:
+    - ASSET (1), CUSTODIAN (3), BALANCE_ACCOUNT (4): payload = address in the
+      low 20 bytes.
+    - TARGET (2): payload = selector<<160 | target, so the 4-byte selector sits
+      above the address (the 7 high payload bytes are zero). Note this is the
+      mirror image of the async-action TARGET layout, where the selector is
+      below the address.
+    - STALENESS_MAX (5), BIG_CHANGE_BPS (6), DUST_THRESHOLD (7),
+      MIN_UPDATE_INTERVAL (8): payload = uint248 scalar. The extra key names
+      the unit -- ``seconds``, ``bps`` or ``percent`` (of one token) -- since
+      the four types share a payload shape but not a unit.
+    - UNDEFINED (0), the enum's invalid member, and any tag above 8 stay raw.
+    """
+    type_byte = int(hex_str[0:2], 16)
+    if type_byte == 0:
+        return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="UNDEFINED")
+    if label := _EXTERNAL_STATE_ADDRESS_TYPES.get(type_byte):
+        return SubstrateInfo(address=f"0x{hex_str[24:]}", type_label=label)
+    if type_byte == 2:
+        return SubstrateInfo(
+            address=f"0x{hex_str[24:]}",
+            type_label="TARGET",
+            extra={"selector": f"0x{hex_str[16:24]}"},
+        )
+    if scalar := _EXTERNAL_STATE_SCALAR_TYPES.get(type_byte):
+        label, unit = scalar
+        return SubstrateInfo(
+            raw_hex=f"0x{hex_str}",
+            type_label=label,
+            extra={unit: str(int(hex_str[2:], 16))},
+        )
+    return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=f"type={type_byte}")
+
+
 # Market ID → decoder function.  Markets not listed here get raw hex output.
 _SUBSTRATE_DECODERS: dict[int, Callable[[str], SubstrateInfo]] = {}
 
@@ -300,6 +349,9 @@ _register_markets([47], _decode_dolomite)
 _register_markets([11], _decode_euler_v2)
 # Async Action (typed: amount-to-outside / target+selector / exit slippage)
 _register_markets([40], _decode_async_action)
+# External State (typed: asset / target+selector / custodian / balance account
+# / four uint248 guards). RWA (50) is the deprecated alias of EXTERNAL_STATE.
+_register_markets([50], _decode_external_state)
 # Uniswap V4 (id 53 per IporFusionMarkets.sol): PoolId or pool currency.
 # TERM_FINANCE (52) stays unregistered on purpose — its substrate library is
 # not mirrored here yet, and no_decoder(TERM_FINANCE) is the honest answer

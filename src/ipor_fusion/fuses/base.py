@@ -11,6 +11,23 @@ from ipor_fusion.types import MAX_UINT256, Amount
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
+def _validate_not_zero_address(value: str, name: str) -> None:
+    """Reject an empty or zero address; ``name`` labels it in the error.
+
+    Compares the parsed bytes rather than the text, so every spelling of the
+    zero address is caught -- ``0x``-prefixed or bare. Input that is not hex at
+    all falls through to the encoder, which reports the malformed address.
+    """
+    if not value:
+        raise ValueError(f"{name} is required and must not be zero address")
+    try:
+        payload = bytes.fromhex(value.removeprefix("0x"))
+    except ValueError:
+        return
+    if payload == bytes(20):
+        raise ValueError(f"{name} must not be zero address")
+
+
 @dataclass(frozen=True, slots=True)
 class FuseAction:
     """Immutable calldata payload targeting a specific fuse contract."""
@@ -38,8 +55,7 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
     """Abstract base class for all protocol fuse adapters."""
 
     def __init__(self, address: ChecksumAddress):
-        if not address or address == ZERO_ADDRESS:
-            raise ValueError("Fuse address is required and must not be zero address")
+        _validate_not_zero_address(address, "fuse address")
         self._address = address
 
     @property
@@ -53,8 +69,7 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
 
     @staticmethod
     def _validate_address(value: str, name: str) -> None:
-        if not value or value == ZERO_ADDRESS:
-            raise ValueError(f"{name} must not be zero address")
+        _validate_not_zero_address(value, name)
 
     @staticmethod
     def _validate_non_empty_list(value: list, name: str) -> None:
@@ -106,6 +121,22 @@ def _substrate_address_bytes(address: ChecksumAddress) -> bytes:
     if len(payload) != 20:
         raise ValueError(f"not a 20-byte address: {address}")
     return payload
+
+
+def _encode_address_substrate(tag: int, address: ChecksumAddress, name: str) -> bytes:
+    """A bytes32 substrate: a one-byte type ``tag``, 11 zero bytes, then the
+    20-byte ``address``, which must not be the zero address. ``name`` labels it
+    in the error. Markets that permit a zero address do not share this layout
+    and pack their own.
+    """
+    _validate_not_zero_address(address, name)
+    return bytes([tag]) + b"\x00" * 11 + _substrate_address_bytes(address)
+
+
+def _validate_selector(selector: bytes) -> None:
+    """A substrate-packed function selector is exactly 4 bytes."""
+    if len(selector) != 4:
+        raise ValueError(f"selector must be 4 bytes, got {len(selector)}")
 
 
 def _encode_uint248_substrate(tag: int, value: int, name: str) -> bytes:

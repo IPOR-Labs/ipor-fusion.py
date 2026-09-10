@@ -27,6 +27,7 @@ from ipor_fusion.fuses.base import (
     FuseAction,
     _encode_uint248_substrate,
     _substrate_address_bytes,
+    _validate_selector,
 )
 from ipor_fusion.types import Amount
 
@@ -169,6 +170,11 @@ class AsyncActionSubstrates:
     Mirrors `AsyncActionFuseLib.sol`: each substrate is
     ``bytes32(uint256(type) << 248 | payload)`` -- a one-byte type tag in the
     high byte, then a 31-byte payload whose layout depends on the type.
+
+    These encoders accept the zero address, unlike their external-state and
+    universal-token-swapper counterparts: `AsyncActionFuseLib.sol` has no
+    zero-address check, and the SDK mirrors the library rather than adding a
+    rule the chain does not enforce.
     """
 
     _ALLOWED_AMOUNT_TO_OUTSIDE = 0
@@ -197,8 +203,7 @@ class AsyncActionSubstrates:
         carrier checked for a fetched asset -- see ``AsyncActionFuse.exit``.
         Layout: type byte, 7 zero bytes, the 20-byte target, the 4-byte selector.
         """
-        if len(selector) != 4:
-            raise ValueError(f"selector must be 4 bytes, got {len(selector)}")
+        _validate_selector(selector)
         return (
             bytes([cls._ALLOWED_TARGETS])
             + b"\x00" * 7
