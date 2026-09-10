@@ -354,7 +354,10 @@ _register_markets([40], _decode_async_action)
 _register_markets([50], _decode_external_state)
 # Uniswap V4 (id 53 per IporFusionMarkets.sol): PoolId or pool currency.
 # TERM_FINANCE (52) stays unregistered on purpose — its substrate library is
-# not mirrored here yet, and no_decoder(TERM_FINANCE) is the honest answer
+# not mirrored here yet, and no_decoder(TERM_FINANCE) is the honest answer.
+# SPOL_UNSTAKE (424243) likewise: SPOLUnstakeFuse is not in the public
+# contracts repo, so its substrate grant check cannot be verified — the market
+# doc says the sPOLController address, but no_decoder until the fuse is mirrored
 _register_markets([53], _decode_uniswap_v4)
 
 

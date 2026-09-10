@@ -100,6 +100,12 @@ class IporFusionMarkets:
     # keccak256(abi.encode(PoolKey))) plus both pool currencies as
     # substrate-as-asset; native-currency pools are not supported
     UNISWAP_V4 = 53
+    # POL unstaking via sPOLController. The out-of-band id is baked into the
+    # deployed fuses as an immutable (424243 = 0x67933), so it must match the
+    # deployments. Substrates per IporFusionMarkets.sol: the sPOLController
+    # (this market) and sPOL under ERC20_VAULT_BALANCE, with a dependency edge
+    # to it (enter burns wallet sPOL and creates the pending claim atomically).
+    SPOL_UNSTAKE = 424_243
     ERC4626_0001 = 100_001
     ERC4626_0002 = 100_002
     ERC4626_0003 = 100_003

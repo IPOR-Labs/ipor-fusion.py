@@ -289,6 +289,16 @@ def test_external_state_is_canonical_name_and_rwa_is_alias():
     assert market_name(50) == "EXTERNAL_STATE"
 
 
+def test_spol_unstake_follows_ipor_fusion_markets_sol():
+    assert IporFusionMarkets.SPOL_UNSTAKE == 424_243
+    assert market_name(424_243) == "SPOL_UNSTAKE"
+    # SPOLUnstakeFuse is not in the public contracts repo, so its substrate
+    # grant check cannot be verified: loud, never guessed
+    info = decode_substrate("0x" + "11" * 32, market_id=424_243)
+    assert info.address == ""
+    assert info.type_label == "no_decoder(SPOL_UNSTAKE)"
+
+
 def test_no_market_context_returns_raw():
     info = decode_substrate("0x" + "22" * 32)
     assert info == SubstrateInfo(raw_hex="0x" + "22" * 32)
