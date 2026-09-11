@@ -116,6 +116,8 @@ from ipor_fusion.fuses import (
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers import (
+    AaveV3FuseReader,
+    AaveV3PoolAddressesProvider,
     AaveV3Reader,
     AaveV3UserAccountData,
     CompoundV3Reader,
@@ -292,6 +294,8 @@ __all__ = [
     "MorphoMarketRates",
     "MorphoPosition",
     "MorphoMarketParams",
+    "AaveV3FuseReader",
+    "AaveV3PoolAddressesProvider",
     "AaveV3Reader",
     "AaveV3UserAccountData",
     "CompoundV3Reader",

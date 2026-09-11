@@ -1,4 +1,9 @@
-from ipor_fusion.readers.aave_v3 import AaveV3Reader, AaveV3UserAccountData
+from ipor_fusion.readers.aave_v3 import (
+    AaveV3FuseReader,
+    AaveV3PoolAddressesProvider,
+    AaveV3Reader,
+    AaveV3UserAccountData,
+)
 from ipor_fusion.readers.compound_v3 import CompoundV3Reader
 from ipor_fusion.readers.lending_health import (
     LendingMarketHealth,
@@ -29,6 +34,8 @@ __all__ = [
     "MorphoMarketRates",
     "MorphoPosition",
     "MorphoMarketParams",
+    "AaveV3FuseReader",
+    "AaveV3PoolAddressesProvider",
     "AaveV3Reader",
     "AaveV3UserAccountData",
     "CompoundV3Reader",

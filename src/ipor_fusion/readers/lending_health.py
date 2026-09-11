@@ -36,7 +36,10 @@ ORACLE_PRICE_SCALE = 10**36
 # Kept so existing imports keep resolving.
 MORPHO_BLUE_ADDRESS: ChecksumAddress = MORPHO_BLUE_ADDRESSES[1]
 
-# Aave V3 Pool addresses per chain.
+# Aave V3 Core Pool per chain — the Pool of market AAVE_V3 only. Aave V3 Prime
+# and SparkLend run on their own Pools, so a market's Pool is read from its
+# balance fuse (`AaveV3FuseReader.pool`); this map is only the fallback of
+# `fetch_vault_lending_health` for callers that pass no `aave_pools`.
 AAVE_V3_POOL: dict[int, ChecksumAddress] = {
     1: Web3.to_checksum_address(
         "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"
@@ -61,11 +64,13 @@ MORPHO_MARKET_IDS = frozenset(
     }
 )
 
-# Market IDs that represent Aave V3 lending positions.
+# Market IDs served by the generic Aave V3 fuses, SparkLend (an Aave V3 fork)
+# included. Each market has its own Pool.
 AAVE_V3_MARKET_IDS = frozenset(
     {
         IporFusionMarkets.AAVE_V3,
         IporFusionMarkets.AAVE_V3_LIDO,
+        IporFusionMarkets.SPARK_LEND,
     }
 )
 
@@ -276,24 +281,16 @@ def _compute_aave_market_health(
     )
 
 
-def fetch_vault_lending_health(  # noqa: C901
-    ctx: Web3Context,
-    vault_address: ChecksumAddress,
-    chain_id: int,
+def _collect_lending_markets(
     balance_fuse_market_ids: list[int],
     market_substrates: dict[int, list[bytes]],
-) -> VaultLendingHealth:
-    """Fetch lending health for all lending markets in a vault.
-
-    Args:
-        ctx: Web3 context for on-chain calls.
-        vault_address: The Plasma Vault address.
-        chain_id: Chain ID (needed for Aave V3 pool address lookup).
-        balance_fuse_market_ids: List of market IDs from balance fuses.
-        market_substrates: Map of market_id -> list of raw substrate bytes.
-    """
+    aave_pools: dict[int, ChecksumAddress],
+) -> tuple[
+    list[tuple[int, str, MorphoBlueMarketId]], list[tuple[int, str, ChecksumAddress]]
+]:
+    """Pick the positions to read: Morpho substrates, and Aave V3 markets with a Pool."""
     morpho_markets: list[tuple[int, str, MorphoBlueMarketId]] = []
-    aave_market_ids: list[tuple[int, str]] = []
+    aave_markets: list[tuple[int, str, ChecksumAddress]] = []
 
     for mid in balance_fuse_market_ids:
         name = market_name(mid)
@@ -304,7 +301,43 @@ def fetch_vault_lending_health(  # noqa: C901
                 if len(hex_str) == 64:
                     morpho_markets.append((mid, name, MorphoBlueMarketId(hex_str)))
         elif mid in AAVE_V3_MARKET_IDS:
-            aave_market_ids.append((mid, name))
+            if aave_pool := aave_pools.get(mid):
+                aave_markets.append((mid, name, aave_pool))
+            else:
+                _logger.debug("No Aave V3 pool for market %d, skipping", mid)
+
+    return morpho_markets, aave_markets
+
+
+def fetch_vault_lending_health(
+    ctx: Web3Context,
+    vault_address: ChecksumAddress,
+    chain_id: int,
+    balance_fuse_market_ids: list[int],
+    market_substrates: dict[int, list[bytes]],
+    aave_pools: dict[int, ChecksumAddress] | None = None,
+) -> VaultLendingHealth:
+    """Fetch lending health for all lending markets in a vault.
+
+    Args:
+        ctx: Web3 context for on-chain calls.
+        vault_address: The Plasma Vault address.
+        chain_id: Chain ID (selects the default Aave V3 Core pool).
+        balance_fuse_market_ids: List of market IDs from balance fuses.
+        market_substrates: Map of market_id -> list of raw substrate bytes.
+        aave_pools: Map of Aave V3 market_id -> the Pool its balance fuse
+            reads (`AaveV3FuseReader.pool`). Aave V3 markets without an entry
+            are skipped. Defaults to the chain's Core pool for AAVE_V3 only:
+            the Pools of Aave V3 Prime and SparkLend are known only to their
+            fuses.
+    """
+    if aave_pools is None:
+        core_pool = AAVE_V3_POOL.get(chain_id)
+        aave_pools = {IporFusionMarkets.AAVE_V3: core_pool} if core_pool else {}
+
+    morpho_markets, aave_markets = _collect_lending_markets(
+        balance_fuse_market_ids, market_substrates, aave_pools
+    )
 
     results: list[LendingMarketHealth] = []
 
@@ -326,26 +359,17 @@ def fetch_vault_lending_health(  # noqa: C901
                     )
                 )
 
-        if aave_market_ids:
-            aave_pool = AAVE_V3_POOL.get(chain_id)
-            if aave_pool:
-                aave_reader = AaveV3Reader(ctx, aave_pool)
-                # Aave V3 returns aggregated data per user, not per asset.
-                # Only fetch once, use for all Aave market IDs.
-                first_mid, first_name = aave_market_ids[0]
-                futures.append(
-                    pool.submit(
-                        _compute_aave_market_health,
-                        aave_reader,
-                        vault_address,
-                        first_mid,
-                        first_name,
-                    )
+        # Aave V3 health is account-level per Pool, so each market reads its own.
+        for ipor_mid, name, aave_pool in aave_markets:
+            futures.append(
+                pool.submit(
+                    _compute_aave_market_health,
+                    AaveV3Reader(ctx, aave_pool),
+                    vault_address,
+                    ipor_mid,
+                    name,
                 )
-            else:
-                _logger.debug(
-                    "No Aave V3 pool address for chain %d, skipping", chain_id
-                )
+            )
 
         for fut in futures:
             result = fut.result()

@@ -4,10 +4,12 @@ from unittest.mock import MagicMock
 
 import pytest
 from eth_abi import encode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.errors import MorphoMarketNotFoundError, UnsupportedChainError
 from ipor_fusion.readers.aave_v3 import (
+    AaveV3FuseReader,
     AaveV3PositionBreakdown,
     AaveV3Reader,
     AaveV3ReserveTokens,
@@ -273,6 +275,41 @@ class TestAaveV3ReaderPositionBreakdown:
 
         assert breakdown.stable_debt == 0
         assert breakdown.is_empty
+
+    def test_position_breakdown_is_empty_for_asset_not_listed_on_pool(self):
+        """An unlisted asset has a zeroed ReserveData: no token is queried
+        (balanceOf on the zero address returns no data and would raise)."""
+        reader, ctx = _make_reader(AaveV3Reader)
+        ctx.call.return_value = self._reserve_data(self.ZERO, self.ZERO, self.ZERO)
+
+        breakdown = reader.position_breakdown(TOKEN_A, USER_ADDR)
+
+        assert breakdown.is_empty
+        ctx.call.assert_called_once()
+
+
+class TestAaveV3FuseReaderPool:
+    PROVIDER = Web3.to_checksum_address("0x3030303030303030303030303030303030303030")
+    POOL = Web3.to_checksum_address("0x4040404040404040404040404040404040404040")
+
+    def test_pool_reads_provider_from_fuse_then_pool_from_provider(self):
+        reader, ctx = _make_reader(AaveV3FuseReader)
+        ctx.call.side_effect = [
+            encode(["address"], [self.PROVIDER]),
+            encode(["address"], [self.POOL]),
+        ]
+
+        assert reader.pool() == self.POOL
+
+        (fuse_call, provider_call) = ctx.call.call_args_list
+        assert fuse_call.args == (
+            CONTRACT_ADDR,
+            function_signature_to_4byte_selector("AAVE_V3_POOL_ADDRESSES_PROVIDER()"),
+        )
+        assert provider_call.args == (
+            self.PROVIDER,
+            function_signature_to_4byte_selector("getPool()"),
+        )
 
 
 class TestMorphoReaderPositionBreakdown:

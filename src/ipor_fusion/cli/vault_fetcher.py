@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, TypeVar
 
 from eth_abi import decode
@@ -30,12 +31,15 @@ from ipor_fusion.core.fee_manager import (
     RecipientFee,
 )
 from ipor_fusion.core.oracle import PriceOracleMiddleware
-from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
-from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown, AaveV3Reader
+from ipor_fusion.readers.aave_v3 import (
+    AaveV3FuseReader,
+    AaveV3PositionBreakdown,
+    AaveV3Reader,
+)
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
-    AAVE_V3_POOL,
     MORPHO_MARKET_IDS,
     VaultLendingHealth,
     fetch_vault_lending_health,
@@ -145,8 +149,9 @@ class _VaultData:
     morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None = None
     # Aave V3 per-asset position breakdown (supply / variable_debt / stable_debt),
     # keyed by IPOR market_id. Populated only for markets in AAVE_V3_MARKET_IDS
-    # whose substrates decode to valid asset addresses on supported chains.
-    # Empty positions are filtered out (a vault may allow an asset without using it).
+    # whose balance fuse resolves to a Pool and whose substrates decode to
+    # valid asset addresses. Empty positions are filtered out (a vault may
+    # allow an asset without using it).
     aave_positions: dict[int, list[AaveV3PositionBreakdown]] | None = None
     # USD price per token address (lowercase) for tokens appearing in lending
     # breakdowns (Morpho loan/collateral, Aave reserve assets). Sourced from the
@@ -427,32 +432,64 @@ def _collect_aave_substrate_assets(
     return result
 
 
+def _fetch_aave_pool(ctx: Web3Context, fuse: ChecksumAddress) -> ChecksumAddress | None:
+    """Resolve the Aave V3 Pool an Aave V3 balance fuse reads; None if it can't.
+
+    A balance fuse that is not an Aave V3 fuse either reverts on the getter or
+    answers with empty data, which fails ABI decoding instead of reverting.
+    """
+    try:
+        return _safe_call(AaveV3FuseReader(ctx, fuse).pool)
+    except DecodingError:
+        return None
+
+
+def _fetch_aave_pools(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    balance_fuses: list[BalanceFuse],
+) -> dict[int, ChecksumAddress]:
+    """Map every Aave V3 market to the Pool its balance fuse reads.
+
+    Aave V3 Core, Aave V3 Prime and SparkLend share the fuse contracts but not
+    the Pool, so the Pool is resolved per market rather than per chain.
+    """
+    futures = {
+        bf.market_id: pool.submit(_fetch_aave_pool, ctx, bf.fuse)
+        for bf in balance_fuses
+        if bf.market_id in AAVE_V3_MARKET_IDS
+    }
+    return {mid: addr for mid, fut in futures.items() if (addr := fut.result())}
+
+
 def _fetch_aave_positions(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
     vault_addr: ChecksumAddress,
-    chain_id: int,
+    aave_pools: dict[int, ChecksumAddress],
     market_substrates: dict[int, list[bytes]],
 ) -> dict[int, list[AaveV3PositionBreakdown]] | None:
     """Fetch supply / variable / stable debt per Aave V3 asset substrate.
 
     The on-chain `getUserAccountData` aggregates all reserves into a single
     base-currency total — this helper exposes the per-asset decomposition.
-    Empty positions (vault allows the asset but holds none of it) are dropped.
+    Each market is read from its own Pool (`aave_pools`); markets without one
+    are skipped. Empty positions (vault allows the asset but holds none of it)
+    are dropped.
     """
-    aave_pool_addr = AAVE_V3_POOL.get(chain_id)
-    if not aave_pool_addr:
-        return None
-    per_market_assets = _collect_aave_substrate_assets(market_substrates)
+    per_market_assets = {
+        mid: assets
+        for mid, assets in _collect_aave_substrate_assets(market_substrates).items()
+        if mid in aave_pools
+    }
     if not per_market_assets:
         return None
 
-    reader = AaveV3Reader(ctx, aave_pool_addr)
+    readers = {mid: AaveV3Reader(ctx, aave_pools[mid]) for mid in per_market_assets}
     futures: dict[int, list[Future]] = {
         mid: [
             pool.submit(
-                _safe_call,
-                lambda a=asset: reader.position_breakdown(a, vault_addr),
+                _safe_call, partial(readers[mid].position_breakdown, asset, vault_addr)
             )
             for asset in assets
         ]
@@ -614,6 +651,7 @@ def _fetch_vault_data(
                     market_substrates[mid] = subs
 
             vault_addr = Web3.to_checksum_address(plasma_vault.address)
+            aave_pools = _fetch_aave_pools(ctx, pool, balance_fuses)
             lending_health = _safe_call(
                 lambda: fetch_vault_lending_health(
                     ctx,
@@ -621,6 +659,7 @@ def _fetch_vault_data(
                     chain_id,
                     [bf.market_id for bf in balance_fuses],
                     market_substrates,
+                    aave_pools=aave_pools,
                 )
             )
 
@@ -628,7 +667,7 @@ def _fetch_vault_data(
                 ctx, pool, vault_addr, market_substrates
             )
             aave_positions = _fetch_aave_positions(
-                ctx, pool, vault_addr, chain_id, market_substrates
+                ctx, pool, vault_addr, aave_pools, market_substrates
             )
             token_prices_usd = _fetch_breakdown_token_prices(
                 pool,
