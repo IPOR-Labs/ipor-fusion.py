@@ -10,6 +10,7 @@ from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
+    AAVE_V3_POOL,
     MORPHO_BLUE_ADDRESS,
     MORPHO_MARKET_IDS,
     ORACLE_PRICE_SCALE,
@@ -40,6 +41,14 @@ def _make_aave_reader():
     ctx = MagicMock()
     pool = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
     return AaveV3Reader(ctx, pool), ctx
+
+
+def _aave_account_data(health_factor_wad: int) -> bytes:
+    """getUserAccountData(): $100 collateral, $80 debt, 85% liquidation threshold."""
+    return encode(
+        ["uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],
+        [100_000_000_00, 80_000_000_00, 0, 8500, 8000, health_factor_wad],
+    )
 
 
 # ── shares_to_assets_up ──────────────────────────────────────────────
@@ -471,6 +480,67 @@ class TestFetchVaultLendingHealth:
     def test_aave_market_ids_recognized(self):
         assert IporFusionMarkets.AAVE_V3 in AAVE_V3_MARKET_IDS
         assert IporFusionMarkets.AAVE_V3_LIDO in AAVE_V3_MARKET_IDS
+        assert IporFusionMarkets.SPARK_LEND in AAVE_V3_MARKET_IDS
+
+    def test_each_aave_market_reads_its_own_pool(self):
+        """Aave V3 Core, Prime and SparkLend are separate Pools: one account-level
+        row per market, each from its own Pool — never one Pool's figures
+        repeated under another market's label."""
+        pools = {
+            IporFusionMarkets.AAVE_V3: Web3.to_checksum_address("0x" + "a1" * 20),
+            IporFusionMarkets.AAVE_V3_LIDO: Web3.to_checksum_address("0x" + "a2" * 20),
+            IporFusionMarkets.SPARK_LEND: Web3.to_checksum_address("0x" + "a3" * 20),
+        }
+        health_factor_wad = {
+            pools[IporFusionMarkets.AAVE_V3]: 1_057_200_000_000_000_000,
+            pools[IporFusionMarkets.AAVE_V3_LIDO]: 1_073_900_000_000_000_000,
+            pools[IporFusionMarkets.SPARK_LEND]: 1_035_000_000_000_000_000,
+        }
+        ctx = MagicMock()
+        ctx.call.side_effect = lambda to, _data: _aave_account_data(
+            health_factor_wad[to]
+        )
+
+        result = fetch_vault_lending_health(
+            ctx,
+            VAULT_ADDR,
+            1,
+            balance_fuse_market_ids=list(pools),
+            market_substrates={},
+            aave_pools=pools,
+        )
+
+        by_market = {m.market_id: m for m in result.markets}
+        assert by_market.keys() == set(pools)
+        assert by_market[IporFusionMarkets.AAVE_V3].health_factor == 1.0572
+        assert by_market[IporFusionMarkets.AAVE_V3_LIDO].health_factor == 1.0739
+        spark = by_market[IporFusionMarkets.SPARK_LEND]
+        assert spark.health_factor == 1.035
+        assert spark.market_name == "SPARK_LEND"
+        assert spark.is_critical
+
+    def test_default_pools_cover_core_market_only(self):
+        """Without `aave_pools` only AAVE_V3 has a known Pool (the chain's Core
+        pool); Prime and SparkLend are skipped rather than shown with Core's
+        figures."""
+        ctx = MagicMock()
+        ctx.call.return_value = _aave_account_data(1_700_000_000_000_000_000)
+
+        result = fetch_vault_lending_health(
+            ctx,
+            VAULT_ADDR,
+            1,
+            balance_fuse_market_ids=[
+                IporFusionMarkets.AAVE_V3,
+                IporFusionMarkets.AAVE_V3_LIDO,
+                IporFusionMarkets.SPARK_LEND,
+            ],
+            market_substrates={},
+        )
+
+        assert [m.market_id for m in result.markets] == [IporFusionMarkets.AAVE_V3]
+        ctx.call.assert_called_once()
+        assert ctx.call.call_args.args[0] == AAVE_V3_POOL[1]
 
     @patch("ipor_fusion.readers.lending_health.market_name", return_value="Morpho")
     @patch(

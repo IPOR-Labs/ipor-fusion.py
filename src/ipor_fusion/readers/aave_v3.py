@@ -89,6 +89,40 @@ def _reserve_tokens_decoder(value: tuple) -> AaveV3ReserveTokens:
     )
 
 
+class AaveV3PoolAddressesProvider(ContractWrapper):
+    """Registry of one Aave V3 deployment's contracts; knows its Pool."""
+
+    def get_pool(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "getPool()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
+
+class AaveV3FuseReader(ContractWrapper):
+    """Reader for the immutables of an IPOR Fusion Aave V3 fuse.
+
+    The same fuse contracts serve every Aave V3 deployment a vault can use —
+    Aave V3 Core, Aave V3 Prime (`AAVE_V3_LIDO`) and the SparkLend fork
+    (`SPARK_LEND`) — each deployed with that deployment's PoolAddressesProvider.
+    The Pool behind a market is therefore a property of its fuse, not of the
+    chain: resolve it with `pool()`.
+    """
+
+    def pool_addresses_provider(self) -> Call[ChecksumAddress]:
+        return self._view(
+            "AAVE_V3_POOL_ADDRESSES_PROVIDER()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
+    def pool(self) -> ChecksumAddress:
+        """Return the Aave V3 Pool this fuse operates on (two reads)."""
+        provider = self.pool_addresses_provider().call()
+        return AaveV3PoolAddressesProvider(self._ctx, provider).get_pool().call()
+
+
 class AaveV3Reader(ContractWrapper):
     """Reader for Aave V3 lending pool on-chain state."""
 

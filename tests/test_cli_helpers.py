@@ -35,6 +35,7 @@ from ipor_fusion.cli.vault_fetcher import (
     _collect_breakdown_token_addresses,
     _collect_morpho_substrates,
     _FeeData,
+    _fetch_aave_pools,
     _fetch_aave_positions,
     _fetch_breakdown_token_prices,
     _fetch_fee_data,
@@ -64,6 +65,8 @@ from ipor_fusion.cli.vault_rendering import (
 )
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
+from ipor_fusion.core.plasma_vault import BalanceFuse
+from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.lending_health import (
@@ -72,7 +75,7 @@ from ipor_fusion.readers.lending_health import (
 )
 from ipor_fusion.readers.morpho import MORPHO_BLUE_ADDRESSES, MorphoPositionBreakdown
 from ipor_fusion.substrates import decode_substrate, market_name
-from ipor_fusion.types import Amount, MorphoBlueMarketId
+from ipor_fusion.types import Amount, MarketId, MorphoBlueMarketId
 
 VALID_ADDR_LOWER = "0x" + "ab" * 20
 VALID_ADDR_UPPER = "0x" + "AB" * 20
@@ -1699,17 +1702,76 @@ class TestFetcherCollectors:
         assert not out
 
 
-class TestFetchAavePositions:
-    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
-    def test_returns_none_when_chain_unsupported(self, _mock_reader_cls):
+_AAVE_POOLS = {
+    IporFusionMarkets.AAVE_V3: Web3.to_checksum_address("0x" + "a1" * 20),
+    IporFusionMarkets.AAVE_V3_LIDO: Web3.to_checksum_address("0x" + "a2" * 20),
+    IporFusionMarkets.SPARK_LEND: Web3.to_checksum_address("0x" + "a3" * 20),
+}
+
+
+class TestFetchAavePools:
+    _FUSES = {
+        IporFusionMarkets.AAVE_V3: Web3.to_checksum_address("0x" + "f1" * 20),
+        IporFusionMarkets.AAVE_V3_LIDO: Web3.to_checksum_address("0x" + "f2" * 20),
+        IporFusionMarkets.SPARK_LEND: Web3.to_checksum_address("0x" + "f3" * 20),
+        IporFusionMarkets.MORPHO: Web3.to_checksum_address("0x" + "f4" * 20),
+    }
+
+    def _balance_fuses(self) -> list[BalanceFuse]:
+        return [
+            BalanceFuse(market_id=MarketId(mid), fuse=fuse)
+            for mid, fuse in self._FUSES.items()
+        ]
+
+    @patch("ipor_fusion.cli.vault_fetcher.AaveV3FuseReader")
+    def test_maps_each_aave_market_to_its_fuse_pool(self, mock_fuse_reader_cls):
+        pool_of_fuse = {self._FUSES[mid]: pool for mid, pool in _AAVE_POOLS.items()}
+        mock_fuse_reader_cls.side_effect = lambda _ctx, fuse: MagicMock(
+            pool=MagicMock(return_value=pool_of_fuse[fuse])
+        )
+
         with ThreadPoolExecutor() as pool:
-            result = _fetch_aave_positions(MagicMock(), pool, _VAULT_ADDR, 999, {})
+            result = _fetch_aave_pools(MagicMock(), pool, self._balance_fuses())
+
+        assert result == _AAVE_POOLS
+        probed = {c.args[1] for c in mock_fuse_reader_cls.call_args_list}
+        assert self._FUSES[IporFusionMarkets.MORPHO] not in probed
+
+    @patch("ipor_fusion.cli.vault_fetcher.AaveV3FuseReader")
+    def test_drops_markets_whose_fuse_does_not_resolve(self, mock_fuse_reader_cls):
+        failures = {
+            self._FUSES[IporFusionMarkets.AAVE_V3_LIDO]: ContractLogicError("revert"),
+            self._FUSES[IporFusionMarkets.SPARK_LEND]: EmptyCallResultError("empty"),
+        }
+        core_pool = _AAVE_POOLS[IporFusionMarkets.AAVE_V3]
+        mock_fuse_reader_cls.side_effect = lambda _ctx, fuse: MagicMock(
+            pool=MagicMock(side_effect=failures.get(fuse), return_value=core_pool)
+        )
+
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_aave_pools(MagicMock(), pool, self._balance_fuses())
+
+        assert result == {IporFusionMarkets.AAVE_V3: core_pool}
+
+
+class TestFetchAavePositions:
+    _ASSET_SUBSTRATE = bytes(12) + bytes.fromhex("22" * 20)
+
+    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    def test_returns_none_when_no_pool_resolved(self, mock_reader_cls):
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_aave_positions(
+                MagicMock(), pool, _VAULT_ADDR, {}, {1: [self._ASSET_SUBSTRATE]}
+            )
         assert result is None
+        mock_reader_cls.assert_not_called()
 
     @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
     def test_returns_none_when_no_aave_substrates(self, _mock_reader_cls):
         with ThreadPoolExecutor() as pool:
-            result = _fetch_aave_positions(MagicMock(), pool, _VAULT_ADDR, 1, {})
+            result = _fetch_aave_positions(
+                MagicMock(), pool, _VAULT_ADDR, _AAVE_POOLS, {}
+            )
         assert result is None
 
     @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
@@ -1720,10 +1782,13 @@ class TestFetchAavePositions:
         )
         mock_reader_cls.return_value = mock_reader
 
-        addr_bytes = bytes(12) + bytes.fromhex("22" * 20)
         with ThreadPoolExecutor() as pool:
             result = _fetch_aave_positions(
-                MagicMock(), pool, _VAULT_ADDR, 1, {1: [addr_bytes]}
+                MagicMock(),
+                pool,
+                _VAULT_ADDR,
+                _AAVE_POOLS,
+                {1: [self._ASSET_SUBSTRATE]},
             )
         assert result is None
 
@@ -1733,12 +1798,40 @@ class TestFetchAavePositions:
         mock_reader.position_breakdown.return_value = _aave_breakdown(supply=42)
         mock_reader_cls.return_value = mock_reader
 
-        addr_bytes = bytes(12) + bytes.fromhex("22" * 20)
         with ThreadPoolExecutor() as pool:
             result = _fetch_aave_positions(
-                MagicMock(), pool, _VAULT_ADDR, 1, {1: [addr_bytes]}
+                MagicMock(),
+                pool,
+                _VAULT_ADDR,
+                _AAVE_POOLS,
+                {1: [self._ASSET_SUBSTRATE]},
             )
         assert result == {1: [_aave_breakdown(supply=42)]}
+
+    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    def test_reads_each_market_from_its_own_pool(self, mock_reader_cls):
+        """Markets granting the same assets still hold separate positions: each
+        breakdown comes from that market's Pool, never another market's."""
+        supply_in_pool = {pool: i for i, pool in enumerate(_AAVE_POOLS.values(), 1)}
+        mock_reader_cls.side_effect = lambda _ctx, aave_pool: MagicMock(
+            position_breakdown=MagicMock(
+                return_value=_aave_breakdown(supply=supply_in_pool[aave_pool])
+            )
+        )
+
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_aave_positions(
+                MagicMock(),
+                pool,
+                _VAULT_ADDR,
+                _AAVE_POOLS,
+                {mid: [self._ASSET_SUBSTRATE] for mid in _AAVE_POOLS},
+            )
+
+        assert result == {
+            mid: [_aave_breakdown(supply=supply_in_pool[aave_pool])]
+            for mid, aave_pool in _AAVE_POOLS.items()
+        }
 
 
 class TestFetchMorphoPositions:
