@@ -2,6 +2,55 @@
 
 <!-- version list -->
 
+## v3.6.8 (2026-09-11)
+
+### Bug Fixes
+
+- **sdk**: Read each Aave V3 market from its own pool, SparkLend included
+  ([`dd4e754`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dd4e754b85d41bed5466d3bf5a8daef5284e21e5))
+
+- **sdk**: Reject every spelling of the zero address
+  ([`669ecc1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/669ecc154807d600bfa6ea3d3ecf60e5051f0adb))
+
+- **sdk**: Reject zero address in universal-token-swapper substrates
+  ([`8350678`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/835067899d6842519bbc67084d41a058b1977a2c))
+
+- **sdk**: Treat Aave V3 reserves not listed on the pool as empty positions
+  ([`ef27045`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ef2704565e6284f0a18419aaba4ba7c061e95493))
+
+### Chores
+
+- Ship the ignore rule for .claude/settings.local.json
+  ([`853afa9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/853afa99d10cb2065e15797cfc3e48303f61e34e))
+
+### Features
+
+- **sdk**: Add the SPOL_UNSTAKE market id (424243)
+  ([`9b5bb0d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9b5bb0da613bf8d372403a37920033be4a3d6f13))
+
+- **sdk**: Encode and decode external-state substrates (market 50)
+  ([`a1f4010`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a1f40109c38a0ab5a7074be892926b9bc82d7a1f))
+
+### Refactoring
+
+- **sdk**: Share substrate encoding helpers across markets
+  ([`0e81c75`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0e81c75178669f67a881b90169267f9883962fa5))
+
+- **sdk**: Validate inside the shared address-substrate packer
+  ([`1790dd2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1790dd22717d95a91f83279de59cf5e4c43d1e68))
+
+### Testing
+
+- **sdk**: Drift-check the Solidity mirror enums at a pinned upstream ref
+  ([`68d64e4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/68d64e41dca6fdef66e375517485b0880a7537e9))
+
+### Additional Release Information
+
+- **sdk**: Fetch_vault_lending_health() reports Aave V3 Prime and SparkLend health only when given
+  aave_pools (market_id -> Pool, from AaveV3FuseReader(ctx, balance_fuse).pool()); without it, only
+  AAVE_V3 is reported, from the chain's Core pool.
+
+
 ## v3.6.7 (2026-09-08)
 
 ### Bug Fixes
