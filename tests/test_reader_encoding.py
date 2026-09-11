@@ -274,6 +274,17 @@ class TestAaveV3ReaderPositionBreakdown:
         assert breakdown.stable_debt == 0
         assert breakdown.is_empty
 
+    def test_position_breakdown_is_empty_for_asset_not_listed_on_pool(self):
+        """An unlisted asset has a zeroed ReserveData: no token is queried
+        (balanceOf on the zero address returns no data and would raise)."""
+        reader, ctx = _make_reader(AaveV3Reader)
+        ctx.call.return_value = self._reserve_data(self.ZERO, self.ZERO, self.ZERO)
+
+        breakdown = reader.position_breakdown(TOKEN_A, USER_ADDR)
+
+        assert breakdown.is_empty
+        ctx.call.assert_called_once()
+
 
 class TestMorphoReaderPositionBreakdown:
     def test_position_breakdown_converts_shares_to_assets(self):

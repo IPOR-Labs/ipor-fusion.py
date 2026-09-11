@@ -117,26 +117,22 @@ class AaveV3Reader(ContractWrapper):
         """Return the user's position in `asset` as supply / variable / stable amounts.
 
         Combines `getReserveData()` with `balanceOf()` on each reserve token.
-        Stable debt is queried only when the reserve has a stable debt token
-        (some chains/reserves have it disabled and zeroed).
+        A zero token address counts as a zero balance, as in the IPOR Fusion
+        Aave V3 balance fuse: stable debt is zeroed on reserves that dropped
+        it, and every token is zero when `asset` is not listed on this Pool.
         """
         tokens = self.reserve_tokens(asset).call()
-        supply = ERC20(self._ctx, tokens.a_token).balance_of(user).call()
-        variable_debt = (
-            ERC20(self._ctx, tokens.variable_debt_token).balance_of(user).call()
-        )
-        if tokens.stable_debt_token.lower() == _ZERO_ADDRESS:
-            stable_debt = Amount(0)
-        else:
-            stable_debt = (
-                ERC20(self._ctx, tokens.stable_debt_token).balance_of(user).call()
-            )
         return AaveV3PositionBreakdown(
             asset=asset,
             a_token=tokens.a_token,
             variable_debt_token=tokens.variable_debt_token,
             stable_debt_token=tokens.stable_debt_token,
-            supply=supply,
-            variable_debt=variable_debt,
-            stable_debt=stable_debt,
+            supply=self._balance_of(tokens.a_token, user),
+            variable_debt=self._balance_of(tokens.variable_debt_token, user),
+            stable_debt=self._balance_of(tokens.stable_debt_token, user),
         )
+
+    def _balance_of(self, token: ChecksumAddress, user: ChecksumAddress) -> Amount:
+        if token.lower() == _ZERO_ADDRESS:
+            return Amount(0)
+        return ERC20(self._ctx, token).balance_of(user).call()
