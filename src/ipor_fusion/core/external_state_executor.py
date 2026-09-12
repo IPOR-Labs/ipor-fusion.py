@@ -97,6 +97,20 @@ class ExternalStateExecutor(ContractWrapper):
             )
         return cls(ctx, executor)
 
+    def balances(self, balance_account: ChecksumAddress) -> Call[Amount]:
+        """Underlying-unit balance the executor tracks for `balance_account`.
+
+        The figure the custodians last confirmed (or that an enter/exit last
+        adjusted), not an on-chain token balance -- the executor holds no tokens
+        between operations. This is what the balance fuse aggregates into the
+        external-state market's value."""
+        return self._view(
+            "balances(address)",
+            balance_account,
+            output_types=["uint256"],
+            decoder=Amount,
+        )
+
     def nonce(self) -> Call[int]:
         """Monotonic proposal nonce, incremented on every `proposeBalance`.
 
