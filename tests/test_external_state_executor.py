@@ -100,6 +100,26 @@ class TestForVault:
             ExternalStateExecutor.for_vault(ctx, VAULT_ADDR)
 
 
+class TestBalances:
+    def test_encodes_selector_and_account(self):
+        executor, _ = _make_executor()
+
+        call = executor.balances(BALANCE_ACCOUNT)
+
+        assert call.to == EXECUTOR_ADDR
+        assert call.data[:4] == Web3.keccak(text="balances(address)")[:4]
+        (account,) = decode(["address"], call.data[4:])
+        assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
+        assert call.output_types == ["uint256"]
+        assert call.decoder is Amount
+
+    def test_decodes_uint256(self):
+        executor, ctx = _make_executor()
+        ctx.call.return_value = encode(["uint256"], [1_234_567])
+
+        assert executor.balances(BALANCE_ACCOUNT).call() == Amount(1_234_567)
+
+
 class TestNonce:
     def test_decodes_uint256(self):
         executor, ctx = _make_executor()
