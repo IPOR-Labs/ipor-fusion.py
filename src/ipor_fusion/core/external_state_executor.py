@@ -6,14 +6,17 @@ by the external-state market. Its address lives in the VAULT's ERC-7201 storage
 
 NAV for the external-state market is marked by a dual-custodian propose/confirm
 on this executor, then a `update_markets_balances([EXTERNAL_STATE])` refresh on
-the vault. `mark_nav` runs that whole sequence; the propose/confirm Calls and the
-pure `proposal_hash` helper are exposed for callers that orchestrate by hand.
+the vault. `mark_nav` runs that whole sequence in one process; a SEPARATED
+confirm service instead reads `pending_proposal` and confirms the hash it
+returns, never guessing the executor's global nonce. `parse_balance_proposed`
+decodes the matching event for audit and for verifying a hash computed offline.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
@@ -29,6 +32,36 @@ from ipor_fusion.types import Amount, ChainId, MarketId
 
 if TYPE_CHECKING:
     from ipor_fusion.core.plasma_vault import PlasmaVault
+
+
+def _log_bytes(value: Any) -> bytes:
+    """Normalize one log field to bytes.
+
+    Receipts carry `topics` and `data` as HexBytes; `eth_simulateV1` and raw
+    JSON-RPC carry them as `0x`-hex strings. Both shapes reach the public
+    parsers, so neither can be assumed."""
+    if isinstance(value, str):
+        return bytes.fromhex(value.removeprefix("0x"))
+    return bytes(value)
+
+
+@dataclass(frozen=True, slots=True)
+class BalanceProposal:
+    """A dual-custodian balance proposal, from either route that yields one.
+
+    `parse_balance_proposed` / `find_balance_proposed` build it from the
+    `BalanceProposed` event; `pending_proposal` builds it from the executor's
+    pending slot. `proposal_hash` is populated on both -- the event carries it,
+    and the state route recomputes it from the same fields -- so it is always
+    the value `confirm_balance` expects.
+    """
+
+    balance_account: ChecksumAddress
+    proposer: ChecksumAddress
+    value: Amount
+    nonce: int
+    proposed_at: int
+    proposal_hash: bytes
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +151,65 @@ class ExternalStateExecutor(ContractWrapper):
         `++nonce` before storing the pending proposal)."""
         return self._view("nonce()", output_types=["uint256"])
 
+    def pending_proposal(
+        self, balance_account: ChecksumAddress
+    ) -> Call[BalanceProposal | None]:
+        """The proposal awaiting confirmation for `balance_account`, or `None`.
+
+        This is the read a SEPARATED confirm service wants: it returns the
+        CURRENT pending proposal with the hash `confirm_balance` will verify, so
+        custodian B needs nothing from custodian A beyond "go look". Computing
+        the hash instead from `proposal_hash(...)` plus a fresh `nonce()` is
+        unsound -- `nonce` is executor-global, so another account's proposal in
+        between silently yields the wrong hash.
+
+        `None` means no proposal is pending: a successful `confirm_balance`
+        DELETES the slot, so this is the normal state between marks, not an
+        error. The hash is bound to this wrapper's chain, so the wrapper needs a
+        `Web3Context` (an `encoder()` instance raises).
+        """
+        account = Web3.to_checksum_address(balance_account)
+        chain_id = self._require_chain_id()
+
+        def to_proposal(values: tuple[int, str, int, int]) -> BalanceProposal | None:
+            value, proposer, proposed_at, nonce = values
+            if Web3.to_checksum_address(proposer) == ZERO_ADDRESS:
+                return None
+            return BalanceProposal(
+                balance_account=account,
+                proposer=Web3.to_checksum_address(proposer),
+                value=Amount(value),
+                nonce=nonce,
+                proposed_at=proposed_at,
+                proposal_hash=self.proposal_hash(
+                    executor=self._address,
+                    chain_id=chain_id,
+                    balance_account=account,
+                    value=Amount(value),
+                    proposer=Web3.to_checksum_address(proposer),
+                    proposed_at=proposed_at,
+                    nonce=nonce,
+                ),
+            )
+
+        # PendingProposal struct fields in declaration order; the auto-getter
+        # returns them flattened, not as a tuple type.
+        return self._view(
+            "pendingProposals(address)",
+            account,
+            output_types=["uint256", "address", "uint64", "uint256"],
+            decoder=to_proposal,
+        )
+
+    def _require_chain_id(self) -> ChainId:
+        """The wrapper's chain, or a clear error on a ctx-less `encoder()`."""
+        if self._ctx is None:
+            raise ValueError(
+                "Web3Context required: the proposal hash is bound to a chain id, "
+                "so build this wrapper with a ctx rather than via encoder()."
+            )
+        return self._ctx.chain_id
+
     def propose_balance(
         self, balance_account: ChecksumAddress, value: Amount
     ) -> Call[None]:
@@ -179,6 +271,60 @@ class ExternalStateExecutor(ContractWrapper):
             )
         )
 
+    @classmethod
+    def parse_balance_proposed(cls, log: Mapping[str, Any]) -> BalanceProposal:
+        """Decode one `BalanceProposed` log into a `BalanceProposal`.
+
+        Accepts receipt-shaped logs (HexBytes) and JSON-RPC / `eth_simulateV1`
+        -shaped logs (`0x`-hex strings) alike, so it also decodes rows from an
+        event index. Needs no chain access.
+
+        Checks topic0 only: it does NOT verify which contract emitted the log,
+        since any contract may emit this signature. Verify the emitter yourself,
+        or use `find_balance_proposed`, which does.
+        """
+        topics = log.get("topics") or ()
+        if not topics or _log_bytes(topics[0]) != cls._BALANCE_PROPOSED_TOPIC:
+            raise ValueError("log is not a BalanceProposed event")
+        # data fields in declaration order; all six are unindexed, so topics
+        # carries topic0 alone.
+        account, proposer, value, nonce, proposed_at, proposal_hash = decode(
+            ["address", "address", "uint256", "uint256", "uint64", "bytes32"],
+            _log_bytes(log["data"]),
+        )
+        return BalanceProposal(
+            balance_account=Web3.to_checksum_address(account),
+            proposer=Web3.to_checksum_address(proposer),
+            value=Amount(value),
+            nonce=nonce,
+            proposed_at=proposed_at,
+            proposal_hash=proposal_hash,
+        )
+
+    def find_balance_proposed(
+        self, logs: Iterable[Mapping[str, Any]]
+    ) -> BalanceProposal:
+        """The first `BalanceProposed` log THIS executor emitted in `logs`.
+
+        Takes any iterable of logs, so it serves `receipt["logs"]`, a simulated
+        call's `logs`, and `get_logs` output alike. Unlike
+        `parse_balance_proposed` it matches on the emitting address, so a
+        same-signature event from another contract cannot be mistaken for ours.
+
+        Reading a proposal from the propose transaction's own logs is race-free
+        by construction; `pending_proposal` is the route for a service that did
+        not send that transaction.
+        """
+        for log in logs:
+            topics = log.get("topics") or ()
+            if (
+                topics
+                and _log_bytes(topics[0]) == self._BALANCE_PROPOSED_TOPIC
+                and Web3.to_checksum_address(log["address"]) == self._address
+            ):
+                return self.parse_balance_proposed(log)
+        raise ValueError(f"no BalanceProposed log from executor {self._address}")
+
     def mark_nav(
         self,
         *,
@@ -222,12 +368,10 @@ class ExternalStateExecutor(ContractWrapper):
         propose_receipt = self.propose_balance(balance_account, value).send(
             proposer_ctx
         )
-        nonce, proposed_at, proposal_hash = self._parse_balance_proposed(
-            propose_receipt
-        )
-        confirm_receipt = self.confirm_balance(balance_account, proposal_hash).send(
-            confirmer_ctx
-        )
+        proposal = self.find_balance_proposed(propose_receipt["logs"])
+        confirm_receipt = self.confirm_balance(
+            balance_account, proposal.proposal_hash
+        ).send(confirmer_ctx)
 
         refresh_receipt: TxReceipt | None = None
         if vault is not None:
@@ -236,28 +380,10 @@ class ExternalStateExecutor(ContractWrapper):
             ).send(confirmer_ctx)
 
         return NavMark(
-            proposed_at=proposed_at,
-            nonce=nonce,
-            proposal_hash=proposal_hash,
+            proposed_at=proposal.proposed_at,
+            nonce=proposal.nonce,
+            proposal_hash=proposal.proposal_hash,
             propose_receipt=propose_receipt,
             confirm_receipt=confirm_receipt,
             refresh_receipt=refresh_receipt,
         )
-
-    def _parse_balance_proposed(self, receipt: TxReceipt) -> tuple[int, int, bytes]:
-        """Pull `(nonce, proposed_at, proposal_hash)` from this executor's
-        `BalanceProposed` log in a propose receipt -- the exact values the
-        contract stored. Raises if the receipt carries no such log."""
-        for log in receipt["logs"]:
-            if (
-                Web3.to_checksum_address(log["address"]) == self._address
-                and log["topics"][0] == self._BALANCE_PROPOSED_TOPIC
-            ):
-                # data fields: balanceAccount, proposer, value, nonce,
-                # proposedAt, proposalHash -- only the last three are needed.
-                _, _, _, nonce, proposed_at, proposal_hash = decode(
-                    ["address", "address", "uint256", "uint256", "uint64", "bytes32"],
-                    bytes(log["data"]),
-                )
-                return nonce, proposed_at, proposal_hash
-        raise ValueError("propose receipt has no BalanceProposed log")

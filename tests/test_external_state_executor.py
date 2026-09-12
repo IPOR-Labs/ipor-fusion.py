@@ -10,7 +10,12 @@ from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
 
-from ipor_fusion.core.external_state_executor import ExternalStateExecutor, NavMark
+from ipor_fusion.core.external_state_executor import (
+    BalanceProposal,
+    ExternalStateExecutor,
+    NavMark,
+)
+from ipor_fusion.fuses.base import ZERO_ADDRESS
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import Amount, ChainId, MarketId
 
@@ -130,6 +135,89 @@ class TestNonce:
         to, data = ctx.call.call_args.args
         assert to == EXECUTOR_ADDR
         assert data == Web3.keccak(text="nonce()")[:4]
+
+
+class TestPendingProposal:
+    # Distinct values so a swapped value/proposedAt/nonce cannot pass.
+    VALUE = 5_000_000
+    PROPOSED_AT = 1_700_000_123
+    NONCE = 9
+    CHAIN = ChainId(8453)
+
+    def _executor_with_slot(self, *, proposer=PROPOSER, value=None, nonce=None):
+        executor, ctx = _make_executor()
+        ctx.chain_id = self.CHAIN
+        ctx.call.return_value = encode(
+            ["uint256", "address", "uint64", "uint256"],
+            [
+                self.VALUE if value is None else value,
+                proposer,
+                self.PROPOSED_AT,
+                self.NONCE if nonce is None else nonce,
+            ],
+        )
+        return executor, ctx
+
+    def test_encodes_selector_and_account(self):
+        executor, _ = self._executor_with_slot()
+
+        call = executor.pending_proposal(BALANCE_ACCOUNT)
+
+        assert call.to == EXECUTOR_ADDR
+        assert call.data[:4] == Web3.keccak(text="pendingProposals(address)")[:4]
+        (account,) = decode(["address"], call.data[4:])
+        assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
+        assert call.output_types == ["uint256", "address", "uint64", "uint256"]
+
+    def test_decodes_slot_into_proposal(self):
+        executor, _ = self._executor_with_slot()
+
+        proposal = executor.pending_proposal(BALANCE_ACCOUNT).call()
+
+        assert proposal == BalanceProposal(
+            # Not in the getter's return -- carried over from the argument.
+            balance_account=BALANCE_ACCOUNT,
+            proposer=PROPOSER,
+            value=Amount(self.VALUE),
+            nonce=self.NONCE,
+            proposed_at=self.PROPOSED_AT,
+            proposal_hash=ExternalStateExecutor.proposal_hash(
+                executor=EXECUTOR_ADDR,
+                chain_id=self.CHAIN,
+                balance_account=BALANCE_ACCOUNT,
+                value=Amount(self.VALUE),
+                proposer=PROPOSER,
+                proposed_at=self.PROPOSED_AT,
+                nonce=self.NONCE,
+            ),
+        )
+
+    def test_hash_is_what_confirm_balance_expects(self):
+        # The state route's whole point: feed the hash straight to confirm.
+        executor, _ = self._executor_with_slot()
+        proposal = executor.pending_proposal(BALANCE_ACCOUNT).call()
+
+        assert proposal is not None
+        call = executor.confirm_balance(BALANCE_ACCOUNT, proposal.proposal_hash)
+
+        _, sent_hash = decode(["address", "bytes32"], call.data[4:])
+        assert sent_hash == proposal.proposal_hash
+
+    def test_returns_none_for_deleted_slot(self):
+        # confirmBalance deletes the slot, so zeros are the NORMAL post-confirm
+        # state -- never a zeroed dataclass carrying a hash computed over zeros.
+        executor, _ = self._executor_with_slot(
+            proposer=Web3.to_checksum_address(ZERO_ADDRESS), value=0, nonce=0
+        )
+
+        assert executor.pending_proposal(BALANCE_ACCOUNT).call() is None
+
+    def test_encoder_instance_raises_without_ctx(self):
+        # The hash is chain-bound, so a calldata-only wrapper cannot build one.
+        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+
+        with pytest.raises(ValueError, match="Web3Context required"):
+            executor.pending_proposal(BALANCE_ACCOUNT)
 
 
 class TestProposalHash:
@@ -300,6 +388,130 @@ class TestConfirmBalance:
 _BALANCE_PROPOSED_TOPIC = Web3.keccak(
     text="BalanceProposed(address,address,uint256,uint256,uint64,bytes32)"
 )
+
+
+_OTHER_ADDR = Web3.to_checksum_address("0x7777777777777777777777777777777777777777")
+
+# Six distinct values, so a swapped pair of same-typed fields cannot pass.
+_EVENT_VALUE = 111
+_EVENT_NONCE = 222
+_EVENT_PROPOSED_AT = 333
+_EVENT_HASH = b"\xde" * 32
+
+
+def _proposed_log(*, as_strings: bool, address=EXECUTOR_ADDR, topic=None):
+    """A BalanceProposed log in either wire shape.
+
+    Receipts give HexBytes; eth_simulateV1 and raw JSON-RPC give 0x-strings.
+    """
+    data = encode(
+        ["address", "address", "uint256", "uint256", "uint64", "bytes32"],
+        [
+            BALANCE_ACCOUNT,
+            PROPOSER,
+            _EVENT_VALUE,
+            _EVENT_NONCE,
+            _EVENT_PROPOSED_AT,
+            _EVENT_HASH,
+        ],
+    )
+    topic = _BALANCE_PROPOSED_TOPIC if topic is None else topic
+    if as_strings:
+        return {
+            "address": address.lower(),
+            "topics": [topic.to_0x_hex()],
+            "data": "0x" + data.hex(),
+        }
+    return {"address": address, "topics": [HexBytes(topic)], "data": HexBytes(data)}
+
+
+_EXPECTED_PROPOSAL = BalanceProposal(
+    balance_account=BALANCE_ACCOUNT,
+    proposer=PROPOSER,
+    value=Amount(_EVENT_VALUE),
+    nonce=_EVENT_NONCE,
+    proposed_at=_EVENT_PROPOSED_AT,
+    proposal_hash=_EVENT_HASH,
+)
+
+
+class TestParseBalanceProposed:
+    @pytest.mark.parametrize("as_strings", [False, True], ids=["hexbytes", "0x-string"])
+    def test_decodes_both_log_shapes(self, as_strings):
+        # Full-object equality pins every field AND their order.
+        log = _proposed_log(as_strings=as_strings)
+
+        assert ExternalStateExecutor.parse_balance_proposed(log) == _EXPECTED_PROPOSAL
+
+    def test_needs_no_instance(self):
+        # Decoding indexer rows or a get_logs range must not require a wrapper,
+        # a ctx, or an RPC.
+        parsed = ExternalStateExecutor.parse_balance_proposed(
+            _proposed_log(as_strings=True)
+        )
+
+        assert parsed.nonce == _EVENT_NONCE
+
+    def test_does_not_check_the_emitter(self):
+        # Deliberate: any contract may emit this signature, so the primitive
+        # trusts the caller. find_balance_proposed is the one that matches.
+        log = _proposed_log(as_strings=False, address=_OTHER_ADDR)
+
+        assert ExternalStateExecutor.parse_balance_proposed(log) == _EXPECTED_PROPOSAL
+
+    def test_rejects_a_different_event(self):
+        log = _proposed_log(as_strings=False, topic=Web3.keccak(text="Transfer()"))
+
+        with pytest.raises(ValueError, match="not a BalanceProposed event"):
+            ExternalStateExecutor.parse_balance_proposed(log)
+
+    @pytest.mark.parametrize("topics", [[], None], ids=["empty", "missing"])
+    def test_rejects_a_log_without_topics(self, topics):
+        log = {"address": EXECUTOR_ADDR, "topics": topics, "data": b""}
+
+        with pytest.raises(ValueError, match="not a BalanceProposed event"):
+            ExternalStateExecutor.parse_balance_proposed(log)
+
+
+class TestFindBalanceProposed:
+    @pytest.mark.parametrize("as_strings", [False, True], ids=["hexbytes", "0x-string"])
+    def test_finds_ours_in_both_log_shapes(self, as_strings):
+        executor, _ = _make_executor()
+        logs = [_proposed_log(as_strings=as_strings)]
+
+        assert executor.find_balance_proposed(logs) == _EXPECTED_PROPOSAL
+
+    def test_skips_same_event_from_another_contract(self):
+        # A foreign emitter AHEAD of ours must not stop the scan.
+        executor, _ = _make_executor()
+        logs = [
+            _proposed_log(as_strings=False, address=_OTHER_ADDR),
+            _proposed_log(as_strings=False),
+        ]
+
+        found = executor.find_balance_proposed(logs)
+
+        assert found == _EXPECTED_PROPOSAL
+
+    def test_skips_other_events_from_this_contract(self):
+        executor, _ = _make_executor()
+        logs = [_proposed_log(as_strings=False, topic=Web3.keccak(text="Transfer()"))]
+
+        with pytest.raises(ValueError, match="no BalanceProposed log"):
+            executor.find_balance_proposed(logs)
+
+    def test_raises_when_only_foreign_emitters_match(self):
+        executor, _ = _make_executor()
+        logs = [_proposed_log(as_strings=True, address=_OTHER_ADDR)]
+
+        with pytest.raises(ValueError, match="no BalanceProposed log"):
+            executor.find_balance_proposed(logs)
+
+    def test_raises_on_empty_logs(self):
+        executor, _ = _make_executor()
+
+        with pytest.raises(ValueError, match="no BalanceProposed log"):
+            executor.find_balance_proposed([])
 
 
 class TestMarkNav:
