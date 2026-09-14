@@ -53,8 +53,9 @@ USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 SUPPLY_FUSE = "0x26fD6EF391E98C78CfCA27e00c3d15be4D941625"  # SupplyFuseAaveV3, Base
 BALANCE_FUSE = "0xf53f3EaFfDf67539256365cA7299540A98b60BA9"  # BalanceFuseAaveV3, Base
 
-# 1. Deploy. Clone addresses are CREATE2-deterministic: .call() previews them for
-#    free, .send() with the same arguments creates the vault and its managers.
+# 1. Deploy, then read the addresses actually created from the mined receipt.
+#    Do not use a prior .call() preview: another clone can consume those CREATE
+#    addresses before this transaction lands.
 factory = FusionFactory(ctx, FACTORY_PROXY)
 clone = factory.clone(
     asset_name="My Vault",
@@ -63,8 +64,8 @@ clone = factory.clone(
     redemption_delay_seconds=0,
     owner=owner,
 )
-instance = clone.call(ctx)
-clone.send(ctx)
+receipt = clone.send(ctx)
+instance = factory.decode_clone_receipt(receipt)
 vault_address = instance.plasma_vault
 access_manager_address = instance.access_manager
 

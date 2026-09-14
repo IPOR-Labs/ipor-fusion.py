@@ -29,7 +29,7 @@ from ipor_fusion.core import PlasmaVault
 
 LOG = logging.getLogger(__name__)
 
-# Deployed by scripts/smoke_base_deploy.py — addresses are CREATE2-deterministic
+# Deployed by scripts/smoke_base_deploy.py — recorded deployment addresses
 # for that factory index and stable across runs.
 BASE_PLASMA_VAULT = Web3.to_checksum_address(
     "0xc4f086a9389c647ffa9b8f255150c3d1fc05d4fd"

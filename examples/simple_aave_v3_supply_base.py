@@ -5,7 +5,7 @@ the test suite, how to:
 
   1. connect a ``Web3Context`` to Base;
   2. preview a vault deployment with ``FusionFactory.clone(...).call()`` to learn
-     its deterministic CREATE2 addresses;
+     its state-dependent CREATE addresses for the atomic simulation;
   3. obtain the unsigned creation calldata via ``.calldata``;
   4. bootstrap the vault's roles in the correct order;
   5. pair the Aave V3 supply (functional) fuse with its balance fuse;
@@ -185,7 +185,7 @@ def clone_args() -> dict:
     """Arguments for FusionFactory.clone(...).
 
     The preview and the in-batch create MUST use identical args: same args plus
-    the same factory index yield the same CREATE2 addresses.
+    the same factory state yields the same CREATE addresses in one simulation.
     """
     return {
         "asset_name": "IPOR USDC Vault (example)",

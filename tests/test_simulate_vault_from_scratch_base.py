@@ -2,9 +2,9 @@
 Aave V3, fast-forward a year, and assert the position appreciated — all in one
 `eth_simulateV1` batch.
 
-Clone addresses are CREATE2-deterministic, so we preview `clone(...)` via eth_call
-to learn them, then queue the real `clone(...)` as the FIRST call in the batch —
-any prior clone would bump the factory index and change the addresses.
+Clone addresses depend on the factory's CREATE nonces, so we preview `clone(...)`
+via eth_call to learn them, then queue the real `clone(...)` as the FIRST call in
+the atomic simulation batch. A live deployment must use receipt events instead.
 
 Governance bootstrap: a fresh clone grants the `owner` param only OWNER_ROLE. The
 role-admin chain is ADMIN → OWNER → ATOMIST → {ALPHA, FUSE_MANAGER, WHITELIST,
@@ -86,7 +86,7 @@ DEPOSIT_AMOUNT = Amount(1_000_000_000)  # 1,000 USDC (6 decimals)
 
 def _clone_args() -> dict:
     """Identical args for the preview and the in-batch create — same args +
-    same factory index → same CREATE2 addresses."""
+    same factory state → same CREATE addresses within the atomic simulation."""
     return {
         "asset_name": "IPOR USDC Vault (e2e)",
         "asset_symbol": "ipUSDCe2e",

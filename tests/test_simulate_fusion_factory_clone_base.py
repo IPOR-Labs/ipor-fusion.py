@@ -10,8 +10,8 @@ Two test paths:
   * `test_simulate_clone_*_base` — uses the `web3_base` session fixture
     (set via `BASE_PROVIDER_URL`) to run `factory.clone(...).call(ctx)`,
     decoding the 17-field `FusionInstance` tuple. eth_call is read-only
-    so the CREATE2 addresses returned are deterministic for the current
-    factory index; running it twice in the same block returns the same
+    so the state-dependent CREATE addresses returned for the current factory
+    index are stable within that block; running it twice returns the same
     addresses.
 
 References:
@@ -27,6 +27,7 @@ import logging
 import pytest
 from eth_abi import encode as abi_encode
 from eth_utils import function_signature_to_4byte_selector
+from hexbytes import HexBytes
 from web3 import Web3
 
 from ipor_fusion import Web3Context
@@ -40,6 +41,89 @@ BASE_FUSION_FACTORY = Web3.to_checksum_address(
 )
 BASE_USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
 SAMPLE_OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+
+
+def _address(byte: int):
+    return Web3.to_checksum_address("0x" + f"{byte:02x}" * 20)
+
+
+def _event_log(emitter, signature, abi_types, values):
+    return {
+        "address": emitter,
+        "topics": [HexBytes(Web3.keccak(text=signature))],
+        "data": HexBytes(abi_encode(abi_types, values)),
+    }
+
+
+def _clone_receipt(*, component_index: int = 138):
+    instance_types = [
+        "uint256",
+        "uint256",
+        "string",
+        "string",
+        "uint8",
+        "address",
+        "string",
+        "uint8",
+        "address",
+        "address",
+        "address",
+        "address",
+    ]
+    return {
+        "logs": [
+            _event_log(
+                _address(20),
+                "AccessManagerCreated(uint256,address,uint256)",
+                ["uint256", "address", "uint256"],
+                [component_index, _address(12), 0],
+            ),
+            _event_log(
+                _address(21),
+                "RewardsManagerCreated(uint256,address,address,address)",
+                ["uint256", "address", "address", "address"],
+                [component_index, _address(14), _address(12), _address(10)],
+            ),
+            _event_log(
+                _address(22),
+                "WithdrawManagerCreated(uint256,address,address)",
+                ["uint256", "address", "address"],
+                [component_index, _address(15), _address(12)],
+            ),
+            _event_log(
+                _address(23),
+                "ContextManagerCreated(uint256,address,address[])",
+                ["uint256", "address", "address[]"],
+                [component_index, _address(16), []],
+            ),
+            _event_log(
+                _address(24),
+                "PriceManagerCreated(uint256,address,address)",
+                ["uint256", "address", "address"],
+                [component_index, _address(17), _address(25)],
+            ),
+            _event_log(
+                BASE_FUSION_FACTORY,
+                "FusionInstanceCreated(uint256,uint256,string,string,uint8,address,"
+                "string,uint8,address,address,address,address)",
+                instance_types,
+                [
+                    138,
+                    8,
+                    "IPOR USDC Vault",
+                    "ipUSDC",
+                    8,
+                    BASE_USDC,
+                    "USDC",
+                    6,
+                    SAMPLE_OWNER,
+                    _address(10),
+                    _address(11),
+                    _address(13),
+                ],
+            ),
+        ]
+    }
 
 
 def _bare_factory() -> FusionFactory:
@@ -154,12 +238,44 @@ def test_decode_clone_result_round_trip():
     assert inst.access_manager == Web3.to_checksum_address(access_manager_lc)
 
 
+def test_decode_clone_receipt_returns_addresses_created_by_transaction():
+    factory = _bare_factory()
+    instance = factory.decode_clone_receipt(_clone_receipt())  # type: ignore[arg-type]
+
+    assert instance.index == 138
+    assert instance.plasma_vault == _address(10)
+    assert instance.plasma_vault_base == _address(11)
+    assert instance.access_manager == _address(12)
+    assert instance.fee_manager == _address(13)
+    assert instance.rewards_manager == _address(14)
+    assert instance.withdraw_manager == _address(15)
+    assert instance.context_manager == _address(16)
+    assert instance.price_manager == _address(17)
+
+
+def test_decode_clone_receipt_rejects_component_from_another_instance():
+    factory = _bare_factory()
+    receipt = _clone_receipt(component_index=139)
+
+    with pytest.raises(ValueError, match="AccessManagerCreated.*found 0"):
+        factory.decode_clone_receipt(receipt)  # type: ignore[arg-type]
+
+
+def test_decode_clone_receipt_rejects_another_factory_proxy():
+    factory = _bare_factory()
+    receipt = _clone_receipt()
+    receipt["logs"][-1]["address"] = _address(99)
+
+    with pytest.raises(ValueError, match="FusionInstanceCreated.*found 0"):
+        factory.decode_clone_receipt(receipt)  # type: ignore[arg-type]
+
+
 # --- live eth_call preview (no gas, no state change) ------------------------
 
 
 def test_simulate_clone_preview_base(web3_base):
     """eth_call against IporFusionFactoryProxy on BASE — decodes FusionInstance
-    and verifies the CREATE2 address layout."""
+    and verifies the returned CREATE address layout."""
     ctx = Web3Context(web3=web3_base, chain_id=8453, signer=SAMPLE_OWNER)
     factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
     instance = factory.clone(
@@ -181,7 +297,7 @@ def test_simulate_clone_preview_base(web3_base):
     assert instance.underlying_token_decimals == 6
     assert instance.initial_owner == SAMPLE_OWNER
 
-    # All 8 cloned addresses must be non-zero (CREATE2-deterministic).
+    # All 8 cloned addresses must be non-zero.
     cloned = [
         instance.plasma_vault,
         instance.plasma_vault_base,
