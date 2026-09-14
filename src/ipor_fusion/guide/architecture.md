@@ -50,10 +50,11 @@ Manager for management and performance fees.
 Vaults are not deployed from bytecode. `FusionFactory.clone(...)` on the
 per-chain `IporFusionFactoryProxy` creates the vault together with its access
 manager, fee manager, rewards manager, withdraw manager, context manager and
-price manager in one transaction. Clone addresses are CREATE2-deterministic: `.call()` on the same
-arguments previews them for free and `.send()` deploys. `clone_supervised` has
-the same shape but is gated by a maintenance role; use `clone` unless you were
-told otherwise.
+price manager in one transaction. The component factories deploy with CREATE,
+so code that broadcasts a clone must get the created addresses from
+`factory.decode_clone_receipt(receipt)`, not from an earlier `.call()` preview.
+`clone_supervised` has the same shape but is gated by a maintenance role; use
+`clone` unless you were told otherwise.
 
 Fuse and factory addresses differ per chain and are not embedded in the SDK.
 Resolve them by contract name in the public `ipor-abi` registry. Names are

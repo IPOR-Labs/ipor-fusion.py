@@ -149,6 +149,7 @@ class TestSkill:
         api = (FusionFactory, PlasmaVault, AccessManager, ERC20, AaveV3SupplyFuse, Call)
         for step in [
             "clone",
+            "decode_clone_receipt",
             "grant_role",
             "add_fuses",
             "grant_market_substrates",

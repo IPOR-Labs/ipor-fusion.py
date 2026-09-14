@@ -7,7 +7,8 @@ how to:
 
   1. connect a ``Web3Context`` to Base;
   2. preview a vault deployment with ``FusionFactory.clone(...).call()`` and read
-     its deterministic CREATE2 addresses, plus the unsigned creation ``.calldata``;
+     its state-dependent CREATE addresses for the atomic simulation, plus the
+     unsigned creation ``.calldata``;
   3. bootstrap the vault's roles in the correct order;
   4. install the Euler V2 supply / collateral / controller / borrow fuses and
      pair them with the shared Euler V2 balance fuse;
@@ -244,8 +245,9 @@ def clone_args() -> dict:
     """Arguments for FusionFactory.clone(...).
 
     The preview and the in-batch create MUST use identical args: same args plus
-    the same factory index yield the same CREATE2 addresses. The accounting asset
-    is WETH -- the asset this vault borrows and denominates its NAV in.
+    the same factory state yields the same CREATE addresses in one simulation.
+    The accounting asset is WETH -- the asset this vault borrows and denominates
+    its NAV in.
     """
     return {
         "asset_name": "IPOR WETH Euler Credit Vault (example)",
