@@ -129,8 +129,12 @@ class ContractWrapper:
         consumer is `.calldata`. Calling `.call()` or `.send()` on a Call
         produced this way raises (no ctx).
 
-        Pass `address` if you want the placeholder slot filled in (purely
-        cosmetic — `.calldata` ignores it).
+        Pass `address` unless `.calldata` really is the only consumer. The
+        encoding ignores it, but a builder that reads `self._address`
+        semantically -- `ExternalStateExecutor`'s event readers match it
+        against a log's emitter and bind it into the proposal hash -- runs
+        against the placeholder zero address without one, and so rejects
+        every real log.
         """
         instance = cls.__new__(cls)
         instance._ctx = None  # type: ignore[assignment]
