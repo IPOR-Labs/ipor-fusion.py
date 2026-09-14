@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.6.9 (2026-09-14)
+
+### Bug Fixes
+
+- **sdk**: Decode clone addresses from receipt events
+  ([`db7410d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/db7410d136d4620ad14812319f588dc96a8df9bb))
+
+### Additional Release Information
+
+- **sdk**: After broadcasting clone(), derive deployed addresses with
+  FusionFactory.decode_clone_receipt() instead of using an earlier .call() preview.
+
+
 ## v3.6.8 (2026-09-11)
 
 ### Bug Fixes
