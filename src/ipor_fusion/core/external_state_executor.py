@@ -200,6 +200,24 @@ class ExternalStateExecutor(ContractWrapper):
             decoder=Amount,
         )
 
+    def last_updated(self, balance_account: ChecksumAddress) -> Call[int]:
+        """Block timestamp of the last confirmed custodian update for
+        `balance_account`, or 0 if there has never been one.
+
+        Per account -- not the executor-wide `lastCustodianUpdateTimestamp`,
+        which only tells the balance fuse that something was confirmed
+        somewhere. This one drives the `minUpdateInterval` rate limit and feeds
+        `getOldestUpdateTimestamp()`, so it is what an off-chain monitor reads
+        to spot an account whose attestation has gone stale.
+
+        Zero is a real answer: never confirmed, or cleared when
+        `syncSubstrates` purges an account that has left the substrate set --
+        which it can only do once that account's balance is already zero. A
+        sync that keeps an account does NOT reset its timestamp."""
+        return self._view(
+            "lastUpdated(address)", balance_account, output_types=["uint256"]
+        )
+
     def nonce(self) -> Call[int]:
         """Monotonic proposal nonce, incremented on every `proposeBalance`.
 
