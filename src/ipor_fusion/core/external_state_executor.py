@@ -154,11 +154,22 @@ class ExternalStateExecutor(ContractWrapper):
         0x1781023874512EC457C16827AD102F41A5C5CE1CD7BA8AA8FCD2DA52541D8A00
     )
 
-    # topic0 of `proposeBalance`'s event; its non-indexed data carries the exact
-    # nonce, proposedAt, and proposalHash the contract stored -- `mark_nav` reads
-    # them from the propose receipt rather than re-querying (race-free).
+    # `BalanceProposed`'s parameter list, in declaration order. All six are
+    # unindexed, so both event readers take them straight out of the log's
+    # `data`, and the values are the ones the contract stored rather than
+    # anything re-read afterwards. Declared once because topic0 and the payload
+    # decode have to agree: a signature that drifts from the decode list stops
+    # matching topic0 SILENTLY, which reads as "the event never happened".
+    _BALANCE_PROPOSED_TYPES = (
+        "address",  # balanceAccount
+        "address",  # proposer
+        "uint256",  # newValue
+        "uint256",  # nonce
+        "uint64",  # proposedAt
+        "bytes32",  # proposalHash
+    )
     _BALANCE_PROPOSED_TOPIC = Web3.keccak(
-        text="BalanceProposed(address,address,uint256,uint256,uint64,bytes32)"
+        text=f"BalanceProposed({','.join(_BALANCE_PROPOSED_TYPES)})"
     )
 
     @classmethod
@@ -481,11 +492,10 @@ class ExternalStateExecutor(ContractWrapper):
         if data is None:
             raise ValueError("BalanceProposed log carries no data")
         try:
-            # Fields in the order `BalanceProposed` declares them in
-            # ExternalStateExecutor.sol; all six are unindexed, so topics
-            # carries topic0 alone.
+            # Unpacked in the order `BalanceProposed` declares them; all six
+            # are unindexed, so topics carries topic0 alone.
             account, proposer, value, nonce, proposed_at, proposal_hash = decode(
-                ["address", "address", "uint256", "uint256", "uint64", "bytes32"],
+                cls._BALANCE_PROPOSED_TYPES,
                 HexBytes(data),
             )
         except (DecodingError, ValueError) as exc:
