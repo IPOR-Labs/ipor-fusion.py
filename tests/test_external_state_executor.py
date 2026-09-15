@@ -93,6 +93,16 @@ class TestStorageSlotProvenance:
         )
 
 
+class TestEventSignatureProvenance:
+    def test_topic_matches_the_declared_event_signature(self):
+        # topic0 is built by joining the type tuple, so this pins the
+        # derivation against the signature the contract actually emits --
+        # a drift there would otherwise just stop matching, silently.
+        assert ExternalStateExecutor._BALANCE_PROPOSED_TOPIC == Web3.keccak(
+            text="BalanceProposed(address,address,uint256,uint256,uint64,bytes32)"
+        )
+
+
 class TestForVault:
     def test_resolves_address_from_full_slot(self):
         ctx = MagicMock()
