@@ -167,6 +167,37 @@ class TestBalances:
         assert executor.balances(BALANCE_ACCOUNT).call() == Amount(1_234_567)
 
 
+class TestLastUpdated:
+    def test_encodes_selector_and_account(self):
+        executor, _ = _make_executor()
+
+        call = executor.last_updated(BALANCE_ACCOUNT)
+
+        assert call.to == EXECUTOR_ADDR
+        assert call.data[:4] == Web3.keccak(text="lastUpdated(address)")[:4]
+        (account,) = decode(["address"], call.data[4:])
+        assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
+        assert call.output_types == ["uint256"]
+        # A timestamp carries no unit, so no decoder. Pinned because `Amount` is
+        # a NewType -- adding one here would change nothing at runtime and pass
+        # pyright, leaving this assertion the only thing that would notice.
+        assert call.decoder is None
+
+    def test_decodes_uint256(self):
+        executor, ctx = _make_executor()
+        ctx.call.return_value = encode(["uint256"], [1_700_000_123])
+
+        assert executor.last_updated(BALANCE_ACCOUNT).call() == 1_700_000_123
+
+    def test_zero_stays_zero(self):
+        # "never confirmed" is a legitimate timestamp, not a missing value:
+        # unlike `pending_proposal`, this read must not sentinel zero into None.
+        executor, ctx = _make_executor()
+        ctx.call.return_value = encode(["uint256"], [0])
+
+        assert executor.last_updated(BALANCE_ACCOUNT).call() == 0
+
+
 class TestNonce:
     def test_decodes_uint256(self):
         executor, ctx = _make_executor()
