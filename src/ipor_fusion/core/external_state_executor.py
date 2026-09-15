@@ -172,6 +172,16 @@ class ExternalStateExecutor(ContractWrapper):
         text=f"BalanceProposed({','.join(_BALANCE_PROPOSED_TYPES)})"
     )
 
+    # `pendingProposals`' auto-getter returns the struct's fields in declaration
+    # order. Named so the drift gate can compare it with the Solidity rather
+    # than with itself.
+    _PENDING_PROPOSAL_TYPES = (
+        "uint256",  # value
+        "address",  # proposer
+        "uint64",  # proposedAt
+        "uint256",  # nonce
+    )
+
     @classmethod
     def for_vault(
         cls, ctx: Web3Context, vault_address: ChecksumAddress
@@ -309,12 +319,10 @@ class ExternalStateExecutor(ContractWrapper):
                 ),
             )
 
-        # PendingProposal struct fields in declaration order; the auto-getter
-        # returns them flattened, not as a tuple type.
         return self._view(
             "pendingProposals(address)",
             account,
-            output_types=["uint256", "address", "uint64", "uint256"],
+            output_types=list(self._PENDING_PROPOSAL_TYPES),
             decoder=to_proposal,
         )
 
