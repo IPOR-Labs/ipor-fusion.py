@@ -1,6 +1,7 @@
 # pyright: reportOperatorIssue=false
 from unittest.mock import MagicMock
 
+from _simulate import simulate_response
 from eth_abi import encode as abi_encode
 from web3 import Web3
 
@@ -235,18 +236,9 @@ def _sim_with_one_execute() -> VaultSimulator:
 
 
 def _failed_call_response(error: object, return_data: str = "0x") -> list[dict]:
-    return [
-        {
-            "calls": [
-                {
-                    "status": "0x0",
-                    "returnData": return_data,
-                    "gasUsed": "0x100",
-                    "error": error,
-                }
-            ]
-        }
-    ]
+    return simulate_response(
+        status="0x0", returnData=return_data, gasUsed="0x100", error=error
+    )
 
 
 def test_parse_response_error_object_without_data():

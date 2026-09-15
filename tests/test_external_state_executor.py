@@ -5,6 +5,7 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from _simulate import simulate_response
 from eth_abi import decode, encode
 from eth_abi.exceptions import NonEmptyPaddingBytes, ValueOutOfBounds
 from eth_typing import ChecksumAddress
@@ -62,18 +63,12 @@ def _observed(call, return_data: bytes):
     sim = VaultSimulator(MagicMock(), EXECUTOR_ADDR, EXECUTOR_ADDR)
     sim.observe("slot", call)
     result = sim._parse_response(
-        [
-            {
-                "calls": [
-                    {
-                        "returnData": HexBytes(return_data).to_0x_hex(),
-                        "status": "0x1",
-                        "gasUsed": "0x0",
-                        "logs": [],
-                    }
-                ]
-            }
-        ]
+        simulate_response(
+            returnData=HexBytes(return_data).to_0x_hex(),
+            status="0x1",
+            gasUsed="0x0",
+            logs=[],
+        )
     )
     return result.get("slot")
 
