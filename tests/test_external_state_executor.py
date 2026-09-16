@@ -41,6 +41,12 @@ MIXED_CASE = Web3.to_checksum_address("0xabcdef0123456789abcdef0123456789abcdef0
 # The chain the fixture logs below are hashed for. `parse_balance_proposed`
 # rehashes every log, so a wrapper that parses one has to name a chain.
 EVENT_CHAIN = ChainId(8453)
+# The signature the contract emits. Spelled out rather than derived from the
+# SDK's own type tuple: the provenance test below pins that tuple against this
+# string, and a derived one would assert the tuple against itself.
+_BALANCE_PROPOSED_SIG = (
+    "BalanceProposed(address,address,uint256,uint256,uint64,bytes32)"
+)
 
 
 def _slot_bytes(address: str) -> HexBytes:
@@ -101,7 +107,7 @@ class TestEventSignatureProvenance:
         # derivation against the signature the contract actually emits --
         # a drift there would otherwise just stop matching, silently.
         assert ExternalStateExecutor._BALANCE_PROPOSED_TOPIC == Web3.keccak(
-            text="BalanceProposed(address,address,uint256,uint256,uint64,bytes32)"
+            text=_BALANCE_PROPOSED_SIG
         )
 
 
@@ -222,7 +228,11 @@ class TestPendingProposals:
     VALUE = 5_000_000
     PROPOSED_AT = 1_700_000_123
     NONCE = 9
-    CHAIN = ChainId(8453)
+    CHAIN = EVENT_CHAIN
+    # `pendingProposals`' flattened field order, for building synthetic slots.
+    # The `output_types` assertion below stays a literal on purpose -- it pins
+    # the SDK's own tuple, so sharing this one would compare it with itself.
+    SLOT_TYPES = ["uint256", "address", "uint64", "uint256"]
 
     def _slot_ctx(self, *, proposer=PROPOSER, value=None, nonce=None, proposed_at=None):
         """A ctx whose eth_call answers with a synthetic pendingProposals slot,
@@ -230,7 +240,7 @@ class TestPendingProposals:
         ctx = MagicMock()
         ctx.chain_id = self.CHAIN
         ctx.call.return_value = encode(
-            ["uint256", "address", "uint64", "uint256"],
+            self.SLOT_TYPES,
             [
                 self.VALUE if value is None else value,
                 proposer,
@@ -308,12 +318,10 @@ class TestPendingProposals:
         # a decoder exception into None (simulation.py), the same value an empty
         # slot legitimately produces, so the two are indistinguishable there.
         populated = encode(
-            ["uint256", "address", "uint64", "uint256"],
+            self.SLOT_TYPES,
             [self.VALUE, PROPOSER, self.PROPOSED_AT, self.NONCE],
         )
-        empty = encode(
-            ["uint256", "address", "uint64", "uint256"], [0, ZERO_ADDRESS, 0, 0]
-        )
+        empty = encode(self.SLOT_TYPES, [0, ZERO_ADDRESS, 0, 0])
         executor, _ = self._executor_with_slot()
 
         # Positive control first: without it every assertion below is `is None`
@@ -619,9 +627,7 @@ class TestConfirmBalance:
         assert got == proposal_hash
 
 
-_BALANCE_PROPOSED_TOPIC = Web3.keccak(
-    text="BalanceProposed(address,address,uint256,uint256,uint64,bytes32)"
-)
+_BALANCE_PROPOSED_TOPIC = Web3.keccak(text=_BALANCE_PROPOSED_SIG)
 
 
 # Six distinct values, so a swapped pair of same-typed fields cannot pass.
@@ -1342,15 +1348,7 @@ class TestMarkNav:
         # Our value and proposer, another proposal's hash: the value and
         # proposer guards pass, and confirming would attest that other
         # proposal's figure. Only the hash check stops it.
-        lifted = ExternalStateExecutor.proposal_hash(
-            executor=EXECUTOR_ADDR,
-            chain_id=self.CHAIN,
-            balance_account=BALANCE_ACCOUNT,
-            value=Amount(999_000_000_000),
-            proposer=PROPOSER,
-            proposed_at=self.PROPOSED_AT,
-            nonce=self.NONCE,
-        )
+        lifted = _consistent_hash(self.CHAIN, value=999_000_000_000)
         executor, proposer_ctx, confirmer_ctx = self._setup(proposal_hash=lifted)
 
         with pytest.raises(ValueError, match="another proposal's hash"):
