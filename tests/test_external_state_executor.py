@@ -629,17 +629,23 @@ _EVENT_PROPOSED_AT = 333
 
 
 def _consistent_hash(
-    chain_id, *, proposer=PROPOSER, executor=EXECUTOR_ADDR, value=_EVENT_VALUE
+    chain_id,
+    *,
+    proposer=PROPOSER,
+    executor=EXECUTOR_ADDR,
+    value=_EVENT_VALUE,
+    balance_account=BALANCE_ACCOUNT,
+    nonce=_EVENT_NONCE,
 ):
     """The hash the executor itself would compute for `_proposed_log`."""
     return ExternalStateExecutor.proposal_hash(
         executor=executor,
         chain_id=chain_id,
-        balance_account=BALANCE_ACCOUNT,
+        balance_account=balance_account,
         value=Amount(value),
         proposer=proposer,
         proposed_at=_EVENT_PROPOSED_AT,
-        nonce=_EVENT_NONCE,
+        nonce=nonce,
     )
 
 
@@ -659,20 +665,37 @@ def _proposed_log(
     proposal_hash=None,
     value=None,
     proposer=None,
+    nonce=None,
 ):
     """A BalanceProposed log in either wire shape.
 
     Receipts give HexBytes; eth_simulateV1 and raw JSON-RPC give 0x-strings.
+
+    Whatever fields you vary, the default `proposal_hash` follows them, because
+    both readers rehash the log's own fields and reject a mismatch. Pass one
+    explicitly only to build a log the executor could not have emitted.
     """
+    account = BALANCE_ACCOUNT if balance_account is None else balance_account
+    proposer = PROPOSER if proposer is None else proposer
+    value = _EVENT_VALUE if value is None else value
+    nonce = _EVENT_NONCE if nonce is None else nonce
+    if proposal_hash is None:
+        proposal_hash = _consistent_hash(
+            EVENT_CHAIN,
+            proposer=proposer,
+            value=value,
+            balance_account=account,
+            nonce=nonce,
+        )
     data = encode(
         ["address", "address", "uint256", "uint256", "uint64", "bytes32"],
         [
-            BALANCE_ACCOUNT if balance_account is None else balance_account,
-            PROPOSER if proposer is None else proposer,
-            _EVENT_VALUE if value is None else value,
-            _EVENT_NONCE,
+            account,
+            proposer,
+            value,
+            nonce,
             _EVENT_PROPOSED_AT,
-            _EVENT_HASH if proposal_hash is None else proposal_hash,
+            proposal_hash,
         ],
     )
     topic = _BALANCE_PROPOSED_TOPIC if topic is None else topic
@@ -1000,11 +1023,14 @@ class TestFindBalanceProposed:
     def test_returns_the_last_proposal_for_one_account(self):
         # proposeBalance overwrites the pending slot, so among several proposals
         # for one account only the newest can still be confirmed.
+        # Distinguished by nonce, which is what actually separates two real
+        # proposals -- `proposeBalance` increments it -- and which gives each
+        # log a different, self-consistent hash for free.
         executor, _ = _make_executor()
-        newest_hash = b"\xee" * 32
+        newest_hash = _consistent_hash(EVENT_CHAIN, nonce=_EVENT_NONCE + 1)
         logs = [
-            _proposed_log(as_strings=False, proposal_hash=b"\xcc" * 32),
-            _proposed_log(as_strings=False, proposal_hash=newest_hash),
+            _proposed_log(as_strings=False),
+            _proposed_log(as_strings=False, nonce=_EVENT_NONCE + 1),
         ]
 
         assert executor.find_balance_proposed(logs).proposal_hash == newest_hash
@@ -1074,6 +1100,53 @@ class TestFindBalanceProposed:
         executor = ExternalStateExecutor.encoder()
 
         with pytest.raises(ValueError, match="executor address required"):
+            executor.find_balance_proposed([_proposed_log(as_strings=False)])
+
+    def test_rejects_a_match_whose_hash_is_not_its_own(self):
+        # Same check `parse_balance_proposed` applies. Unreachable on chain --
+        # the executor computes the hash it emits -- so a mismatch means the
+        # SDK's formula and the contract's have diverged, which must not be
+        # skipped past to an older log.
+        executor, _ = _make_executor()
+        log = _proposed_log(
+            as_strings=False,
+            proposal_hash=_consistent_hash(EVENT_CHAIN, value=999_000_000_000),
+        )
+
+        with pytest.raises(ValueError, match="another proposal's hash"):
+            executor.find_balance_proposed([log])
+
+    def test_a_bad_hash_on_another_account_does_not_abort_the_scan(self):
+        # Only the match is verified. A log for an account you did not ask
+        # about is filtered out before the hash check, so it cannot cost you
+        # the match -- unlike a malformed payload, which aborts the decode.
+        executor, _ = _make_executor()
+        other = _proposed_log(
+            as_strings=False,
+            balance_account=OTHER_ACCOUNT,
+            proposal_hash=b"\xcc" * 32,
+        )
+
+        found = executor.find_balance_proposed(
+            [other, _proposed_log(as_strings=False)], BALANCE_ACCOUNT
+        )
+
+        assert found == _EXPECTED_PROPOSAL
+
+    def test_scans_through_a_ctxless_encoder_given_a_chain_id(self):
+        # The hash check needs a chain; an explicit one frees a calldata-only
+        # wrapper, exactly as it does for the other two readers.
+        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        logs = [_proposed_log(as_strings=True)]
+
+        assert executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN) == (
+            _EXPECTED_PROPOSAL
+        )
+
+    def test_a_ctxless_encoder_needs_an_explicit_chain_id(self):
+        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+
+        with pytest.raises(ValueError, match="Web3Context required"):
             executor.find_balance_proposed([_proposed_log(as_strings=False)])
 
 
@@ -1302,6 +1375,24 @@ class TestMarkNav:
                 confirmer_ctx=confirmer_ctx,
             )
         proposer_ctx.send.assert_not_called()
+
+    def test_verifies_against_the_confirmers_chain_not_the_wrappers(self):
+        # Both custodians sign on CHAIN, but the wrapper was built from a third
+        # context on another chain -- a read-only RPC, say. The hash must bind
+        # the chain the confirm will be checked on, so this must still succeed.
+        _, proposer_ctx, confirmer_ctx = self._setup()
+        wrapper_ctx = MagicMock()
+        wrapper_ctx.chain_id = ChainId(1)
+        executor = ExternalStateExecutor(wrapper_ctx, EXECUTOR_ADDR)
+
+        result = executor.mark_nav(
+            value=Amount(self.VALUE),
+            balance_account=BALANCE_ACCOUNT,
+            proposer_ctx=proposer_ctx,
+            confirmer_ctx=confirmer_ctx,
+        )
+
+        assert result.proposal_hash == self.PROPOSAL_HASH
 
     def test_accepts_a_lowercase_proposer_signer(self):
         # `Web3Context` stores an explicitly-passed signer verbatim, so one read

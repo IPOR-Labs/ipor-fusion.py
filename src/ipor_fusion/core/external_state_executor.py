@@ -521,15 +521,25 @@ class ExternalStateExecutor(ContractWrapper):
         self,
         logs: Iterable[RawLog],
         balance_account: ChecksumAddress | None = None,
+        *,
+        chain_id: ChainId | None = None,
     ) -> BalanceProposal:
-        """The last `BalanceProposed` log THIS executor emitted among `logs`.
+        """The last `BalanceProposed` log THIS executor emitted among `logs`,
+        hash-verified.
 
         Built for the logs of ONE call -- a propose receipt's `receipt["logs"]`,
         or a simulated call's `logs`. Like `parse_balance_proposed` it matches
         on the emitting address, so a same-signature event from another contract
-        cannot be mistaken for ours and the hash it returns is one this executor
-        computed; unlike it, a log that is not ours is skipped rather than
-        raising, since scanning a batch is the point.
+        cannot be mistaken for ours, and it verifies the match's hash against
+        that log's own fields before returning it; unlike it, a log that is not
+        ours is skipped rather than raising, since scanning a batch is the
+        point.
+
+        Only the match is verified, not every candidate: a log for an account
+        you did not ask about must not abort the scan, and the emitter check
+        already means a rejected hash is this executor disagreeing with the
+        SDK's own formula -- a broken assumption, so it raises rather than
+        skipping on to an older log.
 
         The LAST match wins because `proposeBalance` OVERWRITES the pending
         slot: where several proposals for one account appear, only the newest
@@ -538,13 +548,18 @@ class ExternalStateExecutor(ContractWrapper):
         Pass `balance_account` when the logs may span several accounts, so the
         match is the one you proposed for rather than whichever came last.
 
+        The hash is bound to a chain. `chain_id` defaults to this wrapper's
+        context; pass it explicitly to verify against a different chain, or to
+        scan through a ctx-less `encoder()` instance.
+
         Over a `get_logs` range this still answers a different question than
         `pending_proposals`: a proposal may have been confirmed since, which
         deletes the slot but leaves the event behind. To read every proposal,
         filter the range by this executor's address and map
-        `parse_balance_proposed` over it -- that one RAISES on a foreign log
-        where this scan skips, and it additionally verifies each hash against
-        its own log's fields, which a scan for the newest match does not need.
+        `parse_balance_proposed` over it. Both verify identically; the reason to
+        prefer it there is that it RAISES on a foreign log where this scan
+        silently skips, and over a range you filtered yourself a foreign log
+        means the filter is wrong, not that the row is uninteresting.
 
         Logs that are not this event, or do not come from this executor, are
         skipped -- including ones whose address is missing or unreadable, since
@@ -571,6 +586,13 @@ class ExternalStateExecutor(ContractWrapper):
             if wanted is None or proposal.balance_account == wanted:
                 found = proposal
         if found is not None:
+            # Only the match, not every candidate: an unrelated account's log
+            # must not abort a scan it is not part of, and one hash beats N.
+            _require_matching_hash(
+                found,
+                executor=self._address,
+                chain_id=self._require_chain_id(chain_id),
+            )
             return found
         for_account = f" for account {wanted}" if wanted is not None else ""
         raise ValueError(
@@ -633,7 +655,11 @@ class ExternalStateExecutor(ContractWrapper):
         propose_receipt = self.propose_balance(balance_account, value).send(
             proposer_ctx
         )
-        proposal = self.find_balance_proposed(propose_receipt["logs"], balance_account)
+        # Verified against the CONFIRMER's chain, which is the one the confirm
+        # will be checked on; the wrapper's own ctx may be a third context.
+        proposal = self.find_balance_proposed(
+            propose_receipt["logs"], balance_account, chain_id=confirmer_ctx.chain_id
+        )
         # The receipt is data from the node, so confirm only what we asked for:
         # signing off on a proposal that differs from the one just sent would
         # attest a value this call never chose.
@@ -647,12 +673,6 @@ class ExternalStateExecutor(ContractWrapper):
                 f"proposal was made by {proposal.proposer}, not {proposer_address}; "
                 "refusing to confirm"
             )
-        # The hash is what `confirmBalance` authorizes against, so the value and
-        # proposer checks above only bind the confirm once the hash is known to
-        # be theirs.
-        _require_matching_hash(
-            proposal, executor=self._address, chain_id=confirmer_ctx.chain_id
-        )
         confirm_receipt = self.confirm_balance(
             balance_account, proposal.proposal_hash
         ).send(confirmer_ctx)
