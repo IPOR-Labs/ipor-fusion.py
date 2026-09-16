@@ -120,21 +120,19 @@ class ContractWrapper:
 
     @classmethod
     def encoder(cls, address: ChecksumAddress | None = None):
-        """Build a ctx-less wrapper for raw calldata encoding.
+        """Build a ctx-less wrapper: every builder method, no Web3Context.
 
-        External-signer flows (HTTP signing service, multisig) only need
-        `Call.calldata` — the actual `to` and `ctx` are filled in by the
-        signer. `encoder()` returns an instance with a placeholder zero
-        address and `ctx=None`, suitable for any builder method whose only
-        consumer is `.calldata`. Calling `.call()` or `.send()` on a Call
+        Named for its first use, external-signer flows (HTTP signing service,
+        multisig), which only need `Call.calldata` — the actual `to` and `ctx`
+        are filled in by the signer. It serves any builder that needs no chain
+        access, decoders included. Calling `.call()` or `.send()` on a Call
         produced this way raises (no ctx).
 
         Pass `address` unless `.calldata` really is the only consumer. The
         encoding ignores it, but a builder that reads `self._address`
-        semantically -- `ExternalStateExecutor`'s event readers match it
-        against a log's emitter and bind it into the proposal hash -- runs
-        against the placeholder zero address without one, and so rejects
-        every real log.
+        semantically — matching it against a log's emitter, say, or folding it
+        into a hash — runs against the placeholder zero address without one,
+        and so rejects input that is genuinely the caller's.
         """
         instance = cls.__new__(cls)
         instance._ctx = None  # type: ignore[assignment]
