@@ -6,10 +6,13 @@ by the external-state market. Its address lives in the VAULT's ERC-7201 storage
 
 NAV for the external-state market is marked by a dual-custodian propose/confirm
 on this executor, then a `update_markets_balances([EXTERNAL_STATE])` refresh on
-the vault. `mark_nav` runs that whole sequence in one process; a SEPARATED
+the vault. `mark_nav` runs that whole sequence in one process; a separate
 confirm service instead reads `pending_proposals` and confirms the hash it
-returns, never guessing the executor's global nonce. `parse_balance_proposed`
-decodes the matching event for audit and for verifying a hash computed offline.
+returns, never guessing the executor's global nonce. The same proposal reaches
+an offline reader through the `BalanceProposed` event -- `find_balance_proposed`
+picks it out of a receipt's logs, `parse_balance_proposed` decodes one row from
+an index -- and `balances` and `last_updated` report what the custodians last
+confirmed for an account.
 """
 
 from __future__ import annotations
@@ -257,7 +260,7 @@ class ExternalStateExecutor(ContractWrapper):
     ) -> Call[BalanceProposal | None]:
         """The proposal awaiting confirmation for `balance_account`, or `None`.
 
-        The read a SEPARATED confirm service needs: it returns the CURRENT
+        The read a separate confirm service needs: it returns the CURRENT
         pending proposal carrying the hash `confirm_balance` verifies, so
         custodian B never has to obtain it from custodian A. Deriving that hash
         instead from `proposal_hash(...)` plus a fresh `nonce()` is unsound --
@@ -453,8 +456,9 @@ class ExternalStateExecutor(ContractWrapper):
         event index. Needs no chain access. Raises `ValueError` for a log that
         is not this event, was not emitted by this executor, carries a hash that
         is not the hash of its own fields, or whose data is malformed -- and for
-        a call with no chain id available at all; `TypeError` for a field that
-        is not hex data at all.
+        a call with no chain id available at all; `TypeError` for `data` that is
+        not hex at all, which is the one field whose shape it cannot rule out
+        first.
 
         Security: two checks, and both are needed. This executor must have
         emitted the log, and `proposal_hash` must be the hash of the log's own
@@ -613,7 +617,10 @@ class ExternalStateExecutor(ContractWrapper):
 
         `proposer_ctx` signs the propose; `confirmer_ctx` signs the confirm (and,
         when `vault` is given, the `update_markets_balances([EXTERNAL_STATE])`
-        refresh). The two signers MUST be different custodians. The confirm hash,
+        refresh). The two signers MUST be different custodians, and MUST be on
+        the same chain; both are checked before the propose is sent, since the
+        hash is chain-bound and a mismatch would otherwise only surface with a
+        proposal already stranded on the proposer's chain. The confirm hash,
         nonce, and timestamp are taken from the propose tx's `BalanceProposed`
         event -- exactly what the contract stored, so no read can race the
         executor's global nonce. Returns a `NavMark` with the proposal and every

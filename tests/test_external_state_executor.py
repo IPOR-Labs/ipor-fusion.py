@@ -1,5 +1,7 @@
-"""Unit tests for the ExternalStateExecutor wrapper -- mock ctx, verify the
-executor-address resolution, `nonce()` decode, and the pure `proposal_hash`."""
+"""Unit tests for the ExternalStateExecutor wrapper: mock ctx, no RPC.
+
+Deliberately scope-neutral: an enumeration of what is covered here goes stale
+every time a reader is added."""
 
 from typing import cast
 from unittest.mock import MagicMock
@@ -196,7 +198,7 @@ class TestLastUpdated:
 
     def test_zero_stays_zero(self):
         # "never confirmed" is a legitimate timestamp, not a missing value:
-        # unlike `pending_proposal`, this read must not sentinel zero into None.
+        # unlike `pending_proposals`, this read must not sentinel zero into None.
         executor, ctx = _make_executor()
         ctx.call.return_value = encode(["uint256"], [0])
 
