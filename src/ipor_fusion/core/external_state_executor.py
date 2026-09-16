@@ -263,9 +263,8 @@ class ExternalStateExecutor(ContractWrapper):
         The read a separate confirm service needs: it returns the CURRENT
         pending proposal carrying the hash `confirm_balance` verifies, so
         custodian B never has to obtain it from custodian A. Deriving that hash
-        instead from `proposal_hash(...)` plus a fresh `nonce()` is unsound --
-        `nonce` is executor-global, so any other account's proposal in between
-        silently yields the wrong one.
+        instead from `proposal_hash(...)` plus a fresh `nonce()` is unsound; see
+        `nonce` for why.
 
         Security: the returned hash is plumbing, not authorization. Confirming
         asserts that a SECOND custodian independently agrees with `value`, and
@@ -394,9 +393,8 @@ class ExternalStateExecutor(ContractWrapper):
 
         `proposed_at` is the propose tx's block timestamp; `nonce` is the one
         the contract stored, from `pending_proposals` or the `BalanceProposed`
-        event. The counter is executor-global, so reading `nonce()` after the
-        propose races any other account's. Pure -- no chain access -- so
-        callers can pre-compute or verify a hash offline.
+        event, never a fresh `nonce()` read -- see `nonce`. Pure -- no chain
+        access -- so callers can pre-compute or verify a hash offline.
         """
         return keccak(
             encode(
@@ -422,10 +420,8 @@ class ExternalStateExecutor(ContractWrapper):
         )
 
     def _emitted_by_us(self, log: RawLog) -> bool:
-        """Whether this executor emitted `log`.
-
-        An address that is missing or not parseable cannot be ours, so it reads
-        as a foreign log rather than aborting a scan over someone else's rows."""
+        """Whether this executor emitted `log`; see `_log_emitter` for why an
+        address that is missing or unreadable answers "no"."""
         return _log_emitter(log) == self._address
 
     @classmethod
@@ -532,18 +528,22 @@ class ExternalStateExecutor(ContractWrapper):
         hash-verified.
 
         Built for the logs of ONE call -- a propose receipt's `receipt["logs"]`,
-        or a simulated call's `logs`. Like `parse_balance_proposed` it matches
-        on the emitting address, so a same-signature event from another contract
-        cannot be mistaken for ours, and it verifies the match's hash against
-        that log's own fields before returning it; unlike it, a log that is not
-        ours is skipped rather than raising, since scanning a batch is the
-        point.
+        or a simulated call's `logs`. Like `parse_balance_proposed` it accepts
+        only logs this executor emitted, so a same-signature event from another
+        contract cannot be mistaken for ours, and it verifies the match's hash
+        against that log's own fields before returning it.
 
-        Only the match is verified, not every candidate: a log for an account
-        you did not ask about must not abort the scan, and the emitter check
-        already means a rejected hash is this executor disagreeing with the
-        SDK's own formula -- a broken assumption, so it raises rather than
-        skipping on to an older log.
+        What it skips and what it raises on differ, because scanning a batch is
+        the point. A log that is not this event, or not from this executor --
+        including one whose address is missing or unreadable, since neither can
+        be ours -- is skipped. One of OURS that will not decode, or whose hash
+        is not the hash of its own fields, raises and aborts the scan: on a
+        propose receipt that is a broken assumption worth surfacing, though it
+        is worth weighing over a batch of index rows, where one bad payload
+        costs the scan. Only the match is hash-checked, so a log for an account
+        you did not ask about can never abort a scan it is not part of, but
+        decoding runs before the `balance_account` filter, so one of OURS that
+        will not decode surfaces whichever account you asked for.
 
         The LAST match wins because `proposeBalance` OVERWRITES the pending
         slot: where several proposals for one account appear, only the newest
@@ -565,14 +565,6 @@ class ExternalStateExecutor(ContractWrapper):
         silently skips, and over a range you filtered yourself a foreign log
         means the filter is wrong, not that the row is uninteresting.
 
-        Logs that are not this event, or do not come from this executor, are
-        skipped -- including ones whose address is missing or unreadable, since
-        neither can be ours. One of OURS that fails to decode raises instead,
-        aborting the scan: on a propose receipt that is a broken assumption
-        worth surfacing. Weigh it over a batch of index rows, where one bad
-        payload costs the scan. Decoding runs before the `balance_account`
-        filter, so one of ours that will not decode surfaces whichever account
-        you asked for.
         """
         expected_emitter = self._require_address()
         wanted = (
@@ -590,8 +582,8 @@ class ExternalStateExecutor(ContractWrapper):
             if wanted is None or proposal.balance_account == wanted:
                 found = proposal
         if found is not None:
-            # Only the match, not every candidate: an unrelated account's log
-            # must not abort a scan it is not part of, and one hash beats N.
+            # Outside the loop: one hash instead of N, and only over the log
+            # actually being returned.
             _require_matching_hash(
                 found,
                 executor=self._address,
