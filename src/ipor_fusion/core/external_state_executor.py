@@ -370,8 +370,7 @@ class ExternalStateExecutor(ContractWrapper):
         """CUSTODIAN-only: confirm the pending proposal for `balance_account`.
         Must be sent by a custodian other than the proposer, and `proposal_hash`
         must be the hash the contract stored -- take it from `pending_proposals`
-        or the `BalanceProposed` event, which report the nonce and timestamp it
-        was built from."""
+        or the `BalanceProposed` event; see `nonce` for why not to rebuild it."""
         return self._write(
             "confirmBalance(address,bytes32)", balance_account, proposal_hash
         )
@@ -538,9 +537,10 @@ class ExternalStateExecutor(ContractWrapper):
         including one whose address is missing or unreadable, since neither can
         be ours -- is skipped. One of OURS that will not decode, or whose hash
         is not the hash of its own fields, raises and aborts the scan: on a
-        propose receipt that is a broken assumption worth surfacing, though it
-        is worth weighing over a batch of index rows, where one bad payload
-        costs the scan. Only the match is hash-checked, so a log for an account
+        propose receipt that is a broken assumption worth surfacing. Over a
+        batch of index rows, where one bad payload would cost the whole scan,
+        map `parse_balance_proposed` instead and catch per row. Only the match
+        is hash-checked, so a log for an account
         you did not ask about can never abort a scan it is not part of, but
         decoding runs before the `balance_account` filter, so one of OURS that
         will not decode surfaces whichever account you asked for.
@@ -564,7 +564,6 @@ class ExternalStateExecutor(ContractWrapper):
         prefer it there is that it RAISES on a foreign log where this scan
         silently skips, and over a range you filtered yourself a foreign log
         means the filter is wrong, not that the row is uninteresting.
-
         """
         expected_emitter = self._require_address()
         wanted = (

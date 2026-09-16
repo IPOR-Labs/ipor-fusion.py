@@ -1,7 +1,4 @@
-"""Unit tests for the ExternalStateExecutor wrapper: mock ctx, no RPC.
-
-Deliberately scope-neutral: an enumeration of what is covered here goes stale
-every time a reader is added."""
+"""Unit tests for the ExternalStateExecutor wrapper: mock ctx, no RPC."""
 
 from typing import cast
 from unittest.mock import MagicMock
@@ -224,7 +221,9 @@ class TestNonce:
 
 
 class TestPendingProposals:
-    # Distinct values so a swapped value/proposedAt/nonce cannot pass.
+    # Distinct values so a swapped value/proposedAt/nonce cannot pass, and
+    # distinct from the module's `_EVENT_*` set so that a slot fixture wired
+    # into an event assertion (or the reverse) fails instead of matching.
     VALUE = 5_000_000
     PROPOSED_AT = 1_700_000_123
     NONCE = 9
