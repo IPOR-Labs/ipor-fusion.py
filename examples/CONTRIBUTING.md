@@ -183,6 +183,27 @@ Every example ships with two tests so it cannot silently go stale:
 - Configuration comes from environment variables; never commit keys, RPC URLs, or other secrets.
 - Commit with a `docs(sdk):` message.
 
+## 12. Say the same thing as the other examples
+
+A claim that appears in more than one example must read the same in all of them. The role admin
+chain, how the factory deploys the vault stack, what a simulation-only construct stands in for, an
+address from the registry: where two examples disagree about one of these, one of them is wrong, and
+nothing inside either file reveals which. Cross-example agreement is the cheapest correctness check
+available here -- it needs no contract source, and it catches statements that read perfectly
+plausibly on their own. Before adding such a claim, grep the other examples for it; before changing
+one, grep for its copies and change them together.
+
+Deliberate divergence is fine and **must be commented with its reason at the point it occurs**, which
+is what makes the rule checkable: an uncommented difference is then a defect by construction, with no
+judgment call required. Say what the other examples do, why this one does otherwise, and -- where the
+deviation gives something up -- what compensates for it.
+
+`external_state_margin_leg_base.py` carries two worked instances. Its `market_substrates()` explains
+why it accepts a TARGET/ASSET overlap that the operation fuse's own review rule warns against, and
+names the controls that overlap then owes. Its module docstring explains why its `SimulationResult`
+reports a failed call on a completely successful run, and tells the reader not to copy
+`if result.all_success:` from it.
+
 ## When the canonical example and these rules disagree
 
 These rules describe the target. If you find the canonical example not yet matching a rule, the rule
