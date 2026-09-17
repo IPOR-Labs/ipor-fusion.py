@@ -42,3 +42,18 @@ def test_advanced_euler_v2_credit_market_base_simulation(web3_base, load_example
     # run_simulation already asserts all_success and every outcome; here just
     # confirm the batch actually executed on-chain work.
     assert result.gas_used > 0
+
+
+def test_external_state_margin_leg_base_simulation(web3_base, load_example):
+    mod = load_example("external_state_margin_leg_base.py")
+    result = mod.run_simulation(web3_base)
+    assert result.gas_used > 0
+    # This example ends on a deliberate revert, so `result.all_success` is False
+    # on a successful run and the sibling checks above do not apply. run_simulation
+    # already enforces what follows and raises if it does not hold, so these lines
+    # cannot fail on their own; they are here so that weakening the example's own
+    # guard -- letting a second call fail, or accepting any revert reason --
+    # still fails CI.
+    assert [c.label for c in result.failed_calls] == ["demo_confirm"]
+    revert_data = bytes(result.failed_calls[0].return_data)
+    assert revert_data[:4] == mod.PROPOSAL_HASH_MISMATCH_SELECTOR
