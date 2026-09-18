@@ -68,8 +68,11 @@ registry is `AaveV3SupplyFuse` in Python).
 Inspection tools (vault info, oracle mapping, role holders, market data) are
 read-only and need no key. Anything that changes state — cloning, granting
 roles, configuring markets, depositing, executing — goes through the Python SDK
-with a `Web3Context` that carries a private key. `.call()` previews any call
-without a key; `.send()` signs locally and needs one.
+with a `Web3Context` that carries a private key. `.call()` runs a read-only
+`eth_call` on a view and raises on a write-only call, so most governance setters
+cannot be previewed with it; `.build_transaction()` returns an unsigned
+transaction and needs the signer address but no key; `.send()` signs locally and
+needs one.
 
 ## The wider index
 
