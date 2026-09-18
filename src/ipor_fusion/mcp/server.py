@@ -16,6 +16,7 @@ from ipor_fusion.cli.config_store import (
     FusionConfig,
     VaultEntry,
     load_config,
+    mask_provider_url,
     save_config,
 )
 from ipor_fusion.cli.market_cmd import _build_json as _build_morpho_blue_json
@@ -430,12 +431,14 @@ def vault_remove(address: str) -> ActionResult:
 def config_show() -> ConfigShowResponse:
     """Show current fusion CLI configuration.
 
-    Displays configured RPC providers, saved vaults,
-    and Etherscan API key status.
+    Provider URLs are masked to scheme and host: the stored value may carry an
+    API key in its path or query string.
     """
     cfg = load_config()
     return ConfigShowResponse(
-        providers=dict(cfg.providers),
+        providers={
+            chain_id: mask_provider_url(url) for chain_id, url in cfg.providers.items()
+        },
         vaults=[
             VaultListEntry(
                 address=v.address,

@@ -367,7 +367,8 @@ class VaultListEntry(_Base):
 
 class ConfigShowResponse(_Base):
     providers: dict[str, str] = Field(
-        description="Map of chain_id (string) to RPC provider URL."
+        description="Map of chain_id (string) to RPC provider URL, masked to "
+        "scheme and host; the stored value may carry an API key."
     )
     vaults: list[VaultListEntry]
     etherscan_api_key: str | None = Field(

@@ -82,6 +82,12 @@ def _config_with_provider_for(chain_id: int):
     return FusionConfig(providers={str(chain_id): "https://rpc.example.com"})
 
 
+def _config_with_keyed_provider():
+    from ipor_fusion.cli.config_store import FusionConfig
+
+    return FusionConfig(providers={"1": "https://rpc.example.com/v2/SECRETKEY"})
+
+
 def _config_with_vault():
     from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
 
@@ -252,6 +258,14 @@ class TestConfigShow:
         result = config_show()
         assert len(result.vaults) == 1
         assert result.vaults[0].address == "0xABC"
+
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_keyed_provider(),
+    )
+    def test_provider_url_is_masked(self, _):
+        result = config_show()
+        assert result.providers == {"1": "https://rpc.example.com"}
 
 
 class TestConfigSetProvider:

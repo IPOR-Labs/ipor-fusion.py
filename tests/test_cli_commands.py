@@ -139,7 +139,7 @@ class TestConfigShow:
 
     def test_config_with_data(self, tmp_config):
         cfg = FusionConfig(
-            providers={"1": "https://rpc.example.com"},
+            providers={"1": "https://rpc.example.com/v2/SECRETKEY"},
             etherscan_api_key="secret123",
             vaults=[VaultEntry(address=ADDR_1, label="MyVault", chain_id=1)],
         )
@@ -150,6 +150,7 @@ class TestConfigShow:
         assert result.exit_code == 0
         assert "Chain 1" in result.output
         assert "https://rpc.example.com" in result.output
+        assert "SECRETKEY" not in result.output
         assert ADDR_1 in result.output
         assert "MyVault" in result.output
         assert "***" in result.output

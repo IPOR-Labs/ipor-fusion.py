@@ -5,6 +5,7 @@ import click
 from ipor_fusion.cli.config_store import (
     FusionConfig,
     load_config,
+    mask_provider_url,
     save_config,
 )
 
@@ -49,7 +50,7 @@ def set_etherscan_key(api_key: str) -> None:
 
 @config.command("show")
 def show() -> None:
-    """Display current configuration."""
+    """Display current configuration (provider URLs masked to scheme and host)."""
     cfg = load_config()
     _print_config(cfg)
 
@@ -58,7 +59,7 @@ def _print_config(cfg: FusionConfig) -> None:
     click.echo("Providers:")
     if cfg.providers:
         for chain_id, url in cfg.providers.items():
-            click.echo(f"  Chain {chain_id}: {url}")
+            click.echo(f"  Chain {chain_id}: {mask_provider_url(url)}")
     else:
         click.echo("  (none)")
 
