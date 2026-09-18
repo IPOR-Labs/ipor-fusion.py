@@ -35,6 +35,7 @@ from ipor_fusion.mcp.models import (
     WithdrawManagerDetails,
 )
 from ipor_fusion.mcp.server import (
+    _without_notes,
     config_set_etherscan_key,
     config_set_provider,
     config_show,
@@ -1039,3 +1040,34 @@ class TestMarketMetaMorpho:
             assert "not found" in str(exc)
         else:
             raise AssertionError("expected ValueError")
+
+
+class TestWithoutNotes:
+    def test_drops_note_keys_at_every_depth(self):
+        payload = {
+            "fees": {
+                "deposit_fee_percent": 0.1,
+                "deposit_fee_percent_note": "prose",
+                "recipients": [{"address": "0xA", "fee_bps": 10, "fee_note": "prose"}],
+            },
+            "vault": "0xV",
+        }
+        assert _without_notes(payload) == {
+            "fees": {
+                "deposit_fee_percent": 0.1,
+                "recipients": [{"address": "0xA", "fee_bps": 10}],
+            },
+            "vault": "0xV",
+        }
+
+    def test_leaves_a_payload_without_notes_unchanged(self):
+        payload = {"vault": "0xV", "fuses": ["0xF"], "block": 1}
+        assert _without_notes(payload) == payload
+
+    def test_only_a_trailing_note_suffix_is_dropped(self):
+        payload = {"note_id": 1, "denoted": True, "notes": "kept", "x_note": "gone"}
+        assert _without_notes(payload) == {
+            "note_id": 1,
+            "denoted": True,
+            "notes": "kept",
+        }

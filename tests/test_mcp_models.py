@@ -31,6 +31,7 @@ from ipor_fusion.mcp.models import (
     VaultListEntry,
     WithdrawManagerDetails,
 )
+from ipor_fusion.mcp.server import _without_notes
 from ipor_fusion.readers.oracle_mapping import (
     OracleAsset,
     OracleMapping,
@@ -916,3 +917,30 @@ class TestModelsImportGraph:
             }
         )
         assert offending == []
+
+
+def _keys_at_every_depth(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield key
+            yield from _keys_at_every_depth(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _keys_at_every_depth(item)
+
+
+class TestNotesAreNotServedOverMcp:
+    """The CLI JSON carries `*_note` prose; the MCP result must not."""
+
+    def test_full_payload_validates_without_its_notes(self):
+        stripped = _without_notes(_full_vault_info_dict())
+        model = VaultInfoResponse.model_validate(stripped)
+        assert not [
+            k for k in _keys_at_every_depth(model.model_dump()) if k.endswith("_note")
+        ]
+
+    def test_a_payload_that_still_has_notes_validates_too(self):
+        model = VaultInfoResponse.model_validate(_full_vault_info_dict())
+        assert not [
+            k for k in _keys_at_every_depth(model.model_dump()) if k.endswith("_note")
+        ]

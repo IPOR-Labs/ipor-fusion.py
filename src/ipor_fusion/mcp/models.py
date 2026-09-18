@@ -138,70 +138,70 @@ class FeesSection(_Base):
     """
 
     fee_manager: str | None = Field(description=_FEE_DOCS["fee_manager"])
-    fee_manager_note: str
+    fee_manager_note: str = Field(default="", exclude=True)
     ipor_dao_fee_recipient: str | None = Field(
         description=_FEE_DOCS["ipor_dao_fee_recipient"]
     )
-    ipor_dao_fee_recipient_note: str
+    ipor_dao_fee_recipient_note: str = Field(default="", exclude=True)
 
     deposit_fee_percent: float | None = Field(
         description=_FEE_DOCS["deposit_fee_percent"]
     )
     deposit_fee_wad: int | None
-    deposit_fee_percent_note: str
+    deposit_fee_percent_note: str = Field(default="", exclude=True)
 
     request_fee_percent: float | None = Field(
         description=_FEE_DOCS["request_fee_percent"]
     )
     request_fee_wad: int | None
-    request_fee_percent_note: str
+    request_fee_percent_note: str = Field(default="", exclude=True)
 
     withdraw_fee_percent: float | None = Field(
         description=_FEE_DOCS["withdraw_fee_percent"]
     )
     withdraw_fee_wad: int | None
-    withdraw_fee_percent_note: str
+    withdraw_fee_percent_note: str = Field(default="", exclude=True)
 
     performance_fee_percent: float | None = Field(
         description=_FEE_DOCS["performance_fee_percent"]
     )
     performance_fee_bps: int | None
-    performance_fee_percent_note: str
+    performance_fee_percent_note: str = Field(default="", exclude=True)
     performance_fee_manager_percent: float | None = Field(
         description=_FEE_DOCS["performance_fee_manager_percent"]
     )
-    performance_fee_manager_percent_note: str
+    performance_fee_manager_percent_note: str = Field(default="", exclude=True)
     performance_fee_recipients: list[FeeRecipientEntry] | None = Field(
         description=_FEE_DOCS["performance_fee_recipients"]
     )
-    performance_fee_recipients_note: str
+    performance_fee_recipients_note: str = Field(default="", exclude=True)
     high_water_mark: HighWaterMark | None = Field(
         description=_FEE_DOCS["high_water_mark"]
     )
-    high_water_mark_note: str
+    high_water_mark_note: str = Field(default="", exclude=True)
 
     management_fee_percent: float | None = Field(
         description=_FEE_DOCS["management_fee_percent"]
     )
     management_fee_bps: int | None
-    management_fee_percent_note: str
+    management_fee_percent_note: str = Field(default="", exclude=True)
     management_fee_manager_percent: float | None = Field(
         description=_FEE_DOCS["management_fee_manager_percent"]
     )
-    management_fee_manager_percent_note: str
+    management_fee_manager_percent_note: str = Field(default="", exclude=True)
     management_fee_recipients: list[FeeRecipientEntry] | None = Field(
         description=_FEE_DOCS["management_fee_recipients"]
     )
-    management_fee_recipients_note: str
+    management_fee_recipients_note: str = Field(default="", exclude=True)
     management_fee_last_update_timestamp: int | None = Field(
         description=_FEE_DOCS["management_fee_last_update_timestamp"]
     )
     management_fee_last_update_utc: str | None
-    management_fee_last_update_timestamp_note: str
+    management_fee_last_update_timestamp_note: str = Field(default="", exclude=True)
     unrealized_management_fee: Amount | None = Field(
         description=_FEE_DOCS["unrealized_management_fee"]
     )
-    unrealized_management_fee_note: str
+    unrealized_management_fee_note: str = Field(default="", exclude=True)
 
 
 # ---------------------------------------------------------------------------
@@ -247,20 +247,20 @@ class WithdrawManagerDetails(_Base):
     withdraw_window_seconds: int = Field(
         description=_WM_DOCS["withdraw_window_seconds"]
     )
-    withdraw_window_seconds_note: str
-    fees_note: str
+    withdraw_window_seconds_note: str = Field(default="", exclude=True)
+    fees_note: str = Field(default="", exclude=True)
     shares_to_release: Amount = Field(description=_WM_DOCS["shares_to_release"])
-    shares_to_release_note: str
+    shares_to_release_note: str = Field(default="", exclude=True)
     last_release_funds_timestamp: int = Field(
         description=_WM_DOCS["last_release_funds_timestamp"]
     )
     last_release_funds_utc: str | None
-    last_release_funds_timestamp_note: str
+    last_release_funds_timestamp_note: str = Field(default="", exclude=True)
     pending_requests: list[PendingRequestEntry] = Field(
         description="Requests whose window has not yet closed, one per account."
     )
     total_pending_shares: Amount = Field(description=_WM_DOCS["total_pending_shares"])
-    total_pending_shares_note: str
+    total_pending_shares_note: str = Field(default="", exclude=True)
 
 
 class FuseEntry(_Base):

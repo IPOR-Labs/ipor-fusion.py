@@ -76,6 +76,25 @@ register_guide(mcp)
 # ---------------------------------------------------------------------------
 
 
+def _without_notes(value: object) -> object:
+    """Drop the `*_note` fields from a JSON payload.
+
+    They repeat their sibling's schema description as payload text, for
+    consumers that never see a schema. An MCP client is sent `outputSchema`
+    once per session, so on this path the same prose in every result is
+    ~2.6 KB the caller cannot strip (fusion-mcp-agent, 2026-09-18).
+    """
+    if isinstance(value, dict):
+        return {
+            key: _without_notes(item)
+            for key, item in value.items()
+            if not key.endswith("_note")
+        }
+    if isinstance(value, list):
+        return [_without_notes(item) for item in value]
+    return value
+
+
 def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
     if provider_url := cfg.providers.get(str(chain_id)):
         return provider_url
@@ -196,7 +215,7 @@ def vault_info(
     result = _build_json_output(
         ctx, plasma_vault, data, vault_address, chain_id, chain_label, api_key
     )
-    return VaultInfoResponse.model_validate(result)
+    return VaultInfoResponse.model_validate(_without_notes(result))
 
 
 # Static mirror of Roles member names: pyright rejects a dynamically built
