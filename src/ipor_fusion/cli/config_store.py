@@ -4,6 +4,7 @@ import json
 import os
 import threading
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import click
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -46,6 +47,20 @@ class FusionConfig(BaseModel):
         if isinstance(data, dict):
             data.pop("default_vault", None)
         return data
+
+
+def mask_provider_url(url: str) -> str:
+    """Render a provider URL as scheme and host only.
+
+    RPC provider URLs carry API keys in the path, the query string or the
+    userinfo, so nothing but the scheme and the host (with port) may be
+    displayed. An unparsable value is rendered as ``***``.
+    """
+    parts = urlsplit(url)
+    host = parts.netloc.rpartition("@")[2]
+    if not parts.scheme or not host:
+        return "***"
+    return f"{parts.scheme}://{host}"
 
 
 def load_config() -> FusionConfig:

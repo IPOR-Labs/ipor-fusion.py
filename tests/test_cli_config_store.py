@@ -9,6 +9,7 @@ from ipor_fusion.cli.config_store import (
     VaultEntry,
     load_config,
     load_contract_cache,
+    mask_provider_url,
     save_config,
     save_contract_cache,
 )
@@ -226,3 +227,28 @@ class TestConfigVersioning:
         cfg = load_config()
         assert not cfg.providers
         assert not cfg.vaults
+
+
+class TestMaskProviderUrl:
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            (
+                "https://eth-mainnet.g.alchemy.com/v2/SECRETKEY",
+                "https://eth-mainnet.g.alchemy.com",
+            ),
+            ("https://rpc.example.com/?apikey=SECRETKEY", "https://rpc.example.com"),
+            ("https://user:SECRETKEY@rpc.example.com/v1", "https://rpc.example.com"),
+            ("http://localhost:8545", "http://localhost:8545"),
+            ("wss://rpc.example.com:443/ws/SECRETKEY", "wss://rpc.example.com:443"),
+            ("http://[::1]:8545/SECRETKEY", "http://[::1]:8545"),
+        ],
+    )
+    def test_keeps_scheme_and_host_only(self, url, expected):
+        masked = mask_provider_url(url)
+        assert masked == expected
+        assert "SECRETKEY" not in masked
+
+    @pytest.mark.parametrize("url", ["", "SECRETKEY", "not a url", "https://"])
+    def test_unparsable_value_is_fully_masked(self, url):
+        assert mask_provider_url(url) == "***"
