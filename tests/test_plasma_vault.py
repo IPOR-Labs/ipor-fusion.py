@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -166,6 +167,38 @@ class TestPlasmaVaultSendMethods:
         sent_to, sent_data = ctx.send.call_args[0]
         assert sent_to == VAULT_ADDR
         assert sent_data == call.calldata
+
+    def test_update_callback_handler(self):
+        """updateCallbackHandler(address,address,bytes4): selector from a
+        signature string equals the one from raw bytes."""
+        vault, ctx = _make_vault()
+        ctx.send.return_value = {"status": 1}
+        morpho = FUSE_ADDR_2
+        handler = FUSE_ADDR
+        sig = "onMorphoFlashLoan(uint256,bytes)"
+        selector = function_signature_to_4byte_selector(sig)
+
+        call = vault.update_callback_handler(handler, morpho, sig)
+
+        expected = function_signature_to_4byte_selector(
+            "updateCallbackHandler(address,address,bytes4)"
+        ) + encode(["address", "address", "bytes4"], [handler, morpho, selector])
+        assert call.calldata == expected
+        assert (
+            vault.update_callback_handler(handler, morpho, selector).calldata
+            == expected
+        )
+
+        result = call.send()
+        assert result == {"status": 1}
+        sent_to, sent_data = ctx.send.call_args[0]
+        assert sent_to == VAULT_ADDR
+        assert sent_data == expected
+
+    def test_update_callback_handler_rejects_bad_selector(self):
+        vault, _ = _make_vault()
+        with pytest.raises(ValueError):
+            vault.update_callback_handler(FUSE_ADDR, FUSE_ADDR_2, b"\x01\x02")
 
     def test_transfer(self):
         vault, ctx = _make_vault()

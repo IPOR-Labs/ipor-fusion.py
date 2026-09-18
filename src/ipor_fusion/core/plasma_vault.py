@@ -41,6 +41,15 @@ class ManagementFeeData:
     last_update_timestamp: Timestamp
 
 
+def _selector(sig: bytes | str) -> bytes:
+    """4-byte selector from a canonical signature string or raw bytes."""
+    if isinstance(sig, str):
+        return bytes(Web3.keccak(text=sig)[:4])
+    if len(sig) != 4:
+        raise ValueError(f"callback selector must be 4 bytes, got {len(sig)}")
+    return bytes(sig)
+
+
 def _market_id_list_decoder(value: list) -> list[MarketId]:
     return [MarketId(v) for v in value]
 
@@ -152,6 +161,28 @@ class PlasmaVault(ContractWrapper):
             "updateDependencyBalanceGraphs(uint256[],uint256[][])",
             list(market_ids),
             [list(deps) for deps in dependencies],
+        )
+
+    def update_callback_handler(
+        self, handler: ChecksumAddress, sender: ChecksumAddress, sig: bytes | str
+    ) -> Call[None]:
+        """ATOMIST-only: route a callback into the vault to a handler contract.
+
+        Some markets call back into the vault mid-`execute` (Morpho Blue flash
+        loans call `onMorphoFlashLoan`, Uniswap V3 mints call
+        `uniswapV3MintCallback`, ...). The vault dispatches on
+        `(msg.sender, msg.sig)`: when `sender` calls the vault with selector
+        `sig`, the call is delegated to `handler`. Register one entry per
+        (protocol, callback) pair before the fuse that triggers it is used.
+
+        `sig` is the 4-byte selector, or the canonical function signature
+        (e.g. ``"onMorphoFlashLoan(uint256,bytes)"``) which is hashed here.
+        """
+        return self._write(
+            "updateCallbackHandler(address,address,bytes4)",
+            handler,
+            sender,
+            _selector(sig),
         )
 
     def setup_markets_limits(self, limits: list[tuple[MarketId, Amount]]) -> Call[None]:

@@ -46,7 +46,10 @@ greppable.
    what is not optional is that all three precede `execute`. `execute` on a market with no
    balance fuse reverts `AddressEmptyCode(address)` (`0x9996b315`) with the
    zero address; an action outside the granted substrates reverts inside the
-   fuse.
+   fuse. A fuse whose protocol calls back into the vault mid-`execute`
+   (Morpho Blue flash loans, Uniswap V3 mints) also needs
+   `update_callback_handler(handler, protocol, "onMorphoFlashLoan(uint256,bytes)")`
+   before its first `execute`; without it the callback reverts inside the protocol.
 4. **A fresh clone is private.** `deposit` and `mint` revert
    `AccessManagedUnauthorized(address)` (`0x068ca9d8`) until either the
    depositor holds `WHITELIST_ROLE` (800), which keeps the vault private, or an
