@@ -47,6 +47,7 @@ from ipor_fusion import (
     SimulationResult,
     VaultSimulator,
     Web3Context,
+    addresses,
     is_simulate_v1_supported,
 )
 from ipor_fusion.core import FusionFactory
@@ -65,9 +66,7 @@ BASE_CHAIN_ID = ChainId(8453)
 
 # IporFusionFactoryProxy on Base. Its clone(...) takes the six arguments
 # assembled in clone_args() below.
-BASE_FUSION_FACTORY = Web3.to_checksum_address(
-    "0x1455717668fA96534f675856347A973fA907e922"
-)
+BASE_FUSION_FACTORY = addresses.factory_proxy(8453)  # IporFusionFactoryProxy
 
 # Native (Circle-issued) USDC on Base, 6 decimals. Not the bridged USDbC, a
 # distinct ERC-20 with its own Aave market and price feed.
