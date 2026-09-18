@@ -7,6 +7,7 @@ there, this test will fail until the model is updated. That is the point.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import sys
 from pathlib import Path
@@ -31,7 +32,7 @@ from ipor_fusion.mcp.models import (
     VaultListEntry,
     WithdrawManagerDetails,
 )
-from ipor_fusion.mcp.server import _without_notes
+from ipor_fusion.mcp.server import _without_notes, mcp
 from ipor_fusion.readers.oracle_mapping import (
     OracleAsset,
     OracleMapping,
@@ -929,18 +930,25 @@ def _keys_at_every_depth(value):
             yield from _keys_at_every_depth(item)
 
 
-class TestNotesAreNotServedOverMcp:
-    """The CLI JSON carries `*_note` prose; the MCP result must not."""
+class TestNotesAreOptionalOverMcp:
+    """`vault_info(notes=True)` is the default and keeps the prose."""
 
-    def test_full_payload_validates_without_its_notes(self):
-        stripped = _without_notes(_full_vault_info_dict())
-        model = VaultInfoResponse.model_validate(stripped)
-        assert not [
-            k for k in _keys_at_every_depth(model.model_dump()) if k.endswith("_note")
-        ]
-
-    def test_a_payload_that_still_has_notes_validates_too(self):
+    def test_default_payload_keeps_its_notes(self):
         model = VaultInfoResponse.model_validate(_full_vault_info_dict())
-        assert not [
-            k for k in _keys_at_every_depth(model.model_dump()) if k.endswith("_note")
-        ]
+        dumped = model.model_dump()
+        assert [k for k in _keys_at_every_depth(dumped) if k.endswith("_note")]
+        assert (
+            dumped["fees"]["deposit_fee_percent_note"]
+            == DOCS["fees"]["deposit_fee_percent"]
+        )
+
+    def test_stripped_payload_omits_them_entirely(self):
+        stripped = _without_notes(_full_vault_info_dict())
+        dumped = VaultInfoResponse.model_validate(stripped).model_dump()
+        # Absent, not null: a null per field would spend most of the saving.
+        assert not [k for k in _keys_at_every_depth(dumped) if k.endswith("_note")]
+
+    def test_the_tool_asks_for_notes_by_default(self):
+        tools = asyncio.run(mcp.list_tools())
+        tool = next(t for t in tools if t.name == "vault_info")
+        assert tool.inputSchema["properties"]["notes"]["default"] is True

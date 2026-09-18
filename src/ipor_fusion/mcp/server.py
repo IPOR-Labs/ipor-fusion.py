@@ -170,21 +170,22 @@ def server_info(
 
 @mcp.tool()
 def vault_info(
-    vault_address: str,
-    chain_id: int = 0,
-    block_number: int = 0,
+    vault_address: Annotated[str, Field(description="Plasma Vault address.")],
+    chain_id: Annotated[int, Field(description="Chain ID (auto-detected if 0).")] = 0,
+    block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
+    notes: Annotated[
+        bool,
+        Field(
+            description="Keep the `*_note` fields, which repeat each documented "
+            "field's description as payload text. Pass false for bulk reads: "
+            "they add about 2.6 KB of the same prose to every result, and the "
+            "output schema already carries it."
+        ),
+    ] = True,
 ) -> VaultInfoResponse:
     """Get full on-chain state of a Plasma Vault — the comprehensive summary.
 
-    Returns a structured VaultInfoResponse — see model field descriptions
-    for the complete output schema (assets, balance fuses, fees, withdraw
-    manager, reconciliation, lending health, substrates, role accounts,
-    etc.).
-
-    Args:
-        vault_address: Vault address (required).
-        chain_id: Chain ID (auto-detected if 0).
-        block_number: Block number (latest if 0).
+    One RPC fan-out per call; the heaviest tool here.
     """
     cfg = load_config()
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
@@ -215,7 +216,7 @@ def vault_info(
     result = _build_json_output(
         ctx, plasma_vault, data, vault_address, chain_id, chain_label, api_key
     )
-    return VaultInfoResponse.model_validate(_without_notes(result))
+    return VaultInfoResponse.model_validate(result if notes else _without_notes(result))
 
 
 # Static mirror of Roles member names: pyright rejects a dynamically built
