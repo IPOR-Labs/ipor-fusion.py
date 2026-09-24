@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import decode_aggregate3, is_aggregate3, multicall_aware
 from eth_abi import decode, encode
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -10,7 +11,6 @@ from web3.exceptions import ContractLogicError
 from ipor_fusion import MULTICALL3_ADDRESS, Multicall3
 from ipor_fusion.core.contract import Call
 from ipor_fusion.errors import EmptyCallResultError
-from tests._multicall import decode_aggregate3, is_aggregate3, multicall_aware
 
 TOKEN_A = Web3.to_checksum_address("0x" + "aa" * 20)
 TOKEN_B = Web3.to_checksum_address("0x" + "bb" * 20)

@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import sequenced
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -29,7 +30,6 @@ from ipor_fusion.readers.morpho import (
 from ipor_fusion.readers.ramses_v2 import RamsesV2Position, RamsesV2Reader
 from ipor_fusion.readers.uniswap_v3 import UniswapV3Position, UniswapV3Reader
 from ipor_fusion.types import Amount
-from tests._multicall import sequenced
 
 # Deterministic test addresses
 CONTRACT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")

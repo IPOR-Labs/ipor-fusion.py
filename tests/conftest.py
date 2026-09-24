@@ -6,11 +6,11 @@ from types import ModuleType
 from unittest.mock import patch
 
 import pytest
+from _multicall import SequentialMulticall
 from dotenv import load_dotenv
 from web3 import Web3
 
 from ipor_fusion import is_simulate_v1_supported
-from tests._multicall import SequentialMulticall
 
 load_dotenv()
 

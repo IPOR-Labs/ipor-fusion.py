@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import decode_aggregate3, is_aggregate3, multicall_aware
 from eth_abi import decode, encode
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -17,7 +18,6 @@ from ipor_fusion import (
     role_account_sort_key,
 )
 from ipor_fusion.types import Period, RoleId
-from tests._multicall import decode_aggregate3, is_aggregate3, multicall_aware
 
 MANAGER_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 VAULT_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")

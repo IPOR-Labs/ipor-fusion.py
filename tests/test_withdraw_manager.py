@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import decode_aggregate3, multicall_aware
 from eth_abi import encode
 from eth_typing import BlockNumber, ChecksumAddress
 from web3 import Web3
@@ -10,7 +11,6 @@ from web3.exceptions import ContractLogicError, ContractPanicError
 
 from ipor_fusion.core.withdraw_manager import WithdrawManager, WithdrawRequestInfo
 from ipor_fusion.types import Amount, Fee, Period, Shares
-from tests._multicall import decode_aggregate3, multicall_aware
 
 FAKE_ADDRESS: ChecksumAddress = Web3.to_checksum_address(
     "0x0000000000000000000000000000000000000001"

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+from _multicall import decode_aggregate3, multicall_aware
 from click.testing import CliRunner
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -81,7 +82,6 @@ from ipor_fusion.readers.lending_health import (
 from ipor_fusion.readers.morpho import MORPHO_BLUE_ADDRESSES, MorphoPositionBreakdown
 from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import Amount, MarketId, MorphoBlueMarketId
-from tests._multicall import decode_aggregate3, multicall_aware
 
 VALID_ADDR_LOWER = "0x" + "ab" * 20
 VALID_ADDR_UPPER = "0x" + "AB" * 20

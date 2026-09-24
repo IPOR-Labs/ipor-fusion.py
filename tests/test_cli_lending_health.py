@@ -3,6 +3,7 @@
 
 from unittest.mock import MagicMock, patch
 
+from _multicall import sequenced
 from eth_abi import encode
 from web3 import Web3
 
@@ -23,7 +24,6 @@ from ipor_fusion.readers.lending_health import (
 )
 from ipor_fusion.readers.morpho import MorphoReader
 from ipor_fusion.types import MorphoBlueMarketId
-from tests._multicall import sequenced
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 ORACLE_ADDR = Web3.to_checksum_address("0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd")
