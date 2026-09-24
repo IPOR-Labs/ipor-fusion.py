@@ -343,6 +343,16 @@ class TestPlasmaVaultCallMethods:
         assert result == Amount(1001)
 
 
+def _balance_fuse_logs(added: list[dict], removed: list[dict]) -> list[dict]:
+    """Tag each log with its event's topic0, as the single OR-filtered
+    eth_getLogs behind `get_balance_fuses` returns them."""
+    added_topic = Web3.keccak(text="BalanceFuseAdded(uint256,address)")
+    removed_topic = Web3.keccak(text="BalanceFuseRemoved(uint256,address)")
+    return [{**log, "topics": [added_topic]} for log in added] + [
+        {**log, "topics": [removed_topic]} for log in removed
+    ]
+
+
 class TestPlasmaVaultEventDecoding:
     """Methods that decode log events."""
 
@@ -360,7 +370,7 @@ class TestPlasmaVaultEventDecoding:
                 "logIndex": 0,
             },
         ]
-        ctx.get_logs.side_effect = [added, []]
+        ctx.get_logs.return_value = _balance_fuse_logs(added, [])
 
         result = vault.get_balance_fuses()
 
@@ -389,7 +399,7 @@ class TestPlasmaVaultEventDecoding:
                 "logIndex": 0,
             }
         ]
-        ctx.get_logs.side_effect = [added, removed]
+        ctx.get_logs.return_value = _balance_fuse_logs(added, removed)
 
         result = vault.get_balance_fuses()
 
@@ -411,7 +421,7 @@ class TestPlasmaVaultEventDecoding:
                 "logIndex": 0,
             },
         ]
-        ctx.get_logs.side_effect = [added, []]
+        ctx.get_logs.return_value = _balance_fuse_logs(added, [])
 
         result = vault.get_balance_fuses()
 
@@ -434,7 +444,7 @@ class TestPlasmaVaultEventDecoding:
                 "logIndex": 0,
             },
         ]
-        ctx.get_logs.side_effect = [added, []]
+        ctx.get_logs.return_value = _balance_fuse_logs(added, [])
 
         result = vault.get_balance_fuses()
 
@@ -464,7 +474,7 @@ class TestPlasmaVaultEventDecoding:
                 "logIndex": 0,
             }
         ]
-        ctx.get_logs.side_effect = [added, removed]
+        ctx.get_logs.return_value = _balance_fuse_logs(added, removed)
 
         result = vault.get_balance_fuses()
 
@@ -487,16 +497,29 @@ class TestPlasmaVaultEventDecoding:
                 "logIndex": 1,
             },
         ]
-        ctx.get_logs.side_effect = [added, []]
+        ctx.get_logs.return_value = _balance_fuse_logs(added, [])
 
         result = vault.get_balance_fuses()
 
         assert len(result) == 1
         assert result[0].fuse == FUSE_ADDR_2
 
+    def test_get_balance_fuses_reads_both_events_in_one_query(self):
+        vault, ctx = _make_vault()
+        ctx.get_logs.return_value = []
+
+        vault.get_balance_fuses()
+
+        ctx.get_logs.assert_called_once()
+        (topic0_alternatives,) = ctx.get_logs.call_args.kwargs["topics"]
+        assert topic0_alternatives == [
+            Web3.keccak(text="BalanceFuseAdded(uint256,address)").to_0x_hex(),
+            Web3.keccak(text="BalanceFuseRemoved(uint256,address)").to_0x_hex(),
+        ]
+
     def test_get_balance_fuses_empty(self):
         vault, ctx = _make_vault()
-        ctx.get_logs.side_effect = [[], []]
+        ctx.get_logs.return_value = _balance_fuse_logs([], [])
 
         result = vault.get_balance_fuses()
 

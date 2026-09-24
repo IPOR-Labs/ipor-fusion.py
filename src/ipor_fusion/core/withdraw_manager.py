@@ -11,6 +11,7 @@ from web3.exceptions import ContractPanicError
 from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.types import Amount, Fee, Period, Shares
 
 logger = logging.getLogger(__name__)
@@ -131,21 +132,28 @@ class WithdrawManager(ContractWrapper):
             ):
                 accounts.append(account)
 
+        checksummed = [Web3.to_checksum_address(account) for account in accounts]
+        calls = [self.request_info(account) for account in checksummed]
+        infos = Multicall3(self._ctx).try_aggregate(calls)
         results: list[AccountRequest] = []
-        for account in accounts:
-            try:
-                req = self.request_info(Web3.to_checksum_address(account)).call()
-                if req.end_withdraw_window_timestamp > current_timestamp:
-                    results.append(
-                        AccountRequest(
-                            account=Web3.to_checksum_address(account),
-                            shares=Shares(req.shares),
-                            end_withdraw_window_timestamp=req.end_withdraw_window_timestamp,
-                            can_withdraw=req.can_withdraw,
-                        )
+        for account, call, req in zip(checksummed, calls, infos, strict=True):
+            if req is None:
+                # Re-run the failed read alone: a panic skips the account,
+                # any other failure surfaces as it would unbatched.
+                try:
+                    req = call.call()
+                except ContractPanicError:
+                    logger.warning("ContractPanicError for account %s", account)
+                    continue
+            if req.end_withdraw_window_timestamp > current_timestamp:
+                results.append(
+                    AccountRequest(
+                        account=account,
+                        shares=Shares(req.shares),
+                        end_withdraw_window_timestamp=req.end_withdraw_window_timestamp,
+                        can_withdraw=req.can_withdraw,
                     )
-            except ContractPanicError:
-                logger.warning("ContractPanicError for account %s", account)
+                )
 
         return results
 

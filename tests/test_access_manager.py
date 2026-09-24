@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from eth_abi import encode
+from eth_abi import decode, encode
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
@@ -17,6 +17,7 @@ from ipor_fusion import (
     role_account_sort_key,
 )
 from ipor_fusion.types import Period, RoleId
+from tests._multicall import decode_aggregate3, is_aggregate3, multicall_aware
 
 MANAGER_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 VAULT_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
@@ -39,7 +40,9 @@ def _manager_with(
 ) -> AccessManager:
     ctx = MagicMock()
     ctx.get_logs.return_value = events
-    ctx.call.return_value = encode(["bool", "uint32"], [is_member, execution_delay])
+    ctx.call.side_effect = multicall_aware(
+        lambda _to, _data: encode(["bool", "uint32"], [is_member, execution_delay])
+    )
     return AccessManager(ctx, MANAGER_ADDR)
 
 
@@ -82,6 +85,44 @@ class TestGetAllRoleAccounts:
         accounts = manager.get_all_role_accounts()
 
         assert len(accounts) == 1
+
+    def test_resolves_all_candidates_in_one_multicall(self):
+        manager = _manager_with(
+            [_grant_event(1, ALICE), _grant_event(100, BOB), _grant_event(1, ALICE)]
+        )
+
+        manager.get_all_role_accounts()
+
+        ctx: MagicMock = manager._ctx  # type: ignore[assignment]
+        ((to, data), _kwargs) = ctx.call.call_args
+        assert ctx.call.call_count == 1
+        assert is_aggregate3(to, data)
+        role_checks = [
+            decode(["uint64", "address"], calldata[4:])
+            for _target, calldata in decode_aggregate3(data)
+        ]
+        assert role_checks == [(1, ALICE.lower()), (100, BOB.lower())]
+
+    def test_keeps_members_and_drops_revoked_per_account(self):
+        ctx = MagicMock()
+        ctx.get_logs.return_value = [_grant_event(1, ALICE), _grant_event(1, BOB)]
+
+        def has_role(_to: str, data: bytes) -> bytes:
+            (_role, account) = decode(["uint64", "address"], data[4:])
+            is_member = Web3.to_checksum_address(account) == BOB
+            return encode(["bool", "uint32"], [is_member, 0])
+
+        ctx.call.side_effect = multicall_aware(has_role)
+
+        accounts = AccessManager(ctx, MANAGER_ADDR).get_all_role_accounts()
+
+        assert [ra.account for ra in accounts] == [BOB]
+
+    def test_no_grants_skips_the_rpc(self):
+        manager = _manager_with([])
+
+        assert manager.get_all_role_accounts() == []
+        manager._ctx.call.assert_not_called()  # type: ignore[attr-defined]
 
 
 class TestGetAccountsWithRole:

@@ -6,10 +6,11 @@ import pytest
 from eth_abi import encode
 from eth_typing import BlockNumber, ChecksumAddress
 from web3 import Web3
-from web3.exceptions import ContractPanicError
+from web3.exceptions import ContractLogicError, ContractPanicError
 
 from ipor_fusion.core.withdraw_manager import WithdrawManager, WithdrawRequestInfo
 from ipor_fusion.types import Amount, Fee, Period, Shares
+from tests._multicall import decode_aggregate3, multicall_aware
 
 FAKE_ADDRESS: ChecksumAddress = Web3.to_checksum_address(
     "0x0000000000000000000000000000000000000001"
@@ -158,6 +159,17 @@ def test_request_info(wm, ctx):
 # ── get_pending_requests_info ────────────────────────────────────────────────
 
 
+def _answer(raw: bytes):
+    return multicall_aware(lambda _to, _data: raw)
+
+
+def _raise(exc: Exception):
+    def handler(_to: str, _data: bytes) -> bytes:
+        raise exc
+
+    return handler
+
+
 def _event(account: str, amount: int, end_window: int) -> dict:
     """Build a fake log event with encoded data."""
     return {
@@ -169,9 +181,11 @@ def test_pending_requests_aggregates_active(wm, ctx):
     current_ts = 5000
     ctx.get_block.return_value = {"timestamp": current_ts}
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 100, current_ts + 1000)]
-    ctx.call.return_value = encode(
-        ["uint256", "uint256", "bool", "uint256"],
-        [200, current_ts + 500, True, 3600],
+    ctx.call.side_effect = _answer(
+        encode(
+            ["uint256", "uint256", "bool", "uint256"],
+            [200, current_ts + 500, True, 3600],
+        )
     )
 
     pending = wm.get_pending_requests_info()
@@ -205,9 +219,11 @@ def test_pending_requests_deduplicates_accounts(wm, ctx):
         _event(FAKE_ACCOUNT, 100, current_ts + 1000),
         _event(FAKE_ACCOUNT, 200, current_ts + 2000),
     ]
-    ctx.call.return_value = encode(
-        ["uint256", "uint256", "bool", "uint256"],
-        [300, current_ts + 500, True, 3600],
+    ctx.call.side_effect = _answer(
+        encode(
+            ["uint256", "uint256", "bool", "uint256"],
+            [300, current_ts + 500, True, 3600],
+        )
     )
 
     pending = wm.get_pending_requests_info()
@@ -219,7 +235,7 @@ def test_pending_requests_handles_contract_panic(wm, ctx):
     current_ts = 5000
     ctx.get_block.return_value = {"timestamp": current_ts}
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 100, current_ts + 1000)]
-    ctx.call.side_effect = ContractPanicError("arithmetic overflow")
+    ctx.call.side_effect = multicall_aware(_raise(ContractPanicError("overflow")))
 
     pending = wm.get_pending_requests_info()
     assert pending.shares == Shares(0)
@@ -230,9 +246,11 @@ def test_pending_requests_skips_expired_request_info(wm, ctx):
     current_ts = 5000
     ctx.get_block.return_value = {"timestamp": current_ts}
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 100, current_ts + 1000)]
-    ctx.call.return_value = encode(
-        ["uint256", "uint256", "bool", "uint256"],
-        [200, current_ts - 100, False, 3600],
+    ctx.call.side_effect = _answer(
+        encode(
+            ["uint256", "uint256", "bool", "uint256"],
+            [200, current_ts - 100, False, 3600],
+        )
     )
 
     pending = wm.get_pending_requests_info()
@@ -247,3 +265,35 @@ def test_pending_requests_passes_from_block(wm, ctx):
     wm.get_pending_requests_info(from_block=BlockNumber(1234))
     call_kwargs = ctx.get_logs.call_args
     assert call_kwargs[1]["from_block"] == BlockNumber(1234)
+
+
+def test_pending_requests_reads_every_account_in_one_batch(wm, ctx):
+    current_ts = 5000
+    other = Web3.to_checksum_address("0x" + "ab" * 20)
+    ctx.get_block.return_value = {"timestamp": current_ts}
+    ctx.get_logs.return_value = [
+        _event(FAKE_ACCOUNT, 100, current_ts + 1000),
+        _event(other, 100, current_ts + 1000),
+    ]
+    ctx.call.side_effect = _answer(
+        encode(
+            ["uint256", "uint256", "bool", "uint256"],
+            [50, current_ts + 500, False, 3600],
+        )
+    )
+
+    requests = wm.get_pending_requests()
+
+    assert [r.account for r in requests] == [FAKE_ACCOUNT, other]
+    assert ctx.call.call_count == 1
+    ((_to, data), _kwargs) = ctx.call.call_args
+    assert len(decode_aggregate3(data)) == 2
+
+
+def test_pending_requests_non_panic_revert_propagates(wm, ctx):
+    ctx.get_block.return_value = {"timestamp": 5000}
+    ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 100, 6000)]
+    ctx.call.side_effect = multicall_aware(_raise(ContractLogicError("boom")))
+
+    with pytest.raises(ContractLogicError, match="boom"):
+        wm.get_pending_requests()

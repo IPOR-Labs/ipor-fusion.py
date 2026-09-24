@@ -23,6 +23,7 @@ from ipor_fusion.readers.lending_health import (
 )
 from ipor_fusion.readers.morpho import MorphoReader
 from ipor_fusion.types import MorphoBlueMarketId
+from tests._multicall import sequenced
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 ORACLE_ADDR = Web3.to_checksum_address("0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd")
@@ -209,15 +210,22 @@ class TestComputeMorphoMarketHealth:
         reader, ctx = _make_morpho_reader()
 
         # position: no borrow
-        ctx.call.side_effect = [
-            # position(market_id, user) → supply_shares=1000, borrow_shares=0, collateral=500
-            encode(["uint256", "uint128", "uint128"], [1000, 0, 500]),
-            # market_params(market_id) → lltv=0.86e18
-            encode(
-                ["address", "address", "address", "address", "uint256"],
-                [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
-            ),
-        ]
+        ctx.call.side_effect = sequenced(
+            [
+                # position(market_id, user) → supply_shares=1000, borrow_shares=0, collateral=500
+                encode(["uint256", "uint128", "uint128"], [1000, 0, 500]),
+                # market(market_id) — read in the same batch, unused without a borrow
+                encode(
+                    ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+                    [2000, 2000, 0, 0, 1700000000, 0],
+                ),
+                # market_params(market_id) → lltv=0.86e18
+                encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
+                ),
+            ]
+        )
 
         result = _compute_morpho_market_health(
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
@@ -241,22 +249,24 @@ class TestComputeMorphoMarketHealth:
         # → current_ltv = 500/1000 = 0.5
         # lltv = 0.86 → usage = 0.5/0.86 ≈ 58.14%
 
-        ctx.call.side_effect = [
-            # position
-            encode(["uint256", "uint128", "uint128"], [0, 500, 1000]),
-            # market
-            encode(
-                ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
-                [2000, 2000, 1000, 1000, 1700000000, 0],
-            ),
-            # market_params
-            encode(
-                ["address", "address", "address", "address", "uint256"],
-                [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
-            ),
-            # oracle price() → 1e36 (1:1)
-            encode(["uint256"], [ORACLE_PRICE_SCALE]),
-        ]
+        ctx.call.side_effect = sequenced(
+            [
+                # position
+                encode(["uint256", "uint128", "uint128"], [0, 500, 1000]),
+                # market
+                encode(
+                    ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+                    [2000, 2000, 1000, 1000, 1700000000, 0],
+                ),
+                # market_params
+                encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
+                ),
+                # oracle price() → 1e36 (1:1)
+                encode(["uint256"], [ORACLE_PRICE_SCALE]),
+            ]
+        )
 
         result = _compute_morpho_market_health(
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
@@ -276,18 +286,20 @@ class TestComputeMorphoMarketHealth:
 
         # ~83% LTV → 83/86 ≈ 96.5% usage → critical
         # borrowed ≈ 830, collateral=1000, oracle_price=1e36
-        ctx.call.side_effect = [
-            encode(["uint256", "uint128", "uint128"], [0, 830, 1000]),
-            encode(
-                ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
-                [2000, 2000, 1000, 1000, 1700000000, 0],
-            ),
-            encode(
-                ["address", "address", "address", "address", "uint256"],
-                [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
-            ),
-            encode(["uint256"], [ORACLE_PRICE_SCALE]),
-        ]
+        ctx.call.side_effect = sequenced(
+            [
+                encode(["uint256", "uint128", "uint128"], [0, 830, 1000]),
+                encode(
+                    ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+                    [2000, 2000, 1000, 1000, 1700000000, 0],
+                ),
+                encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
+                ),
+                encode(["uint256"], [ORACLE_PRICE_SCALE]),
+            ]
+        )
 
         result = _compute_morpho_market_health(
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
@@ -300,18 +312,20 @@ class TestComputeMorphoMarketHealth:
     def test_zero_collateral_returns_none_ltv(self):
         reader, ctx = _make_morpho_reader()
 
-        ctx.call.side_effect = [
-            encode(["uint256", "uint128", "uint128"], [0, 100, 0]),
-            encode(
-                ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
-                [2000, 2000, 1000, 1000, 1700000000, 0],
-            ),
-            encode(
-                ["address", "address", "address", "address", "uint256"],
-                [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
-            ),
-            encode(["uint256"], [ORACLE_PRICE_SCALE]),
-        ]
+        ctx.call.side_effect = sequenced(
+            [
+                encode(["uint256", "uint128", "uint128"], [0, 100, 0]),
+                encode(
+                    ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+                    [2000, 2000, 1000, 1000, 1700000000, 0],
+                ),
+                encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
+                ),
+                encode(["uint256"], [ORACLE_PRICE_SCALE]),
+            ]
+        )
 
         result = _compute_morpho_market_health(
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
@@ -334,10 +348,12 @@ class TestComputeMorphoMarketHealth:
     def test_market_data_failure_returns_none(self):
         reader, ctx = _make_morpho_reader()
         # First call succeeds (position), second fails (market)
-        ctx.call.side_effect = [
-            encode(["uint256", "uint128", "uint128"], [0, 100, 1000]),
-            Exception("market read failed"),
-        ]
+        ctx.call.side_effect = sequenced(
+            [
+                encode(["uint256", "uint128", "uint128"], [0, 100, 1000]),
+                Exception("market read failed"),
+            ]
+        )
 
         result = _compute_morpho_market_health(
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"

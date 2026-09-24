@@ -412,7 +412,7 @@ class TestVaultInfoGuards:
         assert "does not appear" not in result.output
 
 
-@pytest.mark.usefixtures("mock_fee_contracts")
+@pytest.mark.usefixtures("mock_fee_contracts", "sequential_multicall")
 class TestVaultInfo:
     @pytest.fixture(autouse=True)
     def _pass_vault_probe(self):
@@ -902,7 +902,7 @@ class TestVaultListJson:
         assert data[1]["address"] == ADDR_2
 
 
-@pytest.mark.usefixtures("mock_fee_contracts")
+@pytest.mark.usefixtures("mock_fee_contracts", "sequential_multicall")
 class TestVaultInfoJson:
     @pytest.fixture(autouse=True)
     def _pass_vault_probe(self):
