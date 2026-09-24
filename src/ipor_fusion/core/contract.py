@@ -66,6 +66,13 @@ class Call(Generic[T]):
                 "address at the requested block, or it does not implement the "
                 "function."
             )
+        return self.decode(raw)
+
+    def decode(self, raw: bytes) -> T:
+        """Decode raw return data per `output_types`/`decoder` — the second half
+        of `.call()`, for return data fetched elsewhere (e.g. `Multicall3`)."""
+        if not self.output_types:
+            raise RuntimeError("Call.decode() on a write-only Call.")
         values = tuple(decode(self.output_types, bytes(raw)))
         single: Any = values[0] if len(values) == 1 else values
         if self.decoder is not None:
