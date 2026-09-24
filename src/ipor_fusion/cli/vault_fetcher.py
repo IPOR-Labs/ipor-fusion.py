@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, TypeVar
 
-from eth_abi import decode
+import requests
 from eth_abi.exceptions import DecodingError
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -22,7 +22,9 @@ from ipor_fusion.cli.config_store import (
     update_deployment_cache,
 )
 from ipor_fusion.cli.explorer import get_deployment_tx
+from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sort_key
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.fee_manager import (
     FeeAccount,
@@ -30,11 +32,13 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
 from ipor_fusion.readers.aave_v3 import (
     AaveV3FuseReader,
+    AaveV3PoolAddressesProvider,
     AaveV3PositionBreakdown,
     AaveV3Reader,
 )
@@ -167,6 +171,20 @@ class _VaultData:
     # Substrates registered for each balance-fuse market. Allows the fuse
     # tables to report substrate counts per fuse without duplicating reads.
     market_substrates: dict[int, list[bytes]] | None = None
+    # Confirmed AccessManager role holders, sorted by role_account_sort_key.
+    # None when the RoleGranted log scan failed (see _ROLE_SCAN_ERRORS).
+    role_accounts: list[RoleAccount] | None = None
+
+
+# Failure modes of the heavy RoleGranted scan: JSON-RPC rejections/limits plus
+# transport-level errors — web3's HTTPProvider re-raises raw requests
+# exceptions (read timeouts, 429/5xx via raise_for_status).
+_ROLE_SCAN_ERRORS = (
+    ContractLogicError,
+    Web3RPCError,
+    TimeExhausted,
+    requests.RequestException,
+)
 
 
 def _safe_call(func: Callable[[], T]) -> T | None:
@@ -180,20 +198,37 @@ def _safe_call(func: Callable[[], T]) -> T | None:
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
 
 
-def _fetch_fuse_market_id(ctx: Web3Context, fuse_addr: ChecksumAddress) -> int | None:
-    """Read the immutable MARKET_ID() exposed by every IPOR Fusion fuse.
+def _fuse_market_id_call(ctx: Web3Context, fuse: ChecksumAddress) -> Call[int]:
+    """The immutable MARKET_ID() every IPOR Fusion fuse exposes.
 
-    Returns ``None`` when the call reverts or the fuse contract does not
-    expose the getter (e.g. a non-fuse address ever found in getFuses()).
+    Read with `try_aggregate`: a fuse that reverts or lacks the getter (a
+    non-fuse address ever found in getFuses()) reads as ``None``.
     """
-    raw = _safe_call(lambda: ctx.call(fuse_addr, _MARKET_ID_SELECTOR))
-    if not raw:
-        return None
-    try:
-        (value,) = decode(["uint256"], raw)
-    except Exception:
-        return None
-    return int(value)
+    return Call(
+        to=fuse,
+        data=_MARKET_ID_SELECTOR,
+        output_types=["uint256"],
+        decoder=int,
+        ctx=ctx,
+    )
+
+
+def _read_batch(
+    ctx: Web3Context,
+    required: Sequence[Call[Any]],
+    optional: Sequence[Call[Any]] = (),
+) -> tuple[list[Any], list[Any]]:
+    """Read `required` + `optional` in one Multicall3 round trip.
+
+    A failing optional read is ``None``. A failing required read is re-run on
+    its own, so it raises exactly what `Call.call()` would.
+    """
+    results = Multicall3(ctx).try_aggregate([*required, *optional])
+    head = [
+        value if value is not None else call.call()
+        for value, call in zip(results, required, strict=False)
+    ]
+    return head, results[len(required) :]
 
 
 def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
@@ -237,29 +272,32 @@ def _resolve_token_decimals(ctx: Web3Context, address: str) -> int | None:
     return decimals
 
 
-def _fetch_withdraw_manager_data(
-    ctx: Web3Context,
-    pool: ThreadPoolExecutor,
-    withdraw_mgr_addr: ChecksumAddress | None,
-) -> _WithdrawManagerData | None:
-    if not withdraw_mgr_addr:
-        return None
-    wm_contract = WithdrawManager(ctx, withdraw_mgr_addr)
-    f_window = pool.submit(_safe_call, wm_contract.get_withdraw_window().call)
-    f_req_fee = pool.submit(_safe_call, wm_contract.get_request_fee().call)
-    f_wd_fee = pool.submit(_safe_call, wm_contract.get_withdraw_fee().call)
-    f_shares = pool.submit(_safe_call, wm_contract.get_shares_to_release().call)
-    f_last_ts = pool.submit(
-        _safe_call, wm_contract.get_last_release_funds_timestamp().call
+def _fetch_withdraw_manager(
+    ctx: Web3Context, plasma_vault: PlasmaVault
+) -> tuple[ChecksumAddress | None, _WithdrawManagerData | None]:
+    """Resolve the vault's WithdrawManager and snapshot its state."""
+    address = plasma_vault.withdraw_manager_address()
+    if not address:
+        return None, None
+    wm = WithdrawManager(ctx, address)
+    _, (window, request_fee, withdraw_fee, shares, last_ts) = _read_batch(
+        ctx,
+        [],
+        [
+            wm.get_withdraw_window(),
+            wm.get_request_fee(),
+            wm.get_withdraw_fee(),
+            wm.get_shares_to_release(),
+            wm.get_last_release_funds_timestamp(),
+        ],
     )
-    f_requests = pool.submit(_safe_call, wm_contract.get_pending_requests)
-    return _WithdrawManagerData(
-        withdraw_window=f_window.result() or 0,
-        request_fee=f_req_fee.result(),
-        withdraw_fee=f_wd_fee.result(),
-        shares_to_release=f_shares.result() or 0,
-        last_release_funds_timestamp=f_last_ts.result() or 0,
-        pending_requests=f_requests.result() or [],
+    return address, _WithdrawManagerData(
+        withdraw_window=window or 0,
+        request_fee=request_fee,
+        withdraw_fee=withdraw_fee,
+        shares_to_release=shares or 0,
+        last_release_funds_timestamp=last_ts or 0,
+        pending_requests=_safe_call(wm.get_pending_requests) or [],
     )
 
 
@@ -279,32 +317,29 @@ def _fetch_fee_manager_address(
         return None
 
 
-def _fetch_fee_data(
-    ctx: Web3Context,
-    pool: ThreadPoolExecutor,
-    plasma_vault: PlasmaVault,
-) -> _FeeData:
+def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> _FeeData:
     """Fetch the vault's fee configuration, including the FeeManager hop.
 
-    Three dependent phases (reads inside each run in parallel): vault-level
-    fee data, then FeeAccount.FEE_MANAGER() to discover the FeeManager, then
-    the FeeManager getters. Nothing raises — every read degrades to ``None``,
-    so vaults without a fee account and FeeManagers predating the deposit fee
-    or high-water mark still produce a usable snapshot.
+    Three dependent round trips: vault-level fee data, then
+    FeeAccount.FEE_MANAGER() to discover the FeeManager, then the FeeManager
+    getters. Nothing raises on a revert — every read degrades to ``None``, so
+    vaults without a fee account and FeeManagers predating the deposit fee or
+    high-water mark still produce a usable snapshot.
     """
-    f_perf = pool.submit(_safe_call, plasma_vault.get_performance_fee_data().call)
-    f_mgmt = pool.submit(_safe_call, plasma_vault.get_management_fee_data().call)
-    f_unrealized = pool.submit(
-        _safe_call, plasma_vault.get_unrealized_management_fee().call
+    _, (perf, mgmt, unrealized) = _read_batch(
+        ctx,
+        [],
+        [
+            plasma_vault.get_performance_fee_data(),
+            plasma_vault.get_management_fee_data(),
+            plasma_vault.get_unrealized_management_fee(),
+        ],
     )
-
-    perf = f_perf.result()
-    mgmt = f_mgmt.result()
     result = _FeeData(
         performance_fee_vault_bps=perf.fee_in_percentage if perf else None,
         management_fee_vault_bps=mgmt.fee_in_percentage if mgmt else None,
         management_fee_last_update=mgmt.last_update_timestamp if mgmt else None,
-        unrealized_management_fee=f_unrealized.result(),
+        unrealized_management_fee=unrealized,
     )
 
     # A FeeManager deploys two separate escrow accounts (performance and
@@ -327,30 +362,30 @@ def _fetch_fee_data(
     result.fee_manager = fee_manager_addr
 
     fee_manager = FeeManager(ctx, fee_manager_addr)
-    f_deposit = pool.submit(_safe_call, fee_manager.get_deposit_fee().call)
-    f_perf_total = pool.submit(_safe_call, fee_manager.get_total_performance_fee().call)
-    f_mgmt_total = pool.submit(_safe_call, fee_manager.get_total_management_fee().call)
-    f_perf_recipients = pool.submit(
-        _safe_call, fee_manager.get_performance_fee_recipients().call
+    (
+        _,
+        (
+            result.deposit_fee_wad,
+            result.performance_fee_manager_bps,
+            result.management_fee_manager_bps,
+            result.performance_fee_recipients,
+            result.management_fee_recipients,
+            result.ipor_dao_fee_recipient,
+            result.high_water_mark,
+        ),
+    ) = _read_batch(
+        ctx,
+        [],
+        [
+            fee_manager.get_deposit_fee(),
+            fee_manager.get_total_performance_fee(),
+            fee_manager.get_total_management_fee(),
+            fee_manager.get_performance_fee_recipients(),
+            fee_manager.get_management_fee_recipients(),
+            fee_manager.get_ipor_dao_fee_recipient_address(),
+            fee_manager.get_plasma_vault_high_water_mark_performance_fee(),
+        ],
     )
-    f_mgmt_recipients = pool.submit(
-        _safe_call, fee_manager.get_management_fee_recipients().call
-    )
-    f_dao = pool.submit(
-        _safe_call, fee_manager.get_ipor_dao_fee_recipient_address().call
-    )
-    f_hwm = pool.submit(
-        _safe_call,
-        fee_manager.get_plasma_vault_high_water_mark_performance_fee().call,
-    )
-
-    result.deposit_fee_wad = f_deposit.result()
-    result.performance_fee_manager_bps = f_perf_total.result()
-    result.management_fee_manager_bps = f_mgmt_total.result()
-    result.performance_fee_recipients = f_perf_recipients.result()
-    result.management_fee_recipients = f_mgmt_recipients.result()
-    result.ipor_dao_fee_recipient = f_dao.result()
-    result.high_water_mark = f_hwm.result()
     return result
 
 
@@ -432,34 +467,42 @@ def _collect_aave_substrate_assets(
     return result
 
 
-def _fetch_aave_pool(ctx: Web3Context, fuse: ChecksumAddress) -> ChecksumAddress | None:
-    """Resolve the Aave V3 Pool an Aave V3 balance fuse reads; None if it can't.
-
-    A balance fuse that is not an Aave V3 fuse either reverts on the getter or
-    answers with empty data, which fails ABI decoding instead of reverting.
-    """
-    try:
-        return _safe_call(AaveV3FuseReader(ctx, fuse).pool)
-    except DecodingError:
-        return None
-
-
 def _fetch_aave_pools(
-    ctx: Web3Context,
-    pool: ThreadPoolExecutor,
-    balance_fuses: list[BalanceFuse],
+    ctx: Web3Context, balance_fuses: list[BalanceFuse]
 ) -> dict[int, ChecksumAddress]:
     """Map every Aave V3 market to the Pool its balance fuse reads.
 
     Aave V3 Core, Aave V3 Prime and SparkLend share the fuse contracts but not
-    the Pool, so the Pool is resolved per market rather than per chain.
+    the Pool, so the Pool is resolved per market rather than per chain: the
+    fuse's PoolAddressesProvider, then its Pool, one batch each. A balance
+    fuse that is not an Aave V3 fuse reverts or answers with empty data and is
+    left out.
     """
-    futures = {
-        bf.market_id: pool.submit(_fetch_aave_pool, ctx, bf.fuse)
+    fuses = {
+        bf.market_id: bf.fuse
         for bf in balance_fuses
         if bf.market_id in AAVE_V3_MARKET_IDS
     }
-    return {mid: addr for mid, fut in futures.items() if (addr := fut.result())}
+    if not fuses:
+        return {}
+    multicall = Multicall3(ctx)
+    providers = multicall.try_aggregate(
+        [
+            AaveV3FuseReader(ctx, fuse).pool_addresses_provider()
+            for fuse in fuses.values()
+        ]
+    )
+    resolved = {
+        mid: provider
+        for mid, provider in zip(fuses, providers, strict=True)
+        if provider is not None
+    }
+    pools = multicall.try_aggregate(
+        [AaveV3PoolAddressesProvider(ctx, p).get_pool() for p in resolved.values()]
+    )
+    return {
+        mid: pool for mid, pool in zip(resolved, pools, strict=True) if pool is not None
+    }
 
 
 def _fetch_aave_positions(
@@ -528,26 +571,211 @@ def _collect_breakdown_token_addresses(
 
 
 def _fetch_breakdown_token_prices(
-    pool: ThreadPoolExecutor,
+    ctx: Web3Context,
     oracle: PriceOracleMiddleware,
     addresses: set[ChecksumAddress],
 ) -> dict[str, float] | None:
-    """Fetch USD prices for breakdown tokens in parallel via the vault's oracle.
+    """Fetch USD prices for breakdown tokens in one batch via the vault's oracle.
 
     Returns a dict keyed by lowercase token address. Tokens with no oracle
     source configured are simply omitted (callers treat absence as "no price").
     """
     if not addresses:
         return None
-    futures = {
-        addr: pool.submit(_safe_call, lambda a=addr: oracle.get_asset_price(a).call())
-        for addr in addresses
+    ordered = sorted(addresses)
+    prices = Multicall3(ctx).try_aggregate(
+        [oracle.get_asset_price(addr) for addr in ordered]
+    )
+    result = {
+        addr.lower(): price.readable()
+        for addr, price in zip(ordered, prices, strict=True)
+        if price is not None
     }
-    prices: dict[str, float] = {}
-    for addr, fut in futures.items():
-        if (price := fut.result()) is not None:
-            prices[addr.lower()] = price.readable()
-    return prices or None
+    return result or None
+
+
+def _fetch_block(ctx: Web3Context, block_number: int | None) -> tuple[int, int]:
+    """``(block_number, timestamp)`` of the requested block, latest by default."""
+    resolved = ctx.web3.eth.block_number if block_number is None else block_number
+    return resolved, ctx.web3.eth.get_block(resolved)["timestamp"]
+
+
+def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str, Any]:
+    """Vault and underlying-asset state, as `_VaultData` fields.
+
+    Two Multicall3 round trips: vault getters, then everything that needs the
+    asset, the oracle or the fuse list (asset metadata, idle balance, price,
+    each fuse's MARKET_ID()).
+    """
+    pv = plasma_vault
+    (
+        (
+            share_decimals,
+            total_assets,
+            total_supply,
+            supply_cap,
+            asset,
+            access_manager,
+            price_oracle_addr,
+            fuses,
+            instant_fuses,
+        ),
+        (vault_name, rewards_manager),
+    ) = _read_batch(
+        ctx,
+        [
+            pv.decimals(),
+            pv.total_assets(),
+            pv.total_supply(),
+            pv.get_total_supply_cap(),
+            pv.underlying_asset_address(),
+            pv.get_access_manager_address(),
+            pv.get_price_oracle_middleware_address(),
+            pv.get_fuses(),
+            pv.get_instant_withdrawal_fuses(),
+        ],
+        [pv.name(), pv.get_rewards_claim_manager_address()],
+    )
+
+    asset_erc20 = ERC20(ctx, asset)
+    oracle = PriceOracleMiddleware(ctx, price_oracle_addr)
+    (asset_decimals, underlying_balance), (symbol, price, *fuse_market_ids) = (
+        _read_batch(
+            ctx,
+            [
+                asset_erc20.decimals(),
+                asset_erc20.balance_of(Web3.to_checksum_address(pv.address)),
+            ],
+            [
+                asset_erc20.symbol(),
+                oracle.get_asset_price(asset),
+                *(_fuse_market_id_call(ctx, fuse) for fuse in fuses),
+            ],
+        )
+    )
+    # Fuses without a readable MARKET_ID() are left out; the rest detect orphan
+    # markets (action fuse registered, no balance fuse for its market).
+    fuse_markets = {
+        fuse: mid
+        for fuse, mid in zip(fuses, fuse_market_ids, strict=True)
+        if mid is not None
+    }
+    return {
+        "share_decimals": share_decimals,
+        "total_assets": total_assets,
+        "total_supply": total_supply,
+        "supply_cap": supply_cap,
+        "asset": asset,
+        "access_manager": access_manager,
+        "price_oracle_addr": price_oracle_addr,
+        "fuses": fuses,
+        "instant_fuses": instant_fuses,
+        "vault_name": vault_name or "",
+        "rewards_manager": rewards_manager,
+        "asset_decimals": asset_decimals,
+        "underlying_balance_on_vault": underlying_balance,
+        "asset_symbol": symbol or "?",
+        "asset_price_usd": price.readable() if price else None,
+        "fuse_markets": fuse_markets or None,
+    }
+
+
+def _fetch_role_accounts(
+    ctx: Web3Context, plasma_vault: PlasmaVault
+) -> list[RoleAccount] | None:
+    """All confirmed role holders on the vault's AccessManager, sorted; None
+    when the RoleGranted log scan fails (provider without broad eth_getLogs
+    support, or a transport-level failure on the heavy query)."""
+    try:
+        manager = AccessManager(ctx, plasma_vault.get_access_manager_address().call())
+        accounts = manager.get_all_role_accounts()
+    except _ROLE_SCAN_ERRORS:
+        return None
+    return sorted(accounts, key=role_account_sort_key)
+
+
+@dataclass
+class _MarketReads:
+    balance_fuses: list[BalanceFuse]
+    dependency_graph: dict[int, list[int]]
+    # Only markets with at least one substrate.
+    market_substrates: dict[int, list[bytes]]
+    aave_pools: dict[int, ChecksumAddress]
+
+
+def _fetch_market_reads(
+    ctx: Web3Context, plasma_vault: PlasmaVault, with_aave_pools: bool
+) -> _MarketReads:
+    """Balance fuses, then every market's dependency graph and substrates in
+    one batch, then (optionally) the Aave V3 Pools behind the markets."""
+    balance_fuses = plasma_vault.get_balance_fuses()
+    market_ids = [bf.market_id for bf in balance_fuses]
+    graph_and_substrates, _ = _read_batch(
+        ctx,
+        [
+            *(plasma_vault.get_dependency_balance_graph(mid) for mid in market_ids),
+            *(plasma_vault.get_market_substrates(mid) for mid in market_ids),
+        ],
+    )
+    graphs = graph_and_substrates[: len(market_ids)]
+    substrates = graph_and_substrates[len(market_ids) :]
+    return _MarketReads(
+        balance_fuses=balance_fuses,
+        dependency_graph={
+            mid: [int(dep) for dep in deps]
+            for mid, deps in zip(market_ids, graphs, strict=True)
+            if deps
+        },
+        market_substrates={
+            mid: subs for mid, subs in zip(market_ids, substrates, strict=True) if subs
+        },
+        aave_pools=_fetch_aave_pools(ctx, balance_fuses) if with_aave_pools else {},
+    )
+
+
+@dataclass
+class _LendingReads:
+    lending_health: VaultLendingHealth | None = None
+    morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None = None
+    aave_positions: dict[int, list[AaveV3PositionBreakdown]] | None = None
+
+
+def _fetch_lending_reads(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    vault_addr: ChecksumAddress,
+    chain_id: int,
+    markets: _MarketReads,
+) -> _LendingReads:
+    """Lending health (Morpho, Aave V3) plus the per-position breakdowns.
+
+    Health runs as one pool task (it fans out on its own executor); the
+    breakdowns fan out on `pool` from the calling thread, so no pool task ever
+    waits on another.
+    """
+    f_health = pool.submit(
+        _safe_call,
+        partial(
+            fetch_vault_lending_health,
+            ctx,
+            vault_addr,
+            chain_id,
+            [bf.market_id for bf in markets.balance_fuses],
+            markets.market_substrates,
+            aave_pools=markets.aave_pools,
+        ),
+    )
+    morpho_positions = _fetch_morpho_positions(
+        ctx, pool, vault_addr, markets.market_substrates
+    )
+    aave_positions = _fetch_aave_positions(
+        ctx, pool, vault_addr, markets.aave_pools, markets.market_substrates
+    )
+    return _LendingReads(
+        lending_health=f_health.result(),
+        morpho_positions=morpho_positions,
+        aave_positions=aave_positions,
+    )
 
 
 def _fetch_vault_data(
@@ -560,156 +788,56 @@ def _fetch_vault_data(
     # fetch die deep in the stack (e.g. eth_getLogs range caps) on chains
     # the tooling is not validated on.
     ensure_supported_chain(chain_id or ctx.chain_id)
+    vault_addr = Web3.to_checksum_address(plasma_vault.address)
     with ThreadPoolExecutor() as pool:
-        # Phase 1: all independent vault reads in parallel
-        f_block = pool.submit(lambda: ctx.web3.eth.block_number)
-        f_name: Future = pool.submit(_safe_call, plasma_vault.name().call)
-        f_decimals = pool.submit(plasma_vault.decimals().call)
-        f_total_assets = pool.submit(plasma_vault.total_assets().call)
-        f_total_supply = pool.submit(plasma_vault.total_supply().call)
-        f_supply_cap = pool.submit(plasma_vault.get_total_supply_cap().call)
-        f_asset = pool.submit(plasma_vault.underlying_asset_address().call)
-        f_access = pool.submit(plasma_vault.get_access_manager_address().call)
-        f_oracle = pool.submit(plasma_vault.get_price_oracle_middleware_address().call)
-        f_fuses = pool.submit(plasma_vault.get_fuses().call)
-        f_balance_fuses = pool.submit(plasma_vault.get_balance_fuses)
-        f_rewards: Future = pool.submit(
-            _safe_call, plasma_vault.get_rewards_claim_manager_address().call
-        )
-        f_withdraw = pool.submit(plasma_vault.withdraw_manager_address)
-        f_instant = pool.submit(plasma_vault.get_instant_withdrawal_fuses().call)
-
-        # Phase 2: asset-dependent (wait for asset + oracle addresses)
-        asset = f_asset.result()
-        price_oracle_addr = f_oracle.result()
-        asset_erc20 = ERC20(ctx, asset)
-        oracle = PriceOracleMiddleware(ctx, price_oracle_addr)
-
-        f_symbol: Future = pool.submit(_safe_call, asset_erc20.symbol().call)
-        f_adec = pool.submit(asset_erc20.decimals().call)
-        f_underlying_bal = pool.submit(
-            asset_erc20.balance_of(Web3.to_checksum_address(plasma_vault.address)).call
-        )
-        f_price: Future = pool.submit(
-            _safe_call, lambda: oracle.get_asset_price(asset).call()
+        # Independent pipelines, each a short chain of batched reads; none of
+        # them waits on a pool future, so they cannot starve the pool.
+        f_block = pool.submit(_fetch_block, ctx, block_number)
+        f_vault = pool.submit(_fetch_vault_reads, ctx, plasma_vault)
+        f_fees = pool.submit(_fetch_fee_data, ctx, plasma_vault)
+        f_withdraw = pool.submit(_fetch_withdraw_manager, ctx, plasma_vault)
+        f_roles = pool.submit(_fetch_role_accounts, ctx, plasma_vault)
+        f_markets = pool.submit(
+            _fetch_market_reads, ctx, plasma_vault, with_aave_pools=bool(chain_id)
         )
 
-        # Collect all results
-        latest_block = f_block.result()
-        is_latest = block_number is None
-        resolved_block = latest_block if block_number is None else block_number
-        block_timestamp: int = ctx.web3.eth.get_block(resolved_block)["timestamp"]
-        asset_price = f_price.result()
-        withdraw_mgr_addr = f_withdraw.result()
-
-        # Phase 3: withdraw manager details (needs address from phase 1) and
-        # fee configuration (own internal FeeAccount -> FeeManager hop)
-        wm_data = _fetch_withdraw_manager_data(ctx, pool, withdraw_mgr_addr)
-        fee_data = _fetch_fee_data(ctx, pool, plasma_vault)
-
-        # Phase 4: dependency balance graph per market
-        balance_fuses = f_balance_fuses.result()
-        dep_futs = {
-            bf.market_id: pool.submit(
-                plasma_vault.get_dependency_balance_graph(bf.market_id).call
+        markets = f_markets.result()
+        lending = (
+            _fetch_lending_reads(ctx, pool, vault_addr, chain_id, markets)
+            if chain_id
+            else _LendingReads()
+        )
+        vault_reads = f_vault.result()
+        token_prices_usd = (
+            _fetch_breakdown_token_prices(
+                ctx,
+                PriceOracleMiddleware(ctx, vault_reads["price_oracle_addr"]),
+                _collect_breakdown_token_addresses(
+                    lending.morpho_positions, lending.aave_positions
+                ),
             )
-            for bf in balance_fuses
-        }
-        dep_graph: dict[int, list[int]] = {}
-        for market_id, fut in dep_futs.items():
-            deps = fut.result()
-            if deps:
-                dep_graph[market_id] = [int(d) for d in deps]
-
-        # Per-fuse MARKET_ID() — needed to detect orphan markets (action fuse
-        # registered but no balance fuse for the same market_id).
-        fuses_list = f_fuses.result()
-        fuse_market_futs = {
-            addr: pool.submit(_fetch_fuse_market_id, ctx, addr) for addr in fuses_list
-        }
-        fuse_markets: dict[str, int] = {}
-        for addr, fm_fut in fuse_market_futs.items():
-            fuse_mid = fm_fut.result()
-            if fuse_mid is not None:
-                fuse_markets[addr] = fuse_mid
-
-        instant_fuses_list = f_instant.result()
-
-        # Phase 5: lending health (Morpho, Aave V3)
-        lending_health: VaultLendingHealth | None = None
-        if chain_id:
-            sub_futs: dict[int, Any] = {
-                bf.market_id: pool.submit(
-                    plasma_vault.get_market_substrates(bf.market_id).call
-                )
-                for bf in balance_fuses
-            }
-            market_substrates: dict[int, list[bytes]] = {}
-            for mid, fut in sub_futs.items():
-                subs = fut.result()
-                if subs:
-                    market_substrates[mid] = subs
-
-            vault_addr = Web3.to_checksum_address(plasma_vault.address)
-            aave_pools = _fetch_aave_pools(ctx, pool, balance_fuses)
-            lending_health = _safe_call(
-                lambda: fetch_vault_lending_health(
-                    ctx,
-                    vault_addr,
-                    chain_id,
-                    [bf.market_id for bf in balance_fuses],
-                    market_substrates,
-                    aave_pools=aave_pools,
-                )
-            )
-
-            morpho_positions = _fetch_morpho_positions(
-                ctx, pool, vault_addr, market_substrates
-            )
-            aave_positions = _fetch_aave_positions(
-                ctx, pool, vault_addr, aave_pools, market_substrates
-            )
-            token_prices_usd = _fetch_breakdown_token_prices(
-                pool,
-                oracle,
-                _collect_breakdown_token_addresses(morpho_positions, aave_positions),
-            )
-        else:
-            morpho_positions = None
-            aave_positions = None
-            token_prices_usd = None
-            market_substrates = {}
+            if chain_id
+            else None
+        )
+        resolved_block, block_timestamp = f_block.result()
+        withdraw_manager, withdraw_manager_data = f_withdraw.result()
 
         return _VaultData(
+            **vault_reads,
             block_number=resolved_block,
-            is_latest=is_latest,
+            is_latest=block_number is None,
             block_timestamp=block_timestamp,
-            share_decimals=f_decimals.result(),
-            asset_decimals=f_adec.result(),
-            underlying_balance_on_vault=f_underlying_bal.result(),
-            total_assets=f_total_assets.result(),
-            total_supply=f_total_supply.result(),
-            supply_cap=f_supply_cap.result(),
-            asset=asset,
-            vault_name=f_name.result() or "",
-            asset_symbol=f_symbol.result() or "?",
-            access_manager=f_access.result(),
-            price_oracle_addr=price_oracle_addr,
-            rewards_manager=f_rewards.result(),
-            withdraw_manager=withdraw_mgr_addr,
-            asset_price_usd=asset_price.readable() if asset_price else None,
-            fuses=fuses_list,
-            balance_fuses=balance_fuses,
-            instant_fuses=instant_fuses_list,
-            withdraw_manager_data=wm_data,
-            fee_data=fee_data,
-            dependency_graph=dep_graph or None,
-            lending_health=lending_health,
-            morpho_positions=morpho_positions,
-            aave_positions=aave_positions,
+            withdraw_manager=withdraw_manager,
+            withdraw_manager_data=withdraw_manager_data,
+            fee_data=f_fees.result(),
+            balance_fuses=markets.balance_fuses,
+            dependency_graph=markets.dependency_graph or None,
+            market_substrates=markets.market_substrates or None,
+            lending_health=lending.lending_health,
+            morpho_positions=lending.morpho_positions,
+            aave_positions=lending.aave_positions,
             token_prices_usd=token_prices_usd,
-            fuse_markets=fuse_markets or None,
-            market_substrates=market_substrates or None,
+            role_accounts=f_roles.result(),
         )
 
 

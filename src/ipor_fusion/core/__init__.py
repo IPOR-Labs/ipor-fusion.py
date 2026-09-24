@@ -8,6 +8,7 @@ from ipor_fusion.core.fee_manager import (
     RecipientFee,
 )
 from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInstance
+from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
     PriceOracleMiddleware,
@@ -28,6 +29,8 @@ from ipor_fusion.core.withdraw_manager import (
 
 __all__ = [
     "Web3Context",
+    "Multicall3",
+    "MULTICALL3_ADDRESS",
     "PlasmaVault",
     "AccessManager",
     "RoleAccount",

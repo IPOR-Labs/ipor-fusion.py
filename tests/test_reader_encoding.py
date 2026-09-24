@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import sequenced
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -244,12 +245,14 @@ class TestAaveV3ReaderPositionBreakdown:
 
     def test_position_breakdown_aggregates_balances(self):
         reader, ctx = _make_reader(AaveV3Reader)
-        ctx.call.side_effect = [
-            self._reserve_data(self.STABLE_DEBT, self.A_TOKEN, self.VARIABLE_DEBT),
-            encode(["uint256"], [12345]),  # aToken.balanceOf
-            encode(["uint256"], [678]),  # variableDebtToken.balanceOf
-            encode(["uint256"], [9]),  # stableDebtToken.balanceOf
-        ]
+        ctx.call.side_effect = sequenced(
+            [
+                self._reserve_data(self.STABLE_DEBT, self.A_TOKEN, self.VARIABLE_DEBT),
+                encode(["uint256"], [12345]),  # aToken.balanceOf
+                encode(["uint256"], [678]),  # variableDebtToken.balanceOf
+                encode(["uint256"], [9]),  # stableDebtToken.balanceOf
+            ]
+        )
 
         breakdown = reader.position_breakdown(TOKEN_A, USER_ADDR)
 
@@ -265,11 +268,13 @@ class TestAaveV3ReaderPositionBreakdown:
 
     def test_position_breakdown_skips_stable_when_zero_address(self):
         reader, ctx = _make_reader(AaveV3Reader)
-        ctx.call.side_effect = [
-            self._reserve_data(self.ZERO, self.A_TOKEN, self.VARIABLE_DEBT),
-            encode(["uint256"], [0]),  # aToken.balanceOf
-            encode(["uint256"], [0]),  # variableDebtToken.balanceOf
-        ]
+        ctx.call.side_effect = sequenced(
+            [
+                self._reserve_data(self.ZERO, self.A_TOKEN, self.VARIABLE_DEBT),
+                encode(["uint256"], [0]),  # aToken.balanceOf
+                encode(["uint256"], [0]),  # variableDebtToken.balanceOf
+            ]
+        )
 
         breakdown = reader.position_breakdown(TOKEN_A, USER_ADDR)
 
@@ -327,7 +332,7 @@ class TestMorphoReaderPositionBreakdown:
             ["address", "address", "address", "address", "uint256"],
             [TOKEN_A, TOKEN_B, ORACLE, IRM, 860000000000000000],
         )
-        ctx.call.side_effect = [position_raw, market_raw, params_raw]
+        ctx.call.side_effect = sequenced([position_raw, market_raw, params_raw])
 
         result = reader.position_breakdown(MARKET_ID, USER_ADDR)
 
@@ -352,7 +357,7 @@ class TestMorphoReaderPositionBreakdown:
             ["address", "address", "address", "address", "uint256"],
             [TOKEN_A, TOKEN_B, ORACLE, IRM, 0],
         )
-        ctx.call.side_effect = [position_raw, market_raw, params_raw]
+        ctx.call.side_effect = sequenced([position_raw, market_raw, params_raw])
 
         result = reader.position_breakdown(MARKET_ID, USER_ADDR)
 

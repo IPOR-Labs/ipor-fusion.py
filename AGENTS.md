@@ -85,7 +85,7 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
   used by the CLI, MCP and `readers/lending_health`
 - `config/roles.py` — `Roles` IntEnum
 - `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
-  `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
+  `multicall` (`Multicall3`), `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
   `simulation` (`VaultSimulator`, eth_simulateV1), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`
 - `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, erc4626,
@@ -116,6 +116,11 @@ or examples.
   A `Call` without `output_types` (a write) raises on `.call()`. The same
   `Call` feeds `VaultSimulator.observe`, so reads, sends and simulations share
   one definition.
+- Batch independent reads: `Multicall3(ctx).aggregate(calls)` (raises as
+  `.call()` would) or `.try_aggregate(calls)` (``None`` per failed read) runs
+  many `Call`s in one `eth_call` at one block. A loop of `.call()`s, or a
+  thread pool of them, costs one round trip each; RPC latency, not decoding,
+  is what makes the vault tooling slow.
 - Fuses (`fuses/`) are stateless encoders: a method returns an immutable
   `FuseAction(fuse_address, calldata)` and touches no chain. `Fuse` builds it
   via `self._action_raw(solidity_signature, values)`; the shared `_validate_*`
@@ -157,9 +162,11 @@ byte, e.g. Ebisu ZAPPER/REGISTRY).
 
 `fusion config` (set-provider, set-etherscan-key, show), `fusion market`
 (morpho-blue, meta-morpho), `fusion vault` (add, remove, list, info,
-role-accounts, oracle-mapping). `vault info` fans out RPC and API calls with a
-`ThreadPoolExecutor`; contract names and token symbols are cached in
-`~/.cache/ipor-fusion/contract_cache.json`.
+role-accounts, oracle-mapping). `vault info` runs independent fetch pipelines
+(vault/asset, fees, WithdrawManager, markets, roles) concurrently on a
+`ThreadPoolExecutor`, each a short chain of `Multicall3` batches; keep new
+reads inside a batch rather than adding per-call round trips. Contract names
+and token symbols are cached in `~/.cache/ipor-fusion/contract_cache.json`.
 
 Every CLI command has an MCP tool (`fusion changelog` maps to `server_info`;
 the rest share names). Read-only: `vault_info`, `vault_list`,

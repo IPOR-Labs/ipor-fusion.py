@@ -10,6 +10,7 @@ import logging
 import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from typing import Any
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
@@ -17,6 +18,8 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import Call
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.morpho import (
@@ -148,15 +151,19 @@ def _compute_morpho_market_health(
     market_name: str,
 ) -> LendingMarketHealth | None:
     """Compute LTV health for a single Morpho Blue market position."""
+    calls: list[Call[Any]] = [
+        reader.position(morpho_market_id, vault_address),
+        reader.market(morpho_market_id),
+        reader.market_params(morpho_market_id),
+    ]
     try:
-        position = reader.position(morpho_market_id, vault_address).call()
+        position, market, params = Multicall3(ctx).aggregate(calls)
     except Exception:
-        _logger.debug("Failed to read Morpho position for %s", morpho_market_id)
+        _logger.debug("Failed to read Morpho market data for %s", morpho_market_id)
         return None
 
     # No borrow = no liquidation risk
     if position.borrow_shares == 0:
-        params = reader.market_params(morpho_market_id).call()
         return LendingMarketHealth(
             protocol="morpho",
             market_id=ipor_market_id,
@@ -171,11 +178,9 @@ def _compute_morpho_market_health(
         )
 
     try:
-        market = reader.market(morpho_market_id).call()
-        params = reader.market_params(morpho_market_id).call()
         oracle_price = _call_morpho_oracle_price(ctx, params.oracle)
     except Exception:
-        _logger.debug("Failed to read Morpho market data for %s", morpho_market_id)
+        _logger.debug("Failed to read Morpho oracle price for %s", morpho_market_id)
         return None
 
     borrowed = _shares_to_assets_up(

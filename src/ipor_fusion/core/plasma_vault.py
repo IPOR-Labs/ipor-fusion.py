@@ -12,6 +12,13 @@ from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
+_BALANCE_FUSE_ADDED_TOPIC = HexBytes(
+    Web3.keccak(text="BalanceFuseAdded(uint256,address)")
+)
+_BALANCE_FUSE_REMOVED_TOPIC = HexBytes(
+    Web3.keccak(text="BalanceFuseRemoved(uint256,address)")
+)
+
 
 @dataclass(slots=True)
 class BalanceFuse:
@@ -328,16 +335,16 @@ class PlasmaVault(ContractWrapper):
         # Replay Added/Removed events chronologically to mirror on-chain storage.
         # Sorting by (blockNumber, logIndex) handles provider-side ordering quirks
         # and re-add-after-remove cases that a set-subtraction approach misses.
-        events: list[tuple[LogReceipt, bool]] = [
-            (e, True) for e in self._get_balance_fuse_added_events()
-        ] + [(e, False) for e in self._get_balance_fuse_removed_events()]
-        events.sort(key=lambda item: (item[0]["blockNumber"], item[0]["logIndex"]))
+        events = sorted(
+            self._get_balance_fuse_events(),
+            key=lambda event: (event["blockNumber"], event["logIndex"]),
+        )
 
         state: dict[int, BalanceFuse] = {}
-        for event, is_added in events:
+        for event in events:
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
             checksum = Web3.to_checksum_address(fuse)
-            if is_added:
+            if HexBytes(event["topics"][0]) == _BALANCE_FUSE_ADDED_TOPIC:
                 state[market_id] = BalanceFuse(market_id=market_id, fuse=checksum)
             else:
                 current = state.get(market_id)
@@ -373,22 +380,16 @@ class PlasmaVault(ContractWrapper):
             )
         )
 
-    def _get_balance_fuse_added_events(self) -> list[LogReceipt]:
-        event_signature_hash = HexBytes(
-            Web3.keccak(text="BalanceFuseAdded(uint256,address)")
-        ).to_0x_hex()
+    def _get_balance_fuse_events(self) -> list[LogReceipt]:
+        """BalanceFuseAdded and BalanceFuseRemoved logs, from one eth_getLogs."""
         return list(
             self._ctx.get_logs(
-                contract_address=self._address, topics=[event_signature_hash]
-            )
-        )
-
-    def _get_balance_fuse_removed_events(self) -> list[LogReceipt]:
-        event_signature_hash = HexBytes(
-            Web3.keccak(text="BalanceFuseRemoved(uint256,address)")
-        ).to_0x_hex()
-        return list(
-            self._ctx.get_logs(
-                contract_address=self._address, topics=[event_signature_hash]
+                contract_address=self._address,
+                topics=[
+                    [
+                        _BALANCE_FUSE_ADDED_TOPIC.to_0x_hex(),
+                        _BALANCE_FUSE_REMOVED_TOPIC.to_0x_hex(),
+                    ]
+                ],
             )
         )

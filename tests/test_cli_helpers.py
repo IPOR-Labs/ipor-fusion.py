@@ -4,8 +4,11 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+from _multicall import decode_aggregate3, multicall_aware
 from click.testing import CliRunner
+from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
@@ -39,8 +42,9 @@ from ipor_fusion.cli.vault_fetcher import (
     _fetch_aave_positions,
     _fetch_breakdown_token_prices,
     _fetch_fee_data,
-    _fetch_fuse_market_id,
     _fetch_morpho_positions,
+    _fuse_market_id_call,
+    _read_batch,
     _resolve_token_symbol,
     _safe_call,
     _VaultData,
@@ -64,9 +68,11 @@ from ipor_fusion.cli.vault_rendering import (
     _substrate_details,
 )
 from ipor_fusion.config.roles import Roles
+from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
+from ipor_fusion.core.multicall import Multicall3
+from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse
-from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.lending_health import (
@@ -1723,35 +1729,76 @@ class TestFetchAavePools:
             for mid, fuse in self._FUSES.items()
         ]
 
-    @patch("ipor_fusion.cli.vault_fetcher.AaveV3FuseReader")
-    def test_maps_each_aave_market_to_its_fuse_pool(self, mock_fuse_reader_cls):
-        pool_of_fuse = {self._FUSES[mid]: pool for mid, pool in _AAVE_POOLS.items()}
-        mock_fuse_reader_cls.side_effect = lambda _ctx, fuse: MagicMock(
-            pool=MagicMock(return_value=pool_of_fuse[fuse])
-        )
+    _PROVIDER_SELECTOR = function_signature_to_4byte_selector(
+        "AAVE_V3_POOL_ADDRESSES_PROVIDER()"
+    )
+    _GET_POOL_SELECTOR = function_signature_to_4byte_selector("getPool()")
 
-        with ThreadPoolExecutor() as pool:
-            result = _fetch_aave_pools(MagicMock(), pool, self._balance_fuses())
+    def _ctx(self, bad_fuses: dict[str, bytes | Exception]) -> MagicMock:
+        """Each Aave fuse names its own provider; each provider answers with
+        its market's pool. `bad_fuses` overrides a fuse's getter response."""
+        provider_of = {
+            fuse: Web3.to_checksum_address("0x" + "e" * 39 + str(i))
+            for i, fuse in enumerate(self._FUSES.values())
+        }
+        pool_of = {
+            provider_of[self._FUSES[mid]]: pool for mid, pool in _AAVE_POOLS.items()
+        }
+
+        def handler(to: str, data: bytes) -> bytes:
+            if data == self._PROVIDER_SELECTOR:
+                bad = bad_fuses.get(to)
+                if isinstance(bad, Exception):
+                    raise bad
+                return (
+                    bad if bad is not None else encode(["address"], [provider_of[to]])
+                )
+            assert data == self._GET_POOL_SELECTOR
+            return encode(["address"], [pool_of[to]])
+
+        ctx = MagicMock()
+        ctx.call.side_effect = multicall_aware(handler)
+        return ctx
+
+    def test_maps_each_aave_market_to_its_fuse_pool(self):
+        ctx = self._ctx({})
+
+        result = _fetch_aave_pools(ctx, self._balance_fuses())
 
         assert result == _AAVE_POOLS
-        probed = {c.args[1] for c in mock_fuse_reader_cls.call_args_list}
+        # Providers, then pools: one Multicall3 round trip per stage, and the
+        # Morpho fuse is never probed.
+        assert ctx.call.call_count == 2
+        (_to, data), _ = ctx.call.call_args_list[0]
+        probed = {target for target, _cd in decode_aggregate3(data)}
         assert self._FUSES[IporFusionMarkets.MORPHO] not in probed
 
-    @patch("ipor_fusion.cli.vault_fetcher.AaveV3FuseReader")
-    def test_drops_markets_whose_fuse_does_not_resolve(self, mock_fuse_reader_cls):
-        failures = {
-            self._FUSES[IporFusionMarkets.AAVE_V3_LIDO]: ContractLogicError("revert"),
-            self._FUSES[IporFusionMarkets.SPARK_LEND]: EmptyCallResultError("empty"),
-        }
-        core_pool = _AAVE_POOLS[IporFusionMarkets.AAVE_V3]
-        mock_fuse_reader_cls.side_effect = lambda _ctx, fuse: MagicMock(
-            pool=MagicMock(side_effect=failures.get(fuse), return_value=core_pool)
+    def test_drops_markets_whose_fuse_does_not_resolve(self):
+        # Aave V3 Prime's fuse reverts; SparkLend's answers with no data.
+        ctx = self._ctx(
+            {
+                self._FUSES[IporFusionMarkets.AAVE_V3_LIDO]: ContractLogicError("x"),
+                self._FUSES[IporFusionMarkets.SPARK_LEND]: b"",
+            }
         )
 
-        with ThreadPoolExecutor() as pool:
-            result = _fetch_aave_pools(MagicMock(), pool, self._balance_fuses())
+        result = _fetch_aave_pools(ctx, self._balance_fuses())
 
-        assert result == {IporFusionMarkets.AAVE_V3: core_pool}
+        assert result == {
+            IporFusionMarkets.AAVE_V3: _AAVE_POOLS[IporFusionMarkets.AAVE_V3]
+        }
+
+    def test_no_aave_market_skips_the_rpc(self):
+        ctx = MagicMock()
+        morpho_only = [
+            BalanceFuse(
+                market_id=MarketId(IporFusionMarkets.MORPHO),
+                fuse=self._FUSES[IporFusionMarkets.MORPHO],
+            )
+        ]
+
+        assert _fetch_aave_pools(ctx, morpho_only) == {}
+        ctx.call.assert_not_called()
 
 
 class TestFetchAavePositions:
@@ -1870,27 +1917,27 @@ class TestBreakdownTokenPrices:
         assert _collect_breakdown_token_addresses(None, None) == set()
 
     def test_fetch_prices_returns_none_for_empty_set(self):
-        with ThreadPoolExecutor() as pool:
-            assert _fetch_breakdown_token_prices(pool, MagicMock(), set()) is None
+        ctx = MagicMock()
+        assert _fetch_breakdown_token_prices(ctx, MagicMock(), set()) is None
+        ctx.call.assert_not_called()
 
     def test_fetch_prices_keys_lowercase_and_skips_unknown(self):
-        good_price = MagicMock()
-        good_price.readable.return_value = 1234.56
-        oracle = MagicMock()
-        oracle.get_asset_price.side_effect = [
-            good_price,
-            ContractLogicError("no source"),
-        ]
+        oracle_addr = Web3.to_checksum_address("0x" + "0c" * 20)
 
-        with ThreadPoolExecutor() as pool:
-            result = _fetch_breakdown_token_prices(
-                pool, oracle, {_TOKEN_USDC, _TOKEN_WETH}
-            )
+        def handler(_to: str, data: bytes) -> bytes:
+            (asset,) = decode(["address"], data[4:])
+            if Web3.to_checksum_address(asset) == _TOKEN_WETH:
+                raise ContractLogicError("no source")
+            return encode(["uint256", "uint256"], [123456, 2])
 
-        assert result is not None
-        assert len(result) == 1
-        for addr in result:
-            assert addr == addr.lower()
+        ctx = MagicMock()
+        ctx.call.side_effect = multicall_aware(handler)
+        oracle = PriceOracleMiddleware(ctx, oracle_addr)
+
+        result = _fetch_breakdown_token_prices(ctx, oracle, {_TOKEN_USDC, _TOKEN_WETH})
+
+        assert result == {_TOKEN_USDC.lower(): 1234.56}
+        assert ctx.call.call_count == 1
 
 
 class TestBreakdownAmountJson:
@@ -2059,33 +2106,75 @@ class TestPrintFuseSection:
         assert "(none)" in captured.out
 
 
-class TestFetchFuseMarketId:
-    """Reads the immutable MARKET_ID() exposed by every IPOR Fusion fuse so
-    the CLI can detect orphan markets (action fuses without a matching
-    balance fuse)."""
+class TestReadBatch:
+    """Required reads raise their own error; optional reads degrade to None;
+    both share one Multicall3 round trip."""
 
-    def test_returns_decoded_uint256(self):
+    @staticmethod
+    def _call(ctx: MagicMock, value: int) -> Call[int]:
+        return Call(
+            to=ADDR_1,
+            data=bytes(4) + encode(["uint256"], [value]),
+            output_types=["uint256"],
+            ctx=ctx,
+        )
+
+    @staticmethod
+    def _ctx() -> MagicMock:
+        def handler(_to: str, data: bytes) -> bytes:
+            (value,) = decode(["uint256"], data[4:])
+            if value == 0:
+                raise ContractLogicError("execution reverted: Zero")
+            return encode(["uint256"], [value])
+
         ctx = MagicMock()
-        # uint256(14) ABI-encoded
-        ctx.call.return_value = (14).to_bytes(32, "big")
-        result = _fetch_fuse_market_id(ctx, ADDR_1)
-        assert result == 14
+        ctx.call.side_effect = multicall_aware(handler)
+        return ctx
+
+    def test_splits_required_and_optional_in_one_round_trip(self):
+        ctx = self._ctx()
+
+        required, optional = _read_batch(
+            ctx, [self._call(ctx, 1), self._call(ctx, 2)], [self._call(ctx, 0)]
+        )
+
+        assert (required, optional) == ([1, 2], [None])
         ctx.call.assert_called_once()
 
-    def test_returns_none_on_revert(self):
+    def test_failing_required_read_raises_its_revert(self):
+        ctx = self._ctx()
+
+        with pytest.raises(ContractLogicError, match="Zero"):
+            _read_batch(ctx, [self._call(ctx, 1), self._call(ctx, 0)])
+
+
+class TestFuseMarketIdCall:
+    """MARKET_ID() of every registered fuse, read in one batch, lets the CLI
+    detect orphan markets (action fuses without a matching balance fuse)."""
+
+    @staticmethod
+    def _read(response: bytes | Exception) -> int | None:
+        def handler(_to: str, _data: bytes) -> bytes:
+            if isinstance(response, Exception):
+                raise response
+            return response
+
         ctx = MagicMock()
-        ctx.call.side_effect = ContractLogicError("execution reverted")
-        assert _fetch_fuse_market_id(ctx, ADDR_1) is None
+        ctx.call.side_effect = multicall_aware(handler)
+        (result,) = Multicall3(ctx).try_aggregate([_fuse_market_id_call(ctx, ADDR_1)])
+        return result
+
+    def test_returns_decoded_uint256(self):
+        assert self._read(encode(["uint256"], [14])) == 14
+
+    def test_returns_none_on_revert(self):
+        assert self._read(ContractLogicError("execution reverted")) is None
 
     def test_returns_none_on_empty_response(self):
-        ctx = MagicMock()
-        ctx.call.return_value = b""
-        assert _fetch_fuse_market_id(ctx, ADDR_1) is None
+        assert self._read(b"") is None
 
     def test_returns_none_on_undecodable_response(self):
-        ctx = MagicMock()
-        ctx.call.return_value = b"\x00\x01"  # too short for uint256
-        assert _fetch_fuse_market_id(ctx, ADDR_1) is None
+        assert self._read(b"\x00\x01") is None  # too short for uint256
 
 
 class TestPartitionBalanceFuses:
@@ -2324,14 +2413,14 @@ class TestPrintFees:
         assert "MISMATCH" not in capsys.readouterr().out
 
 
+@pytest.mark.usefixtures("sequential_multicall")
 class TestFetchFeeData:
     def test_no_fee_account_skips_the_fee_manager_hop(self):
         vault = MagicMock()
         vault.get_performance_fee_data.return_value.call.return_value = None
         vault.get_management_fee_data.return_value.call.return_value = None
         vault.get_unrealized_management_fee.return_value.call.return_value = 7
-        with ThreadPoolExecutor() as pool:
-            result = _fetch_fee_data(MagicMock(), pool, vault)
+        result = _fetch_fee_data(MagicMock(), vault)
         assert result.fee_manager is None
         assert result.deposit_fee_wad is None
         assert result.unrealized_management_fee == 7
@@ -2352,10 +2441,9 @@ class TestFetchFeeData:
 
         with (
             patch("ipor_fusion.cli.vault_fetcher.FeeAccount") as account_cls,
-            ThreadPoolExecutor() as pool,
         ):
             account_cls.return_value.fee_manager.return_value.call = empty_return
-            result = _fetch_fee_data(MagicMock(), pool, vault)
+            result = _fetch_fee_data(MagicMock(), vault)
 
         assert result.fee_manager is None
         assert result.performance_fee_vault_bps == 1000
@@ -2373,7 +2461,6 @@ class TestFetchFeeData:
         with (
             patch("ipor_fusion.cli.vault_fetcher.FeeAccount") as account_cls,
             patch("ipor_fusion.cli.vault_fetcher.FeeManager") as manager_cls,
-            ThreadPoolExecutor() as pool,
         ):
             account_cls.return_value.fee_manager.return_value.call.return_value = ADDR_2
             manager = manager_cls.return_value
@@ -2386,7 +2473,7 @@ class TestFetchFeeData:
             manager.get_management_fee_recipients.return_value.call.return_value = []
             dao_getter = manager.get_ipor_dao_fee_recipient_address
             dao_getter.return_value.call.return_value = ADDR_1
-            result = _fetch_fee_data(MagicMock(), pool, vault)
+            result = _fetch_fee_data(MagicMock(), vault)
 
         assert result.fee_manager == ADDR_2
         assert result.deposit_fee_wad is None

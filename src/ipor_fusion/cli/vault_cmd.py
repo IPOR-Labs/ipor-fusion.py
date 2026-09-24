@@ -7,9 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import click
-import requests
 from web3 import Web3
-from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 
 from ipor_fusion.chains import CHAIN_NAME_TO_ID, CHAIN_NAMES, ensure_supported_chain
 from ipor_fusion.cli.config_store import (
@@ -20,6 +18,7 @@ from ipor_fusion.cli.config_store import (
 )
 from ipor_fusion.cli.explorer import get_contract_name
 from ipor_fusion.cli.vault_fetcher import (
+    _ROLE_SCAN_ERRORS,
     _ZERO_ADDRESS,
     _fetch_deployment_info,
     _fetch_vault_data,
@@ -47,7 +46,6 @@ from ipor_fusion.cli.vault_rendering import (
 )
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import (
-    AccessManager,
     resolve_access_manager,
     role_account_sort_key,
 )
@@ -745,31 +743,10 @@ def _print_health_lines(market: Any, indent: str) -> None:
     click.secho(f"{indent}Status:        {status}", fg=color, bold=bold)
 
 
-# Failure modes of the heavy RoleGranted scan: JSON-RPC rejections/limits plus
-# transport-level errors — web3's HTTPProvider re-raises raw requests
-# exceptions (read timeouts, 429/5xx via raise_for_status).
-_ROLE_SCAN_ERRORS = (
-    ContractLogicError,
-    Web3RPCError,
-    TimeExhausted,
-    requests.RequestException,
-)
-
-
-def _fetch_role_accounts_json(
-    ctx: Web3Context, data: _VaultData
-) -> list[dict[str, Any]] | None:
-    """All confirmed role holders on the AccessManager, sorted; None when the
-    RoleGranted log scan fails (provider without broad eth_getLogs support,
-    or a transport-level failure on the heavy query)."""
-    try:
-        accounts = AccessManager(
-            ctx,
-            data.access_manager,  # type: ignore[arg-type]
-        ).get_all_role_accounts()
-    except _ROLE_SCAN_ERRORS:
+def _role_accounts_json(data: _VaultData) -> list[dict[str, Any]] | None:
+    if data.role_accounts is None:
         return None
-    return [ra.to_dict() for ra in sorted(accounts, key=role_account_sort_key)]
+    return [ra.to_dict() for ra in data.role_accounts]
 
 
 def _print_role_accounts_table(role_accounts: list[dict[str, Any]]) -> None:
@@ -820,12 +797,6 @@ def _print_vault_info(
         )
         click.echo(json.dumps(result, indent=2))
         return
-
-    # Start the heavy RoleGranted scan now; joined when its section prints.
-    # shutdown(wait=False) only stops new submissions — the task completes.
-    role_pool = ThreadPoolExecutor(max_workers=1)
-    role_accounts_fut = role_pool.submit(_fetch_role_accounts_json, ctx, data)
-    role_pool.shutdown(wait=False)
 
     total_assets_usd = _format_usd(
         data.total_assets, data.asset_decimals, data.asset_price_usd
@@ -906,7 +877,7 @@ def _print_vault_info(
     _print_fees(data)
     click.echo()
 
-    _print_role_accounts(role_accounts_fut.result())
+    _print_role_accounts(_role_accounts_json(data))
 
     _print_fuse_section(
         "Fuses",
@@ -1402,11 +1373,9 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             data.total_assets / 10**data.asset_decimals
         ) * data.asset_price_usd
 
-    # Resolve fuse contract names in parallel
     with ThreadPoolExecutor() as pool:
-        # The heavy RoleGranted scan overlaps the fetches below; the with-block
-        # exit waits for it, so .result() in the return dict never blocks.
-        role_accounts_fut = pool.submit(_fetch_role_accounts_json, ctx, data)
+        # Runs its own fan-out; submitted first so it overlaps the name lookups.
+        erc20_fut = pool.submit(_compute_erc20_balances, ctx, plasma_vault, data)
         fuse_name_futs = {
             addr: pool.submit(get_contract_name, chain_id, addr, api_key)
             for addr in data.fuses
@@ -1582,7 +1551,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             substrates_json[market_str] = entries
 
     # ERC20 balances
-    erc20_totals = _compute_erc20_balances(ctx, plasma_vault, data)
+    erc20_totals = erc20_fut.result()
     erc20_json = []
     for td in erc20_totals.token_details:
         erc20_entry: dict = {"address": td.address, "symbol": td.symbol}
@@ -1742,7 +1711,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             "withdraw": data.withdraw_manager,
             "fee": data.fee_data.fee_manager if data.fee_data else None,
         },
-        "role_accounts": role_accounts_fut.result(),
+        "role_accounts": _role_accounts_json(data),
         "fees": _build_fees_json(data),
         "withdraw_manager_details": _build_withdraw_manager_json(data, plasma_vault),
         "fuses": fuses_json,
