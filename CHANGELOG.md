@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v3.6.10 (2026-09-24)
+
+### Bug Fixes
+
+- **cli,mcp**: Mask provider URLs in config show output
+  ([`d792bde`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d792bde28fc6e73c303859819facd6b9a6bd30fa))
+
+### Documentation
+
+- **sdk**: State the real Call preview rule in the architecture guide
+  ([`c32c2b0`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c32c2b0b8bd2f96a92d37074e658051b9cc20b0d))
+
+### Features
+
+- **sdk**: Add Multicall3 to batch view Calls into one eth_call
+  ([`585882c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/585882cb72df83a6692ad6aafc30b8a2bd0aeb77))
+
+### Performance Improvements
+
+- **sdk**: Batch vault_info reads through Multicall3 in concurrent pipelines
+  ([`3dcf2e9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3dcf2e931dddcf1a76befc2a6e07bf849326d57d))
+
+- **sdk**: Stop refetching eth_chainId around every eth_call
+  ([`4f32a41`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4f32a419d53caa2294f451c129aa2aa59beb54c2))
+
+### Testing
+
+- **sdk**: Import the multicall test helper like the other test helpers
+  ([`6410ff9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6410ff98c9e1e42ed5c647ab4c8d044f371c2ffa))
+
+### Additional Release Information
+
+- **cli,mcp**: `fusion config show` and the `config_show` MCP tool no longer return the full
+  provider URL. Read `~/.config/ipor-fusion/config.json` for the stored value.
+
+
 ## v3.6.9 (2026-09-14)
 
 ### Bug Fixes
