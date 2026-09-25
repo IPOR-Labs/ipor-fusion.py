@@ -23,6 +23,7 @@ in the hub's future and stays inside the executors' 1 h staleness window.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 import pytest
@@ -189,6 +190,18 @@ class Spoke:
 
 
 @dataclass(frozen=True)
+class TransportDeployment:
+    """One transport's executor generation on the hub and the two fuses that
+    drive it. A new generation always comes from a new factory, so the factory
+    pins the ABI generation the SDK mirrors."""
+
+    executor: str
+    factory: str
+    supply_fuse: str
+    command_fuse: str
+
+
+@dataclass(frozen=True)
 class Deployment:
     """One hub vault, its executors (one per transport, each created by its own
     factory), the fuses registered on the vault, the attestation roles, and the
@@ -201,14 +214,7 @@ class Deployment:
     balance_proposer: str
     balance_approver: str
     market_id: int
-    stargate_executor: str
-    stargate_factory: str
-    stargate_supply_fuse: str
-    stargate_command_fuse: str
-    ccip_executor: str
-    ccip_factory: str
-    ccip_supply_fuse: str
-    ccip_command_fuse: str
+    transports: dict[CrosschainTransportKind, TransportDeployment]
     claim_fuse: str
     spokes: tuple[Spoke, ...]
     #: Spokes the deployment will grow to; their chains are still ``pending``.
@@ -219,36 +225,21 @@ class Deployment:
         return [self.hub, *(spoke.chain for spoke in self.spokes)]
 
     def executor(self, transport_kind: CrosschainTransportKind) -> str:
-        return _by_transport(transport_kind, self.stargate_executor, self.ccip_executor)
+        return self.transports[transport_kind].executor
 
     def factory(self, transport_kind: CrosschainTransportKind) -> str:
-        return _by_transport(transport_kind, self.stargate_factory, self.ccip_factory)
+        return self.transports[transport_kind].factory
 
     def lane_fuses(self, transport_kind: CrosschainTransportKind) -> LaneFuses:
-        supply = _by_transport(
-            transport_kind, self.stargate_supply_fuse, self.ccip_supply_fuse
-        )
-        command = _by_transport(
-            transport_kind, self.stargate_command_fuse, self.ccip_command_fuse
-        )
+        transport = self.transports[transport_kind]
         return LaneFuses(
-            supply=Web3.to_checksum_address(supply),
-            command=Web3.to_checksum_address(command),
+            supply=Web3.to_checksum_address(transport.supply_fuse),
+            command=Web3.to_checksum_address(transport.command_fuse),
             claim=Web3.to_checksum_address(self.claim_fuse),
         )
 
     def transport(self, transport_kind: CrosschainTransportKind) -> CrosschainTransport:
-        if transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO:
-            return stargate_transport(self)
-        return ccip_transport(self)
-
-
-def _by_transport(transport_kind: CrosschainTransportKind, stargate, ccip):
-    if transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO:
-        return stargate
-    if transport_kind == CrosschainTransportKind.CHAINLINK_CCIP:
-        return ccip
-    raise ValueError(f"unsupported transport {transport_kind.name}")
+        return _TRANSPORTS[transport_kind](self)
 
 
 POC = Deployment(
@@ -262,31 +253,37 @@ POC = Deployment(
         "0xCeE5C4272E246A424AeDE992c987966736E0F63b"
     ),
     market_id=crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1"),
-    # Executors and the factories that created them. A new executor generation
-    # always comes from a new factory, so the factory pins the ABI generation
-    # the SDK mirrors; the Stargate executor exposes no interface version.
-    stargate_executor=Web3.to_checksum_address(
-        "0x1d5c9d44f8d556ec7f557ae992401cc770937e6e"
-    ),
-    stargate_factory=Web3.to_checksum_address(
-        "0xb7894a9081d9060ced0b2e33714cdb075de67b9e"
-    ),
-    stargate_supply_fuse=Web3.to_checksum_address(
-        "0x9455e228b821b7f6695aa5a1cdcac9d331be7a13"
-    ),
-    stargate_command_fuse=Web3.to_checksum_address(
-        "0x2413227ce2d96d871a78503651b90779d39ebc07"
-    ),
-    ccip_executor=Web3.to_checksum_address(
-        "0xb99ab307ce3df269b9f8763657fa128bbd38e2aa"
-    ),
-    ccip_factory=Web3.to_checksum_address("0xf360e8b00694c03fdc33dc2c54396fa41fabaadf"),
-    ccip_supply_fuse=Web3.to_checksum_address(
-        "0x79613512f64a8360c1dfd17d93f2efd02fd023b5"
-    ),
-    ccip_command_fuse=Web3.to_checksum_address(
-        "0xbcb72b216dd685dfebe952c95e9210c6e4b8c8c6"
-    ),
+    # The Stargate executor exposes no interface version; its factory pins it.
+    transports={
+        CrosschainTransportKind.STARGATE_LAYERZERO: TransportDeployment(
+            executor=Web3.to_checksum_address(
+                "0x1d5c9d44f8d556ec7f557ae992401cc770937e6e"
+            ),
+            factory=Web3.to_checksum_address(
+                "0xb7894a9081d9060ced0b2e33714cdb075de67b9e"
+            ),
+            supply_fuse=Web3.to_checksum_address(
+                "0x9455e228b821b7f6695aa5a1cdcac9d331be7a13"
+            ),
+            command_fuse=Web3.to_checksum_address(
+                "0x2413227ce2d96d871a78503651b90779d39ebc07"
+            ),
+        ),
+        CrosschainTransportKind.CHAINLINK_CCIP: TransportDeployment(
+            executor=Web3.to_checksum_address(
+                "0xb99ab307ce3df269b9f8763657fa128bbd38e2aa"
+            ),
+            factory=Web3.to_checksum_address(
+                "0xf360e8b00694c03fdc33dc2c54396fa41fabaadf"
+            ),
+            supply_fuse=Web3.to_checksum_address(
+                "0x79613512f64a8360c1dfd17d93f2efd02fd023b5"
+            ),
+            command_fuse=Web3.to_checksum_address(
+                "0xbcb72b216dd685dfebe952c95e9210c6e4b8c8c6"
+            ),
+        ),
+    },
     claim_fuse=Web3.to_checksum_address("0xc4f6ab5938dd1509d03d3817be69c17440e04399"),
     spokes=(
         Spoke(
@@ -302,7 +299,7 @@ POC = Deployment(
 )
 
 # Kept for the offline transport tests and as the single POC executor address.
-STARGATE_EXECUTOR = POC.stargate_executor
+STARGATE_EXECUTOR = POC.executor(CrosschainTransportKind.STARGATE_LAYERZERO)
 
 #: The transports every deployment is exercised on.
 TRANSPORT_KINDS = (
@@ -384,12 +381,22 @@ def ccip_transport(deployment: Deployment = POC) -> CcipTransport:
     return CcipTransport(_ccip_chain(c) for c in deployment.chains)
 
 
-def assert_relay_success(results) -> None:
-    """Fail with the first reverted call of the first failing chain."""
-    from _simulate import assert_all_success
+_TRANSPORTS = {
+    CrosschainTransportKind.STARGATE_LAYERZERO: stargate_transport,
+    CrosschainTransportKind.CHAINLINK_CCIP: ccip_transport,
+}
 
+
+def assert_relay_success(results, *, expected_failures: Collection[str] = ()) -> None:
+    """Fail with the first reverted call of the first failing chain. Calls
+    labelled in ``expected_failures`` are deliberate reverts (a fail-closed
+    read, a refused proposal) that stay in the replayed call list."""
     for chain_id, result in sorted(results.items()):
-        try:
-            assert_all_success(result)
-        except AssertionError as exc:
-            raise AssertionError(f"chain {chain_id}: {exc}") from exc
+        for call in result.failed_calls:
+            if call.label in expected_failures:
+                continue
+            selector = bytes(call.return_data[:4]).hex()
+            raise AssertionError(
+                f"chain {chain_id}: {call.label!r} reverted: {call.error} "
+                f"selector=0x{selector} (reason={result.revert_reason})"
+            )
