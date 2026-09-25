@@ -285,17 +285,29 @@ class VaultSimulator:
             raise ValueError("No calls buffered — call execute() or observe() first")
 
         block_state_calls: list[dict[str, Any]] = []
+        # A block with no calls is not sent, but its overrides still apply to
+        # everything after it (state carries between blocks), so they fold
+        # into the next block that is sent; that block's own values win.
+        block_overrides: dict[str, Any] = {}
+        state_overrides: dict[str, dict[str, Any]] = {}
         for block in self._blocks:
+            block_overrides = {**block_overrides, **block.block_overrides}
+            for address, fields in block.state_overrides.items():
+                state_overrides[address] = {
+                    **state_overrides.get(address, {}),
+                    **fields,
+                }
             if not block.calls:
                 continue
             entry: dict[str, Any] = {
                 "calls": [self._serialize_call(c) for c in block.calls]
             }
-            if block.block_overrides:
-                entry["blockOverrides"] = block.block_overrides
-            if block.state_overrides:
-                entry["stateOverrides"] = dict(block.state_overrides)
+            if block_overrides:
+                entry["blockOverrides"] = block_overrides
+            if state_overrides:
+                entry["stateOverrides"] = state_overrides
             block_state_calls.append(entry)
+            block_overrides, state_overrides = {}, {}
 
         payload = [
             {
