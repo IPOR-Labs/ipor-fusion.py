@@ -265,3 +265,74 @@ def test_parse_response_plain_string_error_passthrough():
     )
     assert result.revert_reason == "execution reverted"
     assert result.calls[0].error == "execution reverted"
+
+
+# ---------------------------------------------------------------------------
+# Registered custom errors
+# ---------------------------------------------------------------------------
+
+
+def _custom(signature: str, *args) -> bytes:
+    from eth_utils import keccak
+
+    types = signature[signature.index("(") + 1 : -1]
+    return keccak(text=signature)[:4] + abi_encode(
+        types.split(",") if types else [], list(args)
+    )
+
+
+def test_registered_custom_error_decodes_every_argument_kind():
+    from ipor_fusion.errors import register_custom_errors
+
+    signature = "SdkTestError(uint256,address,bytes32,bool,string)"
+    register_custom_errors([signature])
+    owner = "0x" + "ab" * 20
+    data = _custom(signature, 42, owner, b"\x01" * 32, True, "why")
+    assert _decode_revert_reason(data) == (
+        f'SdkTestError(42, {Web3.to_checksum_address(owner)}, 0x{"01" * 32}, true, "why")'
+    )
+
+
+def test_registered_custom_error_without_arguments():
+    from ipor_fusion.errors import register_custom_errors
+
+    register_custom_errors(["SdkTestPlain()"])
+    assert _decode_revert_reason(_custom("SdkTestPlain()")) == "SdkTestPlain()"
+
+
+def test_registered_custom_error_with_malformed_payload():
+    from ipor_fusion.errors import register_custom_errors
+
+    register_custom_errors(["SdkTestBroken(uint256,bytes32)"])
+    data = _custom("SdkTestBroken(uint256,bytes32)", 1, b"\x02" * 32)[:12]
+    assert _decode_revert_reason(data).startswith("SdkTestBroken(<decode failed>: 0x")
+
+
+def test_register_rejects_a_non_signature():
+    from ipor_fusion.errors import register_custom_errors
+
+    try:
+        register_custom_errors(["not a signature"])
+    except ValueError as exc:
+        assert "not a signature" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_get_revert_reason_uses_the_registry():
+    from ipor_fusion.errors import register_custom_errors
+
+    register_custom_errors(["SdkTestGated(uint256)"])
+    web3 = MagicMock()
+    web3.eth.get_transaction.return_value = {
+        "from": "0x" + "11" * 20,
+        "to": "0x" + "22" * 20,
+        "input": "0x",
+        "value": 0,
+    }
+    exc = Exception("execution reverted")
+    exc.data = "0x" + _custom("SdkTestGated(uint256)", 7).hex()  # type: ignore[attr-defined]
+    web3.eth.call.side_effect = exc
+    assert get_revert_reason(web3, b"\x00" * 32, {"blockNumber": 1}) == (  # type: ignore[arg-type]
+        "SdkTestGated(7)"
+    )

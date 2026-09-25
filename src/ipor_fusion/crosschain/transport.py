@@ -30,10 +30,6 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.contracts import CrosschainDispatcher, CrosschainExecutor
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
-from ipor_fusion.fuses.crosschain.base import (
-    CrosschainCommandFuse,
-    CrosschainSupplyFuse,
-)
 from ipor_fusion.types import ChainId
 
 
@@ -100,14 +96,6 @@ class CrosschainTransport(ABC):
         self, ctx: Web3Context, address: ChecksumAddress
     ) -> CrosschainDispatcher:
         """Wrap a dispatcher of this transport."""
-
-    @abstractmethod
-    def supply_fuse(self, address: ChecksumAddress) -> CrosschainSupplyFuse:
-        """The supply fuse encoder of this transport, deployed at ``address``."""
-
-    @abstractmethod
-    def command_fuse(self, address: ChecksumAddress) -> CrosschainCommandFuse:
-        """The command fuse encoder of this transport, deployed at ``address``."""
 
 
 def transfer_call(

@@ -25,6 +25,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import ClassVar
 
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
@@ -133,6 +134,9 @@ class CrosschainSupplyFuse(Fuse, ABC):
     instant-withdrawal fuse: tokens arrive later and are pulled home with
     ``CrosschainClaimFuse``."""
 
+    #: Solidity signature of ``enter``; discovery finds the fuse by its selector.
+    _ENTER: ClassVar[str]
+
     @abstractmethod
     def enter(
         self,
@@ -189,6 +193,9 @@ class CrosschainCommandFuse(Fuse, ABC):
     transports implement with the same semantics. Everything else (chain or
     route registration, balance refresh, retry, cancel) is transport-specific
     and goes through each implementation's ``enter``."""
+
+    #: Solidity signature of ``enter``; discovery finds the fuse by its selector.
+    _ENTER: ClassVar[str]
 
     @abstractmethod
     def send_command(

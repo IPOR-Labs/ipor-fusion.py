@@ -255,6 +255,13 @@ Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` 
 
 The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
 
+Custom errors of the crosschain contracts decode by name: importing
+`ipor_fusion.crosschain` registers their signatures (`CROSSCHAIN_ERROR_SIGNATURES`),
+so a simulated or sent call that reverts reads `NavSettledStale(8453)` in
+`SimulationResult.revert_reason` and `TransactionError` instead of a bare selector.
+`register_custom_errors([...])` adds your own, and `SimulationResult.raise_for_failure()`
+raises `SimulationError` naming the first failed call.
+
 ## Vault construction examples
 
 Runnable, canonical examples for building and configuring a vault from scratch live in
@@ -310,7 +317,8 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
 | `StargateCrosschainDispatcher`, `CcipCrosschainDispatcher` | Remote dispatcher state (`observation`, tracked idle, command lane) |
 | `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |
-| `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation; `open_lane` detects the transport and finds the fuses |
+| `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation (`attestation`, `needs_attestation`, `staleness_max`); `open_lane` detects the transport and finds the fuses |
+| `discover_deployment`, `open_lanes` | Read a vault's crosschain market from the hub alone (executors with transport, factory, fuses, attestation keys and spokes served; remote vaults per spoke) and open every lane; `LANES` maps a transport kind to its lane class |
 | `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between chains, no bridge needed |
 | `ERC20` | Token reads and approvals |
 

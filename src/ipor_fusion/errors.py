@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import logging
+import re
+from collections.abc import Iterable
 
 from eth_abi import decode as abi_decode
 from eth_abi.exceptions import InsufficientDataBytes
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
@@ -24,6 +27,53 @@ PANIC_CODES: dict[int, str] = {
 
 ERROR_SELECTOR = bytes.fromhex("08c379a0")
 PANIC_SELECTOR = bytes.fromhex("4e487b71")
+
+#: Registered custom errors: selector -> (name, ABI parameter types).
+CUSTOM_ERRORS: dict[bytes, tuple[str, tuple[str, ...]]] = {}
+
+_SIGNATURE_RE = re.compile(r"^(\w+)\((.*)\)$")
+
+
+def register_custom_errors(signatures: Iterable[str]) -> None:
+    """Register ``Name(type,type)`` custom error signatures so their revert
+    data decodes to ``Name(arg, arg)``. A later registration of the same
+    selector replaces the earlier one."""
+    for signature in signatures:
+        match = _SIGNATURE_RE.fullmatch(signature.replace(" ", ""))
+        if match is None:
+            raise ValueError(f"not a custom error signature: {signature!r}")
+        name, params = match.groups()
+        types = tuple(param for param in params.split(",") if param)
+        canonical = f"{name}({','.join(types)})"
+        CUSTOM_ERRORS[function_signature_to_4byte_selector(canonical)] = (name, types)
+
+
+def decode_custom_error(selector: bytes, payload: bytes) -> str | None:
+    """``Name(arg, arg)`` for a registered selector, ``None`` otherwise."""
+    registered = CUSTOM_ERRORS.get(bytes(selector))
+    if registered is None:
+        return None
+    name, types = registered
+    if not types:
+        return f"{name}()"
+    try:
+        values = abi_decode(list(types), payload)
+    except Exception:
+        return f"{name}(<decode failed>: 0x{payload.hex()[:64]})"
+    args = ", ".join(_format_arg(t, v) for t, v in zip(types, values, strict=True))
+    return f"{name}({args})"
+
+
+def _format_arg(abi_type: str, value: object) -> str:
+    if abi_type == "address" and isinstance(value, str):
+        return Web3.to_checksum_address(value)
+    if isinstance(value, (bytes, bytearray)):
+        return f"0x{bytes(value).hex()}"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return f'"{value}"'
+    return str(value)
 
 
 def _decode_revert_reason(data: bytes) -> str:
@@ -50,6 +100,10 @@ def _decode_revert_reason(data: bytes) -> str:
             return f"Panic(0x{code:02x}: {description})"
         except Exception:
             return f"Panic(<decode failed>: 0x{payload.hex()[:64]})"
+
+    custom = decode_custom_error(selector, payload)
+    if custom is not None:
+        return custom
 
     # Unknown selector — show truncated hex
     hex_str = f"0x{data.hex()}"
@@ -130,6 +184,21 @@ class MorphoMarketNotFoundError(IporFusionError, ValueError):
 
     Also a ValueError so MCP adapters can let it propagate unmapped.
     """
+
+
+class SimulationError(IporFusionError):
+    """A simulated call reverted; raised by ``SimulationResult.raise_for_failure``."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        label: str | None = None,
+        revert_reason: str | None = None,
+    ):
+        self.label = label
+        self.revert_reason = revert_reason
+        super().__init__(message)
 
 
 class TransactionError(IporFusionError):

@@ -101,13 +101,18 @@ blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
   the same address on each spoke chain), split like the contracts: shared `messages`
   (`Command`, `MsgType`, envelopes), `contracts` (wrapper bases), `transport`
   (`CrosschainTransport` seam), `lane` (`CrosschainLane`: one executor/dispatcher pair
-  driven without knowing its transport), `discovery` (`open_lane` detects the
-  transport and finds the fuses), `simulation` (`CrosschainSimulator`, a relay over
-  one `VaultSimulator` per chain that impersonates the endpoint/router on delivery),
-  and one subpackage per transport, `stargate/` and `ccip/`, each with its wire
-  codecs, executor/dispatcher/factory wrappers, transport and lane. `fuses/crosschain/`
-  mirrors it (`base`, `stargate`, `ccip`). Names mirror the Solidity contracts and
-  libraries. Layering: the fuse encoders import the wire codecs and wrappers; lanes,
+  driven without knowing its transport; it carries its transport's fuse classes and
+  the keeper's attestation helpers), `discovery` (`discover_deployment` reads the
+  market grants, `open_lane`/`open_lanes` build lanes; `LANES` is the transport →
+  lane registry, the only place that knows every concrete lane), `errors` (the
+  contracts' custom error signatures, registered so reverts decode by name),
+  `simulation` (`CrosschainSimulator`, a relay over one `VaultSimulator` per chain
+  that impersonates the endpoint/router on delivery; test and dry-run tooling, not
+  something a keeper needs), and one subpackage per transport, `stargate/` and
+  `ccip/`, each with its wire codecs, executor/dispatcher/factory wrappers, transport
+  and lane. `fuses/crosschain/` mirrors it (`base`, `stargate`, `ccip`). Names mirror
+  the Solidity contracts and libraries. Adding a transport: a new subpackage plus one
+  `LANES` entry. Layering: the fuse encoders import the wire codecs and wrappers; lanes,
   discovery, transports and the simulator import the encoders. A package `__init__`
   runs before its modules, so `ipor_fusion.crosschain`, `.stargate` and `.ccip`
   export only the fuse-free half; the rest is exported from `ipor_fusion` and

@@ -29,14 +29,6 @@ from ipor_fusion.crosschain.transport import (
     OutboundMessage,
     transfer_call,
 )
-from ipor_fusion.fuses.crosschain.base import (
-    CrosschainCommandFuse,
-    CrosschainSupplyFuse,
-)
-from ipor_fusion.fuses.crosschain.stargate import (
-    StargateCrosschainCommandFuse,
-    StargateCrosschainSupplyFuse,
-)
 from ipor_fusion.types import ChainId
 
 
@@ -95,12 +87,6 @@ class StargateTransport(CrosschainTransport):
         self, ctx: Web3Context, address: ChecksumAddress
     ) -> StargateCrosschainDispatcher:
         return StargateCrosschainDispatcher(ctx, address)
-
-    def supply_fuse(self, address: ChecksumAddress) -> CrosschainSupplyFuse:
-        return StargateCrosschainSupplyFuse(address)
-
-    def command_fuse(self, address: ChecksumAddress) -> CrosschainCommandFuse:
-        return StargateCrosschainCommandFuse(address)
 
     def outbound_messages(
         self, src_chain_id: ChainId, logs: Iterable[Mapping]

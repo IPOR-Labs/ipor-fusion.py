@@ -24,6 +24,7 @@ from typing import Any, ClassVar
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.contracts import (
     BalanceObservation,
@@ -69,6 +70,9 @@ class CrosschainLane(ABC):
     """One executor/dispatcher pair on one spoke chain, transport-agnostic."""
 
     transport_kind: ClassVar[CrosschainTransportKind]
+    #: The fuse encoders of this transport, instantiated on ``fuses``.
+    supply_fuse_cls: ClassVar[type[CrosschainSupplyFuse]]
+    command_fuse_cls: ClassVar[type[CrosschainCommandFuse]]
     #: topic0 of this transport's ``BalanceProposed`` event; ``proposalId`` is
     #: its first (non-indexed) field on both transports.
     BALANCE_PROPOSED_TOPIC: ClassVar[bytes]
@@ -80,8 +84,6 @@ class CrosschainLane(ABC):
         dispatcher: CrosschainDispatcher,
         spoke_chain_id: ChainId,
         fuses: LaneFuses,
-        supply_fuse: CrosschainSupplyFuse,
-        command_fuse: CrosschainCommandFuse,
     ) -> None:
         # CREATE3 puts the executor and its dispatcher at one address on every
         # chain; the fuses address the spoke side by the executor address.
@@ -94,9 +96,22 @@ class CrosschainLane(ABC):
         self.dispatcher = dispatcher
         self.spoke_chain_id = spoke_chain_id
         self.fuses = fuses
-        self.supply_fuse = supply_fuse
-        self.command_fuse = command_fuse
+        self.supply_fuse: CrosschainSupplyFuse = self.supply_fuse_cls(fuses.supply)
+        self.command_fuse: CrosschainCommandFuse = self.command_fuse_cls(fuses.command)
         self.claim_fuse: CrosschainClaimFuse = CrosschainClaimFuse(fuses.claim)
+
+    @classmethod
+    @abstractmethod
+    def open(
+        cls,
+        hub_ctx: Web3Context,
+        spoke_ctx: Web3Context,
+        *,
+        executor: ChecksumAddress,
+        fuses: LaneFuses,
+    ) -> CrosschainLane:
+        """Wrap ``executor`` on the hub and its dispatcher on the spoke, reading
+        whatever else this transport's lane needs (the CCIP route)."""
 
     @property
     def executor_address(self) -> ChecksumAddress:
@@ -174,7 +189,49 @@ class CrosschainLane(ABC):
     def chain_blocked(self) -> Call[bool]:
         return self.executor.chain_blocked(self.spoke_chain_id)
 
+    def last_approved_observed_at(self) -> Call[int]:
+        """Remote timestamp of the approved observation NAV freshness is
+        measured from; 0 before the first attestation."""
+        return self.executor.last_approved_observed_at(self.spoke_chain_id)
+
     # ── attestation ───────────────────────────────────────────────────────
+
+    def attestation(
+        self,
+        observation: LaneObservation,
+        *,
+        remote_block: int,
+        remote_timestamp: int,
+        expiry: int,
+    ) -> BalanceObservation:
+        """The proposal for ``observation``, read on the spoke at
+        ``remote_block`` / ``remote_timestamp`` and valid on the hub until
+        ``expiry``: the dispatcher's accounted balance marked at its state
+        version, which must equal ``remote_state_version`` when proposed and
+        when approved."""
+        return BalanceObservation(
+            chain_id=self.spoke_chain_id,
+            settled_balance=observation.accounted_balance,
+            state_version=observation.state_version,
+            remote_block=remote_block,
+            remote_timestamp=remote_timestamp,
+            expiry=expiry,
+            tracked_position_set_hash=observation.tracked_position_set_hash,
+        )
+
+    def needs_attestation(self, *, now: int, margin: int = 0) -> bool:
+        """Whether a keeper should propose now (four reads on the hub): the
+        settled bucket is non-zero, nothing is in flight (a receipt landing
+        between propose and approve moves the state version and the approval
+        reverts), and the approved observation is missing or older than
+        ``staleness_max - margin`` seconds, after which ``getBalance()``
+        fails closed."""
+        if self.settled_remote_balance().call() == 0:
+            return False
+        if self.pending_transfer_count().call() != 0:
+            return False
+        last = self.last_approved_observed_at().call()
+        return last == 0 or now - last > self.staleness_max().call() - margin
 
     def approve_balance(self, proposal_id: int) -> Call[None]:
         """``BALANCE_APPROVER`` only."""
@@ -219,6 +276,11 @@ class CrosschainLane(ABC):
         self, send: SendParams, amount: Amount, min_received: Amount
     ) -> SendParams:
         """Bind ``min_received`` into the transport's send parameters."""
+
+    @abstractmethod
+    def staleness_max(self) -> Call[int]:
+        """Seconds an approved observation keeps the settled bucket in NAV
+        (``STALENESS_MAX`` on Stargate, ``BALANCE_STALENESS_MAX`` on CCIP)."""
 
     @abstractmethod
     def remote_state_version(self) -> Call[int]:

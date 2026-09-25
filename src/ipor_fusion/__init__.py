@@ -52,6 +52,7 @@ from ipor_fusion.core.withdraw_manager import (
     WithdrawRequestInfo,
 )
 from ipor_fusion.crosschain import (
+    CROSSCHAIN_ERROR_SIGNATURES,
     BalanceObservation,
     BusinessAction,
     CcipCrosschainDispatcher,
@@ -73,9 +74,14 @@ from ipor_fusion.crosschain import (
 from ipor_fusion.crosschain.ccip.lane import CcipLane
 from ipor_fusion.crosschain.ccip.transport import CcipChain, CcipTransport
 from ipor_fusion.crosschain.discovery import (
+    LANES,
+    CrosschainDeployment,
+    CrosschainExecutorInfo,
     detect_transport,
+    discover_deployment,
     discover_lane_fuses,
     open_lane,
+    open_lanes,
 )
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
 from ipor_fusion.crosschain.simulation import CrosschainSimulator
@@ -87,13 +93,17 @@ from ipor_fusion.crosschain.transport import (
     OutboundMessage,
 )
 from ipor_fusion.errors import (
+    CUSTOM_ERRORS,
     ContractNotFoundError,
     EmptyCallResultError,
     IporFusionError,
     MorphoMarketNotFoundError,
     NotPlasmaVaultError,
+    SimulationError,
     TransactionError,
     UnsupportedChainError,
+    decode_custom_error,
+    register_custom_errors,
 )
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.fuses import (
@@ -283,8 +293,14 @@ __all__ = [
     "LaneFuses",
     "LaneObservation",
     "open_lane",
+    "open_lanes",
     "detect_transport",
+    "discover_deployment",
     "discover_lane_fuses",
+    "CrosschainDeployment",
+    "CrosschainExecutorInfo",
+    "LANES",
+    "CROSSCHAIN_ERROR_SIGNATURES",
     "DeliveryCall",
     "OutboundMessage",
     "FuseAction",
@@ -367,7 +383,11 @@ __all__ = [
     "MorphoMarketNotFoundError",
     "NotPlasmaVaultError",
     "TransactionError",
+    "SimulationError",
     "UnsupportedChainError",
+    "CUSTOM_ERRORS",
+    "decode_custom_error",
+    "register_custom_errors",
     "CHAIN_NAMES",
     "CHAIN_NAME_TO_ID",
     "SUPPORTED_CHAIN_IDS",

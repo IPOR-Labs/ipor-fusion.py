@@ -57,12 +57,6 @@ from ipor_fusion.crosschain.stargate.layerzero import (
     address_to_bytes32,
 )
 from ipor_fusion.fuses.base import ZERO_ADDRESS
-from ipor_fusion.fuses.crosschain import (
-    CcipCrosschainCommandFuse,
-    CcipCrosschainSupplyFuse,
-    StargateCrosschainCommandFuse,
-    StargateCrosschainSupplyFuse,
-)
 from ipor_fusion.types import ChainId
 
 TRANSFER_SELECTOR = function_signature_to_4byte_selector("transfer(address,uint256)")
@@ -265,12 +259,6 @@ class TestStargateTransport:
         assert isinstance(
             transport.dispatcher(ctx, STARGATE_EXECUTOR), StargateCrosschainDispatcher
         )
-        assert isinstance(
-            transport.supply_fuse(STARGATE_EXECUTOR), StargateCrosschainSupplyFuse
-        )
-        assert isinstance(
-            transport.command_fuse(STARGATE_EXECUTOR), StargateCrosschainCommandFuse
-        )
         assert {ETHEREUM, BASE} <= transport.chain_ids
         assert transport.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO
 
@@ -425,12 +413,6 @@ class TestCcipTransport:
         )
         assert isinstance(
             transport.dispatcher(ctx, STARGATE_EXECUTOR), CcipCrosschainDispatcher
-        )
-        assert isinstance(
-            transport.supply_fuse(STARGATE_EXECUTOR), CcipCrosschainSupplyFuse
-        )
-        assert isinstance(
-            transport.command_fuse(STARGATE_EXECUTOR), CcipCrosschainCommandFuse
         )
         assert transport.transport_kind == CrosschainTransportKind.CHAINLINK_CCIP
 

@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from eth_typing import ChecksumAddress
 from eth_utils import keccak
 
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.contracts import BalanceObservation
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
@@ -47,8 +49,13 @@ class StargateLane(CrosschainLane):
         OptionsBuilder.new_options().add_executor_lz_receive_option(2_000_000)
     )
 
+    supply_fuse_cls = StargateCrosschainSupplyFuse
+    command_fuse_cls = StargateCrosschainCommandFuse
+
     executor: StargateCrosschainExecutor
     dispatcher: StargateCrosschainDispatcher
+    supply_fuse: StargateCrosschainSupplyFuse
+    command_fuse: StargateCrosschainCommandFuse
 
     def __init__(
         self,
@@ -63,9 +70,26 @@ class StargateLane(CrosschainLane):
             dispatcher=dispatcher,
             spoke_chain_id=spoke_chain_id,
             fuses=fuses,
-            supply_fuse=StargateCrosschainSupplyFuse(fuses.supply),
-            command_fuse=StargateCrosschainCommandFuse(fuses.command),
         )
+
+    @classmethod
+    def open(
+        cls,
+        hub_ctx: Web3Context,
+        spoke_ctx: Web3Context,
+        *,
+        executor: ChecksumAddress,
+        fuses: LaneFuses,
+    ) -> StargateLane:
+        return cls(
+            executor=StargateCrosschainExecutor(hub_ctx, executor),
+            dispatcher=StargateCrosschainDispatcher(spoke_ctx, executor),
+            spoke_chain_id=ChainId(spoke_ctx.chain_id),
+            fuses=fuses,
+        )
+
+    def staleness_max(self) -> Call[int]:
+        return self.executor.staleness_max()
 
     def default_send(self, *, token: bool) -> StargateSendParams:
         options = self.DEFAULT_SUPPLY_OPTIONS if token else self.DEFAULT_RECALL_OPTIONS

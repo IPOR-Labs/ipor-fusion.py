@@ -28,6 +28,7 @@ FUSES = Path(fuses_pkg.__file__).parent
 LEAF = {
     "ipor_fusion.crosschain",
     "ipor_fusion.crosschain.contracts",
+    "ipor_fusion.crosschain.errors",
     "ipor_fusion.crosschain.logs",
     "ipor_fusion.crosschain.messages",
     "ipor_fusion.crosschain.ccip",

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from eth_typing import ChecksumAddress
 from eth_utils import keccak
 
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.ccip.contracts import (
     CcipCrosschainDispatcher,
@@ -38,8 +40,13 @@ class CcipLane(CrosschainLane):
         text="BalanceProposed(uint256,uint256,uint256,uint64,bytes32)"
     )
 
+    supply_fuse_cls = CcipCrosschainSupplyFuse
+    command_fuse_cls = CcipCrosschainCommandFuse
+
     executor: CcipCrosschainExecutor
     dispatcher: CcipCrosschainDispatcher
+    supply_fuse: CcipCrosschainSupplyFuse
+    command_fuse: CcipCrosschainCommandFuse
 
     def __init__(
         self,
@@ -56,11 +63,31 @@ class CcipLane(CrosschainLane):
             dispatcher=dispatcher,
             spoke_chain_id=spoke_chain_id,
             fuses=fuses,
-            supply_fuse=CcipCrosschainSupplyFuse(fuses.supply),
-            command_fuse=CcipCrosschainCommandFuse(fuses.command),
         )
         self.route = route
         self.decimal_conversion_rate = decimal_conversion_rate
+
+    @classmethod
+    def open(
+        cls,
+        hub_ctx: Web3Context,
+        spoke_ctx: Web3Context,
+        *,
+        executor: ChecksumAddress,
+        fuses: LaneFuses,
+    ) -> CcipLane:
+        hub_executor = CcipCrosschainExecutor(hub_ctx, executor)
+        spoke = ChainId(spoke_ctx.chain_id)
+        return cls(
+            executor=hub_executor,
+            dispatcher=CcipCrosschainDispatcher(spoke_ctx, executor),
+            spoke_chain_id=spoke,
+            fuses=fuses,
+            route=hub_executor.ccip_route(spoke).call(),
+        )
+
+    def staleness_max(self) -> Call[int]:
+        return self.executor.balance_staleness_max()
 
     def default_send(self, *, token: bool) -> CcipSendParams:
         return CcipSendParams.from_route(self.route, token=token)

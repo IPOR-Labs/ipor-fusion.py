@@ -12,6 +12,7 @@ from web3 import Web3
 from web3.types import BlockIdentifier, RPCEndpoint
 
 from ipor_fusion.core.contract import Call
+from ipor_fusion.errors import SimulationError, decode_custom_error
 from ipor_fusion.fuses.base import FuseAction
 
 
@@ -57,6 +58,23 @@ class SimulationResult:
 
     def get(self, label: str) -> Any:
         return self.observations[label]
+
+    def raise_for_failure(self) -> None:
+        """Raise :class:`SimulationError` naming the first failed call (label,
+        client error, decoded revert reason); a no-op when every call succeeded."""
+        if not self.failed_calls:
+            return
+        first = self.failed_calls[0]
+        reason = _decode_revert(first.return_data, first.error)
+        label = first.label or "<unlabelled>"
+        detail = first.error or "reverted"
+        if reason and reason != first.error:
+            detail = f"{detail}: {reason}"
+        raise SimulationError(
+            f"simulated call {label!r} failed: {detail}",
+            label=first.label,
+            revert_reason=reason,
+        )
 
 
 def is_simulate_v1_supported(web3: Web3) -> bool:
@@ -444,5 +462,8 @@ def _decode_revert(return_data: HexBytes, error: str | None) -> str | None:
                 return f"Panic(0x{code:x})"
             except (DecodingError, OverflowError, ValueError):
                 pass
+        decoded = decode_custom_error(selector, bytes(return_data[4:]))
+        if decoded is not None:
+            return decoded
         return f"custom error 0x{selector.hex()}"
     return error

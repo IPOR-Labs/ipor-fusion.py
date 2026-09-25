@@ -13,14 +13,19 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion import (
+    LANES,
     CcipLane,
+    CrosschainExecutorInfo,
     CrosschainLane,
     LaneFuses,
     LaneObservation,
+    PlasmaVault,
     StargateLane,
     detect_transport,
+    discover_deployment,
     discover_lane_fuses,
     open_lane,
+    open_lanes,
 )
 from ipor_fusion.crosschain import (
     BalanceObservation,
@@ -39,6 +44,7 @@ from ipor_fusion.fuses.crosschain import (
     CcipCrosschainSupplyFuse,
     CcipSendParams,
     CrosschainClaimFuse,
+    CrosschainSubstrateLib,
     StargateCrosschainCommandFuse,
     StargateCrosschainSupplyFuse,
     StargateSendParams,
@@ -389,3 +395,244 @@ class TestDiscovery:
         assert isinstance(lane, StargateLane)
         assert lane.fuses == FUSES
         assert isinstance(lane, CrosschainLane)
+
+
+CCIP_EXECUTOR = Web3.to_checksum_address("0xb99ab307ce3df269b9f8763657fa128bbd38e2aa")
+CCIP_FUSES = LaneFuses(
+    supply=Web3.to_checksum_address("0x4444444444444444444444444444444444444444"),
+    command=Web3.to_checksum_address("0x5555555555555555555555555555555555555555"),
+    claim=FUSES.claim,
+)
+STARGATE_FACTORY = Web3.to_checksum_address(
+    "0xb7894a9081d9060ced0b2e33714cdb075de67b9e"
+)
+CCIP_FACTORY = Web3.to_checksum_address("0xf360e8b00694c03fdc33dc2c54396fa41fabaadf")
+PROPOSER = Web3.to_checksum_address("0x4F56543f62aB0186bA390e754EFC6c0870Dc5df5")
+APPROVER = Web3.to_checksum_address("0xCeE5C4272E246A424AeDE992c987966736E0F63b")
+ARBITRUM = ChainId(42161)
+ARBITRUM_VAULT = Web3.to_checksum_address("0x174bfA12935AC416caA7d27397Bd4f3b15175980")
+MARKET = 54
+
+
+def _sel(call) -> bytes:
+    return bytes(call.data[:4])
+
+
+class TestLaneParts:
+    def test_fuse_encoders_come_from_the_lane_class(self):
+        lane = _stargate_lane()
+        assert StargateLane.supply_fuse_cls is StargateCrosschainSupplyFuse
+        assert isinstance(lane.supply_fuse, StargateCrosschainSupplyFuse)
+        assert isinstance(lane.command_fuse, StargateCrosschainCommandFuse)
+        assert isinstance(lane.claim_fuse, CrosschainClaimFuse)
+        ccip = _ccip_lane()
+        assert isinstance(ccip.supply_fuse, CcipCrosschainSupplyFuse)
+        assert isinstance(ccip.command_fuse, CcipCrosschainCommandFuse)
+        assert LANES == {
+            CrosschainTransportKind.STARGATE_LAYERZERO: StargateLane,
+            CrosschainTransportKind.CHAINLINK_CCIP: CcipLane,
+        }
+
+    @pytest.mark.parametrize("make", [_stargate_lane, _ccip_lane])
+    def test_attestation_marks_the_accounted_balance(self, make):
+        lane = make()
+        observation = LaneObservation(
+            tracked_idle=1,
+            accounted_balance=999_700,
+            state_version=6,
+            command_config_epoch=2,
+            tracked_position_set_hash=HASH,
+        )
+        assert lane.attestation(
+            observation,
+            remote_block=51_723_200,
+            remote_timestamp=1_790_235_747,
+            expiry=1_790_237_651,
+        ) == BalanceObservation(
+            SPOKE, 999_700, 6, 51_723_200, 1_790_235_747, 1_790_237_651, HASH
+        )
+
+    def test_staleness_max_per_transport(self):
+        stargate = _stargate_lane()
+        assert _sel(stargate.staleness_max()) == selector("STALENESS_MAX()")
+        ccip = _ccip_lane()
+        assert _sel(ccip.staleness_max()) == selector("BALANCE_STALENESS_MAX()")
+
+    @pytest.mark.parametrize(
+        ("settled", "pending", "last", "now", "margin", "due"),
+        [
+            (5, 0, 1_000, 4_601, 0, True),  # one second past the window
+            (5, 0, 1_000, 4_600, 0, False),  # exactly at the window: still fresh
+            (5, 0, 1_000, 4_560, 60, True),  # margin brings it forward
+            (5, 0, 0, 10, 0, True),  # never attested
+            (0, 0, 0, 10, 0, False),  # nothing settled, nothing to mark
+            (5, 1, 1_000, 9_999, 0, False),  # a transfer in flight: wait
+        ],
+    )
+    def test_needs_attestation(self, settled, pending, last, now, margin, due):
+        probe = _stargate_lane()
+        answers = {
+            _sel(probe.settled_remote_balance()): encode(["uint256"], [settled]),
+            _sel(probe.pending_transfer_count()): encode(["uint256"], [pending]),
+            _sel(probe.last_approved_observed_at()): encode(["uint64"], [last]),
+            _sel(probe.staleness_max()): encode(["uint256"], [3_600]),
+        }
+        lane = _stargate_lane(hub_ctx=_ctx_answering(answers))
+        assert lane.needs_attestation(now=now, margin=margin) is due
+
+
+def _deployment_ctx() -> MagicMock:
+    """A hub whose crosschain market grants two executors (one per transport)
+    and two remote vaults; the CCIP executor serves Base only."""
+    vault = MagicMock()
+    substrates = [
+        CrosschainSubstrateLib.executor_substrate(EXECUTOR),
+        CrosschainSubstrateLib.executor_substrate(CCIP_EXECUTOR),
+        CrosschainSubstrateLib.remote_vault_substrate(SPOKE, REMOTE_VAULT),
+        CrosschainSubstrateLib.remote_vault_substrate(ARBITRUM, ARBITRUM_VAULT),
+    ]
+    fuses = [
+        FUSES.supply,
+        FUSES.command,
+        CCIP_FUSES.supply,
+        CCIP_FUSES.command,
+        FUSES.claim,
+    ]
+    probe_vault = PlasmaVault(vault, VAULT)
+    probe_exec = StargateCrosschainExecutor(vault, EXECUTOR)
+    route_raw = encode(
+        ["(uint64,address,address,uint96,uint96,uint256,bool)"], [ROUTE.as_tuple()]
+    )
+    by_selector: dict[tuple[str, bytes], bytes] = {
+        (VAULT, _sel(probe_vault.get_market_substrates(MARKET))): encode(
+            ["bytes32[]"], [substrates]
+        ),
+        (VAULT, _sel(probe_vault.get_fuses())): encode(["address[]"], [fuses]),
+        (EXECUTOR, selector("STARGATE_POOL()")): encode(["address"], [POOL]),
+        (EXECUTOR, _sel(probe_exec.manager())): encode(["address"], [VAULT]),
+        (EXECUTOR, _sel(probe_exec.factory())): encode(["address"], [STARGATE_FACTORY]),
+        (EXECUTOR, _sel(probe_exec.balance_proposer())): encode(
+            ["address"], [PROPOSER]
+        ),
+        (EXECUTOR, _sel(probe_exec.balance_approver())): encode(
+            ["address"], [APPROVER]
+        ),
+        (CCIP_EXECUTOR, selector("transportKind()")): encode(["uint8"], [2]),
+        (CCIP_EXECUTOR, _sel(probe_exec.manager())): encode(["address"], [VAULT]),
+        (CCIP_EXECUTOR, _sel(probe_exec.factory())): encode(
+            ["address"], [CCIP_FACTORY]
+        ),
+        (CCIP_EXECUTOR, _sel(probe_exec.balance_proposer())): encode(
+            ["address"], [PROPOSER]
+        ),
+        (CCIP_EXECUTOR, _sel(probe_exec.balance_approver())): encode(
+            ["address"], [APPROVER]
+        ),
+        (CCIP_EXECUTOR, selector("ccipRoute(uint256)")): route_raw,
+    }
+    by_selector |= {
+        (fuse, selector("MARKET_ID()")): encode(["uint256"], [MARKET]) for fuse in fuses
+    }
+    by_data: dict[tuple[str, bytes], bytes] = {
+        (EXECUTOR, bytes(probe_exec.has_dispatcher(SPOKE).data)): encode(
+            ["bool"], [True]
+        ),
+        (EXECUTOR, bytes(probe_exec.has_dispatcher(ARBITRUM).data)): encode(
+            ["bool"], [True]
+        ),
+        (CCIP_EXECUTOR, bytes(probe_exec.has_dispatcher(SPOKE).data)): encode(
+            ["bool"], [True]
+        ),
+        (CCIP_EXECUTOR, bytes(probe_exec.has_dispatcher(ARBITRUM).data)): encode(
+            ["bool"], [False]
+        ),
+    }
+    codes = {
+        FUSES.supply: selector(StargateCrosschainSupplyFuse._ENTER),
+        FUSES.command: selector(StargateCrosschainCommandFuse._ENTER),
+        CCIP_FUSES.supply: selector(CcipCrosschainSupplyFuse._ENTER),
+        CCIP_FUSES.command: selector(CcipCrosschainCommandFuse._ENTER),
+        FUSES.claim: selector("enter((address,uint256))"),
+    }
+    ctx = MagicMock()
+    ctx.chain_id = 1
+    ctx.default_block = "latest"
+
+    def call(to, data, block=None):
+        data = bytes(data)
+        if (to, data) in by_data:
+            return by_data[(to, data)]
+        if (to, data[:4]) in by_selector:
+            return by_selector[(to, data[:4])]
+        raise ContractLogicError("execution reverted")
+
+    ctx.call.side_effect = call
+    ctx.web3.eth.get_code.side_effect = lambda addr, block_identifier=None: codes[addr]
+    return ctx
+
+
+class TestDeploymentDiscovery:
+    def test_discover_deployment_reads_the_market_grants(self):
+        deployment = discover_deployment(_deployment_ctx(), VAULT, MARKET)
+        assert deployment.vault == VAULT
+        assert deployment.spoke_chain_ids == (SPOKE, ARBITRUM)
+        assert deployment.remote_vaults == {
+            SPOKE: (REMOTE_VAULT,),
+            ARBITRUM: (ARBITRUM_VAULT,),
+        }
+        stargate = deployment.executor(CrosschainTransportKind.STARGATE_LAYERZERO)
+        assert stargate == CrosschainExecutorInfo(
+            address=EXECUTOR,
+            transport_kind=CrosschainTransportKind.STARGATE_LAYERZERO,
+            factory=STARGATE_FACTORY,
+            fuses=FUSES,
+            balance_proposer=PROPOSER,
+            balance_approver=APPROVER,
+            spoke_chain_ids=(SPOKE, ARBITRUM),
+        )
+        ccip = deployment.executor(CrosschainTransportKind.CHAINLINK_CCIP)
+        assert ccip.fuses == CCIP_FUSES
+        assert ccip.factory == CCIP_FACTORY
+        assert ccip.spoke_chain_ids == (SPOKE,)
+        with pytest.raises(ValueError, match="0 UNDEFINED executors"):
+            deployment.executor(CrosschainTransportKind.UNDEFINED)
+
+    def test_discover_deployment_rejects_a_foreign_executor(self):
+        ctx = _deployment_ctx()
+        inner = ctx.call.side_effect
+        manager = _sel(StargateCrosschainExecutor(MagicMock(), EXECUTOR).manager())
+
+        def call(to, data, block=None):
+            if to == CCIP_EXECUTOR and bytes(data)[:4] == manager:
+                return encode(["address"], [REMOTE_VAULT])
+            return inner(to, data, block)
+
+        ctx.call.side_effect = call
+        with pytest.raises(ValueError, match="managed by"):
+            discover_deployment(ctx, VAULT, MARKET)
+
+    def test_open_lanes_one_per_executor_and_served_spoke(self):
+        hub_ctx = _deployment_ctx()
+        deployment = discover_deployment(hub_ctx, VAULT, MARKET)
+        base_ctx, arbitrum_ctx = MagicMock(), MagicMock()
+        base_ctx.chain_id, arbitrum_ctx.chain_id = SPOKE, ARBITRUM
+        lanes = open_lanes(hub_ctx, {SPOKE: base_ctx}, deployment=deployment)
+        assert [(type(lane), lane.spoke_chain_id) for lane in lanes] == [
+            (StargateLane, SPOKE),
+            (CcipLane, SPOKE),
+        ]
+        lanes = open_lanes(
+            hub_ctx, {SPOKE: base_ctx, ARBITRUM: arbitrum_ctx}, deployment=deployment
+        )
+        assert [(type(lane), lane.spoke_chain_id) for lane in lanes] == [
+            (StargateLane, SPOKE),
+            (StargateLane, ARBITRUM),
+            (CcipLane, SPOKE),
+        ]
+        assert [lane.executor_address for lane in lanes] == [
+            EXECUTOR,
+            EXECUTOR,
+            CCIP_EXECUTOR,
+        ]
+        ccip = next(lane for lane in lanes if isinstance(lane, CcipLane))
+        assert ccip.route == ROUTE and ccip.fuses == CCIP_FUSES

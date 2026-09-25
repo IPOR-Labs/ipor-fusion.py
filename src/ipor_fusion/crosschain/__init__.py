@@ -33,6 +33,7 @@ from ipor_fusion.crosschain.contracts import (
     CrosschainExecutor,
     CrosschainFactory,
 )
+from ipor_fusion.crosschain.errors import CROSSCHAIN_ERROR_SIGNATURES
 from ipor_fusion.crosschain.messages import (
     CCIP_VERSION,
     CODEC_VERSION,
@@ -76,6 +77,7 @@ __all__ = [
     "BusinessAction",
     "CCIP_MESSAGE_SENT_TOPIC",
     "CCIP_VERSION",
+    "CROSSCHAIN_ERROR_SIGNATURES",
     "CODEC_VERSION",
     "CcipCrosschainDispatcher",
     "CcipCrosschainExecutor",
