@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
 
-from ipor_fusion.core.contract import Call
+from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.contracts import (
     BalanceObservation,
     CrosschainDispatcher,
@@ -273,6 +273,24 @@ def _observation_decoder(values: tuple) -> Observation:
         command_config_epoch=int(epoch),
         tracked_position_set_hash=bytes(set_hash),
     )
+
+
+class StargateTokenMessaging(ContractWrapper):
+    """Stargate V2 ``TokenMessaging``, the OApp that carries taxi packets:
+    ``peers`` tells whether a route to an endpoint id exists."""
+
+    def peers(self, eid: int) -> Call[bytes]:
+        """The peer OApp on ``eid`` as bytes32; zero when no route exists."""
+        return self._view("peers(uint32)", eid, output_types=["bytes32"])
+
+    def stargate_impls(self, asset_id: int) -> Call[ChecksumAddress]:
+        """The local pool of ``asset_id``."""
+        return self._view(
+            "stargateImpls(uint16)",
+            asset_id,
+            output_types=["address"],
+            decoder=_address,
+        )
 
 
 class StargateCrosschainFactory(CrosschainFactory):

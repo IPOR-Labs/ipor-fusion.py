@@ -24,6 +24,7 @@ from ipor_fusion.crosschain.ccip.contracts import (
 from ipor_fusion.crosschain.logs import log_topic0
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
 from ipor_fusion.crosschain.transport import (
+    SYNTHETIC_TOKEN_SOURCE,
     CrosschainTransport,
     DeliveryCall,
     OutboundMessage,
@@ -36,13 +37,18 @@ from ipor_fusion.types import ChainId
 class CcipChain:
     """Per-chain CCIP wiring for one bridged asset. ``token_source`` is the
     address impersonated to credit delivered tokens (the real path mints
-    through CCTP, which a simulation cannot drive)."""
+    through CCTP, which a simulation cannot drive); leave it ``None`` to have
+    the simulator fund ``SYNTHETIC_TOKEN_SOURCE`` by a storage override."""
 
     chain_id: ChainId
     chain_selector: int
     router: ChecksumAddress
     token: ChecksumAddress
-    token_source: ChecksumAddress
+    token_source: ChecksumAddress | None = None
+
+    @property
+    def credit_source(self) -> ChecksumAddress:
+        return self.token_source or SYNTHETIC_TOKEN_SOURCE
 
 
 class CcipTransport(CrosschainTransport):
@@ -60,6 +66,10 @@ class CcipTransport(CrosschainTransport):
 
     def chain(self, chain_id: ChainId) -> CcipChain:
         return self._chains[chain_id]
+
+    def synthetic_credit_tokens(self, chain_id: ChainId) -> tuple[ChecksumAddress, ...]:
+        chain = self._chains[chain_id]
+        return () if chain.token_source else (chain.token,)
 
     def executor(
         self, ctx: Web3Context, address: ChecksumAddress
@@ -121,7 +131,7 @@ class CcipTransport(CrosschainTransport):
         if message.token_amount:
             calls.append(
                 transfer_call(
-                    dst.token, dst.token_source, message.receiver, message.token_amount
+                    dst.token, dst.credit_source, message.receiver, message.token_amount
                 )
             )
             token_amounts = (EVMTokenAmount(dst.token, message.token_amount),)

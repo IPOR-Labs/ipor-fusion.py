@@ -44,6 +44,7 @@ from ipor_fusion.core.simulation import (
     SimulatedCallResult,
     SimulationResult,
     VaultSimulator,
+    erc20_balance_slot,
     is_simulate_v1_supported,
 )
 from ipor_fusion.core.withdraw_manager import (
@@ -70,6 +71,7 @@ from ipor_fusion.crosschain import (
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
+    StargateTokenMessaging,
     ccip_token_lane,
     encode_enforced_options,
 )
@@ -90,6 +92,7 @@ from ipor_fusion.crosschain.simulation import CrosschainSimulator
 from ipor_fusion.crosschain.stargate.lane import StargateLane
 from ipor_fusion.crosschain.stargate.transport import StargateChain, StargateTransport
 from ipor_fusion.crosschain.transport import (
+    SYNTHETIC_TOKEN_SOURCE,
     CrosschainTransport,
     DeliveryCall,
     OutboundMessage,
@@ -305,6 +308,9 @@ __all__ = [
     "CROSSCHAIN_ERROR_SIGNATURES",
     "CcipTokenLane",
     "ccip_token_lane",
+    "StargateTokenMessaging",
+    "SYNTHETIC_TOKEN_SOURCE",
+    "erc20_balance_slot",
     "DeliveryCall",
     "OutboundMessage",
     "FuseAction",

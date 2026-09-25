@@ -177,11 +177,19 @@ CHAINS: dict[str, Chain] = {
         ),
         chain_selector=2442541497099098535,
         pending=(
-            "Stargate TokenMessaging and USDC pool, a CCIP pool for USDC, the "
-            "dispatcher and the spoke vault are not wired yet"
+            "a CCIP pool for USDC, the hub factory's route policy, the factory, "
+            "dispatcher and spoke vault on HyperEVM are not wired yet; Stargate "
+            "has no HyperEVM route"
         ),
     ),
 }
+
+
+#: The transports a deployment is exercised on, in matrix order.
+TRANSPORT_KINDS = (
+    CrosschainTransportKind.STARGATE_LAYERZERO,
+    CrosschainTransportKind.CHAINLINK_CCIP,
+)
 
 
 @dataclass(frozen=True)
@@ -191,10 +199,16 @@ class Spoke:
 
     chain: Chain
     remote_vault: str | None
+    #: Transports that reach this spoke; HyperEVM starts CCIP-only.
+    transports: frozenset[CrosschainTransportKind] = frozenset(TRANSPORT_KINDS)
 
     @property
     def name(self) -> str:
         return self.chain.name
+
+    @property
+    def transport_kinds(self) -> tuple[CrosschainTransportKind, ...]:
+        return tuple(k for k in TRANSPORT_KINDS if k in self.transports)
 
     @property
     def chain_id(self) -> ChainId:
@@ -307,17 +321,17 @@ POC = Deployment(
             Web3.to_checksum_address("0x174bfA12935AC416caA7d27397Bd4f3b15175980"),
         ),
     ),
-    planned_spokes=(Spoke(CHAINS["hyperevm"], remote_vault=None),),
+    planned_spokes=(
+        Spoke(
+            CHAINS["hyperevm"],
+            remote_vault=None,
+            transports=frozenset({CrosschainTransportKind.CHAINLINK_CCIP}),
+        ),
+    ),
 )
 
 # Kept for the offline transport tests and as the single POC executor address.
 STARGATE_EXECUTOR = POC.executor(CrosschainTransportKind.STARGATE_LAYERZERO)
-
-#: The transports every deployment is exercised on.
-TRANSPORT_KINDS = (
-    CrosschainTransportKind.STARGATE_LAYERZERO,
-    CrosschainTransportKind.CHAINLINK_CCIP,
-)
 
 
 def _transport_name(transport_kind: CrosschainTransportKind) -> str:
@@ -339,8 +353,8 @@ LIFECYCLES = [
             transport_kind,
             id=f"{_transport_name(transport_kind)}-{POC.hub.name}-to-{spoke.name}",
         )
-        for transport_kind in TRANSPORT_KINDS
         for spoke in POC.spokes
+        for transport_kind in spoke.transport_kinds
     ],
     *[
         pytest.param(
@@ -352,8 +366,8 @@ LIFECYCLES = [
                 raises=NotImplementedError, strict=True, reason=spoke.chain.pending
             ),
         )
-        for transport_kind in TRANSPORT_KINDS
         for spoke in POC.planned_spokes
+        for transport_kind in spoke.transport_kinds
     ],
 ]
 
@@ -372,14 +386,13 @@ def _stargate_chain(chain: Chain) -> StargateChain:
 
 def _ccip_chain(chain: Chain) -> CcipChain:
     chain.require_available()
-    # CCTP mints on the real path; the Stargate pools hold enough USDC on every
-    # chain to stand in as the token source.
+    # The real path mints through CCTP, so no holder is impersonated: the
+    # simulator funds the synthetic token source by a storage override.
     return CcipChain(
         chain_id=chain.chain_id,
         chain_selector=chain.chain_selector,
         router=Web3.to_checksum_address(chain.ccip_router),
         token=Web3.to_checksum_address(chain.usdc),
-        token_source=Web3.to_checksum_address(chain.stargate_pool),
     )
 
 

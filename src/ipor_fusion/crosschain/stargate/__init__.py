@@ -11,6 +11,7 @@ from ipor_fusion.crosschain.stargate.contracts import (
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
+    StargateTokenMessaging,
 )
 from ipor_fusion.crosschain.stargate.layerzero import (
     PACKET_SENT_TOPIC,
@@ -36,6 +37,7 @@ __all__ = [
     "StargateCrosschainDispatcher",
     "StargateCrosschainExecutor",
     "StargateCrosschainFactory",
+    "StargateTokenMessaging",
     "TaxiMessage",
     "encode_enforced_options",
     "encode_oft_compose_msg",

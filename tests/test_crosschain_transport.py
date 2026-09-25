@@ -36,6 +36,7 @@ from test_crosschain_encoding import (
 from web3 import Web3
 
 from ipor_fusion import (
+    SYNTHETIC_TOKEN_SOURCE,
     CrosschainSimulator,
     CrosschainTransport,
     DeliveryCall,
@@ -305,7 +306,8 @@ class TestCcipTransport:
         assert outbound.token_amount == 100_000
         assert outbound.payload == payload
         credit, receive = transport.delivery_calls(outbound)
-        assert credit.from_ == BASE_STARGATE_USDC_POOL
+        # CCIP chains in the fixtures name no holder: the synthetic source pays.
+        assert credit.from_ == SYNTHETIC_TOKEN_SOURCE
         assert credit.to == BASE_USDC
         assert receive.to == STARGATE_EXECUTOR
         assert receive.from_ == BASE_CCIP_ROUTER
@@ -597,3 +599,100 @@ class TestCrosschainSimulator:
             sim.add_chain(CHAIN_A, _web3(CHAIN_A, {}))
         assert sim.chain(CHAIN_A).has_calls is False
         assert sim.relay() == {}
+
+
+class TestSyntheticTokenSource:
+    def test_ccip_chain_without_a_holder_credits_from_the_synthetic_source(self):
+        from ipor_fusion import SYNTHETIC_TOKEN_SOURCE, CcipChain, CcipTransport
+
+        chain = CcipChain(
+            chain_id=BASE,
+            chain_selector=15971525489660198786,
+            router=BASE_CCIP_ROUTER,
+            token=BASE_USDC,
+        )
+        assert chain.credit_source == SYNTHETIC_TOKEN_SOURCE
+        transport = CcipTransport([chain])
+        assert transport.synthetic_credit_tokens(BASE) == (BASE_USDC,)
+        with_holder = CcipChain(
+            chain_id=BASE,
+            chain_selector=15971525489660198786,
+            router=BASE_CCIP_ROUTER,
+            token=BASE_USDC,
+            token_source=STARGATE_EXECUTOR,
+        )
+        assert CcipTransport([with_holder]).synthetic_credit_tokens(BASE) == ()
+
+    def test_simulator_funds_the_synthetic_source_when_the_chain_is_added(self):
+        from eth_abi import encode
+        from eth_utils import keccak
+
+        from ipor_fusion import (
+            SYNTHETIC_TOKEN_SOURCE,
+            CcipChain,
+            CcipTransport,
+            CrosschainSimulator,
+        )
+
+        key = (
+            "0x"
+            + keccak(encode(["address", "uint256"], [SYNTHETIC_TOKEN_SOURCE, 0])).hex()
+        )
+
+        class TokenProvider(ScriptedProvider):
+            """USDC with its balances at slot 0; answers the slot probe."""
+
+            def make_request(self, method, params):
+                self.payloads.append(params)
+                results = []
+                for block in params[0]["blockStateCalls"]:
+                    diff = (
+                        block.get("stateOverrides", {})
+                        .get(BASE_USDC, {})
+                        .get("stateDiff", {})
+                    )
+                    for call in block["calls"]:
+                        value = 0
+                        if len(call["input"]) == 2 + 8 + 64:  # balanceOf(address)
+                            holder = Web3.to_checksum_address(
+                                "0x" + call["input"][-40:]
+                            )
+                            probe_key = (
+                                "0x"
+                                + keccak(
+                                    encode(["address", "uint256"], [holder, 0])
+                                ).hex()
+                            )
+                            value = int(diff.get(probe_key, "0x0"), 16)
+                        results.append(
+                            {
+                                "status": "0x1",
+                                "returnData": "0x" + value.to_bytes(32, "big").hex(),
+                                "gasUsed": "0x0",
+                                "logs": [],
+                            }
+                        )
+                return {"result": [{"calls": results}]}
+
+        web3 = MagicMock()
+        web3.provider = TokenProvider(BASE, {})
+        web3.eth.get_block.return_value = {"timestamp": 1_790_000_000}
+        transport = CcipTransport(
+            [
+                CcipChain(
+                    chain_id=BASE,
+                    chain_selector=15971525489660198786,
+                    router=BASE_CCIP_ROUTER,
+                    token=BASE_USDC,
+                )
+            ]
+        )
+        sim = CrosschainSimulator(transport).add_chain(BASE, web3, block=1)
+        sim.observe(
+            "anything", Call(to=BASE_USDC, data=b"\x00" * 4, output_types=["uint256"])
+        )
+        sim.run()
+        entry = web3.provider.payloads[-1][0]["blockStateCalls"][0]
+        assert entry["stateOverrides"][BASE_USDC]["stateDiff"] == {
+            key: "0x" + (2**96).to_bytes(32, "big").hex()
+        }

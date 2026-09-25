@@ -4,16 +4,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from eth_abi import decode
+from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
+from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import BlockIdentifier, RPCEndpoint
 
-from ipor_fusion.core.contract import Call
+from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.errors import SimulationError, decode_custom_error
-from ipor_fusion.fuses.base import FuseAction
+from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 
 
 @dataclass(slots=True)
@@ -193,6 +194,24 @@ class VaultSimulator:
         self, address: ChecksumAddress, **overrides: Any
     ) -> VaultSimulator:
         self._current.state_overrides[Web3.to_checksum_address(address)] = overrides
+        return self
+
+    def with_erc20_balance(
+        self,
+        token: ChecksumAddress,
+        holder: ChecksumAddress,
+        amount: int,
+        *,
+        slot: int,
+    ) -> VaultSimulator:
+        """Set ``holder``'s balance of ``token`` to ``amount`` in the current
+        block by overriding the ``balances`` mapping entry at storage ``slot``
+        (see ``erc20_balance_slot``). Other overrides on the token are kept."""
+        overrides = self._current.state_overrides.setdefault(
+            Web3.to_checksum_address(token), {}
+        )
+        diff = overrides.setdefault("stateDiff", {})
+        diff[_mapping_key(holder, slot)] = "0x" + amount.to_bytes(32, "big").hex()
         return self
 
     def next_block(self, time_shift_seconds: int | None = None) -> VaultSimulator:
@@ -428,6 +447,40 @@ class VaultSimulator:
             calls=parsed,
             failed_calls=failed_calls,
         )
+
+
+def _mapping_key(holder: str, slot: int) -> str:
+    """Storage key of ``mapping(address => uint256)`` entry ``holder`` at ``slot``."""
+    return "0x" + keccak(encode(["address", "uint256"], [holder, slot])).hex()
+
+
+def erc20_balance_slot(
+    web3: Web3,
+    token: ChecksumAddress,
+    *,
+    block: BlockIdentifier = "latest",
+    max_slot: int = 32,
+) -> int:
+    """Find the storage slot of ``token``'s ``balances`` mapping by overriding
+    candidate slots in ``eth_simulateV1`` until ``balanceOf`` reflects the
+    override (slot 9 for Circle's FiatToken, 0 for OpenZeppelin ERC20). Raises
+    ``ValueError`` when no slot up to ``max_slot`` answers, which is the case
+    for tokens whose balances are not a plain address-keyed mapping."""
+    holder: Any = Web3.to_checksum_address("0x" + "42" * 20)
+    probe = 0x1234_5678_9ABC
+    balance_of = Call(
+        to=token,
+        data=_encode_calldata("balanceOf(address)", holder),
+        output_types=["uint256"],
+    )
+    zero: Any = ZERO_ADDRESS
+    for slot in range(max_slot + 1):
+        sim = VaultSimulator(web3, vault=zero, alpha=zero, block=block)
+        sim.with_erc20_balance(token, holder, probe, slot=slot)
+        sim.observe("balance", balance_of)
+        if sim.run().get("balance") == probe:
+            return slot
+    raise ValueError(f"no balances mapping slot found for {token} up to {max_slot}")
 
 
 def _normalize_call_error(

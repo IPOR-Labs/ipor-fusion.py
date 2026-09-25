@@ -44,9 +44,12 @@ Ethereum to every spoke on every transport through `CrosschainLane` and
 `CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
 blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
 `pending` chain there and an `xfail(strict=True)` param until it is wired.
-`test_crosschain_readiness.py` checks the CCIP lanes and USDC pools on the
-Chainlink contracts; a spoke whose USDC lane is not open yet is a strict xfail
-there, so it fails loudly the day the lane opens.
+`test_crosschain_readiness.py` checks every spoke's preconditions on the bridge
+and IPOR contracts (CCIP lanes and USDC pools, the hub factory's route policy,
+Stargate routes, contracts deployed on the spoke); each check a planned spoke
+still fails is a strict xfail there, so it fails loudly the day that piece
+lands. A `Spoke` declares which transports reach it; the lifecycle matrix
+follows that.
 
 ## Conventions
 
@@ -94,7 +97,8 @@ there, so it fails loudly the day the lane opens.
 - `config/roles.py` — `Roles` IntEnum
 - `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
   `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
-  `simulation` (`VaultSimulator`, eth_simulateV1), `oracle`, `fusion_factory`,
+  `simulation` (`VaultSimulator`, eth_simulateV1, `erc20_balance_slot` and ERC-20 balance
+  overrides), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`
 - `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, crosschain/,
   erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
@@ -110,8 +114,9 @@ there, so it fails loudly the day the lane opens.
   lane registry, the only place that knows every concrete lane), `errors` (the
   contracts' custom error signatures, registered so reverts decode by name),
   `simulation` (`CrosschainSimulator`, a relay over one `VaultSimulator` per chain
-  that impersonates the endpoint/router on delivery; test and dry-run tooling, not
-  something a keeper needs), and one subpackage per transport, `stargate/` and
+  that impersonates the endpoint/router on delivery and funds `SYNTHETIC_TOKEN_SOURCE`
+  by a storage override where a chain names no token holder; test and dry-run
+  tooling, not something a keeper needs), and one subpackage per transport, `stargate/` and
   `ccip/`, each with its wire codecs, executor/dispatcher/factory wrappers, transport
   and lane; `ccip/chainlink` reads Chainlink's Router, OnRamp, TokenAdminRegistry and
   token pool (`ccip_token_lane`: is there a lane, does the token travel on it).

@@ -85,6 +85,11 @@ class CrosschainTransport(ABC):
     def delivery_calls(self, message: OutboundMessage) -> list[DeliveryCall]:
         """The calls that deliver ``message`` on its destination, in order."""
 
+    def synthetic_credit_tokens(self, chain_id: ChainId) -> tuple[ChecksumAddress, ...]:
+        """Tokens credited on ``chain_id`` from ``SYNTHETIC_TOKEN_SOURCE``
+        because the chain names no real holder to impersonate."""
+        return ()
+
     @abstractmethod
     def executor(
         self, ctx: Web3Context, address: ChecksumAddress
@@ -96,6 +101,13 @@ class CrosschainTransport(ABC):
         self, ctx: Web3Context, address: ChecksumAddress
     ) -> CrosschainDispatcher:
         """Wrap a dispatcher of this transport."""
+
+
+#: The address impersonated to credit delivered tokens when a chain names no
+#: ``token_source``; ``CrosschainSimulator`` funds it by a storage override.
+SYNTHETIC_TOKEN_SOURCE: ChecksumAddress = Web3.to_checksum_address(
+    "0x00000000000000000000000000000000000c0ffee"[:42]
+)
 
 
 def transfer_call(
