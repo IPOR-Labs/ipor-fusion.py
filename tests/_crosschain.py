@@ -46,7 +46,8 @@ BASE = ChainId(8453)
 ARBITRUM = ChainId(42161)
 HYPEREVM = ChainId(999)
 
-# LayerZero V2 endpoint: the same address on every chain used here.
+# LayerZero V2 endpoint on Ethereum, Base and Arbitrum; newer chains such as
+# HyperEVM got a different address, so it is a per-chain field.
 LAYERZERO_ENDPOINT = Web3.to_checksum_address(
     "0x1a44076050125825900e736c501f859c50fE728c"
 )
@@ -101,6 +102,7 @@ class Chain:
     block: int
     usdc: str
     eid: int
+    endpoint: str
     token_messaging: str
     stargate_pool: str
     ccip_router: str
@@ -120,6 +122,7 @@ CHAINS: dict[str, Chain] = {
         block=26_045_913,
         usdc=ETHEREUM_USDC,
         eid=ETHEREUM_EID,
+        endpoint=LAYERZERO_ENDPOINT,
         token_messaging=ETHEREUM_TOKEN_MESSAGING,
         stargate_pool=ETHEREUM_STARGATE_USDC_POOL,
         ccip_router=ETHEREUM_CCIP_ROUTER,
@@ -132,6 +135,7 @@ CHAINS: dict[str, Chain] = {
         block=51_723_200,
         usdc=BASE_USDC,
         eid=BASE_EID,
+        endpoint=LAYERZERO_ENDPOINT,
         token_messaging=BASE_TOKEN_MESSAGING,
         stargate_pool=BASE_STARGATE_USDC_POOL,
         ccip_router=BASE_CCIP_ROUTER,
@@ -144,29 +148,34 @@ CHAINS: dict[str, Chain] = {
         block=508_376_600,
         usdc=ARBITRUM_USDC,
         eid=ARBITRUM_EID,
+        endpoint=LAYERZERO_ENDPOINT,
         token_messaging=ARBITRUM_TOKEN_MESSAGING,
         stargate_pool=ARBITRUM_STARGATE_USDC_POOL,
         ccip_router=ARBITRUM_CCIP_ROUTER,
         chain_selector=ARBITRUM_CHAIN_SELECTOR,
     ),
-    # Next spoke. Fill in the LayerZero eid, the Stargate TokenMessaging and
-    # USDC pool, the CCIP router and selector, USDC and a pinned block, add the
-    # spoke vault to the deployment and drop `pending`; the xfail on its
-    # lifecycle params then fails loudly until it is removed too.
+    # Next spoke, pre-wired with what is live: the chain, its LayerZero endpoint
+    # (eid 30367, not at the address the older chains share), USDC and a block
+    # pinned two minutes before the hub's. Still missing: the Stargate
+    # TokenMessaging and USDC pool, the CCIP router and selector (if CCIP serves
+    # HyperEVM at all), the dispatcher and the spoke vault. Fill them, add the
+    # spoke to the deployment and drop `pending`; the strict xfail on its
+    # lifecycle params then fails until it is removed too.
     "hyperevm": Chain(
         name="hyperevm",
         chain_id=HYPEREVM,
         web3_fixture="web3_hyperevm",
-        block=0,
-        usdc="",
-        eid=0,
+        block=46_745_610,
+        usdc=Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f"),
+        eid=30367,
+        endpoint=Web3.to_checksum_address("0x3A73033C0b1407574C76BdBAc67f126f6b4a9AA9"),
         token_messaging="",
         stargate_pool="",
         ccip_router="",
         chain_selector=0,
         pending=(
-            "LayerZero eid, Stargate USDC pool, CCIP lane, pinned block and the "
-            "spoke vault are not wired yet"
+            "Stargate TokenMessaging and USDC pool, the CCIP lane, the dispatcher "
+            "and the spoke vault are not wired yet"
         ),
     ),
 }
@@ -351,7 +360,7 @@ def _stargate_chain(chain: Chain) -> StargateChain:
     return StargateChain(
         chain_id=chain.chain_id,
         eid=chain.eid,
-        endpoint=LAYERZERO_ENDPOINT,
+        endpoint=Web3.to_checksum_address(chain.endpoint),
         token_messaging=Web3.to_checksum_address(chain.token_messaging),
         stargate_pool=Web3.to_checksum_address(chain.stargate_pool),
         token=Web3.to_checksum_address(chain.usdc),
