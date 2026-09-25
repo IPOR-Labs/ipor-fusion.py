@@ -58,6 +58,12 @@ def _solidity_constants(file_name: str) -> dict[str, int]:
     return constants
 
 
+# Constants the SDK carries ahead of the pinned public contracts (sourced from
+# a contracts feature branch). Each must be ABSENT upstream at the pinned ref;
+# once it lands, drop it here and bump IPOR_FUSION_REF in the same change.
+_AHEAD_OF_UPSTREAM = {"CROSSCHAIN": 54}
+
+
 def test_market_ids_mirror_ipor_fusion_markets_sol():
     solidity = _solidity_constants("IporFusionMarkets.sol")
     aliases = IporFusionMarkets._DEPRECATED_ALIASES
@@ -68,6 +74,10 @@ def test_market_ids_mirror_ipor_fusion_markets_sol():
         and name not in aliases
         and isinstance(value := getattr(IporFusionMarkets, name), int)
     }
+    for name, value in _AHEAD_OF_UPSTREAM.items():
+        assert python.pop(name) == value
+        assert name not in solidity, f"{name} landed upstream: drop the allowlist"
+        assert value not in solidity.values(), f"id {value} is taken upstream"
     assert python == solidity
 
 

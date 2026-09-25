@@ -15,6 +15,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from eth_utils import keccak
+
 from ipor_fusion.market_ids import IporFusionMarkets
 
 
@@ -230,6 +232,27 @@ def _decode_external_state(hex_str: str) -> SubstrateInfo:
     return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=f"type={type_byte}")
 
 
+_CROSSCHAIN_TYPES = {0: "UNDEFINED", 1: "EXECUTOR", 2: "REMOTE_VAULT"}
+
+
+def _decode_crosschain(hex_str: str) -> SubstrateInfo:
+    """Decode type<<248 | chainId<<160 | address (Crosschain market).
+
+    Source: CrosschainSubstrateLib.sol -- EXECUTOR (1) is an executor on the
+    vault's own chain (chain id slot zero); REMOTE_VAULT (2) is a remote
+    PlasmaVault bound to the 88-bit destination chain id in bits 247..160, so
+    the same vault address granted for another chain is a different grant.
+    """
+    type_byte = int(hex_str[0:2], 16)
+    label = _CROSSCHAIN_TYPES.get(type_byte, f"type={type_byte}")
+    if type_byte not in (1, 2):
+        return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label)
+    info = SubstrateInfo(address=f"0x{hex_str[24:]}", type_label=label)
+    if type_byte == 2:
+        info.extra = {"chain_id": str(int(hex_str[2:24], 16))}
+    return info
+
+
 # Market ID → decoder function.  Markets not listed here get raw hex output.
 _SUBSTRATE_DECODERS: dict[int, Callable[[str], SubstrateInfo]] = {}
 
@@ -359,6 +382,17 @@ _register_markets([50], _decode_external_state)
 # contracts repo, so its substrate grant check cannot be verified — the market
 # doc says the sPOLController address, but no_decoder until the fuse is mirrored
 _register_markets([53], _decode_uniswap_v4)
+# Crosschain (id 54 on the contracts' crosschain branch): EXECUTOR /
+# REMOTE_VAULT typed substrates per CrosschainSubstrateLib.sol. The mainnet
+# POC vault (Ethereum 0x0Aa75BfD…) granted the same layout under the
+# keccak-derived market id its fuses were built with, so that id decodes too.
+_register_markets(
+    [
+        54,
+        int.from_bytes(keccak(text="IPOR_FUSION_CROSSCHAIN_USDC_POC_V1"), "big"),
+    ],
+    _decode_crosschain,
+)
 
 
 def _build_market_lookup() -> dict[int, str]:

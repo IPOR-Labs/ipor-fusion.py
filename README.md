@@ -307,6 +307,11 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
 | `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50) |
+| `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
+| `StargateCrosschainDispatcher`, `CcipCrosschainDispatcher` | Remote dispatcher state (`observation`, tracked idle, command lane) |
+| `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |
+| `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation; `open_lane` detects the transport and finds the fuses |
+| `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between chains, no bridge needed |
 | `ERC20` | Token reads and approvals |
 
 ### Supported protocols (`ipor_fusion.fuses`)
@@ -325,6 +330,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Merkl | `MerklClaimWrapperFuse` |
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
+| Crosschain | `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse` (market 54); transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` |
 
 ### Readers (`ipor_fusion.readers`)
 

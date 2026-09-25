@@ -39,6 +39,11 @@ named address constant). They auto-skip unless `ETHEREUM_PROVIDER_URL`,
 `BASE_PROVIDER_URL` and `ARBITRUM_PROVIDER_URL` are set (`.env` is loaded via
 python-dotenv) and the provider supports `eth_simulateV1`. CI has all three as
 secrets. Never print `.env` or a provider URL: they embed API keys.
+`test_simulate_crosschain_lifecycle.py` drives the mainnet POC deployment from
+Ethereum to every spoke on every transport through `CrosschainLane` and
+`CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
+blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
+`pending` chain there and an `xfail(strict=True)` param until it is wired.
 
 ## Conventions
 
@@ -69,7 +74,7 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
 |---|---|
 | ruff version | `uv.lock` dev group and `rev` in `.pre-commit-config.yaml` |
 | Python 3.12 runtime, 3.10 floor | `.python-version` + CI `python-version` default; `requires-python`, ruff `target-version`, pyright `pythonVersion` |
-| `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors |
+| `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors. An id sourced from a contracts feature branch ahead of the pinned ref goes in the test's `_AHEAD_OF_UPSTREAM` allowlist and is removed when the ref catches up |
 | substrate decoders | `substrates.py` registry mirrors each market's `contracts/fuses/<protocol>/*SubstrateLib.sol` or `*FuseLib.sol` |
 | `vault_info` JSON shape | `_build_json_output` in `cli/vault_cmd.py`, models in `mcp/models.py` (`extra="forbid"`), `_full_vault_info_dict` fixture in `test_mcp_models.py` |
 | CLI command set | every CLI command has a matching tool in `mcp/server.py` (`changelog` maps to `server_info`) |
@@ -88,10 +93,27 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
   `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
   `simulation` (`VaultSimulator`, eth_simulateV1), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`
-- `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, erc4626,
-  euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
+- `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, crosschain/,
+  erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
   uniswap_v3, universal, `events.py`); `base.py` holds `Fuse`, `FuseAction` and the
   shared validators
+- `crosschain/` — crosschain Plasma Vaults (executor on the hub chain, dispatcher at
+  the same address on each spoke chain), split like the contracts: shared `messages`
+  (`Command`, `MsgType`, envelopes), `contracts` (wrapper bases), `transport`
+  (`CrosschainTransport` seam), `lane` (`CrosschainLane`: one executor/dispatcher pair
+  driven without knowing its transport), `discovery` (`open_lane` detects the
+  transport and finds the fuses), `simulation` (`CrosschainSimulator`, a relay over
+  one `VaultSimulator` per chain that impersonates the endpoint/router on delivery),
+  and one subpackage per transport, `stargate/` and `ccip/`, each with its wire
+  codecs, executor/dispatcher/factory wrappers, transport and lane. `fuses/crosschain/`
+  mirrors it (`base`, `stargate`, `ccip`). Names mirror the Solidity contracts and
+  libraries. Layering: the fuse encoders import the wire codecs and wrappers; lanes,
+  discovery, transports and the simulator import the encoders. A package `__init__`
+  runs before its modules, so `ipor_fusion.crosschain`, `.stargate` and `.ccip`
+  export only the fuse-free half; the rest is exported from `ipor_fusion` and
+  imported by module path. `tests/test_crosschain_layering.py` pins this (no
+  function-level or `TYPE_CHECKING` imports in either package); never work around
+  a cycle with a lazy import, move the module instead.
 - `readers/` — read side: lending_health, oracle_mapping, position_manager, aave_v3,
   compound_v3, morpho, ramses_v2, uniswap_v3
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`

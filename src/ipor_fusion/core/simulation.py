@@ -146,6 +146,11 @@ class VaultSimulator:
     def _current(self) -> _Block:
         return self._blocks[-1]
 
+    @property
+    def has_calls(self) -> bool:
+        """Whether anything is buffered; ``run()`` refuses an empty batch."""
+        return any(block.calls for block in self._blocks)
+
     def _baseline(self) -> int:
         """Pinned-block timestamp; cached so multi-block batches stay consistent."""
         if self._baseline_timestamp is None:
