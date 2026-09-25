@@ -44,6 +44,9 @@ Ethereum to every spoke on every transport through `CrosschainLane` and
 `CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
 blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
 `pending` chain there and an `xfail(strict=True)` param until it is wired.
+`test_crosschain_readiness.py` checks the CCIP lanes and USDC pools on the
+Chainlink contracts; a spoke whose USDC lane is not open yet is a strict xfail
+there, so it fails loudly the day the lane opens.
 
 ## Conventions
 
@@ -110,7 +113,9 @@ blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
   that impersonates the endpoint/router on delivery; test and dry-run tooling, not
   something a keeper needs), and one subpackage per transport, `stargate/` and
   `ccip/`, each with its wire codecs, executor/dispatcher/factory wrappers, transport
-  and lane. `fuses/crosschain/` mirrors it (`base`, `stargate`, `ccip`). Names mirror
+  and lane; `ccip/chainlink` reads Chainlink's Router, OnRamp, TokenAdminRegistry and
+  token pool (`ccip_token_lane`: is there a lane, does the token travel on it).
+  `fuses/crosschain/` mirrors it (`base`, `stargate`, `ccip`). Names mirror
   the Solidity contracts and libraries. Adding a transport: a new subpackage plus one
   `LANES` entry. Layering: the fuse encoders import the wire codecs and wrappers; lanes,
   discovery, transports and the simulator import the encoders. A package `__init__`

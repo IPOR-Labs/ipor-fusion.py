@@ -59,6 +59,7 @@ from ipor_fusion.crosschain import (
     CcipCrosschainExecutor,
     CcipCrosschainFactory,
     CcipRouteConfig,
+    CcipTokenLane,
     Command,
     CrosschainExecutor,
     CrosschainTransportKind,
@@ -69,6 +70,7 @@ from ipor_fusion.crosschain import (
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
+    ccip_token_lane,
     encode_enforced_options,
 )
 from ipor_fusion.crosschain.ccip.lane import CcipLane
@@ -301,6 +303,8 @@ __all__ = [
     "CrosschainExecutorInfo",
     "LANES",
     "CROSSCHAIN_ERROR_SIGNATURES",
+    "CcipTokenLane",
+    "ccip_token_lane",
     "DeliveryCall",
     "OutboundMessage",
     "FuseAction",

@@ -32,6 +32,7 @@ LEAF = {
     "ipor_fusion.crosschain.logs",
     "ipor_fusion.crosschain.messages",
     "ipor_fusion.crosschain.ccip",
+    "ipor_fusion.crosschain.ccip.chainlink",
     "ipor_fusion.crosschain.ccip.codec",
     "ipor_fusion.crosschain.ccip.contracts",
     "ipor_fusion.crosschain.stargate",

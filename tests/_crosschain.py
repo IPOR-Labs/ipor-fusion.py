@@ -155,12 +155,13 @@ CHAINS: dict[str, Chain] = {
         chain_selector=ARBITRUM_CHAIN_SELECTOR,
     ),
     # Next spoke, pre-wired with what is live: the chain, its LayerZero endpoint
-    # (eid 30367, not at the address the older chains share), USDC and a block
+    # (eid 30367, not at the address the older chains share), the CCIP router
+    # and selector (message lanes to and from the hub chains exist; USDC has
+    # no pool on them yet, see test_crosschain_readiness.py), USDC and a block
     # pinned two minutes before the hub's. Still missing: the Stargate
-    # TokenMessaging and USDC pool, the CCIP router and selector (if CCIP serves
-    # HyperEVM at all), the dispatcher and the spoke vault. Fill them, add the
-    # spoke to the deployment and drop `pending`; the strict xfail on its
-    # lifecycle params then fails until it is removed too.
+    # TokenMessaging and USDC pool, the dispatcher and the spoke vault. Fill
+    # them, add the spoke to the deployment and drop `pending`; the strict
+    # xfail on its lifecycle params then fails until it is removed too.
     "hyperevm": Chain(
         name="hyperevm",
         chain_id=HYPEREVM,
@@ -171,11 +172,13 @@ CHAINS: dict[str, Chain] = {
         endpoint=Web3.to_checksum_address("0x3A73033C0b1407574C76BdBAc67f126f6b4a9AA9"),
         token_messaging="",
         stargate_pool="",
-        ccip_router="",
-        chain_selector=0,
+        ccip_router=Web3.to_checksum_address(
+            "0x13b3332b66389B1467CA6eBd6fa79775CCeF65ec"
+        ),
+        chain_selector=2442541497099098535,
         pending=(
-            "Stargate TokenMessaging and USDC pool, the CCIP lane, the dispatcher "
-            "and the spoke vault are not wired yet"
+            "Stargate TokenMessaging and USDC pool, a CCIP pool for USDC, the "
+            "dispatcher and the spoke vault are not wired yet"
         ),
     ),
 }

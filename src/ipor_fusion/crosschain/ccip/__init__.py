@@ -2,6 +2,14 @@
 (``ccip.transport``, ``ccip.lane``) import the fuse encoders and are exported
 from :mod:`ipor_fusion` instead, see :mod:`ipor_fusion.crosschain`."""
 
+from ipor_fusion.crosschain.ccip.chainlink import (
+    CcipOnRamp,
+    CcipRouter,
+    CcipTokenAdminRegistry,
+    CcipTokenLane,
+    CcipTokenPool,
+    ccip_token_lane,
+)
 from ipor_fusion.crosschain.ccip.codec import (
     CCIP_MESSAGE_SENT_TOPIC,
     Any2EVMMessage,
@@ -28,6 +36,12 @@ __all__ = [
     "CcipCrosschainFactory",
     "CcipMessageSent",
     "CcipObservation",
+    "CcipOnRamp",
+    "CcipRouter",
+    "CcipTokenAdminRegistry",
+    "CcipTokenLane",
+    "CcipTokenPool",
+    "ccip_token_lane",
     "CcipRouteConfig",
     "EVMTokenAmount",
     "MessageV1",

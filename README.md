@@ -320,6 +320,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation (`attestation`, `needs_attestation`, `staleness_max`); `open_lane` detects the transport and finds the fuses |
 | `discover_deployment`, `open_lanes` | Read a vault's crosschain market from the hub alone (executors with transport, factory, fuses, attestation keys and spokes served; remote vaults per spoke) and open every lane; `LANES` maps a transport kind to its lane class |
 | `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between chains, no bridge needed |
+| `ccip_token_lane` | Whether a CCIP message lane exists from a chain and whether a token's pool serves it, read on Chainlink's Router, OnRamp, TokenAdminRegistry and pool |
 | `ERC20` | Token reads and approvals |
 
 ### Supported protocols (`ipor_fusion.fuses`)

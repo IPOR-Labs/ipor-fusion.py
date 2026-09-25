@@ -11,6 +11,14 @@ modules that need the encoders, ``lane``, ``discovery``, ``transport``,
 :mod:`ipor_fusion` and importable by module path.
 """
 
+from ipor_fusion.crosschain.ccip.chainlink import (
+    CcipOnRamp,
+    CcipRouter,
+    CcipTokenAdminRegistry,
+    CcipTokenLane,
+    CcipTokenPool,
+    ccip_token_lane,
+)
 from ipor_fusion.crosschain.ccip.codec import (
     CCIP_MESSAGE_SENT_TOPIC,
     Any2EVMMessage,
@@ -85,6 +93,12 @@ __all__ = [
     "CcipMessageSent",
     "CcipMsgType",
     "CcipObservation",
+    "CcipOnRamp",
+    "CcipRouter",
+    "CcipTokenAdminRegistry",
+    "CcipTokenLane",
+    "CcipTokenPool",
+    "ccip_token_lane",
     "CcipRouteConfig",
     "Command",
     "CommandStatus",
