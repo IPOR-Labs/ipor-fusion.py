@@ -218,13 +218,26 @@ def test_same_block_state_replaces_an_earlier_state_diff():
     assert entry["stateOverrides"][TOKEN] == {"state": {STORAGE_B: VALUE_B}}
 
 
-def test_erc20_balance_slot_probes_until_balance_of_reflects_the_override():
+def test_erc20_balance_slot_batches_every_candidate_in_one_request():
     from ipor_fusion import erc20_balance_slot
 
     web3 = MagicMock()
     web3.provider = FiatTokenProvider()
     web3.eth.get_block.return_value = {"timestamp": BASELINE}
     assert erc20_balance_slot(web3, TOKEN, block=100) == 9
-    assert len(web3.provider.payloads) == 10  # slots 0..9, one simulate each
+    assert len(web3.provider.payloads) == 1
+    (entry,) = web3.provider.payloads[0][0]["blockStateCalls"]
+    assert len(entry["calls"]) == 33
+    assert len(entry["stateOverrides"][TOKEN]["stateDiff"]) == 33
+    holders = [call["input"][-40:] for call in entry["calls"]]
+    assert len(set(holders)) == 33
+
     with pytest.raises(ValueError, match="no balances mapping slot"):
         erc20_balance_slot(web3, TOKEN, block=100, max_slot=8)
+    assert len(web3.provider.payloads) == 2
+    (entry,) = web3.provider.payloads[1][0]["blockStateCalls"]
+    assert len(entry["calls"]) == 9
+
+    with pytest.raises(ValueError, match="no balances mapping slot"):
+        erc20_balance_slot(web3, TOKEN, block=100, max_slot=-1)
+    assert len(web3.provider.payloads) == 2

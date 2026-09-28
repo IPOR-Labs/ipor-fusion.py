@@ -24,11 +24,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   lane, supplies assets, relays them with `CrosschainSimulator` and reads the
   settled bucket once the referenced deployment's contracts are public.
 
-## API and efficiency
-
-- [ ] **`erc20_balance_slot` makes up to 33 round trips** (`core/simulation.py`).
-  Probe every candidate slot in one `eth_simulateV1` call, one holder per slot.
-
 ## External documentation
 
 - [ ] Add the Python crosschain SDK surface to `llms.txt` and `llms-full.txt`

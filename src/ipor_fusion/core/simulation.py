@@ -493,25 +493,37 @@ def erc20_balance_slot(
     max_slot: int = 32,
 ) -> int:
     """Find the storage slot of ``token``'s ``balances`` mapping by overriding
-    candidate slots in ``eth_simulateV1`` until ``balanceOf`` reflects the
-    override (slot 9 for Circle's FiatToken, 0 for OpenZeppelin ERC20). Raises
-    ``ValueError`` when no slot up to ``max_slot`` answers, which is the case
-    for tokens whose balances are not a plain address-keyed mapping."""
-    holder: Any = Web3.to_checksum_address("0x" + "42" * 20)
+    every candidate in one ``eth_simulateV1`` request, using a distinct holder
+    per slot, until ``balanceOf`` reflects the override (slot 9 for Circle's
+    FiatToken, 0 for OpenZeppelin ERC20). Raises ``ValueError`` when no slot up
+    to ``max_slot`` answers, which is the case for tokens whose balances are not
+    a plain address-keyed mapping."""
     probe = 0x1234_5678_9ABC
-    balance_of = Call(
-        to=token,
-        data=_encode_calldata("balanceOf(address)", holder),
-        output_types=["uint256"],
-    )
+    no_slot = f"no balances mapping slot found for {token} up to {max_slot}"
+    if max_slot < 0:
+        raise ValueError(no_slot)
+
     zero: Any = ZERO_ADDRESS
+    sim = VaultSimulator(web3, vault=zero, alpha=zero, block=block)
     for slot in range(max_slot + 1):
-        sim = VaultSimulator(web3, vault=zero, alpha=zero, block=block)
+        holder = Web3.to_checksum_address(
+            "0x" + keccak(encode(["uint256"], [slot]))[-20:].hex()
+        )
         sim.with_erc20_balance(token, holder, probe, slot=slot)
-        sim.observe("balance", balance_of)
-        if sim.run().get("balance") == probe:
+        sim.observe(
+            f"balance_slot_{slot}",
+            Call(
+                to=token,
+                data=_encode_calldata("balanceOf(address)", holder),
+                output_types=["uint256"],
+            ),
+        )
+
+    result = sim.run()
+    for slot in range(max_slot + 1):
+        if result.get(f"balance_slot_{slot}") == probe:
             return slot
-    raise ValueError(f"no balances mapping slot found for {token} up to {max_slot}")
+    raise ValueError(no_slot)
 
 
 def _normalize_call_error(
