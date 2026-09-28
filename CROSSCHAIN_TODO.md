@@ -11,10 +11,12 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   the Arbitrum factory above the current `requestDispatcher` quote (its initial
   0.0005 ETH balance was insufficient), deploy and configure the Arbitrum hub
   vault and HyperEVM spoke vault, and deploy/register the three crosschain
-  fuses on the hub. Rehearse the resulting deployment through the full
-  lifecycle test before the first live asset transfer. HyperEVM delivery must
-  use its 30M-gas big blocks; Chainlink CCIP transmitters already do so. Add
-  `HYPEREVM_PROVIDER_URL` to CI so the pinned rehearsal runs there.
+  fuses on the hub. The SDK now proves this topology through a full in-simulation
+  CCIP lifecycle. After the live deployment, add its addresses to the pinned
+  topology and run the same shared lifecycle before the first live asset
+  transfer. HyperEVM delivery must use its 30M-gas big blocks; Chainlink CCIP
+  transmitters already do so. Add `HYPEREVM_PROVIDER_URL` to CI so the pinned
+  rehearsal runs there.
 
 - [ ] **Foundry compiler CI.** Add a GitHub Actions job for the Solidity-source
   deployment rehearsal: pin the Foundry version, check out the exact public

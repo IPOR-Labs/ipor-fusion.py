@@ -1,5 +1,10 @@
 """Pinned Arbitrum-to-HyperEVM CCIP factory and deployment rehearsal.
 
+The lifecycle relay impersonates the CCIP Router, and synthetic storage funding
+stands in for HTEST token-pool release. It proves that the IPOR contracts, fuses
+and SDK compose end to end; pinned readiness tests separately verify the live
+CCIP lanes and pools, but this simulation does not prove their liveness.
+
 The module requires both RPCs and skips in CI until ``HYPEREVM_PROVIDER_URL``
 is configured there.
 """
@@ -11,22 +16,36 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from _crosschain_lifecycle import Run, run_lifecycle
 from _foundry import FoundryContract, compile_foundry_contracts
 from web3 import Web3
 
 from ipor_fusion import (
+    ERC20,
+    AccessManager,
     CcipChain,
+    CcipCommandType,
+    CcipCrosschainDispatcher,
     CcipCrosschainExecutor,
     CcipCrosschainFactory,
+    CcipLane,
     CcipTransport,
     CrosschainSimulator,
+    CrosschainSubstrateLib,
+    CrosschainTransportKind,
+    LaneFuses,
+    PlasmaVault,
+    PriceOracleMiddlewareManager,
+    Roles,
     SafetyConfig,
     VaultSimulator,
     Web3Context,
     ccip_token_lane,
+    erc20_balance_slot,
 )
 from ipor_fusion.core.contract import Call
-from ipor_fusion.types import ChainId
+from ipor_fusion.core.fusion_factory import FusionFactory
+from ipor_fusion.types import Amount, ChainId, MarketId
 
 ARBITRUM = ChainId(42161)
 HYPEREVM = ChainId(999)
@@ -37,6 +56,20 @@ HYPEREVM_SELECTOR = 2442541497099098535
 ARBITRUM_ROUTER = Web3.to_checksum_address("0x141fa059441E0ca23ce184B6A78bafD2A517DdE8")
 HYPEREVM_ROUTER = Web3.to_checksum_address("0x13b3332b66389B1467CA6eBd6fa79775CCeF65ec")
 FACTORY = Web3.to_checksum_address("0x3a745EaC243ea7563CCbD5890dbCA1b05CEe1e0D")
+ARBITRUM_FUSION_FACTORY = Web3.to_checksum_address(
+    "0x134fCAce7a2C7Ef3dF2479B62f03ddabAEa922d5"
+)
+HYPEREVM_FUSION_FACTORY = Web3.to_checksum_address(
+    "0x6bBc827F34b4e862d15215ABd4AC0E3886181665"
+)
+# The executor asset equals the vault underlying, so this source cancels in the
+# conversion ratio. Lifecycle assertions remain HTEST-denominated, never USD.
+ARBITRUM_WBTC_USD_FEED = Web3.to_checksum_address(
+    "0xd0C7101eACbB49F3deCcCc166d238410D6D46d57"
+)
+HYPEREVM_ONE_VALUE_FEED = Web3.to_checksum_address(
+    "0xb00121888530a090a124913bBdBc39c68F804904"
+)
 OWNER = Web3.to_checksum_address("0x3F48E1FfC0Ea0b1f908770Ec3372eA0F50dA2af2")
 RESCUE_GUARDIAN = Web3.to_checksum_address("0x0000000000000000000000000000000000000B22")
 BALANCE_PROPOSER = Web3.to_checksum_address(
@@ -91,6 +124,8 @@ FUSE_CONTRACTS = (
         "CrosschainBalanceFuse",
     ),
 )
+CROSSCHAIN_MARKET = MarketId(54)
+VAULT_DEPOSIT = Amount(10 * 10**18)
 
 
 def test_simulate_contract_creation(web3_arb):
@@ -124,19 +159,7 @@ def test_simulate_contract_creation(web3_arb):
 
 
 def test_compile_and_deploy_crosschain_fuses(web3_arb):
-    contracts_dir = os.environ.get("IPOR_FUSION_CONTRACTS_DIR")
-    if not contracts_dir:
-        pytest.skip("IPOR_FUSION_CONTRACTS_DIR not set")
-    remappings = tuple(
-        item
-        for item in os.environ.get("IPOR_FUSION_FOUNDRY_REMAPPINGS", "").split(";")
-        if item
-    )
-    artifacts = compile_foundry_contracts(
-        Path(contracts_dir),
-        FUSE_CONTRACTS,
-        remappings=remappings,
-    )
+    artifacts = _compile_crosschain_fuses()
     market_id = int.from_bytes(
         Web3.keccak(text="IPOR_FUSION_CROSSCHAIN_HTEST_V1"), "big"
     )
@@ -192,6 +215,43 @@ def _ctx(web3, chain_id: ChainId, block: int) -> Web3Context:
     return ctx
 
 
+def _compile_crosschain_fuses():
+    contracts_dir = os.environ.get("IPOR_FUSION_CONTRACTS_DIR")
+    if not contracts_dir:
+        pytest.skip("IPOR_FUSION_CONTRACTS_DIR not set")
+    remappings = tuple(
+        item
+        for item in os.environ.get("IPOR_FUSION_FOUNDRY_REMAPPINGS", "").split(";")
+        if item
+    )
+    return compile_foundry_contracts(
+        Path(contracts_dir),
+        FUSE_CONTRACTS,
+        remappings=remappings,
+    )
+
+
+def _htest_transport() -> CcipTransport:
+    return CcipTransport(
+        (
+            CcipChain(
+                ARBITRUM,
+                ARBITRUM_SELECTOR,
+                ARBITRUM_ROUTER,
+                ASSETS["HTEST"][0],
+                18,
+            ),
+            CcipChain(
+                HYPEREVM,
+                HYPEREVM_SELECTOR,
+                HYPEREVM_ROUTER,
+                ASSETS["HTEST"][1],
+                18,
+            ),
+        )
+    )
+
+
 def _safety_config() -> SafetyConfig:
     return SafetyConfig(
         rescue_admin=OWNER,
@@ -204,6 +264,316 @@ def _safety_config() -> SafetyConfig:
         min_update_interval=60 * 60,
         transfer_staleness_max=24 * 60 * 60,
     )
+
+
+@pytest.mark.parametrize(
+    ("web3_fixture", "chain_id", "block", "factory_address", "token"),
+    (
+        (
+            "web3_arb",
+            ARBITRUM,
+            ARBITRUM_BLOCK,
+            ARBITRUM_FUSION_FACTORY,
+            ASSETS["HTEST"][0],
+        ),
+        (
+            "web3_hyperevm",
+            HYPEREVM,
+            HYPEREVM_BLOCK,
+            HYPEREVM_FUSION_FACTORY,
+            ASSETS["HTEST"][1],
+        ),
+    ),
+)
+def test_simulate_clone_htest_vault(
+    request, web3_fixture, chain_id, block, factory_address, token
+):
+    web3 = request.getfixturevalue(web3_fixture)
+    ctx = _ctx(web3, chain_id, block)
+    factory = FusionFactory(ctx, factory_address)
+    clone = factory.clone(
+        "Crosschain HTEST Rehearsal",
+        "xcHTEST",
+        token,
+        1,
+        OWNER,
+    )
+    preview = clone.call()
+    simulator = VaultSimulator(web3, vault=ZERO_ADDRESS, alpha=OWNER, block=block)
+    simulator.with_block_override(gasLimit=30_000_000)
+    simulator.add_call(clone, from_=OWNER, label="clone_vault")
+    vault = PlasmaVault(ctx, preview.plasma_vault)
+    simulator.observe("vault_asset", vault.underlying_asset_address())
+    simulator.observe("vault_access_manager", vault.get_access_manager_address())
+
+    result = simulator.run()
+
+    result.raise_for_failure()
+    instance = result.get("clone_vault")
+    assert instance == preview
+    assert result.get("vault_asset") == token
+    assert result.get("vault_access_manager") == preview.access_manager
+
+
+def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
+    artifacts = _compile_crosschain_fuses()
+    arb_ctx = _ctx(web3_arb, ARBITRUM, ARBITRUM_BLOCK)
+    hyper_ctx = _ctx(web3_hyperevm, HYPEREVM, HYPEREVM_BLOCK)
+    arb_fusion_factory = FusionFactory(arb_ctx, ARBITRUM_FUSION_FACTORY)
+    hyper_fusion_factory = FusionFactory(hyper_ctx, HYPEREVM_FUSION_FACTORY)
+    hub_clone = arb_fusion_factory.clone(
+        "Crosschain HTEST Hub Rehearsal", "xcHTEST-ARB", ASSETS["HTEST"][0], 1, OWNER
+    )
+    spoke_clone = hyper_fusion_factory.clone(
+        "Crosschain HTEST Spoke Rehearsal",
+        "xcHTEST-HYPE",
+        ASSETS["HTEST"][1],
+        1,
+        OWNER,
+    )
+    hub_instance = hub_clone.call()
+    spoke_instance = spoke_clone.call()
+
+    ccip_factory = CcipCrosschainFactory(arb_ctx, FACTORY)
+    user_salt = Web3.keccak(text="ipor-fusion.py Arbitrum HyperEVM full lifecycle")
+    executor = ccip_factory.compute_executor_address(OWNER, user_salt).call()
+    route = replace(ccip_factory.ccip_route(HYPEREVM).call(), peer=executor)
+
+    simulator = CrosschainSimulator(_htest_transport())
+    hub = simulator.add_chain(
+        ARBITRUM,
+        web3_arb,
+        block=ARBITRUM_BLOCK,
+        vault=hub_instance.plasma_vault,
+        alpha=OWNER,
+    )
+    spoke = simulator.add_chain(HYPEREVM, web3_hyperevm, block=HYPEREVM_BLOCK)
+    hub.with_block_time_shift(60).with_block_override(gasLimit=30_000_000)
+    spoke.with_block_override(gasLimit=30_000_000)
+
+    hub.with_state_override(SIMULATED_DEPLOYER, balance=hex(10**18), nonce=hex(0))
+    fuse_addresses = {
+        contract.name: hub.deploy_contract(
+            artifacts[contract].init_code(
+                ("uint256",),
+                (CROSSCHAIN_MARKET,),
+            ),
+            from_=SIMULATED_DEPLOYER,
+            nonce=nonce,
+            label=f"deploy_{contract.name}",
+        )
+        for nonce, contract in enumerate(FUSE_CONTRACTS)
+    }
+    hub.add_call(hub_clone, from_=OWNER, label="clone_hub_vault")
+    spoke.add_call(spoke_clone, from_=OWNER, label="clone_spoke_vault")
+    spoke.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
+
+    hub_access = AccessManager(arb_ctx, hub_instance.access_manager)
+    for role in (
+        Roles.ATOMIST_ROLE,
+        Roles.ALPHA_ROLE,
+        Roles.FUSE_MANAGER_ROLE,
+        Roles.UPDATE_MARKETS_BALANCES_ROLE,
+        Roles.PRICE_ORACLE_MIDDLEWARE_MANAGER_ROLE,
+        Roles.WHITELIST_ROLE,
+    ):
+        hub.add_call(
+            hub_access.grant_role(role, OWNER, 0),
+            from_=OWNER,
+            label=f"grant_hub_{role.name.lower()}",
+        )
+    spoke_access = AccessManager(hyper_ctx, spoke_instance.access_manager)
+    spoke.add_call(
+        spoke_access.grant_role(Roles.ATOMIST_ROLE, OWNER, 0),
+        from_=OWNER,
+        label="grant_spoke_atomist_role",
+    )
+    spoke.add_call(
+        spoke_access.grant_role(Roles.WHITELIST_ROLE, executor, 0),
+        from_=OWNER,
+        label="grant_dispatcher_spoke_whitelist",
+    )
+    spoke.add_call(
+        spoke_access.grant_role(Roles.PRICE_ORACLE_MIDDLEWARE_MANAGER_ROLE, OWNER, 0),
+        from_=OWNER,
+        label="grant_spoke_price_manager_role",
+    )
+    spoke.add_call(
+        PriceOracleMiddlewareManager(
+            hyper_ctx, spoke_instance.price_manager
+        ).set_assets_price_sources([ASSETS["HTEST"][1]], [HYPEREVM_ONE_VALUE_FEED]),
+        from_=OWNER,
+        label="configure_spoke_htest_price",
+    )
+
+    hub.add_call(
+        PriceOracleMiddlewareManager(
+            arb_ctx, hub_instance.price_manager
+        ).set_assets_price_sources([ASSETS["HTEST"][0]], [ARBITRUM_WBTC_USD_FEED]),
+        from_=OWNER,
+        label="configure_htest_price",
+    )
+    hub.add_call(
+        ccip_factory.create_executor(
+            user_salt,
+            Web3.keccak(text="HTEST"),
+            hub_instance.plasma_vault,
+            _safety_config(),
+        ),
+        from_=OWNER,
+        label="create_executor",
+    )
+
+    hub_vault = PlasmaVault(arb_ctx, hub_instance.plasma_vault)
+    hub.add_call(
+        hub_vault.add_fuses(
+            [
+                fuse_addresses["CcipCrosschainSupplyFuse"],
+                fuse_addresses["CcipCrosschainCommandFuse"],
+                fuse_addresses["CrosschainClaimFuse"],
+            ]
+        ),
+        from_=OWNER,
+        label="add_crosschain_fuses",
+    )
+    hub.add_call(
+        hub_vault.add_balance_fuse(
+            CROSSCHAIN_MARKET, fuse_addresses["CrosschainBalanceFuse"]
+        ),
+        from_=OWNER,
+        label="add_crosschain_balance_fuse",
+    )
+    hub.add_call(
+        hub_vault.grant_market_substrates(
+            CROSSCHAIN_MARKET,
+            [
+                CrosschainSubstrateLib.executor_substrate(executor),
+                CrosschainSubstrateLib.remote_vault_substrate(
+                    HYPEREVM, spoke_instance.plasma_vault
+                ),
+            ],
+        ),
+        from_=OWNER,
+        label="grant_crosschain_substrates",
+    )
+
+    htest = ERC20(arb_ctx, ASSETS["HTEST"][0])
+    hub.with_erc20_balance(
+        ASSETS["HTEST"][0],
+        OWNER,
+        VAULT_DEPOSIT,
+        slot=erc20_balance_slot(web3_arb, ASSETS["HTEST"][0], block=ARBITRUM_BLOCK),
+    )
+    hub.add_call(
+        htest.approve(hub_instance.plasma_vault, VAULT_DEPOSIT),
+        from_=OWNER,
+        label="approve_hub_deposit",
+    )
+    hub.add_call(
+        hub_vault.deposit(VAULT_DEPOSIT, OWNER),
+        from_=OWNER,
+        label="deposit_hub_vault",
+    )
+
+    lane = CcipLane(
+        executor=CcipCrosschainExecutor(arb_ctx, executor),
+        dispatcher=CcipCrosschainDispatcher(hyper_ctx, executor),
+        spoke_chain_id=HYPEREVM,
+        fuses=LaneFuses(
+            supply=fuse_addresses["CcipCrosschainSupplyFuse"],
+            command=fuse_addresses["CcipCrosschainCommandFuse"],
+            claim=fuse_addresses["CrosschainClaimFuse"],
+        ),
+        route=route,
+        decimal_conversion_rate=1,
+    )
+    hub.add_call(
+        hub_vault.execute(
+            [
+                lane.command_fuse.enter(
+                    CcipCommandType.REGISTER_ROUTE,
+                    executor=executor,
+                    chain_id=HYPEREVM,
+                    route=route,
+                ),
+                lane.command_fuse.create_dispatcher(
+                    executor=executor,
+                    chain_id=HYPEREVM,
+                    plasma_vaults=[spoke_instance.plasma_vault],
+                    send=lane.default_command_send(),
+                ),
+            ]
+        ),
+        from_=OWNER,
+        label="configure_lane_and_request_dispatcher",
+    )
+    simulator.fund_native(ARBITRUM, FACTORY, route.max_fee)
+    simulator.fund_native(ARBITRUM, OWNER, 10**20)
+    simulator.fund_native(ARBITRUM, executor, 10**18)
+    simulator.fund_native(HYPEREVM, OWNER, 10**20)
+    simulator.fund_native(HYPEREVM, executor, 10**18)
+    hub.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
+    spoke.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
+
+    results = simulator.relay()
+    for result in results.values():
+        result.raise_for_failure()
+
+    simulator.observe(
+        ARBITRUM,
+        "dispatcher_ready",
+        CcipCrosschainExecutor(arb_ctx, executor).has_dispatcher(HYPEREVM),
+    )
+    simulator.observe(
+        HYPEREVM,
+        "dispatcher_registered",
+        CcipCrosschainFactory(hyper_ctx, FACTORY).is_dispatcher(executor),
+    )
+    simulator.observe(ARBITRUM, "hub_shares", hub_vault.balance_of(OWNER))
+    simulator.observe(
+        ARBITRUM,
+        "hub_assets",
+        htest.balance_of(hub_instance.plasma_vault),
+    )
+    results = simulator.relay()
+    for result in results.values():
+        result.raise_for_failure()
+    assert results[ARBITRUM].get("dispatcher_ready") is True
+    assert results[HYPEREVM].get("dispatcher_registered") is True
+    share_scale = 10 ** (
+        hub_instance.asset_decimals - hub_instance.underlying_token_decimals
+    )
+    assert results[ARBITRUM].get("hub_shares") == VAULT_DEPOSIT * share_scale
+    assert results[ARBITRUM].get("hub_assets") == VAULT_DEPOSIT
+
+    hub_start = hub.current_time
+    spoke_start = spoke.current_time
+    run = Run(
+        hub_chain_id=ARBITRUM,
+        spoke_chain_id=HYPEREVM,
+        spoke_name="hyperevm",
+        hub_vault_address=hub_instance.plasma_vault,
+        hub_asset_address=ASSETS["HTEST"][0],
+        market_id=CROSSCHAIN_MARKET,
+        owner=OWNER,
+        balance_proposer=BALANCE_PROPOSER,
+        balance_approver=BALANCE_APPROVER,
+        transport_kind=CrosschainTransportKind.CHAINLINK_CCIP,
+        lane=lane,
+        csim=simulator,
+        hub=hub,
+        spoke_sim=spoke,
+        vault=hub_vault,
+        remote_vault=PlasmaVault(hyper_ctx, spoke_instance.plasma_vault),
+        hub_asset=htest,
+        hub_now=hub_start,
+        spoke_now=spoke_start,
+        spoke_block=spoke.current_block_number,
+        amount=10**18,
+        hub_start=hub_start,
+        staleness_max=_safety_config().balance_staleness_max,
+    )
+    run_lifecycle(run)
 
 
 def _simulate_factory_deployment(web3_arb, web3_hyperevm, *, big_block: bool):
@@ -303,6 +673,33 @@ def test_ccip_factory_is_ready(
     assert route.peer == FACTORY
     assert route.chain_selector == peer_selector
     assert factory.chain_id_of_selector(peer_selector).call() == peer_id
+
+
+def test_hyperevm_one_value_feed_is_ready(web3_hyperevm):
+    ctx = _ctx(web3_hyperevm, HYPEREVM, HYPEREVM_BLOCK)
+    decimals = Call(
+        to=HYPEREVM_ONE_VALUE_FEED,
+        data=bytes(Web3.keccak(text="decimals()")[:4]),
+        output_types=["uint8"],
+        ctx=ctx,
+    )
+    latest_round_data = Call(
+        to=HYPEREVM_ONE_VALUE_FEED,
+        data=bytes(Web3.keccak(text="latestRoundData()")[:4]),
+        output_types=["uint80", "int256", "uint256", "uint256", "uint80"],
+        ctx=ctx,
+    )
+
+    assert (
+        len(
+            web3_hyperevm.eth.get_code(
+                HYPEREVM_ONE_VALUE_FEED, block_identifier=HYPEREVM_BLOCK
+            )
+        )
+        > 0
+    )
+    assert decimals.call() == 8
+    assert latest_round_data.call() == (0, 1, 0, 0, 0)
 
 
 @pytest.mark.parametrize(("symbol", "tokens"), ASSETS.items())
