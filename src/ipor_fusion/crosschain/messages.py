@@ -272,6 +272,8 @@ def decode_envelope(raw: bytes) -> tuple[MsgType, bytes]:
     version, msg_type, data = decode(["uint8", "uint8", "bytes"], raw)
     if version != CODEC_VERSION:
         raise ValueError(f"unsupported codec version {version}")
+    if msg_type == MsgType.NONE or msg_type > max(MsgType):
+        raise ValueError(f"unsupported message type {msg_type}")
     return MsgType(msg_type), bytes(data)
 
 
@@ -281,6 +283,8 @@ def decode_ccip_envelope(raw: bytes) -> tuple[CcipMsgType, bytes]:
     version, msg_type, data = decode(["uint8", "uint8", "bytes"], raw)
     if version != CCIP_VERSION:
         raise ValueError(f"unsupported CCIP codec version {version}")
+    if msg_type == CcipMsgType.NONE or msg_type > max(CcipMsgType):
+        raise ValueError(f"unsupported CCIP message type {msg_type}")
     return CcipMsgType(msg_type), bytes(data)
 
 

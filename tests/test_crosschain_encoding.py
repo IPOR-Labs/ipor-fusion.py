@@ -13,6 +13,8 @@ from eth_utils import function_signature_to_4byte_selector, keccak
 from web3 import Web3
 
 from ipor_fusion.crosschain import (
+    CCIP_VERSION,
+    CODEC_VERSION,
     EMPTY_COMMAND,
     Any2EVMMessage,
     BusinessAction,
@@ -147,6 +149,34 @@ class TestCommand:
             decode_envelope(encode(["uint8", "uint8", "bytes"], [2, 9, b""]))
         with pytest.raises(ValueError, match="CCIP codec version"):
             decode_ccip_envelope(encode(["uint8", "uint8", "bytes"], [3, 5, b""]))
+
+    @pytest.mark.parametrize("msg_type", [0, 15])
+    def test_invalid_envelope_message_type_rejected(self, msg_type):
+        raw = encode(["uint8", "uint8", "bytes"], [CODEC_VERSION, msg_type, b""])
+        with pytest.raises(ValueError, match=f"unsupported message type {msg_type}"):
+            decode_envelope(raw)
+
+    @pytest.mark.parametrize("msg_type", [0, 18])
+    def test_invalid_ccip_envelope_message_type_rejected(self, msg_type):
+        raw = encode(["uint8", "uint8", "bytes"], [CCIP_VERSION, msg_type, b""])
+        with pytest.raises(
+            ValueError, match=f"unsupported CCIP message type {msg_type}"
+        ):
+            decode_ccip_envelope(raw)
+
+    def test_maximum_envelope_message_types_are_valid(self):
+        assert max(MsgType) == MsgType.RETURN_REJECTED == 14
+        assert max(CcipMsgType) == CcipMsgType.CANCEL_COMMAND == 17
+        stargate = encode(
+            ["uint8", "uint8", "bytes"],
+            [CODEC_VERSION, 14, b"stargate"],
+        )
+        ccip = encode(
+            ["uint8", "uint8", "bytes"],
+            [CCIP_VERSION, 17, b"ccip"],
+        )
+        assert decode_envelope(stargate) == (MsgType.RETURN_REJECTED, b"stargate")
+        assert decode_ccip_envelope(ccip) == (CcipMsgType.CANCEL_COMMAND, b"ccip")
 
     def test_validation(self):
         with pytest.raises(ValueError, match="command_id must be 32 bytes"):

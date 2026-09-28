@@ -23,9 +23,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Correctness
 
-- [ ] **Envelope decoders accept `NONE`** (`crosschain/messages.py`).
-  `decode_envelope` and `decode_ccip_envelope` must reject type 0 and types
-  above the last member, as `decodeEnvelope` and `CcipMessages.decode` do.
 - [ ] **`ccip_token_lane` assumes the OnRamp 2.x layout** (`crosschain/ccip/chainlink.py`).
   `CcipOnRamp.token_admin_registry` decodes `getStaticConfig()` as the 2.x
   tuple without checking `typeAndVersion`. Gate on the version prefix and
