@@ -3,7 +3,8 @@
 ``discover_deployment`` reads the vault's CROSSCHAIN market grants: every
 ``EXECUTOR`` substrate is an executor (its transport detected the way the
 fuses detect it, its fuses found on the vault by market id and ``enter``
-selector, the spokes it serves asked from ``hasDispatcher``), every
+selector, and its served spokes limited to chains with a ``REMOTE_VAULT`` grant
+whose ``hasDispatcher`` is true), every
 ``REMOTE_VAULT`` substrate a spoke vault a command may target. ``open_lanes``
 turns that into one ``CrosschainLane`` per executor and spoke; ``open_lane``
 does it for one executor address. ``LANES`` is the only place that knows the
@@ -102,7 +103,10 @@ def discover_lane_fuses(
         for role, selector in selectors.items():
             if selector in code:
                 if role in found:
-                    raise ValueError(f"two {role} fuses on market {market_id}")
+                    raise ValueError(
+                        f"two {role} fuses on market {market_id}: "
+                        f"{found[role]} and {fuse}"
+                    )
                 found[role] = fuse
     missing = [role for role in selectors if role not in found]
     if missing:
@@ -129,7 +133,7 @@ class CrosschainExecutorInfo:
     fuses: LaneFuses
     balance_proposer: ChecksumAddress
     balance_approver: ChecksumAddress
-    #: Spokes with a dispatcher registered on this executor.
+    #: Spoke chains with both a REMOTE_VAULT grant and a registered dispatcher.
     spoke_chain_ids: tuple[ChainId, ...]
 
 

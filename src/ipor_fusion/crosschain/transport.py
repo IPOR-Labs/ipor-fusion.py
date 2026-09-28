@@ -106,7 +106,7 @@ class CrosschainTransport(ABC):
 #: The address impersonated to credit delivered tokens when a chain names no
 #: ``token_source``; ``CrosschainSimulator`` funds it by a storage override.
 SYNTHETIC_TOKEN_SOURCE: ChecksumAddress = Web3.to_checksum_address(
-    "0x00000000000000000000000000000000000c0ffee"[:42]
+    "0x0000000000000000000000000000000000c0ffee"
 )
 
 
@@ -119,8 +119,3 @@ def transfer_call(
         from_=source,
         label=f"token_credit:{to}",
     )
-
-
-def checksum(address: str) -> ChecksumAddress:
-    """Convenience for building chain configs from lowercase literals."""
-    return Web3.to_checksum_address(address)

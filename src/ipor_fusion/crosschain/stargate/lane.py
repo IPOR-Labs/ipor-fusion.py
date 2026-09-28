@@ -30,9 +30,9 @@ from ipor_fusion.types import Amount, ChainId
 
 class StargateLane(CrosschainLane):
     """A lane over Stargate taxi transfers and LayerZero messages. The default
-    options are the ones the mainnet POC scripts use: 250k ``lzReceive`` plus
-    1.5M ``lzCompose`` gas on a supply, 2M ``lzReceive`` gas on a recall and
-    no native drop. Pass ``send`` to change them or to add a native drop."""
+    options provide 250k ``lzReceive`` plus 1.5M ``lzCompose`` gas on a supply,
+    2M ``lzReceive`` gas on a recall and no native drop. Pass ``send`` to change
+    them or to add a native drop."""
 
     transport_kind = CrosschainTransportKind.STARGATE_LAYERZERO
     BALANCE_PROPOSED_TOPIC = keccak(
@@ -54,21 +54,6 @@ class StargateLane(CrosschainLane):
     dispatcher: StargateCrosschainDispatcher
     supply_fuse: StargateCrosschainSupplyFuse
     command_fuse: StargateCrosschainCommandFuse
-
-    def __init__(
-        self,
-        *,
-        executor: StargateCrosschainExecutor,
-        dispatcher: StargateCrosschainDispatcher,
-        spoke_chain_id: ChainId,
-        fuses: LaneFuses,
-    ) -> None:
-        super().__init__(
-            executor=executor,
-            dispatcher=dispatcher,
-            spoke_chain_id=spoke_chain_id,
-            fuses=fuses,
-        )
 
     @classmethod
     def open(

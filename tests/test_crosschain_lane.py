@@ -399,10 +399,12 @@ class TestDiscovery:
             )
         codes[REMOTE_VAULT] = selector("enter((address,uint256))")
         markets[REMOTE_VAULT] = market
-        with pytest.raises(ValueError, match="two claim fuses"):
+        with pytest.raises(ValueError, match="two claim fuses") as exc_info:
             discover_lane_fuses(
                 ctx, list(codes), CrosschainTransportKind.STARGATE_LAYERZERO, market
             )
+        assert FUSES.claim in str(exc_info.value)
+        assert REMOTE_VAULT in str(exc_info.value)
         with pytest.raises(ValueError, match="unsupported transport"):
             discover_lane_fuses(ctx, [], CrosschainTransportKind.UNDEFINED, market)
 

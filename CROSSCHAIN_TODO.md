@@ -20,25 +20,14 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   `cancelRequested(commandId)` on the CCIP executor. Until then the SDK cannot
   distinguish a parked failed command from one whose cancellation receipt is
   in flight, so one attestation approval may race and revert.
+- [ ] **Runnable crosschain example.** Add an `examples/` flow that opens a
+  lane, supplies assets, relays them with `CrosschainSimulator` and reads the
+  settled bucket once the referenced deployment's contracts are public.
 
 ## API and efficiency
 
 - [ ] **`erc20_balance_slot` makes up to 33 round trips** (`core/simulation.py`).
   Probe every candidate slot in one `eth_simulateV1` call, one holder per slot.
-
-## Polish
-
-- [ ] `SYNTHETIC_TOKEN_SOURCE` (`crosschain/transport.py`): write a 40-digit
-  literal instead of slicing a 41-digit one.
-- [ ] Remove the unused `checksum()` helper from `crosschain/transport.py`.
-- [ ] Remove `StargateLane.__init__`, which only forwards to `super()`.
-- [ ] `discover_lane_fuses`: keep failing on two fuses of one role, but name
-  both addresses in the error.
-- [ ] `crosschain/discovery.py` docstring: spokes are the chains with a
-  REMOTE_VAULT grant whose `hasDispatcher` is true, not every dispatcher.
-- [ ] Shipped docstrings that mention "the mainnet POC" (`StargateLane`
-  default options, `crosschain_market_id`): describe the values without
-  referring to a deployment users cannot see.
 
 ## External documentation
 

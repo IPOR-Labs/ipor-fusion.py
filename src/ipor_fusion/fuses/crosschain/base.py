@@ -52,9 +52,8 @@ class SendParams:
 
 
 def crosschain_market_id(preimage: str) -> MarketId:
-    """``uint256(keccak256(preimage))``: the market id a POC deployment baked
-    into its fuses (the mainnet POC used ``IPOR_FUSION_CROSSCHAIN_USDC_POC_V1``).
-    New deployments use ``IporFusionMarkets.CROSSCHAIN``."""
+    """``uint256(keccak256(preimage))``: a market id some deployments bake
+    into their fuses. Canonical deployments use ``IporFusionMarkets.CROSSCHAIN``."""
     return MarketId(int.from_bytes(keccak(text=preimage), "big"))
 
 
