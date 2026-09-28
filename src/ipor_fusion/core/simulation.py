@@ -11,6 +11,7 @@ from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import BlockIdentifier, RPCEndpoint
+from web3.utils.address import get_create_address
 
 from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.errors import SimulationError, decode_custom_error
@@ -19,13 +20,17 @@ from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 
 @dataclass(slots=True)
 class _Call:
-    to: ChecksumAddress
+    to: ChecksumAddress | None
     data: bytes
-    from_: ChecksumAddress | None
     label: str | None
     decode_types: list[str] | None
     decoder: Callable[..., Any] | None
     is_execute: bool
+    from_: ChecksumAddress | None = None
+    nonce: int | None = None
+    value: int | None = None
+    gas: int | None = None
+    predicted_address: ChecksumAddress | None = None
 
 
 @dataclass(slots=True)
@@ -44,6 +49,7 @@ class SimulatedCallResult:
     error: str | None
     logs: list[dict]
     decoded: Any | None
+    predicted_address: ChecksumAddress | None = None
 
 
 @dataclass(slots=True)
@@ -301,6 +307,51 @@ class VaultSimulator:
         )
         return self
 
+    def deploy_contract(
+        self,
+        init_code: bytes,
+        *,
+        from_: ChecksumAddress,
+        nonce: int,
+        value: int = 0,
+        gas: int | None = None,
+        label: str | None = None,
+    ) -> ChecksumAddress:
+        """Queue an EVM ``CREATE`` transaction and return its predicted address.
+
+        ``init_code`` is creation bytecode with ABI-encoded constructor arguments
+        appended. The returned address is correct only when the sender's
+        simulated state nonce equals ``nonce`` when this call executes. Pin the
+        starting nonce with ``with_state_override(from_, nonce=hex(nonce))`` and
+        deploy sequentially without interleaving other calls from that sender.
+        """
+        if not init_code:
+            raise ValueError("init_code must not be empty")
+        if nonce < 0:
+            raise ValueError(f"nonce must be non-negative, got {nonce}")
+        if value < 0:
+            raise ValueError(f"value must be non-negative, got {value}")
+        if gas is not None and gas <= 0:
+            raise ValueError(f"gas must be positive, got {gas}")
+        sender = Web3.to_checksum_address(from_)
+        predicted_address = get_create_address(sender, nonce)
+        self._current.calls.append(
+            _Call(
+                to=None,
+                data=bytes(init_code),
+                from_=sender,
+                nonce=nonce,
+                value=value,
+                gas=gas,
+                label=label,
+                decode_types=None,
+                decoder=None,
+                is_execute=False,
+                predicted_address=predicted_address,
+            )
+        )
+        return predicted_address
+
     def observe(self, label: str, call: Call) -> VaultSimulator:
         """Queue a view-style read; decoded per the wrapper method's types and
         decoder so `result.get(label)` returns the typed Python value
@@ -316,7 +367,6 @@ class VaultSimulator:
             _Call(
                 to=call.to,
                 data=call.data,
-                from_=None,
                 label=label,
                 decode_types=call.output_types,
                 decoder=call.decoder,
@@ -373,12 +423,17 @@ class VaultSimulator:
         return self._parse_response(response["result"])
 
     def _serialize_call(self, call: _Call) -> dict[str, Any]:
-        out: dict[str, Any] = {
-            "to": call.to,
-            "input": "0x" + call.data.hex(),
-        }
+        out: dict[str, Any] = {"input": "0x" + call.data.hex()}
+        if call.to is not None:
+            out["to"] = call.to
         if call.from_:
             out["from"] = call.from_
+        if call.nonce is not None:
+            out["nonce"] = hex(call.nonce)
+        if call.value:
+            out["value"] = hex(call.value)
+        if call.gas is not None:
+            out["gas"] = hex(call.gas)
         return out
 
     def _parse_response(self, result: list[dict]) -> SimulationResult:
@@ -426,6 +481,7 @@ class VaultSimulator:
                     error=error,
                     logs=logs,
                     decoded=decoded,
+                    predicted_address=(source.predicted_address if success else None),
                 )
             )
 

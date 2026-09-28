@@ -133,6 +133,61 @@ def test_a_sent_block_does_not_leak_its_overrides_forward():
     assert "blockOverrides" not in second
 
 
+def test_deploy_contract_serializes_creation_and_predicts_address():
+    sim, provider = _simulator()
+    init_code = bytes.fromhex("6001600c60003960016000f300")
+
+    deployed = sim.deploy_contract(
+        init_code,
+        from_=PAYER,
+        nonce=7,
+        value=11,
+        gas=500_000,
+        label="deploy",
+    )
+    result = sim.run()
+
+    assert deployed == Web3.to_checksum_address(
+        "0x729683F8328f2FEA0d38FDCd26fad9fD8A07c876"
+    )
+    (entry,) = _sent_blocks(provider)
+    (call,) = entry["calls"]
+    assert call == {
+        "input": "0x" + init_code.hex(),
+        "from": PAYER,
+        "nonce": "0x7",
+        "value": "0xb",
+        "gas": "0x7a120",
+    }
+    assert result.calls[0].predicted_address == deployed
+
+
+def test_deploy_contract_omits_zero_value_and_optional_gas():
+    sim, provider = _simulator()
+    sim.deploy_contract(b"\x00", from_=PAYER, nonce=0)
+    sim.run()
+    (entry,) = _sent_blocks(provider)
+    (call,) = entry["calls"]
+    assert "value" not in call
+    assert "gas" not in call
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"init_code": b""}, "init_code must not be empty"),
+        ({"init_code": b"\x00", "nonce": -1}, "nonce must be non-negative"),
+        ({"init_code": b"\x00", "value": -1}, "value must be non-negative"),
+        ({"init_code": b"\x00", "gas": 0}, "gas must be positive"),
+    ],
+)
+def test_deploy_contract_rejects_invalid_input(kwargs, message):
+    sim, _ = _simulator()
+    params = {"from_": PAYER, "nonce": 0, **kwargs}
+    with pytest.raises(ValueError, match=message):
+        sim.deploy_contract(**params)
+
+
 TOKEN = Web3.to_checksum_address("0x" + "aa" * 20)
 PROBE = 0x1234_5678_9ABC
 

@@ -342,6 +342,72 @@ class CcipCrosschainFactory(CrosschainFactory):
             decoder=lambda v: (_address(v[0]), int(v[1]), bool(v[2])),
         )
 
+    def is_dispatcher(self, dispatcher: ChecksumAddress) -> Call[bool]:
+        return self._view("isDispatcher(address)", dispatcher, output_types=["bool"])
+
+    def pending_deployment_ticket(
+        self, executor: ChecksumAddress, dst_chain_id: ChainId
+    ) -> Call[bytes]:
+        return self._view(
+            "pendingDeploymentTicket(address,uint256)",
+            executor,
+            dst_chain_id,
+            output_types=["bytes32"],
+            decoder=bytes,
+        )
+
+    def pending_deployment_created_at(
+        self, executor: ChecksumAddress, dst_chain_id: ChainId
+    ) -> Call[int]:
+        return self._view(
+            "pendingDeploymentCreatedAt(address,uint256)",
+            executor,
+            dst_chain_id,
+            output_types=["uint64"],
+        )
+
+    def register_executor_route(
+        self,
+        executor: ChecksumAddress,
+        chain_id: ChainId,
+        route: CcipRouteConfig,
+    ) -> Call[None]:
+        """Register the factory-approved route on ``executor``. The executor's
+        manager must send this call and ``route.peer`` must be the executor."""
+        if route.peer != executor:
+            raise ValueError(
+                f"CCIP executor route peer {route.peer} != executor {executor}"
+            )
+        return self._write(
+            f"registerExecutorRoute(address,uint256,{_ROUTE_TUPLE})",
+            executor,
+            chain_id,
+            route.as_tuple(),
+        )
+
+    def request_dispatcher(
+        self,
+        executor: ChecksumAddress,
+        dst_chain_id: ChainId,
+        vaults: list[ChecksumAddress],
+        max_fee: int,
+    ) -> Call[bytes]:
+        """Request the executor's CREATE3 dispatcher on ``dst_chain_id``.
+
+        The executor's manager must send this call. The source factory pays
+        the quoted CCIP fee from its native balance. A write: ``.send()`` it,
+        or ``.call()`` inside a simulation to preview the CCIP message id.
+        """
+        return self._view(
+            "requestDispatcher(address,uint256,address[],uint256)",
+            executor,
+            dst_chain_id,
+            vaults,
+            max_fee,
+            output_types=["bytes32"],
+            decoder=bytes,
+        )
+
     def sync_ccip_route_policy(
         self, app: ChecksumAddress, chain_id: ChainId
     ) -> Call[None]:

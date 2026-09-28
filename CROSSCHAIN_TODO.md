@@ -5,6 +5,24 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Before the crosschain contracts are public
 
+- [ ] **Arbitrum → HyperEVM pilot deployment.** The CCIP factory at
+  `0x3a745EaC243ea7563CCbD5890dbCA1b05CEe1e0D` has symmetric routes and five
+  enabled 18-decimal test assets. Before requesting the HTEST dispatcher, fund
+  the Arbitrum factory above the current `requestDispatcher` quote (its initial
+  0.0005 ETH balance was insufficient), deploy and configure the Arbitrum hub
+  vault and HyperEVM spoke vault, and deploy/register the three crosschain
+  fuses on the hub. Rehearse the resulting deployment through the full
+  lifecycle test before the first live asset transfer. HyperEVM delivery must
+  use its 30M-gas big blocks; Chainlink CCIP transmitters already do so. Add
+  `HYPEREVM_PROVIDER_URL` to CI so the pinned rehearsal runs there.
+
+- [ ] **Foundry compiler CI.** Add a GitHub Actions job for the Solidity-source
+  deployment rehearsal: pin the Foundry version, check out the exact public
+  `ipor-fusion` contracts ref with all dependencies, set
+  `IPOR_FUSION_CONTRACTS_DIR`, and run the compiler/deployment test with the
+  HyperEVM and Arbitrum RPC secrets. The workflow must not depend on a private
+  repository path or download an unpinned compiler at test time.
+
 - [ ] **Solidity mirrors ahead of upstream.** `IporFusionMarkets.CROSSCHAIN`
   (54), the crosschain substrate decoder and the crosschain module docstrings
   mirror contracts not yet in the public `ipor-fusion` repository. Once they

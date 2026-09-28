@@ -967,6 +967,33 @@ _VIEWS = [
         (8453,),
         8453,
     ),
+    (
+        CcipCrosschainFactory,
+        "is_dispatcher",
+        (ADDR,),
+        "isDispatcher(address)",
+        ["bool"],
+        (True,),
+        True,
+    ),
+    (
+        CcipCrosschainFactory,
+        "pending_deployment_ticket",
+        (ADDR, 8453),
+        "pendingDeploymentTicket(address,uint256)",
+        ["bytes32"],
+        (ASSET_ID,),
+        ASSET_ID,
+    ),
+    (
+        CcipCrosschainFactory,
+        "pending_deployment_created_at",
+        (ADDR, 8453),
+        "pendingDeploymentCreatedAt(address,uint256)",
+        ["uint64"],
+        (1_790_000_000,),
+        1_790_000_000,
+    ),
 ]
 
 
@@ -1117,6 +1144,40 @@ def test_writes_encode_arguments():
     )
     assert (salt, asset_id, manager) == (b"\x01" * 32, ASSET_ID, VAULT.lower())
     assert decoded_safety[4:] == (86400, 3600, 1000, 60, 3600)
+    route = CcipRouteConfig(
+        15971525489660198786, ADDR, POOL, 1_200_000, 1_000_000, 10**16, True
+    )
+    call = ccip_factory.register_executor_route(ADDR, 8453, route)
+    _selector(
+        call,
+        "registerExecutorRoute(address,uint256,(uint64,address,address,uint96,uint96,uint256,bool))",
+    )
+    executor, chain_id, decoded_route = decode(
+        ["address", "uint256", "(uint64,address,address,uint96,uint96,uint256,bool)"],
+        call.data[4:],
+    )
+    assert (executor, chain_id) == (ADDR.lower(), 8453)
+    assert decoded_route == (
+        route.chain_selector,
+        route.peer.lower(),
+        route.fee_token.lower(),
+        route.message_gas_limit,
+        route.token_gas_limit,
+        route.max_fee,
+        route.enabled,
+    )
+    with pytest.raises(ValueError, match="route peer"):
+        ccip_factory.register_executor_route(POOL, 8453, route)
+    ccip_factory = _wrapper(CcipCrosschainFactory, ["bytes32"], (ASSET_ID,))
+    call = ccip_factory.request_dispatcher(ADDR, 8453, [VAULT], 10**16)
+    _selector(call, "requestDispatcher(address,uint256,address[],uint256)")
+    assert decode(["address", "uint256", "address[]", "uint256"], call.data[4:]) == (
+        ADDR.lower(),
+        8453,
+        (VAULT.lower(),),
+        10**16,
+    )
+    assert call.call() == ASSET_ID
     _selector(
         ccip_factory.sync_ccip_route_policy(ADDR, 8453),
         "syncCcipRoutePolicy(address,uint256)",
