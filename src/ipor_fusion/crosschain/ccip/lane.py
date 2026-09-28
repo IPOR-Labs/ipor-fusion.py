@@ -32,8 +32,8 @@ class CcipLane(CrosschainLane):
     """A lane over CCIP programmable token transfers and messages. The default
     send parameters come from the executor's registered ``route`` (fee
     ceiling, fee token, token or message gas limit). ``decimal_conversion_rate``
-    is the executor's ``DECIMAL_CONVERSION_RATE`` (local per shared unit; 1
-    for USDC), used to report the dispatcher observation in local decimals."""
+    is the executor's ``DECIMAL_CONVERSION_RATE`` (local per shared unit), used
+    to report the dispatcher observation in local decimals."""
 
     transport_kind = CrosschainTransportKind.CHAINLINK_CCIP
     BALANCE_PROPOSED_TOPIC = keccak(
@@ -56,7 +56,7 @@ class CcipLane(CrosschainLane):
         spoke_chain_id: ChainId,
         fuses: LaneFuses,
         route: CcipRouteConfig,
-        decimal_conversion_rate: int = 1,
+        decimal_conversion_rate: int,
     ) -> None:
         super().__init__(
             executor=executor,
@@ -84,6 +84,7 @@ class CcipLane(CrosschainLane):
             spoke_chain_id=spoke,
             fuses=fuses,
             route=hub_executor.ccip_route(spoke).call(),
+            decimal_conversion_rate=hub_executor.decimal_conversion_rate().call(),
         )
 
     def staleness_max(self) -> Call[int]:

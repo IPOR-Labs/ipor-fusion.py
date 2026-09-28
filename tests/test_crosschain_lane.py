@@ -72,6 +72,7 @@ ROUTE = CcipRouteConfig(
     enabled=True,
 )
 HASH = b"\x0f" * 32
+DECIMAL_CONVERSION_RATE = 10**12
 OBSERVATION = BalanceObservation(
     SPOKE, 999_700, 6, 51_723_200, 1_790_235_747, 1_790_237_651, HASH
 )
@@ -236,10 +237,17 @@ class TestReads:
             ["(uint256,uint256,uint256,uint64,uint64,bytes32)"],
             [(1000, 100, 0, 4, 1, HASH)],
         )
-        assert _ccip_lane(
-            spoke_ctx=ctx, rate=10**12
-        ).observation().call() == LaneObservation(
-            100 * 10**12, 1000 * 10**12, 4, 1, HASH
+        lane = _ccip_lane(spoke_ctx=ctx, rate=10**12)
+        observation = lane.observation().call()
+        assert observation == LaneObservation(100 * 10**12, 1000 * 10**12, 4, 1, HASH)
+        assert (
+            lane.attestation(
+                observation,
+                remote_block=51_723_200,
+                remote_timestamp=1_790_235_747,
+                expiry=1_790_237_651,
+            ).settled_balance
+            == 1000 * 10**12
         )
 
 
@@ -365,6 +373,9 @@ class TestDiscovery:
             {
                 selector("transportKind()"): encode(["uint8"], [2]),
                 selector("ccipRoute(uint256)"): route_raw,
+                selector("DECIMAL_CONVERSION_RATE()"): encode(
+                    ["uint256"], [DECIMAL_CONVERSION_RATE]
+                ),
             }
         )
         lane = open_lane(
@@ -372,6 +383,7 @@ class TestDiscovery:
         )
         assert isinstance(lane, CcipLane)
         assert lane.route == ROUTE
+        assert lane.decimal_conversion_rate == DECIMAL_CONVERSION_RATE
         assert lane.spoke_chain_id == SPOKE
         stargate_ctx = _ctx_answering(
             {
@@ -529,6 +541,9 @@ def _deployment_ctx() -> MagicMock:
             ["address"], [APPROVER]
         ),
         (CCIP_EXECUTOR, selector("ccipRoute(uint256)")): route_raw,
+        (CCIP_EXECUTOR, selector("DECIMAL_CONVERSION_RATE()")): encode(
+            ["uint256"], [DECIMAL_CONVERSION_RATE]
+        ),
     }
     by_selector |= {
         (fuse, selector("MARKET_ID()")): encode(["uint256"], [MARKET]) for fuse in fuses
@@ -636,3 +651,4 @@ class TestDeploymentDiscovery:
         ]
         ccip = next(lane for lane in lanes if isinstance(lane, CcipLane))
         assert ccip.route == ROUTE and ccip.fuses == CCIP_FUSES
+        assert ccip.decimal_conversion_rate == DECIMAL_CONVERSION_RATE

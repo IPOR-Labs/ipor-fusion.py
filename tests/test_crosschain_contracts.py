@@ -447,6 +447,15 @@ _VIEWS = [
     ),
     (
         CcipCrosschainExecutor,
+        "decimal_conversion_rate",
+        (),
+        "DECIMAL_CONVERSION_RATE()",
+        ["uint256"],
+        (10**12,),
+        10**12,
+    ),
+    (
+        CcipCrosschainExecutor,
         "balance_staleness_max",
         (),
         "BALANCE_STALENESS_MAX()",

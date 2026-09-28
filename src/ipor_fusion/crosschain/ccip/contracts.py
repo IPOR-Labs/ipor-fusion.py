@@ -119,6 +119,9 @@ class CcipCrosschainExecutor(CrosschainExecutor):
     def ccip_router(self) -> Call[ChecksumAddress]:
         return self._view("CCIP_ROUTER()", output_types=["address"], decoder=_address)
 
+    def decimal_conversion_rate(self) -> Call[int]:
+        return self._view("DECIMAL_CONVERSION_RATE()", output_types=["uint256"])
+
     def balance_staleness_max(self) -> Call[int]:
         return self._view("BALANCE_STALENESS_MAX()", output_types=["uint256"])
 
