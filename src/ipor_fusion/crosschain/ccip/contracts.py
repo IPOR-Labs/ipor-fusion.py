@@ -9,6 +9,7 @@ from eth_typing import ChecksumAddress
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.contracts import (
+    BalanceObservation,
     CrosschainDispatcher,
     CrosschainExecutor,
     CrosschainFactory,
@@ -191,26 +192,16 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             "processedCcipMessage(bytes32)", message_id, output_types=["bool"]
         )
 
-    def propose_balance(
-        self,
-        chain_id: ChainId,
-        balance: Amount,
-        state_version: int,
-        remote_block: int,
-        remote_timestamp: int,
-        expiry: int,
-        tracked_position_set_hash: bytes,
-    ) -> Call[None]:
-        """``BALANCE_PROPOSER`` only; ``balance`` in local decimals."""
-        return self._write(
+    def propose_balance(self, observation: BalanceObservation) -> Call[int]:
+        """``BALANCE_PROPOSER`` only; ``settled_balance`` in local decimals.
+
+        A write: ``.send()`` it, or ``.call()`` inside a simulation to preview
+        the proposal id.
+        """
+        return self._view(
             "proposeBalance(uint256,uint256,uint64,uint64,uint64,uint64,bytes32)",
-            chain_id,
-            balance,
-            state_version,
-            remote_block,
-            remote_timestamp,
-            expiry,
-            tracked_position_set_hash,
+            *observation.as_tuple(),
+            output_types=["uint256"],
         )
 
     def reject_balance_and_block(self, proposal_id: int) -> Call[None]:

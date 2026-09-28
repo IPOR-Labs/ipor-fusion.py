@@ -1067,17 +1067,20 @@ def test_writes_encode_arguments():
         executor.cancel_stale_return_request(8453), "cancelStaleReturnRequest(uint256)"
     )
 
-    ccip = _wrapper(CcipCrosschainExecutor)
-    call = ccip.propose_balance(
-        8453, 100_000, 4, 51_700_000, 1_790_000_000, 1_790_001_800, ASSET_ID
-    )
+    ccip = _wrapper(CcipCrosschainExecutor, ["uint256"], (42,))
+    call = ccip.propose_balance(observation)
     _selector(
         call, "proposeBalance(uint256,uint256,uint64,uint64,uint64,uint64,bytes32)"
     )
-    assert decode(
-        ["uint256", "uint256", "uint64", "uint64", "uint64", "uint64", "bytes32"],
-        call.data[4:],
-    ) == (8453, 100_000, 4, 51_700_000, 1_790_000_000, 1_790_001_800, ASSET_ID)
+    assert (
+        decode(
+            ["uint256", "uint256", "uint64", "uint64", "uint64", "uint64", "bytes32"],
+            call.data[4:],
+        )
+        == observation.as_tuple()
+    )
+    assert call.output_types == ["uint256"]
+    assert call.call() == 42
     _selector(ccip.reject_balance_and_block(1), "rejectBalanceAndBlock(uint256)")
     _selector(
         ccip.cancel_stale_pending_return(8453), "cancelStalePendingReturn(uint256)"

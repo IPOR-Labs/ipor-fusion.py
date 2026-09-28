@@ -14,6 +14,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.errors import EmptyCallResultError
 
 T = TypeVar("T")
+U = TypeVar("U")
 
 
 @dataclass(slots=True)
@@ -49,6 +50,24 @@ class Call(Generic[T]):
         to an external signer (HTTP signing service, multisig flow) instead of
         routing through `.send(ctx)`. Pure data — no ctx required."""
         return self.data
+
+    def map(self, transform: Callable[[T], U]) -> Call[U]:
+        """Return the same call with ``transform`` applied to what ``call()`` returns."""
+        if not self.output_types:
+            raise ValueError("cannot map a write-only Call without output types")
+        decoder = self.decoder
+
+        def mapped(value: Any) -> U:
+            decoded = decoder(value) if decoder is not None else cast(T, value)
+            return transform(decoded)
+
+        return Call(
+            to=self.to,
+            data=self.data,
+            output_types=list(self.output_types),
+            decoder=mapped,
+            ctx=self.ctx,
+        )
 
     def call(self, ctx: Web3Context | None = None) -> T:
         """Execute as `eth_call`; decode and convert per `output_types`/`decoder`."""

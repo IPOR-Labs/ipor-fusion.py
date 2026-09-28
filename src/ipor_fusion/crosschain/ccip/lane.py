@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
 
@@ -14,7 +12,6 @@ from ipor_fusion.crosschain.ccip.contracts import (
     CcipCrosschainExecutor,
     CcipObservation,
     CcipRouteConfig,
-    _ccip_observation_decoder,
 )
 from ipor_fusion.crosschain.contracts import BalanceObservation
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
@@ -111,13 +108,8 @@ class CcipLane(CrosschainLane):
         return self.executor.last_remote_state_version(self.spoke_chain_id)
 
     def has_active_command(self) -> Call[bool]:
-        call = self.executor.active_command(self.spoke_chain_id)
-        return Call(
-            to=call.to,
-            data=call.data,
-            output_types=call.output_types,
-            decoder=lambda value: bytes(value) != bytes(32),
-            ctx=call.ctx,
+        return self.executor.active_command(self.spoke_chain_id).map(
+            lambda command_id: command_id != bytes(32)
         )
 
     def command_in_flight(self) -> bool:
@@ -130,29 +122,15 @@ class CcipLane(CrosschainLane):
         return self.executor.pending_transfer_count(self.spoke_chain_id)
 
     def observation(self) -> Call[LaneObservation]:
-        call = self.dispatcher.observation()
         rate = self.decimal_conversion_rate
-        return Call(
-            to=call.to,
-            data=call.data,
-            output_types=call.output_types,
-            decoder=lambda values: _to_lane(_ccip_observation_decoder(values), rate),
-            ctx=call.ctx,
+        return self.dispatcher.observation().map(
+            lambda observation: _to_lane(observation, rate)
         )
 
-    def propose_balance(self, observation: BalanceObservation) -> Call[Any]:
+    def propose_balance(self, observation: BalanceObservation) -> Call[int]:
         """Returns the proposal id (the function's return value)."""
         self._require_spoke(observation)
-        call = self.executor.propose_balance(
-            observation.chain_id,
-            observation.settled_balance,
-            observation.state_version,
-            observation.remote_block,
-            observation.remote_timestamp,
-            observation.expiry,
-            observation.tracked_position_set_hash,
-        )
-        return Call(to=call.to, data=call.data, output_types=["uint256"], ctx=call.ctx)
+        return self.executor.propose_balance(observation)
 
 
 def _to_lane(observation: CcipObservation, rate: int) -> LaneObservation:

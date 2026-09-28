@@ -23,6 +23,12 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Correctness
 
+- [ ] **CCIP simulation assumes one 1:1 token transfer**
+  (`crosschain/ccip/transport.py`). `_from_event` silently ignores every
+  transfer after the first and credits the source amount on the destination.
+  Raise on multiple transfers and convert decimals, or refuse the relay, when
+  source and destination token decimals differ.
+
 ## API and efficiency
 
 - [ ] **`with_state_override` replaces same-block account overrides**
@@ -32,14 +38,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   or document the required call order.
 - [ ] **`erc20_balance_slot` makes up to 33 round trips** (`core/simulation.py`).
   Probe every candidate slot in one `eth_simulateV1` call, one holder per slot.
-- [ ] **CCIP `propose_balance` shape** (`crosschain/ccip/contracts.py`).
-  Take a `BalanceObservation` like the Stargate wrapper and declare the
-  `uint256` proposal id it returns; `CcipLane.propose_balance` then stops
-  rebuilding the `Call`.
-- [ ] **Re-decoding a `Call` by hand** (`stargate/lane.py`, `ccip/lane.py`).
-  Five copies of `Call(to=..., data=..., output_types=..., decoder=..., ctx=...)`;
-  replace with one helper in `core/contract.py`.
-
 ## Polish
 
 - [ ] `SYNTHETIC_TOKEN_SOURCE` (`crosschain/transport.py`): write a 40-digit

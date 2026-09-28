@@ -17,8 +17,6 @@ from ipor_fusion.crosschain.stargate.contracts import (
     Observation,
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
-    _active_command_decoder,
-    _observation_decoder,
 )
 from ipor_fusion.crosschain.stargate.layerzero import OptionsBuilder
 from ipor_fusion.fuses.crosschain.base import SendParams
@@ -111,13 +109,8 @@ class StargateLane(CrosschainLane):
         return self.executor.acknowledged_remote_state_version(self.spoke_chain_id)
 
     def has_active_command(self) -> Call[bool]:
-        call = self.executor.active_command(self.spoke_chain_id)
-        return Call(
-            to=call.to,
-            data=call.data,
-            output_types=call.output_types,
-            decoder=lambda values: _active_command_decoder(values).active,
-            ctx=call.ctx,
+        return self.executor.active_command(self.spoke_chain_id).map(
+            lambda command: command.active
         )
 
     def command_in_flight(self) -> bool:
@@ -130,14 +123,7 @@ class StargateLane(CrosschainLane):
         return self.executor.pending_transfer_count(self.spoke_chain_id)
 
     def observation(self) -> Call[LaneObservation]:
-        call = self.dispatcher.observation()
-        return Call(
-            to=call.to,
-            data=call.data,
-            output_types=call.output_types,
-            decoder=lambda values: _to_lane(_observation_decoder(values)),
-            ctx=call.ctx,
-        )
+        return self.dispatcher.observation().map(_to_lane)
 
     def propose_balance(self, observation: BalanceObservation) -> Call[Any]:
         """No return value on this transport: read the id with
