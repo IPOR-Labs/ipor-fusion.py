@@ -154,6 +154,24 @@ class PlasmaVault(ContractWrapper):
             [list(deps) for deps in dependencies],
         )
 
+    def update_callback_handler(
+        self,
+        handler: ChecksumAddress,
+        sender: ChecksumAddress,
+        selector: bytes | bytearray,
+    ) -> Call[None]:
+        """FUSE_MANAGER-only: route a sender's callback through a handler."""
+        if not isinstance(selector, (bytes, bytearray)):
+            raise TypeError("selector must be bytes-like")
+        if len(selector) != 4:
+            raise ValueError(f"selector must be exactly 4 bytes, got {len(selector)}")
+        return self._write(
+            "updateCallbackHandler(address,address,bytes4)",
+            handler,
+            sender,
+            bytes(selector),
+        )
+
     def setup_markets_limits(self, limits: list[tuple[MarketId, Amount]]) -> Call[None]:
         """ATOMIST-only: set per-market cap in the underlying asset's smallest unit."""
         return self._write("setupMarketsLimits((uint256,uint256)[])", list(limits))

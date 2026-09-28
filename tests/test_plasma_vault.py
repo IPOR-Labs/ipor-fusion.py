@@ -139,6 +139,43 @@ class TestPlasmaVaultSendMethods:
         )[:4]
         assert sent_data == selector + encode(["uint256[]", "uint256[][]"], [[], []])
 
+    def test_update_callback_handler(self):
+        vault, ctx = _make_vault()
+        ctx.send.return_value = {"status": 1}
+        selector = bytes.fromhex("150b7a02")
+
+        result = vault.update_callback_handler(FUSE_ADDR, TOKEN_ADDR, selector).send()
+
+        assert result == {"status": 1}
+        sent_to, sent_data = ctx.send.call_args[0]
+        assert sent_to == VAULT_ADDR
+        expected_selector = Web3.keccak(
+            text="updateCallbackHandler(address,address,bytes4)"
+        )[:4]
+        assert sent_data == expected_selector + encode(
+            ["address", "address", "bytes4"], [FUSE_ADDR, TOKEN_ADDR, selector]
+        )
+
+    def test_update_callback_handler_rejects_invalid_selector(self):
+        vault, _ = _make_vault()
+
+        for selector in (b"", b"\x01\x02\x03", b"\x01\x02\x03\x04\x05"):
+            try:
+                vault.update_callback_handler(FUSE_ADDR, TOKEN_ADDR, selector)
+            except ValueError as error:
+                assert "selector must be exactly 4 bytes" in str(error)
+            else:
+                raise AssertionError(f"accepted invalid selector {selector!r}")
+
+        try:
+            vault.update_callback_handler(  # type: ignore[arg-type]
+                FUSE_ADDR, TOKEN_ADDR, "0x150b7a02"
+            )
+        except TypeError as error:
+            assert str(error) == "selector must be bytes-like"
+        else:
+            raise AssertionError("accepted a string selector")
+
     def test_set_total_supply_cap(self):
         vault, ctx = _make_vault()
         ctx.send.return_value = {"status": 1}
