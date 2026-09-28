@@ -120,16 +120,19 @@ class CrosschainSimulator:
     def relay(self, max_rounds: int = 8) -> dict[ChainId, SimulationResult]:
         """Run every chain and deliver messages until nothing is in flight.
 
-        Raises ``RuntimeError`` if messages are still being produced after
-        ``max_rounds`` rounds. A delivery that reverts stays in the destination
-        call list and surfaces through that chain's ``SimulationResult``.
+        Runs at most ``max_rounds`` rounds and raises ``RuntimeError`` if
+        messages are still being produced afterward. A delivery that reverts
+        stays in the destination call list and surfaces through that chain's
+        ``SimulationResult``.
         """
         pending = {cid for cid, sim in self._chains.items() if sim.has_calls}
         for _ in range(max_rounds):
             if not pending:
-                return dict(self._results)
+                break
             pending = self._run_round(pending)
-        raise RuntimeError(f"relay did not settle within {max_rounds} rounds")
+        if pending:
+            raise RuntimeError(f"relay did not settle within {max_rounds} rounds")
+        return dict(self._results)
 
     def _run_round(self, chain_ids: set[ChainId]) -> set[ChainId]:
         touched: set[ChainId] = set()

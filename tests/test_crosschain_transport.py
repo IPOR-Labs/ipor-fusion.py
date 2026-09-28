@@ -516,7 +516,10 @@ def _web3(chain_id: int, script: dict[int, list[dict]]):
 
 
 class TestCrosschainSimulator:
-    def test_relay_round_trips_and_deduplicates(self):
+    @pytest.mark.parametrize(
+        ("max_rounds", "settles"), [(2, False), (3, True), (4, True)]
+    )
+    def test_relay_round_trips_and_deduplicates(self, max_rounds, settles):
         m1, m2 = b"\x01" * 32, b"\x02" * 32
         # Chain A: its first call emits m1 -> B. Chain B: delivering m1 (its first call) emits m2 -> A.
         web3_a = _web3(CHAIN_A, {0: [_message_log(CHAIN_B, m1)]})
@@ -532,7 +535,14 @@ class TestCrosschainSimulator:
             CHAIN_A, "probe", Call(to=RECEIVER, data=b"\x01", output_types=["uint256"])
         )
 
-        results = sim.relay()
+        if not settles:
+            with pytest.raises(
+                RuntimeError, match=f"did not settle within {max_rounds} rounds"
+            ):
+                sim.relay(max_rounds=max_rounds)
+            return
+
+        results = sim.relay(max_rounds=max_rounds)
 
         assert set(results) == {CHAIN_A, CHAIN_B}
         assert [m.message_id for m in sim.delivered] == [m1, m2]
@@ -598,7 +608,10 @@ class TestCrosschainSimulator:
         with pytest.raises(ValueError, match="already added"):
             sim.add_chain(CHAIN_A, _web3(CHAIN_A, {}))
         assert sim.chain(CHAIN_A).has_calls is False
-        assert sim.relay() == {}
+        assert sim.relay(max_rounds=0) == {}
+        sim.chain(CHAIN_A).add_call(Call(to=RECEIVER, data=b""), from_=SENDER)
+        with pytest.raises(RuntimeError, match="did not settle within 0 rounds"):
+            sim.relay(max_rounds=0)
 
 
 class TestSyntheticTokenSource:

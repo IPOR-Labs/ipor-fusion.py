@@ -12,7 +12,11 @@ Related repositories (siblings, referenced by name; clone paths vary):
 
 The canonical machine-readable overview of IPOR Fusion for AI agents is
 https://ipor.io/llms.txt (with https://ipor.io/llms-full.txt inlining the
-docs); read it before answering protocol-level questions.
+docs). Fetch it once when a working session first needs protocol context and
+reuse that copy for the rest of the session. Fetch it again only when the user
+asks for current information, there is evidence it changed, or a discrepancy
+must be re-verified. Do not fetch it merely because a new turn starts or for
+repository-local work that does not require protocol context.
 
 ## Commands
 

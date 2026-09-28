@@ -23,9 +23,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Correctness
 
-- [ ] **`CrosschainSimulator.relay()` off by one** (`crosschain/simulation.py`).
-  A flow that settles in exactly `max_rounds` rounds raises
-  `RuntimeError`, because `pending` is not checked after the last round.
 - [ ] **Shallow override merge in `VaultSimulator.run()`** (`core/simulation.py`).
   Folding an empty block's overrides replaces the whole `stateDiff` of an
   address, so two `with_erc20_balance` calls on one token in different blocks
