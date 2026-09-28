@@ -16,6 +16,7 @@ from _crosschain import (
     BASE_TOKEN_MESSAGING,
     BASE_USDC,
     ETHEREUM,
+    ETHEREUM_CCIP_ROUTER,
     ETHEREUM_CHAIN_SELECTOR,
     ETHEREUM_EID,
     ETHEREUM_STARGATE_USDC_POOL,
@@ -346,6 +347,61 @@ class TestCcipTransport:
             else receive.from_ == transport.chain(ETHEREUM).router
         )
 
+    def test_rejects_token_transfer_between_different_decimals(self):
+        from ipor_fusion import CcipChain, CcipTransport
+
+        transport = CcipTransport(
+            [
+                CcipChain(
+                    ETHEREUM,
+                    ETHEREUM_CHAIN_SELECTOR,
+                    ETHEREUM_CCIP_ROUTER,
+                    ETHEREUM_USDC,
+                    6,
+                ),
+                CcipChain(
+                    BASE,
+                    BASE_CHAIN_SELECTOR,
+                    BASE_CCIP_ROUTER,
+                    BASE_USDC,
+                    18,
+                ),
+            ]
+        )
+        encoded = encode_message_v1(
+            source_selector=ETHEREUM_CHAIN_SELECTOR,
+            dest_selector=BASE_CHAIN_SELECTOR,
+            sender=STARGATE_EXECUTOR,
+            receiver=STARGATE_EXECUTOR,
+            data=b"",
+            transfer=(100_000, BASE_USDC),
+        )
+        log = ccip_message_sent_log(
+            encoded,
+            dest_selector=BASE_CHAIN_SELECTOR,
+            sender=STARGATE_EXECUTOR,
+            message_id=keccak(encoded),
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="equal token decimals.*src 1: 6, dst 8453: 18",
+        ):
+            transport.outbound_messages(ETHEREUM, [log])
+
+    @pytest.mark.parametrize("local_decimals", [-1, 256])
+    def test_rejects_invalid_local_decimals(self, local_decimals):
+        from ipor_fusion import CcipChain
+
+        with pytest.raises(ValueError, match="local_decimals must fit uint8"):
+            CcipChain(
+                ETHEREUM,
+                ETHEREUM_CHAIN_SELECTOR,
+                BASE_CCIP_ROUTER,
+                ETHEREUM_USDC,
+                local_decimals,
+            )
+
     def test_rejects_wrong_selector_or_token(self):
         transport = ccip_transport()
         foreign = encode_message_v1(
@@ -623,6 +679,7 @@ class TestSyntheticTokenSource:
             chain_selector=15971525489660198786,
             router=BASE_CCIP_ROUTER,
             token=BASE_USDC,
+            local_decimals=6,
         )
         assert chain.credit_source == SYNTHETIC_TOKEN_SOURCE
         transport = CcipTransport([chain])
@@ -632,6 +689,7 @@ class TestSyntheticTokenSource:
             chain_selector=15971525489660198786,
             router=BASE_CCIP_ROUTER,
             token=BASE_USDC,
+            local_decimals=6,
             token_source=STARGATE_EXECUTOR,
         )
         assert CcipTransport([with_holder]).synthetic_credit_tokens(BASE) == ()
@@ -700,6 +758,7 @@ class TestSyntheticTokenSource:
                     chain_selector=15971525489660198786,
                     router=BASE_CCIP_ROUTER,
                     token=BASE_USDC,
+                    local_decimals=6,
                 )
             ]
         )

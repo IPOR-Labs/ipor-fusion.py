@@ -23,12 +23,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Correctness
 
-- [ ] **CCIP simulation assumes one 1:1 token transfer**
-  (`crosschain/ccip/transport.py`). `_from_event` silently ignores every
-  transfer after the first and credits the source amount on the destination.
-  Raise on multiple transfers and convert decimals, or refuse the relay, when
-  source and destination token decimals differ.
-
 ## API and efficiency
 
 - [ ] **`erc20_balance_slot` makes up to 33 round trips** (`core/simulation.py`).
@@ -36,6 +30,8 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Polish
 
+- [ ] `StargateChain` defaults `local_decimals` and `shared_decimals` to 6;
+  make them required like `CcipChain.local_decimals`.
 - [ ] `SYNTHETIC_TOKEN_SOURCE` (`crosschain/transport.py`): write a 40-digit
   literal instead of slicing a 41-digit one.
 - [ ] Remove the unused `checksum()` helper from `crosschain/transport.py`.

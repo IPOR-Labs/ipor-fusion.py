@@ -101,6 +101,7 @@ class Chain:
     web3_fixture: str
     block: int
     usdc: str
+    usdc_decimals: int
     eid: int
     endpoint: str
     token_messaging: str
@@ -121,6 +122,7 @@ CHAINS: dict[str, Chain] = {
         web3_fixture="web3_eth",
         block=26_045_913,
         usdc=ETHEREUM_USDC,
+        usdc_decimals=6,
         eid=ETHEREUM_EID,
         endpoint=LAYERZERO_ENDPOINT,
         token_messaging=ETHEREUM_TOKEN_MESSAGING,
@@ -134,6 +136,7 @@ CHAINS: dict[str, Chain] = {
         web3_fixture="web3_base",
         block=51_723_200,
         usdc=BASE_USDC,
+        usdc_decimals=6,
         eid=BASE_EID,
         endpoint=LAYERZERO_ENDPOINT,
         token_messaging=BASE_TOKEN_MESSAGING,
@@ -147,6 +150,7 @@ CHAINS: dict[str, Chain] = {
         web3_fixture="web3_arb",
         block=508_376_600,
         usdc=ARBITRUM_USDC,
+        usdc_decimals=6,
         eid=ARBITRUM_EID,
         endpoint=LAYERZERO_ENDPOINT,
         token_messaging=ARBITRUM_TOKEN_MESSAGING,
@@ -168,6 +172,7 @@ CHAINS: dict[str, Chain] = {
         web3_fixture="web3_hyperevm",
         block=46_745_610,
         usdc=Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f"),
+        usdc_decimals=6,
         eid=30367,
         endpoint=Web3.to_checksum_address("0x3A73033C0b1407574C76BdBAc67f126f6b4a9AA9"),
         token_messaging="",
@@ -393,6 +398,7 @@ def _ccip_chain(chain: Chain) -> CcipChain:
         chain_selector=chain.chain_selector,
         router=Web3.to_checksum_address(chain.ccip_router),
         token=Web3.to_checksum_address(chain.usdc),
+        local_decimals=chain.usdc_decimals,
     )
 
 

@@ -38,13 +38,22 @@ class CcipChain:
     """Per-chain CCIP wiring for one bridged asset. ``token_source`` is the
     address impersonated to credit delivered tokens (the real path mints
     through CCTP, which a simulation cannot drive); leave it ``None`` to have
-    the simulator fund ``SYNTHETIC_TOKEN_SOURCE`` by a storage override."""
+    the simulator fund ``SYNTHETIC_TOKEN_SOURCE`` by a storage override.
+    ``local_decimals`` must be explicit so the relay can reject unsafe
+    cross-decimal token credits."""
 
     chain_id: ChainId
     chain_selector: int
     router: ChecksumAddress
     token: ChecksumAddress
+    local_decimals: int
     token_source: ChecksumAddress | None = None
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.local_decimals <= 255:
+            raise ValueError(
+                f"local_decimals must fit uint8, got {self.local_decimals}"
+            )
 
     @property
     def credit_source(self) -> ChecksumAddress:
@@ -106,10 +115,17 @@ class CcipTransport(CrosschainTransport):
             )
         token_amount = 0
         if message.token_transfer:
+            # The codec admits at most one transfer (MAX_NUMBER_OF_TOKENS = 1).
             transfer = message.token_transfer[0]
             dest_token = evm_address(transfer.dest_token_address)
             if dest_token != dst.token:
                 raise ValueError(f"CCIP transfer of {dest_token}, expected {dst.token}")
+            if src.local_decimals != dst.local_decimals:
+                raise ValueError(
+                    "CCIP relay simulation needs equal token decimals on both "
+                    f"chains (src {src.chain_id}: {src.local_decimals}, dst "
+                    f"{dst.chain_id}: {dst.local_decimals})"
+                )
             token_amount = transfer.amount
         return OutboundMessage(
             transport_kind=self.transport_kind,
