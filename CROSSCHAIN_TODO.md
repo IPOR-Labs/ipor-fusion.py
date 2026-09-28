@@ -31,13 +31,9 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## API and efficiency
 
-- [ ] **`with_state_override` replaces same-block account overrides**
-  (`core/simulation.py`). Calling it after `with_erc20_balance` for the same
-  token drops the earlier balance diff, contradicting the balance helper's
-  promise to keep other token overrides. Merge fields and `stateDiff` key-wise,
-  or document the required call order.
 - [ ] **`erc20_balance_slot` makes up to 33 round trips** (`core/simulation.py`).
   Probe every candidate slot in one `eth_simulateV1` call, one holder per slot.
+
 ## Polish
 
 - [ ] `SYNTHETIC_TOKEN_SOURCE` (`crosschain/transport.py`): write a 40-digit

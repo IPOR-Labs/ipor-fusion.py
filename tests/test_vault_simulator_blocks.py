@@ -116,10 +116,8 @@ def test_storage_overrides_compose_when_an_empty_block_folds_forward(
 
 def test_one_account_override_cannot_mix_state_and_state_diff():
     sim, _ = _simulator()
-    sim.with_state_override(TOKEN, state={}, stateDiff={})
-    sim.observe("later", _read())
     with pytest.raises(ValueError, match="cannot contain both state and stateDiff"):
-        sim.run()
+        sim.with_state_override(TOKEN, state={}, stateDiff={})
 
 
 def test_a_sent_block_does_not_leak_its_overrides_forward():
@@ -184,6 +182,40 @@ def test_with_erc20_balance_overrides_the_mapping_entry_and_keeps_other_fields()
             _mapping_key(ALPHA, 9): "0x" + (7).to_bytes(32, "big").hex(),
         },
     }
+
+
+def test_same_block_state_overrides_compose_without_mutating_inputs():
+    sim, provider = _simulator()
+    initial_state = {STORAGE_A: VALUE_A}
+    sim.with_state_override(TOKEN, state=initial_state, balance=hex(1))
+    sim.with_erc20_balance(TOKEN, PAYER, 5, slot=9)
+    sim.with_state_override(TOKEN, balance=hex(2), code="0x6000")
+    assert initial_state == {STORAGE_A: VALUE_A}
+    initial_state[STORAGE_B] = VALUE_B
+    sim.observe("later", _read())
+    sim.run()
+
+    (entry,) = _sent_blocks(provider)
+    assert entry["stateOverrides"][TOKEN] == {
+        "state": {
+            STORAGE_A: VALUE_A,
+            _mapping_key(PAYER, 9): "0x" + (5).to_bytes(32, "big").hex(),
+        },
+        "balance": hex(2),
+        "code": "0x6000",
+    }
+    assert initial_state == {STORAGE_A: VALUE_A, STORAGE_B: VALUE_B}
+
+
+def test_same_block_state_replaces_an_earlier_state_diff():
+    sim, provider = _simulator()
+    sim.with_erc20_balance(TOKEN, PAYER, 5, slot=9)
+    sim.with_state_override(TOKEN, state={STORAGE_B: VALUE_B})
+    sim.observe("later", _read())
+    sim.run()
+
+    (entry,) = _sent_blocks(provider)
+    assert entry["stateOverrides"][TOKEN] == {"state": {STORAGE_B: VALUE_B}}
 
 
 def test_erc20_balance_slot_probes_until_balance_of_reflects_the_override():

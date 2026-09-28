@@ -193,7 +193,16 @@ class VaultSimulator:
     def with_state_override(
         self, address: ChecksumAddress, **overrides: Any
     ) -> VaultSimulator:
-        self._current.state_overrides[Web3.to_checksum_address(address)] = overrides
+        """Merge an account override into the current block.
+
+        Later fields and ``stateDiff`` slots win. ``state`` replaces storage;
+        a later ``stateDiff`` patches it. One call cannot contain both forms.
+        """
+        checksum_address = Web3.to_checksum_address(address)
+        current = self._current.state_overrides.get(checksum_address, {})
+        self._current.state_overrides[checksum_address] = _compose_account_overrides(
+            current, overrides
+        )
         return self
 
     def with_erc20_balance(
@@ -207,12 +216,12 @@ class VaultSimulator:
         """Set ``holder``'s balance of ``token`` to ``amount`` in the current
         block by overriding the ``balances`` mapping entry at storage ``slot``
         (see ``erc20_balance_slot``). Other overrides on the token are kept."""
-        overrides = self._current.state_overrides.setdefault(
-            Web3.to_checksum_address(token), {}
+        return self.with_state_override(
+            token,
+            stateDiff={
+                _mapping_key(holder, slot): "0x" + amount.to_bytes(32, "big").hex()
+            },
         )
-        diff = overrides.setdefault("stateDiff", {})
-        diff[_mapping_key(holder, slot)] = "0x" + amount.to_bytes(32, "big").hex()
-        return self
 
     def next_block(self, time_shift_seconds: int | None = None) -> VaultSimulator:
         """Seal the current block and open a new one, optionally shifted in time.
@@ -457,6 +466,7 @@ def _compose_account_overrides(
 
     merged = {**earlier, **later}
     if "state" in later:
+        merged["state"] = dict(later["state"])
         merged.pop("stateDiff", None)
     elif "stateDiff" in later:
         if "state" in earlier:
