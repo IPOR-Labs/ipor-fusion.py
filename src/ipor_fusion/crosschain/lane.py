@@ -220,15 +220,19 @@ class CrosschainLane(ABC):
         )
 
     def needs_attestation(self, *, now: int, margin: int = 0) -> bool:
-        """Whether a keeper should propose now (four reads on the hub): the
-        settled bucket is non-zero, nothing is in flight (a receipt landing
-        between propose and approve moves the state version and the approval
-        reverts), and the approved observation is missing or older than
-        ``staleness_max - margin`` seconds, after which ``getBalance()``
-        fails closed."""
+        """Whether a keeper should propose now (up to six reads on the hub):
+        the settled bucket is non-zero, no transfer or command receipt is in
+        flight, and the approved observation is missing or older than
+        ``staleness_max - margin`` seconds, after which ``getBalance()`` fails
+        closed. A parked failed command does not block attestation because it
+        cannot change the remote state version without first being retried or
+        cancelled. A receipt that never arrives (a stuck command or transfer)
+        keeps this false; resolve it on the executor first."""
         if self.settled_remote_balance().call() == 0:
             return False
         if self.pending_transfer_count().call() != 0:
+            return False
+        if self.command_in_flight():
             return False
         last = self.last_approved_observed_at().call()
         return last == 0 or now - last > self.staleness_max().call() - margin
@@ -290,6 +294,11 @@ class CrosschainLane(ABC):
     @abstractmethod
     def has_active_command(self) -> Call[bool]:
         """Whether a command still occupies the lane's single command slot."""
+
+    @abstractmethod
+    def command_in_flight(self) -> bool:
+        """Whether a command receipt that can change the remote state version
+        is outstanding. A parked failed command is not in flight."""
 
     @abstractmethod
     def pending_transfer_count(self) -> Call[int]:

@@ -33,6 +33,7 @@ from ipor_fusion.crosschain import (
     CcipCrosschainExecutor,
     CcipRouteConfig,
     Command,
+    CommandStatus,
     CrosschainTransportKind,
     OptionsBuilder,
     StargateCrosschainDispatcher,
@@ -223,6 +224,46 @@ class TestReads:
         assert _ccip_lane(hub_ctx=ctx).has_active_command().call() is False
         ctx.call.return_value = encode(["bytes32"], [HASH])
         assert _ccip_lane(hub_ctx=ctx).has_active_command().call() is True
+
+    @pytest.mark.parametrize(
+        ("active", "awaiting_cancel", "status", "expected"),
+        [
+            (True, False, CommandStatus.PENDING, True),
+            (True, False, CommandStatus.FAILED, False),
+            (True, True, CommandStatus.FAILED, True),
+            (False, False, CommandStatus.PENDING, False),
+        ],
+    )
+    def test_stargate_command_in_flight_tracks_receipts(
+        self, active, awaiting_cancel, status, expected
+    ):
+        ctx = _ctx_answering(
+            {
+                selector("activeCommand(uint256)"): encode(
+                    ["bool", "bool", "bool", "uint8", "bytes32", "uint64", "uint64"],
+                    [active, False, awaiting_cancel, status, HASH, 4, 0],
+                )
+            }
+        )
+        assert _stargate_lane(hub_ctx=ctx).command_in_flight() is expected
+
+    @pytest.mark.parametrize(
+        ("command_id", "status", "expected"),
+        [
+            (bytes(32), None, False),
+            (HASH, CommandStatus.PENDING, True),
+            (HASH, CommandStatus.FAILED, False),
+        ],
+    )
+    def test_ccip_command_in_flight_tracks_receipts(self, command_id, status, expected):
+        answers = {
+            selector("activeCommand(uint256)"): encode(["bytes32"], [command_id])
+        }
+        if status is not None:
+            answers[selector("commandStatus(bytes32)")] = encode(["uint8"], [status])
+        assert (
+            _ccip_lane(hub_ctx=_ctx_answering(answers)).command_in_flight() is expected
+        )
 
     def test_observation_is_normalized(self):
         ctx = MagicMock()
@@ -471,21 +512,57 @@ class TestLaneParts:
         assert _sel(ccip.staleness_max()) == selector("BALANCE_STALENESS_MAX()")
 
     @pytest.mark.parametrize(
-        ("settled", "pending", "last", "now", "margin", "due"),
+        (
+            "settled",
+            "pending",
+            "command_active",
+            "awaiting_cancel",
+            "command_status",
+            "last",
+            "now",
+            "margin",
+            "due",
+        ),
         [
-            (5, 0, 1_000, 4_601, 0, True),  # one second past the window
-            (5, 0, 1_000, 4_600, 0, False),  # exactly at the window: still fresh
-            (5, 0, 1_000, 4_560, 60, True),  # margin brings it forward
-            (5, 0, 0, 10, 0, True),  # never attested
-            (0, 0, 0, 10, 0, False),  # nothing settled, nothing to mark
-            (5, 1, 1_000, 9_999, 0, False),  # a transfer in flight: wait
+            (5, 0, False, False, CommandStatus.NONE, 1_000, 4_601, 0, True),
+            (5, 0, False, False, CommandStatus.NONE, 1_000, 4_600, 0, False),
+            (5, 0, False, False, CommandStatus.NONE, 1_000, 4_560, 60, True),
+            (5, 0, False, False, CommandStatus.NONE, 0, 10, 0, True),
+            (0, 0, False, False, CommandStatus.NONE, 0, 10, 0, False),
+            (5, 1, False, False, CommandStatus.NONE, 1_000, 9_999, 0, False),
+            (5, 0, True, False, CommandStatus.PENDING, 0, 10, 0, False),
+            (5, 0, True, False, CommandStatus.FAILED, 0, 10, 0, True),
+            (5, 0, True, True, CommandStatus.FAILED, 0, 10, 0, False),
         ],
     )
-    def test_needs_attestation(self, settled, pending, last, now, margin, due):
+    def test_needs_attestation(
+        self,
+        settled,
+        pending,
+        command_active,
+        awaiting_cancel,
+        command_status,
+        last,
+        now,
+        margin,
+        due,
+    ):
         probe = _stargate_lane()
         answers = {
             _sel(probe.settled_remote_balance()): encode(["uint256"], [settled]),
             _sel(probe.pending_transfer_count()): encode(["uint256"], [pending]),
+            selector("activeCommand(uint256)"): encode(
+                ["bool", "bool", "bool", "uint8", "bytes32", "uint64", "uint64"],
+                [
+                    command_active,
+                    False,
+                    awaiting_cancel,
+                    command_status,
+                    HASH,
+                    4,
+                    0,
+                ],
+            ),
             _sel(probe.last_approved_observed_at()): encode(["uint64"], [last]),
             _sel(probe.staleness_max()): encode(["uint256"], [3_600]),
         }

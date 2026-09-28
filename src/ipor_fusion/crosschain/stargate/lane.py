@@ -12,7 +12,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.contracts import BalanceObservation
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
-from ipor_fusion.crosschain.messages import CrosschainTransportKind
+from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
 from ipor_fusion.crosschain.stargate.contracts import (
     Observation,
     StargateCrosschainDispatcher,
@@ -118,6 +118,12 @@ class StargateLane(CrosschainLane):
             output_types=call.output_types,
             decoder=lambda values: _active_command_decoder(values).active,
             ctx=call.ctx,
+        )
+
+    def command_in_flight(self) -> bool:
+        command = self.executor.active_command(self.spoke_chain_id).call()
+        return command.active and (
+            command.status == CommandStatus.PENDING or command.awaiting_cancel
         )
 
     def pending_transfer_count(self) -> Call[int]:

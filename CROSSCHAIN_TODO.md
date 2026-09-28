@@ -16,14 +16,13 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   XPASS. When the lane opens, drop the marks that XPASS; then move the module
   behind its own marker, run it in a scheduled or manual job only, and keep it
   out of the default `pytest` run.
+- [ ] **CCIP cancel receipt visibility.** Expose a public getter for
+  `cancelRequested(commandId)` on the CCIP executor. Until then the SDK cannot
+  distinguish a parked failed command from one whose cancellation receipt is
+  in flight, so one attestation approval may race and revert.
 
 ## Correctness
 
-- [ ] **`needs_attestation` ignores an in-flight command** (`crosschain/lane.py`).
-  A completed or cancelled command bumps the dispatcher `stateVersion` on both
-  transports; a proposal made while a command is active fails
-  `ProposalVersionMismatch` on approval. Return `False` while
-  `has_active_command()` is true.
 - [ ] **`CrosschainSimulator.relay()` off by one** (`crosschain/simulation.py`).
   A flow that settles in exactly `max_rounds` rounds raises
   `RuntimeError`, because `pending` is not checked after the last round.

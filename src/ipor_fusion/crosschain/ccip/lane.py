@@ -18,7 +18,7 @@ from ipor_fusion.crosschain.ccip.contracts import (
 )
 from ipor_fusion.crosschain.contracts import BalanceObservation
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
-from ipor_fusion.crosschain.messages import CrosschainTransportKind
+from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
 from ipor_fusion.fuses.crosschain.base import SendParams
 from ipor_fusion.fuses.crosschain.ccip import (
     CcipCrosschainCommandFuse,
@@ -119,6 +119,12 @@ class CcipLane(CrosschainLane):
             decoder=lambda value: bytes(value) != bytes(32),
             ctx=call.ctx,
         )
+
+    def command_in_flight(self) -> bool:
+        command_id = self.executor.active_command(self.spoke_chain_id).call()
+        if command_id == bytes(32):
+            return False
+        return self.executor.command_status(command_id).call() == CommandStatus.PENDING
 
     def pending_transfer_count(self) -> Call[int]:
         return self.executor.pending_transfer_count(self.spoke_chain_id)
