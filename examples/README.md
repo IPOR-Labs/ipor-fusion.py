@@ -23,6 +23,12 @@ transaction.
   controller, borrow WETH, repay, then unwind (controller before collateral) and
   withdraw the collateral, reading the outstanding debt from the eVault's
   `debtOf` to confirm the position fully closed.
+- [`advanced_euler_v2_looping_arbitrum.py`](advanced_euler_v2_looping_arbitrum.py) --
+  builds a WBTC-denominated vault on Arbitrum and opens (but does not unwind) a
+  leveraged Euler V2 position in one Morpho flash-loan callback: supply WBTC,
+  borrow USDC, swap the USDC back to WBTC, and repay the flash loan. It demonstrates
+  the four Euler functional fuses, typed swapper substrates and callback-handler
+  configuration.
 
 ## Prerequisites
 
@@ -34,6 +40,8 @@ transaction.
 
 - `BASE_PROVIDER_URL` (required) -- your Base archive RPC endpoint. Never commit it or
   share it; it embeds your provider key.
+- `ARBITRUM_PROVIDER_URL` (required by the Arbitrum example) -- your Arbitrum
+  archive RPC endpoint. Never commit it or share it.
 
 ## Running
 
