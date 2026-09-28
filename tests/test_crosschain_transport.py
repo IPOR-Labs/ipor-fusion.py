@@ -264,6 +264,51 @@ class TestStargateTransport:
         assert {ETHEREUM, BASE} <= transport.chain_ids
         assert transport.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO
 
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("local_decimals", -1),
+            ("local_decimals", 256),
+            ("shared_decimals", -1),
+            ("shared_decimals", 256),
+        ],
+    )
+    def test_rejects_decimals_outside_uint8(self, field, value):
+        with pytest.raises(ValueError, match=rf"{field} must fit uint8"):
+            StargateChain_(chain_id=ETHEREUM, eid=ETHEREUM_EID, **{field: value})
+
+    def test_rejects_local_decimals_below_shared_decimals(self):
+        with pytest.raises(ValueError, match="local_decimals 5 must be greater than"):
+            StargateChain_(
+                chain_id=ETHEREUM,
+                eid=ETHEREUM_EID,
+                local_decimals=5,
+                shared_decimals=6,
+            )
+
+    @pytest.mark.parametrize("asset_id", [0, 0x10000])
+    def test_rejects_asset_id_outside_uint16(self, asset_id):
+        with pytest.raises(ValueError, match="asset_id must be between 1 and 65535"):
+            StargateChain_(
+                chain_id=ETHEREUM,
+                eid=ETHEREUM_EID,
+                asset_id=asset_id,
+            )
+
+    def test_rejects_mixed_shared_decimals(self):
+        with pytest.raises(ValueError, match="same shared_decimals.*1: 6, 8453: 5"):
+            StargateTransport(
+                [
+                    StargateChain_(chain_id=ETHEREUM, eid=ETHEREUM_EID),
+                    StargateChain_(
+                        chain_id=BASE,
+                        eid=BASE_EID,
+                        local_decimals=6,
+                        shared_decimals=5,
+                    ),
+                ]
+            )
+
 
 def StargateChain_(**overrides):  # noqa: N802 - test helper that fills the boring fields
     defaults = dict(
@@ -275,6 +320,9 @@ def StargateChain_(**overrides):  # noqa: N802 - test helper that fills the bori
         if overrides.get("chain_id") == ETHEREUM
         else BASE_STARGATE_USDC_POOL,
         token=ETHEREUM_USDC if overrides.get("chain_id") == ETHEREUM else BASE_USDC,
+        asset_id=1,
+        local_decimals=6,
+        shared_decimals=6,
     )
     return StargateChain(**{**defaults, **overrides})
 

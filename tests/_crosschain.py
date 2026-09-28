@@ -102,6 +102,8 @@ class Chain:
     block: int
     usdc: str
     usdc_decimals: int
+    stargate_asset_id: int
+    stargate_shared_decimals: int
     eid: int
     endpoint: str
     token_messaging: str
@@ -123,6 +125,8 @@ CHAINS: dict[str, Chain] = {
         block=26_045_913,
         usdc=ETHEREUM_USDC,
         usdc_decimals=6,
+        stargate_asset_id=1,
+        stargate_shared_decimals=6,
         eid=ETHEREUM_EID,
         endpoint=LAYERZERO_ENDPOINT,
         token_messaging=ETHEREUM_TOKEN_MESSAGING,
@@ -137,6 +141,8 @@ CHAINS: dict[str, Chain] = {
         block=51_723_200,
         usdc=BASE_USDC,
         usdc_decimals=6,
+        stargate_asset_id=1,
+        stargate_shared_decimals=6,
         eid=BASE_EID,
         endpoint=LAYERZERO_ENDPOINT,
         token_messaging=BASE_TOKEN_MESSAGING,
@@ -151,6 +157,8 @@ CHAINS: dict[str, Chain] = {
         block=508_376_600,
         usdc=ARBITRUM_USDC,
         usdc_decimals=6,
+        stargate_asset_id=1,
+        stargate_shared_decimals=6,
         eid=ARBITRUM_EID,
         endpoint=LAYERZERO_ENDPOINT,
         token_messaging=ARBITRUM_TOKEN_MESSAGING,
@@ -173,6 +181,8 @@ CHAINS: dict[str, Chain] = {
         block=46_745_610,
         usdc=Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f"),
         usdc_decimals=6,
+        stargate_asset_id=1,
+        stargate_shared_decimals=6,
         eid=30367,
         endpoint=Web3.to_checksum_address("0x3A73033C0b1407574C76BdBAc67f126f6b4a9AA9"),
         token_messaging="",
@@ -386,6 +396,9 @@ def _stargate_chain(chain: Chain) -> StargateChain:
         token_messaging=Web3.to_checksum_address(chain.token_messaging),
         stargate_pool=Web3.to_checksum_address(chain.stargate_pool),
         token=Web3.to_checksum_address(chain.usdc),
+        asset_id=chain.stargate_asset_id,
+        local_decimals=chain.usdc_decimals,
+        shared_decimals=chain.stargate_shared_decimals,
     )
 
 

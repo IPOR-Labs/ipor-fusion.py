@@ -21,8 +21,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   distinguish a parked failed command from one whose cancellation receipt is
   in flight, so one attestation approval may race and revert.
 
-## Correctness
-
 ## API and efficiency
 
 - [ ] **`erc20_balance_slot` makes up to 33 round trips** (`core/simulation.py`).
@@ -30,8 +28,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Polish
 
-- [ ] `StargateChain` defaults `local_decimals` and `shared_decimals` to 6;
-  make them required like `CcipChain.local_decimals`.
 - [ ] `SYNTHETIC_TOKEN_SOURCE` (`crosschain/transport.py`): write a 40-digit
   literal instead of slicing a 41-digit one.
 - [ ] Remove the unused `checksum()` helper from `crosschain/transport.py`.

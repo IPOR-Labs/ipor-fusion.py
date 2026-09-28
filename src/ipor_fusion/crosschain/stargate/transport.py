@@ -40,7 +40,8 @@ class StargateChain:
     LayerZero sender of every taxi (asset) packet; ``stargate_pool`` is the
     asset's pool, which the receiver sees as ``lzCompose``'s ``from`` and which
     is also the default ``token_source``. ``asset_id`` is the pool's id in
-    ``TokenMessaging`` (1 for USDC).
+    ``TokenMessaging``. Asset id and decimal configuration are explicit because
+    they differ between assets and chains.
     """
 
     chain_id: ChainId
@@ -49,10 +50,27 @@ class StargateChain:
     token_messaging: ChecksumAddress
     stargate_pool: ChecksumAddress
     token: ChecksumAddress
-    asset_id: int = 1
-    local_decimals: int = 6
-    shared_decimals: int = 6
+    asset_id: int
+    local_decimals: int
+    shared_decimals: int
     token_source: ChecksumAddress | None = None
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.asset_id <= 0xFFFF:
+            raise ValueError(
+                f"asset_id must be between 1 and 65535, got {self.asset_id}"
+            )
+        for name, value in (
+            ("local_decimals", self.local_decimals),
+            ("shared_decimals", self.shared_decimals),
+        ):
+            if not 0 <= value <= 255:
+                raise ValueError(f"{name} must fit uint8, got {value}")
+        if self.local_decimals < self.shared_decimals:
+            raise ValueError(
+                f"local_decimals {self.local_decimals} must be greater than or "
+                f"equal to shared_decimals {self.shared_decimals}"
+            )
 
     @property
     def credit_source(self) -> ChecksumAddress:
@@ -69,6 +87,15 @@ class StargateTransport(CrosschainTransport):
 
     def __init__(self, chains: Iterable[StargateChain]) -> None:
         self._chains = {c.chain_id: c for c in chains}
+        shared_decimals = {c.shared_decimals for c in self._chains.values()}
+        if len(shared_decimals) > 1:
+            configured = ", ".join(
+                f"{chain.chain_id}: {chain.shared_decimals}"
+                for chain in self._chains.values()
+            )
+            raise ValueError(
+                f"Stargate chains must use the same shared_decimals ({configured})"
+            )
         self._by_eid = {c.eid: c for c in self._chains.values()}
 
     @property
