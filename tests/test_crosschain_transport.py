@@ -647,9 +647,12 @@ class TestSyntheticTokenSource:
             CrosschainSimulator,
         )
 
-        key = (
+        synthetic_key = (
             "0x"
             + keccak(encode(["address", "uint256"], [SYNTHETIC_TOKEN_SOURCE, 0])).hex()
+        )
+        second_holder_key = (
+            "0x" + keccak(encode(["address", "uint256"], [STARGATE_EXECUTOR, 0])).hex()
         )
 
         class TokenProvider(ScriptedProvider):
@@ -701,11 +704,14 @@ class TestSyntheticTokenSource:
             ]
         )
         sim = CrosschainSimulator(transport).add_chain(BASE, web3, block=1)
+        sim.next_block()
+        sim.with_erc20_balance(BASE_USDC, STARGATE_EXECUTOR, 42, slot=0)
         sim.observe(
             "anything", Call(to=BASE_USDC, data=b"\x00" * 4, output_types=["uint256"])
         )
         sim.run()
         entry = web3.provider.payloads[-1][0]["blockStateCalls"][0]
         assert entry["stateOverrides"][BASE_USDC]["stateDiff"] == {
-            key: "0x" + (2**96).to_bytes(32, "big").hex()
+            synthetic_key: "0x" + (2**96).to_bytes(32, "big").hex(),
+            second_holder_key: "0x" + (42).to_bytes(32, "big").hex(),
         }

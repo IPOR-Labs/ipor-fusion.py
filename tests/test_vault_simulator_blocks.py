@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 from web3 import Web3
 
 from ipor_fusion import VaultSimulator
@@ -67,6 +68,58 @@ def test_the_sent_block_wins_and_addresses_merge():
     (entry,) = _sent_blocks(provider)
     assert entry["stateOverrides"] == {PAYER: {"balance": hex(2), "nonce": hex(7)}}
     assert entry["blockOverrides"] == {"time": hex(BASELINE + 10 + 60)}
+
+
+STORAGE_A = "0x" + "01" * 32
+STORAGE_B = "0x" + "02" * 32
+VALUE_A = "0x" + "0a" * 32
+VALUE_B = "0x" + "0b" * 32
+
+
+@pytest.mark.parametrize(
+    ("earlier", "later", "expected"),
+    [
+        (
+            {"stateDiff": {STORAGE_A: VALUE_A}},
+            {"stateDiff": {STORAGE_B: VALUE_B}},
+            {"stateDiff": {STORAGE_A: VALUE_A, STORAGE_B: VALUE_B}},
+        ),
+        (
+            {"state": {STORAGE_A: VALUE_A}},
+            {"stateDiff": {STORAGE_B: VALUE_B}},
+            {"state": {STORAGE_A: VALUE_A, STORAGE_B: VALUE_B}},
+        ),
+        (
+            {"stateDiff": {STORAGE_A: VALUE_A}},
+            {"state": {STORAGE_B: VALUE_B}},
+            {"state": {STORAGE_B: VALUE_B}},
+        ),
+        (
+            {"state": {STORAGE_A: VALUE_A}},
+            {"state": {STORAGE_B: VALUE_B}},
+            {"state": {STORAGE_B: VALUE_B}},
+        ),
+    ],
+)
+def test_storage_overrides_compose_when_an_empty_block_folds_forward(
+    earlier, later, expected
+):
+    sim, provider = _simulator()
+    sim.with_state_override(TOKEN, **earlier)
+    sim.next_block()
+    sim.with_state_override(TOKEN, **later)
+    sim.observe("later", _read())
+    sim.run()
+    (entry,) = _sent_blocks(provider)
+    assert entry["stateOverrides"][TOKEN] == expected
+
+
+def test_one_account_override_cannot_mix_state_and_state_diff():
+    sim, _ = _simulator()
+    sim.with_state_override(TOKEN, state={}, stateDiff={})
+    sim.observe("later", _read())
+    with pytest.raises(ValueError, match="cannot contain both state and stateDiff"):
+        sim.run()
 
 
 def test_a_sent_block_does_not_leak_its_overrides_forward():
@@ -141,7 +194,5 @@ def test_erc20_balance_slot_probes_until_balance_of_reflects_the_override():
     web3.eth.get_block.return_value = {"timestamp": BASELINE}
     assert erc20_balance_slot(web3, TOKEN, block=100) == 9
     assert len(web3.provider.payloads) == 10  # slots 0..9, one simulate each
-    import pytest
-
     with pytest.raises(ValueError, match="no balances mapping slot"):
         erc20_balance_slot(web3, TOKEN, block=100, max_slot=8)

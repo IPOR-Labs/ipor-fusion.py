@@ -330,10 +330,9 @@ class VaultSimulator:
         for block in self._blocks:
             block_overrides = {**block_overrides, **block.block_overrides}
             for address, fields in block.state_overrides.items():
-                state_overrides[address] = {
-                    **state_overrides.get(address, {}),
-                    **fields,
-                }
+                state_overrides[address] = _compose_account_overrides(
+                    state_overrides.get(address, {}), fields
+                )
             if not block.calls:
                 continue
             entry: dict[str, Any] = {
@@ -447,6 +446,28 @@ class VaultSimulator:
             calls=parsed,
             failed_calls=failed_calls,
         )
+
+
+def _compose_account_overrides(
+    earlier: dict[str, Any], later: dict[str, Any]
+) -> dict[str, Any]:
+    for fields in (earlier, later):
+        if "state" in fields and "stateDiff" in fields:
+            raise ValueError("account override cannot contain both state and stateDiff")
+
+    merged = {**earlier, **later}
+    if "state" in later:
+        merged.pop("stateDiff", None)
+    elif "stateDiff" in later:
+        if "state" in earlier:
+            merged["state"] = {**earlier["state"], **later["stateDiff"]}
+            merged.pop("stateDiff", None)
+        else:
+            merged["stateDiff"] = {
+                **earlier.get("stateDiff", {}),
+                **later["stateDiff"],
+            }
+    return merged
 
 
 def _mapping_key(holder: str, slot: int) -> str:

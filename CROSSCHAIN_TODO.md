@@ -23,11 +23,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Correctness
 
-- [ ] **Shallow override merge in `VaultSimulator.run()`** (`core/simulation.py`).
-  Folding an empty block's overrides replaces the whole `stateDiff` of an
-  address, so two `with_erc20_balance` calls on one token in different blocks
-  keep only the last holder. Merge `stateDiff` key-wise; reject `state` and
-  `stateDiff` on the same address, which `eth_simulateV1` refuses.
 - [ ] **Non-canonical EXECUTOR grants pass silently.** An EXECUTOR substrate
   with a non-zero chain id is never matched by the fuses, yet
   `_decode_crosschain` (`substrates.py`) hides the chain slot and
@@ -44,6 +39,11 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## API and efficiency
 
+- [ ] **`with_state_override` replaces same-block account overrides**
+  (`core/simulation.py`). Calling it after `with_erc20_balance` for the same
+  token drops the earlier balance diff, contradicting the balance helper's
+  promise to keep other token overrides. Merge fields and `stateDiff` key-wise,
+  or document the required call order.
 - [ ] **`erc20_balance_slot` makes up to 33 round trips** (`core/simulation.py`).
   Probe every candidate slot in one `eth_simulateV1` call, one holder per slot.
 - [ ] **CCIP `propose_balance` shape** (`crosschain/ccip/contracts.py`).
