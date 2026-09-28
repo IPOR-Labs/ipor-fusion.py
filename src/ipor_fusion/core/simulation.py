@@ -17,6 +17,8 @@ from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.errors import SimulationError, decode_custom_error
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 
+DEFAULT_BLOCK_TIME_INCREMENT = 12
+
 
 @dataclass(slots=True)
 class _Call:
@@ -176,6 +178,26 @@ class VaultSimulator:
         """Whether anything is buffered; ``run()`` refuses an empty batch."""
         return any(block.calls for block in self._blocks)
 
+    @property
+    def current_time(self) -> int:
+        """Timestamp of the latest sent block or an explicit pending time.
+
+        A pending block without an explicit time will run 12 seconds later
+        once it contains a call.
+        """
+        return self._current_time()
+
+    @property
+    def current_block_number(self) -> int:
+        """Pinned block number plus the number of blocks containing calls.
+
+        A numeric pinned block is required because tags such as ``latest`` do
+        not identify a stable parent block number.
+        """
+        if not isinstance(self._block, int):
+            raise ValueError("current_block_number requires a numeric pinned block")
+        return self._block + sum(bool(block.calls) for block in self._blocks)
+
     def _baseline(self) -> int:
         """Pinned-block timestamp; cached so multi-block batches stay consistent."""
         if self._baseline_timestamp is None:
@@ -239,16 +261,33 @@ class VaultSimulator:
         new_block = _Block()
         if time_shift_seconds is not None:
             prev_time = self._current_time()
-            new_block.block_overrides["time"] = hex(prev_time + int(time_shift_seconds))
+            next_time = prev_time + int(time_shift_seconds)
+            if next_time <= prev_time:
+                raise ValueError("next block time must be strictly increasing")
+            new_block.block_overrides["time"] = hex(next_time)
         self._blocks.append(new_block)
         return self
 
     def _current_time(self) -> int:
-        """Resolve the most recently set block timestamp, walking back if needed."""
-        for block in reversed(self._blocks):
+        """Resolve the current modeled timestamp.
+
+        Clients advance a simulated block without an explicit timestamp by 12
+        seconds. Empty blocks are folded into the next sent block, so they do
+        not consume that increment.
+        """
+        current_time = self._baseline()
+        pending_time: int | None = None
+        for block in self._blocks:
             if "time" in block.block_overrides:
-                return int(block.block_overrides["time"], 16)
-        return self._baseline()
+                pending_time = int(block.block_overrides["time"], 16)
+            if block.calls:
+                current_time = (
+                    pending_time
+                    if pending_time is not None
+                    else current_time + DEFAULT_BLOCK_TIME_INCREMENT
+                )
+                pending_time = None
+        return pending_time if pending_time is not None else current_time
 
     def execute(self, actions: list[FuseAction]) -> VaultSimulator:
         """Queue a default `execute((address,bytes)[])` batch on the vault, from alpha."""
@@ -386,6 +425,8 @@ class VaultSimulator:
         # into the next block that is sent; that block's own values win.
         block_overrides: dict[str, Any] = {}
         state_overrides: dict[str, dict[str, Any]] = {}
+        modeled_time = self._baseline()
+        previous_sent_time = modeled_time
         for block in self._blocks:
             block_overrides = {**block_overrides, **block.block_overrides}
             for address, fields in block.state_overrides.items():
@@ -394,11 +435,18 @@ class VaultSimulator:
                 )
             if not block.calls:
                 continue
+            if "time" in block_overrides:
+                modeled_time = int(block_overrides["time"], 16)
+            else:
+                modeled_time += DEFAULT_BLOCK_TIME_INCREMENT
+                block_overrides["time"] = hex(modeled_time)
+            if modeled_time <= previous_sent_time:
+                raise ValueError("simulated block times must be strictly increasing")
+            previous_sent_time = modeled_time
             entry: dict[str, Any] = {
                 "calls": [self._serialize_call(c) for c in block.calls]
             }
-            if block_overrides:
-                entry["blockOverrides"] = block_overrides
+            entry["blockOverrides"] = block_overrides
             if state_overrides:
                 entry["stateOverrides"] = state_overrides
             block_state_calls.append(entry)

@@ -130,7 +130,91 @@ def test_a_sent_block_does_not_leak_its_overrides_forward():
     first, second = _sent_blocks(provider)
     assert first["stateOverrides"] == {PAYER: {"balance": hex(1)}}
     assert "stateOverrides" not in second
-    assert "blockOverrides" not in second
+    assert first["blockOverrides"] == {"time": hex(BASELINE + 12)}
+    assert second["blockOverrides"] == {"time": hex(BASELINE + 24)}
+
+
+def test_default_block_times_are_explicit_and_increase_by_twelve_seconds():
+    sim, provider = _simulator()
+    sim.observe("first", _read())
+    sim.next_block()
+    sim.observe("second", _read())
+
+    sim.run()
+
+    first, second = _sent_blocks(provider)
+    assert first["blockOverrides"]["time"] == hex(BASELINE + 12)
+    assert second["blockOverrides"]["time"] == hex(BASELINE + 24)
+
+
+def test_explicit_shift_after_default_block_uses_modeled_client_time():
+    sim, provider = _simulator()
+    sim.observe("first", _read())
+    sim.next_block(time_shift_seconds=1)
+    sim.observe("second", _read())
+
+    sim.run()
+
+    first, second = _sent_blocks(provider)
+    assert first["blockOverrides"]["time"] == hex(BASELINE + 12)
+    assert second["blockOverrides"]["time"] == hex(BASELINE + 13)
+
+
+@pytest.mark.parametrize("shift", (0, -1))
+def test_next_block_rejects_non_increasing_time(shift):
+    sim, _ = _simulator()
+    sim.observe("first", _read())
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        sim.next_block(time_shift_seconds=shift)
+
+
+def test_folded_empty_block_does_not_consume_a_default_time_increment():
+    sim, provider = _simulator()
+    sim.next_block()
+    sim.observe("first", _read())
+    sim.next_block()
+    sim.observe("second", _read())
+
+    sim.run()
+
+    first, second = _sent_blocks(provider)
+    assert first["blockOverrides"]["time"] == hex(BASELINE + 12)
+    assert second["blockOverrides"]["time"] == hex(BASELINE + 24)
+
+
+def test_run_rejects_absolute_time_that_moves_backwards():
+    sim, _ = _simulator()
+    sim.with_block_time_shift(60).observe("first", _read())
+    sim.next_block()
+    sim.with_block_time_shift(5).observe("second", _read())
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        sim.run()
+
+
+def test_current_time_and_block_number_follow_only_sent_blocks():
+    sim, _ = _simulator()
+    assert sim.current_time == BASELINE
+    assert sim.current_block_number == 100
+    sim.next_block()
+    sim.observe("first", _read())
+    assert sim.current_time == BASELINE + 12
+    assert sim.current_block_number == 101
+    sim.next_block(time_shift_seconds=1)
+    sim.observe("second", _read())
+    assert sim.current_time == BASELINE + 13
+    assert sim.current_block_number == 102
+
+
+def test_current_block_number_requires_numeric_pin():
+    web3 = MagicMock()
+    web3.provider = RecordingProvider()
+    web3.eth.get_block.return_value = {"timestamp": BASELINE}
+    sim = VaultSimulator(web3, vault=VAULT, alpha=ALPHA, block="latest")
+
+    with pytest.raises(ValueError, match="numeric pinned block"):
+        _ = sim.current_block_number
 
 
 def test_deploy_contract_serializes_creation_and_predicts_address():
