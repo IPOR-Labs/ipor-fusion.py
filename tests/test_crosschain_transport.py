@@ -309,6 +309,27 @@ class TestStargateTransport:
                 ]
             )
 
+    def test_rejects_duplicate_chain_ids(self):
+        with pytest.raises(ValueError, match="duplicate Stargate chain_id 1"):
+            StargateTransport(
+                [
+                    StargateChain_(chain_id=ETHEREUM, eid=ETHEREUM_EID),
+                    StargateChain_(chain_id=ETHEREUM, eid=BASE_EID),
+                ]
+            )
+
+    def test_rejects_duplicate_eids(self):
+        with pytest.raises(
+            ValueError,
+            match=f"LayerZero eid {ETHEREUM_EID} configured for chains 1 and 8453",
+        ):
+            StargateTransport(
+                [
+                    StargateChain_(chain_id=ETHEREUM, eid=ETHEREUM_EID),
+                    StargateChain_(chain_id=BASE, eid=ETHEREUM_EID),
+                ]
+            )
+
 
 def StargateChain_(**overrides):  # noqa: N802 - test helper that fills the boring fields
     defaults = dict(
@@ -449,6 +470,56 @@ class TestCcipTransport:
                 ETHEREUM_USDC,
                 local_decimals,
             )
+
+    def test_rejects_duplicate_chain_ids(self):
+        from ipor_fusion import CcipChain, CcipTransport
+
+        chains = [
+            CcipChain(
+                ETHEREUM,
+                ETHEREUM_CHAIN_SELECTOR,
+                ETHEREUM_CCIP_ROUTER,
+                ETHEREUM_USDC,
+                6,
+            ),
+            CcipChain(
+                ETHEREUM,
+                BASE_CHAIN_SELECTOR,
+                BASE_CCIP_ROUTER,
+                BASE_USDC,
+                6,
+            ),
+        ]
+        with pytest.raises(ValueError, match="duplicate CCIP chain_id 1"):
+            CcipTransport(chains)
+
+    def test_rejects_duplicate_chain_selectors(self):
+        from ipor_fusion import CcipChain, CcipTransport
+
+        chains = [
+            CcipChain(
+                ETHEREUM,
+                ETHEREUM_CHAIN_SELECTOR,
+                ETHEREUM_CCIP_ROUTER,
+                ETHEREUM_USDC,
+                6,
+            ),
+            CcipChain(
+                BASE,
+                ETHEREUM_CHAIN_SELECTOR,
+                BASE_CCIP_ROUTER,
+                BASE_USDC,
+                6,
+            ),
+        ]
+        with pytest.raises(
+            ValueError,
+            match=(
+                f"CCIP chain_selector {ETHEREUM_CHAIN_SELECTOR} configured for "
+                "chains 1 and 8453"
+            ),
+        ):
+            CcipTransport(chains)
 
     def test_rejects_wrong_selector_or_token(self):
         transport = ccip_transport()

@@ -86,7 +86,20 @@ class StargateTransport(CrosschainTransport):
     transport_kind = CrosschainTransportKind.STARGATE_LAYERZERO
 
     def __init__(self, chains: Iterable[StargateChain]) -> None:
-        self._chains = {c.chain_id: c for c in chains}
+        self._chains: dict[ChainId, StargateChain] = {}
+        self._by_eid: dict[int, StargateChain] = {}
+        for chain in chains:
+            if chain.chain_id in self._chains:
+                raise ValueError(f"duplicate Stargate chain_id {chain.chain_id}")
+            if chain.eid in self._by_eid:
+                configured = self._by_eid[chain.eid]
+                raise ValueError(
+                    f"LayerZero eid {chain.eid} configured for chains "
+                    f"{configured.chain_id} and {chain.chain_id}"
+                )
+            self._chains[chain.chain_id] = chain
+            self._by_eid[chain.eid] = chain
+
         shared_decimals = {c.shared_decimals for c in self._chains.values()}
         if len(shared_decimals) > 1:
             configured = ", ".join(
@@ -96,7 +109,6 @@ class StargateTransport(CrosschainTransport):
             raise ValueError(
                 f"Stargate chains must use the same shared_decimals ({configured})"
             )
-        self._by_eid = {c.eid: c for c in self._chains.values()}
 
     @property
     def chain_ids(self) -> frozenset[ChainId]:

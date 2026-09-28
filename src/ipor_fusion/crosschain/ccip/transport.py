@@ -66,8 +66,19 @@ class CcipTransport(CrosschainTransport):
     transport_kind = CrosschainTransportKind.CHAINLINK_CCIP
 
     def __init__(self, chains: Iterable[CcipChain]) -> None:
-        self._chains = {c.chain_id: c for c in chains}
-        self._by_selector = {c.chain_selector: c for c in self._chains.values()}
+        self._chains: dict[ChainId, CcipChain] = {}
+        self._by_selector: dict[int, CcipChain] = {}
+        for chain in chains:
+            if chain.chain_id in self._chains:
+                raise ValueError(f"duplicate CCIP chain_id {chain.chain_id}")
+            if chain.chain_selector in self._by_selector:
+                configured = self._by_selector[chain.chain_selector]
+                raise ValueError(
+                    f"CCIP chain_selector {chain.chain_selector} configured for "
+                    f"chains {configured.chain_id} and {chain.chain_id}"
+                )
+            self._chains[chain.chain_id] = chain
+            self._by_selector[chain.chain_selector] = chain
 
     @property
     def chain_ids(self) -> frozenset[ChainId]:
