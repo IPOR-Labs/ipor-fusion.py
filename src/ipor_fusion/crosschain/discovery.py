@@ -170,16 +170,27 @@ def discover_deployment(
     executors: list[ChecksumAddress] = []
     remote_vaults: dict[ChainId, list[ChecksumAddress]] = {}
     for raw in plasma_vault.get_market_substrates(market_id).call():
-        substrate = CrosschainSubstrateLib.bytes32_to_substrate(bytes(raw))
+        raw_bytes = bytes(raw)
+        substrate = CrosschainSubstrateLib.bytes32_to_substrate(raw_bytes)
         if substrate.substrate_type == CrosschainSubstrateType.EXECUTOR:
+            if substrate.chain_id != 0:
+                raise ValueError(
+                    f"executor substrate {raw_bytes.hex()} on market {market_id} "
+                    f"has nonzero chain id {substrate.chain_id}"
+                )
             executors.append(substrate.substrate_address)
         elif substrate.substrate_type == CrosschainSubstrateType.REMOTE_VAULT:
+            if substrate.chain_id == 0:
+                raise ValueError(
+                    f"remote vault substrate {raw_bytes.hex()} on market "
+                    f"{market_id} has zero chain id"
+                )
             remote_vaults.setdefault(substrate.chain_id, []).append(
                 substrate.substrate_address
             )
         else:
             raise ValueError(
-                f"substrate {bytes(raw).hex()} on market {market_id} has type "
+                f"substrate {raw_bytes.hex()} on market {market_id} has type "
                 f"{substrate.substrate_type.name}"
             )
     fuses = plasma_vault.get_fuses().call()

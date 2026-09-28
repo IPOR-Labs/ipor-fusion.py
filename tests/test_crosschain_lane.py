@@ -45,7 +45,9 @@ from ipor_fusion.fuses.crosschain import (
     CcipCrosschainSupplyFuse,
     CcipSendParams,
     CrosschainClaimFuse,
+    CrosschainSubstrate,
     CrosschainSubstrateLib,
+    CrosschainSubstrateType,
     StargateCrosschainCommandFuse,
     StargateCrosschainSupplyFuse,
     StargateSendParams,
@@ -702,6 +704,38 @@ class TestDeploymentDiscovery:
         ctx.call.side_effect = call
         with pytest.raises(ValueError, match="managed by"):
             discover_deployment(ctx, VAULT, MARKET)
+
+    @pytest.mark.parametrize(
+        ("substrate", "message"),
+        [
+            (
+                CrosschainSubstrate(CrosschainSubstrateType.EXECUTOR, SPOKE, EXECUTOR),
+                "executor substrate .* has nonzero chain id 8453",
+            ),
+            (
+                CrosschainSubstrate(
+                    CrosschainSubstrateType.REMOTE_VAULT, ChainId(0), REMOTE_VAULT
+                ),
+                "remote vault substrate .* has zero chain id",
+            ),
+        ],
+    )
+    def test_discover_deployment_rejects_noncanonical_substrates(
+        self, substrate, message
+    ):
+        ctx = _deployment_ctx()
+        malformed = CrosschainSubstrateLib.substrate_to_bytes32(substrate)
+        market_substrates_selector = selector("getMarketSubstrates(uint256)")
+
+        def call(to, data, block=None):
+            if to == VAULT and bytes(data)[:4] == market_substrates_selector:
+                return encode(["bytes32[]"], [[malformed]])
+            raise AssertionError("unexpected executor probe")
+
+        ctx.call.side_effect = call
+        with pytest.raises(ValueError, match=message):
+            discover_deployment(ctx, VAULT, MARKET)
+        assert ctx.call.call_count == 1
 
     def test_open_lanes_one_per_executor_and_served_spoke(self):
         hub_ctx = _deployment_ctx()

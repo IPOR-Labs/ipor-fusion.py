@@ -213,6 +213,24 @@ class TestCrosschainSubstrateLib:
         unknown = decode_substrate("0x09" + "00" * 31, market_id=54)
         assert unknown.type_label == "type=9"
 
+    @pytest.mark.parametrize(
+        "substrate",
+        [
+            CrosschainSubstrate(CrosschainSubstrateType.EXECUTOR, 8453, EXECUTOR),
+            CrosschainSubstrate(
+                CrosschainSubstrateType.REMOTE_VAULT, 0, REMOTE_VAULT_BASE
+            ),
+        ],
+    )
+    def test_noncanonical_substrate_renders_as_an_error(self, substrate):
+        raw = CrosschainSubstrateLib.substrate_to_bytes32(substrate)
+        info = decode_substrate(raw, market_id=IporFusionMarkets.CROSSCHAIN)
+        assert info.raw_hex == "0x" + raw.hex()
+        assert info.address == ""
+        assert info.type_label == substrate.substrate_type.name
+        assert info.is_error is True
+        assert info.extra == {"chain_id": str(substrate.chain_id)}
+
     def test_poc_market_id_matches_deployment_manifest(self):
         assert POC_MARKET_ID == int(
             "0x3698b2215fdb7b90ebd6e623939afe7a334e14147954f78e1a42ddcbcbc9b576", 16

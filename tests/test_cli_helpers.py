@@ -1059,6 +1059,24 @@ class TestPrintSubstrates:
         captured = capsys.readouterr()
         assert "[encoding error]" in captured.out
 
+    def test_encoding_error_includes_decoded_details(self, capsys):
+        ctx = MagicMock()
+        pv = MagicMock()
+        malformed_executor = bytes.fromhex(
+            "01" + (8453).to_bytes(11, "big").hex() + "ab" * 20
+        )
+        pv.get_market_substrates.return_value.call.return_value = [malformed_executor]
+
+        _print_substrates(
+            ctx,
+            pv,
+            [FakeBalanceFuse(market_id=54, fuse=ADDR_1)],
+            1,
+            None,
+        )
+        captured = capsys.readouterr()
+        assert "[encoding error: EXECUTOR, chain_id=8453]" in captured.out
+
 
 class TestPrintBalanceFusesTable:
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name")

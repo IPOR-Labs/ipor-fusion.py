@@ -242,14 +242,23 @@ def _decode_crosschain(hex_str: str) -> SubstrateInfo:
     vault's own chain (chain id slot zero); REMOTE_VAULT (2) is a remote
     PlasmaVault bound to the 88-bit destination chain id in bits 247..160, so
     the same vault address granted for another chain is a different grant.
+    Non-canonical chain slots decode as errors because no fuse can match them.
     """
     type_byte = int(hex_str[0:2], 16)
     label = _CROSSCHAIN_TYPES.get(type_byte, f"type={type_byte}")
     if type_byte not in (1, 2):
         return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label)
+    chain_id = int(hex_str[2:24], 16)
+    if (type_byte == 1 and chain_id != 0) or (type_byte == 2 and chain_id == 0):
+        return SubstrateInfo(
+            raw_hex=f"0x{hex_str}",
+            type_label=label,
+            is_error=True,
+            extra={"chain_id": str(chain_id)},
+        )
     info = SubstrateInfo(address=f"0x{hex_str[24:]}", type_label=label)
     if type_byte == 2:
-        info.extra = {"chain_id": str(int(hex_str[2:24], 16))}
+        info.extra = {"chain_id": str(chain_id)}
     return info
 
 

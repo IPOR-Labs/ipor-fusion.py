@@ -23,12 +23,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Correctness
 
-- [ ] **Non-canonical EXECUTOR grants pass silently.** An EXECUTOR substrate
-  with a non-zero chain id is never matched by the fuses, yet
-  `_decode_crosschain` (`substrates.py`) hides the chain slot and
-  `discover_deployment` accepts it. Render the slot loudly and raise in
-  discovery. The generic encoder stays a faithful mirror of Solidity;
-  `CrosschainSubstrateLib.executor_substrate` is the safe constructor.
 - [ ] **Envelope decoders accept `NONE`** (`crosschain/messages.py`).
   `decode_envelope` and `decode_ccip_envelope` must reject type 0 and types
   above the last member, as `decodeEnvelope` and `CcipMessages.decode` do.
