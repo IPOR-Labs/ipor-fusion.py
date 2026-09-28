@@ -7,6 +7,7 @@ token travels on it (``ccip_token_lane``).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
@@ -41,7 +42,8 @@ class CcipRouter(ContractWrapper):
 class CcipOnRamp(ContractWrapper):
     """The ``OnRamp`` of one lane. ``getStaticConfig()`` on OnRamp 2.0.0 is
     ``(chainSelector, rmnRemote, <limit>, tokenAdminRegistry)``; only the
-    registry is read here."""
+    registry is read here. The tuple applies to OnRamp 2.x only;
+    :func:`ccip_token_lane` checks the version before using it."""
 
     def type_and_version(self) -> Call[str]:
         return self._view("typeAndVersion()", output_types=["string"])
@@ -92,6 +94,10 @@ class CcipTokenLane:
     token_lane: bool = False
 
 
+def _is_supported_on_ramp(version: str) -> bool:
+    return re.fullmatch(r"OnRamp 2\.\d+\.\d+", version) is not None
+
+
 def ccip_token_lane(
     ctx: Web3Context,
     router: ChecksumAddress,
@@ -99,13 +105,20 @@ def ccip_token_lane(
     chain_selector: int,
 ) -> CcipTokenLane:
     """Read, on ``router``'s chain, whether a message lane and a ``token`` lane
-    exist towards ``chain_selector``. Five reads at most."""
+    exist towards ``chain_selector``. Five reads at most. Raises ``ValueError``
+    before reading static config when the OnRamp version has an unverified
+    layout."""
     router_wrapper = CcipRouter(ctx, router)
     if not router_wrapper.is_chain_supported(chain_selector).call():
         return CcipTokenLane(chain_selector, message_lane=False)
     on_ramp = router_wrapper.get_on_ramp(chain_selector).call()
     on_ramp_wrapper = CcipOnRamp(ctx, on_ramp)
     on_ramp_version = on_ramp_wrapper.type_and_version().call()
+    if not _is_supported_on_ramp(on_ramp_version):
+        raise ValueError(
+            f"unsupported CCIP OnRamp version {on_ramp_version!r} at {on_ramp}; "
+            "ccip_token_lane supports OnRamp 2.x"
+        )
     registry = CcipTokenAdminRegistry(
         ctx, on_ramp_wrapper.token_admin_registry().call()
     )
