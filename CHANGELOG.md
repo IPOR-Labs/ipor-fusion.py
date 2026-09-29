@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.6.11 (2026-09-29)
+
+### Documentation
+
+- **sdk**: Add Arbitrum Euler V2 looping example
+  ([`a2a2834`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a2a2834d013d8f21be91e7bc6d885cbab62f42b4))
+
+### Features
+
+- **sdk**: Add callback handler configuration
+  ([`e6a7bb5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e6a7bb56da38744b68f7db8a4c38ff22fa8f5beb))
+
+
 ## v3.6.10 (2026-09-24)
 
 ### Bug Fixes
