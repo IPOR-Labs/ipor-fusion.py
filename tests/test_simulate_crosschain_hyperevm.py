@@ -1,7 +1,7 @@
 """Pinned Arbitrum-to-HyperEVM CCIP factory and deployment rehearsal.
 
 The lifecycle relay impersonates the CCIP Router, and synthetic storage funding
-stands in for HTEST token-pool release. It proves that the IPOR contracts, fuses
+stands in for destination token-pool release. It proves that the IPOR contracts, fuses
 and SDK compose end to end; pinned readiness tests separately verify the live
 CCIP lanes and pools, but this simulation does not prove their liveness.
 
@@ -12,12 +12,18 @@ is configured there.
 from __future__ import annotations
 
 import os
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 from _crosschain_lifecycle import Run, run_lifecycle
+from _crosschain_recovery import (
+    run_failed_deposit_recovery,
+    run_unfunded_return_recovery,
+)
 from _foundry import FoundryContract, compile_foundry_contracts
+from eth_abi import encode
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion import (
@@ -45,7 +51,7 @@ from ipor_fusion import (
 )
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fusion_factory import FusionFactory
-from ipor_fusion.types import Amount, ChainId, MarketId
+from ipor_fusion.types import Amount, ChainId, MarketId, Shares
 
 ARBITRUM = ChainId(42161)
 HYPEREVM = ChainId(999)
@@ -125,7 +131,51 @@ FUSE_CONTRACTS = (
     ),
 )
 CROSSCHAIN_MARKET = MarketId(54)
-VAULT_DEPOSIT = Amount(10 * 10**18)
+
+
+@dataclass(frozen=True)
+class RehearsalAsset:
+    symbol: str
+    tokens: tuple[ChecksumAddress, ChecksumAddress]
+    decimals: int
+    blocks: tuple[int, int]
+    feeds: tuple[ChecksumAddress, ChecksumAddress]
+    configure_factory: bool = False
+
+    @property
+    def asset_id(self) -> bytes:
+        return bytes(Web3.keccak(text=self.symbol))
+
+    @property
+    def deposit_amount(self) -> Amount:
+        return Amount(10 * 10**self.decimals + 1)
+
+
+HTEST = RehearsalAsset(
+    "HTEST",
+    ASSETS["HTEST"],
+    18,
+    (ARBITRUM_BLOCK, HYPEREVM_BLOCK),
+    (ARBITRUM_WBTC_USD_FEED, HYPEREVM_ONE_VALUE_FEED),
+)
+# Native token identities: https://developers.circle.com/stablecoins/usdc-contract-addresses
+# Feed proxies: data.chain.link/feeds/arbitrum/mainnet/usdc-usd and
+# data.chain.link/feeds/hyperliquid/hyperliquid/usdc-usd (standard, not SVR).
+USDC = RehearsalAsset(
+    "USDC",
+    (
+        Web3.to_checksum_address("0xaf88d065e77c8cC2239327C5EDb3A432268e5831"),
+        Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f"),
+    ),
+    6,
+    (509_959_086, 47_183_474),
+    (
+        Web3.to_checksum_address("0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3"),
+        Web3.to_checksum_address("0xA0Adc43ce7AfE3EE7d7eac3C994E178D0620223B"),
+    ),
+    configure_factory=True,
+)
+REHEARSAL_ASSETS = (HTEST, USDC)
 
 
 def test_simulate_contract_creation(web3_arb):
@@ -231,25 +281,144 @@ def _compile_crosschain_fuses():
     )
 
 
-def _htest_transport() -> CcipTransport:
+def _asset_transport(asset: RehearsalAsset) -> CcipTransport:
     return CcipTransport(
         (
             CcipChain(
                 ARBITRUM,
                 ARBITRUM_SELECTOR,
                 ARBITRUM_ROUTER,
-                ASSETS["HTEST"][0],
-                18,
+                asset.tokens[0],
+                asset.decimals,
             ),
             CcipChain(
                 HYPEREVM,
                 HYPEREVM_SELECTOR,
                 HYPEREVM_ROUTER,
-                ASSETS["HTEST"][1],
-                18,
+                asset.tokens[1],
+                asset.decimals,
             ),
         )
     )
+
+
+def _require_token_lanes(web3_arb, web3_hyperevm, asset: RehearsalAsset) -> None:
+    unavailable = []
+    for index, (web3, chain, router, peer) in enumerate(
+        (
+            (web3_arb, ARBITRUM, ARBITRUM_ROUTER, HYPEREVM_SELECTOR),
+            (web3_hyperevm, HYPEREVM, HYPEREVM_ROUTER, ARBITRUM_SELECTOR),
+        )
+    ):
+        lane = ccip_token_lane(
+            _ctx(web3, chain, asset.blocks[index]), router, asset.tokens[index], peer
+        )
+        assert lane.message_lane, f"CCIP message lane missing on chain {chain}"
+        assert lane.pool is not None, (
+            f"{asset.symbol} has no CCIP pool on chain {chain}"
+        )
+        if not lane.token_lane:
+            unavailable.append(
+                f"chain {chain} pool {lane.pool} does not support selector {peer} "
+                f"at block {asset.blocks[index]}"
+            )
+    if unavailable and asset == USDC:
+        pytest.skip("USDC acceptance blocked: " + "; ".join(unavailable))
+    assert not unavailable, unavailable
+
+
+def _factory_view(ctx, signature, output_types):
+    return Call(
+        to=FACTORY,
+        data=bytes(Web3.keccak(text=signature)[:4]),
+        output_types=output_types,
+        ctx=ctx,
+    )
+
+
+def _asset_governance_call(asset: RehearsalAsset, index: int, method: str) -> Call:
+    signature = f"{method}(bytes32,address,uint8)"
+    return Call(
+        to=FACTORY,
+        data=bytes(Web3.keccak(text=signature)[:4])
+        + encode(
+            ["bytes32", "address", "uint8"],
+            [asset.asset_id, asset.tokens[index], asset.decimals],
+        ),
+    )
+
+
+def _enable_factory_asset(simulator, ctx, asset: RehearsalAsset, *, index: int) -> None:
+    factory = CcipCrosschainFactory(ctx, FACTORY)
+    assert (
+        Web3.to_checksum_address(_factory_view(ctx, "OWNER()", ["address"]).call())
+        == OWNER
+    )
+    delay = _factory_view(ctx, "CONFIG_DELAY()", ["uint256"]).call()
+    config = factory.asset_config(asset.asset_id).call()
+    if config == (asset.tokens[index], asset.decimals, True):
+        return
+    assert config == (ZERO_ADDRESS, 0, False), config
+    simulator.add_call(
+        _asset_governance_call(asset, index, "scheduleAsset"),
+        from_=OWNER,
+        label="schedule_factory_asset",
+    )
+    simulator.next_block(time_shift_seconds=delay + 1).with_block_override(
+        gasLimit=30_000_000
+    )
+    simulator.add_call(
+        _asset_governance_call(asset, index, "executeAsset"),
+        from_=OWNER,
+        label="enable_factory_asset",
+    )
+
+
+def _feed_read(ctx, address, signature, output_types):
+    return Call(
+        to=address,
+        data=bytes(Web3.keccak(text=signature)[:4]),
+        output_types=output_types,
+        ctx=ctx,
+    ).call()
+
+
+def _assert_configured_prices(simulator, contexts, instances, asset: RehearsalAsset):
+    for index, ctx in enumerate(contexts):
+        manager = PriceOracleMiddlewareManager(ctx, instances[index].price_manager)
+        simulator.observe(
+            ctx.chain_id, "asset_price", manager.get_asset_price(asset.tokens[index])
+        )
+        simulator.observe(
+            ctx.chain_id,
+            "asset_source",
+            manager.get_source_of_asset_price(asset.tokens[index]),
+        )
+        simulator.observe(
+            ctx.chain_id,
+            "factory_asset",
+            CcipCrosschainFactory(ctx, FACTORY).asset_config(asset.asset_id),
+        )
+    results = simulator.relay()
+    for index, ctx in enumerate(contexts):
+        result = results[ctx.chain_id]
+        result.raise_for_failure()
+        assert result.get("asset_source") == asset.feeds[index]
+        assert result.get("factory_asset") == (
+            asset.tokens[index],
+            asset.decimals,
+            True,
+        )
+        answer = _feed_read(
+            ctx,
+            asset.feeds[index],
+            "latestRoundData()",
+            ["uint80", "int256", "uint256", "uint256", "uint80"],
+        )[1]
+        decimals = _feed_read(ctx, asset.feeds[index], "decimals()", ["uint8"])
+        price = result.get("asset_price")
+        assert price.decimals == 18
+        assert price.amount == answer * 10 ** (18 - decimals)
 
 
 def _safety_config() -> SafetyConfig:
@@ -315,19 +484,159 @@ def test_simulate_clone_htest_vault(
     assert result.get("vault_access_manager") == preview.access_manager
 
 
-def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
+@pytest.mark.parametrize("asset", REHEARSAL_ASSETS, ids=lambda asset: asset.symbol)
+def test_simulate_configured_asset_lane(web3_arb, web3_hyperevm, asset):
+    _require_token_lanes(web3_arb, web3_hyperevm, asset)
+    run_lifecycle(_prepare_asset_run(web3_arb, web3_hyperevm, asset))
+
+
+@pytest.mark.parametrize("cancel", (False, True), ids=("retry", "cancel"))
+@pytest.mark.parametrize("asset", REHEARSAL_ASSETS, ids=lambda asset: asset.symbol)
+def test_simulate_failed_asset_deposit_recovery(web3_arb, web3_hyperevm, asset, cancel):
+    _require_token_lanes(web3_arb, web3_hyperevm, asset)
+    run = _prepare_asset_run(
+        web3_arb, web3_hyperevm, asset, whitelist_dispatcher=cancel
+    )
+    run_failed_deposit_recovery(run, cancel=cancel)
+
+
+@pytest.mark.parametrize("asset", REHEARSAL_ASSETS, ids=lambda asset: asset.symbol)
+def test_simulate_unfunded_asset_return_recovery(web3_arb, web3_hyperevm, asset):
+    _require_token_lanes(web3_arb, web3_hyperevm, asset)
+    run_unfunded_return_recovery(_prepare_asset_run(web3_arb, web3_hyperevm, asset))
+
+
+@pytest.mark.parametrize("index", (0, 1), ids=("arbitrum", "hyperevm"))
+def test_usdc_pinned_prerequisites(web3_arb, web3_hyperevm, index):
+    web3 = (web3_arb, web3_hyperevm)[index]
+    chain = (ARBITRUM, HYPEREVM)[index]
+    ctx = _ctx(web3, chain, USDC.blocks[index])
+    token = ERC20(ctx, USDC.tokens[index])
+    assert token.symbol().call() == "USDC"
+    assert token.decimals().call() == 6
+    assert CcipCrosschainFactory(ctx, FACTORY).asset_config(USDC.asset_id).call() == (
+        ZERO_ADDRESS,
+        0,
+        False,
+    )
+    assert (
+        Web3.to_checksum_address(_factory_view(ctx, "OWNER()", ["address"]).call())
+        == OWNER
+    )
+    assert _factory_view(ctx, "CONFIG_DELAY()", ["uint256"]).call() == 300
+    feed = USDC.feeds[index]
+    assert _feed_read(ctx, feed, "description()", ["string"]) == "USDC / USD"
+    assert _feed_read(ctx, feed, "decimals()", ["uint8"]) == 8
+    round_id, answer, _, updated_at, answered_in_round = _feed_read(
+        ctx,
+        feed,
+        "latestRoundData()",
+        ["uint80", "int256", "uint256", "uint256", "uint80"],
+    )
+    assert 99_000_000 <= answer <= 101_000_000
+    assert round_id > 0 and answered_in_round >= round_id
+    assert (
+        0 <= web3.eth.get_block(USDC.blocks[index])["timestamp"] - updated_at <= 86400
+    )
+    lane = ccip_token_lane(
+        ctx,
+        (ARBITRUM_ROUTER, HYPEREVM_ROUTER)[index],
+        USDC.tokens[index],
+        (HYPEREVM_SELECTOR, ARBITRUM_SELECTOR)[index],
+    )
+    assert lane.message_lane
+    assert lane.pool_version == "USDCTokenPoolProxy 2.0.0"
+    assert lane.token_lane is (index == 1)
+
+
+def test_simulate_usdc_configuration_and_rounding(web3_arb, web3_hyperevm):
+    """USDC governance/deployment/pricing and local rounding, not CCIP acceptance."""
+    run = _prepare_asset_run(web3_arb, web3_hyperevm, USDC)
+    _check_hub_usdc_roundtrip(run)
+    _check_spoke_usdc_rounding(run, web3_hyperevm)
+
+
+def _check_hub_usdc_roundtrip(run: Run):
+    run.hub.observe("hub_share_decimals", run.vault.decimals())
+    results = run.relay()
+    scale = 10 ** (results[ARBITRUM].get("hub_share_decimals") - USDC.decimals)
+    assert scale > 1
+    run.advance(60)
+    run.hub.add_call(run.vault.withdraw(Amount(1), OWNER, OWNER), from_=OWNER)
+    run.hub.observe("after_one_raw_unit", run.hub_asset.balance_of(OWNER))
+    run.hub.observe("shares_after_one_raw_unit", run.vault.balance_of(OWNER))
+    remaining_shares = Shares((USDC.deposit_amount - 1) * scale)
+    run.hub.add_call(run.vault.redeem(remaining_shares, OWNER, OWNER), from_=OWNER)
+    run.hub.observe("usdc_recovered", run.hub_asset.balance_of(OWNER))
+    run.hub.observe("hub_usdc_remaining", run.hub_asset.balance_of(run.vault.address))
+    results = run.relay()
+    assert results[ARBITRUM].get("after_one_raw_unit") == 1
+    assert results[ARBITRUM].get("shares_after_one_raw_unit") == remaining_shares
+    assert results[ARBITRUM].get("usdc_recovered") == USDC.deposit_amount
+    assert results[ARBITRUM].get("hub_usdc_remaining") == 0
+
+
+def _check_spoke_usdc_rounding(run: Run, web3):
+    ctx = _ctx(web3, HYPEREVM, USDC.blocks[1])
+    token = ERC20(ctx, USDC.tokens[1])
+    vault = run.remote_vault
+    holder = run.lane.executor_address
+    run.spoke_sim.with_erc20_balance(
+        token.address,
+        holder,
+        USDC.deposit_amount,
+        slot=erc20_balance_slot(web3, token.address, block=USDC.blocks[1]),
+    )
+    run.spoke_sim.add_call(
+        token.approve(vault.address, USDC.deposit_amount), from_=holder
+    )
+    run.spoke_sim.add_call(vault.deposit(USDC.deposit_amount, holder), from_=holder)
+    run.spoke_sim.observe("spoke_share_decimals", vault.decimals())
+    run.spoke_sim.observe("spoke_deposited_shares", vault.balance_of(holder))
+    results = run.relay()
+    scale = 10 ** (results[HYPEREVM].get("spoke_share_decimals") - USDC.decimals)
+    assert scale > 1
+    assert (
+        results[HYPEREVM].get("spoke_deposited_shares") == USDC.deposit_amount * scale
+    )
+    run.advance(60)
+    run.spoke_sim.add_call(
+        vault.redeem(Shares(scale + 1), holder, holder), from_=holder
+    )
+    run.spoke_sim.observe("spoke_fractional_redemption", token.balance_of(holder))
+    run.spoke_sim.add_call(
+        vault.redeem(Shares((USDC.deposit_amount - 1) * scale - 1), holder, holder),
+        from_=holder,
+    )
+    run.spoke_sim.observe("spoke_recovered", token.balance_of(holder))
+    run.spoke_sim.observe("spoke_rounding_dust", token.balance_of(vault.address))
+    run.spoke_sim.observe("spoke_final_shares", vault.balance_of(holder))
+    results = run.relay()
+    assert results[HYPEREVM].get("spoke_fractional_redemption") == 1
+    assert results[HYPEREVM].get("spoke_final_shares") == 0
+    assert results[HYPEREVM].get("spoke_recovered") == USDC.deposit_amount - 1
+    assert results[HYPEREVM].get("spoke_rounding_dust") == 1
+
+
+def _prepare_asset_run(
+    web3_arb, web3_hyperevm, asset: RehearsalAsset, *, whitelist_dispatcher=True
+) -> Run:
     artifacts = _compile_crosschain_fuses()
-    arb_ctx = _ctx(web3_arb, ARBITRUM, ARBITRUM_BLOCK)
-    hyper_ctx = _ctx(web3_hyperevm, HYPEREVM, HYPEREVM_BLOCK)
+    arb_ctx = _ctx(web3_arb, ARBITRUM, asset.blocks[0])
+    hyper_ctx = _ctx(web3_hyperevm, HYPEREVM, asset.blocks[1])
     arb_fusion_factory = FusionFactory(arb_ctx, ARBITRUM_FUSION_FACTORY)
     hyper_fusion_factory = FusionFactory(hyper_ctx, HYPEREVM_FUSION_FACTORY)
     hub_clone = arb_fusion_factory.clone(
-        "Crosschain HTEST Hub Rehearsal", "xcHTEST-ARB", ASSETS["HTEST"][0], 1, OWNER
+        f"Crosschain {asset.symbol} Hub Rehearsal",
+        f"xc{asset.symbol}-ARB",
+        asset.tokens[0],
+        1,
+        OWNER,
     )
     spoke_clone = hyper_fusion_factory.clone(
-        "Crosschain HTEST Spoke Rehearsal",
-        "xcHTEST-HYPE",
-        ASSETS["HTEST"][1],
+        f"Crosschain {asset.symbol} Spoke Rehearsal",
+        f"xc{asset.symbol}-HYPE",
+        asset.tokens[1],
         1,
         OWNER,
     )
@@ -339,17 +648,20 @@ def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
     executor = ccip_factory.compute_executor_address(OWNER, user_salt).call()
     route = replace(ccip_factory.ccip_route(HYPEREVM).call(), peer=executor)
 
-    simulator = CrosschainSimulator(_htest_transport())
+    simulator = CrosschainSimulator(_asset_transport(asset))
     hub = simulator.add_chain(
         ARBITRUM,
         web3_arb,
-        block=ARBITRUM_BLOCK,
+        block=asset.blocks[0],
         vault=hub_instance.plasma_vault,
         alpha=OWNER,
     )
-    spoke = simulator.add_chain(HYPEREVM, web3_hyperevm, block=HYPEREVM_BLOCK)
+    spoke = simulator.add_chain(HYPEREVM, web3_hyperevm, block=asset.blocks[1])
     hub.with_block_time_shift(60).with_block_override(gasLimit=30_000_000)
     spoke.with_block_override(gasLimit=30_000_000)
+    if asset.configure_factory:
+        _enable_factory_asset(hub, arb_ctx, asset, index=0)
+        _enable_factory_asset(spoke, hyper_ctx, asset, index=1)
 
     hub.with_state_override(SIMULATED_DEPLOYER, balance=hex(10**18), nonce=hex(0))
     fuse_addresses = {
@@ -388,11 +700,12 @@ def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
         from_=OWNER,
         label="grant_spoke_atomist_role",
     )
-    spoke.add_call(
-        spoke_access.grant_role(Roles.WHITELIST_ROLE, executor, 0),
-        from_=OWNER,
-        label="grant_dispatcher_spoke_whitelist",
-    )
+    if whitelist_dispatcher:
+        spoke.add_call(
+            spoke_access.grant_role(Roles.WHITELIST_ROLE, executor, 0),
+            from_=OWNER,
+            label="grant_dispatcher_spoke_whitelist",
+        )
     spoke.add_call(
         spoke_access.grant_role(Roles.PRICE_ORACLE_MIDDLEWARE_MANAGER_ROLE, OWNER, 0),
         from_=OWNER,
@@ -401,22 +714,22 @@ def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
     spoke.add_call(
         PriceOracleMiddlewareManager(
             hyper_ctx, spoke_instance.price_manager
-        ).set_assets_price_sources([ASSETS["HTEST"][1]], [HYPEREVM_ONE_VALUE_FEED]),
+        ).set_assets_price_sources([asset.tokens[1]], [asset.feeds[1]]),
         from_=OWNER,
-        label="configure_spoke_htest_price",
+        label="configure_spoke_asset_price",
     )
 
     hub.add_call(
         PriceOracleMiddlewareManager(
             arb_ctx, hub_instance.price_manager
-        ).set_assets_price_sources([ASSETS["HTEST"][0]], [ARBITRUM_WBTC_USD_FEED]),
+        ).set_assets_price_sources([asset.tokens[0]], [asset.feeds[0]]),
         from_=OWNER,
-        label="configure_htest_price",
+        label="configure_hub_asset_price",
     )
     hub.add_call(
         ccip_factory.create_executor(
             user_salt,
-            Web3.keccak(text="HTEST"),
+            asset.asset_id,
             hub_instance.plasma_vault,
             _safety_config(),
         ),
@@ -457,20 +770,20 @@ def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
         label="grant_crosschain_substrates",
     )
 
-    htest = ERC20(arb_ctx, ASSETS["HTEST"][0])
+    token = ERC20(arb_ctx, asset.tokens[0])
     hub.with_erc20_balance(
-        ASSETS["HTEST"][0],
+        asset.tokens[0],
         OWNER,
-        VAULT_DEPOSIT,
-        slot=erc20_balance_slot(web3_arb, ASSETS["HTEST"][0], block=ARBITRUM_BLOCK),
+        asset.deposit_amount,
+        slot=erc20_balance_slot(web3_arb, asset.tokens[0], block=asset.blocks[0]),
     )
     hub.add_call(
-        htest.approve(hub_instance.plasma_vault, VAULT_DEPOSIT),
+        token.approve(hub_instance.plasma_vault, asset.deposit_amount),
         from_=OWNER,
         label="approve_hub_deposit",
     )
     hub.add_call(
-        hub_vault.deposit(VAULT_DEPOSIT, OWNER),
+        hub_vault.deposit(asset.deposit_amount, OWNER),
         from_=OWNER,
         label="deposit_hub_vault",
     )
@@ -533,7 +846,7 @@ def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
     simulator.observe(
         ARBITRUM,
         "hub_assets",
-        htest.balance_of(hub_instance.plasma_vault),
+        token.balance_of(hub_instance.plasma_vault),
     )
     results = simulator.relay()
     for result in results.values():
@@ -543,17 +856,22 @@ def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
     share_scale = 10 ** (
         hub_instance.asset_decimals - hub_instance.underlying_token_decimals
     )
-    assert results[ARBITRUM].get("hub_shares") == VAULT_DEPOSIT * share_scale
-    assert results[ARBITRUM].get("hub_assets") == VAULT_DEPOSIT
+    assert hub_instance.underlying_token_decimals == asset.decimals
+    assert spoke_instance.underlying_token_decimals == asset.decimals
+    assert results[ARBITRUM].get("hub_shares") == asset.deposit_amount * share_scale
+    assert results[ARBITRUM].get("hub_assets") == asset.deposit_amount
+    _assert_configured_prices(
+        simulator, (arb_ctx, hyper_ctx), (hub_instance, spoke_instance), asset
+    )
 
     hub_start = hub.current_time
     spoke_start = spoke.current_time
-    run = Run(
+    return Run(
         hub_chain_id=ARBITRUM,
         spoke_chain_id=HYPEREVM,
         spoke_name="hyperevm",
         hub_vault_address=hub_instance.plasma_vault,
-        hub_asset_address=ASSETS["HTEST"][0],
+        hub_asset_address=asset.tokens[0],
         market_id=CROSSCHAIN_MARKET,
         owner=OWNER,
         balance_proposer=BALANCE_PROPOSER,
@@ -565,15 +883,14 @@ def test_simulate_configured_htest_lane(web3_arb, web3_hyperevm):
         spoke_sim=spoke,
         vault=hub_vault,
         remote_vault=PlasmaVault(hyper_ctx, spoke_instance.plasma_vault),
-        hub_asset=htest,
+        hub_asset=token,
         hub_now=hub_start,
         spoke_now=spoke_start,
         spoke_block=spoke.current_block_number,
-        amount=10**18,
+        amount=10**asset.decimals + 1,
         hub_start=hub_start,
         staleness_max=_safety_config().balance_staleness_max,
     )
-    run_lifecycle(run)
 
 
 def _simulate_factory_deployment(web3_arb, web3_hyperevm, *, big_block: bool):

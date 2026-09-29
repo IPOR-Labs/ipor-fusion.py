@@ -132,7 +132,7 @@ class Run:
         self.relays += 1
         assert_relay_success(results, expected_failures=self.expected_failures)
         for label in self.expected_failures:
-            assert not _call(results, self.hub_chain_id, label).success, label
+            assert not call(results, self.hub_chain_id, label).success, label
         log.debug(
             "%s/%s relay #%d: %d hub calls, %d spoke calls, %d messages delivered",
             self.transport_kind.name.lower(),
@@ -158,11 +158,11 @@ class Run:
         )
 
 
-def _call(results, chain_id: ChainId, label: str) -> SimulatedCallResult:
+def call(results, chain_id: ChainId, label: str) -> SimulatedCallResult:
     return next(c for c in results[chain_id].calls if c.label == label)
 
 
-def _assert_reverted(call: SimulatedCallResult, error_signature: str) -> None:
+def assert_reverted(call: SimulatedCallResult, error_signature: str) -> None:
     assert not call.success, f"{call.label} did not revert"
     expected = function_signature_to_4byte_selector(error_signature)
     assert bytes(call.return_data[:4]) == expected, (
@@ -267,7 +267,7 @@ def prepare_deployed_run(
     return run
 
 
-def _supply(run: Run) -> int:
+def supply(run: Run) -> int:
     """Bridge to the spoke; returns the amount credited to the dispatcher."""
     lane = run.lane
     delivered_before = len(run.csim.delivered)
@@ -345,7 +345,7 @@ def _observation(
     return replace(proposal, state_version=state_version)
 
 
-def _attest(
+def attest(
     run: Run,
     *,
     tag: str,
@@ -379,12 +379,12 @@ def _attest(
     )
     results = run.relay()
     if old_version is not None:
-        _assert_reverted(
-            _call(results, run.hub_chain_id, "propose_old_version"),
+        assert_reverted(
+            call(results, run.hub_chain_id, "propose_old_version"),
             PROPOSAL_VERSION_MISMATCH,
         )
     proposal_id = lane.proposal_id_from_logs(
-        _call(results, run.hub_chain_id, f"propose_{tag}").logs
+        call(results, run.hub_chain_id, f"propose_{tag}").logs
     )
     proposed: dict[str, object] = {
         "proposal_id": proposal_id,
@@ -407,8 +407,8 @@ def _attest(
     if approve_error is not None:
         run.expected_failures.add(f"approve_{tag}")
         results = run.relay()
-        _assert_reverted(
-            _call(results, run.hub_chain_id, f"approve_{tag}"), approve_error
+        assert_reverted(
+            call(results, run.hub_chain_id, f"approve_{tag}"), approve_error
         )
         run.log(f"attest {tag} refused", proposal_id=proposal_id, error=approve_error)
         return observation.accounted_balance
@@ -490,8 +490,8 @@ def _renew_after_gap(run: Run, credited: int) -> int:
     )
     run.csim.observe(run.spoke_chain_id, "observation_after_gap", lane.observation())
     results = run.relay()
-    _assert_reverted(
-        _call(results, run.hub_chain_id, "nav_after_gap"),
+    assert_reverted(
+        call(results, run.hub_chain_id, "nav_after_gap"),
         NAV_STALE_ERROR[run.transport_kind],
     )
     after = results[run.spoke_chain_id].get("observation_after_gap")
@@ -506,7 +506,7 @@ def _renew_after_gap(run: Run, credited: int) -> int:
         state_version=after.state_version,
         accounted_balance=after.accounted_balance,
     )
-    settled = _attest(
+    settled = attest(
         run,
         tag="renewed",
         observation_label="observation_after_gap",
@@ -516,7 +516,7 @@ def _renew_after_gap(run: Run, credited: int) -> int:
     return settled
 
 
-def _redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> int:
+def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> int:
     """REDEEM in a later spoke block, recall everything; returns the idle
     credited home."""
     lane = run.lane
@@ -605,7 +605,7 @@ def _attest_residue(run: Run, idle: int) -> None:
         settled_residue=residue,
         expect=BIG_CHANGE_EXCEEDED if residue else "zero-to-zero approval",
     )
-    _attest(
+    attest(
         run,
         tag="residue",
         observation_label="observation_after_return",
@@ -614,7 +614,7 @@ def _attest_residue(run: Run, idle: int) -> None:
     )
 
 
-def _claim(run: Run, idle: int) -> None:
+def claim(run: Run, idle: int) -> None:
     lane = run.lane
     run.hub.execute([lane.claim(idle)])
     run.csim.observe(
@@ -647,11 +647,11 @@ def _claim(run: Run, idle: int) -> None:
 
 def run_lifecycle(run: Run) -> None:
     """Execute the transport-independent lifecycle against a prepared lane."""
-    credited = _supply(run)
-    _attest(run, tag="initial", observation_label="observation_after_settle")
+    credited = supply(run)
+    attest(run, tag="initial", observation_label="observation_after_settle")
     shares = _deposit(run, credited)
     settled = _renew_after_gap(run, credited)
-    idle = _redeem_and_recall(run, shares, credited=credited, settled=settled)
+    idle = redeem_and_recall(run, shares, credited=credited, settled=settled)
     _attest_residue(run, idle)
-    _claim(run, idle)
+    claim(run, idle)
     run.log("done", messages=len(run.csim.delivered), relays=run.relays)

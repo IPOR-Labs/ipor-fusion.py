@@ -18,6 +18,28 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   transmitters already do so. Add `HYPEREVM_PROVIDER_URL` to CI so the pinned
   rehearsal runs there.
 
+- [ ] **Unblock USDC acceptance for Arbitrum → HyperEVM.** The shared lifecycle
+  and three recovery scenarios now include native USDC (6 decimals), retaining
+  HTEST (18 decimals). The USDC configuration rehearsal covers timelocked factory
+  enablement, vault/executor/dispatcher deployment, real USDC/USD feeds on both
+  chains, raw-unit amounts and local vault rounding. At USDC pins Arbitrum
+  `509959086` / HyperEVM `47183474`, the HyperEVM → Arbitrum token lane is open,
+  but Arbitrum → HyperEVM is still closed; both factories still disable USDC.
+  Value-moving USDC scenarios explicitly skip on that verified token-lane blocker,
+  never on arbitrary errors. After Chainlink opens the outbound lane, re-pin both
+  chains, update the pinned readiness facts and require all four USDC scenarios
+  to pass without skips. Execute the rehearsed factory asset governance for the
+  live pilot. Neither HTEST passing nor USDC setup alone is USDC acceptance;
+  simulated delivery remains distinct from live CCIP delivery verification.
+  Feed age is checked only at the pinned block; the configured middleware ignores
+  feed timestamps, so simulated clock advancement does not validate live freshness.
+
+- [ ] **Pilot factory build provenance.** Record the exact source commit/build
+  configuration for the deployed CCIP factories. Their `CONFIG_DELAY()` is 300
+  seconds, matching the pilot document, while the local contracts branch declares
+  24 hours. The rehearsal reads the deployed delay; compiling the fuses from the
+  current branch does not prove the factories came from that same source.
+
 - [ ] **Foundry compiler CI.** Add a GitHub Actions job for the Solidity-source
   deployment rehearsal: pin the Foundry version, check out the exact public
   `ipor-fusion` contracts ref with all dependencies, set
