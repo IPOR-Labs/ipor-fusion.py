@@ -3,7 +3,8 @@
 `ipor-fusion` is the Python SDK for IPOR Fusion Plasma Vaults: typed fuse
 encoders, on-chain readers, and a `fusion` CLI plus `fusion-mcp` MCP server
 built on the same SDK. Published to PyPI. It is a library and inspection
-tooling, not an automation service: nothing here runs on a schedule.
+tooling, not an automation service. The separate crosschain-readiness workflow
+is a scheduled/manual read-only diagnostic, not a keeper or production monitor.
 
 Related repositories (siblings, referenced by name; clone paths vary):
 - [ipor-fusion](https://github.com/IPOR-Labs/ipor-fusion) — Solidity contracts, the source of truth for market ids, roles and substrates.
@@ -27,6 +28,8 @@ uv run ruff check ./                                          # lint: bandit S, 
 uv run pyright                                                # types, basic mode, src + tests
 uv run pytest                                                 # all tests + coverage gate (fail_under = 95)
 uv run pytest -m "cli or mcp" --no-cov                        # fast offline subset
+uv run pytest --run-readiness -m readiness --no-cov -rA       # opt-in live Ethereum-hub POC checks
+uv run python scripts/crosschain_readiness.py --output /tmp/crosschain-readiness.json # live Arbitrum/HyperEVM report
 uv run pytest tests/test_fuse_encoding.py -k aave --no-cov    # single file / test
 uv lock --check                                               # uv.lock in sync with pyproject.toml
 ```
@@ -48,12 +51,19 @@ Ethereum to every spoke on every transport through `CrosschainLane` and
 `CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
 blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
 `pending` chain there and an `xfail(strict=True)` param until it is wired.
-`test_crosschain_readiness.py` checks every spoke's preconditions on the bridge
-and IPOR contracts (CCIP lanes and USDC pools, the hub factory's route policy,
-Stargate routes, contracts deployed on the spoke); each check a planned spoke
-still fails is a strict xfail there, so it fails loudly the day that piece
-lands. A `Spoke` declares which transports reach it; the lifecycle matrix
-follows that.
+`test_crosschain_readiness.py` checks the Ethereum-hub POC's live bridge and IPOR
+preconditions. Its `readiness` marker requires `--run-readiness`: ordinary runs
+exclude it even with `-m sdk`. Known HyperEVM gaps are non-strict xfails restricted
+to assertion failures, so availability improving is an XPASS, not broken CI.
+Readiness RPC clients fail on missing/unreachable providers or wrong chain IDs;
+they pin a snapshot per chain and do not require `eth_simulateV1`.
+`scripts/crosschain_readiness.py` separately reports both Arbitrum/HyperEVM USDC
+directions and factory configurations with snapshot block numbers/hashes/timestamps.
+Blocked availability is a successful observation, not acceptance; incomplete probes
+fail. `.github/workflows/crosschain-readiness.yml` runs it independently of PR CI
+using Arbitrum and HyperEVM RPC secrets. Scheduling only becomes active after the
+workflow reaches the default branch. A `Spoke` declares which transports reach it;
+the lifecycle matrix follows that.
 
 ## Conventions
 

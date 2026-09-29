@@ -30,7 +30,20 @@ def load_example() -> Callable[[str], ModuleType]:
     return _load
 
 
-def pytest_collection_modifyitems(items):
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-readiness",
+        action="store_true",
+        default=False,
+        help="Include live crosschain readiness checks; combine with -m readiness to run only those checks.",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if not config.getoption("--run-readiness"):
+        deselected = [item for item in items if item.get_closest_marker("readiness")]
+        items[:] = [item for item in items if not item.get_closest_marker("readiness")]
+        config.hook.pytest_deselected(items=deselected)
     for item in items:
         path = str(item.fspath)
         if "test_cli_" in path:

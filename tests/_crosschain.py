@@ -23,6 +23,7 @@ in the hub's future and stays inside the executors' 1 h staleness window.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Collection
 from dataclasses import dataclass
 
@@ -36,6 +37,7 @@ from ipor_fusion import (
     LaneFuses,
     StargateChain,
     StargateTransport,
+    Web3Context,
 )
 from ipor_fusion.crosschain import CrosschainTransportKind
 from ipor_fusion.fuses.crosschain import crosschain_market_id
@@ -45,6 +47,32 @@ ETHEREUM = ChainId(1)
 BASE = ChainId(8453)
 ARBITRUM = ChainId(42161)
 HYPEREVM = ChainId(999)
+
+
+def connect_readiness(chain: Chain) -> Web3Context:
+    """Pin a live snapshot without requiring simulation support; fail closed."""
+    env_name = f"{chain.name.upper()}_PROVIDER_URL"
+    url = os.environ.get(env_name)
+    if not url:
+        pytest.fail(f"readiness requires {env_name}", pytrace=False)
+    web3 = Web3(Web3.HTTPProvider(url, request_kwargs={"timeout": 30}))
+    try:
+        actual_chain_id = web3.eth.chain_id
+        block = web3.eth.block_number
+    except Exception as error:
+        pytest.fail(
+            f"readiness RPC probe failed for {chain.name} ({type(error).__name__})",
+            pytrace=False,
+        )
+    if actual_chain_id != chain.chain_id:
+        pytest.fail(
+            f"{env_name} serves chain {actual_chain_id}, expected {chain.chain_id}",
+            pytrace=False,
+        )
+    ctx = Web3Context(web3=web3, chain_id=chain.chain_id)
+    ctx.default_block = block
+    return ctx
+
 
 # LayerZero V2 endpoint on Ethereum, Base and Arbitrum; newer chains such as
 # HyperEVM got a different address, so it is a per-chain field.

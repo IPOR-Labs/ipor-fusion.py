@@ -31,6 +31,12 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   to pass without skips. Execute the rehearsed factory asset governance for the
   live pilot. Neither HTEST passing nor USDC setup alone is USDC acceptance;
   simulated delivery remains distinct from live CCIP delivery verification.
+  `scripts/crosschain_readiness.py` and the separate readiness workflow now
+  report both token lanes, factory gates and observed block hashes/timestamps.
+  Re-pin candidates are observations, not finality guarantees: re-check the
+  chosen final block pair before updating acceptance pins. The report never
+  changes pins or executes governance. The workflow requires both RPC secrets
+  and only becomes scheduled after reaching the default branch.
   Feed age is checked only at the pinned block; the configured middleware ignores
   feed timestamps, so simulated clock advancement does not validate live freshness.
 
@@ -52,12 +58,6 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   mirror contracts not yet in the public `ipor-fusion` repository. Once they
   land: bump the pinned ref in `tests/test_solidity_mirrors.py`, remove 54
   from `_AHEAD_OF_UPSTREAM`, and check every cited Solidity path resolves.
-- [ ] **Readiness tests in the default suite.** `tests/test_crosschain_readiness.py`
-  reads live, unpinned state and marks HyperEVM checks `xfail(strict=True)`,
-  so an external change (CCIP opening USDC to HyperEVM) fails every CI run on
-  XPASS. When the lane opens, drop the marks that XPASS; then move the module
-  behind its own marker, run it in a scheduled or manual job only, and keep it
-  out of the default `pytest` run.
 - [ ] **CCIP cancel receipt visibility.** Expose a public getter for
   `cancelRequested(commandId)` on the CCIP executor. Until then the SDK cannot
   distinguish a parked failed command from one whose cancellation receipt is
