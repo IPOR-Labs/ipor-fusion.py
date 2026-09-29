@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 from _crosschain_lifecycle import Run, run_lifecycle
+from _crosschain_pilot import assert_pilot_code, assert_pilot_deployment
 from _crosschain_recovery import (
     run_failed_deposit_recovery,
     run_unfunded_return_recovery,
@@ -979,7 +980,8 @@ def test_ccip_factory_is_ready(
     web3 = request.getfixturevalue(web3_fixture)
     factory = CcipCrosschainFactory(_ctx(web3, chain_id, block), FACTORY)
 
-    assert len(web3.eth.get_code(FACTORY, block_identifier=block)) > 0
+    assert_pilot_code(web3, chain_id, block)
+    assert_pilot_deployment(web3, chain_id)
     assert factory.factory_interface_version().call() == 1
     assert factory.ccip_router().call() == router
     assert factory.creation_restricted().call()

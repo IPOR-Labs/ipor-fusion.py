@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "status": "reconstructed_test_only_build",
+  "warning": "Not a production build. Byte equivalence proves a reproducible recipe, not the deployer's original checkout or toolchain.",
+  "source": {
+    "repository": "ipor-fusion",
+    "reconstructed_commit": "1a0c230889978cf07f5f762409022cdd129ae6b3",
+    "publication": "pending",
+    "patches": [
+      {
+        "source": "contracts/crosschain/ccip/CcipCrosschainFactory.sol",
+        "before": "uint256 public constant CONFIG_DELAY = 24 hours;",
+        "after": "uint256 public constant CONFIG_DELAY = 5 minutes;"
+      },
+      {
+        "source": "contracts/crosschain/lib/CrosschainConstants.sol",
+        "before": "uint256 internal constant MIN_RESCUE_DELAY = 24 hours;",
+        "after": "uint256 internal constant MIN_RESCUE_DELAY = 5 minutes;"
+      },
+      {
+        "source": "contracts/crosschain/lib/CrosschainConstants.sol",
+        "before": "uint256 internal constant FRONTIER_REPAIR_DELAY = 6 hours;",
+        "after": "uint256 internal constant FRONTIER_REPAIR_DELAY = 5 minutes;"
+      }
+    ],
+    "content_hash_note": "Keccak-256 of compiler input content after the listed patches. Keys are resolved import paths; OpenZeppelin paths are normalized to @openzeppelin/.",
+    "content_keccak": {
+      "@openzeppelin/contracts/interfaces/IERC4626.sol": "0x207f64371bc0fcc5be86713aa5da109a870cc3a6da50e93b64ee881e369b593d",
+      "@openzeppelin/contracts/token/ERC20/IERC20.sol": "0xc6a8ff0ea489379b61faa647490411b80102578440ab9d84e9a957cc12164e70",
+      "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol": "0xaa761817f6cd7892fcf158b3c776b34551cde36f48ff9703d53898bc45a94ea2",
+      "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol": "0x6008dabfe393240d73d7dd7688033f72740d570aa422254d29a7dce8568f3aff",
+      "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol": "0x37bb49513c49c87c4642a891b13b63571bc87013dde806617aa1efb54605f386",
+      "@openzeppelin/contracts/utils/Address.sol": "0xaf28a975a78550e45f65e559a3ad6a5ad43b9b8a37366999abd1b7084eb70721",
+      "@openzeppelin/contracts/utils/ReentrancyGuard.sol": "0xf980daa263b661ab8ddee7d4fd833c7da7e7995e2c359ff1f17e67e4112f2236",
+      "@openzeppelin/contracts/utils/introspection/IERC165.sol": "0x4296879f55019b23e135000eb36896057e7101fb7fb859c5ef690cf14643757b",
+      "@openzeppelin/contracts/utils/math/Math.sol": "0x005ec64c6313f0555d59e278f9a7a5ab2db5bdc72a027f255a37c327af1ec02d",
+      "@openzeppelin/contracts/utils/math/SafeCast.sol": "0xe19a4d5f31d2861e7344e8e535e2feafb913d806d3e2b5fe7782741a2a7094fe",
+      "contracts/crosschain/ccip/CcipCrosschainDispatcher.sol": "0x24f993b7a46018cd53ded0fb0f4fcc1e828da1304f290f5de53b2cd8b79ee1c3",
+      "contracts/crosschain/ccip/CcipCrosschainExecutor.sol": "0xaad5c38dd6339ef6db3cb72deefe157b9d04e4b82c3eb1232fde3b411bbef437",
+      "contracts/crosschain/ccip/CcipCrosschainFactory.sol": "0x9198982d0f07934097533695b824fc2675532d21e33a8bb631ca894ffa31585b",
+      "contracts/crosschain/ccip/base/CcipAppBase.sol": "0xa81040bf0a2950314d7329fbb2bfaa19fa7d9249af602a546a2a6098d46b90ce",
+      "contracts/crosschain/ccip/interfaces/CcipClient.sol": "0xc405b8f00ee14ff11887080c55974b530b23c2c232b0c2d07620c9c6fcbdfa58",
+      "contracts/crosschain/ccip/interfaces/ICcipCrosschain.sol": "0xbab40fca3338b69daf97a77a6656c05939374f80440e2e2f7677af22ef4cdaf4",
+      "contracts/crosschain/ccip/lib/CcipDecimalsLib.sol": "0xf875d8dc6d0649e127b849acefa25adc22e6444902bc6aafb66c521be11e09cb",
+      "contracts/crosschain/ccip/lib/CcipExecutorAttestationLib.sol": "0xf60a4fe252a4cd3fdeb0934df6b308386e5f35a5a997042b1ecd8242bf2d0b35",
+      "contracts/crosschain/ccip/lib/CcipExecutorCommandLib.sol": "0x58d1f8c59026f18de1a287939ba1161da2daac31e2c81a4a946f92513c2ed5ab",
+      "contracts/crosschain/ccip/lib/CcipExecutorTransferLib.sol": "0xaeef063a150ec5a783cca82fba759b69293e963be26be2d263f417f54642c90a",
+      "contracts/crosschain/ccip/lib/CcipMessages.sol": "0x6359dc970bf3bdb950196d46730f5f25a430b5ffe5325569c1999250513ebda5",
+      "contracts/crosschain/ccip/lib/CcipRouteLib.sol": "0x7c4332fc8c013e7690fffcbf9e52469d27852693caeb616993424199a273d137",
+      "contracts/crosschain/ccip/lib/CcipSendLib.sol": "0xf5272d63e9c838a9570a91208d2041b838588cda925bd5ce5813f088bdd23ab2",
+      "contracts/crosschain/common/CrosschainTransportTypes.sol": "0x9b3d273bdd0cf321573fd7ed812a7857fe31730de1922bd39305484b40f54579",
+      "contracts/crosschain/common/ICrosschainExecutorMetadata.sol": "0x22de056e2bbc878a7c2e5b75f9fe46fc2d133077e235373b1ad01152a5d3d741",
+      "contracts/crosschain/lib/CrosschainConstants.sol": "0x310eaad30a94266c79c773531ea7ce4852a9005bc72bf587d3734bcaed70b1e6",
+      "contracts/crosschain/lib/CrosschainErrors.sol": "0x6f53fe5204a1a93665ab8220742fb4ce2aa4ea3257955ad127a4b03e12c039cd",
+      "contracts/crosschain/lib/CrosschainMessages.sol": "0x7d2853ecca6b7abfce1796705053aeedc0ce3dd80f0e225c812b27191565ee3f",
+      "contracts/crosschain/lib/CrosschainVaultActionLib.sol": "0x5e2b07a274007988195975522210b878f8ae5b944d22fd8c8596fb0ab5375824",
+      "contracts/crosschain/lib/RescueLogicLib.sol": "0x8d8c3eff46c696cfa885dcce5af8113a27ca1b97db4c3acc408d71f9c49e0607",
+      "contracts/crosschain/lib/RescueModule.sol": "0x6574683d414af13012061f591ca23c34ecae624a626cca7e82c126f2346b5736",
+      "contracts/interfaces/IPlasmaVault.sol": "0xf7ea72a8767f93b2ce0e6e7ad20663af07376fad78e7685345308d80243d48a0",
+      "contracts/libraries/PlasmaVaultStorageLib.sol": "0x0a67cf8a9bc30fd14080bf802065248c036d6b1c3822c618ea921b344462a001",
+      "contracts/universal_reader/UniversalReader.sol": "0x9c3801656a1e4b44454187a410cff30852904de42c4bf85e2b98771ac9b1ce4f",
+      "contracts/vendor/solady/src/utils/CREATE3.sol": "0x31e75a543082e22e6f03144260388b8c1511010f0b2362356ca9fc0813976756"
+    }
+  },
+  "original_deployment": {
+    "source_commit": null,
+    "forge_version": null,
+    "metadata_source_hash_present": false
+  },
+  "compiler": {
+    "version": "0.8.30+commit.73712a01",
+    "linux_binary_sha256": "f3e987dc6ecebd4bd350c48edcbc320b46cf9e3109bd3fc3d88f1acaf4c428f7",
+    "reconstruction_forge_version": "1.7.1-dev",
+    "openzeppelin_contracts_version": "5.0.2",
+    "settings": {
+      "optimizer": {
+        "enabled": true,
+        "runs": 2
+      },
+      "metadata": {
+        "useLiteralContent": false,
+        "bytecodeHash": "none",
+        "appendCBOR": true
+      },
+      "evmVersion": "cancun",
+      "viaIR": false,
+      "libraries": {
+        "contracts/crosschain/ccip/lib/CcipRouteLib.sol": {
+          "CcipRouteLib": "0xeA5D382B3DcEE5C192548A1bc408b3a8CD60Ccf9"
+        },
+        "contracts/crosschain/ccip/lib/CcipSendLib.sol": {
+          "CcipSendLib": "0x6eB2E4e640492957477553Efa5BD2ecb93Af0972"
+        },
+        "contracts/crosschain/ccip/lib/CcipDecimalsLib.sol": {
+          "CcipDecimalsLib": "0x8EB55B565C26B23fCF2a8c0B3aB92F5Db767Ac5A"
+        },
+        "contracts/crosschain/ccip/lib/CcipExecutorAttestationLib.sol": {
+          "CcipExecutorAttestationLib": "0x4ef582CeC009acdC8D3A1FfBDF23Ca51a3F3A3De"
+        },
+        "contracts/crosschain/ccip/lib/CcipExecutorCommandLib.sol": {
+          "CcipExecutorCommandLib": "0xf41C3A2f4B0892189007f7947d47113D8B9F8fce"
+        },
+        "contracts/crosschain/ccip/lib/CcipExecutorTransferLib.sol": {
+          "CcipExecutorTransferLib": "0xB544a307f9EDD7B12C9b97Fd9a66fdE81A128f55"
+        },
+        "contracts/crosschain/lib/RescueLogicLib.sol": {
+          "RescueLogicLib": "0x238569C79159d61eb401073F122c31C1B5746614"
+        },
+        "contracts/crosschain/lib/CrosschainVaultActionLib.sol": {
+          "CrosschainVaultActionLib": "0xb4576e8051003E2856ce1B086bDA17F521E6Aa90"
+        }
+      }
+    }
+  },
+  "factory": {
+    "address": "0x3a745EaC243ea7563CCbD5890dbCA1b05CEe1e0D",
+    "config_delay_seconds": 300,
+    "creation_size": 18981,
+    "creation_keccak": "0xfee96f0073b121261e2812c2160b3308bb99140974b2bd475d1b309b22702da2"
+  },
+  "chains": {
+    "999": {
+      "name": "hyperevm",
+      "observed_block": {
+        "number": 47191216,
+        "hash": "0x24688cc588fbd4bb04a4245ec2789c7c58ae1ea55855b906910ec59f8a251b71",
+        "timestamp": 1790674112
+      },
+      "owner": "0x3f48e1ffc0ea0b1f908770ec3372ea0f50da2af2",
+      "router": "0x13b3332b66389b1467ca6ebd6fa79775ccef65ec",
+      "runtime_size": 18579,
+      "runtime_keccak": "0x1c3b573cce0c4bfe2d9b2012974486835592f9093ba2f4079b39bd4247a78377",
+      "deployment_transaction": "0xa1b04cd130e01851878bbc7233a1eeaedffab253a3ffc83854490f2be335334e",
+      "deployment_block": 47131343,
+      "create3_anchor": "0xd96fEB3B7EafD9c4a218aFa1de0a217e5f9Ae35C",
+      "salt": "0x0eea4b19daa00d82bf8c7f50440bbbb75f136981621715fd0829097f9f8f0298"
+    },
+    "42161": {
+      "name": "arbitrum",
+      "observed_block": {
+        "number": 509987812,
+        "hash": "0x71b99e022c86948cdead1f99a7c2fe95601ab2dde24cf6da8dfd6b81462af03a",
+        "timestamp": 1790674112
+      },
+      "owner": "0x3f48e1ffc0ea0b1f908770ec3372ea0f50da2af2",
+      "router": "0x141fa059441e0ca23ce184b6a78bafd2a517dde8",
+      "runtime_size": 18579,
+      "runtime_keccak": "0xef39d3cf3e45df2ed9cb7e15cfbe5bba9f10bf3d1c9eadb33550b4236710815e",
+      "deployment_transaction": "0x80411cdd708974adb7bcdb8457966a1b9296f46d0d17e5afe443868efb7d5671",
+      "deployment_block": 509769002,
+      "create3_anchor": "0xd96fEB3B7EafD9c4a218aFa1de0a217e5f9Ae35C",
+      "salt": "0x0eea4b19daa00d82bf8c7f50440bbbb75f136981621715fd0829097f9f8f0298"
+    }
+  },
+  "creation_stores": {
+    "executor": {
+      "addresses": [
+        "0x2503cCF756b58D6D0c9BBAC95ac66418A4EDB21D",
+        "0xB2918ed84380F4052c33e81ad92448ca51e1453b"
+      ],
+      "address_slots": [
+        12,
+        13
+      ],
+      "length_slot": 16,
+      "length_offset": 0,
+      "size": 25413,
+      "creation_keccak": "0x6940940af30976bd1c9fc1ac5e83175aa056ed67f49073740f3158613351f0b6"
+    },
+    "dispatcher": {
+      "addresses": [
+        "0xd7E0B16f9Af1f46A0BE0bbE1f49Ae2Cc102D7F2A",
+        "0x4cfD96dad76FA360c25ebE438E69dA929455fFc9"
+      ],
+      "address_slots": [
+        14,
+        15
+      ],
+      "length_slot": 16,
+      "length_offset": 4,
+      "size": 25549,
+      "creation_keccak": "0xefdbcd2932cdda5f943f4e6562a4769031f41aa73086efb7fd569c4d44192f39"
+    }
+  },
+  "libraries": [
+    {
+      "source": "contracts/crosschain/ccip/lib/CcipRouteLib.sol",
+      "name": "CcipRouteLib",
+      "address": "0xeA5D382B3DcEE5C192548A1bc408b3a8CD60Ccf9",
+      "size": 2045,
+      "runtime_keccak": "0x391e66a30829072a7474afa4c4245fa0223d76843bbf001a6f668ec04699e691"
+    },
+    {
+      "source": "contracts/crosschain/ccip/lib/CcipSendLib.sol",
+      "name": "CcipSendLib",
+      "address": "0x6eB2E4e640492957477553Efa5BD2ecb93Af0972",
+      "size": 3288,
+      "runtime_keccak": "0x27b5fa9b296c144ea3ee24089841be80a1fe57ab9f3f2b9469557f605bcd1e3f"
+    },
+    {
+      "source": "contracts/crosschain/ccip/lib/CcipDecimalsLib.sol",
+      "name": "CcipDecimalsLib",
+      "address": "0x8EB55B565C26B23fCF2a8c0B3aB92F5Db767Ac5A",
+      "size": 1212,
+      "runtime_keccak": "0x97da17d09a10d4379885e9a430e1eadd54338bc3d6d4820f3cd0cd314e44f30d"
+    },
+    {
+      "source": "contracts/crosschain/ccip/lib/CcipExecutorAttestationLib.sol",
+      "name": "CcipExecutorAttestationLib",
+      "address": "0x4ef582CeC009acdC8D3A1FfBDF23Ca51a3F3A3De",
+      "size": 4142,
+      "runtime_keccak": "0x99851f94a626524e82acf18e3435a1bbd0926f4d06f25d855f0a7b0fd5877a45"
+    },
+    {
+      "source": "contracts/crosschain/ccip/lib/CcipExecutorCommandLib.sol",
+      "name": "CcipExecutorCommandLib",
+      "address": "0xf41C3A2f4B0892189007f7947d47113D8B9F8fce",
+      "size": 6120,
+      "runtime_keccak": "0xa9c2cc1db046d20030ec5ba72a5475913483c9adee8b2ee12c74a2f2517080f1"
+    },
+    {
+      "source": "contracts/crosschain/ccip/lib/CcipExecutorTransferLib.sol",
+      "name": "CcipExecutorTransferLib",
+      "address": "0xB544a307f9EDD7B12C9b97Fd9a66fdE81A128f55",
+      "size": 4447,
+      "runtime_keccak": "0x4949ee6e6d1c12fe5118ac81fdefa25612e455f0ffb2f64b7779c308540ce9f6"
+    },
+    {
+      "source": "contracts/crosschain/lib/RescueLogicLib.sol",
+      "name": "RescueLogicLib",
+      "address": "0x238569C79159d61eb401073F122c31C1B5746614",
+      "size": 3820,
+      "runtime_keccak": "0xdaee04fa1a61f82c75ff06fe6d3673cfd1f75b942375879900971471ae4c5bcc"
+    },
+    {
+      "source": "contracts/crosschain/lib/CrosschainVaultActionLib.sol",
+      "name": "CrosschainVaultActionLib",
+      "address": "0xb4576e8051003E2856ce1B086bDA17F521E6Aa90",
+      "size": 1670,
+      "runtime_keccak": "0x225193af998491576fd5d5f0d481f77ec8db3cb5ad97da8571330bcd6b012c5e"
+    }
+  ]
+}

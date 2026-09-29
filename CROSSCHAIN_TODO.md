@@ -40,11 +40,20 @@ Delete an entry in the change that resolves it; delete this file when it is empt
   Feed age is checked only at the pinned block; the configured middleware ignores
   feed timestamps, so simulated clock advancement does not validate live freshness.
 
-- [ ] **Pilot factory build provenance.** Record the exact source commit/build
-  configuration for the deployed CCIP factories. Their `CONFIG_DELAY()` is 300
-  seconds, matching the pilot document, while the local contracts branch declares
-  24 hours. The rehearsal reads the deployed delay; compiling the fuses from the
-  current branch does not prove the factories came from that same source.
+- [ ] **Pilot deployment attestation and production build.** The deployed code
+  is reproducible from contracts snapshot `1a0c230889978cf07f5f762409022cdd129ae6b3`
+  plus the explicit test-only patches and library links recorded in
+  `tests/fixtures/ccip_pilot_build.json`. Independent compilation matches both
+  factory runtimes/creation code, their stored executor/dispatcher creation code,
+  and eight linked libraries on both chains. The pilot shortens `CONFIG_DELAY`
+  from 24 hours, `MIN_RESCUE_DELAY` from 24 hours, and `FRONTIER_REPAIR_DELAY`
+  from 6 hours, all to 5 minutes. The rescue minimum is a constructor floor,
+  not the instance's selected delay. These are not production defaults.
+  The factory tests now pin all those on-chain code identities. Still obtain
+  the deployer's original build record (actual checkout/toolchain are unknown),
+  publish the matching source snapshot/dependencies, and independently verify a
+  production build without the three shortened-delay patches. Byte equivalence
+  proves a recipe, not historical build provenance or production readiness.
 
 - [ ] **Foundry compiler CI.** Add a GitHub Actions job for the Solidity-source
   deployment rehearsal: pin the Foundry version, check out the exact public
