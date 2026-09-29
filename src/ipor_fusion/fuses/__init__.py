@@ -28,6 +28,18 @@ from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappSupplyFuse,
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
+from ipor_fusion.fuses.hypercore import (
+    HyperCoreBuilderFeeFuse,
+    HyperCoreCancelFuse,
+    HyperCoreConfigKey,
+    HyperCoreDepositFuse,
+    HyperCoreMarginFuse,
+    HyperCoreOrderFuse,
+    HyperCoreSendFuse,
+    HyperCoreSubstrates,
+    SettlementMode,
+    TimeInForce,
+)
 from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
     MorphoBorrowFuse,
@@ -93,6 +105,16 @@ __all__ = [
     "ExternalStateAction",
     "ExternalStateOperationFuse",
     "ExternalStateSubstrates",
+    "HyperCoreBuilderFeeFuse",
+    "HyperCoreCancelFuse",
+    "HyperCoreConfigKey",
+    "HyperCoreDepositFuse",
+    "HyperCoreMarginFuse",
+    "HyperCoreOrderFuse",
+    "HyperCoreSendFuse",
+    "HyperCoreSubstrates",
+    "SettlementMode",
+    "TimeInForce",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",

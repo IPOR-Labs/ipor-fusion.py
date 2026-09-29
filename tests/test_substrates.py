@@ -325,3 +325,108 @@ def test_market_id_registrations_follow_ipor_fusion_markets_sol():
 
     spark = "0x" + "00" * 12 + SUSDE[2:]
     assert decode_substrate(spark, market_id=44) == SubstrateInfo(address=SUSDE)
+
+
+# The 12 words granted on the first HyperEVM HyperCore test vault
+# (0x41c46c32…, run of 2026-09-28; see tests/fixtures/hypercore_hip3_flow.json).
+HYPERCORE_USDC = "0xb88339cb7199b77e23db6e890353e22632ba630f"
+HYPERCORE_WORDS = {
+    "spot_token": "0x010000000000000000000000b88339cb7199b77e23db6e890353e22632ba630f",
+    "perp_market": "0x020001adb20000000000000000e4e1c000000000000000000000000000000000",
+    "destination": "0x03000000000000000000000041c46c328036fa7865d5cb15d531d7c5120f05c8",
+    "send_cap": "0x06000000000000000000000000000000000000000000000000000002540be400",
+    "config_dex_ids": "0x0504000000000000000000000000000000000000000000000000000000000002",
+    "config_mode": "0x0505000000000000000000000000000000000000000000000000000000000001",
+    "builder": "0x040000000000000000000001cee5c4272e246a424aede992c987966736e0f63b",
+}
+
+
+def test_hypercore_typed_substrates():
+    market = IporFusionMarkets.HYPERCORE
+    assert market_name(market) == "HYPERCORE"
+
+    spot = decode_substrate(HYPERCORE_WORDS["spot_token"], market_id=market)
+    assert spot == SubstrateInfo(
+        address=HYPERCORE_USDC, type_label="SPOT_TOKEN", extra={"token_index": "0"}
+    )
+
+    perp = decode_substrate(HYPERCORE_WORDS["perp_market"], market_id=market)
+    assert perp.type_label == "PERP_MARKET"
+    assert perp.extra == {
+        "asset": "110002",
+        "max_notional_usd6": "15000000",
+        "reduce_only_required": "false",
+    }
+
+    dest = decode_substrate(HYPERCORE_WORDS["destination"], market_id=market)
+    assert dest == SubstrateInfo(
+        address="0x41c46c328036fa7865d5cb15d531d7c5120f05c8", type_label="DESTINATION"
+    )
+
+    cap = decode_substrate(HYPERCORE_WORDS["send_cap"], market_id=market)
+    assert cap.type_label == "SEND_CAP"
+    assert cap.extra == {"token_index": "0", "max_wei": str(100 * 10**8)}
+
+    dex_ids = decode_substrate(HYPERCORE_WORDS["config_dex_ids"], market_id=market)
+    assert dex_ids.type_label == "CONFIG"
+    assert dex_ids.extra == {"key": "PerpDexIds", "value": "2"}
+
+    mode = decode_substrate(HYPERCORE_WORDS["config_mode"], market_id=market)
+    assert mode.extra == {"key": "SettlementMode", "value": "1", "mode": "TIMING"}
+
+    builder = decode_substrate(HYPERCORE_WORDS["builder"], market_id=market)
+    assert builder.address == "0xcee5c4272e246a424aede992c987966736e0f63b"
+    assert builder.extra == {"max_fee_rate_decibps": "1"}
+
+
+@pytest.mark.parametrize(
+    ("word", "label"),
+    [
+        # SpotToken with bits 247..224 set
+        (
+            "0x01"
+            + "ff0000"
+            + "0000000000000000"
+            + "b88339cb7199b77e23db6e890353e22632ba630f",
+            "SPOT_TOKEN",
+        ),
+        # PerpMarket with the low 120 bits set
+        ("0x020001adb20000000000000000e4e1c000" + "01" + "00" * 14, "PERP_MARKET"),
+        # PerpMarket with a reduce-only flag of 2
+        ("0x020001adb20000000000000000e4e1c002" + "00" * 15, "PERP_MARKET"),
+        # Destination with bits above the address set
+        (
+            "0x03" + "01" + "00" * 10 + "41c46c328036fa7865d5cb15d531d7c5120f05c8",
+            "DESTINATION",
+        ),
+        # Builder with bits 247..224 set
+        (
+            "0x04"
+            + "000001"
+            + "0000000000000001"
+            + "cee5c4272e246a424aede992c987966736e0f63b",
+            "BUILDER",
+        ),
+        # SendCap with bits 247..192 set
+        (
+            "0x06"
+            + "00000000000001"
+            + "0000000000000000"
+            + hex(100 * 10**8)[2:].rjust(32, "0"),
+            "SEND_CAP",
+        ),
+        # tags the library has no member for
+        ("0x00" + "00" * 31, "type=0"),
+        ("0x07" + "00" * 31, "type=7"),
+        # a config key outside 1..6
+        ("0x0509" + "00" * 30, "CONFIG key=9"),
+    ],
+)
+def test_hypercore_words_the_library_rejects_are_errors(word, label):
+    assert len(word) == 66, word
+    info = decode_substrate(word, market_id=IporFusionMarkets.HYPERCORE)
+    assert info.is_error
+    assert info.type_label == label
+    assert info.address == ""
+    assert info.raw_hex == word
+    assert info.extra == {"error": "invalid HyperCore substrate"}

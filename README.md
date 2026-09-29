@@ -325,6 +325,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Merkl | `MerklClaimWrapperFuse` |
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
+| HyperCore (Hyperliquid, market 55) | `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` |
 
 ### Readers (`ipor_fusion.readers`)
 
