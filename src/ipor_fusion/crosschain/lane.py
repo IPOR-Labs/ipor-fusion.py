@@ -220,7 +220,7 @@ class CrosschainLane(ABC):
         )
 
     def needs_attestation(self, *, now: int, margin: int = 0) -> bool:
-        """Whether a keeper should propose now (up to six reads on the hub):
+        """Whether a keeper should propose now (up to seven reads on the hub):
         the settled bucket is non-zero, no transfer or command receipt is in
         flight, and the approved observation is missing or older than
         ``staleness_max - margin`` seconds, after which ``getBalance()`` fails
@@ -230,7 +230,7 @@ class CrosschainLane(ABC):
         keeps this false; resolve it on the executor first."""
         if self.settled_remote_balance().call() == 0:
             return False
-        if self.pending_transfer_count().call() != 0:
+        if self.transfer_in_flight():
             return False
         if self.command_in_flight():
             return False
@@ -302,7 +302,16 @@ class CrosschainLane(ABC):
 
     @abstractmethod
     def pending_transfer_count(self) -> Call[int]:
-        """Unresolved value-moving records (outbound and return) on the lane."""
+        """Raw executor counter: outbound transfers on CCIP; outbound and
+        return records on Stargate. Use ``transfer_in_flight`` for either leg."""
+
+    @abstractmethod
+    def transfer_in_flight(self) -> bool:
+        """Whether an outbound transfer or recall is unresolved.
+
+        Reads the hub executor; CCIP needs a separate active-return read
+        because its pending counter covers only outbound transfers.
+        """
 
     @abstractmethod
     def observation(self) -> Call[LaneObservation]:

@@ -121,6 +121,11 @@ class CcipLane(CrosschainLane):
     def pending_transfer_count(self) -> Call[int]:
         return self.executor.pending_transfer_count(self.spoke_chain_id)
 
+    def transfer_in_flight(self) -> bool:
+        return self.pending_transfer_count().call() != 0 or self.executor.active_return(
+            self.spoke_chain_id
+        ).call() != bytes(32)
+
     def observation(self) -> Call[LaneObservation]:
         rate = self.decimal_conversion_rate
         return self.dispatcher.observation().map(

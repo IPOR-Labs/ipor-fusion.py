@@ -197,6 +197,28 @@ class TestActions:
 
 
 class TestReads:
+    @pytest.mark.parametrize("pending", (0, 1))
+    def test_stargate_transfer_in_flight(self, pending):
+        ctx = _ctx_answering(
+            {selector("pendingTransferCount(uint256)"): encode(["uint8"], [pending])}
+        )
+        assert _stargate_lane(hub_ctx=ctx).transfer_in_flight() is bool(pending)
+
+    @pytest.mark.parametrize(
+        ("pending", "active_return", "expected"),
+        [(0, bytes(32), False), (0, HASH, True), (1, bytes(32), True)],
+    )
+    def test_ccip_transfer_in_flight_includes_recalls(
+        self, pending, active_return, expected
+    ):
+        ctx = _ctx_answering(
+            {
+                selector("pendingTransferCount(uint256)"): encode(["uint8"], [pending]),
+                selector("activeReturn(uint256)"): encode(["bytes32"], [active_return]),
+            }
+        )
+        assert _ccip_lane(hub_ctx=ctx).transfer_in_flight() is expected
+
     def test_executor_reads_target_the_spoke(self):
         lane = _stargate_lane()
         for call, sig in (
@@ -476,6 +498,21 @@ def _sel(call) -> bytes:
 
 
 class TestLaneParts:
+    @pytest.mark.parametrize("active_return", (bytes(32), HASH))
+    def test_ccip_attestation_waits_for_active_recall(self, active_return):
+        ctx = _ctx_answering(
+            {
+                selector("settledRemoteBalance(uint256)"): encode(["uint256"], [5]),
+                selector("pendingTransferCount(uint256)"): encode(["uint8"], [0]),
+                selector("activeReturn(uint256)"): encode(["bytes32"], [active_return]),
+                selector("activeCommand(uint256)"): encode(["bytes32"], [bytes(32)]),
+                selector("lastApprovedObservedAt(uint256)"): encode(["uint64"], [0]),
+            }
+        )
+        assert _ccip_lane(hub_ctx=ctx).needs_attestation(now=9999) is (
+            active_return == bytes(32)
+        )
+
     def test_fuse_encoders_come_from_the_lane_class(self):
         lane = _stargate_lane()
         assert StargateLane.supply_fuse_cls is StargateCrosschainSupplyFuse
