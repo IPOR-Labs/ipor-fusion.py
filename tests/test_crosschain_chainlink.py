@@ -100,17 +100,12 @@ def test_open_token_lane():
     assert sent[-1][4:] == encode(["uint64"], [HYPEREVM])
 
 
-def test_supported_on_ramp_2_x_version():
-    ctx = _ctx(_open_lane(pool=None, pool_serves=False, on_ramp_version="OnRamp 2.1.3"))
-    lane = ccip_token_lane(ctx, ROUTER, USDC, HYPEREVM)
-    assert lane.on_ramp_version == "OnRamp 2.1.3"
-
-
 @pytest.mark.parametrize(
     "version",
     [
         "EVM2EVMOnRamp 1.5.0",
         "OnRamp 1.6.0",
+        "OnRamp 2.1.3",
         "OnRamp 3.0.0",
         "OnRamp 20.0.0",
         "",
@@ -121,7 +116,7 @@ def test_unsupported_on_ramp_version_stops_before_static_config(version):
     ctx = _ctx(_open_lane(pool=None, pool_serves=False, on_ramp_version=version))
     message = (
         f"unsupported CCIP OnRamp version {version!r} at {ON_RAMP}; "
-        "ccip_token_lane supports OnRamp 2.x"
+        "ccip_token_lane supports OnRamp 2.0.0"
     )
 
     with pytest.raises(ValueError, match=re.escape(message)):

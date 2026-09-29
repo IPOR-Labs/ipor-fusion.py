@@ -29,7 +29,6 @@ from typing import Any
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.types import BlockIdentifier
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.simulation import (
@@ -77,13 +76,16 @@ class CrosschainSimulator:
         chain_id: ChainId,
         web3: Web3,
         *,
-        block: BlockIdentifier = "latest",
+        block: int,
         vault: ChecksumAddress | None = None,
         alpha: ChecksumAddress | None = None,
     ) -> VaultSimulator:
         """Register a chain and return its simulator. ``vault`` and ``alpha``
         are needed only where ``execute`` batches run (the source vault's
-        chain); a destination chain takes neither."""
+        chain); a destination chain takes neither. ``block`` is required
+        because relay rounds must replay from the same state."""
+        if type(block) is not int or block < 0:
+            raise ValueError("crosschain simulation requires a numeric block pin")
         if chain_id not in self._transport.chain_ids:
             raise ValueError(f"chain {chain_id} is not configured on the transport")
         if chain_id in self._chains:

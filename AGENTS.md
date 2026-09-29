@@ -46,6 +46,13 @@ named address constant). They auto-skip unless `ETHEREUM_PROVIDER_URL`,
 `BASE_PROVIDER_URL` and `ARBITRUM_PROVIDER_URL` are set (`.env` is loaded via
 python-dotenv) and the provider supports `eth_simulateV1`. CI has all three as
 secrets. Never print `.env` or a provider URL: they embed API keys.
+`HYPEREVM_PROVIDER_URL` is used by the HyperEVM lifecycle/deployment tests and
+the separate read-only readiness workflow; general PR CI does not supply it.
+`test_simulate_crosschain_hyperevm.py` covers the pilot on pinned blocks.
+`test_solidity_compiler.py` uses `IPOR_FUSION_CONTRACTS_DIR` for a local contracts
+checkout and optional `IPOR_FUSION_FOUNDRY_REMAPPINGS`; the pilot build identity
+is pinned in `tests/fixtures/ccip_pilot_build.json`. These tests skip when their
+external prerequisites are unavailable.
 `test_simulate_crosschain_lifecycle.py` drives the mainnet POC deployment from
 Ethereum to every spoke on every transport through `CrosschainLane` and
 `CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned

@@ -547,8 +547,19 @@ def main(argv: list[str] | None = None) -> int:
         "--env-file", default=".env", help="dotenv file to load (default: .env)"
     )
     args = parser.parse_args(argv)
-    load_dotenv(args.env_file)
-    report, code, summary = run()
+    try:
+        load_dotenv(args.env_file)
+        report, code, summary = run()
+    except Exception as exc:  # noqa: BLE001 - keep stale reports from looking current
+        kind = type(exc).__name__
+        report = config_error_report(f"probe failed ({kind})")
+        report["blocked_by"] = [f"probe error: {kind}"]
+        report["error"] = {
+            "type": kind,
+            "message": "readiness probe failed before completion",
+        }
+        code = EXIT_INCOMPLETE
+        summary = _summary(report)
     print(summary)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as handle:

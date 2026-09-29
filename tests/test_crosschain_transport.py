@@ -759,17 +759,17 @@ class TestCrosschainSimulator:
         web3_a.provider = Endless(CHAIN_A, {})
         web3_b.provider = Endless(CHAIN_B, {})
         sim = CrosschainSimulator(ScriptedTransport())
-        sim.add_chain(CHAIN_A, web3_a).add_call(
+        sim.add_chain(CHAIN_A, web3_a, block=100).add_call(
             Call(to=RECEIVER, data=b""), from_=SENDER
         )
-        sim.add_chain(CHAIN_B, web3_b)
+        sim.add_chain(CHAIN_B, web3_b, block=200)
         with pytest.raises(RuntimeError, match="did not settle within 3 rounds"):
             sim.relay(max_rounds=3)
 
     def test_message_to_missing_chain_is_an_error(self):
         web3_a = _web3(CHAIN_A, {0: [_message_log(CHAIN_B, b"\x09" * 32)]})
         sim = CrosschainSimulator(ScriptedTransport())
-        sim.add_chain(CHAIN_A, web3_a).add_call(
+        sim.add_chain(CHAIN_A, web3_a, block=100).add_call(
             Call(to=RECEIVER, data=b""), from_=SENDER
         )
         with pytest.raises(RuntimeError, match="was not added to the simulator"):
@@ -777,11 +777,13 @@ class TestCrosschainSimulator:
 
     def test_add_chain_validation_and_empty_relay(self):
         sim = CrosschainSimulator(ScriptedTransport())
+        with pytest.raises(ValueError, match="requires a numeric block pin"):
+            sim.add_chain(CHAIN_A, _web3(CHAIN_A, {}), block="latest")  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="not configured on the transport"):
-            sim.add_chain(ChainId(3), _web3(3, {}))
-        sim.add_chain(CHAIN_A, _web3(CHAIN_A, {}))
+            sim.add_chain(ChainId(3), _web3(3, {}), block=300)
+        sim.add_chain(CHAIN_A, _web3(CHAIN_A, {}), block=100)
         with pytest.raises(ValueError, match="already added"):
-            sim.add_chain(CHAIN_A, _web3(CHAIN_A, {}))
+            sim.add_chain(CHAIN_A, _web3(CHAIN_A, {}), block=100)
         assert sim.chain(CHAIN_A).has_calls is False
         assert sim.relay(max_rounds=0) == {}
         sim.chain(CHAIN_A).add_call(Call(to=RECEIVER, data=b""), from_=SENDER)

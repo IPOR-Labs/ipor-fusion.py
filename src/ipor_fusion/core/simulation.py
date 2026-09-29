@@ -490,6 +490,11 @@ class VaultSimulator:
         raw_calls: list[dict] = []
         for block_result in result:
             raw_calls.extend(block_result.get("calls", []))
+        if len(raw_calls) != len(sources):
+            raise RuntimeError(
+                "eth_simulateV1 returned "
+                f"{len(raw_calls)} call results for {len(sources)} queued calls"
+            )
 
         execute_success = True
         revert_reason: str | None = None
@@ -498,7 +503,7 @@ class VaultSimulator:
         observations: dict[str, Any] = {}
         parsed: list[SimulatedCallResult] = []
 
-        for source, raw in zip(sources, raw_calls, strict=False):
+        for source, raw in zip(sources, raw_calls, strict=True):
             return_hex = raw.get("returnData", "0x")
             return_data = HexBytes(return_hex)
             status = int(raw.get("status", "0x1"), 16)

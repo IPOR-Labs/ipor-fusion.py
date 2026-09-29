@@ -46,6 +46,17 @@ def _sent_blocks(provider: RecordingProvider) -> list[dict]:
     return provider.payloads[0][0]["blockStateCalls"]
 
 
+def test_run_rejects_missing_call_result():
+    sim, provider = _simulator()
+    sim.observe("missing", _read())
+    provider.make_request = MagicMock(return_value={"result": [{"calls": []}]})
+
+    with pytest.raises(
+        RuntimeError, match="eth_simulateV1 returned 0 call results for 1 queued calls"
+    ):
+        sim.run()
+
+
 def test_overrides_on_an_empty_block_fold_into_the_next_sent_block():
     sim, provider = _simulator()
     sim.with_state_override(PAYER, balance=hex(10**18))

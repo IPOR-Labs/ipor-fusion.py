@@ -444,6 +444,28 @@ def test_main_overwrites_a_stale_ready_report_on_incomplete_observation(
     assert report["complete"] is False and report["ready"] is False
 
 
+def test_main_overwrites_a_stale_ready_report_on_unexpected_probe_error(
+    mod, monkeypatch, tmp_path, capsys
+):
+    def broken_probe():
+        raise RuntimeError("provider URL must not be printed")
+
+    monkeypatch.setattr(mod, "run", broken_probe)
+    output = tmp_path / "readiness-report.json"
+    output.write_text(json.dumps({"ready": True}))
+
+    code = mod.main(
+        ["--output", str(output), "--env-file", str(tmp_path / "absent.env")]
+    )
+
+    assert code == mod.EXIT_INCOMPLETE
+    report = json.loads(output.read_text())
+    assert report["ready"] is False and report["complete"] is False
+    assert report["error"]["type"] == "RuntimeError"
+    assert "provider URL" not in output.read_text()
+    assert "provider URL" not in capsys.readouterr().out
+
+
 def test_unsupported_factory_interface_version_is_a_gate(mod):
     report = _report(
         mod,

@@ -96,7 +96,7 @@ def web3_arb() -> Web3:
 
 @pytest.fixture(scope="session")
 def web3_hyperevm() -> Web3:
-    """Planned crosschain spoke; no CI secret yet, so this always skips there."""
+    """HyperEVM simulation fixture; general PR CI does not supply its RPC secret."""
     w3 = _connected_web3("HYPEREVM_PROVIDER_URL")
     _ensure_simulate_v1(w3)
     return w3

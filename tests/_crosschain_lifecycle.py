@@ -87,7 +87,7 @@ BIG_CHANGE_EXCEEDED = "BigChangeExceeded(uint256,uint256,uint256)"
 @dataclass
 class Run:
     """One lifecycle run: the lane under test, both chains' simulators, the
-    hub-side handles the phases read through and the shared clock."""
+    hub-side handles the phases read through and each chain's modeled clock."""
 
     hub_chain_id: ChainId
     spoke_chain_id: ChainId
@@ -106,9 +106,6 @@ class Run:
     vault: PlasmaVault
     remote_vault: PlasmaVault
     hub_asset: ERC20
-    hub_now: int
-    spoke_now: int
-    spoke_block: int
     amount: int
     hub_start: int
     staleness_max: int
@@ -116,14 +113,22 @@ class Run:
     #: Labels of calls that revert on purpose; they stay in the replayed list.
     expected_failures: set[str] = field(default_factory=set)
 
+    @property
+    def hub_now(self) -> int:
+        return self.hub.current_time
+
+    @property
+    def spoke_now(self) -> int:
+        return self.spoke_sim.current_time
+
+    @property
+    def spoke_block(self) -> int:
+        return self.spoke_sim.current_block_number
+
     def advance(self, seconds: int) -> None:
-        """Move both chains into a new block ``seconds`` later, keeping the
-        offset between their pinned blocks."""
+        """Queue a new block on both chains with the same time shift."""
         self.hub.next_block(time_shift_seconds=seconds)
         self.spoke_sim.next_block(time_shift_seconds=seconds)
-        self.hub_now += seconds
-        self.spoke_now += seconds
-        self.spoke_block += 1
 
     def relay(self) -> dict[ChainId, SimulationResult]:
         """Relay, then require every call to succeed except the expected
@@ -246,9 +251,6 @@ def prepare_deployed_run(
         vault=PlasmaVault(hub_ctx, dep.vault),
         remote_vault=PlasmaVault(spoke_ctx, remote_vault),
         hub_asset=ERC20(hub_ctx, dep.hub.usdc),
-        hub_now=hub_start,
-        spoke_now=spoke_start,
-        spoke_block=spoke.chain.block,
         amount=SUPPLY_AMOUNT[transport_kind],
         hub_start=hub_start,
         staleness_max=lane.staleness_max().call(),

@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
-from _crosschain_lifecycle import Run, run_lifecycle
+from _crosschain_lifecycle import Run, assert_reverted, run_lifecycle
 from _crosschain_pilot import assert_pilot_code, assert_pilot_deployment
 from _crosschain_recovery import (
     run_failed_deposit_recovery,
@@ -866,7 +866,6 @@ def _prepare_asset_run(
     )
 
     hub_start = hub.current_time
-    spoke_start = spoke.current_time
     return Run(
         hub_chain_id=ARBITRUM,
         spoke_chain_id=HYPEREVM,
@@ -885,9 +884,6 @@ def _prepare_asset_run(
         vault=hub_vault,
         remote_vault=PlasmaVault(hyper_ctx, spoke_instance.plasma_vault),
         hub_asset=token,
-        hub_now=hub_start,
-        spoke_now=spoke_start,
-        spoke_block=spoke.current_block_number,
         amount=10**asset.decimals + 1,
         hub_start=hub_start,
         staleness_max=_safety_config().balance_staleness_max,
@@ -1071,7 +1067,7 @@ def test_dispatcher_deployment_needs_a_hyperevm_big_block(web3_arb, web3_hyperev
     results[ARBITRUM].raise_for_failure()
     (failure,) = results[HYPEREVM].failed_calls
     assert failure.label is not None and failure.label.startswith("ccip_receive:")
-    assert bytes(failure.return_data[:4]) == bytes.fromhex("19b991a8")
+    assert_reverted(failure, "InitializationFailed()")
     assert web3_hyperevm.eth.get_block(HYPEREVM_BLOCK)["gasLimit"] == 3_000_000
 
 

@@ -319,7 +319,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |
 | `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation (`attestation`, `needs_attestation`, `staleness_max`); `open_lane` detects the transport and finds the fuses |
 | `discover_deployment`, `open_lanes` | Read a vault's crosschain market from the hub alone (executors with transport, factory, fuses, attestation keys and spokes served; remote vaults per spoke) and open every lane; `LANES` maps a transport kind to its lane class |
-| `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between chains, no bridge needed |
+| `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between pinned chains by impersonating the endpoint or router on delivery, no bridge needed |
 | `ccip_token_lane` | Whether a CCIP message lane exists from a chain and whether a token's pool serves it, read on Chainlink's Router, OnRamp, TokenAdminRegistry and pool |
 | `erc20_balance_slot`, `VaultSimulator.with_erc20_balance` | Fund any address with any ERC-20 in a simulation by a storage override (slot found by probing), no holder to impersonate |
 | `ERC20` | Token reads and approvals |
@@ -341,6 +341,10 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
 | Crosschain | `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse` (market 54); transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` |
+
+The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Use
+`crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` for that deployment;
+`open_lane` discovers the vault's actual market grants rather than assuming 54.
 
 ### Readers (`ipor_fusion.readers`)
 

@@ -196,9 +196,10 @@ CHAINS: dict[str, Chain] = {
     ),
     # Next spoke, pre-wired with what is live: the chain, its LayerZero endpoint
     # (eid 30367, not at the address the older chains share), the CCIP router
-    # and selector (message lanes to and from the hub chains exist; USDC has
-    # no pool on them yet, see test_crosschain_readiness.py), USDC and a block
-    # pinned two minutes before the hub's. Still missing: the Stargate
+    # and selector (message lanes to and from the hub chains exist; the
+    # Arbitrum -> HyperEVM USDC token lane was closed at the pinned blocks,
+    # but opened on 2026-09-29), USDC and a block pinned two minutes before
+    # the hub's. Still missing: the Stargate
     # TokenMessaging and USDC pool, the dispatcher and the spoke vault. Fill
     # them, add the spoke to the deployment and drop `pending`; the strict
     # xfail on its lifecycle params then fails until it is removed too.
@@ -220,9 +221,10 @@ CHAINS: dict[str, Chain] = {
         ),
         chain_selector=2442541497099098535,
         pending=(
-            "a CCIP pool for USDC, the hub factory's route policy, the factory, "
-            "dispatcher and spoke vault on HyperEVM are not wired yet; Stargate "
-            "has no HyperEVM route"
+            "the outbound CCIP USDC token lane was closed at the pinned blocks "
+            "(open since 2026-09-29); the hub factory's route policy, dispatcher "
+            "and spoke vault are not wired into this deployment; Stargate has "
+            "no HyperEVM route"
         ),
     ),
 }

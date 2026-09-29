@@ -5,7 +5,7 @@ an executor, dispatcher, factory or crosschain fuse decodes by name
 ``TransactionError`` instead of a bare selector.
 
 The list mirrors the ``error`` declarations of the crosschain contracts, the
-CCIP libraries and the crosschain fuse libraries, one entry per distinct
+CCIP libraries, crosschain fuse libraries and the CREATE3 deployer, one entry per distinct
 signature; a name declared with two parameter lists (for example
 ``MinUpdateIntervalNotMet``) appears twice because the selectors differ.
 """
@@ -113,6 +113,7 @@ CROSSCHAIN_ERROR_SIGNATURES: tuple[str, ...] = (
     "FrontierAdvanceTooLarge(uint256,uint64,uint256,uint256)",
     "GuidMismatch(bytes32,bytes32)",
     "ImmutableParamsHashMismatch(bytes32,bytes32)",
+    "InitializationFailed()",
     "InsufficientAssets(uint256,uint256)",
     "InsufficientFreshFunds(uint256,uint256,uint256)",
     "InsufficientGasForNack(uint256,uint256)",
