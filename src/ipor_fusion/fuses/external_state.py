@@ -82,8 +82,7 @@ class ExternalStateOperationFuse(Fuse):
         Order matters: the executor copies the vault's market substrates into
         its own cache when it is created. Grant every CUSTODIAN,
         BALANCE_ACCOUNT, ASSET and guard substrate first, or refresh the cache
-        with ``ExternalStateExecutor.sync_substrates()`` (not yet available)
-        afterwards.
+        with ``ExternalStateExecutor.sync_substrates()`` afterwards.
 
         ``STALENESS_MAX`` and ``BIG_CHANGE_BPS`` must already be granted, or
         creation reverts with ``ExternalStateMandatorySingletonMissing``.
@@ -127,11 +126,9 @@ class ExternalStateSubstrates:
     TARGET for every action, ASSET and BALANCE_ACCOUNT only when ``amount``
     is non-zero (an actions-only call moves nothing to account for). The executor
     keeps its own cache on top of that, refreshed by
-    ``ExternalStateExecutor.syncSubstrates()``: a newly granted custodian or
-    balance account stays unusable until that runs. Revocation is asymmetric --
-    a revoked balance account is rejected immediately, since propose/confirm
-    check the vault before the cache, while a revoked custodian remains
-    authorized on the executor until the next sync.
+    ``ExternalStateExecutor.sync_substrates()``: a newly granted custodian or
+    balance account stays unusable until that runs. Revocation is asymmetric;
+    see ``sync_substrates`` before revoking a custodian or balance account.
     """
 
     _ASSET = 1
