@@ -109,6 +109,7 @@ class Run:
     amount: int
     hub_start: int
     staleness_max: int
+    recall_min_return_bps: int = 9_800
     relays: int = 0
     #: Labels of calls that revert on purpose; they stay in the replayed list.
     expected_failures: set[str] = field(default_factory=set)
@@ -283,7 +284,9 @@ def supply(run: Run) -> int:
             lane.supply(
                 asset=run.hub_asset_address,
                 amount=run.amount,
-                min_received=run.amount * 99 // 100,
+                min_received=(run.amount * 99 // 100)
+                if lane.enforces_min_received
+                else 0,
             )
         ]
     )
@@ -305,8 +308,14 @@ def supply(run: Run) -> int:
         transfer.dst_chain_id == run.spoke_chain_id
         and settled_receipt.dst_chain_id == run.hub_chain_id
     )
-    assert run.amount * 99 // 100 <= credited <= run.amount
-    assert results[run.hub_chain_id].get("outbound_after_send") == credited
+    assert 0 < credited <= run.amount
+    if lane.enforces_min_received:
+        assert credited >= run.amount * 99 // 100
+    outbound = results[run.hub_chain_id].get("outbound_after_send")
+    if run.transport_kind == CrosschainTransportKind.CHAINLINK_CCIP:
+        assert outbound == run.amount
+    else:
+        assert outbound == credited
 
     run.csim.observe(
         run.hub_chain_id, "settled_after_settle", lane.settled_remote_balance()
@@ -555,7 +564,12 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
     )
 
     run.hub.execute(
-        [lane.recall(amount=remote_idle, min_return=remote_idle * 98 // 100)]
+        [
+            lane.recall(
+                amount=remote_idle,
+                min_return=remote_idle * run.recall_min_return_bps // 10_000,
+            )
+        ]
     )
     run.relay()
     run.csim.observe(run.hub_chain_id, "idle_ledger", lane.idle_ledger())
@@ -581,13 +595,20 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
         .get("observation_after_return")
         .state_version,
     )
-    assert remote_idle * 98 // 100 <= idle <= remote_idle
+    assert 0 < idle <= remote_idle
+    if run.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO:
+        assert idle >= remote_idle * 98 // 100
     assert results[run.hub_chain_id].get("pending_transfers") == 0
-    # The spoke vault's deposit/redeem rounding stays in the settled bucket
-    # until the next attestation re-marks it; the recall debits only what the
-    # dispatcher actually returned (never below zero).
+    # Stargate debits the amount sent from the spoke; CCIP debits the amount
+    # actually received on the hub after any token-pool fee. Vault rounding
+    # remains in the settled bucket until the next attestation.
+    debit = (
+        idle
+        if run.transport_kind == CrosschainTransportKind.CHAINLINK_CCIP
+        else remote_idle
+    )
     assert results[run.hub_chain_id].get("settled_after_return") == max(
-        settled - remote_idle, 0
+        settled - debit, 0
     )
     after = results[run.spoke_chain_id].get("observation_after_return")
     assert after.tracked_idle == 0

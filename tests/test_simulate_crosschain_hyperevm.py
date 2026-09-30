@@ -12,18 +12,26 @@ is configured there.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
-from _crosschain_lifecycle import Run, assert_reverted, run_lifecycle
+from _crosschain_lifecycle import (
+    BIG_CHANGE_EXCEEDED,
+    Run,
+    assert_reverted,
+    attest,
+    run_lifecycle,
+    supply,
+)
 from _crosschain_pilot import assert_pilot_code, assert_pilot_deployment
 from _crosschain_recovery import (
     run_failed_deposit_recovery,
     run_unfunded_return_recovery,
 )
 from _foundry import FoundryContract, compile_foundry_contracts
-from eth_abi import encode
+from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
@@ -41,6 +49,7 @@ from ipor_fusion import (
     CrosschainSubstrateLib,
     CrosschainTransportKind,
     LaneFuses,
+    OutboundMessage,
     PlasmaVault,
     PriceOracleMiddlewareManager,
     Roles,
@@ -52,6 +61,7 @@ from ipor_fusion import (
 )
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fusion_factory import FusionFactory
+from ipor_fusion.crosschain.logs import log_bytes, log_topic0
 from ipor_fusion.types import Amount, ChainId, MarketId, Shares
 
 ARBITRUM = ChainId(42161)
@@ -177,6 +187,29 @@ USDC = RehearsalAsset(
     configure_factory=True,
 )
 REHEARSAL_ASSETS = (HTEST, USDC)
+
+
+class _CctpFeeTransport(CcipTransport):
+    """Model a fixed destination-side CCTP deduction in each token leg."""
+
+    def __init__(self, chains: Iterable[CcipChain], *, fee_raw_units: int) -> None:
+        super().__init__(chains)
+        self.fee_raw_units = fee_raw_units
+
+    def outbound_messages(
+        self, src_chain_id: ChainId, logs: Iterable[Mapping]
+    ) -> list[OutboundMessage]:
+        messages = super().outbound_messages(src_chain_id, logs)
+        adjusted = []
+        for message in messages:
+            if message.token_amount:
+                if message.token_amount <= self.fee_raw_units:
+                    raise ValueError("CCTP test fee must be below the token amount")
+                message = replace(
+                    message, token_amount=message.token_amount - self.fee_raw_units
+                )
+            adjusted.append(message)
+        return adjusted
 
 
 def test_simulate_contract_creation(web3_arb):
@@ -557,6 +590,118 @@ def test_simulate_usdc_configuration_and_rounding(web3_arb, web3_hyperevm):
     _check_spoke_usdc_rounding(run, web3_hyperevm)
 
 
+@pytest.mark.parametrize(
+    "fee_raw_units", (0, 24), ids=("no-fee-control", "cctp-fee")
+)
+def test_simulate_usdc_cctp_fee_in_both_directions(
+    web3_arb, web3_hyperevm, fee_raw_units
+):
+    """Full recalls expose both vault rounding and the added CCTP fee residue."""
+    # These pins observed both USDC token lanes open; the older acceptance pins
+    # intentionally remain unchanged until the pilot factories enable USDC.
+    asset = replace(USDC, blocks=(510_124_921, 47_228_089))
+    base = _asset_transport(asset)
+    transport = _CctpFeeTransport(
+        (base.chain(chain) for chain in (ARBITRUM, HYPEREVM)),
+        fee_raw_units=fee_raw_units,
+    )
+    run = _prepare_asset_run(web3_arb, web3_hyperevm, asset, transport=transport)
+    run.recall_min_return_bps = 10_000
+
+    run_lifecycle(run)
+
+    transfers = [message for message in run.csim.delivered if message.token_amount]
+    assert [message.src_chain_id for message in transfers] == [ARBITRUM, HYPEREVM]
+    for message in transfers:
+        assert (
+            message.raw.token_transfer[0].amount - message.token_amount
+            == fee_raw_units
+        )
+    hub = run.csim.results[ARBITRUM]
+    assert hub.get("outbound_after_send") == transfers[0].raw.token_transfer[0].amount
+    assert hub.get("settled_after_settle") == transfers[0].token_amount
+    assert hub.get("idle_ledger") == transfers[1].token_amount
+    rounding = (
+        transfers[0].token_amount - transfers[1].raw.token_transfer[0].amount
+    )
+    residue = hub.get("settled_after_return")
+    assert residue == rounding + fee_raw_units
+    below_minimum_topic = Web3.keccak(
+        text="ReturnBelowMinimumCredited(uint256,bytes32,uint256,uint256)"
+    )
+    below_minimum = [
+        log
+        for call in hub.calls
+        for log in call.logs
+        if log_topic0(log) == below_minimum_topic
+    ]
+    assert len(below_minimum) == (1 if fee_raw_units else 0)
+    if below_minimum:
+        chain_id, _operation_id, received, minimum = decode(
+            ["uint256", "bytes32", "uint256", "uint256"],
+            log_bytes(below_minimum[0]["data"]),
+        )
+        assert chain_id == HYPEREVM
+        assert received == transfers[1].token_amount
+        assert minimum == transfers[1].raw.token_transfer[0].amount
+
+    run.advance(run.staleness_max + 1)
+    if residue:
+        run.expected_failures.add("nav_after_residue")
+    run.hub.observe("nav_after_residue", run.lane.get_balance())
+    results = run.relay()
+    if residue:
+        stale_nav = next(
+            call for call in results[ARBITRUM].calls if call.label == "nav_after_residue"
+        )
+        assert_reverted(stale_nav, "ObservationStale(uint256)")
+    else:
+        assert results[ARBITRUM].get("nav_after_residue") == 0
+
+
+def test_simulate_usdc_cctp_fee_alone_leaves_unattestable_residue(
+    web3_arb, web3_hyperevm
+):
+    """Without a spoke vault deposit, only the return token-pool fee remains."""
+    asset = replace(USDC, blocks=(510_124_921, 47_228_089))
+    base = _asset_transport(asset)
+    transport = _CctpFeeTransport(
+        (base.chain(chain) for chain in (ARBITRUM, HYPEREVM)), fee_raw_units=24
+    )
+    run = _prepare_asset_run(web3_arb, web3_hyperevm, asset, transport=transport)
+    credited = supply(run)
+    attest(run, tag="initial", observation_label="observation_after_settle")
+
+    run.hub.execute([run.lane.recall(amount=credited, min_return=credited)])
+    run.relay()
+    run.csim.observe(ARBITRUM, "idle_after_recall", run.lane.idle_ledger())
+    run.csim.observe(
+        ARBITRUM, "settled_after_recall", run.lane.settled_remote_balance()
+    )
+    run.csim.observe(HYPEREVM, "observation_after_recall", run.lane.observation())
+    results = run.relay()
+    received = results[ARBITRUM].get("idle_after_recall")
+    assert received == credited - 24
+    assert results[ARBITRUM].get("settled_after_recall") == 24
+    assert results[HYPEREVM].get("observation_after_recall").tracked_idle == 0
+
+    attest(
+        run,
+        tag="zero_after_fee",
+        observation_label="observation_after_recall",
+        hub_idle=received,
+        approve_error=BIG_CHANGE_EXCEEDED,
+    )
+    run.advance(run.staleness_max + 1)
+    run.expected_failures.add("nav_after_fee_only")
+    run.hub.observe("nav_after_fee_only", run.lane.get_balance())
+    results = run.relay()
+    stale_nav = next(
+        call for call in results[ARBITRUM].calls if call.label == "nav_after_fee_only"
+    )
+    assert_reverted(stale_nav, "ObservationStale(uint256)")
+
+
 def _check_hub_usdc_roundtrip(run: Run):
     run.hub.observe("hub_share_decimals", run.vault.decimals())
     results = run.relay()
@@ -620,7 +765,12 @@ def _check_spoke_usdc_rounding(run: Run, web3):
 
 
 def _prepare_asset_run(
-    web3_arb, web3_hyperevm, asset: RehearsalAsset, *, whitelist_dispatcher=True
+    web3_arb,
+    web3_hyperevm,
+    asset: RehearsalAsset,
+    *,
+    whitelist_dispatcher=True,
+    transport: CcipTransport | None = None,
 ) -> Run:
     artifacts = _compile_crosschain_fuses()
     arb_ctx = _ctx(web3_arb, ARBITRUM, asset.blocks[0])
@@ -649,7 +799,7 @@ def _prepare_asset_run(
     executor = ccip_factory.compute_executor_address(OWNER, user_salt).call()
     route = replace(ccip_factory.ccip_route(HYPEREVM).call(), peer=executor)
 
-    simulator = CrosschainSimulator(_asset_transport(asset))
+    simulator = CrosschainSimulator(transport or _asset_transport(asset))
     hub = simulator.add_chain(
         ARBITRUM,
         web3_arb,

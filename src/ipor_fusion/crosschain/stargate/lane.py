@@ -35,6 +35,7 @@ class StargateLane(CrosschainLane):
     them or to add a native drop."""
 
     transport_kind = CrosschainTransportKind.STARGATE_LAYERZERO
+    enforces_min_received = True
     BALANCE_PROPOSED_TOPIC = keccak(
         text="BalanceProposed(uint256,uint256,uint256,uint64,uint64,uint64,uint64,bytes32)"
     )

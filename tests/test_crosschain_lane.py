@@ -114,6 +114,7 @@ def test_lane_rejects_a_dispatcher_at_another_address():
 class TestActions:
     def test_stargate_actions_match_the_fuses(self):
         lane = _stargate_lane()
+        assert lane.enforces_min_received is True
         supply = StargateCrosschainSupplyFuse(FUSES.supply)
         assert lane.supply(
             asset=USDC, amount=1_000_000, min_received=990_000
@@ -159,12 +160,11 @@ class TestActions:
 
     def test_ccip_actions_match_the_fuses(self):
         lane = _ccip_lane()
+        assert lane.enforces_min_received is False
         supply = CcipCrosschainSupplyFuse(FUSES.supply)
         token_send = CcipSendParams(max_fee=10**16, gas_limit=1_000_000)
         message_send = CcipSendParams(max_fee=10**16, gas_limit=1_200_000)
-        assert lane.supply(
-            asset=USDC, amount=100_000, min_received=100_000
-        ) == supply.enter(
+        assert lane.supply(asset=USDC, amount=100_000, min_received=0) == supply.enter(
             executor=EXECUTOR,
             asset=USDC,
             dst_chain_id=SPOKE,
@@ -185,7 +185,9 @@ class TestActions:
             executor=EXECUTOR, chain_id=SPOKE, command=cmd, send=message_send
         )
         assert lane.default_command_send() == message_send
-        with pytest.raises(ValueError, match="min_received 2 exceeds amount 1"):
+        with pytest.raises(ValueError, match="CCIP cannot enforce min_received"):
+            lane.supply(asset=USDC, amount=1, min_received=1)
+        with pytest.raises(ValueError, match="CCIP cannot enforce min_received"):
             lane.supply(asset=USDC, amount=1, min_received=2)
         with pytest.raises(TypeError, match="CcipLane takes CcipSendParams"):
             lane.supply(

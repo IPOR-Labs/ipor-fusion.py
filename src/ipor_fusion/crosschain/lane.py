@@ -70,6 +70,8 @@ class CrosschainLane(ABC):
     """One executor/dispatcher pair on one spoke chain, transport-agnostic."""
 
     transport_kind: ClassVar[CrosschainTransportKind]
+    #: Whether ``supply`` can enforce ``min_received`` after bridge fees.
+    enforces_min_received: ClassVar[bool]
     #: The fuse encoders of this transport, instantiated on ``fuses``.
     supply_fuse_cls: ClassVar[type[CrosschainSupplyFuse]]
     command_fuse_cls: ClassVar[type[CrosschainCommandFuse]]
@@ -128,9 +130,9 @@ class CrosschainLane(ABC):
         min_received: Amount,
         send: SendParams | None = None,
     ) -> FuseAction:
-        """Bridge ``amount`` of ``asset`` to the dispatcher, requiring at least
-        ``min_received`` to be credited there (the transport's slippage floor;
-        CCIP delivers 1:1 and only checks the bound is not above ``amount``)."""
+        """Bridge ``amount`` of ``asset`` to the dispatcher. When
+        ``enforces_min_received`` is false, pass ``min_received=0`` and inspect
+        the settlement receipt for the amount actually credited."""
         params = send if send is not None else self.default_send(token=True)
         return self.supply_fuse.enter(
             executor=self.executor_address,
@@ -144,7 +146,9 @@ class CrosschainLane(ABC):
         self, *, amount: Amount, min_return: Amount, send: SendParams | None = None
     ) -> FuseAction:
         """Ask the dispatcher to return ``amount`` of its tracked idle; the
-        tokens land in the executor's idle ledger later, then ``claim``."""
+        tokens land in the executor's idle ledger later, then ``claim``. On
+        CCIP, ``min_return`` is checked on the spoke before bridge fees; the
+        hub credits the post-fee amount even if it is below that floor."""
         return self.supply_fuse.exit(
             executor=self.executor_address,
             dst_chain_id=self.spoke_chain_id,

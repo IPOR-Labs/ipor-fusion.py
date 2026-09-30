@@ -33,6 +33,7 @@ class CcipLane(CrosschainLane):
     to report the dispatcher observation in local decimals."""
 
     transport_kind = CrosschainTransportKind.CHAINLINK_CCIP
+    enforces_min_received = False
     BALANCE_PROPOSED_TOPIC = keccak(
         text="BalanceProposed(uint256,uint256,uint256,uint64,bytes32)"
     )
@@ -98,10 +99,11 @@ class CcipLane(CrosschainLane):
     ) -> CcipSendParams:
         if not isinstance(send, CcipSendParams):
             raise TypeError(f"CcipLane takes CcipSendParams, got {type(send).__name__}")
-        # CCIP credits the sent amount 1:1 on the destination; a floor above it
-        # can never be met, so it is a caller error rather than a transport param.
-        if min_received > amount:
-            raise ValueError(f"min_received {min_received} exceeds amount {amount}")
+        if min_received != 0:
+            raise ValueError(
+                "CCIP cannot enforce min_received after token-pool fees; "
+                "pass 0 and inspect the settlement receipt"
+            )
         return send
 
     def remote_state_version(self) -> Call[int]:
