@@ -37,6 +37,7 @@ from ipor_fusion.fuses.fluid_instadapp import (
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
 from ipor_fusion.fuses.hypercore import (
+    USDC_SYSTEM_ADDRESS,
     HyperCoreBuilderFeeFuse,
     HyperCoreCancelFuse,
     HyperCoreConfigKey,
@@ -53,6 +54,7 @@ from ipor_fusion.fuses.hypercore import (
     is_supported_perp_dex,
     perp_dex_of,
     read_index_of,
+    system_address,
 )
 from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
@@ -2160,6 +2162,13 @@ class TestHyperCoreFuses:
         assert action.data[:4] == _selector("enter((address,uint64))")
         ((builder, rate),) = decode(["(address,uint64)"], action.data[4:])
         assert (builder.lower(), rate) == (TOKEN_B_LOW, 1)
+
+    def test_system_address(self):
+        assert system_address(0) == USDC_SYSTEM_ADDRESS
+        assert system_address(1) == "0x2000000000000000000000000000000000000001"
+        assert system_address(2**32 - 1).lower().endswith("ffffffff")
+        with pytest.raises(ValueError, match="uint32"):
+            system_address(1 << 32)
 
     def test_hip3_identifiers(self):
         # HyperCoreLib: native assets are < 10_000, HIP-3 assets are

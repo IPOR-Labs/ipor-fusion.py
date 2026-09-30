@@ -39,6 +39,7 @@ from ipor_fusion.fuses.hypercore import (
     HyperCoreSubstrates,
     SettlementMode,
     TimeInForce,
+    system_address,
 )
 from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
@@ -115,6 +116,7 @@ __all__ = [
     "HyperCoreSubstrates",
     "SettlementMode",
     "TimeInForce",
+    "system_address",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",

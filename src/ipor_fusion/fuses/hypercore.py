@@ -46,6 +46,7 @@ from __future__ import annotations
 from enum import IntEnum
 
 from eth_typing import ChecksumAddress
+from eth_utils import to_checksum_address
 
 from ipor_fusion.fuses.base import (
     Fuse,
@@ -66,6 +67,7 @@ USDC_TOKEN_INDEX = 0
 USDC_SYSTEM_ADDRESS: ChecksumAddress = ChecksumAddress(
     "0x2000000000000000000000000000000000000000"
 )
+_SYSTEM_ADDRESS_BASE = 0x2000000000000000000000000000000000000000
 #: HIP-3 perp dexes the fuses admit on HyperEVM mainnet (HyperCoreLib
 #: ``SUPPORTED_HIP3_DEX_MASK``: xyz 1, abcd 6, para 8, mkts 9, io 10); on any
 #: other chain the set is empty.
@@ -173,6 +175,15 @@ def _validate_positive_uint(value: int, bits: int, name: str) -> None:
     if value <= 0:
         raise ValueError(f"{name} must be greater than zero, got {value}")
     _validate_uint(value, bits, name)
+
+
+def system_address(token_index: int) -> ChecksumAddress:
+    """``HyperCoreLib.systemAddress``: the Core -> EVM route of Core token
+    ``token_index`` (``0x2000…0000 + tokenIndex``; :data:`USDC_SYSTEM_ADDRESS`
+    for token 0). A spot -> spot ``sendAsset`` or ``spotSend`` to it credits the
+    sender's EVM balance; tokens above ``uint32`` have no system address."""
+    _validate_uint(token_index, 32, "token_index")
+    return to_checksum_address(_SYSTEM_ADDRESS_BASE + token_index)
 
 
 class HyperCoreDepositFuse(Fuse):
@@ -311,9 +322,14 @@ class HyperCoreSubstrates:
     data)``. The Atomist grants a SpotToken for every Core token the vault may
     hold (an unlisted token is not in NAV), a PerpMarket per tradable market
     (at most one when any of them is HIP-3), Destinations for ``sendAsset`` /
-    ``spotSend`` (the vault itself and, for the Core -> EVM route, the token's
-    system address), a SendCap per token, Builders, and the Config keys.
-    :func:`ipor_fusion.decode_substrate` inverts these.
+    ``spotSend`` (only the vault itself and, for the Core -> EVM route, the
+    token's :func:`system_address` are accepted by the fuses), a SendCap per
+    token (mandatory: a token without one cannot be sent), Builders, and the
+    Config keys. ``WINDOW_ORDER_SECONDS`` and ``SETTLEMENT_MODE`` are required
+    before any order or cancel, ``MAX_USD_CLASS_TRANSFER_USD6`` before a margin
+    transfer; ``WINDOW_TRANSFER_SECONDS`` defaults to 2 s and
+    ``SPOT_SEND_BRIDGE_ENABLED`` to disabled. :func:`ipor_fusion.decode_substrate`
+    inverts these.
     """
 
     @staticmethod

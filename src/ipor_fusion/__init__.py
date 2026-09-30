@@ -124,6 +124,7 @@ from ipor_fusion.fuses import (
     UniversalTokenSwapperFuse,
     UniversalTokenSwapperSubstrates,
     euler_substrate,
+    system_address,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers import (
@@ -259,6 +260,7 @@ __all__ = [
     "HyperCoreSubstrates",
     "SettlementMode",
     "TimeInForce",
+    "system_address",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",
