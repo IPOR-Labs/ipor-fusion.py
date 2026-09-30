@@ -3,8 +3,10 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import patch
 
 import pytest
+from _multicall import SequentialMulticall
 from dotenv import load_dotenv
 from web3 import Web3
 
@@ -37,6 +39,14 @@ def pytest_addoption(parser):
         default=False,
         help="Include live crosschain readiness checks; combine with -m readiness to run only those checks.",
     )
+
+
+@pytest.fixture
+def sequential_multicall():
+    """Run the vault fetch's batched reads one `Call` at a time, for tests that
+    mock contract wrappers (`.call.return_value`) instead of raw eth_call data."""
+    with patch("ipor_fusion.cli.vault_fetcher.Multicall3", SequentialMulticall):
+        yield
 
 
 def pytest_collection_modifyitems(config, items):

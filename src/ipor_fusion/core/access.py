@@ -12,6 +12,7 @@ from web3.types import LogReceipt
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
 from ipor_fusion.types import Period, RoleId
@@ -126,30 +127,28 @@ class AccessManager(ContractWrapper):
         events: list[LogReceipt],
         predicate: "Callable[[int, str], bool]",
     ) -> list[RoleAccount]:
-        # N+1 RPC: each candidate requires a has_role() call; multicall would fix
-        # this but is out of scope.
-        role_accounts: list[RoleAccount] = []
-        seen: set[tuple[int, str]] = set()
+        # A re-granted (role, account) emits multiple RoleGranted events; the
+        # dict keeps each candidate once, in first-grant order.
+        candidates: dict[tuple[int, str], None] = {}
         for event in events:
             (role_id,) = decode(["uint64"], event["topics"][1])
             (account,) = decode(["address"], event["topics"][2])
-            if not predicate(role_id, account):
-                continue
-            # A re-granted (role, account) emits multiple RoleGranted events.
-            if (role_id, account) in seen:
-                continue
-            seen.add((role_id, account))
-            role_status = self.has_role(role_id, account).call()
-            if role_status.is_member:
-                role_accounts.append(
-                    RoleAccount(
-                        account=Web3.to_checksum_address(account),
-                        role_id=role_id,
-                        is_member=role_status.is_member,
-                        execution_delay=role_status.execution_delay,
-                    )
-                )
-        return role_accounts
+            if predicate(role_id, account):
+                candidates[(role_id, account)] = None
+
+        statuses = Multicall3(self._ctx).aggregate(
+            [self.has_role(role_id, account) for role_id, account in candidates]
+        )
+        return [
+            RoleAccount(
+                account=Web3.to_checksum_address(account),
+                role_id=role_id,
+                is_member=status.is_member,
+                execution_delay=status.execution_delay,
+            )
+            for (role_id, account), status in zip(candidates, statuses, strict=True)
+            if status.is_member
+        ]
 
     def _get_grant_role_events(self) -> list[LogReceipt]:
         event_signature_hash = HexBytes(

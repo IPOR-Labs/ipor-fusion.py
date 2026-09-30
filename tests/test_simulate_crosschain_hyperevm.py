@@ -590,9 +590,7 @@ def test_simulate_usdc_configuration_and_rounding(web3_arb, web3_hyperevm):
     _check_spoke_usdc_rounding(run, web3_hyperevm)
 
 
-@pytest.mark.parametrize(
-    "fee_raw_units", (0, 24), ids=("no-fee-control", "cctp-fee")
-)
+@pytest.mark.parametrize("fee_raw_units", (0, 24), ids=("no-fee-control", "cctp-fee"))
 def test_simulate_usdc_cctp_fee_in_both_directions(
     web3_arb, web3_hyperevm, fee_raw_units
 ):
@@ -614,16 +612,13 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
     assert [message.src_chain_id for message in transfers] == [ARBITRUM, HYPEREVM]
     for message in transfers:
         assert (
-            message.raw.token_transfer[0].amount - message.token_amount
-            == fee_raw_units
+            message.raw.token_transfer[0].amount - message.token_amount == fee_raw_units
         )
     hub = run.csim.results[ARBITRUM]
     assert hub.get("outbound_after_send") == transfers[0].raw.token_transfer[0].amount
     assert hub.get("settled_after_settle") == transfers[0].token_amount
     assert hub.get("idle_ledger") == transfers[1].token_amount
-    rounding = (
-        transfers[0].token_amount - transfers[1].raw.token_transfer[0].amount
-    )
+    rounding = transfers[0].token_amount - transfers[1].raw.token_transfer[0].amount
     residue = hub.get("settled_after_return")
     assert residue == rounding + fee_raw_units
     below_minimum_topic = Web3.keccak(
@@ -652,7 +647,9 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
     results = run.relay()
     if residue:
         stale_nav = next(
-            call for call in results[ARBITRUM].calls if call.label == "nav_after_residue"
+            call
+            for call in results[ARBITRUM].calls
+            if call.label == "nav_after_residue"
         )
         assert_reverted(stale_nav, "ObservationStale(uint256)")
     else:

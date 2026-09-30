@@ -11,7 +11,8 @@ from web3.exceptions import Web3RPCError
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
-from ipor_fusion.cli.vault_cmd import _fetch_role_accounts_json
+from ipor_fusion.cli.vault_cmd import _role_accounts_json
+from ipor_fusion.cli.vault_fetcher import _fetch_role_accounts, _VaultData
 from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.errors import NotPlasmaVaultError
 from ipor_fusion.types import Period, RoleId
@@ -185,28 +186,55 @@ class TestRoleAccounts:
         assert "Traceback" not in result.output
 
 
-class TestFetchRoleAccountsJson:
+class TestFetchRoleAccounts:
     @staticmethod
-    def _data() -> MagicMock:
-        data = MagicMock()
-        data.access_manager = MANAGER
-        return data
+    def _vault() -> MagicMock:
+        vault = MagicMock()
+        vault.get_access_manager_address.return_value.call.return_value = MANAGER
+        return vault
+
+    def test_returns_members_in_canonical_order(self):
+        accounts = [_role_account(100, BOB), _role_account(1, ALICE)]
+        with patch(
+            "ipor_fusion.cli.vault_fetcher.AccessManager",
+            return_value=_mock_manager(accounts),
+        ) as manager_cls:
+            result = _fetch_role_accounts(MagicMock(), self._vault())
+
+        assert result == [_role_account(1, ALICE), _role_account(100, BOB)]
+        assert manager_cls.call_args.args[1] == MANAGER
 
     def test_transport_failure_degrades_to_none(self):
         ctx = MagicMock()
         ctx.get_logs.side_effect = requests.exceptions.ReadTimeout("timed out")
 
-        assert _fetch_role_accounts_json(ctx, self._data()) is None
+        assert _fetch_role_accounts(ctx, self._vault()) is None
 
     def test_rpc_rejection_degrades_to_none(self):
         ctx = MagicMock()
         ctx.get_logs.side_effect = Web3RPCError("log range too large")
 
-        assert _fetch_role_accounts_json(ctx, self._data()) is None
+        assert _fetch_role_accounts(ctx, self._vault()) is None
 
     def test_unexpected_errors_propagate(self):
         ctx = MagicMock()
         ctx.get_logs.side_effect = RuntimeError("bug, not a provider issue")
 
         with pytest.raises(RuntimeError, match="bug"):
-            _fetch_role_accounts_json(ctx, self._data())
+            _fetch_role_accounts(ctx, self._vault())
+
+
+class TestRoleAccountsJson:
+    @staticmethod
+    def _data(role_accounts: list[RoleAccount] | None) -> _VaultData:
+        data = MagicMock(spec=_VaultData)
+        data.role_accounts = role_accounts
+        return data
+
+    def test_failed_scan_stays_null(self):
+        assert _role_accounts_json(self._data(None)) is None
+
+    def test_rows_use_the_canonical_shape(self):
+        assert _role_accounts_json(self._data([_role_account(100, ALICE)])) == [
+            _role_account(100, ALICE).to_dict()
+        ]

@@ -5,6 +5,7 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.erc20 import ERC20
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.types import Amount
 
 _ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
@@ -150,23 +151,33 @@ class AaveV3Reader(ContractWrapper):
     ) -> AaveV3PositionBreakdown:
         """Return the user's position in `asset` as supply / variable / stable amounts.
 
-        Combines `getReserveData()` with `balanceOf()` on each reserve token.
-        A zero token address counts as a zero balance, as in the IPOR Fusion
-        Aave V3 balance fuse: stable debt is zeroed on reserves that dropped
-        it, and every token is zero when `asset` is not listed on this Pool.
+        Combines `getReserveData()` with `balanceOf()` on each reserve token,
+        the balances batched in one Multicall3 round trip. A zero token address
+        counts as a zero balance, as in the IPOR Fusion Aave V3 balance fuse:
+        stable debt is zeroed on reserves that dropped it, and every token is
+        zero when `asset` is not listed on this Pool.
         """
         tokens = self.reserve_tokens(asset).call()
+        reserve_tokens = (
+            tokens.a_token,
+            tokens.variable_debt_token,
+            tokens.stable_debt_token,
+        )
+        listed = [token for token in reserve_tokens if token.lower() != _ZERO_ADDRESS]
+        balances = iter(
+            Multicall3(self._ctx).aggregate(
+                [ERC20(self._ctx, token).balance_of(user) for token in listed]
+            )
+        )
+        supply, variable_debt, stable_debt = (
+            next(balances) if token in listed else Amount(0) for token in reserve_tokens
+        )
         return AaveV3PositionBreakdown(
             asset=asset,
             a_token=tokens.a_token,
             variable_debt_token=tokens.variable_debt_token,
             stable_debt_token=tokens.stable_debt_token,
-            supply=self._balance_of(tokens.a_token, user),
-            variable_debt=self._balance_of(tokens.variable_debt_token, user),
-            stable_debt=self._balance_of(tokens.stable_debt_token, user),
+            supply=supply,
+            variable_debt=variable_debt,
+            stable_debt=stable_debt,
         )
-
-    def _balance_of(self, token: ChecksumAddress, user: ChecksumAddress) -> Amount:
-        if token.lower() == _ZERO_ADDRESS:
-            return Amount(0)
-        return ERC20(self._ctx, token).balance_of(user).call()

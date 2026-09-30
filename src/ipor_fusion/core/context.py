@@ -79,6 +79,11 @@ class Web3Context:
         web3 = Web3(
             Web3.HTTPProvider(url, request_kwargs={"timeout": request_timeout_s})
         )
+        # web3's validation middleware fetches eth_chainId (uncached) on the
+        # request AND the response of every eth_call/eth_estimateGas, tripling
+        # round trips, only to check a tx "chainId" field. Reads never carry
+        # one, and `build_transaction` sets it from the chain id read below.
+        web3.middleware_onion.remove("validation")
         chain_id = ChainId(web3.eth.chain_id)
 
         return cls(
@@ -172,7 +177,8 @@ class Web3Context:
     def get_logs(
         self,
         contract_address: ChecksumAddress,
-        topics: list[str],
+        # Per position: one topic, or a list of alternatives (OR).
+        topics: list[str | list[str]],
         from_block: BlockIdentifier = 0,
         to_block: BlockIdentifier = "latest",
     ) -> list[LogReceipt]:

@@ -28,6 +28,7 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
+from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
     PriceOracleMiddleware,
@@ -241,6 +242,8 @@ __all__ = [
     "repository_url",
     "Web3Context",
     "Call",
+    "Multicall3",
+    "MULTICALL3_ADDRESS",
     "VaultSimulator",
     "SimulationResult",
     "SimulatedCallResult",

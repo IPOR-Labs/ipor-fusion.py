@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.providers.rpc import HTTPProvider
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
@@ -111,6 +112,24 @@ class TestFromUrl:
         mock_web3_cls.HTTPProvider.assert_called_once_with(
             "http://localhost:8545", request_kwargs={"timeout": 10.0}
         )
+
+    def test_reads_do_not_refetch_the_chain_id(self):
+        """web3's validation middleware re-fetches eth_chainId around every
+        eth_call, tripling the round trips of each read; from_url drops it."""
+        methods: list[str] = []
+
+        def make_request(_provider, method, _params):
+            methods.append(method)
+            result = "0x1" if method == "eth_chainId" else "0x" + "00" * 32
+            return {"jsonrpc": "2.0", "id": 1, "result": result}
+
+        with patch.object(HTTPProvider, "make_request", make_request):
+            ctx = Web3Context.from_url("http://localhost:8545")
+            target = Web3.to_checksum_address("0x" + "11" * 20)
+            ctx.call(target, b"\x12\x34\x56\x78")
+            ctx.call(target, b"\x12\x34\x56\x78")
+
+        assert methods == ["eth_chainId", "eth_call", "eth_call"]
 
 
 # ── send ────────────────────────────────────────────────────────────────

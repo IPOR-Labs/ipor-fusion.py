@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+from typing import Any
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
@@ -10,6 +11,7 @@ from web3.types import Timestamp
 from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.errors import MorphoMarketNotFoundError, UnsupportedChainError
 from ipor_fusion.types import Amount, Fee, MorphoBlueMarketId, Shares
 
@@ -175,11 +177,15 @@ class MorphoReader(ContractWrapper):
     ) -> MorphoPositionBreakdown:
         """Return the user's position with shares converted to asset amounts.
 
-        Combines `position()`, `market()`, and `market_params()` reads.
+        Combines `position()`, `market()`, and `market_params()` reads in one
+        Multicall3 round trip.
         """
-        pos = self.position(market_id, user).call()
-        market = self.market(market_id).call()
-        params = self.market_params(market_id).call()
+        calls: list[Call[Any]] = [
+            self.position(market_id, user),
+            self.market(market_id),
+            self.market_params(market_id),
+        ]
+        pos, market, params = Multicall3(self._ctx).aggregate(calls)
         if market.total_borrow_shares > 0:
             borrow_assets = math.ceil(
                 pos.borrow_shares
