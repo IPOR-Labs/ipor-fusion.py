@@ -153,6 +153,36 @@ def compile_foundry_contracts(
         }
 
 
+def git_revision(project_root: str | Path) -> str:
+    """``HEAD`` of the checkout at ``project_root``, suffixed ``-dirty`` when a
+    tracked file has uncommitted changes.
+
+    Tests that compile from a checkout pin this value: an unpinned working tree
+    would move the compiled bytecode with whatever it happens to contain, and
+    the test outcome with it, for reasons unrelated to the SDK.
+    """
+    root = Path(project_root).expanduser().resolve()
+    git = shutil.which("git")
+    if git is None:
+        raise SolidityCompilationError("git was not found on PATH")
+
+    def run(*args: str) -> str:
+        completed = subprocess.run(  # noqa: S603 - resolved via shutil.which
+            [git, "-C", str(root), *args],
+            capture_output=True,
+            text=True,
+            timeout=30.0,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise ValueError(f"not a git checkout: {root} ({completed.stderr.strip()})")
+        return completed.stdout
+
+    head = run("rev-parse", "HEAD").strip()
+    dirty = run("status", "--porcelain", "--untracked-files=no").strip()
+    return f"{head}-dirty" if dirty else head
+
+
 def _source_path(root: Path, contract: FoundryContract) -> Path:
     if not contract.source or not contract.name:
         raise ValueError("contract source and name must not be empty")

@@ -30,7 +30,7 @@ from _crosschain_recovery import (
     run_failed_deposit_recovery,
     run_unfunded_return_recovery,
 )
-from _foundry import FoundryContract, compile_foundry_contracts
+from _foundry import FoundryContract, compile_foundry_contracts, git_revision
 from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from web3 import Web3
@@ -141,6 +141,12 @@ FUSE_CONTRACTS = (
         "CrosschainBalanceFuse",
     ),
 )
+# Only the fuses are compiled from source. The executor and dispatcher that
+# the lifecycle creates come from the creation code the pilot factories store
+# on chain, so the accounting under test is the deployed pilot generation, not
+# the checkout's. The checkout is pinned regardless: bump deliberately, with
+# the fuse ABI re-checked against the encoders.
+FUSE_SOURCE_REVISION = "827ada02eabdc01eae913de1114fa5bea45ee205"
 CROSSCHAIN_MARKET = MarketId(54)
 
 
@@ -179,7 +185,9 @@ USDC = RehearsalAsset(
         Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f"),
     ),
     6,
-    (509_959_086, 47_183_474),
+    # The readiness probe's re-pin candidates of 2026-10-01 (same timestamp on
+    # both chains), after the owner enabled USDC on both pilot factories.
+    (510_648_595, 47_375_011),
     (
         Web3.to_checksum_address("0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3"),
         Web3.to_checksum_address("0xA0Adc43ce7AfE3EE7d7eac3C994E178D0620223B"),
@@ -303,6 +311,12 @@ def _compile_crosschain_fuses():
     contracts_dir = os.environ.get("IPOR_FUSION_CONTRACTS_DIR")
     if not contracts_dir:
         pytest.skip("IPOR_FUSION_CONTRACTS_DIR not set")
+    revision = git_revision(contracts_dir)
+    if revision != FUSE_SOURCE_REVISION:
+        pytest.skip(
+            f"IPOR_FUSION_CONTRACTS_DIR is at {revision}; "
+            f"these tests pin {FUSE_SOURCE_REVISION}"
+        )
     remappings = tuple(
         item
         for item in os.environ.get("IPOR_FUSION_FOUNDRY_REMAPPINGS", "").split(";")
@@ -521,7 +535,42 @@ def test_simulate_clone_htest_vault(
 @pytest.mark.parametrize("asset", REHEARSAL_ASSETS, ids=lambda asset: asset.symbol)
 def test_simulate_configured_asset_lane(web3_arb, web3_hyperevm, asset):
     _require_token_lanes(web3_arb, web3_hyperevm, asset)
-    run_lifecycle(_prepare_asset_run(web3_arb, web3_hyperevm, asset))
+    run = _prepare_asset_run(web3_arb, web3_hyperevm, asset)
+    run_lifecycle(run)
+    _assert_token_deliveries_within_gas_limit(run, web3_hyperevm, asset)
+
+
+def _assert_token_deliveries_within_gas_limit(run: Run, web3_hyperevm, asset):
+    """Every token-carrying delivery ran within its route's token gas limit.
+
+    The relay calls ``ccipReceive`` directly, so ``gas_used`` is the receiver's
+    own handling (deposit on the spoke, settlement on the hub). The token
+    pool's release or mint is outside it, as it is for the live OffRamp, which
+    meters the receiver call separately."""
+    assert isinstance(run.lane, CcipLane)
+    spoke_factory = CcipCrosschainFactory(
+        _ctx(web3_hyperevm, HYPEREVM, asset.blocks[1]), FACTORY
+    )
+    limits = {
+        HYPEREVM: run.lane.route.token_gas_limit,
+        ARBITRUM: spoke_factory.ccip_route(ARBITRUM).call().token_gas_limit,
+    }
+    token_legs = [message for message in run.csim.delivered if message.token_amount]
+    assert [message.dst_chain_id for message in token_legs] == [HYPEREVM, ARBITRUM]
+    for message in token_legs:
+        label = f"ccip_receive:{message.message_id.hex()[:8]}"
+        delivery = next(
+            call
+            for call in run.csim.results[message.dst_chain_id].calls
+            if call.label == label
+        )
+        run.log(
+            "token delivery gas",
+            dst_chain_id=message.dst_chain_id,
+            gas_used=delivery.gas_used,
+            token_gas_limit=limits[message.dst_chain_id],
+        )
+        assert 0 < delivery.gas_used <= limits[message.dst_chain_id]
 
 
 @pytest.mark.parametrize("cancel", (False, True), ids=("retry", "cancel"))
@@ -549,9 +598,9 @@ def test_usdc_pinned_prerequisites(web3_arb, web3_hyperevm, index):
     assert token.symbol().call() == "USDC"
     assert token.decimals().call() == 6
     assert CcipCrosschainFactory(ctx, FACTORY).asset_config(USDC.asset_id).call() == (
-        ZERO_ADDRESS,
-        0,
-        False,
+        USDC.tokens[index],
+        USDC.decimals,
+        True,
     )
     assert (
         Web3.to_checksum_address(_factory_view(ctx, "OWNER()", ["address"]).call())
@@ -580,7 +629,7 @@ def test_usdc_pinned_prerequisites(web3_arb, web3_hyperevm, index):
     )
     assert lane.message_lane
     assert lane.pool_version == "USDCTokenPoolProxy 2.0.0"
-    assert lane.token_lane is (index == 1)
+    assert lane.token_lane
 
 
 def test_simulate_usdc_configuration_and_rounding(web3_arb, web3_hyperevm):
@@ -595,8 +644,13 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
     web3_arb, web3_hyperevm, fee_raw_units
 ):
     """Full recalls expose both vault rounding and the added CCTP fee residue."""
-    # These pins observed both USDC token lanes open; the older acceptance pins
-    # intentionally remain unchanged until the pilot factories enable USDC.
+    # These pins observed both USDC token lanes open while the factories still
+    # had USDC disabled, so the run also exercises the asset governance path.
+    # The executor and dispatcher are the deployed pilot generation: the recall
+    # debits the received amount, the fee stays in `settled`, and the relative
+    # gate refuses to re-mark the residue to zero. Contracts IL-8497 (debit the
+    # sent amount) and IL-8499 (attest dust to zero) flip these expectations
+    # once the pilot executors are redeployed from the new creation code.
     asset = replace(USDC, blocks=(510_124_921, 47_228_089))
     base = _asset_transport(asset)
     transport = _CctpFeeTransport(
@@ -659,7 +713,8 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
 def test_simulate_usdc_cctp_fee_alone_leaves_unattestable_residue(
     web3_arb, web3_hyperevm
 ):
-    """Without a spoke vault deposit, only the return token-pool fee remains."""
+    """Without a spoke vault deposit, only the return token-pool fee remains
+    (deployed pilot generation; see the generation note above)."""
     asset = replace(USDC, blocks=(510_124_921, 47_228_089))
     base = _asset_transport(asset)
     transport = _CctpFeeTransport(
@@ -1194,7 +1249,9 @@ def test_ccip_assets_travel_both_ways(web3_arb, web3_hyperevm, symbol, tokens):
         assert lane.token_lane
 
 
-def test_usdc_is_explicitly_disabled(web3_arb, web3_hyperevm):
+def test_usdc_was_disabled_at_acceptance_pins(web3_arb, web3_hyperevm):
+    """The HTEST acceptance pins predate the owner's USDC enablement of
+    2026-10-01; `_enable_factory_asset` simulates the governance from here."""
     asset_id = Web3.keccak(text="USDC")
     for ctx in (
         _ctx(web3_arb, ARBITRUM, ARBITRUM_BLOCK),

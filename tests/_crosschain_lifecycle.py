@@ -599,9 +599,11 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
     if run.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO:
         assert idle >= remote_idle * 98 // 100
     assert results[run.hub_chain_id].get("pending_transfers") == 0
-    # Stargate debits the amount sent from the spoke; CCIP debits the amount
-    # actually received on the hub after any token-pool fee. Vault rounding
-    # remains in the settled bucket until the next attestation.
+    # Stargate debits the amount sent from the spoke. The deployed CCIP
+    # generation debits the amount actually received on the hub after any
+    # token-pool fee; contracts IL-8497 debits the sent amount instead once the
+    # executors are redeployed. Vault rounding remains in the settled bucket
+    # until the next attestation.
     debit = (
         idle
         if run.transport_kind == CrosschainTransportKind.CHAINLINK_CCIP
@@ -621,7 +623,9 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
 def _attest_residue(run: Run, idle: int) -> None:
     """The dispatcher observes zero after a full recall. If the settled bucket
     kept rounding dust, the relative bound refuses to re-mark it to zero;
-    zero-to-zero is the one attestation allowed from an empty bucket."""
+    zero-to-zero is the one attestation allowed from an empty bucket. That is
+    the deployed generation: contracts IL-8499 lets dust at or below 10,000
+    shared-decimal units be attested to zero once the executors are redeployed."""
     residue = run.csim.results[run.hub_chain_id].get("settled_after_return")
     run.log(
         "residue",

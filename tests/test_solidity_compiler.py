@@ -10,6 +10,7 @@ from _foundry import (
     SolidityArtifact,
     SolidityCompilationError,
     compile_foundry_contracts,
+    git_revision,
 )
 
 
@@ -228,3 +229,48 @@ def test_rejects_invalid_artifact(tmp_path, monkeypatch, artifact_data, message)
     monkeypatch.setattr("subprocess.run", run)
     with pytest.raises(SolidityCompilationError, match=message):
         compile_foundry_contracts(tmp_path, (contract,))
+
+
+def _git(monkeypatch, *, head: str = "abc123", status: str = "", returncode: int = 0):
+    monkeypatch.setattr("shutil.which", lambda binary: "/usr/bin/git")
+    captured = []
+
+    def run(command, **kwargs):
+        captured.append(command)
+        stdout = {"rev-parse": f"{head}\n", "status": status}[command[3]]
+        return subprocess.CompletedProcess(command, returncode, stdout, "fatal: x")
+
+    monkeypatch.setattr("subprocess.run", run)
+    return captured
+
+
+def test_git_revision_is_head_of_a_clean_checkout(tmp_path, monkeypatch):
+    captured = _git(monkeypatch)
+
+    assert git_revision(tmp_path) == "abc123"
+    assert [command[:3] for command in captured] == [
+        ["/usr/bin/git", "-C", str(tmp_path)]
+    ] * 2
+    assert captured[1][3:] == ["status", "--porcelain", "--untracked-files=no"]
+
+
+def test_git_revision_marks_tracked_changes_dirty(tmp_path, monkeypatch):
+    # Untracked files are excluded by the status flags, so only a modified
+    # tracked file (which is what gets compiled) makes the revision dirty.
+    _git(monkeypatch, status=" M contracts/Example.sol\n")
+
+    assert git_revision(tmp_path) == "abc123-dirty"
+
+
+def test_git_revision_rejects_a_non_checkout(tmp_path, monkeypatch):
+    _git(monkeypatch, returncode=128)
+
+    with pytest.raises(ValueError, match="not a git checkout"):
+        git_revision(tmp_path)
+
+
+def test_git_revision_reports_missing_git(tmp_path, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda binary: None)
+
+    with pytest.raises(SolidityCompilationError, match="git was not found"):
+        git_revision(tmp_path)
