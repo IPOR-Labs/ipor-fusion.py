@@ -8,7 +8,7 @@ authors = [
 ]
 readme = "README.md"
 license = "BSD-3-Clause"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["ethereum", "defi", "ipor", "plasma-vault", "evm", "web3"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -19,7 +19,6 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -64,7 +63,7 @@ dev = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 # Kept identical to ipor-fusion-dev.py — shared tool config
@@ -88,7 +87,7 @@ max-complexity = 10
 
 [tool.pyright]
 include = ["src", "tests", "examples"]
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 typeCheckingMode = "basic"
 # Resolve imports against the uv-managed ./.venv so an editor-launched pyright (eglot, etc.)
 # matches `uv run pyright`/CI without per-developer interpreter config.
