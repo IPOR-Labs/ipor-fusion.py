@@ -994,6 +994,34 @@ _VIEWS = [
         (1_790_000_000,),
         1_790_000_000,
     ),
+    (CcipCrosschainFactory, "owner", (), "OWNER()", ["address"], (POOL.lower(),), POOL),
+    (
+        CcipCrosschainFactory,
+        "config_delay",
+        (),
+        "CONFIG_DELAY()",
+        ["uint256"],
+        (86_400,),
+        86_400,
+    ),
+    (
+        CcipCrosschainFactory,
+        "executor_creation_code_hash",
+        (),
+        "executorCreationCodeHash()",
+        ["bytes32"],
+        (ASSET_ID,),
+        ASSET_ID,
+    ),
+    (
+        CcipCrosschainFactory,
+        "dispatcher_creation_code_hash",
+        (),
+        "dispatcherCreationCodeHash()",
+        ["bytes32"],
+        (ASSET_ID,),
+        ASSET_ID,
+    ),
 ]
 
 
@@ -1072,6 +1100,66 @@ def test_struct_views():
         CcipCrosschainFactory, ["address", "uint8", "bool"], (POOL.lower(), 6, True)
     )
     assert ccip_factory.asset_config(ASSET_ID).call() == (POOL, 6, True)
+
+
+def test_ccip_factory_governance_writes_encode_arguments():
+    factory = _wrapper(CcipCrosschainFactory)
+    _selector(factory.set_creation_restricted(True), "setCreationRestricted(bool)")
+    call = factory.set_creator_allowed(POOL, False)
+    _selector(call, "setCreatorAllowed(address,bool)")
+    assert decode(["address", "bool"], call.data[4:]) == (POOL.lower(), False)
+
+    call = factory.configure_creation_codes(b"\x60\x00", b"\x60\x01")
+    _selector(call, "configureCreationCodes(bytes,bytes)")
+    assert decode(["bytes", "bytes"], call.data[4:]) == (b"\x60\x00", b"\x60\x01")
+    with pytest.raises(ValueError, match="must not be empty"):
+        factory.configure_creation_codes(b"", b"\x60\x01")
+
+    for method, signature in (
+        ("schedule_asset", "scheduleAsset(bytes32,address,uint8)"),
+        ("execute_asset", "executeAsset(bytes32,address,uint8)"),
+    ):
+        call = getattr(factory, method)(ASSET_ID, POOL, 6)
+        _selector(call, signature)
+        assert decode(["bytes32", "address", "uint8"], call.data[4:]) == (
+            ASSET_ID,
+            POOL.lower(),
+            6,
+        )
+
+    route_tuple = "(uint64,address,address,uint96,uint96,uint256,bool)"
+    # The wrapper's own address is the only acceptable peer.
+    route = CcipRouteConfig(
+        15971525489660198786, ADDR, POOL, 1_200_000, 1_000_000, 10**16, True
+    )
+    for method, signature in (
+        ("schedule_factory_route", f"scheduleFactoryRoute(uint256,{route_tuple})"),
+        ("execute_factory_route", f"executeFactoryRoute(uint256,{route_tuple})"),
+    ):
+        call = getattr(factory, method)(8453, route)
+        _selector(call, signature)
+        chain_id, decoded = decode(["uint256", route_tuple], call.data[4:])
+        assert chain_id == 8453
+        assert decoded == (
+            route.chain_selector,
+            ADDR.lower(),
+            POOL.lower(),
+            1_200_000,
+            1_000_000,
+            10**16,
+            True,
+        )
+    foreign = CcipRouteConfig(
+        15971525489660198786, POOL, POOL, 1_200_000, 1_000_000, 10**16, True
+    )
+    with pytest.raises(ValueError, match="factory itself"):
+        factory.schedule_factory_route(8453, foreign)
+    with pytest.raises(ValueError, match="factory itself"):
+        factory.execute_factory_route(8453, foreign)
+
+    call = factory.cancel_scheduled_config(ASSET_ID)
+    _selector(call, "cancelScheduledConfig(bytes32)")
+    assert decode(["bytes32"], call.data[4:]) == (ASSET_ID,)
 
 
 def test_writes_encode_arguments():

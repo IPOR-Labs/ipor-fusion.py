@@ -366,6 +366,97 @@ class CcipCrosschainFactory(CrosschainFactory):
             output_types=["uint64"],
         )
 
+    def owner(self) -> Call[ChecksumAddress]:
+        return self._view("OWNER()", output_types=["address"], decoder=_address)
+
+    def config_delay(self) -> Call[int]:
+        """Timelock of every scheduled asset and factory route: 24 hours in
+        source, 300 seconds on the pilot test build."""
+        return self._view("CONFIG_DELAY()", output_types=["uint256"])
+
+    def executor_creation_code_hash(self) -> Call[bytes]:
+        """keccak of the executor creation code the factory stores. It tells
+        contract generations apart where ``executorInterfaceVersion`` (7 on
+        both) does not."""
+        return self._view(
+            "executorCreationCodeHash()", output_types=["bytes32"], decoder=bytes
+        )
+
+    def dispatcher_creation_code_hash(self) -> Call[bytes]:
+        return self._view(
+            "dispatcherCreationCodeHash()", output_types=["bytes32"], decoder=bytes
+        )
+
+    def set_creation_restricted(self, restricted: bool) -> Call[None]:
+        """Owner-only. Restricted (the default) limits ``createExecutor`` to
+        allowed creators, each a spender of the factory's fee budget."""
+        return self._write("setCreationRestricted(bool)", restricted)
+
+    def set_creator_allowed(
+        self, creator: ChecksumAddress, allowed: bool
+    ) -> Call[None]:
+        """Owner-only; the owner is allowed from construction."""
+        return self._write("setCreatorAllowed(address,bool)", creator, allowed)
+
+    def configure_creation_codes(
+        self, executor_code: bytes, dispatcher_code: bytes
+    ) -> Call[None]:
+        """Owner-only and write-once: the factory stores both creation codes
+        (constructor arguments are appended per deployment) and reverts
+        ``CreationCodesAlreadyConfigured`` afterwards. A new generation of
+        executors therefore needs a new factory, not a re-registration."""
+        if not executor_code or not dispatcher_code:
+            raise ValueError("executor and dispatcher creation code must not be empty")
+        return self._write(
+            "configureCreationCodes(bytes,bytes)", executor_code, dispatcher_code
+        )
+
+    def schedule_asset(
+        self, asset_id: bytes, token: ChecksumAddress, shared_decimals: int
+    ) -> Call[None]:
+        """Owner-only; executable after ``config_delay`` with the same arguments."""
+        return self._write(
+            "scheduleAsset(bytes32,address,uint8)", asset_id, token, shared_decimals
+        )
+
+    def execute_asset(
+        self, asset_id: bytes, token: ChecksumAddress, shared_decimals: int
+    ) -> Call[None]:
+        return self._write(
+            "executeAsset(bytes32,address,uint8)", asset_id, token, shared_decimals
+        )
+
+    def schedule_factory_route(
+        self, chain_id: ChainId, route: CcipRouteConfig
+    ) -> Call[None]:
+        """Owner-only; executable after ``config_delay`` with the same route.
+        The peer of a factory-to-factory route is the factory itself (same
+        CREATE3 address on every chain), so any other peer is refused here as
+        the contract refuses it."""
+        self._require_self_peer(route)
+        return self._write(
+            f"scheduleFactoryRoute(uint256,{_ROUTE_TUPLE})", chain_id, route.as_tuple()
+        )
+
+    def execute_factory_route(
+        self, chain_id: ChainId, route: CcipRouteConfig
+    ) -> Call[None]:
+        self._require_self_peer(route)
+        return self._write(
+            f"executeFactoryRoute(uint256,{_ROUTE_TUPLE})", chain_id, route.as_tuple()
+        )
+
+    def cancel_scheduled_config(self, commitment: bytes) -> Call[None]:
+        """Owner-only: drop a scheduled asset or route by its commitment hash."""
+        return self._write("cancelScheduledConfig(bytes32)", commitment)
+
+    def _require_self_peer(self, route: CcipRouteConfig) -> None:
+        if route.peer != self.address:
+            raise ValueError(
+                f"factory route peer {route.peer} must be the factory itself "
+                f"({self.address})"
+            )
+
     def register_executor_route(
         self,
         executor: ChecksumAddress,
