@@ -110,6 +110,16 @@ class Run:
     hub_start: int
     staleness_max: int
     recall_min_return_bps: int = 9_800
+    #: CCIP accounting of the executor generation under test. The deployed
+    #: pilot debits a recall by the amount received and cannot re-mark a
+    #: settled residue to zero; the source generation (contracts IL-8497 and
+    #: IL-8499) debits the sent amount and attests dust at or below the bound
+    #: to zero.
+    ccip_debits_sent_amount: bool = False
+    attestation_zero_dust_sd: int = 0
+    #: The executor's ``MIN_UPDATE_INTERVAL`` when the residue attestation
+    #: must wait it out after the renewal (0: no wait).
+    min_update_interval: int = 0
     relays: int = 0
     #: Labels of calls that revert on purpose; they stay in the replayed list.
     expected_failures: set[str] = field(default_factory=set)
@@ -599,14 +609,14 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
     if run.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO:
         assert idle >= remote_idle * 98 // 100
     assert results[run.hub_chain_id].get("pending_transfers") == 0
-    # Stargate debits the amount sent from the spoke. The deployed CCIP
-    # generation debits the amount actually received on the hub after any
-    # token-pool fee; contracts IL-8497 debits the sent amount instead once the
-    # executors are redeployed. Vault rounding remains in the settled bucket
-    # until the next attestation.
+    # Stargate and the source-generation CCIP executor debit the amount sent
+    # from the spoke; the deployed CCIP pilot debits the amount actually
+    # received on the hub after any token-pool fee. Vault rounding remains in
+    # the settled bucket until the next attestation.
     debit = (
         idle
         if run.transport_kind == CrosschainTransportKind.CHAINLINK_CCIP
+        and not run.ccip_debits_sent_amount
         else remote_idle
     )
     assert results[run.hub_chain_id].get("settled_after_return") == max(
@@ -621,23 +631,29 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
 
 
 def _attest_residue(run: Run, idle: int) -> None:
-    """The dispatcher observes zero after a full recall. If the settled bucket
-    kept rounding dust, the relative bound refuses to re-mark it to zero;
-    zero-to-zero is the one attestation allowed from an empty bucket. That is
-    the deployed generation: contracts IL-8499 lets dust at or below 10,000
-    shared-decimal units be attested to zero once the executors are redeployed."""
+    """The dispatcher observes zero after a full recall. A settled residue
+    above ``attestation_zero_dust_sd`` cannot be re-marked to zero (the
+    relative bound refuses it); at or below the bound the source generation
+    resets it, and zero-to-zero is always allowed."""
     residue = run.csim.results[run.hub_chain_id].get("settled_after_return")
+    refused = residue > run.attestation_zero_dust_sd
     run.log(
         "residue",
         settled_residue=residue,
-        expect=BIG_CHANGE_EXCEEDED if residue else "zero-to-zero approval",
+        expect=BIG_CHANGE_EXCEEDED if refused else "approval",
     )
+    # The keeper waits out the update interval after the renewal: an approval
+    # that the balance checks would accept is otherwise refused with
+    # `MinUpdateIntervalNotMet` (the relative bound rejects a residue above
+    # the dust bound before that check is reached).
+    if run.min_update_interval:
+        run.advance(run.min_update_interval)
     attest(
         run,
         tag="residue",
         observation_label="observation_after_return",
         hub_idle=idle,
-        approve_error=BIG_CHANGE_EXCEEDED if residue else None,
+        approve_error=BIG_CHANGE_EXCEEDED if refused else None,
     )
 
 

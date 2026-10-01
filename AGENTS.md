@@ -48,7 +48,11 @@ python-dotenv) and the provider supports `eth_simulateV1`. CI has all three as
 secrets. Never print `.env` or a provider URL: they embed API keys.
 `HYPEREVM_PROVIDER_URL` is used by the HyperEVM lifecycle/deployment tests and
 the separate read-only readiness workflow; general PR CI does not supply it.
-`test_simulate_crosschain_hyperevm.py` covers the pilot on pinned blocks.
+`test_simulate_crosschain_hyperevm.py` covers the pilot on pinned blocks, parametrized by
+`generation`: `deployed` runs executors from the pilot factories' stored creation code,
+`source` builds a factory pair from `FUSE_SOURCE_REVISION` inside the simulation (both
+need `IPOR_FUSION_CONTRACTS_DIR` at that revision; a checkout without `node_modules`
+also needs `IPOR_FUSION_FOUNDRY_REMAPPINGS` for OpenZeppelin).
 `test_solidity_compiler.py` uses `IPOR_FUSION_CONTRACTS_DIR` for a local contracts
 checkout and optional `IPOR_FUSION_FOUNDRY_REMAPPINGS`; the pilot build identity
 is pinned in `tests/fixtures/ccip_pilot_build.json`. These tests skip when their
