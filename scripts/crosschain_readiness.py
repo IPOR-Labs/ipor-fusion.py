@@ -52,6 +52,10 @@ EXIT_INCOMPLETE = 3
 USDC_SYMBOL = "USDC"
 USDC_ASSET_ID = keccak(text=USDC_SYMBOL)
 USDC_DECIMALS = 6
+#: The transport canary's asset: Chainlink's BurnMint test token, 18 decimals.
+TESTTR_SYMBOL = "TESTTR"
+TESTTR_ASSET_ID = keccak(text=TESTTR_SYMBOL)
+TESTTR_DECIMALS = 18
 SUPPORTED_ON_RAMP_PREFIX = "OnRamp 2."
 RPC_TIMEOUT_S = 30.0
 #: Two snapshots taken further apart than this are not offered as a pin pair.
@@ -87,6 +91,7 @@ class ChainSpec:
     router: ChecksumAddress
     usdc: ChecksumAddress
     usdc_usd_feed: ChecksumAddress
+    testtr: ChecksumAddress
 
 
 ARBITRUM = ChainSpec(
@@ -100,6 +105,7 @@ ARBITRUM = ChainSpec(
     usdc_usd_feed=Web3.to_checksum_address(
         "0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3"
     ),
+    testtr=Web3.to_checksum_address("0x83cB78b9009d48C57F29A453dd5bc774b1545682"),
 )
 HYPEREVM = ChainSpec(
     name="hyperevm",
@@ -112,6 +118,7 @@ HYPEREVM = ChainSpec(
     usdc_usd_feed=Web3.to_checksum_address(
         "0xA0Adc43ce7AfE3EE7d7eac3C994E178D0620223B"
     ),
+    testtr=Web3.to_checksum_address("0x3DAc7a0294B6399468F908A7bB2B0c7f15ae71A6"),
 )
 HUB, SPOKE = ARBITRUM, HYPEREVM
 CHAINS: tuple[ChainSpec, ...] = (HUB, SPOKE)
@@ -170,8 +177,13 @@ def _read_token(ctx: Web3Context, spec: ChainSpec) -> dict[str, Any]:
     }
 
 
-def _read_lane(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[str, Any]:
-    lane = ccip_token_lane(ctx, spec.router, spec.usdc, peer.chain_selector)
+def _read_lane(
+    ctx: Web3Context,
+    spec: ChainSpec,
+    peer: ChainSpec,
+    token: ChecksumAddress | None = None,
+) -> dict[str, Any]:
+    lane = ccip_token_lane(ctx, spec.router, token or spec.usdc, peer.chain_selector)
     on_ramp_supported = bool(
         lane.on_ramp_version
         and lane.on_ramp_version.startswith(SUPPORTED_ON_RAMP_PREFIX)
@@ -202,6 +214,7 @@ FACTORY_GATE_TEXT = {
     "creation_codes_expected": "stored creation codes are not the pilot-v2 build",
     "creator_big_blocks": "the canary creator is not on HyperEVM big blocks",
     "usdc_asset_ready": "USDC asset not enabled",
+    "testtr_asset_ready": "TESTTR asset not enabled",
     "route_to_peer_ready": "route to peer not enabled",
 }
 
@@ -224,6 +237,14 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
     factory = CcipCrosschainFactory(ctx, FACTORY)
     route = factory.ccip_route(peer.chain_id).call()
     token, shared_decimals, enabled = factory.asset_config(USDC_ASSET_ID).call()
+    testtr_token, testtr_decimals, testtr_enabled = factory.asset_config(
+        TESTTR_ASSET_ID
+    ).call()
+    testtr_ready = bool(
+        testtr_enabled
+        and testtr_token == spec.testtr
+        and testtr_decimals == TESTTR_DECIMALS
+    )
     peer_chain_id = int(factory.chain_id_of_selector(peer.chain_selector).call())
     owner = _view(ctx, FACTORY, "OWNER()", ["address"])
     router = factory.ccip_router().call()
@@ -261,6 +282,7 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
         == EXPECTED_CREATION_CODE_HASHES,
         "creator_authorized": (not restricted) or creator_allowed,
         "usdc_asset_ready": asset_ready,
+        "testtr_asset_ready": testtr_ready,
         "route_to_peer_ready": route_ready,
     }
     if spec is SPOKE:
@@ -281,6 +303,13 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
             "shared_decimals": int(shared_decimals),
             "enabled": bool(enabled),
             "ready": asset_ready,
+        },
+        "testtr_asset": {
+            "asset_id": "0x" + TESTTR_ASSET_ID.hex(),
+            "token": testtr_token,
+            "shared_decimals": int(testtr_decimals),
+            "enabled": bool(testtr_enabled),
+            "ready": testtr_ready,
         },
         "route_to_peer": {
             "peer_chain_id": int(peer.chain_id),
@@ -363,6 +392,7 @@ def _read_sections(
     sections: list[tuple[str, Callable[[], Any]]] = [
         ("usdc", lambda: _read_token(ctx, spec)),
         ("token_lane_out", lambda: _read_lane(ctx, spec, peer)),
+        ("testtr_lane_out", lambda: _read_lane(ctx, spec, peer, spec.testtr)),
         ("factory", lambda: _read_factory(ctx, spec, peer)),
         ("usdc_usd_feed", lambda: _read_feed(ctx, spec, timestamp)),
     ]

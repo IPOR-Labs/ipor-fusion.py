@@ -83,6 +83,7 @@ def _answers(
         True,
     )
     asset = (spec.usdc, 6, True) if asset_enabled else (ZERO, 0, False)
+    testtr = (spec.testtr, 18, True) if asset_enabled else (ZERO, 0, False)
     symbol, decimals = ("USDC", 6) if native_usdc else ("USDX", 18)
     return {
         (spec.usdc, selector("symbol()")): encode(["string"], [symbol]),
@@ -102,8 +103,11 @@ def _answers(
         (mod.FACTORY, selector("ccipRoute(uint256)")): encode(
             ["(uint64,address,address,uint96,uint96,uint256,bool)"], [route]
         ),
-        (mod.FACTORY, selector("assetConfig(bytes32)")): encode(
+        (mod.FACTORY, selector("assetConfig(bytes32)") + mod.USDC_ASSET_ID): encode(
             ["address", "uint8", "bool"], list(asset)
+        ),
+        (mod.FACTORY, selector("assetConfig(bytes32)") + mod.TESTTR_ASSET_ID): encode(
+            ["address", "uint8", "bool"], list(testtr)
         ),
         (mod.FACTORY, selector("chainIdOfSelector(uint64)")): encode(
             ["uint256"], [peer.chain_id]
@@ -172,12 +176,13 @@ def _ctx(
     ctx.web3.provider.make_request.return_value = {"result": big_blocks}
 
     def call(to, data, block=None):
-        try:
-            return answers[(to, bytes(data)[:4])]
-        except KeyError as exc:
-            raise AssertionError(
-                f"unexpected call {to} {bytes(data)[:4].hex()}"
-            ) from exc
+        # Answers keyed by selector, or by selector plus the first argument
+        # where one selector is read for several assets.
+        raw = bytes(data)
+        for key in ((to, raw[:36]), (to, raw[:4])):
+            if key in answers:
+                return answers[key]
+        raise AssertionError(f"unexpected call {to} {raw[:4].hex()}")
 
     ctx.call.side_effect = call
     ctx.web3.eth.get_block.side_effect = [
@@ -213,7 +218,9 @@ def test_blocked_pair_is_complete_but_not_ready(mod):
     assert [b.split(" (")[0] for b in report["blocked_by"]] == [
         "Chainlink USDC token lane arbitrum->hyperevm not serving the pair",
         "factory on arbitrum: USDC asset not enabled",
+        "factory on arbitrum: TESTTR asset not enabled",
         "factory on hyperevm: USDC asset not enabled",
+        "factory on hyperevm: TESTTR asset not enabled",
     ]
     json.dumps(report)
 
@@ -245,9 +252,12 @@ def test_ready_pair_exposes_per_chain_repin_candidates(mod):
         "creation_codes_expected": True,
         "creator_authorized": True,
         "usdc_asset_ready": True,
+        "testtr_asset_ready": True,
         "route_to_peer_ready": True,
     }
     assert factory["interface_version"] == 1
+    assert factory["testtr_asset"]["token"] == mod.HUB.testtr
+    assert report["chains"]["hyperevm"]["testtr_lane_out"]["ready"] is True
     assert factory["creator"] == {
         "address": mod.CREATOR,
         "is_allowed_creator": True,
