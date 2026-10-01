@@ -328,16 +328,25 @@ class VaultSimulator:
         call: Call,
         from_: ChecksumAddress | None = None,
         label: str | None = None,
+        *,
+        gas: int | None = None,
     ) -> VaultSimulator:
         """Queue an arbitrary write/setup call (role grant, config tweak,
         impersonated deposit). Build via a wrapper method, e.g.
         `access_manager.grant_role(...)` or `usdc.approve(...)`.
+
+        ``gas`` caps the call explicitly; without it the node applies its own
+        default (a few million on public providers), which a call that stores
+        contract-sized blobs exceeds.
         """
+        if gas is not None and gas <= 0:
+            raise ValueError(f"gas must be positive, got {gas}")
         self._current.calls.append(
             _Call(
                 to=call.to,
                 data=call.data,
                 from_=Web3.to_checksum_address(from_) if from_ else None,
+                gas=gas,
                 label=label,
                 decode_types=call.output_types,
                 decoder=call.decoder,

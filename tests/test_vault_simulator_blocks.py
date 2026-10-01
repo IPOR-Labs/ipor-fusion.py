@@ -267,6 +267,22 @@ def test_deploy_contract_omits_zero_value_and_optional_gas():
     assert "gas" not in call
 
 
+def test_add_call_serializes_an_explicit_gas_cap():
+    sim, provider = _simulator()
+    call = Call(to=VAULT, data=b"\x12\x34")
+
+    sim.add_call(call, from_=PAYER, label="capped", gas=20_000_000)
+    sim.add_call(call, from_=PAYER, label="default")
+    sim.run()
+
+    (entry,) = _sent_blocks(provider)
+    capped, default = entry["calls"]
+    assert capped["gas"] == hex(20_000_000)
+    assert "gas" not in default
+    with pytest.raises(ValueError, match="gas must be positive"):
+        sim.add_call(call, from_=PAYER, gas=0)
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
