@@ -53,9 +53,14 @@ by a test in this repository, not by that run.
   only by the reporter contract; the SDK has no reader for the reporter
   (observers, report digest, `Report` type) and no REPORTED-mode rehearsal.
 - [ ] **Market id: HyperCore is 55, crosschain keeps 54** (contracts-team
-  decision, 2026-09-29). The SDK mirrors 55 ahead of upstream. The first
-  HyperEVM test vault (`0x41C4…05C8`, live on mainnet) still runs on 54 until
-  it is redeployed. **Known limitation until then:** once the crosschain SDK
+  decision, 2026-09-29). The SDK mirrors 55 ahead of upstream. The market-55
+  fuse set for HyperEVM is prepared on the contracts side (deployment only;
+  the vault migrates 54 → 55 in a separate step, the same wiring sequence the
+  parity fixture covers) but was not broadcast as of 2026-10-01; once it is,
+  pin the real addresses here and in a fixture with `MARKET_ID() == 55`
+  checks, and point the live dry-run at the fuses the vault actually
+  whitelists. The first HyperEVM test vault (`0x41C4…05C8`, live on mainnet)
+  still runs on 54 until that migration. **Known limitation until then:** once the crosschain SDK
   lands, `vault info` and the MCP tools label that vault's market 54 as
   crosschain and the crosschain decoder **mis-types** its SpotToken and
   PerpMarket words as plausible `EXECUTOR` / `REMOTE_VAULT` rows while the
