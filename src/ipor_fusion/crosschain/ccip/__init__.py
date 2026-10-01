@@ -27,13 +27,28 @@ from ipor_fusion.crosschain.ccip.contracts import (
     CcipRouteConfig,
     SafetyConfig,
 )
+from ipor_fusion.crosschain.ccip.events import (
+    CCIP_EVENT_TOPICS,
+    CCIP_EVENTS,
+    CcipEvent,
+    CcipEventSpec,
+    CcipGeneration,
+    ccip_events,
+    decode_ccip_event,
+    find_ccip_events,
+)
 
 __all__ = [
+    "CCIP_EVENTS",
+    "CCIP_EVENT_TOPICS",
     "CCIP_MESSAGE_SENT_TOPIC",
     "Any2EVMMessage",
     "CcipCrosschainDispatcher",
     "CcipCrosschainExecutor",
     "CcipCrosschainFactory",
+    "CcipEvent",
+    "CcipEventSpec",
+    "CcipGeneration",
     "CcipMessageSent",
     "CcipObservation",
     "CcipOnRamp",
@@ -41,6 +56,7 @@ __all__ = [
     "CcipTokenAdminRegistry",
     "CcipTokenLane",
     "CcipTokenPool",
+    "ccip_events",
     "ccip_token_lane",
     "CcipRouteConfig",
     "EVMTokenAmount",
@@ -48,4 +64,6 @@ __all__ = [
     "SafetyConfig",
     "TokenTransferV1",
     "ccip_receive_calldata",
+    "decode_ccip_event",
+    "find_ccip_events",
 ]

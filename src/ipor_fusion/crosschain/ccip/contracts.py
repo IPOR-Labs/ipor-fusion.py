@@ -171,6 +171,37 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             "commandConfigEpoch(uint256)", chain_id, output_types=["uint64"]
         )
 
+    def accounting_epoch(self, chain_id: ChainId) -> Call[int]:
+        """``accountingEpoch(uint256)``: the per-chain accounting epoch that
+        every value-moving operation bumps to invalidate the active proposal.
+
+        :attr:`CcipGeneration.CURRENT` only: a pilot executor has no such
+        selector and the call reverts.
+        """
+        return self._view("accountingEpoch(uint256)", chain_id, output_types=["uint64"])
+
+    def active_proposal_id(self, chain_id: ChainId) -> Call[int]:
+        """``activeProposalId(uint256)``: the active balance proposal id for
+        the chain, 0 when there is none.
+
+        :attr:`CcipGeneration.CURRENT` only: a pilot executor has no such
+        selector and the call reverts.
+        """
+        return self._view(
+            "activeProposalId(uint256)", chain_id, output_types=["uint256"]
+        )
+
+    def attestation_anchor_principal(self, chain_id: ChainId) -> Call[Amount]:
+        """``attestationAnchorPrincipal(uint256)``: the per-chain accounting
+        anchor ``approveBalance`` bounds attestations against, in shared
+        decimals. Exists on both generations."""
+        return self._view(
+            "attestationAnchorPrincipal(uint256)",
+            chain_id,
+            output_types=["uint256"],
+            decoder=Amount,
+        )
+
     def command_status(self, command_id: bytes) -> Call[CommandStatus]:
         return self._view(
             "commandStatus(bytes32)",

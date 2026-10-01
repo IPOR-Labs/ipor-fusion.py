@@ -140,7 +140,9 @@ the lifecycle matrix follows that.
   tooling, not something a keeper needs), and one subpackage per transport, `stargate/` and
   `ccip/`, each with its wire codecs, executor/dispatcher/factory wrappers, transport
   and lane; `ccip/chainlink` reads Chainlink's Router, OnRamp, TokenAdminRegistry and
-  token pool (`ccip_token_lane`: is there a lane, does the token travel on it).
+  token pool (`ccip_token_lane`: is there a lane, does the token travel on it);
+  `ccip/events` decodes the executor/dispatcher/factory events by topic for both
+  contract generations (`CcipGeneration.PILOT` = deployed pilot, `CURRENT` = source).
   `fuses/crosschain/` mirrors it (`base`, `stargate`, `ccip`). Names mirror
   the Solidity contracts and libraries. Adding a transport: a new subpackage plus one
   `LANES` entry. Layering: the fuse encoders import the wire codecs and wrappers; lanes,
