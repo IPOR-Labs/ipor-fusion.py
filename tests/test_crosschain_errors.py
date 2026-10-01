@@ -145,6 +145,19 @@ def _call(label: str, *, success: bool, data: bytes = b"") -> SimulatedCallResul
     )
 
 
+def test_call_revert_reason_is_its_own_not_the_chains_first():
+    stale = _call("nav", success=False, data=_revert("ObservationStale(uint256)", 999))
+    interval = _call(
+        "approve",
+        success=False,
+        data=_revert("MinUpdateIntervalNotMet(uint64,uint256,uint256)", 1, 2, 3600),
+    )
+    assert stale.revert_reason == "ObservationStale(999)"
+    assert interval.revert_reason == "MinUpdateIntervalNotMet(1, 2, 3600)"
+    assert _call("ok", success=True).revert_reason is None
+    assert _call("bare", success=False).revert_reason == "execution reverted"
+
+
 class TestRaiseForFailure:
     def test_names_the_first_failed_call_with_its_reason(self):
         result = _result(

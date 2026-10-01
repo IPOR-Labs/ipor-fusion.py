@@ -39,7 +39,6 @@ from ipor_fusion import (
     StargateTransport,
     Web3Context,
 )
-from ipor_fusion.core.simulation import _decode_revert
 from ipor_fusion.crosschain import CrosschainTransportKind
 from ipor_fusion.fuses.crosschain import crosschain_market_id
 from ipor_fusion.types import ChainId
@@ -471,10 +470,7 @@ def assert_relay_success(results, *, expected_failures: Collection[str] = ()) ->
             if call.label in expected_failures:
                 continue
             selector = bytes(call.return_data[:4]).hex()
-            # The call's own revert data: `result.revert_reason` names the
-            # chain's first revert, which may be an expected one.
-            reason = _decode_revert(call.return_data, call.error)
             raise AssertionError(
                 f"chain {chain_id}: {call.label!r} reverted: {call.error} "
-                f"selector=0x{selector} (reason={reason})"
+                f"selector=0x{selector} (reason={call.revert_reason})"
             )

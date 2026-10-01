@@ -53,6 +53,14 @@ class SimulatedCallResult:
     decoded: Any | None
     predicted_address: ChecksumAddress | None = None
 
+    @property
+    def revert_reason(self) -> str | None:
+        """This call's decoded revert (a registered custom error by name, an
+        ``Error(string)`` text or ``Panic``), ``None`` when it succeeded or
+        reverted without data. ``SimulationResult.revert_reason`` is the
+        chain's first failed call, which may be a different one."""
+        return _decode_revert(self.return_data, self.error)
+
 
 @dataclass(slots=True)
 class SimulationResult:
