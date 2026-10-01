@@ -59,6 +59,8 @@ class SimulatedCallResult:
         ``Error(string)`` text or ``Panic``), ``None`` when it succeeded or
         reverted without data. ``SimulationResult.revert_reason`` is the
         chain's first failed call, which may be a different one."""
+        if self.success:
+            return None
         return _decode_revert(self.return_data, self.error)
 
 

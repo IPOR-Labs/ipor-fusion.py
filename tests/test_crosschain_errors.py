@@ -155,6 +155,8 @@ def test_call_revert_reason_is_its_own_not_the_chains_first():
     assert stale.revert_reason == "ObservationStale(999)"
     assert interval.revert_reason == "MinUpdateIntervalNotMet(1, 2, 3600)"
     assert _call("ok", success=True).revert_reason is None
+    # A successful call's return data is not a revert payload.
+    assert _call("returned", success=True, data=b"\x00" * 32).revert_reason is None
     assert _call("bare", success=False).revert_reason == "execution reverted"
 
 
