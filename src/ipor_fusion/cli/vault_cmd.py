@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import click
@@ -166,9 +166,7 @@ def _unix_to_iso(timestamp: int) -> str:
     Renders 0 as the epoch. Callers for which 0 is the contract's "never"
     sentinel must guard and emit null themselves.
     """
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+    return datetime.fromtimestamp(timestamp, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _partition_balance_fuses(entries: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -1052,8 +1050,8 @@ def _build_deployment_json(data: _VaultData) -> dict | None:
         "timestamp": data.deployment_timestamp,
         "timestamp_utc": _unix_to_iso(data.deployment_timestamp),
         "age_days": (
-            datetime.now(tz=timezone.utc)
-            - datetime.fromtimestamp(data.deployment_timestamp, tz=timezone.utc)
+            datetime.now(tz=UTC)
+            - datetime.fromtimestamp(data.deployment_timestamp, tz=UTC)
         ).days,
     }
 
