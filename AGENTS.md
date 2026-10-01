@@ -77,6 +77,10 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
 ## Layout (`src/ipor_fusion/`)
 
 - `chains.py` chain registry; `market_ids.py` `IporFusionMarkets`; `types.py`, `errors.py`
+- `addresses.py` — per-chain deployment registry (`factory_proxy`, `resolve`, `balance_fuse`,
+  `lookup`, `source`) backed by `data/ipor_abi_addresses.json`, a snapshot of ipor-abi
+  regenerated with `scripts/sync_ipor_abi_addresses.py`; `FusionFactory(ctx)` and the
+  `fusion_address_lookup` / `fusion_address_names` MCP tools read it
 - `about.py` — package version, repository URL, CHANGELOG parsing (`fusion changelog`,
   `server_info`); `field_docs.py` — `DOCS`, the JSON field descriptions shared by CLI
   output and MCP models

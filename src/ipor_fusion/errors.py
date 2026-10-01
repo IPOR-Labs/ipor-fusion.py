@@ -114,6 +114,11 @@ class UnsupportedChainError(IporFusionError, ValueError):
     """
 
 
+class AddressNotFoundError(IporFusionError, LookupError):
+    """A registry name or a market's balance fuse is not in the shipped
+    ipor-abi snapshot for that chain (see ``ipor_fusion.addresses``)."""
+
+
 class EmptyCallResultError(IporFusionError, InsufficientDataBytes):
     """`eth_call` returned no data for a call that declares return values.
 

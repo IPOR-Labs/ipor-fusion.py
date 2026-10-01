@@ -1,3 +1,4 @@
+from ipor_fusion import addresses
 from ipor_fusion.about import (
     ChangelogEntry,
     package_version,
@@ -58,6 +59,7 @@ from ipor_fusion.core.withdraw_manager import (
     WithdrawRequestInfo,
 )
 from ipor_fusion.errors import (
+    AddressNotFoundError,
     ContractNotFoundError,
     EmptyCallResultError,
     IporFusionError,
@@ -175,6 +177,8 @@ __version__ = package_version()
 
 __all__ = [
     "__version__",
+    "addresses",
+    "AddressNotFoundError",
     "ChangelogEntry",
     "package_version",
     "read_changelog",
