@@ -21,7 +21,12 @@ from ipor_fusion.core.access import (
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.external_state_executor import ExternalStateExecutor, NavMark
+from ipor_fusion.core.external_state_executor import (
+    BalanceProposal,
+    ExternalStateExecutor,
+    NavMark,
+    RawLog,
+)
 from ipor_fusion.core.fee_manager import (
     FeeAccount,
     FeeManager,
@@ -316,6 +321,8 @@ __all__ = [
     "erc20_balance_slot",
     "DeliveryCall",
     "OutboundMessage",
+    "BalanceProposal",
+    "RawLog",
     "FuseAction",
     "Fuse",
     "StakeFuse",
