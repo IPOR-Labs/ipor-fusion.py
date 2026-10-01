@@ -347,6 +347,25 @@ def test_link_rejects_missing_or_malformed_addresses(tmp_path, monkeypatch):
         artifact.link({"Lib": "0xabcd"})
 
 
+def test_rejects_a_placeholder_without_a_link_reference(tmp_path, monkeypatch):
+    _source(tmp_path)
+    contract = FoundryContract("contracts/Example.sol", "Example")
+    monkeypatch.setattr("shutil.which", lambda binary: "/usr/bin/forge")
+
+    def run(command, **kwargs):
+        output = Path(command[command.index("--out") + 1])
+        artifact = output / "Example.sol" / "Example.json"
+        artifact.parent.mkdir(parents=True)
+        data = _linked_artifact(contract.source, contract.name)
+        del data["bytecode"]["linkReferences"]
+        artifact.write_text(json.dumps(data))
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("subprocess.run", run)
+    with pytest.raises(SolidityCompilationError, match="1 library placeholders but 0"):
+        compile_foundry_contracts(tmp_path, (contract,))
+
+
 def test_rejects_invalid_link_references(tmp_path, monkeypatch):
     _source(tmp_path)
     contract = FoundryContract("contracts/Example.sol", "Example")

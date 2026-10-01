@@ -268,8 +268,10 @@ def _read_artifact(
         )
     path, data = matches[0]
     try:
-        creation_code = _bytecode(data["bytecode"]["object"], "creation", contract)
-        runtime_code = _bytecode(
+        creation_code, creation_placeholders = _bytecode(
+            data["bytecode"]["object"], "creation", contract
+        )
+        runtime_code, runtime_placeholders = _bytecode(
             data["deployedBytecode"]["object"], "runtime", contract
         )
         immutable_ranges = _immutable_ranges(
@@ -283,6 +285,17 @@ def _read_artifact(
         raise SolidityCompilationError(
             f"invalid Foundry artifact for {source}:{contract.name} at {path}"
         ) from exc
+    # A zeroed placeholder that no reference will patch would ship a call to
+    # the zero address; refuse the artifact instead.
+    for kind, placeholders, links in (
+        ("creation", creation_placeholders, creation_links),
+        ("runtime", runtime_placeholders, runtime_links),
+    ):
+        if placeholders != len(links):
+            raise SolidityCompilationError(
+                f"{kind} bytecode of {source}:{contract.name} has {placeholders} "
+                f"library placeholders but {len(links)} link references"
+            )
     return SolidityArtifact(
         contract,
         creation_code,
@@ -353,13 +366,15 @@ def _immutable_ranges(value: object) -> tuple[tuple[int, int], ...]:
 _PLACEHOLDER_RE = re.compile(r"__\$[0-9a-fA-F]{34}\$__")
 
 
-def _bytecode(value: object, kind: str, contract: FoundryContract) -> bytes:
+def _bytecode(value: object, kind: str, contract: FoundryContract) -> tuple[bytes, int]:
+    """The bytecode with every library placeholder zeroed, and how many there were."""
     if not isinstance(value, str) or not value.startswith("0x") or len(value) <= 2:
         raise SolidityCompilationError(
             f"{kind} bytecode is empty for {contract.source}:{contract.name}"
         )
+    zeroed, placeholders = _PLACEHOLDER_RE.subn("0" * 40, value[2:])
     try:
-        return bytes.fromhex(_PLACEHOLDER_RE.sub("0" * 40, value[2:]))
+        return bytes.fromhex(zeroed), placeholders
     except ValueError as exc:
         raise SolidityCompilationError(
             f"{kind} bytecode has unresolved libraries for "

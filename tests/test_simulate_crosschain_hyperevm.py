@@ -189,9 +189,6 @@ DISPATCHER_CONTRACT = FoundryContract(
     "contracts/crosschain/ccip/CcipCrosschainDispatcher.sol",
     "CcipCrosschainDispatcher",
 )
-#: `CcipCrosschainFactory.CONFIG_DELAY` in source; the pilot build patches it
-#: to 300 s.
-SOURCE_CONFIG_DELAY = 24 * 60 * 60
 #: `CrosschainConstants.ATTESTATION_ZERO_DUST_SD` of the source generation.
 ATTESTATION_ZERO_DUST_SD = 10_000
 #: `deployed`: executors and dispatchers from the pilot factory's stored
@@ -433,10 +430,11 @@ def _configure_source_factory(
     index: int,
     peer_chain_id: ChainId,
     route_template,
+    config_delay: int,
 ) -> bytes:
     """The owner's governance on a fresh factory: the creation codes
     (write-once), then the asset and the factory-to-factory route through the
-    timelock. Returns the keccak of the executor creation code."""
+    factory's own timelock. Returns the keccak of the executor creation code."""
     executor_code = artifacts[EXECUTOR_CONTRACT].link(libraries).creation_code
     dispatcher_code = artifacts[DISPATCHER_CONTRACT].link(libraries).creation_code
     route = replace(route_template, peer=factory.address)
@@ -458,7 +456,7 @@ def _configure_source_factory(
         from_=OWNER,
         label="schedule_factory_route",
     )
-    chain.next_block(time_shift_seconds=SOURCE_CONFIG_DELAY + 1).with_block_override(
+    chain.next_block(time_shift_seconds=config_delay + 1).with_block_override(
         gasLimit=30_000_000
     )
     chain.add_call(
@@ -495,6 +493,17 @@ def _deploy_source_generation(
     assert (factory_address, libraries) == (spoke_factory_address, spoke_libraries)
     hub_factory = CcipCrosschainFactory(arb_ctx, factory_address)
     spoke_factory = CcipCrosschainFactory(hyper_ctx, factory_address)
+    # The factory's own timelock (24 h in source, 300 s on a patched pilot-style
+    # build), so a patched checkout rehearses unchanged.
+    simulator.observe(ARBITRUM, "source_config_delay", hub_factory.config_delay())
+    simulator.observe(HYPEREVM, "source_config_delay", spoke_factory.config_delay())
+    results = simulator.relay()
+    delays = {
+        chain_id: results[chain_id].get("source_config_delay")
+        for chain_id in (ARBITRUM, HYPEREVM)
+    }
+    assert delays[ARBITRUM] == delays[HYPEREVM] > 0
+    config_delay = delays[ARBITRUM]
     executor_code_hash = _configure_source_factory(
         hub,
         hub_factory,
@@ -506,6 +515,7 @@ def _deploy_source_generation(
         route_template=CcipCrosschainFactory(arb_ctx, FACTORY)
         .ccip_route(HYPEREVM)
         .call(),
+        config_delay=config_delay,
     )
     _configure_source_factory(
         spoke,
@@ -518,6 +528,7 @@ def _deploy_source_generation(
         route_template=CcipCrosschainFactory(hyper_ctx, FACTORY)
         .ccip_route(ARBITRUM)
         .call(),
+        config_delay=config_delay,
     )
     for chain_id, factory, peer in (
         (ARBITRUM, hub_factory, HYPEREVM),
@@ -767,7 +778,7 @@ def test_simulate_configured_asset_lane(web3_arb, web3_hyperevm, asset, generati
     _require_token_lanes(web3_arb, web3_hyperevm, asset)
     run = _prepare_asset_run(web3_arb, web3_hyperevm, asset, generation=generation)
     run_lifecycle(run)
-    _assert_token_deliveries_within_gas_limit(run, web3_hyperevm, asset)
+    _assert_token_deliveries_within_gas_limit(run)
 
 
 def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
@@ -806,31 +817,33 @@ def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
         assert labels == deployment + governance
 
 
-def _assert_token_deliveries_within_gas_limit(run: Run, web3_hyperevm, asset):
-    """Every token-carrying delivery ran within its route's token gas limit.
+def _assert_token_deliveries_within_gas_limit(run: Run) -> None:
+    """Every token-carrying delivery ran within the token gas limit of the
+    route its sender holds: the executor's for the supply leg, the
+    dispatcher's for the return leg.
 
     The relay calls ``ccipReceive`` directly, so ``gas_used`` is the receiver's
     own handling (deposit on the spoke, settlement on the hub). The token
     pool's release or mint is outside it, as it is for the live OffRamp, which
     meters the receiver call separately."""
     assert isinstance(run.lane, CcipLane)
-    # The pilot factory's policy is the template of the source factory's, so
-    # the limit is the same on both generations.
-    spoke_factory = CcipCrosschainFactory(
-        _ctx(web3_hyperevm, HYPEREVM, asset.blocks[1]), FACTORY
+    run.csim.observe(
+        ARBITRUM, "gas_limit_route_hub", run.lane.executor.ccip_route(HYPEREVM)
     )
+    run.csim.observe(
+        HYPEREVM, "gas_limit_route_spoke", run.lane.dispatcher.ccip_route(ARBITRUM)
+    )
+    results = run.relay()
     limits = {
-        HYPEREVM: run.lane.route.token_gas_limit,
-        ARBITRUM: spoke_factory.ccip_route(ARBITRUM).call().token_gas_limit,
+        HYPEREVM: results[ARBITRUM].get("gas_limit_route_hub").token_gas_limit,
+        ARBITRUM: results[HYPEREVM].get("gas_limit_route_spoke").token_gas_limit,
     }
     token_legs = [message for message in run.csim.delivered if message.token_amount]
     assert [message.dst_chain_id for message in token_legs] == [HYPEREVM, ARBITRUM]
     for message in token_legs:
         label = f"ccip_receive:{message.message_id.hex()[:8]}"
         delivery = next(
-            call
-            for call in run.csim.results[message.dst_chain_id].calls
-            if call.label == label
+            call for call in results[message.dst_chain_id].calls if call.label == label
         )
         run.log(
             "token delivery gas",
