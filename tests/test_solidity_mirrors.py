@@ -14,9 +14,11 @@ from functools import cache
 
 import pytest
 import requests
+from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.external_state_executor import ExternalStateExecutor
+from ipor_fusion.fuses import ExternalStateOperationFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 
 # IPOR-Labs/ipor-fusion main as of 2026-09-10
@@ -25,6 +27,9 @@ IPOR_FUSION_REF = "a1f79d6c3d0d426ace4df55ed0fb8ea340580739"
 _RAW_URL = "https://raw.githubusercontent.com/IPOR-Labs/ipor-fusion/{ref}/{path}"
 _LIBRARIES = "contracts/libraries"
 _EXECUTOR_SOL = "contracts/fuses/external_state/ExternalStateExecutor.sol"
+_OPERATION_FUSE_SOL = "contracts/fuses/external_state/ExternalStateOperationFuse.sol"
+# Encoding ignores the target address; any non-zero one will do.
+_ANY_ADDRESS = "0x1111111111111111111111111111111111111111"
 _CONSTANT_RE = re.compile(
     r"uint(?:256|64)\s+public\s+constant\s+(?P<name>\w+)\s*=\s*(?P<value>[^;]+);"
 )
@@ -47,8 +52,8 @@ def _parse_solidity_int(value: str) -> int:
 def _solidity_source(path: str) -> str:
     """The contract at `path` (repo-relative), at the pinned upstream commit.
 
-    Cached so the two executor gates share one fetch; `cache` stores nothing
-    on a raising path, so a transient failure still re-tries."""
+    Cached so gates reading the same file share one fetch; `cache` stores
+    nothing on a raising path, so a transient failure still re-tries."""
     url = _RAW_URL.format(ref=IPOR_FUSION_REF, path=path)
     try:
         resp = requests.get(url, timeout=15)
@@ -72,6 +77,14 @@ def _solidity_constants(file_name: str) -> dict[str, int]:
     return constants
 
 
+def _member_words(body: str) -> list[list[str]]:
+    """The words of each member of a declaration body, members split on `,` or
+    `;`; a member's type is its first word. Empty fragments are skipped."""
+    return [
+        words for fragment in re.split(r"[,;]", body) if (words := fragment.split())
+    ]
+
+
 def _declared_types(source: str, header: str, terminator: str) -> tuple[str, ...]:
     """The ABI types of a `struct` or `event` body, in declaration order.
 
@@ -91,18 +104,14 @@ def _declared_types(source: str, header: str, terminator: str) -> tuple[str, ...
         _COMMENT_RE.sub("", source),
     )
     assert body, f"{header!r} not found — the declaration moved or was renamed"
-    members = []
-    for fragment in re.split(r"[,;]", body.group("body")):
-        words = fragment.split()
-        if not words:
-            continue
+    members = _member_words(body.group("body"))
+    for words in members:
         assert "indexed" not in words, (
-            f"{header!r} declares an indexed parameter ({fragment.strip()!r}); "
+            f"{header!r} declares an indexed parameter ({' '.join(words)!r}); "
             "the topic0 preimage and the data decode now need separate tuples"
         )
-        members.append(words[0])
     assert members, f"parsed no members out of {header!r}"
-    return tuple(members)
+    return tuple(words[0] for words in members)
 
 
 def test_declared_types_ignores_comments():
@@ -157,6 +166,75 @@ def test_pending_proposal_struct_mirrors_the_contract():
         _declared_types(source, "struct PendingProposal {", "}")
         == ExternalStateExecutor._PENDING_PROPOSAL_TYPES
     )
+
+
+def _declared_signature(source: str, function: str) -> str:
+    """The canonical signature of `function`, built from its declaration in
+    `source`, so a test compares the SDK's selector with the contract's rather
+    than with the SDK's own signature string.
+
+    Each parameter contributes its first word, which is its type for the
+    elementary types these gates cover; a struct parameter would need its tuple
+    spelled out and makes the selector comparison fail rather than pass. The
+    declaration must be unique -- an overload leaves the selector ambiguous."""
+    declarations = re.findall(
+        rf"\bfunction\s+{re.escape(function)}\s*\(([^)]*)\)",
+        _COMMENT_RE.sub("", source),
+    )
+    assert len(declarations) == 1, (
+        f"expected one declaration of {function!r}, found {len(declarations)}"
+    )
+    types = [words[0] for words in _member_words(declarations[0])]
+    return f"{function}({','.join(types)})"
+
+
+def test_declared_signature_ignores_comments():
+    source = """
+        // function createExecutor(uint256 legacy) external;
+        function proposeBalance(
+            address balanceAccount_, // the account, not the executor )
+            uint256 newValue_
+        ) external;
+        /* function syncSubstrates(bool) */
+        function syncSubstrates() external override {}
+        function deposit(uint256 amount) external;
+        function deposit(uint256 amount, address to) external;
+    """
+
+    assert (
+        _declared_signature(source, "proposeBalance")
+        == "proposeBalance(address,uint256)"
+    )
+    assert _declared_signature(source, "syncSubstrates") == "syncSubstrates()"
+    with pytest.raises(AssertionError, match="found 0"):
+        _declared_signature(source, "createExecutor")
+    with pytest.raises(AssertionError, match="found 2"):
+        _declared_signature(source, "deposit")
+
+
+@pytest.mark.parametrize(
+    ("path", "function", "calldata"),
+    [
+        pytest.param(
+            _OPERATION_FUSE_SOL,
+            "createExecutor",
+            ExternalStateOperationFuse(_ANY_ADDRESS).create_executor().data,
+            id="createExecutor",
+        ),
+        pytest.param(
+            _EXECUTOR_SOL,
+            "syncSubstrates",
+            ExternalStateExecutor.encoder(_ANY_ADDRESS).sync_substrates().data,
+            id="syncSubstrates",
+        ),
+    ],
+)
+def test_no_argument_calldata_matches_the_contract(path, function, calldata):
+    # Whole-calldata equality: a parameter added upstream changes the selector,
+    # and any argument the SDK encoded would trail it.
+    signature = _declared_signature(_solidity_source(path), function)
+
+    assert calldata == function_signature_to_4byte_selector(signature)
 
 
 def test_market_ids_mirror_ipor_fusion_markets_sol():
