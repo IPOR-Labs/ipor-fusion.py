@@ -15,6 +15,8 @@ ABI (ExternalStateOperationFuse.sol), same shape for both, semantics invert::
     enter((address asset, uint256 amount, address balanceAccount,
            (address target, bytes data)[] actions))
     exit(( ... ))
+
+plus the no-argument ``createExecutor()``.
 """
 
 from eth_typing import ChecksumAddress
@@ -67,6 +69,29 @@ class ExternalStateOperationFuse(Fuse):
         ``amount`` of ``asset`` back from the executor to the vault."""
         return self._build("exit", asset, amount, balance_account, actions)
 
+    def create_executor(self) -> FuseAction:
+        """Deploy the vault's ExternalStateExecutor for this market. A repeat
+        call deploys nothing (it re-emits ``ExecutorCreated``) and reverts if
+        the vault's executor serves another market; read the address with
+        ``ExternalStateExecutor.for_vault``.
+
+        An ``enter`` that moves an amount or runs an action creates the
+        executor lazily, which needs an ASSET or TARGET grant; this method
+        covers attestation-only setups that never ``enter``.
+
+        Order matters: the executor copies the vault's market substrates into
+        its own cache when it is created. Grant every CUSTODIAN,
+        BALANCE_ACCOUNT, ASSET and guard substrate first, or refresh the cache
+        with ``ExternalStateExecutor.sync_substrates()`` afterwards.
+
+        ``STALENESS_MAX`` and ``BIG_CHANGE_BPS`` must already be granted, or
+        creation reverts with ``ExternalStateMandatorySingletonMissing``.
+
+        Deploying the contract costs a few million gas; on chains with small
+        blocks the transaction may need a large-block mechanism.
+        """
+        return self._action_raw("createExecutor()", [])
+
     def _build(
         self,
         method: str,
@@ -101,11 +126,9 @@ class ExternalStateSubstrates:
     TARGET for every action, ASSET and BALANCE_ACCOUNT only when ``amount``
     is non-zero (an actions-only call moves nothing to account for). The executor
     keeps its own cache on top of that, refreshed by
-    ``ExternalStateExecutor.syncSubstrates()``: a newly granted custodian or
-    balance account stays unusable until that runs. Revocation is asymmetric --
-    a revoked balance account is rejected immediately, since propose/confirm
-    check the vault before the cache, while a revoked custodian remains
-    authorized on the executor until the next sync.
+    ``ExternalStateExecutor.sync_substrates()``: a newly granted custodian or
+    balance account stays unusable until that runs. Revocation is asymmetric;
+    see ``sync_substrates`` before revoking a custodian or balance account.
     """
 
     _ASSET = 1
