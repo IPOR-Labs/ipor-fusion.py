@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from _foundry import (
     FoundryContract,
+    LibraryReference,
     SolidityArtifact,
     SolidityCompilationError,
     compile_foundry_contracts,
@@ -274,3 +275,94 @@ def test_git_revision_reports_missing_git(tmp_path, monkeypatch):
 
     with pytest.raises(SolidityCompilationError, match="git was not found"):
         git_revision(tmp_path)
+
+
+LIBRARY = "0x" + "ab" * 20
+PLACEHOLDER = "__$" + "c" * 34 + "$__"
+
+
+def _linked_artifact(source: str, name: str) -> dict:
+    # Creation code: PUSH20 <library> ...; the placeholder sits at byte 1.
+    artifact = _artifact(source, name, bytecode="0x73" + PLACEHOLDER + "00")
+    artifact["bytecode"]["linkReferences"] = {
+        "contracts/Lib.sol": {"Lib": [{"start": 1, "length": 20}]}
+    }
+    artifact["deployedBytecode"] = {
+        "object": "0x6073" + PLACEHOLDER,
+        "linkReferences": {"contracts/Lib.sol": {"Lib": [{"start": 2, "length": 20}]}},
+    }
+    return artifact
+
+
+def _compile_linked(tmp_path, monkeypatch) -> SolidityArtifact:
+    _source(tmp_path)
+    contract = FoundryContract("contracts/Example.sol", "Example")
+    monkeypatch.setattr("shutil.which", lambda binary: "/usr/bin/forge")
+
+    def run(command, **kwargs):
+        output = Path(command[command.index("--out") + 1])
+        artifact = output / "Example.sol" / "Example.json"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text(
+            json.dumps(_linked_artifact(contract.source, contract.name))
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("subprocess.run", run)
+    return compile_foundry_contracts(tmp_path, (contract,))[contract]
+
+
+def test_placeholders_are_zeroed_and_listed(tmp_path, monkeypatch):
+    artifact = _compile_linked(tmp_path, monkeypatch)
+
+    assert artifact.creation_code == bytes.fromhex("73" + "00" * 20 + "00")
+    assert artifact.runtime_code == bytes.fromhex("6073" + "00" * 20)
+    assert artifact.creation_links == (LibraryReference("Lib", 1, 20),)
+    assert artifact.runtime_links == (LibraryReference("Lib", 2, 20),)
+    assert artifact.unlinked_libraries == ("Lib",)
+    with pytest.raises(ValueError, match="unlinked libraries: Lib"):
+        artifact.init_code()
+
+
+def test_link_patches_every_placeholder(tmp_path, monkeypatch):
+    artifact = _compile_linked(tmp_path, monkeypatch)
+
+    linked = artifact.link({"Lib": LIBRARY, "Unused": LIBRARY})
+
+    assert linked.creation_code == bytes.fromhex("73" + "ab" * 20 + "00")
+    assert linked.runtime_code == bytes.fromhex("6073" + "ab" * 20)
+    assert linked.unlinked_libraries == ()
+    assert linked.init_code(("uint8",), (1,)) == linked.creation_code + (1).to_bytes(
+        32, "big"
+    )
+    assert artifact.creation_links, "link() must not mutate the original"
+
+
+def test_link_rejects_missing_or_malformed_addresses(tmp_path, monkeypatch):
+    artifact = _compile_linked(tmp_path, monkeypatch)
+
+    with pytest.raises(ValueError, match="no address for linked libraries: Lib"):
+        artifact.link({})
+    with pytest.raises(ValueError, match="address is 2 bytes, placeholder is 20"):
+        artifact.link({"Lib": "0xabcd"})
+
+
+def test_rejects_invalid_link_references(tmp_path, monkeypatch):
+    _source(tmp_path)
+    contract = FoundryContract("contracts/Example.sol", "Example")
+    monkeypatch.setattr("shutil.which", lambda binary: "/usr/bin/forge")
+
+    def run(command, **kwargs):
+        output = Path(command[command.index("--out") + 1])
+        artifact = output / "Example.sol" / "Example.json"
+        artifact.parent.mkdir(parents=True)
+        data = _artifact(contract.source, contract.name)
+        data["bytecode"]["linkReferences"] = {
+            "contracts/Lib.sol": {"Lib": [{"start": -1}]}
+        }
+        artifact.write_text(json.dumps(data))
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("subprocess.run", run)
+    with pytest.raises(SolidityCompilationError, match="invalid linkReferences"):
+        compile_foundry_contracts(tmp_path, (contract,))

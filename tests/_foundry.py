@@ -13,8 +13,8 @@ import os
 import re
 import shutil
 import subprocess
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -35,13 +35,52 @@ class FoundryContract:
 
 
 @dataclass(frozen=True, slots=True)
+class LibraryReference:
+    """One unlinked library placeholder: ``length`` bytes at ``start`` that
+    :meth:`SolidityArtifact.link` overwrites with the library's address."""
+
+    name: str
+    start: int
+    length: int
+
+
+@dataclass(frozen=True, slots=True)
 class SolidityArtifact:
-    """Creation/runtime bytecode produced for one Solidity contract."""
+    """Creation/runtime bytecode produced for one Solidity contract.
+
+    Library placeholders are zeroed in the bytecode and listed in
+    ``creation_links`` / ``runtime_links``; an artifact stays unusable until
+    :meth:`link` has patched every one of them.
+    """
 
     contract: FoundryContract
     creation_code: bytes
     runtime_code: bytes
     immutable_ranges: tuple[tuple[int, int], ...] = ()
+    creation_links: tuple[LibraryReference, ...] = ()
+    runtime_links: tuple[LibraryReference, ...] = ()
+
+    @property
+    def unlinked_libraries(self) -> tuple[str, ...]:
+        """Library names still to be linked, sorted."""
+        return tuple(
+            sorted({ref.name for ref in self.creation_links + self.runtime_links})
+        )
+
+    def link(self, libraries: Mapping[str, str]) -> SolidityArtifact:
+        """Return a copy with every placeholder patched from ``libraries``
+        (library name to deployed address); names it does not need are
+        ignored, a missing one raises."""
+        missing = [name for name in self.unlinked_libraries if name not in libraries]
+        if missing:
+            raise ValueError(f"no address for linked libraries: {', '.join(missing)}")
+        return replace(
+            self,
+            creation_code=_patch(self.creation_code, self.creation_links, libraries),
+            runtime_code=_patch(self.runtime_code, self.runtime_links, libraries),
+            creation_links=(),
+            runtime_links=(),
+        )
 
     def init_code(
         self,
@@ -49,6 +88,11 @@ class SolidityArtifact:
         constructor_values: Sequence[Any] = (),
     ) -> bytes:
         """Return creation bytecode with ABI-encoded constructor arguments."""
+        if self.creation_links:
+            raise ValueError(
+                f"{self.contract.name} has unlinked libraries: "
+                f"{', '.join(self.unlinked_libraries)}"
+            )
         if len(constructor_types) != len(constructor_values):
             raise ValueError(
                 "constructor_types and constructor_values must have equal length"
@@ -231,11 +275,58 @@ def _read_artifact(
         immutable_ranges = _immutable_ranges(
             data["deployedBytecode"].get("immutableReferences", {})
         )
+        creation_links = _link_references(data["bytecode"].get("linkReferences", {}))
+        runtime_links = _link_references(
+            data["deployedBytecode"].get("linkReferences", {})
+        )
     except (KeyError, TypeError) as exc:
         raise SolidityCompilationError(
             f"invalid Foundry artifact for {source}:{contract.name} at {path}"
         ) from exc
-    return SolidityArtifact(contract, creation_code, runtime_code, immutable_ranges)
+    return SolidityArtifact(
+        contract,
+        creation_code,
+        runtime_code,
+        immutable_ranges,
+        creation_links,
+        runtime_links,
+    )
+
+
+def _link_references(value: object) -> tuple[LibraryReference, ...]:
+    """``linkReferences`` of a Foundry artifact: ``{source: {Library: [{start,
+    length}, ...]}}``. Keyed by bare library name; the names are unique within
+    one compilation."""
+    if not isinstance(value, dict):
+        raise SolidityCompilationError("invalid linkReferences in artifact")
+    references = []
+    try:
+        for libraries in value.values():
+            for name, ranges in libraries.items():
+                for reference in ranges:
+                    start = int(reference["start"])
+                    length = int(reference["length"])
+                    if start < 0 or length <= 0:
+                        raise ValueError
+                    references.append(LibraryReference(str(name), start, length))
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise SolidityCompilationError("invalid linkReferences in artifact") from exc
+    return tuple(sorted(references, key=lambda ref: (ref.start, ref.name)))
+
+
+def _patch(
+    code: bytes, references: Sequence[LibraryReference], libraries: Mapping[str, str]
+) -> bytes:
+    patched = bytearray(code)
+    for ref in references:
+        address = bytes.fromhex(libraries[ref.name].removeprefix("0x"))
+        if len(address) != ref.length:
+            raise ValueError(
+                f"library {ref.name}: address is {len(address)} bytes, "
+                f"placeholder is {ref.length}"
+            )
+        patched[ref.start : ref.start + ref.length] = address
+    return bytes(patched)
 
 
 def _immutable_ranges(value: object) -> tuple[tuple[int, int], ...]:
@@ -257,13 +348,18 @@ def _immutable_ranges(value: object) -> tuple[tuple[int, int], ...]:
     return tuple(sorted(set(ranges)))
 
 
+#: A Foundry library placeholder (``__$<34 hex>$__``); zeroed so the hex
+#: parses, and re-filled from ``linkReferences`` by :meth:`SolidityArtifact.link`.
+_PLACEHOLDER_RE = re.compile(r"__\$[0-9a-fA-F]{34}\$__")
+
+
 def _bytecode(value: object, kind: str, contract: FoundryContract) -> bytes:
     if not isinstance(value, str) or not value.startswith("0x") or len(value) <= 2:
         raise SolidityCompilationError(
             f"{kind} bytecode is empty for {contract.source}:{contract.name}"
         )
     try:
-        return bytes.fromhex(value[2:])
+        return bytes.fromhex(_PLACEHOLDER_RE.sub("0" * 40, value[2:]))
     except ValueError as exc:
         raise SolidityCompilationError(
             f"{kind} bytecode has unresolved libraries for "
