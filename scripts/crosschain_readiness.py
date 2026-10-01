@@ -30,7 +30,7 @@ import os
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from dotenv import load_dotenv
@@ -428,7 +428,7 @@ def build_report(hub: dict[str, Any], spoke: dict[str, Any]) -> dict[str, Any]:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _blockers(hub: dict[str, Any], spoke: dict[str, Any]) -> list[str]:

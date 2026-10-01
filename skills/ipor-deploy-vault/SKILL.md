@@ -86,7 +86,7 @@ addresses.
 ## Install
 
 ```bash
-pip install ipor-fusion                                     # SDK (Python 3.10+)
+pip install ipor-fusion                                     # SDK (Python 3.11+)
 curl -L https://foundry.paradigm.xyz | bash && foundryup    # anvil, for fork tests
 anvil --fork-url <BASE_RPC_URL> --chain-id 8453             # then point the SDK at :8545
 ```

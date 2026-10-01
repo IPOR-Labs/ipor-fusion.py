@@ -235,7 +235,7 @@ class ExternalStateExecutor(ContractWrapper):
         to spot an account whose attestation has gone stale.
 
         Zero is a real answer: never confirmed, or cleared when
-        `syncSubstrates` purges an account that has left the substrate set --
+        `sync_substrates` purges an account that has left the substrate set --
         which it can only do once that account's balance is already zero. A
         sync that keeps an account does NOT reset its timestamp."""
         return self._view(
@@ -374,6 +374,31 @@ class ExternalStateExecutor(ContractWrapper):
         return self._write(
             "confirmBalance(address,bytes32)", balance_account, proposal_hash
         )
+
+    def sync_substrates(self) -> Call[None]:
+        """Permissionless: rebuild the executor's substrate cache (custodians,
+        balance accounts, assets, guards) from the vault's current market
+        grants.
+
+        Send it after any grant or revoke of a CUSTODIAN, BALANCE_ACCOUNT, ASSET
+        or guard substrate once the executor exists; until then the executor
+        keeps acting on its old cache. TARGET changes apply without it.
+        Revocation is asymmetric: a revoked balance account is refused at once,
+        since propose/confirm check the vault first, but a revoked CUSTODIAN
+        stays authorized until this runs -- so revoke and sync back to back.
+
+        Reverts on a duplicate balance account or singleton, when
+        `STALENESS_MAX` or `BIG_CHANGE_BPS` is missing or zero, and when a
+        balance account leaving the set still holds a non-zero balance. A
+        revert keeps the old cache, custodians included. So
+        `ExternalStateOperationFuse.exit` a balance account to zero before
+        revoking it: once revoked while funded, it can be neither exited nor
+        synced away until it is re-granted.
+
+        It reads the grants from the vault, so send it as its own transaction,
+        never from inside `PlasmaVault.execute`.
+        """
+        return self._write("syncSubstrates()")
 
     @staticmethod
     def proposal_hash(

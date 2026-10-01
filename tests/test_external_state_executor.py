@@ -626,6 +626,16 @@ class TestConfirmBalance:
         assert got == proposal_hash
 
 
+class TestSyncSubstrates:
+    def test_encodes_bare_selector(self):
+        executor, _ = _make_executor()
+
+        call = executor.sync_substrates()
+
+        assert call.to == EXECUTOR_ADDR
+        assert call.data == Web3.keccak(text="syncSubstrates()")[:4]
+
+
 _BALANCE_PROPOSED_TOPIC = Web3.keccak(text=_BALANCE_PROPOSED_SIG)
 
 
