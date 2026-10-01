@@ -69,7 +69,9 @@ to assertion failures, so availability improving is an XPASS, not broken CI.
 Readiness RPC clients fail on missing/unreachable providers or wrong chain IDs;
 they pin a snapshot per chain and do not require `eth_simulateV1`.
 `scripts/crosschain_readiness.py` separately reports both Arbitrum/HyperEVM USDC
-directions and factory configurations with snapshot block numbers/hashes/timestamps.
+directions and the pilot-v2 factory pair's configuration (creation codes, routes,
+the canary creator's allowance, balance and HyperEVM big-block flag) with snapshot
+block numbers/hashes/timestamps.
 Blocked availability is a successful observation, not acceptance; incomplete probes
 fail. `.github/workflows/crosschain-readiness.yml` runs it independently of PR CI
 using Arbitrum and HyperEVM RPC secrets. Scheduling only becomes active after the

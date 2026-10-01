@@ -37,13 +37,14 @@ from dotenv import load_dotenv
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector, keccak
 from web3 import Web3
+from web3.types import RPCEndpoint
 
 from ipor_fusion import ERC20, Web3Context, ccip_token_lane
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain import CcipCrosschainFactory
 from ipor_fusion.types import ChainId
 
-SCHEMA = "ipor-fusion.crosschain-readiness/1"
+SCHEMA = "ipor-fusion.crosschain-readiness/2"
 EXIT_OK = 0
 EXIT_CONFIG = 2
 EXIT_INCOMPLETE = 3
@@ -58,8 +59,21 @@ MAX_SNAPSHOT_SKEW_S = 900
 #: The factory generation the SDK wrappers were verified against.
 EXPECTED_FACTORY_INTERFACE_VERSION = 1
 
-#: The CCIP crosschain factory, at one CREATE3 address on both chains.
-FACTORY = Web3.to_checksum_address("0x3a745EaC243ea7563CCbD5890dbCA1b05CEe1e0D")
+#: The pilot-v2 CCIP crosschain factory (contracts source ``810e260`` plus the
+#: three 5-minute patches), at one CREATE3 address on both chains. The first
+#: pilot pair (``0x3a745…``) keeps the old recall accounting and is retired
+#: from this probe.
+FACTORY = Web3.to_checksum_address("0x3BB74623A229Ff463bDe6B5b267B7c8d9086fd4b")
+#: keccak of the creation codes the pilot-v2 factories store; a different value
+#: means another build at this address.
+EXPECTED_CREATION_CODE_HASHES = {
+    "executor": "0x11e28748e1cda094e2b80620b85bfb01e008172a69f2592be72493caad285cd1",
+    "dispatcher": "0xcc2edfa5791f504e730114ed80fcd535a927e5e11e53045a2584bb1e161d5e03",
+}
+#: The canary's creator EOA: `createExecutor` sender on the hub, so it must be
+#: an allowed creator, hold native gas, and sit on HyperEVM big blocks (its
+#: vault clone there needs ~9 M gas).
+CREATOR = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
 
 @dataclass(frozen=True)
@@ -184,15 +198,29 @@ FACTORY_GATE_TEXT = {
     ),
     "router_matches": "factory CCIP_ROUTER differs from the chain's Router",
     "creation_codes_configured": "factory creation codes not configured",
-    "creator_authorized": "creation is restricted and the owner is not an allowed creator",
+    "creator_authorized": "creation is restricted and the canary creator is not allowed",
+    "creation_codes_expected": "stored creation codes are not the pilot-v2 build",
+    "creator_big_blocks": "the canary creator is not on HyperEVM big blocks",
     "usdc_asset_ready": "USDC asset not enabled",
     "route_to_peer_ready": "route to peer not enabled",
 }
 
 
+def _using_big_blocks(ctx: Web3Context, address: ChecksumAddress) -> bool:
+    """HyperEVM's ``eth_usingBigBlocks``: whether ``address`` sends into the
+    30 M-gas big blocks."""
+    response = ctx.web3.provider.make_request(
+        RPCEndpoint("eth_usingBigBlocks"), [address]
+    )
+    if "result" not in response:
+        raise RuntimeError("eth_usingBigBlocks unavailable")
+    return bool(response["result"])
+
+
 def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[str, Any]:
-    """The factory's USDC asset, its route to ``peer`` and the creation gates,
-    each read once; ``gates`` holds every boolean ``ready`` is made of."""
+    """The factory's USDC asset, its route to ``peer``, the creation gates and
+    the canary creator's standing, each read once; ``gates`` holds every
+    boolean ``ready`` is made of."""
     factory = CcipCrosschainFactory(ctx, FACTORY)
     route = factory.ccip_route(peer.chain_id).call()
     token, shared_decimals, enabled = factory.asset_config(USDC_ASSET_ID).call()
@@ -200,7 +228,19 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
     owner = _view(ctx, FACTORY, "OWNER()", ["address"])
     router = factory.ccip_router().call()
     restricted = bool(factory.creation_restricted().call())
-    owner_allowed = bool(factory.is_allowed_creator(owner).call())
+    creator_allowed = bool(factory.is_allowed_creator(CREATOR).call())
+    creation_code_hashes = {
+        "executor": "0x" + bytes(factory.executor_creation_code_hash().call()).hex(),
+        "dispatcher": "0x"
+        + bytes(factory.dispatcher_creation_code_hash().call()).hex(),
+    }
+    creator: dict[str, Any] = {
+        "address": CREATOR,
+        "is_allowed_creator": creator_allowed,
+        "native_balance_wei": int(
+            ctx.web3.eth.get_balance(CREATOR, block_identifier=ctx.default_block)
+        ),
+    }
     asset_ready = bool(
         enabled and token == spec.usdc and shared_decimals == USDC_DECIMALS
     )
@@ -217,16 +257,22 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
         ),
         "router_matches": router == spec.router,
         "creation_codes_configured": bool(factory.creation_codes_configured().call()),
-        "creator_authorized": (not restricted) or owner_allowed,
+        "creation_codes_expected": creation_code_hashes
+        == EXPECTED_CREATION_CODE_HASHES,
+        "creator_authorized": (not restricted) or creator_allowed,
         "usdc_asset_ready": asset_ready,
         "route_to_peer_ready": route_ready,
     }
+    if spec is SPOKE:
+        creator["using_big_blocks"] = _using_big_blocks(ctx, CREATOR)
+        gates["creator_big_blocks"] = creator["using_big_blocks"]
     return {
         "address": FACTORY,
         "interface_version": interface_version,
         "owner": owner,
-        "owner_is_allowed_creator": owner_allowed,
         "creation_restricted": restricted,
+        "creation_code_hashes": creation_code_hashes,
+        "creator": creator,
         "config_delay_seconds": int(_view(ctx, FACTORY, "CONFIG_DELAY()", ["uint256"])),
         "ccip_router": router,
         "usdc_asset": {

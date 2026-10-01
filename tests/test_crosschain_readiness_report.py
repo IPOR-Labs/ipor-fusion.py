@@ -66,8 +66,13 @@ def _answers(
     router_ok: bool,
     route_peer_ok: bool,
     interface_version: int,
+    creation_codes_ok: bool,
 ) -> dict[tuple[str, bytes], bytes]:
     """Return data for every selector the snapshot reads on one chain."""
+    hashes = mod.EXPECTED_CREATION_CODE_HASHES
+    executor_hash = bytes.fromhex(
+        hashes["executor"][2:] if creation_codes_ok else "33" * 32
+    )
     route = (
         peer.chain_selector,
         mod.FACTORY if route_peer_ok else OTHER,
@@ -111,6 +116,12 @@ def _answers(
         (mod.FACTORY, selector("creationRestricted()")): encode(["bool"], [True]),
         (mod.FACTORY, selector("isAllowedCreator(address)")): encode(["bool"], [True]),
         (mod.FACTORY, selector("creationCodesConfigured()")): encode(["bool"], [True]),
+        (mod.FACTORY, selector("executorCreationCodeHash()")): encode(
+            ["bytes32"], [executor_hash]
+        ),
+        (mod.FACTORY, selector("dispatcherCreationCodeHash()")): encode(
+            ["bytes32"], [bytes.fromhex(hashes["dispatcher"][2:])]
+        ),
         (mod.FACTORY, selector("factoryInterfaceVersion()")): encode(
             ["uint32"], [interface_version]
         ),
@@ -136,6 +147,8 @@ def _ctx(
     router_ok: bool = True,
     route_peer_ok: bool = True,
     interface_version: int = 1,
+    creation_codes_ok: bool = True,
+    big_blocks: bool = True,
     block: int = 100,
     timestamp: int = 1_700_000_500,
     hashes: tuple[str, str] = (HASH_A, HASH_A),
@@ -150,10 +163,13 @@ def _ctx(
         router_ok=router_ok,
         route_peer_ok=route_peer_ok,
         interface_version=interface_version,
+        creation_codes_ok=creation_codes_ok,
     )
     ctx = MagicMock()
     ctx.chain_id = spec.chain_id
     ctx.default_block = block
+    ctx.web3.eth.get_balance.return_value = 10**17
+    ctx.web3.provider.make_request.return_value = {"result": big_blocks}
 
     def call(to, data, block=None):
         try:
@@ -226,11 +242,20 @@ def test_ready_pair_exposes_per_chain_repin_candidates(mod):
         "interface_version_supported": True,
         "router_matches": True,
         "creation_codes_configured": True,
+        "creation_codes_expected": True,
         "creator_authorized": True,
         "usdc_asset_ready": True,
         "route_to_peer_ready": True,
     }
     assert factory["interface_version"] == 1
+    assert factory["creator"] == {
+        "address": mod.CREATOR,
+        "is_allowed_creator": True,
+        "native_balance_wei": 10**17,
+    }
+    spoke_factory = report["chains"]["hyperevm"]["factory"]
+    assert spoke_factory["creator"]["using_big_blocks"] is True
+    assert spoke_factory["gates"]["creator_big_blocks"] is True
     assert report["chains"]["arbitrum"]["usdc_usd_feed"]["age_seconds"] == 600
 
 
@@ -464,6 +489,36 @@ def test_main_overwrites_a_stale_ready_report_on_unexpected_probe_error(
     assert report["error"]["type"] == "RuntimeError"
     assert "provider URL" not in output.read_text()
     assert "provider URL" not in capsys.readouterr().out
+
+
+def test_creator_big_blocks_gate_applies_to_the_spoke_only(mod):
+    hub_ctx = _ctx(mod, mod.HUB, mod.SPOKE, big_blocks=False)
+    report = _report(mod, hub_ctx, _ctx(mod, mod.SPOKE, mod.HUB, big_blocks=False))
+
+    assert "creator_big_blocks" not in report["chains"]["arbitrum"]["factory"]["gates"]
+    hub_ctx.web3.provider.make_request.assert_not_called()
+    spoke = report["chains"]["hyperevm"]["factory"]
+    assert spoke["creator"]["using_big_blocks"] is False
+    assert spoke["gates"]["creator_big_blocks"] is False
+    assert report["factories_ready"] is False
+    assert report["blocked_by"] == [
+        "factory on hyperevm: the canary creator is not on HyperEVM big blocks"
+    ]
+
+
+def test_unexpected_creation_codes_are_a_gate(mod):
+    report = _report(
+        mod,
+        _ctx(mod, mod.HUB, mod.SPOKE, creation_codes_ok=False),
+        _ctx(mod, mod.SPOKE, mod.HUB),
+    )
+
+    assert report["factories_ready"] is False
+    hub_factory = report["chains"]["arbitrum"]["factory"]
+    assert hub_factory["creation_code_hashes"]["executor"] == "0x" + "33" * 32
+    assert report["blocked_by"] == [
+        "factory on arbitrum: stored creation codes are not the pilot-v2 build"
+    ]
 
 
 def test_unsupported_factory_interface_version_is_a_gate(mod):
