@@ -263,9 +263,11 @@ def run_simulation(web3: Web3) -> SimulationResult:
     plan.append("deploy the vault stack (clone)")
 
     # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. The admin
-    # chain is ADMIN -> OWNER -> ATOMIST -> {ALPHA, FUSE_MANAGER, WHITELIST,
+    # chain is OWNER -> ATOMIST -> {ALPHA, FUSE_MANAGER, WHITELIST,
     # UPDATE_MARKETS_BALANCES}, so OWNER must self-grant ATOMIST before it can
-    # grant the rest.
+    # grant the rest. OWNER is its OWN admin -- nothing sits above it, ADMIN_ROLE
+    # included -- so it is the root of the vault, and a lost owner key has no
+    # higher authority to recover it.
     sim.add_call(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,
@@ -350,8 +352,12 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.observe("aave_value_t0", plasma_vault.total_assets_in_market(AAVE_MARKET))
     sim.observe("vault_usdc_after_supply", usdc.balance_of(preview.plasma_vault))
 
-    # Fast-forward a year and refresh the cached market balance so the accrued
-    # interest surfaces into the vault's stored NAV.
+    # SIMULATION ONLY (time advancement): next_block shifts block.timestamp so a
+    # year of Aave interest accrues inside one batch. There is no production
+    # equivalent -- you wait, then re-read the position from a later block.
+    # The update_markets_balances call below is NOT simulation-only: it is a real alpha
+    # transaction, needed because the market value is cached and advancing time
+    # alone would not move the vault's stored NAV.
     sim.next_block(time_shift_seconds=ONE_YEAR_SECONDS)
     sim.add_call(call=plasma_vault.update_markets_balances([AAVE_MARKET]), from_=ALPHA)
     sim.observe("aave_value_t1", plasma_vault.total_assets_in_market(AAVE_MARKET))
