@@ -46,6 +46,10 @@ from ipor_fusion.crosschain.ccip.events import (
     decode_ccip_event,
     find_ccip_events,
 )
+from ipor_fusion.crosschain.ccip.quote import (
+    INSUFFICIENT_NATIVE_FEE_SELECTOR,
+    quote_ccip_native_fee,
+)
 from ipor_fusion.crosschain.contracts import (
     CrosschainDispatcher,
     CrosschainExecutor,
@@ -148,6 +152,8 @@ __all__ = [
     "decode_envelope",
     "encode_enforced_options",
     "find_ccip_events",
+    "INSUFFICIENT_NATIVE_FEE_SELECTOR",
+    "quote_ccip_native_fee",
     "encode_oft_compose_msg",
     "lz_compose_calldata",
     "lz_receive_calldata",

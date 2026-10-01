@@ -62,6 +62,7 @@ from ipor_fusion.crosschain import (
     CCIP_EVENT_TOPICS,
     CCIP_EVENTS,
     CROSSCHAIN_ERROR_SIGNATURES,
+    INSUFFICIENT_NATIVE_FEE_SELECTOR,
     BalanceObservation,
     BusinessAction,
     CcipCrosschainDispatcher,
@@ -88,6 +89,7 @@ from ipor_fusion.crosschain import (
     decode_ccip_event,
     encode_enforced_options,
     find_ccip_events,
+    quote_ccip_native_fee,
 )
 from ipor_fusion.crosschain.ccip.lane import CcipLane
 from ipor_fusion.crosschain.ccip.transport import CcipChain, CcipTransport
@@ -330,6 +332,8 @@ __all__ = [
     "ccip_events",
     "decode_ccip_event",
     "find_ccip_events",
+    "INSUFFICIENT_NATIVE_FEE_SELECTOR",
+    "quote_ccip_native_fee",
     "CcipTokenLane",
     "ccip_token_lane",
     "StargateTokenMessaging",

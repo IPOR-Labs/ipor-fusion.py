@@ -37,6 +37,10 @@ from ipor_fusion.crosschain.ccip.events import (
     decode_ccip_event,
     find_ccip_events,
 )
+from ipor_fusion.crosschain.ccip.quote import (
+    INSUFFICIENT_NATIVE_FEE_SELECTOR,
+    quote_ccip_native_fee,
+)
 
 __all__ = [
     "CCIP_EVENTS",
@@ -66,4 +70,6 @@ __all__ = [
     "ccip_receive_calldata",
     "decode_ccip_event",
     "find_ccip_events",
+    "INSUFFICIENT_NATIVE_FEE_SELECTOR",
+    "quote_ccip_native_fee",
 ]

@@ -36,6 +36,7 @@ LEAF = {
     "ipor_fusion.crosschain.ccip.codec",
     "ipor_fusion.crosschain.ccip.contracts",
     "ipor_fusion.crosschain.ccip.events",
+    "ipor_fusion.crosschain.ccip.quote",
     "ipor_fusion.crosschain.stargate",
     "ipor_fusion.crosschain.stargate.contracts",
     "ipor_fusion.crosschain.stargate.layerzero",
