@@ -78,6 +78,21 @@ HYPEREVM_SELECTOR = 2442541497099098535
 ARBITRUM_ROUTER = Web3.to_checksum_address("0x141fa059441E0ca23ce184B6A78bafD2A517DdE8")
 HYPEREVM_ROUTER = Web3.to_checksum_address("0x13b3332b66389B1467CA6eBd6fa79775CCeF65ec")
 FACTORY = Web3.to_checksum_address("0x3a745EaC243ea7563CCbD5890dbCA1b05CEe1e0D")
+# The pilot-v2 factory pair (contracts team, 2026-10-01): source `810e260` on
+# `827ada0` plus the three 5-minute patches, CREATE3 anchor
+# 0x6Fe4852dd57dC0Ec47928D55A3b8577f36704032, same address on both chains.
+FACTORY_V2 = Web3.to_checksum_address("0x3BB74623A229Ff463bDe6B5b267B7c8d9086fd4b")
+#: The canary's creator EOA, allowed on both v2 factories (creation is
+#: restricted there); executors are predicted from it, not from the owner.
+CREATOR = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+#: Pinned after the v2 pair was configured (assets, routes, creator).
+V2_BLOCKS = (510_724_267, 47_394_896)
+V2_EXECUTOR_CREATION_KECCAK = bytes.fromhex(
+    "11e28748e1cda094e2b80620b85bfb01e008172a69f2592be72493caad285cd1"
+)
+V2_DISPATCHER_CREATION_KECCAK = bytes.fromhex(
+    "cc2edfa5791f504e730114ed80fcd535a927e5e11e53045a2584bb1e161d5e03"
+)
 ARBITRUM_FUSION_FACTORY = Web3.to_checksum_address(
     "0x134fCAce7a2C7Ef3dF2479B62f03ddabAEa922d5"
 )
@@ -146,11 +161,11 @@ FUSE_CONTRACTS = (
         "CrosschainBalanceFuse",
     ),
 )
-# The checkout every compiled contract comes from. On the `deployed`
-# generation only the four fuses are compiled (the executor and dispatcher come
-# from the creation code the pilot factories store on chain); on `source` the
-# whole CCIP core is. Bump deliberately, with the fuse ABI re-checked against
-# the encoders.
+# The checkout every compiled contract comes from. On the `pilot` and `v2`
+# generations only the four fuses are compiled (the executors and dispatchers
+# come from the creation code the live factories store); on `source` the whole
+# CCIP core is. Bump deliberately, with the fuse ABI re-checked against the
+# encoders.
 FUSE_SOURCE_REVISION = "827ada02eabdc01eae913de1114fa5bea45ee205"
 CROSSCHAIN_MARKET = MarketId(54)
 
@@ -189,13 +204,15 @@ DISPATCHER_CONTRACT = FoundryContract(
     "contracts/crosschain/ccip/CcipCrosschainDispatcher.sol",
     "CcipCrosschainDispatcher",
 )
-#: `CrosschainConstants.ATTESTATION_ZERO_DUST_SD` of the source generation.
+#: `CrosschainConstants.ATTESTATION_ZERO_DUST_SD` of the new accounting.
 ATTESTATION_ZERO_DUST_SD = 10_000
-#: `deployed`: executors and dispatchers from the pilot factory's stored
-#: creation code. `source`: a factory pair built from FUSE_SOURCE_REVISION
-#: inside the simulation, so the recall debits the sent amount (IL-8497) and
-#: dust attests to zero (IL-8499).
-GENERATIONS = ("deployed", "source")
+#: `pilot`: executors and dispatchers from the pilot factory's stored creation
+#: code (old accounting). `v2`: the live pilot-v2 pair, pinned at V2_BLOCKS.
+#: `source`: a factory pair built from FUSE_SOURCE_REVISION inside the
+#: simulation. `v2` and `source` share the new accounting: the recall debits
+#: the sent amount (IL-8497) and dust attests to zero (IL-8499).
+GENERATIONS = ("pilot", "v2", "source")
+NEW_ACCOUNTING = frozenset({"v2", "source"})
 PILOT_EXECUTOR_CREATION_KECCAK = bytes.fromhex(
     PILOT_BUILD["creation_stores"]["executor"]["creation_keccak"][2:]
 )
@@ -772,13 +789,53 @@ def test_simulate_clone_htest_vault(
     assert result.get("vault_access_manager") == preview.access_manager
 
 
+def _asset_for(asset: RehearsalAsset, generation: str) -> RehearsalAsset:
+    """The asset at the pins its generation needs: the v2 pair exists only
+    from V2_BLOCKS on."""
+    return replace(asset, blocks=V2_BLOCKS) if generation == "v2" else asset
+
+
 @pytest.mark.parametrize("generation", GENERATIONS)
 @pytest.mark.parametrize("asset", REHEARSAL_ASSETS, ids=lambda asset: asset.symbol)
 def test_simulate_configured_asset_lane(web3_arb, web3_hyperevm, asset, generation):
+    asset = _asset_for(asset, generation)
     _require_token_lanes(web3_arb, web3_hyperevm, asset)
     run = _prepare_asset_run(web3_arb, web3_hyperevm, asset, generation=generation)
     run_lifecycle(run)
     _assert_token_deliveries_within_gas_limit(run)
+
+
+@pytest.mark.parametrize("index", (0, 1), ids=("arbitrum", "hyperevm"))
+def test_v2_factory_pair_identity(web3_arb, web3_hyperevm, index):
+    """The live pilot-v2 pair as the contracts team reported it, at the v2
+    pins: same address and creation codes on both chains, the canary creator
+    allowed, routes to each other, USDC and HTEST enabled."""
+    web3 = (web3_arb, web3_hyperevm)[index]
+    chain = (ARBITRUM, HYPEREVM)[index]
+    ctx = _ctx(web3, chain, V2_BLOCKS[index])
+    factory = CcipCrosschainFactory(ctx, FACTORY_V2)
+
+    assert factory.owner().call() == OWNER
+    assert factory.config_delay().call() == 300
+    assert factory.creation_codes_configured().call()
+    assert factory.creation_restricted().call()
+    assert factory.is_allowed_creator(CREATOR).call()
+    assert factory.executor_creation_code_hash().call() == V2_EXECUTOR_CREATION_KECCAK
+    assert (
+        factory.dispatcher_creation_code_hash().call() == V2_DISPATCHER_CREATION_KECCAK
+    )
+    assert V2_EXECUTOR_CREATION_KECCAK != PILOT_EXECUTOR_CREATION_KECCAK
+    route = factory.ccip_route((HYPEREVM, ARBITRUM)[index]).call()
+    assert route.enabled
+    assert route.peer == FACTORY_V2
+    assert route.chain_selector == (HYPEREVM_SELECTOR, ARBITRUM_SELECTOR)[index]
+    assert (route.message_gas_limit, route.token_gas_limit) == (6_000_000, 1_000_000)
+    for asset in REHEARSAL_ASSETS:
+        assert factory.asset_config(asset.asset_id).call() == (
+            asset.tokens[index],
+            asset.decimals,
+            True,
+        )
 
 
 def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
@@ -925,15 +982,14 @@ def test_simulate_usdc_configuration_and_rounding(web3_arb, web3_hyperevm):
 def test_simulate_usdc_cctp_fee_in_both_directions(
     web3_arb, web3_hyperevm, fee_raw_units, generation
 ):
-    """Full recalls expose vault rounding and the CCTP fee; what the settled
-    bucket keeps depends on the generation."""
-    # These pins observed both USDC token lanes open while the pilot factories
-    # still had USDC disabled, so the deployed run also exercises the asset
-    # governance path. Deployed: the recall debits the received amount, the fee
-    # stays in `settled` and the relative gate refuses to re-mark the residue
-    # to zero. Source: the fee is a realized loss (IL-8497), only the vault
-    # rounding remains and it attests to zero (IL-8499).
-    asset = replace(USDC, blocks=(510_124_921, 47_228_089))
+    """Full recalls after the management fee has been re-attested leave only
+    the CCTP fee, and only on the pilot generation."""
+    # The pilot pins observed both USDC token lanes open while the pilot
+    # factories still had USDC disabled, so that run also exercises the asset
+    # governance path. Pilot: the recall debits the received amount, the fee
+    # stays in `settled` and the relative gate refuses to re-mark it to zero.
+    # New accounting: the fee is a realized loss (IL-8497) and nothing remains.
+    asset = _asset_for(replace(USDC, blocks=(510_124_921, 47_228_089)), generation)
     base = _asset_transport(asset)
     transport = _CctpFeeTransport(
         (base.chain(chain) for chain in (ARBITRUM, HYPEREVM)),
@@ -956,9 +1012,12 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
     assert hub.get("outbound_after_send") == transfers[0].raw.token_transfer[0].amount
     assert hub.get("settled_after_settle") == transfers[0].token_amount
     assert hub.get("idle_ledger") == transfers[1].token_amount
-    rounding = transfers[0].token_amount - transfers[1].raw.token_transfer[0].amount
+    # What left the spoke is the credit less the management fee accrued over
+    # the 7-day gap (5 bps a year), re-attested before the recall.
+    accrued_fee = transfers[0].token_amount - transfers[1].raw.token_transfer[0].amount
+    assert 0 < accrued_fee <= transfers[0].token_amount // 10_000
     residue = hub.get("settled_after_return")
-    assert residue == rounding + (0 if run.ccip_debits_sent_amount else fee_raw_units)
+    assert residue == (0 if run.ccip_debits_sent_amount else fee_raw_units)
     _assert_return_finalized(
         hub,
         run,
@@ -1003,8 +1062,8 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
 
 def _assert_return_finalized(hub, run: Run, *, sent: int, received: int) -> None:
     """The one ``ReturnFinalized`` of the run, in the generation's shape:
-    ``(chainId, operationId, received)`` on the deployed pilot,
-    ``(chainId, operationId, sentSD, received)`` on the source generation."""
+    ``(chainId, operationId, received)`` on the pilot,
+    ``(chainId, operationId, sentSD, received)`` on the new accounting."""
     types = ["uint256", "bytes32", "uint256"]
     if run.ccip_debits_sent_amount:
         types.append("uint256")
@@ -1022,9 +1081,8 @@ def _assert_return_finalized(hub, run: Run, *, sent: int, received: int) -> None
 @pytest.mark.parametrize("generation", GENERATIONS)
 def test_simulate_usdc_cctp_fee_alone(web3_arb, web3_hyperevm, generation):
     """Without a spoke vault deposit only the return token-pool fee remains:
-    phantom settled value on the deployed pilot, a realized loss on the source
-    generation."""
-    asset = replace(USDC, blocks=(510_124_921, 47_228_089))
+    phantom settled value on the pilot, a realized loss on the new accounting."""
+    asset = _asset_for(replace(USDC, blocks=(510_124_921, 47_228_089)), generation)
     base = _asset_transport(asset)
     transport = _CctpFeeTransport(
         (base.chain(chain) for chain in (ARBITRUM, HYPEREVM)), fee_raw_units=24
@@ -1144,7 +1202,7 @@ def _prepare_asset_run(
     *,
     whitelist_dispatcher=True,
     transport: CcipTransport | None = None,
-    generation: str = "deployed",
+    generation: str = "pilot",
 ) -> Run:
     if generation not in GENERATIONS:
         raise ValueError(f"unknown generation {generation!r}")
@@ -1182,6 +1240,7 @@ def _prepare_asset_run(
     spoke = simulator.add_chain(HYPEREVM, web3_hyperevm, block=asset.blocks[1])
     hub.with_block_time_shift(60).with_block_override(gasLimit=30_000_000)
     spoke.with_block_override(gasLimit=30_000_000)
+    creator = CREATOR if generation == "v2" else OWNER
     if generation == "source":
         # A fresh factory pair exists only inside the simulation, so its reads
         # are observations, not live calls.
@@ -1208,11 +1267,11 @@ def _prepare_asset_run(
         route = replace(results[ARBITRUM].get("source_executor_route"), peer=executor)
         first_fuse_nonce = len(CORE_LIBRARIES) + 1
     else:
-        factory_address = FACTORY
+        factory_address = FACTORY_V2 if generation == "v2" else FACTORY
         ccip_factory = CcipCrosschainFactory(arb_ctx, factory_address)
-        executor = ccip_factory.compute_executor_address(OWNER, user_salt).call()
+        executor = ccip_factory.compute_executor_address(creator, user_salt).call()
         route = replace(ccip_factory.ccip_route(HYPEREVM).call(), peer=executor)
-        if asset.configure_factory:
+        if asset.configure_factory and generation == "pilot":
             _enable_factory_asset(hub, arb_ctx, asset, index=0)
             _enable_factory_asset(spoke, hyper_ctx, asset, index=1)
         hub.with_state_override(SIMULATED_DEPLOYER, balance=hex(10**18), nonce=hex(0))
@@ -1287,7 +1346,7 @@ def _prepare_asset_run(
             hub_instance.plasma_vault,
             _safety_config(),
         ),
-        from_=OWNER,
+        from_=creator,
         label="create_executor",
     )
 
@@ -1379,6 +1438,7 @@ def _prepare_asset_run(
     simulator.fund_native(ARBITRUM, factory_address, route.max_fee)
     simulator.fund_native(HYPEREVM, factory_address, 10**18)
     simulator.fund_native(ARBITRUM, OWNER, 10**20)
+    simulator.fund_native(ARBITRUM, creator, 10**20)
     simulator.fund_native(ARBITRUM, executor, 10**18)
     simulator.fund_native(HYPEREVM, OWNER, 10**20)
     simulator.fund_native(HYPEREVM, executor, 10**18)
@@ -1447,9 +1507,9 @@ def _prepare_asset_run(
         amount=10**asset.decimals + 1,
         hub_start=hub_start,
         staleness_max=_safety_config().balance_staleness_max,
-        ccip_debits_sent_amount=generation == "source",
+        ccip_debits_sent_amount=generation in NEW_ACCOUNTING,
         attestation_zero_dust_sd=(
-            ATTESTATION_ZERO_DUST_SD if generation == "source" else 0
+            ATTESTATION_ZERO_DUST_SD if generation in NEW_ACCOUNTING else 0
         ),
         min_update_interval=_safety_config().min_update_interval,
     )
