@@ -117,8 +117,8 @@ class Run:
     #: to zero.
     ccip_debits_sent_amount: bool = False
     attestation_zero_dust_sd: int = 0
-    #: The executor's ``MIN_UPDATE_INTERVAL`` when the residue attestation
-    #: must wait it out after the renewal (0: no wait).
+    #: The executor's ``MIN_UPDATE_INTERVAL``: every attestation after the
+    #: first waits it out (0: no wait).
     min_update_interval: int = 0
     relays: int = 0
     #: Labels of calls that revert on purpose; they stay in the replayed list.
@@ -265,6 +265,7 @@ def prepare_deployed_run(
         amount=SUPPLY_AMOUNT[transport_kind],
         hub_start=hub_start,
         staleness_max=lane.staleness_max().call(),
+        min_update_interval=lane.executor.min_update_interval().call(),
     )
     run.log(
         "open_lane",
@@ -537,9 +538,9 @@ def _renew_after_gap(run: Run, credited: int) -> int:
     return settled
 
 
-def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> int:
-    """REDEEM in a later spoke block, recall everything; returns the idle
-    credited home."""
+def redeem_and_recall(run: Run, shares: int, *, credited: int) -> int:
+    """REDEEM in a later spoke block, attest the redeemed amount, recall
+    everything; returns the idle credited home."""
     lane = run.lane
     run.advance(60)
     run.csim.observe(
@@ -572,6 +573,15 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
         .get("observation_after_redeem")
         .state_version,
     )
+
+    # The dispatcher carries the position at deposit cost and the vault's
+    # management fee surfaces only at REDEEM, so a recall straight after it
+    # would leave that fee in the settled bucket. Attest the redeemed amount
+    # first (a change inside bigChangeBps), then recall exactly that.
+    if run.min_update_interval:
+        run.advance(run.min_update_interval)
+    settled = attest(run, tag="redeemed", observation_label="observation_after_redeem")
+    assert settled == remote_idle
 
     run.hub.execute(
         [
@@ -609,10 +619,10 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
     if run.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO:
         assert idle >= remote_idle * 98 // 100
     assert results[run.hub_chain_id].get("pending_transfers") == 0
-    # Stargate and the source-generation CCIP executor debit the amount sent
-    # from the spoke; the deployed CCIP pilot debits the amount actually
-    # received on the hub after any token-pool fee. Vault rounding remains in
-    # the settled bucket until the next attestation.
+    # Stargate and the new-accounting CCIP executors debit the amount sent
+    # from the spoke; the CCIP pilot debits the amount actually received on
+    # the hub after any token-pool fee, which then stays in the settled
+    # bucket as a residue.
     debit = (
         idle
         if run.transport_kind == CrosschainTransportKind.CHAINLINK_CCIP
@@ -620,7 +630,7 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int, settled: int) -> 
         else remote_idle
     )
     assert results[run.hub_chain_id].get("settled_after_return") == max(
-        settled - debit, 0
+        remote_idle - debit, 0
     )
     after = results[run.spoke_chain_id].get("observation_after_return")
     assert after.tracked_idle == 0
@@ -642,10 +652,9 @@ def _attest_residue(run: Run, idle: int) -> None:
         settled_residue=residue,
         expect=BIG_CHANGE_EXCEEDED if refused else "approval",
     )
-    # The keeper waits out the update interval after the renewal: an approval
-    # that the balance checks would accept is otherwise refused with
-    # `MinUpdateIntervalNotMet` (the relative bound rejects a residue above
-    # the dust bound before that check is reached).
+    # An approval that the balance checks would accept is otherwise refused
+    # with `MinUpdateIntervalNotMet` (the relative bound rejects a residue
+    # above the dust bound before that check is reached).
     if run.min_update_interval:
         run.advance(run.min_update_interval)
     attest(
@@ -693,8 +702,8 @@ def run_lifecycle(run: Run) -> None:
     credited = supply(run)
     attest(run, tag="initial", observation_label="observation_after_settle")
     shares = _deposit(run, credited)
-    settled = _renew_after_gap(run, credited)
-    idle = redeem_and_recall(run, shares, credited=credited, settled=settled)
+    _renew_after_gap(run, credited)
+    idle = redeem_and_recall(run, shares, credited=credited)
     _attest_residue(run, idle)
     claim(run, idle)
     run.log("done", messages=len(run.csim.delivered), relays=run.relays)

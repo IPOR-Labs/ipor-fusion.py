@@ -217,9 +217,7 @@ def run_failed_deposit_recovery(run: Run, *, cancel: bool) -> None:
     else:
         assert recovered["shares"] > 0
         assert recovered["observation"].tracked_idle == 0
-        idle = redeem_and_recall(
-            run, recovered["shares"], credited=credited, settled=credited
-        )
+        idle = redeem_and_recall(run, recovered["shares"], credited=credited)
         claim(run, idle)
 
 
