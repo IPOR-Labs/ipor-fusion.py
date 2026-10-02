@@ -13,8 +13,11 @@ spokes is data, not code:
 ``POC`` is the mainnet POC deployment (Ethereum hub, Base and Arbitrum spokes)
 as read on 2026-09-24: the hub vault grants one Stargate and one CCIP
 executor, each with a dispatcher at the same address on every spoke, and every
-fuse was built with the keccak-derived POC market id. Adding a chain is one
-``Chain`` entry plus a ``web3_<name>`` fixture in ``conftest.py``.
+fuse was built with the keccak-derived POC market id. ``CANARY`` is the live
+Arbitrum -> HyperEVM USDC canary (pilot-v2 CCIP factory pair, market 54) that
+the canary runner drove end to end on 2026-10-02, pinned just after its last
+transaction with every bucket at zero. Adding a chain is one ``Chain`` entry
+plus a ``web3_<name>`` fixture in ``conftest.py``.
 
 Block pinning: pin every chain of a deployment within a couple of minutes of
 each other and the hub LAST (latest timestamp), so a spoke observation is never
@@ -25,7 +28,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 from web3 import Web3
@@ -41,6 +44,7 @@ from ipor_fusion import (
 )
 from ipor_fusion.crosschain import CrosschainTransportKind
 from ipor_fusion.fuses.crosschain import crosschain_market_id
+from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId
 
 ETHEREUM = ChainId(1)
@@ -122,7 +126,10 @@ ARBITRUM_CHAIN_SELECTOR = 4949039107694359620
 class Chain:
     """Bridge infrastructure of one chain, independent of any deployment.
     ``pending`` names what is still missing on a chain the stack will grow to;
-    every use of such a chain raises ``NotImplementedError`` with it."""
+    every use of such a chain raises ``NotImplementedError`` with it.
+    ``simulated_gas_limit`` is the block gas limit the simulations run under
+    where the pinned block's own is too small for a delivery (HyperEVM seals
+    3 M small blocks between its 30 M big blocks)."""
 
     name: str
     chain_id: ChainId
@@ -139,6 +146,7 @@ class Chain:
     ccip_router: str
     chain_selector: int
     pending: str | None = None
+    simulated_gas_limit: int | None = None
 
     def require_available(self) -> None:
         if self.pending:
@@ -220,6 +228,7 @@ CHAINS: dict[str, Chain] = {
             "0x13b3332b66389B1467CA6eBd6fa79775CCeF65ec"
         ),
         chain_selector=2442541497099098535,
+        simulated_gas_limit=30_000_000,
         pending=(
             "the outbound CCIP USDC token lane was closed at the pinned blocks "
             "(open since 2026-09-29); the hub factory's route policy, dispatcher "
@@ -290,6 +299,12 @@ class Deployment:
     spokes: tuple[Spoke, ...]
     #: Spokes the deployment will grow to; their chains are still ``pending``.
     planned_spokes: tuple[Spoke, ...] = ()
+    #: The CCIP executor generation's accounting (see ``Run``): the pilot
+    #: debits a recall by the amount received and keeps a settled residue;
+    #: from pilot v2 on (contracts IL-8497 and IL-8499) it debits the amount
+    #: sent and attests dust at or below the bound, in shared decimals, to zero.
+    ccip_debits_sent_amount: bool = False
+    attestation_zero_dust_sd: int = 0
 
     @property
     def chains(self) -> list[Chain]:
@@ -373,6 +388,54 @@ POC = Deployment(
             transports=frozenset({CrosschainTransportKind.CHAINLINK_CCIP}),
         ),
     ),
+)
+
+# The USDC canary of 2026-10-02 (``ipor-fusion-monitoring``'s
+# ``docs/crosschain-canary/state-usdc.json``): both chains pinned right after
+# its last transaction, the claim at Arbitrum 510934861 (five seconds after the
+# HyperEVM pin, so the hub is last); Stargate has no HyperEVM route, so the
+# spoke stays CCIP-only.
+CANARY_ARBITRUM = replace(CHAINS["arbitrum"], block=510_934_861)
+CANARY_HYPEREVM = replace(CHAINS["hyperevm"], block=47_452_389, pending=None)
+
+CANARY = Deployment(
+    hub=CANARY_ARBITRUM,
+    vault=Web3.to_checksum_address("0x9257e35FEcF601fD009d35060C8f555af5A655EA"),
+    # The canary EOA: creator of the executor, holder of every hub role.
+    owner=Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82"),
+    balance_proposer=Web3.to_checksum_address(
+        "0xd122DCF446bC200D1f19AD45eB669a5Ef273dBC8"
+    ),
+    balance_approver=Web3.to_checksum_address(
+        "0x64D345FE416EE6b841B544F27277d9B61b61A02a"
+    ),
+    market_id=int(IporFusionMarkets.CROSSCHAIN),
+    transports={
+        CrosschainTransportKind.CHAINLINK_CCIP: TransportDeployment(
+            executor=Web3.to_checksum_address(
+                "0xb5B4Cb6aB855fee75C98D5F4E7dB2927EDB2d211"
+            ),
+            factory=Web3.to_checksum_address(
+                "0x3BB74623A229Ff463bDe6B5b267B7c8d9086fd4b"
+            ),
+            supply_fuse=Web3.to_checksum_address(
+                "0xf47Ec3E30fBc962817365fDBB047A4f1a8D2eC0e"
+            ),
+            command_fuse=Web3.to_checksum_address(
+                "0xe79AD541F3330cA25E0a7e3F6C5aCD74Bfb51Fa0"
+            ),
+        ),
+    },
+    claim_fuse=Web3.to_checksum_address("0x010D1c669090FECfF5645e2A3a4F2E7208812D45"),
+    spokes=(
+        Spoke(
+            CANARY_HYPEREVM,
+            Web3.to_checksum_address("0x35606C49360f94fD0310F4bAE4f0a1155FC00D1a"),
+            transports=frozenset({CrosschainTransportKind.CHAINLINK_CCIP}),
+        ),
+    ),
+    ccip_debits_sent_amount=True,
+    attestation_zero_dust_sd=10_000,
 )
 
 # Kept for the offline transport tests and as the single POC executor address.

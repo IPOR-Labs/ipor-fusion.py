@@ -240,6 +240,10 @@ def prepare_deployed_run(
         alpha=dep.owner,
     )
     spoke_sim = csim.add_chain(spoke.chain_id, web3_spoke, block=spoke.chain.block)
+    # A block override carries into every later block of the simulation.
+    for simulator, chain in ((hub, dep.hub), (spoke_sim, spoke.chain)):
+        if chain.simulated_gas_limit:
+            simulator.with_block_override(gasLimit=chain.simulated_gas_limit)
     csim.fund_native(dep.hub.chain_id, lane.executor_address, NATIVE_BUDGET)
     csim.fund_native(spoke.chain_id, lane.executor_address, NATIVE_BUDGET)
     hub_start = int(web3_hub.eth.get_block(dep.hub.block)["timestamp"])
@@ -265,6 +269,8 @@ def prepare_deployed_run(
         amount=SUPPLY_AMOUNT[transport_kind],
         hub_start=hub_start,
         staleness_max=lane.staleness_max().call(),
+        ccip_debits_sent_amount=dep.ccip_debits_sent_amount,
+        attestation_zero_dust_sd=dep.attestation_zero_dust_sd,
         min_update_interval=lane.executor.min_update_interval().call(),
     )
     run.log(

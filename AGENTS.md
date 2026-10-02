@@ -62,6 +62,13 @@ Ethereum to every spoke on every transport through `CrosschainLane` and
 `CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
 blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
 `pending` chain there and an `xfail(strict=True)` param until it is wired.
+`test_simulate_crosschain_canary.py` runs the same lifecycle on `CANARY`, the live
+Arbitrum → HyperEVM USDC canary (pilot-v2 CCIP factory pair) pinned right after
+its last transaction, then checks the final gates and every delivery's receiver
+gas against its route limit; a `Chain.simulated_gas_limit` lifts HyperEVM's 3 M
+small-block pin to 30 M and `Deployment.ccip_debits_sent_amount` /
+`attestation_zero_dust_sd` carry the executor generation's accounting into `Run`.
+It needs `ARBITRUM_PROVIDER_URL` and `HYPEREVM_PROVIDER_URL`.
 `test_crosschain_readiness.py` checks the Ethereum-hub POC's live bridge and IPOR
 preconditions. Its `readiness` marker requires `--run-readiness`: ordinary runs
 exclude it even with `-m sdk`. Known HyperEVM gaps are non-strict xfails restricted
