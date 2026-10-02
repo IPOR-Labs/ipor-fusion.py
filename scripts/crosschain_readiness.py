@@ -62,6 +62,11 @@ RPC_TIMEOUT_S = 30.0
 MAX_SNAPSHOT_SKEW_S = 900
 #: The factory generation the SDK wrappers were verified against.
 EXPECTED_FACTORY_INTERFACE_VERSION = 1
+#: HyperEVM's small blocks; Chainlink's executors on this lane send into them
+#: (`eth_usingBigBlocks` false, observed 2026-10-02), so a delivery whose gas
+#: limit exceeds this is never executed by them and needs manual execution
+#: (`OffRamp.execute` from an address on big blocks).
+HYPEREVM_SMALL_BLOCK_GAS_LIMIT = 3_000_000
 
 #: The pilot-v2 CCIP crosschain factory (contracts source ``810e260`` plus the
 #: three 5-minute patches), at one CREATE3 address on both chains. The first
@@ -323,6 +328,10 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
             "max_fee": route.max_fee,
             "selector_maps_to_peer": peer_chain_id == int(peer.chain_id),
             "ready": route_ready,
+            "manual_execution_required": (
+                spec is SPOKE
+                and route.message_gas_limit > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
+            ),
         },
         "gates": gates,
         "ready": all(gates.values()),
