@@ -67,6 +67,7 @@ def _answers(
     route_peer_ok: bool,
     interface_version: int,
     creation_codes_ok: bool,
+    testtr_enabled: bool | None = None,
 ) -> dict[tuple[str, bytes], bytes]:
     """Return data for every selector the snapshot reads on one chain."""
     hashes = mod.EXPECTED_CREATION_CODE_HASHES
@@ -83,7 +84,8 @@ def _answers(
         True,
     )
     asset = (spec.usdc, 6, True) if asset_enabled else (ZERO, 0, False)
-    testtr = (spec.testtr, 18, True) if asset_enabled else (ZERO, 0, False)
+    testtr_on = asset_enabled if testtr_enabled is None else testtr_enabled
+    testtr = (spec.testtr, 18, True) if testtr_on else (ZERO, 0, False)
     symbol, decimals = ("USDC", 6) if native_usdc else ("USDX", 18)
     return {
         (spec.usdc, selector("symbol()")): encode(["string"], [symbol]),
@@ -153,6 +155,7 @@ def _ctx(
     interface_version: int = 1,
     creation_codes_ok: bool = True,
     big_blocks: bool = True,
+    testtr_enabled: bool | None = None,
     block: int = 100,
     timestamp: int = 1_700_000_500,
     hashes: tuple[str, str] = (HASH_A, HASH_A),
@@ -168,6 +171,7 @@ def _ctx(
         route_peer_ok=route_peer_ok,
         interface_version=interface_version,
         creation_codes_ok=creation_codes_ok,
+        testtr_enabled=testtr_enabled,
     )
     ctx = MagicMock()
     ctx.chain_id = spec.chain_id
@@ -218,9 +222,7 @@ def test_blocked_pair_is_complete_but_not_ready(mod):
     assert [b.split(" (")[0] for b in report["blocked_by"]] == [
         "Chainlink USDC token lane arbitrum->hyperevm not serving the pair",
         "factory on arbitrum: USDC asset not enabled",
-        "factory on arbitrum: TESTTR asset not enabled",
         "factory on hyperevm: USDC asset not enabled",
-        "factory on hyperevm: TESTTR asset not enabled",
     ]
     json.dumps(report)
 
@@ -252,7 +254,6 @@ def test_ready_pair_exposes_per_chain_repin_candidates(mod):
         "creation_codes_expected": True,
         "creator_authorized": True,
         "usdc_asset_ready": True,
-        "testtr_asset_ready": True,
         "route_to_peer_ready": True,
     }
     assert factory["interface_version"] == 1
@@ -267,11 +268,13 @@ def test_ready_pair_exposes_per_chain_repin_candidates(mod):
     assert spoke_factory["creator"]["using_big_blocks"] is True
     assert spoke_factory["gates"]["creator_big_blocks"] is True
     # A 6 M message gas limit exceeds HyperEVM's 3 M small blocks, which the
-    # lane's executors send into: informational, not a gate.
-    assert spoke_factory["route_to_peer"]["manual_execution_required"] is True
-    assert spoke_factory["route_to_peer"]["dispatcher_deployment_manual"] is True
-    assert factory["route_to_peer"]["manual_execution_required"] is False
-    assert factory["route_to_peer"]["dispatcher_deployment_manual"] is False
+    # lane's executors send into. The constraint is on deliveries into
+    # HyperEVM, i.e. the hub factory's route to the spoke; the spoke's route
+    # back is executed on Arbitrum. Informational, not a gate.
+    assert factory["route_to_peer"]["manual_execution_required"] is True
+    assert factory["route_to_peer"]["dispatcher_deployment_manual"] is True
+    assert spoke_factory["route_to_peer"]["manual_execution_required"] is False
+    assert spoke_factory["route_to_peer"]["dispatcher_deployment_manual"] is False
     assert report["chains"]["arbitrum"]["usdc_usd_feed"]["age_seconds"] == 600
 
 
@@ -323,6 +326,37 @@ def test_wrong_token_identity_blocks_transport_even_with_open_lanes(mod):
         f"token {mod.HYPEREVM.usdc} on hyperevm is not native USDC "
         "(symbol='USDX', decimals=18)"
     ]
+
+
+def test_testtr_is_reported_but_never_gates_the_usdc_verdict(mod, monkeypatch):
+    """A disabled TESTTR asset and an unreadable TESTTR lane leave a ready USDC
+    pair ready and the observation complete."""
+    read_lane = mod._read_lane
+
+    def flaky_lane(ctx, spec, peer, token=None, *args, **kwargs):
+        if token is not None:
+            raise RuntimeError("TESTTR pool unreadable")
+        return read_lane(ctx, spec, peer, *args, **kwargs)
+
+    monkeypatch.setattr(mod, "_read_lane", flaky_lane)
+    report = _report(
+        mod,
+        _ctx(mod, mod.HUB, mod.SPOKE, testtr_enabled=False),
+        _ctx(mod, mod.SPOKE, mod.HUB, testtr_enabled=False),
+    )
+
+    assert report["complete"] is True
+    assert report["ready"] is True
+    assert report["blocked_by"] == []
+    for chain in ("arbitrum", "hyperevm"):
+        snapshot = report["chains"][chain]
+        assert snapshot["factory"]["testtr_asset"]["ready"] is False
+        assert "testtr_asset_ready" not in snapshot["factory"]["gates"]
+        assert snapshot["testtr_lane_out"] == {
+            "error": "RuntimeError",
+            "informational": True,
+        }
+    json.dumps(report)
 
 
 def test_every_factory_gate_explains_itself(mod):

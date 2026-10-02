@@ -225,7 +225,6 @@ FACTORY_GATE_TEXT = {
     "creation_codes_expected": "stored creation codes are not the pilot-v2 build",
     "creator_big_blocks": "the canary creator is not on HyperEVM big blocks",
     "usdc_asset_ready": "USDC asset not enabled",
-    "testtr_asset_ready": "TESTTR asset not enabled",
     "route_to_peer_ready": "route to peer not enabled",
 }
 
@@ -293,7 +292,6 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
         == EXPECTED_CREATION_CODE_HASHES,
         "creator_authorized": (not restricted) or creator_allowed,
         "usdc_asset_ready": asset_ready,
-        "testtr_asset_ready": testtr_ready,
         "route_to_peer_ready": route_ready,
     }
     if spec is SPOKE:
@@ -334,12 +332,15 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
             "max_fee": route.max_fee,
             "selector_maps_to_peer": peer_chain_id == int(peer.chain_id),
             "ready": route_ready,
+            # The small-block constraint is on deliveries INTO HyperEVM: this
+            # route's messages are executed on the peer, so it binds the hub
+            # factory's route to the spoke, not the spoke's route back.
             "manual_execution_required": (
-                spec is SPOKE
+                peer is SPOKE
                 and route.message_gas_limit > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
             ),
             "dispatcher_deployment_manual": (
-                spec is SPOKE
+                peer is SPOKE
                 and (
                     route.message_gas_limit > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
                     or route.message_gas_limit < DISPATCHER_DEPLOYMENT_GAS
@@ -414,7 +415,6 @@ def _read_sections(
     sections: list[tuple[str, Callable[[], Any]]] = [
         ("usdc", lambda: _read_token(ctx, spec)),
         ("token_lane_out", lambda: _read_lane(ctx, spec, peer)),
-        ("testtr_lane_out", lambda: _read_lane(ctx, spec, peer, spec.testtr)),
         ("factory", lambda: _read_factory(ctx, spec, peer)),
         ("usdc_usd_feed", lambda: _read_feed(ctx, spec, timestamp)),
     ]
@@ -423,6 +423,15 @@ def _read_sections(
             snapshot[name] = read()
         except Exception as exc:  # noqa: BLE001 - reported by class name only
             snapshot["errors"].append({"stage": name, "type": type(exc).__name__})
+    # The TESTTR lane is reported, never gating: the verdict is about USDC, and
+    # a test token that is disabled or unreadable must not hide a ready pair.
+    try:
+        snapshot["testtr_lane_out"] = _read_lane(ctx, spec, peer, spec.testtr)
+    except Exception as exc:  # noqa: BLE001 - reported by class name only
+        snapshot["testtr_lane_out"] = {
+            "error": type(exc).__name__,
+            "informational": True,
+        }
 
 
 def _confirm_block(ctx: Web3Context, snapshot: dict[str, Any]) -> None:
