@@ -12,6 +12,7 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.crosschain import CcipTokenLane, ccip_token_lane
+from ipor_fusion.crosschain.ccip.chainlink import CcipRouter
 
 ROUTER = Web3.to_checksum_address("0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D")
 ON_RAMP = Web3.to_checksum_address("0xc3423f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f")
@@ -229,3 +230,21 @@ def test_resolver_and_committee_verifier_reads():
         "aggregator-1.ccip.chain.link",
         "aggregator-2.ccip.chain.link",
     )
+
+
+def test_router_lists_its_off_ramps_per_source():
+    old, new = (
+        Web3.to_checksum_address("0x70003d849a20e33997fea69bbc8a366d6ab0e131"),
+        Web3.to_checksum_address("0x99bf17a320a981710f9b53c0c0b27219c1121d8d"),
+    )
+    ctx = _ctx(
+        {
+            (ROUTER, selector("getOffRamps()")): encode(
+                ["(uint64,address)[]"], [[(HYPEREVM, old), (HYPEREVM, new)]]
+            )
+        }
+    )
+    assert CcipRouter(ctx, ROUTER).get_off_ramps().call() == [
+        (HYPEREVM, old),
+        (HYPEREVM, new),
+    ]
