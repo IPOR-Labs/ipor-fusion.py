@@ -276,12 +276,17 @@ ever signed or broadcast.
 - [External-state margin leg](examples/external_state_margin_leg_base.py) — a vault whose capital
   sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
   the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
+- [Crosschain CCIP lifecycle](examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) — a vault
+  whose capital works on another chain: supply USDC from an Arbitrum hub to a HyperEVM spoke
+  over CCIP, attest the remote balance with two keys, deposit and redeem on the spoke, recall
+  and claim, driven through `CrosschainLane` and relayed by `CrosschainSimulator`.
 
 ```bash
 export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
 uv run python examples/advanced_euler_v2_credit_market_base.py
 uv run python examples/external_state_margin_leg_base.py
+uv run python examples/crosschain_ccip_usdc_arbitrum_hyperevm.py  # needs ARBITRUM_PROVIDER_URL and HYPEREVM_PROVIDER_URL
 ```
 
 No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs the examples out of
