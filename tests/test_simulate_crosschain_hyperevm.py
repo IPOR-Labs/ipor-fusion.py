@@ -210,7 +210,7 @@ ATTESTATION_ZERO_DUST_SD = 10_000
 #: code (old accounting). `v2`: the live pilot-v2 pair, pinned at V2_BLOCKS.
 #: `source`: a factory pair built from FUSE_SOURCE_REVISION inside the
 #: simulation. `v2` and `source` share the new accounting: the recall debits
-#: the sent amount (IL-8497) and dust attests to zero (IL-8499).
+#: the sent amount (recall-debit fix) and dust attests to zero (dust-to-zero fix).
 GENERATIONS = ("pilot", "v2", "source")
 NEW_ACCOUNTING = frozenset({"v2", "source"})
 PILOT_EXECUTOR_CREATION_KECCAK = bytes.fromhex(
@@ -988,7 +988,7 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
     # factories still had USDC disabled, so that run also exercises the asset
     # governance path. Pilot: the recall debits the received amount, the fee
     # stays in `settled` and the relative gate refuses to re-mark it to zero.
-    # New accounting: the fee is a realized loss (IL-8497) and nothing remains.
+    # New accounting (recall-debit fix): the fee is a realized loss, nothing remains.
     asset = _asset_for(replace(USDC, blocks=(510_124_921, 47_228_089)), generation)
     base = _asset_transport(asset)
     transport = _CctpFeeTransport(

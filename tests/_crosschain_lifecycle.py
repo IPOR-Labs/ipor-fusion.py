@@ -112,8 +112,8 @@ class Run:
     recall_min_return_bps: int = 9_800
     #: CCIP accounting of the executor generation under test. The deployed
     #: pilot debits a recall by the amount received and cannot re-mark a
-    #: settled residue to zero; the source generation (contracts IL-8497 and
-    #: IL-8499) debits the sent amount and attests dust at or below the bound
+    #: settled residue to zero; the source generation (recall-debit and
+    #: dust-to-zero fixes) debits the sent amount and attests dust at or below the bound
     #: to zero.
     ccip_debits_sent_amount: bool = False
     attestation_zero_dust_sd: int = 0

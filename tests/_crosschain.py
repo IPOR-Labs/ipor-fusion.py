@@ -301,7 +301,7 @@ class Deployment:
     planned_spokes: tuple[Spoke, ...] = ()
     #: The CCIP executor generation's accounting (see ``Run``): the pilot
     #: debits a recall by the amount received and keeps a settled residue;
-    #: from pilot v2 on (contracts IL-8497 and IL-8499) it debits the amount
+    #: from pilot v2 on (recall-debit and dust-to-zero fixes) it debits the amount
     #: sent and attests dust at or below the bound, in shared decimals, to zero.
     ccip_debits_sent_amount: bool = False
     attestation_zero_dust_sd: int = 0
