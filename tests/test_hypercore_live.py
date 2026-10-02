@@ -33,6 +33,7 @@ from ipor_fusion import (
     PlasmaVault,
     TimeInForce,
     read_hypercore_nav,
+    read_hypercore_vault_state,
 )
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
@@ -92,6 +93,21 @@ def test_nav_identity_matches_the_balance_fuse(ctx: Web3Context, vault: PlasmaVa
     assert nav.perp_dex_bitmap == 1 << XYZ_DEX
     assert [leg.token_index for leg in nav.spot] == [0]
     assert [leg.dex for leg in nav.hip3] == [XYZ_DEX]
+
+
+def test_vault_state_reads_everything_at_one_block(ctx: Web3Context):
+    state = read_hypercore_vault_state(
+        ctx,
+        VAULT,
+        CREATED["HyperCoreBalanceFuse"],
+        LIVE_MARKET,
+        pending_reader=CREATED["HyperCorePendingReader"],
+    )
+    assert state.nav_matches_balance_fuse is True
+    assert state.pending is not None and state.pending.l1_block_available
+    (nvda,) = state.perp_markets
+    assert (nvda.asset, nvda.dex, nvda.read_index) == (XYZ_NVDA, XYZ_DEX, 10_002)
+    assert nvda.coin is not None and nvda.coin.startswith("xyz:")
 
 
 def test_pending_state_reads_through_the_vault(pending: HyperCorePendingReader):

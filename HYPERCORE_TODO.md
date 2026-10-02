@@ -15,7 +15,8 @@ by a test in this repository, not by that run.
 | Fuses run on the live node with the HyperCore precompiles | six actions | `tests/test_hypercore_live.py` (opt-in, `HYPEREVM_PROVIDER_URL`): `eth_call` + `eth_estimateGas` from the signer of the refresh, EVM -> Core deposit, Core -> EVM and spot -> xyz sends, an IOC order and a cancel on the current state; skips while an action is pending. Independent calls carry no earlier EVM state and cannot settle Core actions, so this never proves a step-by-step cycle. `redeem` beyond the vault's EVM USDC reverts (no instant-withdraw fuse), pinned as a test |
 | Sequence simulation (`VaultSimulator`, `eth_simulateV1`) | not possible on this node | the precompiles fail inside `eth_simulateV1`; no historical Core state, so no replay of past transactions either |
 | State reads: pending action and nonce (`HyperCorePendingReader`), the precompiles (`HyperCoreReader`), the NAV identity (`read_hypercore_nav` == `PlasmaVault.balance_fuse_value`) | done | `tests/test_hypercore_readers.py` offline; the identity holds live at block 47453068 (`test_hypercore_live.py`) |
-| Events, `vault info` / MCP | missing | items below |
+| `vault info` / MCP: market 55 label, decoded substrates with HIP-3 coordinates, NAV legs vs the balance fuse, pending state, perp markets with coin names | done | `hypercore` block (`HyperCoreSection`), `tests/test_cli_hypercore.py`, `tests/test_mcp_hypercore.py`; HyperEVM only, vaults with a market-55 balance fuse |
+| Events | missing | item below |
 | Send pipeline (plan with fingerprint, calldata review, throwaway keystore, pinned-nonce send, settle window, `/info` verification) | outside the SDK | the run's tooling; not re-homed here (see "Beyond the SDK") |
 | An end-to-end run executed from this SDK | not done | needs a funded signer and an explicit go; asynchronous Core effects (fills, spot credits) are only visible through Hyperliquid `/info` |
 
@@ -23,9 +24,9 @@ by a test in this repository, not by that run.
 
 - [ ] **`eth_simulateV1` for market 55.** Re-probe when the node is upgraded
   and record the result here; until then the live test stays `eth_call`-only.
-- [ ] **`vault info` / MCP.** Market 55 label, decoded substrates, pending
-  state, settlement mode, action nonce, HIP-3 dex/asset labels; `models.py`
-  and the `_full_vault_info_dict` fixture mirror.
+- [ ] **Pending reader address.** `HYPERCORE_PENDING_READERS` carries the
+  HIP-3 run's `HyperCorePendingReader` for HyperEVM until `ipor-abi` publishes
+  one; the `hypercore` block shows the pending state only through it.
 - [ ] **Events.** `HyperCoreActionEnqueued`, `HyperCoreActionSettled` and the
   fuse events (first parameter is the fuse address as `version`), so the
   parity test can also assert the receipt shape.

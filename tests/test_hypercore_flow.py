@@ -354,6 +354,8 @@ def test_granted_words_decode_as_hypercore():
         "asset": str(XYZ_NVDA),
         "max_notional_usd6": "15000000",
         "reduce_only_required": "false",
+        "dex": "1",
+        "read_index": "10002",
     }
     assert [i.extra.get("key") for i in infos[5:11]] == [
         "WindowTransferSeconds",

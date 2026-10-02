@@ -42,6 +42,8 @@ from ipor_fusion.fuses.hypercore import (
     NATIVE_PERP_DEX,
     SUPPORTED_HIP3_DEXES,
     SettlementMode,
+    perp_dex_of,
+    read_index_of,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
@@ -52,6 +54,16 @@ T = TypeVar("T")
 #: The market id HyperCore vaults are keyed under once migrated (55); the first
 #: HyperEVM test vault still keys it as 54 until its migration.
 HYPERCORE_MARKET = MarketId(IporFusionMarkets.HYPERCORE)
+#: The only chain with the HyperCore precompiles.
+HYPEREVM_CHAIN_ID = 999
+#: Known ``HyperCorePendingReader`` deployments per chain. The reader is a
+#: stateless helper and any deployment serves any vault; this is the HIP-3
+#: run's instance until ``ipor-abi`` publishes one.
+HYPERCORE_PENDING_READERS: dict[int, ChecksumAddress] = {
+    HYPEREVM_CHAIN_ID: Web3.to_checksum_address(
+        "0x01fcd96f5049946bd10396b86e0b3d3ae7fff539"
+    ),
+}
 WAD_DECIMALS = 18
 #: ``accountMarginSummary`` reports USD with 6 decimals.
 USD6_DECIMALS = 6
@@ -597,3 +609,99 @@ def read_hypercore_nav(
     value = sum(leg.value_wad for leg in spot) + native_leg.value_wad
     value += sum(leg.value_wad for leg in hip3)
     return HyperCoreNav(True, bitmap, spot, native_leg, hip3, value)
+
+
+@dataclass(frozen=True, slots=True)
+class HyperCorePerpMarket:
+    """One granted ``PerpMarket`` substrate with its HIP-3 coordinates and the
+    coin name the ``perpAssetInfo`` precompile reports (``None`` when the read
+    failed, e.g. a delisted market)."""
+
+    asset: int
+    dex: int
+    read_index: int
+    coin: str | None
+    max_notional_usd6: int
+    reduce_only_required: bool
+
+
+@dataclass(frozen=True, slots=True)
+class HyperCoreVaultState:
+    """Everything ``vault info`` shows for a HyperCore market: the NAV legs,
+    the balance fuse's own figure, the pending-action state and the granted
+    perp markets."""
+
+    market_id: MarketId
+    balance_fuse: ChecksumAddress
+    nav: HyperCoreNav
+    balance_fuse_value_wad: int | None
+    pending: HyperCorePendingState | None
+    perp_markets: tuple[HyperCorePerpMarket, ...]
+
+    @property
+    def nav_matches_balance_fuse(self) -> bool | None:
+        if self.balance_fuse_value_wad is None:
+            return None
+        return self.nav.value_wad == self.balance_fuse_value_wad
+
+
+def _granted_perp_markets(substrates: Sequence[bytes]) -> list[tuple[int, int, bool]]:
+    markets: list[tuple[int, int, bool]] = []
+    for raw in substrates:
+        info = decode_substrate(raw, HYPERCORE_MARKET)
+        if info.type_label != "PERP_MARKET" or info.is_error:
+            continue
+        markets.append(
+            (
+                int(info.extra["asset"]),
+                int(info.extra["max_notional_usd6"]),
+                info.extra["reduce_only_required"] == "true",
+            )
+        )
+    return markets
+
+
+def read_hypercore_vault_state(
+    ctx: Web3Context,
+    vault_address: ChecksumAddress,
+    balance_fuse: ChecksumAddress,
+    market_id: MarketId = HYPERCORE_MARKET,
+    *,
+    pending_reader: ChecksumAddress | None = None,
+) -> HyperCoreVaultState:
+    """:func:`read_hypercore_nav` plus the balance fuse's ``balanceOf()`` in
+    the vault's context, the pending state (when a reader is known for the
+    chain or given) and the granted perp markets with their coin names, all
+    at ``ctx.default_block``."""
+    nav = read_hypercore_nav(ctx, vault_address, market_id)
+    vault = PlasmaVault(ctx, vault_address)
+    reader = HyperCoreReader(ctx)
+    pending_reader = pending_reader or HYPERCORE_PENDING_READERS.get(ctx.chain_id)
+    granted = _granted_perp_markets(vault.get_market_substrates(market_id).call())
+    calls: list[Call[Any]] = [vault.balance_fuse_value(balance_fuse)]
+    if pending_reader is not None:
+        calls.append(HyperCorePendingReader(vault, pending_reader).pending_state())
+    calls += [reader.perp_asset_info(read_index_of(asset)) for asset, _, _ in granted]
+    results = Multicall3(ctx).try_aggregate(calls)
+    fuse_value = results[0]
+    pending = results[1] if pending_reader is not None else None
+    infos = results[len(calls) - len(granted) :]
+    perp_markets = tuple(
+        HyperCorePerpMarket(
+            asset=asset,
+            dex=perp_dex_of(asset),
+            read_index=read_index_of(asset),
+            coin=info.coin if info is not None else None,
+            max_notional_usd6=cap,
+            reduce_only_required=reduce_only,
+        )
+        for (asset, cap, reduce_only), info in zip(granted, infos, strict=True)
+    )
+    return HyperCoreVaultState(
+        market_id=market_id,
+        balance_fuse=balance_fuse,
+        nav=nav,
+        balance_fuse_value_wad=fuse_value,
+        pending=pending,
+        perp_markets=perp_markets,
+    )

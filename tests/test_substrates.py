@@ -356,6 +356,8 @@ def test_hypercore_typed_substrates():
         "asset": "110002",
         "max_notional_usd6": "15000000",
         "reduce_only_required": "false",
+        "dex": "1",
+        "read_index": "10002",
     }
 
     dest = decode_substrate(HYPERCORE_WORDS["destination"], market_id=market)

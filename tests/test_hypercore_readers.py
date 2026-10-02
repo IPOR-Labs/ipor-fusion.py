@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from _multicall import multicall_aware
-from eth_abi import encode
+from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -37,6 +37,8 @@ from ipor_fusion.readers.hypercore import (
     POSITION_PRECOMPILE,
     SPOT_BALANCE_PRECOMPILE,
     TOKEN_INFO_PRECOMPILE,
+    HyperCoreVaultState,
+    read_hypercore_vault_state,
 )
 from ipor_fusion.types import MarketId
 
@@ -254,6 +256,16 @@ def test_convert_to_wad_int_rounds_like_ipor_math(value, decimals, expected):
     assert convert_to_wad_int(value, decimals) == expected
 
 
+def _universal_read(data: bytes) -> bytes:
+    """`PlasmaVault.read` double: the pending reader or the balance fuse."""
+    target, inner = decode(["address", "bytes"], data[4:])
+    if Web3.to_checksum_address(target) == READER:
+        return _pending_state_raw(pending=False, settled=True)
+    assert Web3.to_checksum_address(target) == BALANCE_FUSE
+    assert bytes(inner) == _selector("balanceOf()")
+    return encode(["(bytes)"], [(encode(["uint256"], [8_245_000_000_000_000]),)])
+
+
 def _vault_state_handler(
     *,
     exists: bool = True,
@@ -263,30 +275,48 @@ def _vault_state_handler(
 ):
     """eth_call double for the vault, the oracle and the precompiles."""
     words = SUBSTRATES if substrates is None else substrates
+    vault_views = {
+        _selector("getMarketSubstrates(uint256)"): lambda _d: encode(
+            ["bytes32[]"], [words]
+        ),
+        _selector("getPriceOracleMiddleware()"): lambda _d: encode(
+            ["address"], [ORACLE]
+        ),
+        _selector("read(address,bytes)"): _universal_read,
+    }
+
+    def margin(data: bytes) -> bytes:
+        value = {0: 0, 1: xyz_value}[int.from_bytes(data[:32], "big")]
+        return encode(["int64", "uint64", "uint64", "int64"], [value, 0, 0, value])
+
+    def asset_price(data: bytes) -> bytes:
+        assert data[:4] == _selector("getAssetPrice(address)")
+        if isinstance(price, BaseException):
+            raise price
+        return encode(["uint256", "uint256"], list(price))
+
+    def perp_asset_info(data: bytes) -> bytes:
+        assert int.from_bytes(data[:32], "big") == 10_002
+        return encode(
+            ["(string,uint32,uint8,uint8,bool)"], [("xyz:NVDA", 20, 3, 20, False)]
+        )
+
+    responders = {
+        VAULT: lambda data: vault_views[data[:4]](data),
+        CORE_USER_EXISTS_PRECOMPILE: lambda _d: encode(["bool"], [exists]),
+        ACCOUNT_MARGIN_SUMMARY_PRECOMPILE: margin,
+        SPOT_BALANCE_PRECOMPILE: lambda _d: encode(["uint64"] * 3, [SPOT_TOTAL, 0, 0]),
+        TOKEN_INFO_PRECOMPILE: lambda _d: encode(
+            ["(string,uint64[],uint64,address,address,uint8,uint8,int8)"], [TOKEN_INFO]
+        ),
+        PERP_ASSET_INFO_PRECOMPILE: perp_asset_info,
+        ORACLE: asset_price,
+    }
 
     def handler(to: str, data: bytes) -> bytes:
-        if to == VAULT and data[:4] == _selector("getMarketSubstrates(uint256)"):
-            return encode(["bytes32[]"], [words])
-        if to == VAULT and data[:4] == _selector("getPriceOracleMiddleware()"):
-            return encode(["address"], [ORACLE])
-        if to == CORE_USER_EXISTS_PRECOMPILE:
-            return encode(["bool"], [exists])
-        if to == ACCOUNT_MARGIN_SUMMARY_PRECOMPILE:
-            dex = int.from_bytes(data[:32], "big")
-            value = {0: 0, 1: xyz_value}[dex]
-            return encode(["int64", "uint64", "uint64", "int64"], [value, 0, 0, value])
-        if to == SPOT_BALANCE_PRECOMPILE:
-            return encode(["uint64", "uint64", "uint64"], [SPOT_TOTAL, 0, 0])
-        if to == TOKEN_INFO_PRECOMPILE:
-            return encode(
-                ["(string,uint64[],uint64,address,address,uint8,uint8,int8)"],
-                [TOKEN_INFO],
-            )
-        if to == ORACLE and data[:4] == _selector("getAssetPrice(address)"):
-            if isinstance(price, BaseException):
-                raise price
-            return encode(["uint256", "uint256"], list(price))
-        raise AssertionError(f"unexpected call to {to} {data[:4].hex()}")
+        if to not in responders:
+            raise AssertionError(f"unexpected call to {to} {data[:4].hex()}")
+        return responders[to](bytes(data))
 
     return handler
 
@@ -349,3 +379,30 @@ class TestNavIdentity:
         )
         with pytest.raises(ValueError, match="unsupported HIP-3"):
             read_hypercore_nav(ctx, VAULT, MARKET)
+
+
+class TestVaultState:
+    def test_reads_nav_fuse_value_pending_and_perp_markets(self):
+        ctx = _ctx()
+        ctx.chain_id = 999
+        ctx.call.side_effect = multicall_aware(_vault_state_handler(xyz_value=0))
+
+        state = read_hypercore_vault_state(ctx, VAULT, BALANCE_FUSE, MARKET)
+
+        assert isinstance(state, HyperCoreVaultState)
+        assert (state.market_id, state.balance_fuse) == (MARKET, BALANCE_FUSE)
+        assert state.nav.value_wad == 8_245_000_000_000_000
+        assert state.balance_fuse_value_wad == 8_245_000_000_000_000
+        assert state.nav_matches_balance_fuse is True
+        assert state.pending is not None and state.pending.action_nonce == 32
+        (market,) = state.perp_markets
+        assert (market.asset, market.dex, market.read_index) == (110_002, 1, 10_002)
+        assert (market.coin, market.max_notional_usd6) == ("xyz:NVDA", 15_000_000)
+        assert market.reduce_only_required is False
+
+    def test_without_a_known_reader_the_pending_state_is_none(self):
+        ctx = _ctx()
+        ctx.chain_id = 1
+        ctx.call.side_effect = multicall_aware(_vault_state_handler(xyz_value=0))
+        state = read_hypercore_vault_state(ctx, VAULT, BALANCE_FUSE, MARKET)
+        assert state.pending is None and state.nav_matches_balance_fuse is True

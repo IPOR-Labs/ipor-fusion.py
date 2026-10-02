@@ -58,6 +58,7 @@ from ipor_fusion.errors import (
     UnsupportedChainError,
 )
 from ipor_fusion.field_docs import DOCS
+from ipor_fusion.readers.hypercore import HyperCorePendingState, HyperCorePerpLeg
 from ipor_fusion.readers.oracle_mapping import (
     TYPE_CHAINLINK,
     TYPE_CHAINLINK_STYLE,
@@ -932,6 +933,7 @@ def _print_vault_info(
 
     _print_lending_health(ctx, data)
     click.echo()
+    _print_hypercore(data)
 
     _print_health_check(
         data, bf_totals, erc20_totals, all_substrate_addrs, plasma_vault
@@ -1723,8 +1725,148 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
         "erc20_balances": erc20_json,
         "reconciliation": reconciliation_json,
         "lending_health": lending_health_json,
+        "hypercore": _build_hypercore_json(data),
         "health_check": health_json,
     }
+
+
+def _wad_to_usd(wad: int) -> float:
+    return wad / 10**18
+
+
+def _hypercore_pending_json(pending: HyperCorePendingState) -> dict[str, Any]:
+    return {
+        "pending": pending.pending,
+        "settled": pending.settled,
+        "refreshing": pending.refreshing,
+        "action_class": pending.action_class.name,
+        "settlement_mode": (
+            pending.settlement_mode.name if pending.settlement_mode else None
+        ),
+        "reported_result": pending.reported_result.name,
+        "action_id": pending.action_id,
+        "action_nonce": pending.action_nonce,
+        "pending_until": pending.pending_until,
+        "pending_until_utc": _unix_to_iso(pending.pending_until),
+        "enqueued_l1_block": pending.enqueued_l1_block,
+        "enqueued_evm_block": pending.enqueued_evm_block,
+        "cached_value_wad": pending.cached_value_wad,
+        "current_l1_block": pending.current_l1_block,
+        "current_timestamp": pending.current_timestamp,
+        "l1_block_available": pending.l1_block_available,
+    }
+
+
+def _perp_leg_json(leg: HyperCorePerpLeg) -> dict[str, Any]:
+    return {
+        "dex": leg.dex,
+        "account_value_usd6": leg.account_value,
+        "value_usd": _wad_to_usd(leg.value_wad),
+    }
+
+
+def _build_hypercore_json(data: _VaultData) -> dict[str, Any] | None:
+    state = data.hypercore
+    if state is None:
+        return None
+    nav = state.nav
+    return {
+        "market_id": int(state.market_id),
+        "market": market_name(state.market_id),
+        "balance_fuse": state.balance_fuse,
+        "core_user_exists": nav.core_user_exists,
+        "perp_dex_bitmap": nav.perp_dex_bitmap,
+        "nav_wad": nav.value_wad,
+        "nav_usd": _wad_to_usd(nav.value_wad),
+        "balance_fuse_value_wad": state.balance_fuse_value_wad,
+        "nav_matches_balance_fuse": state.nav_matches_balance_fuse,
+        "spot": [
+            {
+                "token_index": leg.token_index,
+                "evm_asset": leg.evm_asset,
+                "total_wei": leg.total,
+                "hold_wei": leg.hold,
+                "wei_decimals": leg.wei_decimals,
+                "price_usd": leg.price.readable() if leg.price else None,
+                "value_usd": _wad_to_usd(leg.value_wad),
+            }
+            for leg in nav.spot
+        ],
+        "native_perp": _perp_leg_json(nav.native_perp) if nav.native_perp else None,
+        "hip3": [_perp_leg_json(leg) for leg in nav.hip3],
+        "perp_markets": [
+            {
+                "asset": pm.asset,
+                "dex": pm.dex,
+                "read_index": pm.read_index,
+                "coin": pm.coin,
+                "max_notional_usd6": pm.max_notional_usd6,
+                "reduce_only_required": pm.reduce_only_required,
+            }
+            for pm in state.perp_markets
+        ],
+        "pending": _hypercore_pending_json(state.pending) if state.pending else None,
+    }
+
+
+def _print_hypercore(data: _VaultData) -> None:
+    state = data.hypercore
+    if state is None:
+        return
+    nav = state.nav
+    click.echo(f"HyperCore ({format_market_label(state.market_id)}):")
+    if not nav.core_user_exists:
+        click.echo(
+            "  Core account: none (NAV is 0 until the first EVM -> Core deposit)"
+        )
+    if state.balance_fuse_value_wad is None:
+        fuse_text = "unavailable"
+    else:
+        verdict = "match" if state.nav_matches_balance_fuse else "MISMATCH"
+        fuse_text = f"{_wad_to_usd(state.balance_fuse_value_wad):.6f} USD ({verdict})"
+    click.echo(
+        f"  NAV: {_wad_to_usd(nav.value_wad):.6f} USD | balance fuse: {fuse_text}"
+    )
+    for leg in nav.spot:
+        price = f"{leg.price.readable():.4f} USD" if leg.price else "unpriced"
+        click.echo(
+            f"  Spot token {leg.token_index} ({leg.evm_asset}): {leg.total} wei"
+            f" ({leg.wei_decimals} dec), hold {leg.hold}, @ {price}"
+            f" = {_wad_to_usd(leg.value_wad):.6f} USD"
+        )
+    if nav.native_perp is not None:
+        click.echo(
+            f"  Native perp (dex 0): {_wad_to_usd(nav.native_perp.value_wad):.6f} USD"
+        )
+    for leg in nav.hip3:
+        click.echo(f"  HIP-3 dex {leg.dex}: {_wad_to_usd(leg.value_wad):.6f} USD")
+    for pm in state.perp_markets:
+        reduce_only = "required" if pm.reduce_only_required else "optional"
+        click.echo(
+            f"  Perp market {pm.coin or '?'} (asset {pm.asset}, dex {pm.dex},"
+            f" read index {pm.read_index}): cap {pm.max_notional_usd6 / 10**6:,.2f} USD,"
+            f" reduce-only {reduce_only}"
+        )
+    _print_hypercore_pending(state.pending)
+    click.echo()
+
+
+def _print_hypercore_pending(pending: HyperCorePendingState | None) -> None:
+    if pending is None:
+        click.echo(
+            "  Pending action: unknown (no HyperCorePendingReader known on this chain)"
+        )
+        return
+    last = f"{pending.action_class.name} #{pending.action_nonce}"
+    if pending.pending:
+        click.echo(
+            f"  Pending action: {last} (id {pending.action_id}) until"
+            f" {_unix_to_iso(pending.pending_until)}; L1 block {pending.current_l1_block}"
+        )
+    else:
+        click.echo(
+            f"  Pending action: none (last {last} settled); L1 block {pending.current_l1_block}"
+        )
 
 
 def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None:

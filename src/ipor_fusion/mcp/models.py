@@ -25,7 +25,7 @@ Design notes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -691,6 +691,98 @@ class MetaMorphoVaultResponse(_Base):
     allocators: list[str]
 
 
+class HyperCoreSpotLegEntry(_Base):
+    """One granted Core spot token in the HyperCore NAV."""
+
+    token_index: int
+    evm_asset: str = Field(description="EVM ERC-20 the token is priced through.")
+    total_wei: int = Field(description="Core balance in Core wei of the token.")
+    hold_wei: int
+    wei_decimals: int | None = Field(
+        description="Core wei decimals; null when the token was not looked up."
+    )
+    price_usd: float | None = Field(
+        description="Oracle price; null when the balance is zero or unpriced."
+    )
+    value_usd: float
+
+
+class HyperCorePerpLegEntry(_Base):
+    """One perp dex in the HyperCore NAV (0 native, otherwise a HIP-3 dex)."""
+
+    dex: int
+    account_value_usd6: int = Field(
+        description="Signed accountMarginSummary.accountValue, USD with 6 decimals."
+    )
+    value_usd: float
+
+
+class HyperCorePerpMarketEntry(_Base):
+    """One granted PerpMarket substrate."""
+
+    asset: int = Field(description="CoreWriter action asset.")
+    dex: int
+    read_index: int = Field(description="Index the read precompiles take.")
+    coin: str | None = Field(
+        description="perpAssetInfo coin name; null when the precompile read failed."
+    )
+    max_notional_usd6: int
+    reduce_only_required: bool
+
+
+class HyperCorePendingEntry(_Base):
+    """HyperCorePendingReader.pendingState(): `pending` and `settled` are the
+    authoritative predicates; the raw fields stay after a TIMING settlement."""
+
+    pending: bool
+    settled: bool
+    refreshing: bool
+    action_class: Literal["NONE", "TRANSFER", "ORDER"]
+    settlement_mode: Literal["TIMING", "REPORTED"] | None
+    reported_result: Literal["NONE", "EXECUTED", "REJECTED"]
+    action_id: int
+    action_nonce: int
+    pending_until: int
+    pending_until_utc: str
+    enqueued_l1_block: int
+    enqueued_evm_block: int
+    cached_value_wad: int
+    current_l1_block: int = Field(
+        description="0 when the L1 precompile was unavailable."
+    )
+    current_timestamp: int
+    l1_block_available: bool
+
+
+class HyperCoreSection(_Base):
+    """Live state of the HyperCore market (55): the NAV identity leg by leg,
+    the balance fuse's own figure, the granted perp markets and the pending
+    action."""
+
+    market_id: int
+    market: str
+    balance_fuse: str
+    core_user_exists: bool = Field(
+        description="False until the first EVM -> Core deposit; NAV is 0 then."
+    )
+    perp_dex_bitmap: int = Field(description="PerpDexIds config: bit i enables dex i.")
+    nav_wad: int = Field(
+        description="Signed NAV the valuation library computes, 18 decimals."
+    )
+    nav_usd: float
+    balance_fuse_value_wad: int | None = Field(
+        description="balanceOf() of the balance fuse in the vault's context; null if unavailable."
+    )
+    nav_matches_balance_fuse: bool | None
+    spot: list[HyperCoreSpotLegEntry]
+    native_perp: HyperCorePerpLegEntry | None
+    hip3: list[HyperCorePerpLegEntry]
+    perp_markets: list[HyperCorePerpMarketEntry]
+    pending: HyperCorePendingEntry | None = Field(
+        description="Null when no HyperCorePendingReader is known on the chain."
+    )
+
+
 class VaultInfoResponse(_Base):
     """Full on-chain state of a Plasma Vault.
 
@@ -747,6 +839,13 @@ class VaultInfoResponse(_Base):
     erc20_balances: list[ERC20Entry]
     reconciliation: Reconciliation
     lending_health: LendingHealth | None = None
+    hypercore: HyperCoreSection | None = Field(
+        default=None,
+        description=(
+            "HyperCore (market 55) live state; null unless the vault is on "
+            "HyperEVM with a HyperCore balance fuse."
+        ),
+    )
     health_check: HealthCheck
 
 

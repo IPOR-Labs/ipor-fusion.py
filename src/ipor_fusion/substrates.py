@@ -15,6 +15,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from ipor_fusion.fuses.hypercore import (
+    is_hip3_asset,
+    is_native_perp_asset,
+    perp_dex_of,
+    read_index_of,
+)
 from ipor_fusion.market_ids import IporFusionMarkets
 
 
@@ -292,15 +298,18 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
         reduce_flag = int(hex_str[32:34], 16)
         if reduce_flag > 1:
             return _hypercore_invalid(hex_str, label)
-        return SubstrateInfo(
-            raw_hex=f"0x{hex_str}",
-            type_label=label,
-            extra={
-                "asset": str(int(hex_str[2:10], 16)),
-                "max_notional_usd6": str(int(hex_str[10:32], 16)),
-                "reduce_only_required": str(reduce_flag == 1).lower(),
-            },
-        )
+        asset = int(hex_str[2:10], 16)
+        extra = {
+            "asset": str(asset),
+            "max_notional_usd6": str(int(hex_str[10:32], 16)),
+            "reduce_only_required": str(reduce_flag == 1).lower(),
+        }
+        # The HIP-3 coordinates the read precompiles want; absent for an asset
+        # outside the native and HIP-3 families, which the perp fuses reject.
+        if is_native_perp_asset(asset) or is_hip3_asset(asset):
+            extra["dex"] = str(perp_dex_of(asset))
+            extra["read_index"] = str(read_index_of(asset))
+        return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
     if type_byte == 3:
         return SubstrateInfo(address=f"0x{hex_str[24:]}", type_label=label)
     if type_byte == 4:

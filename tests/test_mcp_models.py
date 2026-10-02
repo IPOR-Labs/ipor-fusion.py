@@ -307,6 +307,58 @@ def _full_vault_info_dict() -> dict:
                 "execution_delay": 0,
             }
         ],
+        "hypercore": {
+            "market_id": 55,
+            "market": "HYPERCORE",
+            "balance_fuse": "0xBALANCEFUSE",
+            "core_user_exists": True,
+            "perp_dex_bitmap": 2,
+            "nav_wad": 8_245_000_000_000_000,
+            "nav_usd": 0.008245,
+            "balance_fuse_value_wad": 8_245_000_000_000_000,
+            "nav_matches_balance_fuse": True,
+            "spot": [
+                {
+                    "token_index": 0,
+                    "evm_asset": "0xUSDC",
+                    "total_wei": 824_500,
+                    "hold_wei": 0,
+                    "wei_decimals": 8,
+                    "price_usd": 1.0,
+                    "value_usd": 0.008245,
+                }
+            ],
+            "native_perp": {"dex": 0, "account_value_usd6": 0, "value_usd": 0.0},
+            "hip3": [{"dex": 1, "account_value_usd6": 0, "value_usd": 0.0}],
+            "perp_markets": [
+                {
+                    "asset": 110_002,
+                    "dex": 1,
+                    "read_index": 10_002,
+                    "coin": "xyz:NVDA",
+                    "max_notional_usd6": 15_000_000,
+                    "reduce_only_required": False,
+                }
+            ],
+            "pending": {
+                "pending": False,
+                "settled": True,
+                "refreshing": False,
+                "action_class": "TRANSFER",
+                "settlement_mode": None,
+                "reported_result": "NONE",
+                "action_id": 13,
+                "action_nonce": 32,
+                "pending_until": 1_790_609_642,
+                "pending_until_utc": "2026-09-28T15:34:02Z",
+                "enqueued_l1_block": 1_164_341_828,
+                "enqueued_evm_block": 47_125_670,
+                "cached_value_wad": 10**16,
+                "current_l1_block": 1_168_823_034,
+                "current_timestamp": 1_790_931_001,
+                "l1_block_available": True,
+            },
+        },
         # `ok` is a list of passing-check lines, not a boolean.
         "health_check": {
             "ok": ["morpho WETH/USDC: LTV 0.50/0.86, health_factor=1.72"],
@@ -340,6 +392,7 @@ class TestVaultInfoResponseContract:
         d["withdraw_manager_details"] = None
         d["dependency_graph"] = None
         d["lending_health"] = None
+        d["hypercore"] = None
         d["role_accounts"] = None
         d["balance_fuses"] = []
         d["substrates"] = {}
