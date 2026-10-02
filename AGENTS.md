@@ -3,8 +3,9 @@
 `ipor-fusion` is the Python SDK for IPOR Fusion Plasma Vaults: typed fuse
 encoders, on-chain readers, and a `fusion` CLI plus `fusion-mcp` MCP server
 built on the same SDK. Published to PyPI. It is a library and inspection
-tooling, not an automation service. The separate crosschain-readiness workflow
-is a scheduled/manual read-only diagnostic, not a keeper or production monitor.
+tooling, not an automation service. `scripts/crosschain_readiness.py` is a
+read-only diagnostic run on demand, not a keeper or production monitor; any
+scheduled run of it belongs to the monitoring repository.
 
 Related repositories (siblings, referenced by name; clone paths vary):
 - [ipor-fusion](https://github.com/IPOR-Labs/ipor-fusion) — Solidity contracts, the source of truth for market ids, roles and substrates.
@@ -47,7 +48,7 @@ named address constant). They auto-skip unless `ETHEREUM_PROVIDER_URL`,
 python-dotenv) and the provider supports `eth_simulateV1`. CI has all three as
 secrets. Never print `.env` or a provider URL: they embed API keys.
 `HYPEREVM_PROVIDER_URL` is used by the HyperEVM lifecycle/deployment tests and
-the separate read-only readiness workflow; general PR CI does not supply it.
+the readiness script; general PR CI does not supply it.
 `test_simulate_crosschain_hyperevm.py` covers the pilot on pinned blocks, parametrized by
 `generation`: `deployed` runs executors from the pilot factories' stored creation code,
 `source` builds a factory pair from `FUSE_SOURCE_REVISION` inside the simulation (both
@@ -80,9 +81,8 @@ directions and the pilot-v2 factory pair's configuration (creation codes, routes
 the canary creator's allowance, balance and HyperEVM big-block flag) with snapshot
 block numbers/hashes/timestamps.
 Blocked availability is a successful observation, not acceptance; incomplete probes
-fail. `.github/workflows/crosschain-readiness.yml` runs it on demand only
-(`workflow_dispatch`, Arbitrum and HyperEVM RPC secrets); any schedule belongs to
-the monitoring repository, not to this one. A `Spoke` declares which transports reach it;
+fail. There is no GitHub workflow for it in this repository: run it locally with
+the Arbitrum and HyperEVM provider URLs from `.env`. A `Spoke` declares which transports reach it;
 the lifecycle matrix follows that.
 
 ## Conventions
