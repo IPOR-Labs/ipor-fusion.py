@@ -16,7 +16,7 @@ by a test in this repository, not by that run.
 | Sequence simulation (`VaultSimulator`, `eth_simulateV1`) | not possible on this node | the precompiles fail inside `eth_simulateV1`; no historical Core state, so no replay of past transactions either |
 | State reads: pending action and nonce (`HyperCorePendingReader`), the precompiles (`HyperCoreReader`), the NAV identity (`read_hypercore_nav` == `PlasmaVault.balance_fuse_value`) | done | `tests/test_hypercore_readers.py` offline; the identity holds live at block 47453068 (`test_hypercore_live.py`) |
 | `vault info` / MCP: market 55 label, decoded substrates with HIP-3 coordinates, NAV legs vs the balance fuse, pending state, perp markets with coin names | done | `hypercore` block (`HyperCoreSection`), `tests/test_cli_hypercore.py`, `tests/test_mcp_hypercore.py`; HyperEVM only, vaults with a market-55 balance fuse |
-| Events | missing | item below |
+| Events: `HyperCoreActionEnqueued`/`Settled`, the fuse events, the settlement fuse's and the reporter's | done | `fuses/hypercore_events.py`; `tests/test_hypercore_events.py` pins the topics to the run's receipts and the per-action receipt shape |
 | Send pipeline (plan with fingerprint, calldata review, throwaway keystore, pinned-nonce send, settle window, `/info` verification) | outside the SDK | the run's tooling; not re-homed here (see "Beyond the SDK") |
 | An end-to-end run executed from this SDK | not done | needs a funded signer and an explicit go; asynchronous Core effects (fills, spot credits) are only visible through Hyperliquid `/info` |
 
@@ -27,9 +27,6 @@ by a test in this repository, not by that run.
 - [ ] **Pending reader address.** `HYPERCORE_PENDING_READERS` carries the
   HIP-3 run's `HyperCorePendingReader` for HyperEVM until `ipor-abi` publishes
   one; the `hypercore` block shows the pending state only through it.
-- [ ] **Events.** `HyperCoreActionEnqueued`, `HyperCoreActionSettled` and the
-  fuse events (first parameter is the fuse address as `version`), so the
-  parity test can also assert the receipt shape.
 - [ ] **Encoders never exercised on-chain.** `HyperCoreMarginFuse.enter`,
   `HyperCoreBuilderFeeFuse.enter`, `HyperCoreSendFuse.spot_send`,
   `HyperCoreCancelFuse.cancel_by_oid` are verified against the Solidity

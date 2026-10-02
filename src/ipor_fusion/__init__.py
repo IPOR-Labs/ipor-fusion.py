@@ -63,6 +63,8 @@ from ipor_fusion.errors import (
 )
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.fuses import (
+    HYPERCORE_EVENT_SPECS,
+    HYPERCORE_EVENTS,
     AaveV3BorrowFuse,
     AaveV3SupplyFuse,
     AsyncActionFuse,
@@ -94,6 +96,8 @@ from ipor_fusion.fuses import (
     HyperCoreCancelFuse,
     HyperCoreConfigKey,
     HyperCoreDepositFuse,
+    HyperCoreEvent,
+    HyperCoreEventSpec,
     HyperCoreMarginFuse,
     HyperCoreOrderFuse,
     HyperCoreSendFuse,
@@ -123,7 +127,11 @@ from ipor_fusion.fuses import (
     UniversalTokenSwapperAbi,
     UniversalTokenSwapperFuse,
     UniversalTokenSwapperSubstrates,
+    decode_hypercore_event,
     euler_substrate,
+    find_hypercore_events,
+    hypercore_event_name,
+    hypercore_events,
     system_address,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -198,6 +206,14 @@ from ipor_fusion.types import (
 __version__ = package_version()
 
 __all__ = [
+    "HYPERCORE_EVENTS",
+    "HYPERCORE_EVENT_SPECS",
+    "HyperCoreEvent",
+    "HyperCoreEventSpec",
+    "decode_hypercore_event",
+    "find_hypercore_events",
+    "hypercore_event_name",
+    "hypercore_events",
     "__version__",
     "ChangelogEntry",
     "package_version",
