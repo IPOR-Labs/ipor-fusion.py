@@ -182,9 +182,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
 
     def accounting_epoch(self, chain_id: ChainId) -> Call[int]:
         """``accountingEpoch(uint256)``: the per-chain accounting epoch that
-        every value-moving operation bumps to invalidate the active proposal.
-
-        """
+        every value-moving operation bumps to invalidate the active proposal."""
         return self._view("accountingEpoch(uint256)", chain_id, output_types=["uint64"])
 
     def active_proposal_id(self, chain_id: ChainId) -> Call[int]:

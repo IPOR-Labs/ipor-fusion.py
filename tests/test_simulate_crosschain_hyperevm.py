@@ -97,6 +97,10 @@ class FactoryPair:
     #: ``dispatcherDeploymentGasLimit`` toward the other chain; ``None`` on a
     #: build without that getter, whose ticket carries ``message_gas_limit``.
     dispatcher_deployment_gas_limit: int | None
+    #: keccak of the factory's own runtime code, Arbitrum then HyperEVM (the
+    #: router is an immutable, so the two differ). The stored creation codes
+    #: say which executors it deploys; this says which factory build answers.
+    runtime_keccak: tuple[bytes, bytes]
 
     @property
     def ticket_gas_limit(self) -> int:
@@ -113,6 +117,14 @@ V2 = FactoryPair(
     6_000_000,
     1_000_000,
     None,
+    (
+        bytes.fromhex(
+            "f8741f0b7849f691bd5a6fff24810aa72186b3e87c362ad0f4ae561e88315474"
+        ),
+        bytes.fromhex(
+            "731f64e351cebcc611c7e0e1c4a70d140e3cfa0eee3a7bac6339888d8faa9b9f"
+        ),
+    ),
 )
 # Source `7eccea2` (`810e260` plus the ticket's own gas limit) plus the same
 # patches (2026-10-02). Commands carry 2 M, which fits HyperEVM's 3 M small
@@ -126,6 +138,14 @@ V3 = FactoryPair(
     2_000_000,
     1_000_000,
     6_000_000,
+    (
+        bytes.fromhex(
+            "50ae01dc5a81bd4c81e50d450f4ae8aabc37114356b8f453e847a14e531be422"
+        ),
+        bytes.fromhex(
+            "7c5bcfd813c6b2a3422e4635c9b8ac5ec11bc8137fde445f93aab6d4dec68cc0"
+        ),
+    ),
 )
 FACTORY_PAIRS = {pair.name: pair for pair in (V2, V3)}
 #: The per-message fee caps of the deployed routes, Arbitrum then HyperEVM.
@@ -813,6 +833,8 @@ def test_deployed_factory_pair_identity(web3_arb, web3_hyperevm, index, pair):
     ctx = _ctx(web3, chain, pair.blocks[index])
     factory = CcipCrosschainFactory(ctx, pair.address)
 
+    runtime = web3.eth.get_code(pair.address, block_identifier=pair.blocks[index])
+    assert bytes(Web3.keccak(runtime)) == pair.runtime_keccak[index]
     assert factory.factory_interface_version().call() == 1
     assert factory.ccip_router().call() == (ARBITRUM_ROUTER, HYPEREVM_ROUTER)[index]
     assert factory.owner().call() == OWNER
@@ -850,6 +872,49 @@ def test_deployed_factory_pair_identity(web3_arb, web3_hyperevm, index, pair):
 def test_deployed_pairs_run_distinct_builds():
     assert V2.executor_creation_keccak != V3.executor_creation_keccak
     assert V2.dispatcher_creation_keccak != V3.dispatcher_creation_keccak
+    assert set(V2.runtime_keccak).isdisjoint(V3.runtime_keccak)
+
+
+def test_simulate_v3_dispatcher_deployment_gas_governance(web3_arb):
+    """The owner's timelock for the ticket's gas limit, run on the deployed v3
+    factory: a schedule is cancelled by the SDK's commitment (so it matches
+    the contract byte for byte), an execute before ``CONFIG_DELAY`` reverts,
+    and an execute after it writes the getter."""
+    block = V3.blocks[0]
+    factory = CcipCrosschainFactory(_ctx(web3_arb, ARBITRUM, block), V3.address)
+    new_limit = 4_000_000
+    simulator = VaultSimulator(web3_arb, vault=V3.address, alpha=OWNER, block=block)
+    simulator.with_state_override(OWNER, balance=hex(10**18))
+    schedule = factory.schedule_dispatcher_deployment_gas_limit(HYPEREVM, new_limit)
+    execute = factory.execute_dispatcher_deployment_gas_limit(HYPEREVM, new_limit)
+    commitment = CcipCrosschainFactory.dispatcher_deployment_gas_limit_commitment(
+        HYPEREVM, new_limit
+    )
+    simulator.add_call(schedule, from_=OWNER, label="schedule")
+    simulator.add_call(
+        factory.cancel_scheduled_config(commitment), from_=OWNER, label="cancel"
+    )
+    simulator.add_call(schedule, from_=OWNER, label="reschedule")
+    simulator.add_call(execute, from_=OWNER, label="execute_early")
+    simulator.next_block(time_shift_seconds=300 + 1)
+    simulator.add_call(execute, from_=OWNER, label="execute")
+    simulator.observe("limit", factory.dispatcher_deployment_gas_limit(HYPEREVM))
+
+    result = simulator.run()
+
+    outcome = {call.label: call.success for call in result.calls if call.label}
+    assert outcome == {
+        "schedule": True,
+        "cancel": True,
+        "reschedule": True,
+        "execute_early": False,
+        "execute": True,
+        "limit": True,
+    }
+    early = next(call for call in result.calls if call.label == "execute_early")
+    assert_reverted(early, "ConfigNotReady(bytes32,uint256)")
+    assert V3.dispatcher_deployment_gas_limit != new_limit
+    assert result.get("limit") == new_limit
 
 
 def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
