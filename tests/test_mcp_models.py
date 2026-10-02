@@ -21,6 +21,7 @@ from ipor_fusion.mcp.models import (
     Amount,
     ConfigShowResponse,
     FeesSection,
+    HyperCoreSection,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     OracleMappingResponse,
@@ -47,6 +48,7 @@ def _amount(raw: int = 0, formatted: str = "0", usd: float | None = None) -> dic
 # The producer copies these into the payload verbatim; so does the fixture.
 _FEE_NOTES = DOCS["fees"]
 _WM_NOTES = DOCS["withdraw_manager_details"]
+_HC_NOTES = DOCS["hypercore"]
 
 
 def _full_vault_info_dict() -> dict:
@@ -309,6 +311,16 @@ def _full_vault_info_dict() -> dict:
         ],
         "hypercore": {
             "market_id": 55,
+            "core_user_exists_note": _HC_NOTES["core_user_exists"],
+            "perp_dex_bitmap_note": _HC_NOTES["perp_dex_bitmap"],
+            "nav_wad_note": _HC_NOTES["nav_wad"],
+            "balance_fuse_value_wad_note": _HC_NOTES["balance_fuse_value_wad"],
+            "nav_matches_balance_fuse_note": _HC_NOTES["nav_matches_balance_fuse"],
+            "spot_note": _HC_NOTES["spot"],
+            "native_perp_note": _HC_NOTES["native_perp"],
+            "hip3_note": _HC_NOTES["hip3"],
+            "perp_markets_note": _HC_NOTES["perp_markets"],
+            "pending_note": _HC_NOTES["pending"],
             "market": "HYPERCORE",
             "balance_fuse": "0xBALANCEFUSE",
             "core_user_exists": True,
@@ -426,6 +438,7 @@ class TestVaultInfoResponseContract:
 # it raises KeyError rather than going quietly unchecked.
 _MODEL_BY_BLOCK = {
     "fees": FeesSection,
+    "hypercore": HyperCoreSection,
     "withdraw_manager_details": WithdrawManagerDetails,
 }
 

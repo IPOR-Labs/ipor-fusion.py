@@ -150,6 +150,7 @@ IPOR_APP_URL = "https://app.ipor.io/fusion"
 
 # Per-block shorthands into the shared documentation table.
 _FEE_DOCS = DOCS["fees"]
+_HYPERCORE_DOCS = DOCS["hypercore"]
 _WM_DOCS = DOCS["withdraw_manager_details"]
 
 UINT256_MAX = 2**256 - 1
@@ -1806,6 +1807,7 @@ def _build_hypercore_json(data: _VaultData) -> dict[str, Any] | None:
             for pm in state.perp_markets
         ],
         "pending": _hypercore_pending_json(state.pending) if state.pending else None,
+        **{f"{key}_note": text for key, text in _HYPERCORE_DOCS.items()},
     }
 
 

@@ -89,6 +89,7 @@ class Managers(_Base):
 # ---------------------------------------------------------------------------
 
 _FEE_DOCS = DOCS["fees"]
+_HYPERCORE_DOCS = DOCS["hypercore"]
 
 
 class FeeRecipientEntry(_Base):
@@ -757,30 +758,42 @@ class HyperCorePendingEntry(_Base):
 class HyperCoreSection(_Base):
     """Live state of the HyperCore market (55): the NAV identity leg by leg,
     the balance fuse's own figure, the granted perp markets and the pending
-    action."""
+    action. The `*_note` fields carry the DOCS text the CLI payload ships."""
 
     market_id: int
     market: str
     balance_fuse: str
-    core_user_exists: bool = Field(
-        description="False until the first EVM -> Core deposit; NAV is 0 then."
-    )
-    perp_dex_bitmap: int = Field(description="PerpDexIds config: bit i enables dex i.")
-    nav_wad: int = Field(
-        description="Signed NAV the valuation library computes, 18 decimals."
-    )
+    core_user_exists: bool = Field(description=_HYPERCORE_DOCS["core_user_exists"])
+    core_user_exists_note: str
+    perp_dex_bitmap: int = Field(description=_HYPERCORE_DOCS["perp_dex_bitmap"])
+    perp_dex_bitmap_note: str
+    nav_wad: int = Field(description=_HYPERCORE_DOCS["nav_wad"])
+    nav_wad_note: str
     nav_usd: float
     balance_fuse_value_wad: int | None = Field(
-        description="balanceOf() of the balance fuse in the vault's context; null if unavailable."
+        description=_HYPERCORE_DOCS["balance_fuse_value_wad"]
     )
-    nav_matches_balance_fuse: bool | None
-    spot: list[HyperCoreSpotLegEntry]
-    native_perp: HyperCorePerpLegEntry | None
-    hip3: list[HyperCorePerpLegEntry]
-    perp_markets: list[HyperCorePerpMarketEntry]
+    balance_fuse_value_wad_note: str
+    nav_matches_balance_fuse: bool | None = Field(
+        description=_HYPERCORE_DOCS["nav_matches_balance_fuse"]
+    )
+    nav_matches_balance_fuse_note: str
+    spot: list[HyperCoreSpotLegEntry] = Field(description=_HYPERCORE_DOCS["spot"])
+    spot_note: str
+    native_perp: HyperCorePerpLegEntry | None = Field(
+        description=_HYPERCORE_DOCS["native_perp"]
+    )
+    native_perp_note: str
+    hip3: list[HyperCorePerpLegEntry] = Field(description=_HYPERCORE_DOCS["hip3"])
+    hip3_note: str
+    perp_markets: list[HyperCorePerpMarketEntry] = Field(
+        description=_HYPERCORE_DOCS["perp_markets"]
+    )
+    perp_markets_note: str
     pending: HyperCorePendingEntry | None = Field(
-        description="Null when no HyperCorePendingReader is known on the chain."
+        description=_HYPERCORE_DOCS["pending"]
     )
+    pending_note: str
 
 
 class VaultInfoResponse(_Base):
