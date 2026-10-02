@@ -2,8 +2,6 @@ name: Crosschain readiness
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "41 6 * * *"
 
 permissions:
   contents: read

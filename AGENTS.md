@@ -80,9 +80,9 @@ directions and the pilot-v2 factory pair's configuration (creation codes, routes
 the canary creator's allowance, balance and HyperEVM big-block flag) with snapshot
 block numbers/hashes/timestamps.
 Blocked availability is a successful observation, not acceptance; incomplete probes
-fail. `.github/workflows/crosschain-readiness.yml` runs it independently of PR CI
-using Arbitrum and HyperEVM RPC secrets. Scheduling only becomes active after the
-workflow reaches the default branch. A `Spoke` declares which transports reach it;
+fail. `.github/workflows/crosschain-readiness.yml` runs it on demand only
+(`workflow_dispatch`, Arbitrum and HyperEVM RPC secrets); any schedule belongs to
+the monitoring repository, not to this one. A `Spoke` declares which transports reach it;
 the lifecycle matrix follows that.
 
 ## Conventions
