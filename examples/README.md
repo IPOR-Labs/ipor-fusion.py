@@ -38,18 +38,30 @@ transaction.
   brings the margin home and releases it for a user's scheduled withdrawal, then
   demonstrates the executor rejecting a confirmation that does not match its
   proposal.
+- [`crosschain_ccip_usdc_arbitrum_hyperevm.py`](crosschain_ccip_usdc_arbitrum_hyperevm.py) --
+  a vault whose capital works on another chain. Opens a `CrosschainLane` on a
+  live Arbitrum hub vault whose executor has a dispatcher on HyperEVM, then
+  drives the whole lifecycle over CCIP: supply USDC to the spoke, have a
+  proposer and an approver attest the dispatcher's balance into the hub NAV,
+  DEPOSIT into and REDEEM from the spoke vault by command, re-attest, recall
+  the idle to the hub and claim it back into the vault. Both chains run under
+  `eth_simulateV1` and `CrosschainSimulator` relays each CCIP message between
+  them, so it needs an Arbitrum and a HyperEVM archive RPC.
 
 ## Prerequisites
 
 - The `ipor-fusion` package installed (or this repo's dev environment).
-- A Base RPC URL from an **archive node that implements `eth_simulateV1`**
-  (Alchemy and other geth/reth-based providers do).
+- An RPC URL per chain the example uses (Base, Arbitrum, HyperEVM) from an
+  **archive node that implements `eth_simulateV1`** (Alchemy and other
+  geth/reth-based providers do).
 
 ## Environment variables
 
 - `BASE_PROVIDER_URL` (required) -- your Base archive RPC endpoint. Never commit it or
   share it; it embeds your provider key.
-- `ARBITRUM_PROVIDER_URL` (required by the Arbitrum example) -- your Arbitrum
+- `ARBITRUM_PROVIDER_URL` (required by the Arbitrum and crosschain examples) --
+  your Arbitrum archive RPC endpoint. Never commit it or share it.
+- `HYPEREVM_PROVIDER_URL` (required by the crosschain example) -- your HyperEVM
   archive RPC endpoint. Never commit it or share it.
 
 ## Running

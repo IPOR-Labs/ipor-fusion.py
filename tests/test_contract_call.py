@@ -33,6 +33,32 @@ def test_decodes_return_values():
     assert call.call() == 7
 
 
+def test_map_composes_decoder_and_preserves_call():
+    call: Call[str] = Call(
+        to=TARGET,
+        data=SELECTOR,
+        output_types=["uint256"],
+        decoder=lambda value: f"value={value}",
+        ctx=_ctx(encode(["uint256"], [7])),
+    )
+
+    mapped = call.map(len)
+
+    assert mapped.call() == len("value=7")
+    assert mapped.to == call.to
+    assert mapped.data == call.data
+    assert mapped.output_types == call.output_types
+    assert mapped.output_types is not call.output_types
+    assert mapped.ctx is call.ctx
+
+
+def test_map_rejects_write_only_call():
+    call: Call[None] = Call(to=TARGET, data=SELECTOR)
+
+    with pytest.raises(ValueError, match="cannot map a write-only Call"):
+        call.map(lambda value: value)
+
+
 def test_empty_return_raises_typed_error_naming_target_chain_and_selector():
     """An address with no code answers eth_call with empty data; surface that
     instead of the decoder's bare "Tried to read 32 bytes, only got 0 bytes"."""

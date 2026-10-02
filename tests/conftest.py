@@ -32,6 +32,15 @@ def load_example() -> Callable[[str], ModuleType]:
     return _load
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-readiness",
+        action="store_true",
+        default=False,
+        help="Include live crosschain readiness checks; combine with -m readiness to run only those checks.",
+    )
+
+
 @pytest.fixture
 def sequential_multicall():
     """Run the vault fetch's batched reads one `Call` at a time, for tests that
@@ -40,7 +49,11 @@ def sequential_multicall():
         yield
 
 
-def pytest_collection_modifyitems(items):
+def pytest_collection_modifyitems(config, items):
+    if not config.getoption("--run-readiness"):
+        deselected = [item for item in items if item.get_closest_marker("readiness")]
+        items[:] = [item for item in items if not item.get_closest_marker("readiness")]
+        config.hook.pytest_deselected(items=deselected)
     for item in items:
         path = str(item.fspath)
         if "test_cli_" in path:
@@ -87,5 +100,13 @@ def web3_base() -> Web3:
 @pytest.fixture(scope="session")
 def web3_arb() -> Web3:
     w3 = _connected_web3("ARBITRUM_PROVIDER_URL")
+    _ensure_simulate_v1(w3)
+    return w3
+
+
+@pytest.fixture(scope="session")
+def web3_hyperevm() -> Web3:
+    """HyperEVM simulation fixture; general PR CI does not supply its RPC secret."""
+    w3 = _connected_web3("HYPEREVM_PROVIDER_URL")
     _ensure_simulate_v1(w3)
     return w3

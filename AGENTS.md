@@ -3,7 +3,9 @@
 `ipor-fusion` is the Python SDK for IPOR Fusion Plasma Vaults: typed fuse
 encoders, on-chain readers, and a `fusion` CLI plus `fusion-mcp` MCP server
 built on the same SDK. Published to PyPI. It is a library and inspection
-tooling, not an automation service: nothing here runs on a schedule.
+tooling, not an automation service. `scripts/crosschain_readiness.py` is a
+read-only diagnostic run on demand, not a keeper or production monitor; any
+scheduled run of it belongs to the monitoring repository.
 
 Related repositories (siblings, referenced by name; clone paths vary):
 - [ipor-fusion](https://github.com/IPOR-Labs/ipor-fusion) — Solidity contracts, the source of truth for market ids, roles and substrates.
@@ -12,7 +14,11 @@ Related repositories (siblings, referenced by name; clone paths vary):
 
 The canonical machine-readable overview of IPOR Fusion for AI agents is
 https://ipor.io/llms.txt (with https://ipor.io/llms-full.txt inlining the
-docs); read it before answering protocol-level questions.
+docs). Fetch it once when a working session first needs protocol context and
+reuse that copy for the rest of the session. Fetch it again only when the user
+asks for current information, there is evidence it changed, or a discrepancy
+must be re-verified. Do not fetch it merely because a new turn starts or for
+repository-local work that does not require protocol context.
 
 ## Commands
 
@@ -23,6 +29,8 @@ uv run ruff check ./                                          # lint: bandit S, 
 uv run pyright                                                # types, basic mode, src + tests
 uv run pytest                                                 # all tests + coverage gate (fail_under = 95)
 uv run pytest -m "cli or mcp" --no-cov                        # fast offline subset
+uv run pytest --run-readiness -m readiness --no-cov -rA       # opt-in live Ethereum-hub POC checks
+uv run python scripts/crosschain_readiness.py --output /tmp/crosschain-readiness.json # live Arbitrum/HyperEVM report
 uv run pytest tests/test_fuse_encoding.py -k aave --no-cov    # single file / test
 uv lock --check                                               # uv.lock in sync with pyproject.toml
 ```
@@ -39,6 +47,43 @@ named address constant). They auto-skip unless `ETHEREUM_PROVIDER_URL`,
 `BASE_PROVIDER_URL` and `ARBITRUM_PROVIDER_URL` are set (`.env` is loaded via
 python-dotenv) and the provider supports `eth_simulateV1`. CI has all three as
 secrets. Never print `.env` or a provider URL: they embed API keys.
+`HYPEREVM_PROVIDER_URL` is used by the HyperEVM lifecycle/deployment tests and
+the readiness script; general PR CI does not supply it.
+`test_simulate_crosschain_hyperevm.py` covers the pilot on pinned blocks, parametrized by
+`generation`: `deployed` runs executors from the pilot factories' stored creation code,
+`source` builds a factory pair from `FUSE_SOURCE_REVISION` inside the simulation (both
+need `IPOR_FUSION_CONTRACTS_DIR` at that revision; a checkout without `node_modules`
+also needs `IPOR_FUSION_FOUNDRY_REMAPPINGS` for OpenZeppelin).
+`test_solidity_compiler.py` uses `IPOR_FUSION_CONTRACTS_DIR` for a local contracts
+checkout and optional `IPOR_FUSION_FOUNDRY_REMAPPINGS`; the pilot build identity
+is pinned in `tests/fixtures/ccip_pilot_build.json`. These tests skip when their
+external prerequisites are unavailable.
+`test_simulate_crosschain_lifecycle.py` drives the mainnet POC deployment from
+Ethereum to every spoke on every transport through `CrosschainLane` and
+`CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
+blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
+`pending` chain there and an `xfail(strict=True)` param until it is wired.
+`test_simulate_crosschain_canary.py` runs the same lifecycle on `CANARY`, the live
+Arbitrum → HyperEVM USDC canary (pilot-v2 CCIP factory pair) pinned right after
+its last transaction, then checks the final gates and every delivery's receiver
+gas against its route limit; a `Chain.simulated_gas_limit` lifts HyperEVM's 3 M
+small-block pin to 30 M and `Deployment.ccip_debits_sent_amount` /
+`attestation_zero_dust_sd` carry the executor generation's accounting into `Run`.
+It needs `ARBITRUM_PROVIDER_URL` and `HYPEREVM_PROVIDER_URL`.
+`test_crosschain_readiness.py` checks the Ethereum-hub POC's live bridge and IPOR
+preconditions. Its `readiness` marker requires `--run-readiness`: ordinary runs
+exclude it even with `-m sdk`. Known HyperEVM gaps are non-strict xfails restricted
+to assertion failures, so availability improving is an XPASS, not broken CI.
+Readiness RPC clients fail on missing/unreachable providers or wrong chain IDs;
+they pin a snapshot per chain and do not require `eth_simulateV1`.
+`scripts/crosschain_readiness.py` separately reports both Arbitrum/HyperEVM USDC
+directions and the pilot-v2 factory pair's configuration (creation codes, routes,
+the canary creator's allowance, balance and HyperEVM big-block flag) with snapshot
+block numbers/hashes/timestamps.
+Blocked availability is a successful observation, not acceptance; incomplete probes
+fail. There is no GitHub workflow for it in this repository: run it locally with
+the Arbitrum and HyperEVM provider URLs from `.env`. A `Spoke` declares which transports reach it;
+the lifecycle matrix follows that.
 
 ## Conventions
 
@@ -69,7 +114,7 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
 |---|---|
 | ruff version | `uv.lock` dev group and `rev` in `.pre-commit-config.yaml` |
 | Python 3.12 runtime, 3.11 floor | `.python-version` + CI `python-version` default; `requires-python`, ruff `target-version`, pyright `pythonVersion` |
-| `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors |
+| `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors An id sourced from a contracts feature branch ahead of the pinned ref goes in the test's `_AHEAD_OF_UPSTREAM` allowlist and is removed when the ref catches up |
 | substrate decoders | `substrates.py` registry mirrors each market's `contracts/fuses/<protocol>/*SubstrateLib.sol` or `*FuseLib.sol` |
 | `vault_info` JSON shape | `_build_json_output` in `cli/vault_cmd.py`, models in `mcp/models.py` (`extra="forbid"`), `_full_vault_info_dict` fixture in `test_mcp_models.py` |
 | CLI command set | every CLI command has a matching tool in `mcp/server.py` (`changelog` maps to `server_info`) |
@@ -86,12 +131,44 @@ secrets. Never print `.env` or a provider URL: they embed API keys.
 - `config/roles.py` — `Roles` IntEnum
 - `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
   `multicall` (`Multicall3`), `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
-  `simulation` (`VaultSimulator`, eth_simulateV1), `oracle`, `fusion_factory`,
+  `simulation` (`VaultSimulator`, eth_simulateV1, `erc20_balance_slot` and ERC-20 balance
+  overrides), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`
-- `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, erc4626,
-  euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
+- `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, crosschain/,
+  erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
   uniswap_v3, universal, `events.py`); `base.py` holds `Fuse`, `FuseAction` and the
   shared validators
+- `crosschain/` — crosschain Plasma Vaults (executor on the hub chain, dispatcher at
+  the same address on each spoke chain), split like the contracts: shared `messages`
+  (`Command`, `MsgType`, envelopes), `contracts` (wrapper bases), `transport`
+  (`CrosschainTransport` seam), `lane` (`CrosschainLane`: one executor/dispatcher pair
+  driven without knowing its transport; it carries its transport's fuse classes and
+  the keeper's attestation helpers), `discovery` (`discover_deployment` reads the
+  market grants, `open_lane`/`open_lanes` build lanes; `LANES` is the transport →
+  lane registry, the only place that knows every concrete lane), `errors` (the
+  contracts' custom error signatures, registered so reverts decode by name),
+  `simulation` (`CrosschainSimulator`, a relay over one `VaultSimulator` per chain
+  that impersonates the endpoint/router on delivery and funds `SYNTHETIC_TOKEN_SOURCE`
+  by a storage override where a chain names no token holder; test and dry-run
+  tooling, not something a keeper needs), and one subpackage per transport, `stargate/` and
+  `ccip/`, each with its wire codecs, executor/dispatcher/factory wrappers, transport
+  and lane; `ccip/chainlink` reads Chainlink's Router, OnRamp, TokenAdminRegistry and
+  token pool (`ccip_token_lane`: is there a lane, does the token travel on it);
+  `ccip/events` decodes the executor/dispatcher/factory events by topic for both
+  contract generations (`CcipGeneration.PILOT` = deployed pilot, `CURRENT` = source);
+  `ccip/chainlink` also wraps the 2.0 OffRamp, verifier resolver and committee verifier
+  (`CcipOffRamp.execute` is the permissionless delivery) and `ccip/indexer` fetches a
+  message's verifier result from Chainlink's public indexers and builds that
+  `manual_execution` call.
+  `fuses/crosschain/` mirrors it (`base`, `stargate`, `ccip`). Names mirror
+  the Solidity contracts and libraries. Adding a transport: a new subpackage plus one
+  `LANES` entry. Layering: the fuse encoders import the wire codecs and wrappers; lanes,
+  discovery, transports and the simulator import the encoders. A package `__init__`
+  runs before its modules, so `ipor_fusion.crosschain`, `.stargate` and `.ccip`
+  export only the fuse-free half; the rest is exported from `ipor_fusion` and
+  imported by module path. `tests/test_crosschain_layering.py` pins this (no
+  function-level or `TYPE_CHECKING` imports in either package); never work around
+  a cycle with a lazy import, move the module instead.
 - `readers/` — read side: lending_health, oracle_mapping, position_manager, aave_v3,
   compound_v3, morpho, ramses_v2, uniswap_v3
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`

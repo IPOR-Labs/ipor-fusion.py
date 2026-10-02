@@ -77,6 +77,13 @@ def _solidity_constants(file_name: str) -> dict[str, int]:
     return constants
 
 
+# Constants the SDK carries ahead of the pinned public contracts (sourced from
+# a live deployment or a contracts feature branch). Each must be ABSENT
+# upstream at the pinned ref; once it lands, drop it here and bump
+# IPOR_FUSION_REF in the same change.
+_AHEAD_OF_UPSTREAM = {"CROSSCHAIN": 54, "HYPERCORE": 55}
+
+
 def _member_words(body: str) -> list[list[str]]:
     """The words of each member of a declaration body, members split on `,` or
     `;`; a member's type is its first word. Empty fragments are skipped."""
@@ -235,13 +242,6 @@ def test_no_argument_calldata_matches_the_contract(path, function, calldata):
     signature = _declared_signature(_solidity_source(path), function)
 
     assert calldata == function_signature_to_4byte_selector(signature)
-
-
-# Constants the SDK carries ahead of the pinned public contracts (sourced from
-# a live deployment or a contracts feature branch). Each must be ABSENT
-# upstream at the pinned ref; once it lands, drop it here and bump
-# IPOR_FUSION_REF in the same change.
-_AHEAD_OF_UPSTREAM = {"HYPERCORE": 55}
 
 
 def test_market_ids_mirror_ipor_fusion_markets_sol():

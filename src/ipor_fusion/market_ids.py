@@ -100,9 +100,17 @@ class IporFusionMarkets:
     # keccak256(abi.encode(PoolKey))) plus both pool currencies as
     # substrate-as-asset; native-currency pools are not supported
     UNISWAP_V4 = 53
-    # Crosschain market (id 54) is defined on the contracts' crosschain branch
-    # and mirrored by the crosschain SDK; not repeated here.
-    #
+    # Crosschain market: a hub PlasmaVault deploys capital into PlasmaVaults
+    # on other chains through an executor (Stargate/LayerZero or Chainlink
+    # CCIP). Substrate type: CrosschainSubstrateLib (1 EXECUTOR, 2 REMOTE_VAULT
+    # bound to a chain id). Ahead of the public contracts repo: defined on the
+    # crosschain feature branch; the mirror test allowlists it until it lands.
+    # The mainnet POC fuses were built with a keccak-derived id instead (see
+    # ipor_fusion.fuses.crosschain.crosschain_market_id).
+    # A legacy HyperEVM HyperCore test vault also uses 54 until it is
+    # redeployed on HyperCore's assigned market 55; do not interpret that
+    # vault's market-54 substrates as crosschain configuration.
+    CROSSCHAIN = 54
     # HyperCore market (id 55): a HyperEVM PlasmaVault trading on Hyperliquid
     # Core through delegatecalled fuses (CoreWriter actions, precompile reads).
     # Substrate type: HyperCoreSubstrateLib (1 SpotToken, 2 PerpMarket,
