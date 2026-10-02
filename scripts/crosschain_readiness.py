@@ -114,7 +114,10 @@ EXPECTED_CREATION_CODE_HASHES = {
 #: vault clone there needs ~9 M gas).
 CREATOR = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 #: Senders known to execute manually (``OffRamp.execute`` is permissionless):
-#: reported apart, never counted as Chainlink executors.
+#: reported apart, never counted as Chainlink executors. Any other manual
+#: executor counts as one. It cannot make ``all_on_big_blocks`` true while a
+#: Chainlink executor is still on small blocks, but its executions do count
+#: towards ``MIN_OBSERVED_EXECUTIONS``.
 NON_CHAINLINK_EXECUTORS = {CREATOR: "IPOR canary EOA (manual executions)"}
 
 
