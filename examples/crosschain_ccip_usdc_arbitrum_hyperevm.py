@@ -41,10 +41,12 @@ lifecycle four separate signers drive over an hour is compressed into one
 script.
 
 One live fact this simulation does not reproduce: on this lane Chainlink's
-executors submit into HyperEVM's 3 M-gas small blocks, so a hub -> spoke
-message whose gas limit exceeds that is never executed automatically and has to
-be executed by anyone through the permissionless ``OffRamp.execute``
-(``ipor_fusion.manual_execution``). The relay here delivers directly.
+executors submit into HyperEVM's 3 M-gas small blocks. Every lifecycle message
+here carries the factory route's 2 M and is executed automatically, but the
+one-time dispatcher deployment ticket carries 6 M and has to be executed by
+anyone through the permissionless ``OffRamp.execute``
+(``ipor_fusion.manual_execution``). The deployment below already has its
+dispatcher; the relay delivers every message directly.
 
 Run it (the shell snippets assume a POSIX shell -- bash or zsh):
 
@@ -107,14 +109,15 @@ HYPEREVM_USDC = Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba
 
 # The crosschain test deployment this example drives. It is NOT in the ipor-abi
 # registry: these are test vaults and a test executor created by the IPOR SDK
-# team on 2026-10-02 against the CCIP crosschain factory, and they stay live
-# as a regression fixture (the SDK's own tests pin the same addresses). Verify
+# team on 2026-10-02 against the v3 CCIP crosschain factory pair
+# (0x048A95955De3A5d837FE2861a34A9c2DDcb964CD on both chains), and they stay
+# live as a regression fixture (the SDK's own tests pin the same addresses). Verify
 # them yourself with ``discover_deployment(hub_ctx, HUB_VAULT, CROSSCHAIN_MARKET)``,
 # which reads the executor, its fuses and its spoke from the vault's grants.
-HUB_VAULT = Web3.to_checksum_address("0x9257e35FEcF601fD009d35060C8f555af5A655EA")
+HUB_VAULT = Web3.to_checksum_address("0x8BeED16DB1f354B0BFa31eF7e747102e26eb8FbF")
 # The executor on Arbitrum and the dispatcher on HyperEVM: one CREATE3 address.
-EXECUTOR = Web3.to_checksum_address("0xb5B4Cb6aB855fee75C98D5F4E7dB2927EDB2d211")
-SPOKE_VAULT = Web3.to_checksum_address("0x35606C49360f94fD0310F4bAE4f0a1155FC00D1a")
+EXECUTOR = Web3.to_checksum_address("0xcb83A78BD8e8c284d5704B62945EF2C454266dB0")
+SPOKE_VAULT = Web3.to_checksum_address("0xA342eBA00bD725799828A34EA55D25a55958f643")
 # ``IporFusionMarkets.CROSSCHAIN``: the market the four crosschain fuses are
 # registered under on the hub vault.
 CROSSCHAIN_MARKET = MarketId(int(IporFusionMarkets.CROSSCHAIN))
@@ -145,8 +148,8 @@ BALANCE_APPROVER = Web3.to_checksum_address(
 # executor bucket at zero. Bump both if your provider cannot serve state at
 # these heights; keep the hub block a few seconds AFTER the spoke block, the
 # attestation rejects an observation stamped in the hub's future.
-ARBITRUM_PINNED_BLOCK = 510_934_861
-HYPEREVM_PINNED_BLOCK = 47_452_389
+ARBITRUM_PINNED_BLOCK = 510_974_745
+HYPEREVM_PINNED_BLOCK = 47_463_297
 # 1 USDC. Small on purpose: the whole point is the shape of the flow.
 DEPOSIT_AMOUNT = Amount(1_000_000)
 # How long the proposer gives the approver before a proposal expires; the
@@ -308,11 +311,10 @@ def _open(web3_arb: Web3, web3_hype: Web3) -> _Flow:
     # future (the executor rejects that). Live, the two chains' clocks are
     # within seconds and the proposer simply reads the spoke first.
     hub.with_block_time_shift(60)
-    # SIMULATION ONLY: HyperEVM's small blocks carry 3 M gas; the deliveries
-    # here run under a 30 M block, as a HyperEVM big block does. Live, token
-    # legs fit a small block and Chainlink executes them; a message above the
-    # small-block limit needs the manual ``OffRamp.execute`` named in the
-    # module docstring.
+    # SIMULATION ONLY: the relay queues several deliveries into one simulated
+    # HyperEVM block, more than a 3 M small block holds; a 30 M block, as a
+    # HyperEVM big block, takes them. Live, each lifecycle message fits a small
+    # block on its own and Chainlink executes it.
     spoke.with_block_override(gasLimit=30_000_000)
     # SIMULATION ONLY: the executor and the dispatcher pay the CCIP fees of
     # what they send out of their own native balances; the live deployment
