@@ -2,6 +2,90 @@
 
 <!-- version list -->
 
+## v3.7.0 (2026-10-02)
+
+### Build System
+
+- Declare hexbytes as a direct dependency
+  ([`3ebec4a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3ebec4a1cbd4a0f8986803b3abeef91f1bb74587))
+
+- Require Python 3.11+ as 3.10 reaches end of life
+  ([`ab9fea4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ab9fea4eee761440392ac58fec9bed55175204be))
+
+### Documentation
+
+- **examples**: Correct the role admin chain
+  ([`b03d2df`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b03d2dfe3c42b83050bb7ab5018a8f6d228db091))
+
+- **examples**: Label the Aave example's time advance
+  ([`82de866`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/82de866aaa7b5a274b99f9569df64b1e28fb061c))
+
+- **examples**: Require examples to agree, or to say why not
+  ([`b4aef80`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b4aef8092316bf5bfc5c022209dd9c5bb3aaf547))
+
+- **examples**: Require simulation-only constructs to be labelled
+  ([`8d145fe`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8d145fe9884fdd1c121bbe1dd7551904fc41e78a))
+
+- **sdk**: Add external-state margin-leg example on Base
+  ([`b6b92da`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b6b92daad7aa6fa56045d3efd7006070bc04e011))
+
+- **sdk**: Correct the executor's stale and overstated docstrings
+  ([`237aaf8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/237aaf858532c696d984026fed009dc5149de98c))
+
+- **sdk**: Describe encoder() as the ctx-less hatch it is
+  ([`a6a81c2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a6a81c2c11da497ec8e12d1bab243c1ad1994c4f))
+
+- **sdk**: Finish the de-duplication and cut two dead clauses
+  ([`c565fdf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c565fdfdeced6d544b2092b3f87e19d73a9f4002))
+
+- **sdk**: State each executor rule once
+  ([`d7d1601`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d7d16015c6c4819bc21be5ebe32bcc8748868323))
+
+### Features
+
+- **sdk**: Bind find_balance_proposed to a chain and verify its hash
+  ([`e01b3e5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e01b3e50f1862c3f8243ab10c4a4044586e6c3c9))
+
+- **sdk**: Build the external-state createExecutor action
+  ([`bc8c09d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bc8c09dbd0cfc40b21b3fbc4e1e4e99fd52a94d0))
+
+- **sdk**: Expose ExternalStateExecutor.balances for market 50
+  ([`349e3ae`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/349e3ae6f939d32b066992d3c2ce1d941aa7ffcc))
+
+- **sdk**: Expose ExternalStateExecutor.last_updated per account
+  ([`5ba9107`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5ba9107f8462f2b169e836e6efe75764518a25a1))
+
+- **sdk**: Sync the external-state executor's substrate cache
+  ([`4de1ea7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4de1ea7661504ad3be415e9b6c3c61d9f57abcce))
+
+- **sdk**: Verify BalanceProposal readers and harden mark_nav
+  ([`56c3496`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/56c3496936fb97b28ee77cbeefb48df8a4a0b1fd))
+
+### Refactoring
+
+- **sdk**: Derive the BalanceProposed topic from its type list
+  ([`61e9c74`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/61e9c74eddc2722c75772abf001daf9273730828))
+
+- **sdk**: Pin the executor's event and struct layouts upstream
+  ([`5621e52`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5621e5282cc399c231762732c3b0082e286f3337))
+
+### Testing
+
+- **sdk**: Pin and simulate executor creation and substrate sync
+  ([`482f504`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/482f504574b353631f4541cdbad314f092a93b2f))
+
+- **sdk**: Share the eth_simulateV1 response envelope
+  ([`a793ab8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a793ab84acef3d2ef702c6c945f7cefb7d04f239))
+
+- **sdk**: Share the executor's repeated fixture constants
+  ([`060ed17`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/060ed173d130926351a4938547ed3925f472ccfa))
+
+### Additional Release Information
+
+- Python 3.10 is no longer supported; installs on 3.10 resolve to the last release that supports it.
+  Upgrade to Python 3.11 or newer.
+
+
 ## v3.6.11 (2026-09-29)
 
 ### Documentation
