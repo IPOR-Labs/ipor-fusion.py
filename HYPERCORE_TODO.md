@@ -12,28 +12,17 @@ by a test in this repository, not by that run.
 | Layer | Status | Evidence |
 |---|---|---|
 | SDK expresses the run's calls: fuse wiring, migration (pre-hooks included), approve, deposit, EVM -> Core, spot -> HIP-3 dex, IOC/GTC orders, cancel, reduce-only close, dex -> spot, Core -> EVM, balance refresh, redeem | 36 of 36 calls | `tests/test_hypercore_flow.py`: byte parity with the on-chain calldata |
-| Fuses run on the live node with the HyperCore precompiles | one probe | `eth_call` of the run's DepositFuse `execute` from the signer on the current state succeeded |
-| Dry-runs of individual, currently valid actions at the latest state | not yet | opt-in `eth_call` / `eth_estimateGas` test (below); independent calls carry no earlier EVM state and cannot settle Core actions, so this never proves a step-by-step cycle |
+| Fuses run on the live node with the HyperCore precompiles | six actions | `tests/test_hypercore_live.py` (opt-in, `HYPEREVM_PROVIDER_URL`): `eth_call` + `eth_estimateGas` from the signer of the refresh, EVM -> Core deposit, Core -> EVM and spot -> xyz sends, an IOC order and a cancel on the current state; skips while an action is pending. Independent calls carry no earlier EVM state and cannot settle Core actions, so this never proves a step-by-step cycle. `redeem` beyond the vault's EVM USDC reverts (no instant-withdraw fuse), pinned as a test |
 | Sequence simulation (`VaultSimulator`, `eth_simulateV1`) | not possible on this node | the precompiles fail inside `eth_simulateV1`; no historical Core state, so no replay of past transactions either |
-| State reads (pending action, action nonce, precompile NAV), events, `vault info` / MCP | missing | reader items below |
+| State reads: pending action and nonce (`HyperCorePendingReader`), the precompiles (`HyperCoreReader`), the NAV identity (`read_hypercore_nav` == `PlasmaVault.balance_fuse_value`) | done | `tests/test_hypercore_readers.py` offline; the identity holds live at block 47453068 (`test_hypercore_live.py`) |
+| Events, `vault info` / MCP | missing | items below |
 | Send pipeline (plan with fingerprint, calldata review, throwaway keystore, pinned-nonce send, settle window, `/info` verification) | outside the SDK | the run's tooling; not re-homed here (see "Beyond the SDK") |
 | An end-to-end run executed from this SDK | not done | needs a funded signer and an explicit go; asynchronous Core effects (fills, spot credits) are only visible through Hyperliquid `/info` |
 
 ## SDK — PR 2, in progress
 
-- [ ] **Readers.** `HyperCorePendingReader` (`pendingState`, `isPending`), the
-  precompile reads as `Call`s (`spotBalance`, `l1BlockNumber`,
-  `accountMarginSummary(uint32 dex, address user)`, `position2`,
-  `perpAssetInfo`, `tokenInfo`, `coreUserExists`), and the NAV identity
-  (granted spot tokens at oracle price + Σ enabled-dex `accountValue`).
-- [ ] **Live dry-run test (opt-in).** `eth_call` + `eth_estimateGas` of the
-  individual actions of the long cycle that are valid on the current state,
-  from the signer on the latest block, skipping without
-  `HYPEREVM_PROVIDER_URL`; never `eth_simulateV1` for market 55. Each call
-  is independent (no earlier EVM state, no Core settlement), so a revert
-  caused by the vault's current pending state is not an SDK regression, and
-  the full sequence stays a live-run gap. Re-probe `eth_simulateV1` when the
-  node is upgraded and record the result here.
+- [ ] **`eth_simulateV1` for market 55.** Re-probe when the node is upgraded
+  and record the result here; until then the live test stays `eth_call`-only.
 - [ ] **`vault info` / MCP.** Market 55 label, decoded substrates, pending
   state, settlement mode, action nonce, HIP-3 dex/asset labels; `models.py`
   and the `_full_vault_info_dict` fixture mirror.
