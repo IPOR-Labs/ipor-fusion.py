@@ -49,23 +49,25 @@ python-dotenv) and the provider supports `eth_simulateV1`. CI has all three as
 secrets. Never print `.env` or a provider URL: they embed API keys.
 `HYPEREVM_PROVIDER_URL` is used by the HyperEVM lifecycle/deployment tests and
 the readiness script; general PR CI does not supply it.
-`test_simulate_crosschain_hyperevm.py` covers the pilot on pinned blocks, parametrized by
-`generation`: `deployed` runs executors from the pilot factories' stored creation code,
-`source` builds a factory pair from `FUSE_SOURCE_REVISION` inside the simulation (both
-need `IPOR_FUSION_CONTRACTS_DIR` at that revision; a checkout without `node_modules`
-also needs `IPOR_FUSION_FOUNDRY_REMAPPINGS` for OpenZeppelin).
+`test_simulate_crosschain_hyperevm.py` rehearses Arbitrum → HyperEVM on pinned blocks,
+parametrized by `generation`: `v2` and `v3` run the live factory pairs (`FactoryPair`:
+address, pins, creation-code hashes, route and dispatcher deployment gas limits) with
+executors from the creation code they store; `source` builds a factory pair from
+`FUSE_SOURCE_REVISION` inside the simulation. All need `IPOR_FUSION_CONTRACTS_DIR` at
+that revision (the fuses are compiled from it); a checkout without `node_modules` also
+needs `IPOR_FUSION_FOUNDRY_REMAPPINGS` for OpenZeppelin. `test_crosschain_ccip_events.py`
+mirrors the CCIP event registry from a checkout at its own `CONTRACTS_REVISION`.
 `test_solidity_compiler.py` uses `IPOR_FUSION_CONTRACTS_DIR` for a local contracts
-checkout and optional `IPOR_FUSION_FOUNDRY_REMAPPINGS`; the pilot build identity
-is pinned in `tests/fixtures/ccip_pilot_build.json`. These tests skip when their
+checkout and optional `IPOR_FUSION_FOUNDRY_REMAPPINGS`. These tests skip when their
 external prerequisites are unavailable.
 `test_simulate_crosschain_lifecycle.py` drives the mainnet POC deployment from
 Ethereum to every spoke on every transport through `CrosschainLane` and
 `CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
 blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
 `pending` chain there and an `xfail(strict=True)` param until it is wired.
-`test_simulate_crosschain_canary.py` runs the same lifecycle on `CANARY`, the live
-Arbitrum → HyperEVM USDC canary (pilot-v2 CCIP factory pair) pinned right after
-its last transaction, then checks the final gates and every delivery's receiver
+`test_simulate_crosschain_canary.py` runs the same lifecycle on `CANARY` and
+`CANARY_V3`, the live Arbitrum → HyperEVM USDC canaries on the pilot-v2 and v3 CCIP
+factory pairs, each pinned right after its last transaction, then checks the final gates and every delivery's receiver
 gas against its route limit; a `Chain.simulated_gas_limit` lifts HyperEVM's 3 M
 small-block pin to 30 M and `Deployment.ccip_debits_sent_amount` /
 `attestation_zero_dust_sd` carry the executor generation's accounting into `Run`.
@@ -77,9 +79,12 @@ to assertion failures, so availability improving is an XPASS, not broken CI.
 Readiness RPC clients fail on missing/unreachable providers or wrong chain IDs;
 they pin a snapshot per chain and do not require `eth_simulateV1`.
 `scripts/crosschain_readiness.py` separately reports both Arbitrum/HyperEVM USDC
-directions and the pilot-v2 factory pair's configuration (creation codes, routes,
-the canary creator's allowance, balance and HyperEVM big-block flag) with snapshot
-block numbers/hashes/timestamps.
+directions and the v3 factory pair's configuration (creation codes, routes, the
+dispatcher deployment gas limit, the canary creator's allowance, balance and HyperEVM
+big-block flag) with snapshot block numbers/hashes/timestamps. On the hub's route into
+HyperEVM it flags manual execution per message kind: `manual_execution_required` for
+commands and recalls (route `messageGasLimit` above the 3 M small block) and
+`dispatcher_deployment_manual` for the one-time deployment ticket.
 Blocked availability is a successful observation, not acceptance; incomplete probes
 fail. There is no GitHub workflow for it in this repository: run it locally with
 the Arbitrum and HyperEVM provider URLs from `.env`. A `Spoke` declares which transports reach it;
@@ -154,8 +159,8 @@ the lifecycle matrix follows that.
   `ccip/`, each with its wire codecs, executor/dispatcher/factory wrappers, transport
   and lane; `ccip/chainlink` reads Chainlink's Router, OnRamp, TokenAdminRegistry and
   token pool (`ccip_token_lane`: is there a lane, does the token travel on it);
-  `ccip/events` decodes the executor/dispatcher/factory events by topic for both
-  contract generations (`CcipGeneration.PILOT` = deployed pilot, `CURRENT` = source);
+  `ccip/events` decodes the executor/dispatcher/factory events by topic (one
+  registry, mirrored from the v3 source; the v2 pair emits a subset of it);
   `ccip/chainlink` also wraps the 2.0 OffRamp, verifier resolver and committee verifier
   (`CcipOffRamp.execute` is the permissionless delivery) and `ccip/indexer` fetches a
   message's verifier result from Chainlink's public indexers and builds that

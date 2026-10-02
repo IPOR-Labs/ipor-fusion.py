@@ -9,6 +9,7 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -68,6 +69,8 @@ def _answers(
     interface_version: int,
     creation_codes_ok: bool,
     testtr_enabled: bool | None = None,
+    message_gas_limit: int = 2_000_000,
+    deployment_gas_limit: int = 6_000_000,
 ) -> dict[tuple[str, bytes], bytes]:
     """Return data for every selector the snapshot reads on one chain."""
     hashes = mod.EXPECTED_CREATION_CODE_HASHES
@@ -78,7 +81,7 @@ def _answers(
         peer.chain_selector,
         mod.FACTORY if route_peer_ok else OTHER,
         ZERO,
-        6_000_000,
+        message_gas_limit,
         1_000_000,
         10**16,
         True,
@@ -114,6 +117,9 @@ def _answers(
         (mod.FACTORY, selector("chainIdOfSelector(uint64)")): encode(
             ["uint256"], [peer.chain_id]
         ),
+        (mod.FACTORY, selector("dispatcherDeploymentGasLimit(uint256)")): encode(
+            ["uint96"], [deployment_gas_limit]
+        ),
         (mod.FACTORY, selector("OWNER()")): encode(["address"], [OWNER]),
         (mod.FACTORY, selector("CONFIG_DELAY()")): encode(["uint256"], [300]),
         (mod.FACTORY, selector("CCIP_ROUTER()")): encode(
@@ -147,32 +153,34 @@ def _ctx(
     spec,
     peer,
     *,
-    token_lane: bool = True,
-    asset_enabled: bool = True,
-    native_usdc: bool = True,
-    router_ok: bool = True,
-    route_peer_ok: bool = True,
-    interface_version: int = 1,
-    creation_codes_ok: bool = True,
     big_blocks: bool = True,
-    testtr_enabled: bool | None = None,
     block: int = 100,
     timestamp: int = 1_700_000_500,
     hashes: tuple[str, str] = (HASH_A, HASH_A),
+    **answer_overrides: Any,
 ) -> MagicMock:
-    answers = _answers(
-        mod,
-        spec,
-        peer,
-        token_lane=token_lane,
-        asset_enabled=asset_enabled,
-        native_usdc=native_usdc,
-        router_ok=router_ok,
-        route_peer_ok=route_peer_ok,
-        interface_version=interface_version,
-        creation_codes_ok=creation_codes_ok,
-        testtr_enabled=testtr_enabled,
+    """A chain whose reads answer as `_answers` builds them; keywords other
+    than the block and big-block ones go to `_answers` (see its defaults)."""
+    options: dict[str, Any] = {
+        "token_lane": True,
+        "asset_enabled": True,
+        "native_usdc": True,
+        "router_ok": True,
+        "route_peer_ok": True,
+        "interface_version": 1,
+        "creation_codes_ok": True,
+    }
+    unknown = (
+        set(answer_overrides)
+        - set(options)
+        - {
+            "testtr_enabled",
+            "message_gas_limit",
+            "deployment_gas_limit",
+        }
     )
+    assert not unknown, f"unknown _ctx options {sorted(unknown)}"
+    answers = _answers(mod, spec, peer, **(options | answer_overrides))
     ctx = MagicMock()
     ctx.chain_id = spec.chain_id
     ctx.default_block = block
@@ -267,15 +275,52 @@ def test_ready_pair_exposes_per_chain_repin_candidates(mod):
     spoke_factory = report["chains"]["hyperevm"]["factory"]
     assert spoke_factory["creator"]["using_big_blocks"] is True
     assert spoke_factory["gates"]["creator_big_blocks"] is True
-    # A 6 M message gas limit exceeds HyperEVM's 3 M small blocks, which the
-    # lane's executors send into. The constraint is on deliveries into
-    # HyperEVM, i.e. the hub factory's route to the spoke; the spoke's route
-    # back is executed on Arbitrum. Informational, not a gate.
-    assert factory["route_to_peer"]["manual_execution_required"] is True
-    assert factory["route_to_peer"]["dispatcher_deployment_manual"] is True
+    # v3 figures: commands at 2 M fit HyperEVM's 3 M small blocks, which the
+    # lane's executors send into; the 6 M deployment ticket does not. The
+    # constraint is on deliveries into HyperEVM, i.e. the hub factory's route
+    # to the spoke; the spoke's route back is executed on Arbitrum.
+    # Informational, not a gate.
+    hub_route = factory["route_to_peer"]
+    assert hub_route["dispatcher_deployment_gas_limit"] == 6_000_000
+    assert hub_route["effective_dispatcher_deployment_gas_limit"] == 6_000_000
+    assert hub_route["manual_execution_required"] is False
+    assert hub_route["dispatcher_deployment_manual"] is True
     assert spoke_factory["route_to_peer"]["manual_execution_required"] is False
     assert spoke_factory["route_to_peer"]["dispatcher_deployment_manual"] is False
     assert report["chains"]["arbitrum"]["usdc_usd_feed"]["age_seconds"] == 600
+
+
+@pytest.mark.parametrize(
+    ("message_gas", "deployment_gas", "effective", "commands_manual", "ticket_manual"),
+    [
+        # v2 shape: no deployment limit, the 6 M route limit carries everything.
+        (6_000_000, 0, 6_000_000, True, True),
+        # Unset deployment limit under a small-block route: the ticket falls
+        # back to 2 M, below what a dispatcher creation needs.
+        (2_000_000, 0, 2_000_000, False, True),
+        # A deployment limit that fits a small block is still too low to create.
+        (2_000_000, 2_500_000, 2_500_000, False, True),
+    ],
+)
+def test_manual_execution_flags_follow_each_message_kind(
+    mod, message_gas, deployment_gas, effective, commands_manual, ticket_manual
+):
+    gas = {"message_gas_limit": message_gas, "deployment_gas_limit": deployment_gas}
+    report = _report(
+        mod,
+        _ctx(mod, mod.HUB, mod.SPOKE, **gas),
+        _ctx(mod, mod.SPOKE, mod.HUB, **gas),
+    )
+    hub_route = report["chains"]["arbitrum"]["factory"]["route_to_peer"]
+    spoke_route = report["chains"]["hyperevm"]["factory"]["route_to_peer"]
+    assert hub_route["effective_dispatcher_deployment_gas_limit"] == effective
+    assert hub_route["manual_execution_required"] is commands_manual
+    assert hub_route["dispatcher_deployment_manual"] is ticket_manual
+    # The same limits on the spoke's route back bind nothing: Arbitrum has no
+    # small-block executors.
+    assert spoke_route["effective_dispatcher_deployment_gas_limit"] == effective
+    assert spoke_route["manual_execution_required"] is False
+    assert spoke_route["dispatcher_deployment_manual"] is False
 
 
 @pytest.mark.parametrize(

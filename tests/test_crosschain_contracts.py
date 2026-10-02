@@ -1162,6 +1162,43 @@ def test_ccip_factory_governance_writes_encode_arguments():
     assert decode(["bytes32"], call.data[4:]) == (ASSET_ID,)
 
 
+def test_ccip_factory_dispatcher_deployment_gas_limit():
+    factory = _wrapper(CcipCrosschainFactory, ["uint96"], (6_000_000,))
+    call = factory.dispatcher_deployment_gas_limit(999)
+    _selector(call, "dispatcherDeploymentGasLimit(uint256)")
+    assert decode(["uint256"], call.data[4:]) == (999,)
+    assert call.call() == 6_000_000
+
+    for method, signature in (
+        (
+            "schedule_dispatcher_deployment_gas_limit",
+            "scheduleDispatcherDeploymentGasLimit(uint256,uint96)",
+        ),
+        (
+            "execute_dispatcher_deployment_gas_limit",
+            "executeDispatcherDeploymentGasLimit(uint256,uint96)",
+        ),
+    ):
+        call = getattr(factory, method)(999, 6_000_000)
+        _selector(call, signature)
+        assert decode(["uint256", "uint96"], call.data[4:]) == (999, 6_000_000)
+        # 0 is valid: it resets the ticket to the route's messageGasLimit.
+        getattr(factory, method)(999, 0)
+        for out_of_range in (-1, 2**96):
+            with pytest.raises(ValueError, match="outside uint96"):
+                getattr(factory, method)(999, out_of_range)
+
+    # keccak256(abi.encode("DEPLOY_GAS", 999, 6_000_000)), computed with
+    # `cast keccak $(cast abi-encode "f(string,uint256,uint96)" DEPLOY_GAS 999 6000000)`.
+    assert CcipCrosschainFactory.dispatcher_deployment_gas_limit_commitment(
+        999, 6_000_000
+    ) == bytes.fromhex(
+        "4fec746b5a83e1ee477422e98ed726be474578872c5c1eb16316dd56f479e918"
+    )
+    with pytest.raises(ValueError, match="outside uint96"):
+        CcipCrosschainFactory.dispatcher_deployment_gas_limit_commitment(999, 2**96)
+
+
 def test_writes_encode_arguments():
     executor = _wrapper(StargateCrosschainExecutor)
     observation = BalanceObservation(

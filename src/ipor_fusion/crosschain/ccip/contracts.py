@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from eth_abi import encode
 from eth_typing import ChecksumAddress
+from eth_utils import keccak
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.contracts import (
@@ -100,6 +102,13 @@ class SafetyConfig:
 
 
 _ROUTE_TUPLE = "(uint64,address,address,uint96,uint96,uint256,bool)"
+_UINT96_MAX = 2**96 - 1
+
+
+def _require_uint96(gas_limit: int) -> None:
+    if not 0 <= gas_limit <= _UINT96_MAX:
+        raise ValueError(f"gas limit {gas_limit} is outside uint96")
+
 
 _SAFETY_CONFIG_TUPLE = (
     "(address,address,address,address,uint256,uint256,uint256,uint256,uint256)"
@@ -173,20 +182,12 @@ class CcipCrosschainExecutor(CrosschainExecutor):
 
     def accounting_epoch(self, chain_id: ChainId) -> Call[int]:
         """``accountingEpoch(uint256)``: the per-chain accounting epoch that
-        every value-moving operation bumps to invalidate the active proposal.
-
-        :attr:`CcipGeneration.CURRENT` only: a pilot executor has no such
-        selector and the call reverts.
-        """
+        every value-moving operation bumps to invalidate the active proposal."""
         return self._view("accountingEpoch(uint256)", chain_id, output_types=["uint64"])
 
     def active_proposal_id(self, chain_id: ChainId) -> Call[int]:
         """``activeProposalId(uint256)``: the active balance proposal id for
-        the chain, 0 when there is none.
-
-        :attr:`CcipGeneration.CURRENT` only: a pilot executor has no such
-        selector and the call reverts.
-        """
+        the chain, 0 when there is none."""
         return self._view(
             "activeProposalId(uint256)", chain_id, output_types=["uint256"]
         )
@@ -194,7 +195,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
     def attestation_anchor_principal(self, chain_id: ChainId) -> Call[Amount]:
         """``attestationAnchorPrincipal(uint256)``: the per-chain accounting
         anchor ``approveBalance`` bounds attestations against, in shared
-        decimals. Exists on both generations."""
+        decimals."""
         return self._view(
             "attestationAnchorPrincipal(uint256)",
             chain_id,
@@ -401,14 +402,14 @@ class CcipCrosschainFactory(CrosschainFactory):
         return self._view("OWNER()", output_types=["address"], decoder=_address)
 
     def config_delay(self) -> Call[int]:
-        """Timelock of every scheduled asset and factory route: 24 hours in
-        source, 300 seconds on the pilot test build."""
+        """Timelock of every scheduled asset, factory route and dispatcher
+        deployment gas limit: 24 hours in source, 300 seconds on the test
+        builds."""
         return self._view("CONFIG_DELAY()", output_types=["uint256"])
 
     def executor_creation_code_hash(self) -> Call[bytes]:
         """keccak of the executor creation code the factory stores. It tells
-        contract generations apart where ``executorInterfaceVersion`` (7 on
-        both) does not."""
+        builds apart where ``executorInterfaceVersion`` does not."""
         return self._view(
             "executorCreationCodeHash()", output_types=["bytes32"], decoder=bytes
         )
@@ -477,8 +478,49 @@ class CcipCrosschainFactory(CrosschainFactory):
             f"executeFactoryRoute(uint256,{_ROUTE_TUPLE})", chain_id, route.as_tuple()
         )
 
+    def dispatcher_deployment_gas_limit(self, chain_id: ChainId) -> Call[int]:
+        """``dispatcherDeploymentGasLimit(uint256)``: the destination gas limit
+        of the ``CREATE_DISPATCHER`` ticket to ``chain_id``. 0 means the ticket
+        falls back to the route's ``messageGasLimit``; commands, ACK and NACK
+        always use ``messageGasLimit``. A factory without this getter (built
+        before it existed) reverts the call."""
+        return self._view(
+            "dispatcherDeploymentGasLimit(uint256)", chain_id, output_types=["uint96"]
+        )
+
+    def schedule_dispatcher_deployment_gas_limit(
+        self, chain_id: ChainId, gas_limit: int
+    ) -> Call[None]:
+        """Owner-only; executable after ``config_delay`` with the same
+        arguments. 0 resets the ticket to the route's ``messageGasLimit``."""
+        _require_uint96(gas_limit)
+        return self._write(
+            "scheduleDispatcherDeploymentGasLimit(uint256,uint96)", chain_id, gas_limit
+        )
+
+    def execute_dispatcher_deployment_gas_limit(
+        self, chain_id: ChainId, gas_limit: int
+    ) -> Call[None]:
+        _require_uint96(gas_limit)
+        return self._write(
+            "executeDispatcherDeploymentGasLimit(uint256,uint96)", chain_id, gas_limit
+        )
+
+    @staticmethod
+    def dispatcher_deployment_gas_limit_commitment(
+        chain_id: ChainId, gas_limit: int
+    ) -> bytes:
+        """The timelock commitment of a scheduled dispatcher deployment gas
+        limit, ``keccak256(abi.encode("DEPLOY_GAS", chainId, gasLimit))``: the
+        argument :meth:`cancel_scheduled_config` takes to drop it."""
+        _require_uint96(gas_limit)
+        return keccak(
+            encode(["string", "uint256", "uint96"], ["DEPLOY_GAS", chain_id, gas_limit])
+        )
+
     def cancel_scheduled_config(self, commitment: bytes) -> Call[None]:
-        """Owner-only: drop a scheduled asset or route by its commitment hash."""
+        """Owner-only: drop a scheduled asset, route or dispatcher deployment
+        gas limit by its commitment hash."""
         return self._write("cancelScheduledConfig(bytes32)", commitment)
 
     def _require_self_peer(self, route: CcipRouteConfig) -> None:
@@ -517,7 +559,9 @@ class CcipCrosschainFactory(CrosschainFactory):
         """Request the executor's CREATE3 dispatcher on ``dst_chain_id``.
 
         The executor's manager must send this call. The source factory pays
-        the quoted CCIP fee from its native balance. A write: ``.send()`` it,
+        the quoted CCIP fee from its native balance. The ticket carries the
+        factory's :meth:`dispatcher_deployment_gas_limit` for ``dst_chain_id``,
+        or the route's ``messageGasLimit`` when that is 0. A write: ``.send()`` it,
         or ``.call()`` inside a simulation to preview the CCIP message id.
         """
         return self._view(
