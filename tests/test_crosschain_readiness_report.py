@@ -269,7 +269,9 @@ def test_ready_pair_exposes_per_chain_repin_candidates(mod):
     # A 6 M message gas limit exceeds HyperEVM's 3 M small blocks, which the
     # lane's executors send into: informational, not a gate.
     assert spoke_factory["route_to_peer"]["manual_execution_required"] is True
+    assert spoke_factory["route_to_peer"]["dispatcher_deployment_manual"] is True
     assert factory["route_to_peer"]["manual_execution_required"] is False
+    assert factory["route_to_peer"]["dispatcher_deployment_manual"] is False
     assert report["chains"]["arbitrum"]["usdc_usd_feed"]["age_seconds"] == 600
 
 
