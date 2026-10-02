@@ -34,7 +34,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from dotenv import load_dotenv
-from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector, keccak
 from web3 import Web3
@@ -161,20 +160,6 @@ class BlockNumberMismatch(Exception):
     """The provider answered a block request with a different block number."""
 
 
-def _dispatcher_deployment_gas_limit(ctx: Web3Context, peer_chain_id: int) -> int:
-    """``dispatcherDeploymentGasLimit(peer)``, 0 when unset."""
-    return Call(
-        to=FACTORY,
-        data=function_signature_to_4byte_selector(
-            "dispatcherDeploymentGasLimit(uint256)"
-        )
-        + encode(["uint256"], [peer_chain_id]),
-        output_types=["uint96"],
-        decoder=int,
-        ctx=ctx,
-    ).call()
-
-
 def _view(
     ctx: Web3Context, to: ChecksumAddress, signature: str, output_types: list[str]
 ) -> Any:
@@ -264,7 +249,9 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
     boolean ``ready`` is made of."""
     factory = CcipCrosschainFactory(ctx, FACTORY)
     route = factory.ccip_route(peer.chain_id).call()
-    configured_deployment_gas = _dispatcher_deployment_gas_limit(ctx, peer.chain_id)
+    configured_deployment_gas = int(
+        factory.dispatcher_deployment_gas_limit(peer.chain_id).call()
+    )
     deployment_gas = configured_deployment_gas or route.message_gas_limit
     token, shared_decimals, enabled = factory.asset_config(USDC_ASSET_ID).call()
     testtr_token, testtr_decimals, testtr_enabled = factory.asset_config(
