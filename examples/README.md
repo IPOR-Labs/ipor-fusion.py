@@ -29,6 +29,15 @@ transaction.
   borrow USDC, swap the USDC back to WBTC, and repay the flash loan. It demonstrates
   the four Euler functional fuses, typed swapper substrates and callback-handler
   configuration.
+- [`external_state_margin_leg_base.py`](external_state_margin_leg_base.py) -- a
+  vault whose capital leaves the chain. Wires the external-state market (50) with
+  its operation and balance fuses, grants the typed substrates that market needs
+  (asset, one permitted call, a balance account, two custodians, four guards),
+  parks USDC at an off-chain venue through the per-vault executor, has two
+  custodians propose and confirm the off-venue value so the NAV reflects it,
+  brings the margin home and releases it for a user's scheduled withdrawal, then
+  demonstrates the executor rejecting a confirmation that does not match its
+  proposal.
 
 ## Prerequisites
 
@@ -54,9 +63,9 @@ uv run python examples/simple_aave_v3_supply_base.py
 ```
 
 The default run previews the deployment, prints the unsigned creation calldata
-and an ordered transaction plan, executes the whole flow through a single
-`eth_simulateV1` batch, and asserts the final state. It signs and broadcasts
-nothing.
+and an ordered transaction plan, executes the whole flow through `eth_simulateV1`
+-- one batch, except where an example says otherwise -- and asserts the final
+state. It signs and broadcasts nothing.
 
 ### Inspecting the calldata
 

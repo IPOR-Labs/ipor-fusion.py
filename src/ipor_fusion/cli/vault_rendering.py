@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import click
 
@@ -37,9 +37,7 @@ def _format_usd(raw: int, decimals: int, price_usd: float | None) -> str:
 
 def _format_age(timestamp: int) -> str:
     """Format deployment age as human-readable string."""
-    delta = datetime.now(tz=timezone.utc) - datetime.fromtimestamp(
-        timestamp, tz=timezone.utc
-    )
+    delta = datetime.now(tz=UTC) - datetime.fromtimestamp(timestamp, tz=UTC)
     days = delta.days
     if days == 0:
         return "today"

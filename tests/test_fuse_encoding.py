@@ -1625,6 +1625,11 @@ class TestExternalStateOperationFuse:
                 actions=[(ZERO_ADDRESS, b"\x00")],
             )
 
+    def test_create_executor_is_bare_selector(self):
+        action = ExternalStateOperationFuse(FUSE_ADDR).create_executor()
+        assert action.fuse == FUSE_ADDR
+        assert action.data == _selector("createExecutor()")
+
 
 # ── AsyncAction (market 40) ─────────────────────────────────────────────
 

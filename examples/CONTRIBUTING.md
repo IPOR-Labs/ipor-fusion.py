@@ -40,6 +40,35 @@ sign or broadcast a transaction, and must not require a private key to run.
 - For "how to actually submit this on-chain", point the reader at their signer via `.calldata`, and
   at the deployment/operation repos -- do not add a runnable broadcast path.
 
+**Label every simulation-only construct.** Anything that exists *only* because the flow runs under
+`eth_simulateV1` must carry a comment marked `SIMULATION ONLY`, saying so and saying what production
+does instead. No exceptions, including the ones that look self-evident. Examples are read first by
+coding agents (rule 9), and an unlabeled simulation artifact is indistinguishable from a recommended
+pattern. Where a nearby construct could be mistaken for one, say that it is *not* simulation-only.
+
+These fall into two kinds, and the comment should make clear which:
+
+- **Impossible in production** -- sending a call from an address you do not control (staging a
+  counterparty's transfer with `add_call(..., from_=them)`), advancing time with `next_block`. A
+  reader who copies these gets an error, which is the harmless case.
+- **Possible but wrong** -- predicting a value the chain would have told you, computing something
+  offline that an event already carries, running a batch several times to learn an address that a
+  receipt would have given you, driving several roles from one process. These are the dangerous
+  ones: they run fine and silently discard either the authoritative source or the property the
+  separation existed for. Say which read, or which separate signer, replaces them in production.
+
+Driving several roles from one process is the case to be most careful with. In simulation the roles
+are addresses with no keys at all, so the collapse is free and invisible -- exactly what rule 9's
+role-separation note is about. Label the collapse itself, not the calls: sending propose and confirm
+as two separate calls *is* the production shape, and only "both keys in one process" is
+simulation-only.
+
+Cross-reference the SDK method a production caller would use instead, where one exists -- but only
+where the SDK method is the one to reach for. `ExternalStateExecutor.mark_nav` is the counter-example:
+it composes both custodian calls, its own docstring warns that this "does not preserve the
+dual-custodian separation", and it is expected to be deprecated in favour of the two primitives. Do
+not point readers at it.
+
 ## 3. One self-contained file
 
 A reader (human or agent) should understand the whole example from a single file, without chasing
@@ -127,6 +156,12 @@ per line, no reliance on 2D layout.
   control. Say which roles must not share an address, in one line, at the point they are granted.
 - Use the SDK's domain types (`Amount`, `MarketId`, `ChainId`, `Period`, ...) rather than bare ints,
   and import public symbols from the top-level `ipor_fusion` package.
+- Cite a source when a comment asserts an external fact the surrounding code does not prove --
+  recommended governance delays, protocol parameters, an address registry. A reader cannot check
+  those from the file, and they change independently of this repo. Do **not** cite for anything the
+  code demonstrates on its own; that link is decoration, and it rots. Prefer a documentation path
+  (`docs.ipor.io -> build-on-fusion -> atomists -> ...`) over a bare URL, so a moved page stays
+  findable.
 
 ## 10. Tests and CI
 
@@ -147,6 +182,27 @@ Every example ships with two tests so it cannot silently go stale:
   uv-managed).
 - Configuration comes from environment variables; never commit keys, RPC URLs, or other secrets.
 - Commit with a `docs(sdk):` message.
+
+## 12. Say the same thing as the other examples
+
+A claim that appears in more than one example must read the same in all of them. The role admin
+chain, how the factory deploys the vault stack, what a simulation-only construct stands in for, an
+address from the registry: where two examples disagree about one of these, one of them is wrong, and
+nothing inside either file reveals which. Cross-example agreement is the cheapest correctness check
+available here -- it needs no contract source, and it catches statements that read perfectly
+plausibly on their own. Before adding such a claim, grep the other examples for it; before changing
+one, grep for its copies and change them together.
+
+Deliberate divergence is fine and **must be commented with its reason at the point it occurs**, which
+is what makes the rule checkable: an uncommented difference is then a defect by construction, with no
+judgment call required. Say what the other examples do, why this one does otherwise, and -- where the
+deviation gives something up -- what compensates for it.
+
+`external_state_margin_leg_base.py` carries two worked instances. Its `market_substrates()` explains
+why it accepts a TARGET/ASSET overlap that the operation fuse's own review rule warns against, and
+names the controls that overlap then owes. Its module docstring explains why its `SimulationResult`
+reports a failed call on a completely successful run, and tells the reader not to copy
+`if result.all_success:` from it.
 
 ## When the canonical example and these rules disagree
 

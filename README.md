@@ -266,15 +266,19 @@ ever signed or broadcast.
 - [Advanced Euler V2 credit-market vault](examples/advanced_euler_v2_credit_market_base.py) —
   continue here for composing multiple functional fuses, typed Euler substrates and sub-accounts,
   and an ordered collateral → borrow → repay → unwind lifecycle.
+- [External-state margin leg](examples/external_state_margin_leg_base.py) — a vault whose capital
+  sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
+  the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
 
 ```bash
 export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
 uv run python examples/advanced_euler_v2_credit_market_base.py
+uv run python examples/external_state_margin_leg_base.py
 ```
 
-No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs both examples out of
-the box — it supports `eth_simulateV1` and serves the pinned block. It is rate-limited, so use a
+No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs the examples out of
+the box — it supports `eth_simulateV1` and serves their pinned blocks. It is rate-limited, so use a
 dedicated archive node for repeated or CI runs.
 
 ## Architecture

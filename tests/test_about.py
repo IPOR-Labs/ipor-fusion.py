@@ -1,9 +1,10 @@
 """Tests for package self-description (version + changelog parsing)."""
 
 import importlib.metadata
-import re
+import tomllib
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -51,20 +52,17 @@ SAMPLE = """# CHANGELOG
 UNDATED = "## v9.9.9\n\n- Hand-written\n"
 
 
+def _pyproject_project() -> dict[str, Any]:
+    with (REPO_ROOT / "pyproject.toml").open("rb") as f:
+        return tomllib.load(f)["project"]
+
+
 def _pyproject_version() -> str:
-    """Read project.version without tomllib (absent on Python 3.10)."""
-    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    found = re.search(r'^version = "([^"]+)"', text, re.MULTILINE)
-    assert found, "pyproject.toml has no top-level version"
-    return found.group(1)
+    return _pyproject_project()["version"]
 
 
 def _pyproject_repository() -> str:
-    """Read project.urls.repository without tomllib (absent on Python 3.10)."""
-    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    found = re.search(r'^repository = "([^"]+)"', text, re.MULTILINE)
-    assert found, "pyproject.toml has no project.urls.repository"
-    return found.group(1)
+    return _pyproject_project()["urls"]["repository"]
 
 
 def _project_urls(*entries: str) -> MagicMock:
