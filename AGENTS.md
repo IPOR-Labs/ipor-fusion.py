@@ -81,10 +81,15 @@ they pin a snapshot per chain and do not require `eth_simulateV1`.
 `scripts/crosschain_readiness.py` separately reports both Arbitrum/HyperEVM USDC
 directions and the v3 factory pair's configuration (creation codes, routes, the
 dispatcher deployment gas limit, the canary creator's allowance, balance and HyperEVM
-big-block flag) with snapshot block numbers/hashes/timestamps. On the hub's route into
-HyperEVM it flags manual execution per message kind: `manual_execution_required` for
-commands and recalls (route `messageGasLimit` above the 3 M small block) and
-`dispatcher_deployment_manual` for the one-time deployment ticket.
+big-block flag) with snapshot block numbers/hashes/timestamps. `hyperevm_delivery`
+flags manual execution into HyperEVM per message kind: `manual_execution_required` for
+commands and recalls (the hub route's `messageGasLimit`) and `dispatcher_deployment_manual`
+for the one-time deployment ticket. A delivery above the 3 M small block is manual
+unless every Chainlink executor seen delivering on HyperEVM's CCIP 2.0 OffRamp over
+the last ~2 weeks (`chainlink_executors`: `ExecutionStateChanged` senders from every
+source, the canary EOA excluded, at least 20 executions) sends into big blocks; a
+ticket below a dispatcher creation's gas is manual regardless. The executor set is
+derived on every run; `eth_usingBigBlocks` is read at the latest block.
 Blocked availability is a successful observation, not acceptance; incomplete probes
 fail. There is no GitHub workflow for it in this repository: run it locally with
 the Arbitrum and HyperEVM provider URLs from `.env`. A `Spoke` declares which transports reach it;

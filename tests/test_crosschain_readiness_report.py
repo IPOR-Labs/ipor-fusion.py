@@ -27,6 +27,14 @@ OTHER = Web3.to_checksum_address("0x" + "ee" * 20)
 ZERO = Web3.to_checksum_address("0x" + "00" * 20)
 HASH_A = "0x" + "11" * 32
 HASH_B = "0x" + "22" * 32
+OFF_RAMP = Web3.to_checksum_address("0x" + "f2" * 20)
+OLD_OFF_RAMP = Web3.to_checksum_address("0x" + "f1" * 20)
+EXECUTOR_A = Web3.to_checksum_address("0x" + "a1" * 20)
+EXECUTOR_B = Web3.to_checksum_address("0x" + "b1" * 20)
+#: (sender, executions, eth_usingBigBlocks) of the executors the spoke's
+#: OffRamp shows: 22 executions, one of two senders on big blocks.
+EXECUTORS = ((EXECUTOR_A, 12, False), (EXECUTOR_B, 10, True))
+ALL_ON = ((EXECUTOR_A, 12, True), (EXECUTOR_B, 10, True))
 REPORT_KEYS = {
     "schema",
     "generated_at",
@@ -40,6 +48,7 @@ REPORT_KEYS = {
     "observed_blocks",
     "repin_candidates",
     "repin_status",
+    "hyperevm_delivery",
     "simulation_governance",
 }
 
@@ -105,6 +114,20 @@ def _answers(
             ["string"], ["USDCTokenPoolProxy 2.0.0"]
         ),
         (POOL, selector("isSupportedChain(uint64)")): encode(["bool"], [token_lane]),
+        (spec.router, selector("getOffRamps()")): encode(
+            ["(uint64,address)[]"],
+            [
+                [
+                    (peer.chain_selector, OLD_OFF_RAMP),
+                    (peer.chain_selector, OFF_RAMP),
+                    (1, OTHER),
+                ]
+            ],
+        ),
+        (OLD_OFF_RAMP, selector("typeAndVersion()")): encode(
+            ["string"], ["OffRamp 1.6.0"]
+        ),
+        (OFF_RAMP, selector("typeAndVersion()")): encode(["string"], ["OffRamp 2.0.0"]),
         (mod.FACTORY, selector("ccipRoute(uint256)")): encode(
             ["(uint64,address,address,uint96,uint96,uint256,bool)"], [route]
         ),
@@ -154,6 +177,7 @@ def _ctx(
     peer,
     *,
     big_blocks: bool = True,
+    executors: tuple[tuple[str, int, bool], ...] = EXECUTORS,
     block: int = 100,
     timestamp: int = 1_700_000_500,
     hashes: tuple[str, str] = (HASH_A, HASH_A),
@@ -185,7 +209,11 @@ def _ctx(
     ctx.chain_id = spec.chain_id
     ctx.default_block = block
     ctx.web3.eth.get_balance.return_value = 10**17
-    ctx.web3.provider.make_request.return_value = {"result": big_blocks}
+    flags = {sender: on for sender, _, on in executors}
+    ctx.web3.provider.make_request.side_effect = lambda method, params: {
+        "result": flags.get(params[0], big_blocks)
+    }
+    _serve_executions(ctx, executors)
 
     def call(to, data, block=None):
         # Answers keyed by selector, or by selector plus the first argument
@@ -197,11 +225,41 @@ def _ctx(
         raise AssertionError(f"unexpected call {to} {raw[:4].hex()}")
 
     ctx.call.side_effect = call
-    ctx.web3.eth.get_block.side_effect = [
+    pins = [
         {"number": block, "hash": bytes.fromhex(h[2:]), "timestamp": timestamp}
         for h in hashes
     ]
+    blocks = ctx.web3.eth.get_block.blocks
+
+    def get_block(number, full_transactions=False):
+        return blocks[number] if full_transactions else pins.pop(0)
+
+    ctx.web3.eth.get_block.side_effect = get_block
     return ctx
+
+
+def _serve_executions(
+    ctx: MagicMock, executors: tuple[tuple[str, int, bool], ...]
+) -> None:
+    """One execution transaction per block, the logs answered whatever the
+    queried range; a sender on big blocks executes in 30 M blocks, the rest
+    in 3 M ones."""
+    logs, blocks = [], {}
+    number = 1
+    for sender, executions, on in executors:
+        for _ in range(executions):
+            tx_hash = number.to_bytes(32, "big")
+            logs.append({"blockNumber": number, "transactionHash": tx_hash})
+            blocks[number] = {
+                "gasLimit": 30_000_000 if on else 3_000_000,
+                "transactions": [
+                    {"hash": b"\x99" * 32, "from": OTHER},
+                    {"hash": tx_hash, "from": sender},
+                ],
+            }
+            number += 1
+    ctx.web3.eth.get_logs.return_value = logs
+    ctx.web3.eth.get_block.blocks = blocks
 
 
 def _report(mod: ModuleType, hub_ctx: MagicMock, spoke_ctx: MagicMock) -> dict:
@@ -275,52 +333,150 @@ def test_ready_pair_exposes_per_chain_repin_candidates(mod):
     spoke_factory = report["chains"]["hyperevm"]["factory"]
     assert spoke_factory["creator"]["using_big_blocks"] is True
     assert spoke_factory["gates"]["creator_big_blocks"] is True
-    # v3 figures: commands at 2 M fit HyperEVM's 3 M small blocks, which the
-    # lane's executors send into; the 6 M deployment ticket does not. The
-    # constraint is on deliveries into HyperEVM, i.e. the hub factory's route
-    # to the spoke; the spoke's route back is executed on Arbitrum.
-    # Informational, not a gate.
     hub_route = factory["route_to_peer"]
     assert hub_route["dispatcher_deployment_gas_limit"] == 6_000_000
     assert hub_route["effective_dispatcher_deployment_gas_limit"] == 6_000_000
-    assert hub_route["manual_execution_required"] is False
-    assert hub_route["dispatcher_deployment_manual"] is True
-    assert spoke_factory["route_to_peer"]["manual_execution_required"] is False
-    assert spoke_factory["route_to_peer"]["dispatcher_deployment_manual"] is False
+    assert "manual_execution_required" not in hub_route
+    executors = report["chains"]["hyperevm"]["chainlink_executors"]
+    assert executors["off_ramp"] == OFF_RAMP
+    assert (executors["executions_observed"], executors["complete"]) == (22, True)
+    assert executors["executors"] == [
+        {
+            "address": EXECUTOR_A,
+            "executions": 12,
+            "executions_in_big_blocks": 0,
+            "using_big_blocks": False,
+        },
+        {
+            "address": EXECUTOR_B,
+            "executions": 10,
+            "executions_in_big_blocks": 10,
+            "using_big_blocks": True,
+        },
+    ]
+    # v3 figures, one executor still on small blocks: commands at 2 M fit a
+    # small block, the 6 M deployment ticket does not. Informational, not a
+    # gate.
+    assert report["hyperevm_delivery"] == {
+        "executors_on_big_blocks": False,
+        "executors_opted_in": 1,
+        "executors_total": 2,
+        "executors_complete": True,
+        "manual_execution_required": False,
+        "dispatcher_deployment_manual": True,
+    }
     assert report["chains"]["arbitrum"]["usdc_usd_feed"]["age_seconds"] == 600
 
 
 @pytest.mark.parametrize(
-    ("message_gas", "deployment_gas", "effective", "commands_manual", "ticket_manual"),
+    ("message_gas", "deployment_gas", "executors", "commands_manual", "ticket_manual"),
     [
-        # v2 shape: no deployment limit, the 6 M route limit carries everything.
-        (6_000_000, 0, 6_000_000, True, True),
-        # Unset deployment limit under a small-block route: the ticket falls
-        # back to 2 M, below what a dispatcher creation needs.
-        (2_000_000, 0, 2_000_000, False, True),
+        # v2 shape, executors still on small blocks: everything above 3 M is manual.
+        (6_000_000, 0, EXECUTORS, True, True),
+        # Every executor on big blocks: Chainlink delivers both.
+        (6_000_000, 6_000_000, ALL_ON, False, False),
+        # Too few executions to claim every executor was seen: stay manual.
+        (
+            6_000_000,
+            6_000_000,
+            ((EXECUTOR_A, 5, True), (EXECUTOR_B, 5, True)),
+            True,
+            True,
+        ),
+        # No executions at all: an empty set never means "all opted in".
+        (6_000_000, 6_000_000, (), True, True),
+        # Unset deployment limit under a 2 M route: the ticket falls back to
+        # 2 M, below a dispatcher creation, so it fails whoever executes it.
+        (2_000_000, 0, ALL_ON, False, True),
         # A deployment limit that fits a small block is still too low to create.
-        (2_000_000, 2_500_000, 2_500_000, False, True),
+        (2_000_000, 2_500_000, EXECUTORS, False, True),
     ],
 )
-def test_manual_execution_flags_follow_each_message_kind(
-    mod, message_gas, deployment_gas, effective, commands_manual, ticket_manual
+def test_hyperevm_delivery_follows_message_kind_and_executors(
+    mod, message_gas, deployment_gas, executors, commands_manual, ticket_manual
 ):
     gas = {"message_gas_limit": message_gas, "deployment_gas_limit": deployment_gas}
     report = _report(
         mod,
         _ctx(mod, mod.HUB, mod.SPOKE, **gas),
-        _ctx(mod, mod.SPOKE, mod.HUB, **gas),
+        _ctx(mod, mod.SPOKE, mod.HUB, executors=executors, **gas),
     )
-    hub_route = report["chains"]["arbitrum"]["factory"]["route_to_peer"]
-    spoke_route = report["chains"]["hyperevm"]["factory"]["route_to_peer"]
-    assert hub_route["effective_dispatcher_deployment_gas_limit"] == effective
-    assert hub_route["manual_execution_required"] is commands_manual
-    assert hub_route["dispatcher_deployment_manual"] is ticket_manual
-    # The same limits on the spoke's route back bind nothing: Arbitrum has no
-    # small-block executors.
-    assert spoke_route["effective_dispatcher_deployment_gas_limit"] == effective
-    assert spoke_route["manual_execution_required"] is False
-    assert spoke_route["dispatcher_deployment_manual"] is False
+    delivery = report["hyperevm_delivery"]
+    assert delivery["manual_execution_required"] is commands_manual
+    assert delivery["dispatcher_deployment_manual"] is ticket_manual
+
+
+def test_hyperevm_delivery_reads_the_hub_route_not_the_route_back(mod):
+    """Deliveries into HyperEVM carry the hub factory's route limits; the
+    spoke's route back to Arbitrum must not move the verdict either way."""
+    report = _report(
+        mod,
+        _ctx(mod, mod.HUB, mod.SPOKE),
+        _ctx(
+            mod,
+            mod.SPOKE,
+            mod.HUB,
+            message_gas_limit=9_000_000,
+            deployment_gas_limit=1,
+        ),
+    )
+    assert report["hyperevm_delivery"]["manual_execution_required"] is False
+    assert report["hyperevm_delivery"]["dispatcher_deployment_manual"] is True
+    report = _report(
+        mod,
+        _ctx(mod, mod.HUB, mod.SPOKE, message_gas_limit=6_000_000),
+        _ctx(mod, mod.SPOKE, mod.HUB, message_gas_limit=2_000_000),
+    )
+    assert report["hyperevm_delivery"]["manual_execution_required"] is True
+
+
+def test_executor_scan_reads_executions_of_the_current_off_ramp_only(mod):
+    spoke = _ctx(
+        mod,
+        mod.SPOKE,
+        mod.HUB,
+        executors=((mod.CREATOR, 5, True), *ALL_ON),
+    )
+    report = _report(mod, _ctx(mod, mod.HUB, mod.SPOKE), spoke)
+    (query,) = [call.args[0] for call in spoke.web3.eth.get_logs.call_args_list]
+    assert query["address"] == OFF_RAMP
+    assert query["topics"] == ["0x" + mod.EXECUTION_STATE_CHANGED.hex()]
+    assert (query["fromBlock"], query["toBlock"]) == (0, 100)
+    executors = report["chains"]["hyperevm"]["chainlink_executors"]
+    # The canary's manual executions are reported apart and never count.
+    assert executors["excluded"] == [
+        {
+            "address": mod.CREATOR,
+            "reason": mod.NON_CHAINLINK_EXECUTORS[mod.CREATOR],
+            "executions": 5,
+            "executions_in_big_blocks": 5,
+        }
+    ]
+    assert (executors["opted_in"], executors["total"]) == (2, 2)
+    assert report["hyperevm_delivery"]["executors_on_big_blocks"] is True
+
+
+def test_executor_scan_chunks_a_long_window(mod):
+    spoke = _ctx(mod, mod.SPOKE, mod.HUB, block=450_000, hashes=(HASH_A, HASH_A))
+    mod.snapshot_chain(spoke, mod.SPOKE, mod.HUB)
+    spans = [
+        (call.args[0]["fromBlock"], call.args[0]["toBlock"])
+        for call in spoke.web3.eth.get_logs.call_args_list
+    ]
+    assert spans == [(0, 199_999), (200_000, 399_999), (400_000, 450_000)]
+
+
+def test_unreadable_executors_keep_deliveries_manual_and_never_gate(mod):
+    spoke = _ctx(mod, mod.SPOKE, mod.HUB)
+    spoke.web3.eth.get_logs.side_effect = RuntimeError("provider rejected the range")
+    report = _report(mod, _ctx(mod, mod.HUB, mod.SPOKE), spoke)
+    assert report["chains"]["hyperevm"]["chainlink_executors"] == {
+        "error": "RuntimeError",
+        "informational": True,
+    }
+    assert report["complete"] is True and report["ready"] is True
+    assert report["hyperevm_delivery"]["executors_on_big_blocks"] is False
+    assert report["hyperevm_delivery"]["dispatcher_deployment_manual"] is True
 
 
 @pytest.mark.parametrize(
