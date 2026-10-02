@@ -1957,7 +1957,14 @@ def _print_substrates(  # noqa: C901
                 )
                 click.echo(f"    {sub_info.address}{details}")
             elif sub_info.is_error:
-                click.secho(f"    {sub_info.raw_hex} [encoding error]", fg="red")
+                details = [sub_info.type_label] if sub_info.type_label else []
+                details.extend(
+                    f"{key}={value}" for key, value in sub_info.extra.items()
+                )
+                suffix = f": {', '.join(details)}" if details else ""
+                click.secho(
+                    f"    {sub_info.raw_hex} [encoding error{suffix}]", fg="red"
+                )
             else:
                 parts = []
                 if sub_info.type_label:

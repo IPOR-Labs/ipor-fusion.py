@@ -1,0 +1,150 @@
+"""The Chainlink CCIP lane."""
+
+from __future__ import annotations
+
+from eth_typing import ChecksumAddress
+from eth_utils import keccak
+
+from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import Call
+from ipor_fusion.crosschain.ccip.contracts import (
+    CcipCrosschainDispatcher,
+    CcipCrosschainExecutor,
+    CcipObservation,
+    CcipRouteConfig,
+)
+from ipor_fusion.crosschain.contracts import BalanceObservation
+from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
+from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
+from ipor_fusion.fuses.crosschain.base import SendParams
+from ipor_fusion.fuses.crosschain.ccip import (
+    CcipCrosschainCommandFuse,
+    CcipCrosschainSupplyFuse,
+    CcipSendParams,
+)
+from ipor_fusion.types import Amount, ChainId
+
+
+class CcipLane(CrosschainLane):
+    """A lane over CCIP programmable token transfers and messages. The default
+    send parameters come from the executor's registered ``route`` (fee
+    ceiling, fee token, token or message gas limit). ``decimal_conversion_rate``
+    is the executor's ``DECIMAL_CONVERSION_RATE`` (local per shared unit), used
+    to report the dispatcher observation in local decimals."""
+
+    transport_kind = CrosschainTransportKind.CHAINLINK_CCIP
+    enforces_min_received = False
+    BALANCE_PROPOSED_TOPIC = keccak(
+        text="BalanceProposed(uint256,uint256,uint256,uint64,bytes32)"
+    )
+
+    supply_fuse_cls = CcipCrosschainSupplyFuse
+    command_fuse_cls = CcipCrosschainCommandFuse
+
+    executor: CcipCrosschainExecutor
+    dispatcher: CcipCrosschainDispatcher
+    supply_fuse: CcipCrosschainSupplyFuse
+    command_fuse: CcipCrosschainCommandFuse
+
+    def __init__(
+        self,
+        *,
+        executor: CcipCrosschainExecutor,
+        dispatcher: CcipCrosschainDispatcher,
+        spoke_chain_id: ChainId,
+        fuses: LaneFuses,
+        route: CcipRouteConfig,
+        decimal_conversion_rate: int,
+    ) -> None:
+        super().__init__(
+            executor=executor,
+            dispatcher=dispatcher,
+            spoke_chain_id=spoke_chain_id,
+            fuses=fuses,
+        )
+        self.route = route
+        self.decimal_conversion_rate = decimal_conversion_rate
+
+    @classmethod
+    def open(
+        cls,
+        hub_ctx: Web3Context,
+        spoke_ctx: Web3Context,
+        *,
+        executor: ChecksumAddress,
+        fuses: LaneFuses,
+    ) -> CcipLane:
+        hub_executor = CcipCrosschainExecutor(hub_ctx, executor)
+        spoke = ChainId(spoke_ctx.chain_id)
+        return cls(
+            executor=hub_executor,
+            dispatcher=CcipCrosschainDispatcher(spoke_ctx, executor),
+            spoke_chain_id=spoke,
+            fuses=fuses,
+            route=hub_executor.ccip_route(spoke).call(),
+            decimal_conversion_rate=hub_executor.decimal_conversion_rate().call(),
+        )
+
+    def staleness_max(self) -> Call[int]:
+        return self.executor.balance_staleness_max()
+
+    def default_send(self, *, token: bool) -> CcipSendParams:
+        return CcipSendParams.from_route(self.route, token=token)
+
+    def default_command_send(self) -> CcipSendParams:
+        return self.default_send(token=False)
+
+    def _supply_send(
+        self, send: SendParams, amount: Amount, min_received: Amount
+    ) -> CcipSendParams:
+        if not isinstance(send, CcipSendParams):
+            raise TypeError(f"CcipLane takes CcipSendParams, got {type(send).__name__}")
+        if min_received != 0:
+            raise ValueError(
+                "CCIP cannot enforce min_received after token-pool fees; "
+                "pass 0 and inspect the settlement receipt"
+            )
+        return send
+
+    def remote_state_version(self) -> Call[int]:
+        return self.executor.last_remote_state_version(self.spoke_chain_id)
+
+    def has_active_command(self) -> Call[bool]:
+        return self.executor.active_command(self.spoke_chain_id).map(
+            lambda command_id: command_id != bytes(32)
+        )
+
+    def command_in_flight(self) -> bool:
+        command_id = self.executor.active_command(self.spoke_chain_id).call()
+        if command_id == bytes(32):
+            return False
+        return self.executor.command_status(command_id).call() == CommandStatus.PENDING
+
+    def pending_transfer_count(self) -> Call[int]:
+        return self.executor.pending_transfer_count(self.spoke_chain_id)
+
+    def transfer_in_flight(self) -> bool:
+        return self.pending_transfer_count().call() != 0 or self.executor.active_return(
+            self.spoke_chain_id
+        ).call() != bytes(32)
+
+    def observation(self) -> Call[LaneObservation]:
+        rate = self.decimal_conversion_rate
+        return self.dispatcher.observation().map(
+            lambda observation: _to_lane(observation, rate)
+        )
+
+    def propose_balance(self, observation: BalanceObservation) -> Call[int]:
+        """Returns the proposal id (the function's return value)."""
+        self._require_spoke(observation)
+        return self.executor.propose_balance(observation)
+
+
+def _to_lane(observation: CcipObservation, rate: int) -> LaneObservation:
+    return LaneObservation(
+        tracked_idle=Amount(observation.tracked_idle * rate),
+        accounted_balance=Amount(observation.accounted_balance * rate),
+        state_version=observation.state_version,
+        command_config_epoch=observation.command_config_epoch,
+        tracked_position_set_hash=observation.tracked_position_set_hash,
+    )

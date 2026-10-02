@@ -255,6 +255,13 @@ Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` 
 
 The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
 
+Custom errors of the crosschain contracts decode by name: importing
+`ipor_fusion.crosschain` registers their signatures (`CROSSCHAIN_ERROR_SIGNATURES`),
+so a simulated or sent call that reverts reads `NavSettledStale(8453)` in
+`SimulationResult.revert_reason` and `TransactionError` instead of a bare selector.
+`register_custom_errors([...])` adds your own, and `SimulationResult.raise_for_failure()`
+raises `SimulationError` naming the first failed call.
+
 ## Vault construction examples
 
 Runnable, canonical examples for building and configuring a vault from scratch live in
@@ -269,12 +276,17 @@ ever signed or broadcast.
 - [External-state margin leg](examples/external_state_margin_leg_base.py) — a vault whose capital
   sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
   the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
+- [Crosschain CCIP lifecycle](examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) — a vault
+  whose capital works on another chain: supply USDC from an Arbitrum hub to a HyperEVM spoke
+  over CCIP, attest the remote balance with two keys, deposit and redeem on the spoke, recall
+  and claim, driven through `CrosschainLane` and relayed by `CrosschainSimulator`.
 
 ```bash
 export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
 uv run python examples/advanced_euler_v2_credit_market_base.py
 uv run python examples/external_state_margin_leg_base.py
+uv run python examples/crosschain_ccip_usdc_arbitrum_hyperevm.py  # needs ARBITRUM_PROVIDER_URL and HYPEREVM_PROVIDER_URL
 ```
 
 No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs the examples out of
@@ -311,6 +323,14 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
 | `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50) |
+| `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
+| `StargateCrosschainDispatcher`, `CcipCrosschainDispatcher` | Remote dispatcher state (`observation`, tracked idle, command lane) |
+| `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |
+| `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation (`attestation`, `needs_attestation`, `staleness_max`); `enforces_min_received` identifies real supply floors (CCIP requires zero); `open_lane` detects the transport and finds the fuses |
+| `discover_deployment`, `open_lanes` | Read a vault's crosschain market from the hub alone (executors with transport, factory, fuses, attestation keys and spokes served; remote vaults per spoke) and open every lane; `LANES` maps a transport kind to its lane class |
+| `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between pinned chains by impersonating the endpoint or router on delivery, no bridge needed |
+| `ccip_token_lane` | Whether a CCIP message lane exists from a chain and whether a token's pool serves it, read on Chainlink's Router, OnRamp, TokenAdminRegistry and pool |
+| `erc20_balance_slot`, `VaultSimulator.with_erc20_balance` | Fund any address with any ERC-20 in a simulation by a storage override (slot found by probing), no holder to impersonate |
 | `ERC20` | Token reads and approvals |
 
 ### Supported protocols (`ipor_fusion.fuses`)
@@ -329,6 +349,11 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Merkl | `MerklClaimWrapperFuse` |
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
+| Crosschain | `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse` (market 54); transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` |
+
+The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Use
+`crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` for that deployment;
+`open_lane` discovers the vault's actual market grants rather than assuming 54.
 
 ### Readers (`ipor_fusion.readers`)
 
