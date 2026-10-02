@@ -34,6 +34,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from dotenv import load_dotenv
+from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector, keccak
 from web3 import Web3
@@ -44,7 +45,7 @@ from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain import CcipCrosschainFactory
 from ipor_fusion.types import ChainId
 
-SCHEMA = "ipor-fusion.crosschain-readiness/2"
+SCHEMA = "ipor-fusion.crosschain-readiness/3"
 EXIT_OK = 0
 EXIT_CONFIG = 2
 EXIT_INCOMPLETE = 3
@@ -65,25 +66,28 @@ EXPECTED_FACTORY_INTERFACE_VERSION = 1
 #: HyperEVM's small blocks; Chainlink's executors on this lane send into them
 #: (`eth_usingBigBlocks` false, observed 2026-10-02), so a delivery whose gas
 #: limit exceeds this is never executed by them and needs manual execution
-#: (`OffRamp.execute` from an address on big blocks). The route's message gas
-#: limit applies to every non-token message: commands, recall requests and
-#: deployment tickets alike.
+#: (`OffRamp.execute` from an address on big blocks). Commands and recall
+#: requests carry the route's message gas limit; a dispatcher deployment ticket
+#: carries the factory's dispatcher deployment gas limit for the peer, or the
+#: message gas limit when that is unset (0).
 HYPEREVM_SMALL_BLOCK_GAS_LIMIT = 3_000_000
-#: Receiver-side gas of a dispatcher creation on HyperEVM (v2 simulation,
-#: 2026-10-02); a message gas limit below this leaves tickets to manual
-#: execution with a higher `gasLimitOverride` whatever the executor does.
+#: Receiver-side gas of a dispatcher creation on HyperEVM (simulation and the
+#: live tickets, 2026-10-02); a ticket limit below this fails on delivery
+#: whoever executes it, so it needs manual execution with a higher
+#: `gasLimitOverride`.
 DISPATCHER_DEPLOYMENT_GAS = 5_700_000
 
-#: The pilot-v2 CCIP crosschain factory (contracts source ``810e260`` plus the
-#: three 5-minute patches), at one CREATE3 address on both chains. The first
-#: pilot pair (``0x3a745…``) keeps the old recall accounting and is retired
+#: The v3 CCIP crosschain factory, at one CREATE3 address on both chains: the
+#: v2 source plus a per-peer dispatcher deployment gas limit, so commands run
+#: at a route gas limit that fits HyperEVM's small blocks while the deployment
+#: ticket keeps the gas a dispatcher creation needs. Older pairs are retired
 #: from this probe.
-FACTORY = Web3.to_checksum_address("0x3BB74623A229Ff463bDe6B5b267B7c8d9086fd4b")
-#: keccak of the creation codes the pilot-v2 factories store; a different value
+FACTORY = Web3.to_checksum_address("0x048A95955De3A5d837FE2861a34A9c2DDcb964CD")
+#: keccak of the creation codes the v3 factories store; a different value
 #: means another build at this address.
 EXPECTED_CREATION_CODE_HASHES = {
-    "executor": "0x11e28748e1cda094e2b80620b85bfb01e008172a69f2592be72493caad285cd1",
-    "dispatcher": "0xcc2edfa5791f504e730114ed80fcd535a927e5e11e53045a2584bb1e161d5e03",
+    "executor": "0xa97dc5b70d6d455a09693a0f8da6c5b684e616ef2a4edd24f5fb3d69be3cf865",
+    "dispatcher": "0x5adc3c16319f2863f9f2cc16b699eda0b4770c433e59396c4cd89b211b9f79a3",
 }
 #: The canary's creator EOA: `createExecutor` sender on the hub, so it must be
 #: an allowed creator, hold native gas, and sit on HyperEVM big blocks (its
@@ -155,6 +159,20 @@ class ReadinessConfigError(Exception):
 
 class BlockNumberMismatch(Exception):
     """The provider answered a block request with a different block number."""
+
+
+def _dispatcher_deployment_gas_limit(ctx: Web3Context, peer_chain_id: int) -> int:
+    """``dispatcherDeploymentGasLimit(peer)``, 0 when unset."""
+    return Call(
+        to=FACTORY,
+        data=function_signature_to_4byte_selector(
+            "dispatcherDeploymentGasLimit(uint256)"
+        )
+        + encode(["uint256"], [peer_chain_id]),
+        output_types=["uint96"],
+        decoder=int,
+        ctx=ctx,
+    ).call()
 
 
 def _view(
@@ -246,6 +264,8 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
     boolean ``ready`` is made of."""
     factory = CcipCrosschainFactory(ctx, FACTORY)
     route = factory.ccip_route(peer.chain_id).call()
+    configured_deployment_gas = _dispatcher_deployment_gas_limit(ctx, peer.chain_id)
+    deployment_gas = configured_deployment_gas or route.message_gas_limit
     token, shared_decimals, enabled = factory.asset_config(USDC_ASSET_ID).call()
     testtr_token, testtr_decimals, testtr_enabled = factory.asset_config(
         TESTTR_ASSET_ID
@@ -332,9 +352,12 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
             "max_fee": route.max_fee,
             "selector_maps_to_peer": peer_chain_id == int(peer.chain_id),
             "ready": route_ready,
+            "dispatcher_deployment_gas_limit": int(configured_deployment_gas),
+            "effective_dispatcher_deployment_gas_limit": int(deployment_gas),
             # The small-block constraint is on deliveries INTO HyperEVM: this
             # route's messages are executed on the peer, so it binds the hub
             # factory's route to the spoke, not the spoke's route back.
+            # Commands follow the message gas limit, the ticket its own.
             "manual_execution_required": (
                 peer is SPOKE
                 and route.message_gas_limit > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
@@ -342,8 +365,8 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
             "dispatcher_deployment_manual": (
                 peer is SPOKE
                 and (
-                    route.message_gas_limit > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
-                    or route.message_gas_limit < DISPATCHER_DEPLOYMENT_GAS
+                    deployment_gas > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
+                    or deployment_gas < DISPATCHER_DEPLOYMENT_GAS
                 )
             ),
         },
