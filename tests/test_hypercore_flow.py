@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 from eth_abi import decode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion import (
@@ -164,8 +165,36 @@ MARKET_54_GRANTS = [
 ]
 
 
-def _no_pre_hook_wrapper() -> bytes:
-    raise NotImplementedError("PlasmaVault has no set_pre_hook_implementations yet")
+# migration.7: the two HyperCore pre-hooks the run installed, in its order --
+# the pending-action hook on the fuse entry points, the capital-flow hook on
+# every deposit and exit entry point; no hook carries substrates.
+PENDING_ACTION_PRE_HOOK = Web3.to_checksum_address(
+    "0xbd1654f1932ef6869ce0c4e4a4d593c8678b17ec"
+)
+CAPITAL_FLOW_PRE_HOOK = Web3.to_checksum_address(
+    "0xc8efdb4f33b7112f6d68b0d864ded0badc4c9029"
+)
+PRE_HOOKS = [
+    ("execute((address,bytes)[])", PENDING_ACTION_PRE_HOOK),
+    ("updateMarketsBalances(uint256[])", PENDING_ACTION_PRE_HOOK),
+    ("deposit(uint256,address)", CAPITAL_FLOW_PRE_HOOK),
+    (
+        "depositWithPermit(uint256,address,uint256,uint8,bytes32,bytes32)",
+        CAPITAL_FLOW_PRE_HOOK,
+    ),
+    ("mint(uint256,address)", CAPITAL_FLOW_PRE_HOOK),
+    ("withdraw(uint256,address,address)", CAPITAL_FLOW_PRE_HOOK),
+    ("redeem(uint256,address,address)", CAPITAL_FLOW_PRE_HOOK),
+    ("redeemFromRequest(uint256,address,address)", CAPITAL_FLOW_PRE_HOOK),
+]
+
+
+def _set_pre_hooks() -> bytes:
+    return vault.set_pre_hook_implementations(
+        [function_signature_to_4byte_selector(sig) for sig, _hook in PRE_HOOKS],
+        [hook for _sig, hook in PRE_HOOKS],
+        [[] for _ in PRE_HOOKS],
+    ).calldata
 
 
 # nonce -> how the SDK expresses that transaction.
@@ -189,7 +218,7 @@ EXPECTED: dict[int, Callable[[], bytes]] = {
     70: lambda: access.grant_role(ALPHA_ROLE, REPORTER, 0).calldata,
     71: lambda: vault.grant_market_substrates(DOLOMITE, []).calldata,
     72: lambda: vault.update_markets_balances([DOLOMITE, RUN_MARKET]).calldata,
-    73: _no_pre_hook_wrapper,
+    73: _set_pre_hooks,
     74: lambda: vault.remove_balance_fuse(DOLOMITE, OLD_BALANCE_FUSE).calldata,
     75: lambda: vault.remove_fuses(OLD_FUSES).calldata,
     76: lambda: access.revoke_role(ALPHA_ROLE, OLD_REPORTER).calldata,
@@ -244,15 +273,7 @@ EXPECTED: dict[int, Callable[[], bytes]] = {
 }
 
 _PARITY_CASES = [
-    pytest.param(
-        nonce,
-        id=f"n{nonce} {TX[nonce]['step']}",
-        marks=pytest.mark.xfail(
-            strict=True, reason="no pre-hook governance wrapper in the SDK yet"
-        )
-        if nonce == 73
-        else (),
-    )
+    pytest.param(nonce, id=f"n{nonce} {TX[nonce]['step']}")
     for nonce in sorted(EXPECTED)
 ]
 

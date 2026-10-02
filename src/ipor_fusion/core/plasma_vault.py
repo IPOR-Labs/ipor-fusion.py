@@ -149,6 +149,51 @@ class PlasmaVault(ContractWrapper):
             "removeBalanceFuse(uint256,address)", market_id, balance_fuse
         )
 
+    def set_pre_hook_implementations(
+        self,
+        selectors: list[bytes],
+        implementations: list[ChecksumAddress],
+        substrates: list[list[bytes]],
+    ) -> Call[None]:
+        """ATOMIST-only: route each vault function selector to a pre-hook
+        implementation (the zero address removes the hook) with that hook's
+        bytes32 substrates. One implementation and one substrate list per
+        selector, in the same order; a HyperCore vault, for example, puts the
+        pending-action hook on ``execute`` and ``updateMarketsBalances`` and the
+        capital-flow hook on the deposit, mint, withdraw and redeem entry points."""
+        if not (len(selectors) == len(implementations) == len(substrates)):
+            raise ValueError(
+                "selectors, implementations and substrates must have equal length"
+            )
+        for selector in selectors:
+            if len(selector) != 4 or selector == b"\x00" * 4:
+                raise ValueError(f"invalid pre-hook selector {selector.hex()!r}")
+        return self._write(
+            "setPreHookImplementations(bytes4[],address[],bytes32[][])",
+            list(selectors),
+            list(implementations),
+            [list(group) for group in substrates],
+        )
+
+    def get_pre_hook_selectors(self) -> Call[list[bytes]]:
+        """The vault function selectors that currently have a pre-hook."""
+        return self._view(
+            "getPreHookSelectors()",
+            output_types=["bytes4[]"],
+            decoder=lambda values: [bytes(v) for v in values],
+        )
+
+    def get_pre_hook_implementation(self, selector: bytes) -> Call[ChecksumAddress]:
+        """The pre-hook behind ``selector`` (the zero address when none)."""
+        if len(selector) != 4:
+            raise ValueError(f"invalid pre-hook selector {selector.hex()!r}")
+        return self._view(
+            "getPreHookImplementation(bytes4)",
+            selector,
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
     def update_dependency_balance_graphs(
         self, market_ids: list[MarketId], dependencies: list[list[MarketId]]
     ) -> Call[None]:

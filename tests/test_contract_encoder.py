@@ -43,6 +43,42 @@ def test_encoder_plasma_vault_builds_setter_calldata():
     assert add_fuses_data[:4].hex() == Web3.keccak(text="addFuses(address[])")[:4].hex()
 
 
+def test_encoder_plasma_vault_pre_hook_governance():
+    from eth_abi import decode
+
+    vault = PlasmaVault.encoder(SAMPLE_ADDRESS)
+    selector = Web3.keccak(text="deposit(uint256,address)")[:4]
+    call = vault.set_pre_hook_implementations(
+        [selector], [SAMPLE_ADDRESS], [[b"\x01" * 32]]
+    )
+    assert (
+        call.data[:4]
+        == Web3.keccak(
+            text="setPreHookImplementations(bytes4[],address[],bytes32[][])"
+        )[:4]
+    )
+    assert decode(["bytes4[]", "address[]", "bytes32[][]"], call.data[4:]) == (
+        (selector,),
+        (SAMPLE_ADDRESS.lower(),),
+        ((b"\x01" * 32,),),
+    )
+    assert (
+        vault.get_pre_hook_selectors().data[:4]
+        == Web3.keccak(text="getPreHookSelectors()")[:4]
+    )
+    assert vault.get_pre_hook_implementation(selector).data == (
+        Web3.keccak(text="getPreHookImplementation(bytes4)")[:4]
+        + selector
+        + b"\x00" * 28
+    )
+    with pytest.raises(ValueError, match="equal length"):
+        vault.set_pre_hook_implementations([selector], [], [[]])
+    with pytest.raises(ValueError, match="invalid pre-hook selector"):
+        vault.set_pre_hook_implementations([b"\x00" * 4], [SAMPLE_ADDRESS], [[]])
+    with pytest.raises(ValueError, match="invalid pre-hook selector"):
+        vault.get_pre_hook_implementation(b"\x01")
+
+
 def test_encoder_access_manager_builds_grant_role_calldata():
     """`AccessManager.encoder().grant_role(...).calldata` round-trip — proves
     the encoder is usable for both setters (PlasmaVault) and access control."""

@@ -11,8 +11,7 @@ by a test in this repository, not by that run.
 
 | Layer | Status | Evidence |
 |---|---|---|
-| SDK expresses the run's calls: fuse wiring, migration, approve, deposit, EVM -> Core, spot -> HIP-3 dex, IOC/GTC orders, cancel, reduce-only close, dex -> spot, Core -> EVM, balance refresh, redeem | 35 of 36 calls | `tests/test_hypercore_flow.py`: byte parity with the on-chain calldata |
-| `setPreHookImplementations` (migration step 7) | missing wrapper | strict xfail in the same test |
+| SDK expresses the run's calls: fuse wiring, migration (pre-hooks included), approve, deposit, EVM -> Core, spot -> HIP-3 dex, IOC/GTC orders, cancel, reduce-only close, dex -> spot, Core -> EVM, balance refresh, redeem | 36 of 36 calls | `tests/test_hypercore_flow.py`: byte parity with the on-chain calldata |
 | Fuses run on the live node with the HyperCore precompiles | one probe | `eth_call` of the run's DepositFuse `execute` from the signer on the current state succeeded |
 | Dry-runs of individual, currently valid actions at the latest state | not yet | opt-in `eth_call` / `eth_estimateGas` test (below); independent calls carry no earlier EVM state and cannot settle Core actions, so this never proves a step-by-step cycle |
 | Sequence simulation (`VaultSimulator`, `eth_simulateV1`) | not possible on this node | the precompiles fail inside `eth_simulateV1`; no historical Core state, so no replay of past transactions either |
@@ -22,9 +21,6 @@ by a test in this repository, not by that run.
 
 ## SDK — PR 2, in progress
 
-- [ ] **Pre-hook governance wrappers.** `set_pre_hook_implementations`,
-  `get_pre_hook_selectors`, `get_pre_hook_implementation` on `PlasmaVault`
-  (`PlasmaVaultGovernance.sol`), then turn the tx 73 xfail into a parity case.
 - [ ] **Readers.** `HyperCorePendingReader` (`pendingState`, `isPending`), the
   precompile reads as `Call`s (`spotBalance`, `l1BlockNumber`,
   `accountMarginSummary(uint32 dex, address user)`, `position2`,
