@@ -148,7 +148,11 @@ the lifecycle matrix follows that.
   and lane; `ccip/chainlink` reads Chainlink's Router, OnRamp, TokenAdminRegistry and
   token pool (`ccip_token_lane`: is there a lane, does the token travel on it);
   `ccip/events` decodes the executor/dispatcher/factory events by topic for both
-  contract generations (`CcipGeneration.PILOT` = deployed pilot, `CURRENT` = source).
+  contract generations (`CcipGeneration.PILOT` = deployed pilot, `CURRENT` = source);
+  `ccip/chainlink` also wraps the 2.0 OffRamp, verifier resolver and committee verifier
+  (`CcipOffRamp.execute` is the permissionless delivery) and `ccip/indexer` fetches a
+  message's verifier result from Chainlink's public indexers and builds that
+  `manual_execution` call.
   `fuses/crosschain/` mirrors it (`base`, `stargate`, `ccip`). Names mirror
   the Solidity contracts and libraries. Adding a transport: a new subpackage plus one
   `LANES` entry. Layering: the fuse encoders import the wire codecs and wrappers; lanes,

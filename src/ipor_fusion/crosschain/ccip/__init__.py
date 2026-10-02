@@ -3,11 +3,16 @@
 from :mod:`ipor_fusion` instead, see :mod:`ipor_fusion.crosschain`."""
 
 from ipor_fusion.crosschain.ccip.chainlink import (
+    CcipCommitteeVerifier,
+    CcipOffRamp,
     CcipOnRamp,
     CcipRouter,
     CcipTokenAdminRegistry,
     CcipTokenLane,
     CcipTokenPool,
+    CcipVerifierResolver,
+    CcvRequirements,
+    MessageExecutionState,
     ccip_token_lane,
 )
 from ipor_fusion.crosschain.ccip.codec import (
@@ -36,6 +41,13 @@ from ipor_fusion.crosschain.ccip.events import (
     ccip_events,
     decode_ccip_event,
     find_ccip_events,
+)
+from ipor_fusion.crosschain.ccip.indexer import (
+    INDEXER_URLS,
+    VerifierResult,
+    VerifierResultUnavailable,
+    fetch_verifier_result,
+    manual_execution,
 )
 from ipor_fusion.crosschain.ccip.quote import (
     INSUFFICIENT_NATIVE_FEE_SELECTOR,
@@ -72,4 +84,14 @@ __all__ = [
     "find_ccip_events",
     "INSUFFICIENT_NATIVE_FEE_SELECTOR",
     "quote_ccip_native_fee",
+    "CcipCommitteeVerifier",
+    "CcipOffRamp",
+    "CcipVerifierResolver",
+    "CcvRequirements",
+    "MessageExecutionState",
+    "INDEXER_URLS",
+    "VerifierResult",
+    "VerifierResultUnavailable",
+    "fetch_verifier_result",
+    "manual_execution",
 ]

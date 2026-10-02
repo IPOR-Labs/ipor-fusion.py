@@ -125,3 +125,107 @@ def test_unsupported_on_ramp_version_stops_before_static_config(version):
     assert ctx.call.call_count == 3
     called_selectors = {bytes(call.args[1])[:4] for call in ctx.call.call_args_list}
     assert selector("getStaticConfig()") not in called_selectors
+
+
+# --- OffRamp 2.0.0, the verifier resolver and the committee verifier ----------
+
+OFF_RAMP = Web3.to_checksum_address("0x99bf17a320a981710f9b53c0c0b27219c1121d8d")
+RESOLVER = Web3.to_checksum_address("0x2CaAfd3B4Cf606220580c885Bd2B448FB93dC03b")
+COMMITTEE = Web3.to_checksum_address("0x35d59e7bd6e607f28a62bf93524663f504b04a3c")
+MESSAGE_ID = bytes.fromhex(
+    "0bb7cd4dd3b756d8d7d97590db208df08435ca50c8a14dce248671002cca10bc"
+)
+ENCODED = b"\x01" + bytes(range(40))
+CCV_DATA = bytes.fromhex("e9a05a20") + (2).to_bytes(2, "big") + b"\xab\xcd"
+
+
+def test_off_ramp_reads_decode_to_typed_values():
+    from ipor_fusion import CcipOffRamp, CcvRequirements, MessageExecutionState
+
+    ctx = _ctx(
+        {
+            (OFF_RAMP, selector("getExecutionState(bytes32)")): encode(["uint8"], [2]),
+            (OFF_RAMP, selector("getCCVsForMessage(bytes)")): encode(
+                ["address[]", "address[]", "uint8"], [[RESOLVER], [COMMITTEE], 1]
+            ),
+            (OFF_RAMP, selector("typeAndVersion()")): encode(
+                ["string"], ["OffRamp 2.0.0"]
+            ),
+        }
+    )
+    off_ramp = CcipOffRamp(ctx, OFF_RAMP)
+
+    assert off_ramp.type_and_version().call() == "OffRamp 2.0.0"
+    assert off_ramp.execution_state(MESSAGE_ID).call() is MessageExecutionState.SUCCESS
+    assert off_ramp.ccvs_for_message(ENCODED).call() == CcvRequirements(
+        (RESOLVER,), (COMMITTEE,), 1
+    )
+
+
+def test_off_ramp_execute_encodes_one_result_per_ccv():
+    from ipor_fusion import CcipOffRamp
+
+    off_ramp = CcipOffRamp(_ctx({}), OFF_RAMP)
+
+    call = off_ramp.execute(ENCODED, [RESOLVER], [CCV_DATA])
+
+    assert call.to == OFF_RAMP
+    assert call.data[:4] == selector("execute(bytes,address[],bytes[],uint32)")
+    from eth_abi import decode
+
+    assert decode(["bytes", "address[]", "bytes[]", "uint32"], call.data[4:]) == (
+        ENCODED,
+        (RESOLVER.lower(),),
+        (CCV_DATA,),
+        0,
+    )
+    overridden = off_ramp.execute(ENCODED, [RESOLVER], [CCV_DATA], 7_000_000)
+    assert decode(["bytes", "address[]", "bytes[]", "uint32"], overridden.data[4:])[
+        3
+    ] == (7_000_000)
+    with pytest.raises(ValueError, match="one verifier result per CCV"):
+        off_ramp.execute(ENCODED, [RESOLVER], [])
+    with pytest.raises(ValueError, match="one verifier result per CCV"):
+        off_ramp.execute(ENCODED, [], [])
+    with pytest.raises(ValueError, match="must not be empty"):
+        off_ramp.execute(b"", [RESOLVER], [CCV_DATA])
+    with pytest.raises(ValueError, match="uint32"):
+        off_ramp.execute(ENCODED, [RESOLVER], [CCV_DATA], 2**32)
+
+
+def test_resolver_and_committee_verifier_reads():
+    from ipor_fusion import CcipCommitteeVerifier, CcipVerifierResolver
+
+    ctx = _ctx(
+        {
+            (RESOLVER, selector("getInboundImplementation(bytes)")): encode(
+                ["address"], [COMMITTEE]
+            ),
+            (RESOLVER, selector("getAllInboundImplementations()")): encode(
+                ["(bytes4,address)[]"], [[(bytes.fromhex("e9a05a20"), COMMITTEE)]]
+            ),
+            (COMMITTEE, selector("versionTag()")): encode(
+                ["bytes4"], [bytes.fromhex("e9a05a20")]
+            ),
+            (COMMITTEE, selector("getStorageLocations()")): encode(
+                ["string[]"],
+                [["aggregator-1.ccip.chain.link", "aggregator-2.ccip.chain.link"]],
+            ),
+            (COMMITTEE, selector("typeAndVersion()")): encode(
+                ["string"], ["CommitteeVerifier 2.0.0"]
+            ),
+        }
+    )
+    resolver = CcipVerifierResolver(ctx, RESOLVER)
+    committee = CcipCommitteeVerifier(ctx, COMMITTEE)
+
+    assert resolver.inbound_implementation(CCV_DATA).call() == COMMITTEE
+    assert resolver.all_inbound_implementations().call() == (
+        (bytes.fromhex("e9a05a20"), COMMITTEE),
+    )
+    assert committee.type_and_version().call() == "CommitteeVerifier 2.0.0"
+    assert committee.version_tag().call() == bytes.fromhex("e9a05a20")
+    assert committee.storage_locations().call() == (
+        "aggregator-1.ccip.chain.link",
+        "aggregator-2.ccip.chain.link",
+    )

@@ -180,6 +180,9 @@ class CcipMessageSent:
     dest_chain_selector: int
     sender: ChecksumAddress
     message: MessageV1
+    #: The MessageV1 bytes as sent; what ``OffRamp.execute`` takes on the
+    #: destination (``keccak(encoded_message) == message_id``).
+    encoded_message: bytes
 
     @classmethod
     def from_log(cls, log: Mapping) -> CcipMessageSent:
@@ -194,6 +197,7 @@ class CcipMessageSent:
             dest_chain_selector=int.from_bytes(topics[1], "big"),
             sender=Web3.to_checksum_address(topics[2][12:]),
             message=MessageV1.decode(bytes(encoded)),
+            encoded_message=bytes(encoded),
         )
 
 
