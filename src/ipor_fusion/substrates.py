@@ -17,6 +17,12 @@ from dataclasses import dataclass, field
 
 from eth_utils import keccak
 
+from ipor_fusion.fuses.hypercore import (
+    is_hip3_asset,
+    is_native_perp_asset,
+    perp_dex_of,
+    read_index_of,
+)
 from ipor_fusion.market_ids import IporFusionMarkets
 
 
@@ -262,6 +268,120 @@ def _decode_crosschain(hex_str: str) -> SubstrateInfo:
     return info
 
 
+_HYPERCORE_TYPES = {
+    1: "SPOT_TOKEN",
+    2: "PERP_MARKET",
+    3: "DESTINATION",
+    4: "BUILDER",
+    5: "CONFIG",
+    6: "SEND_CAP",
+}
+# HyperCoreSubstrateLib.ConfigKey member names, by enum value.
+_HYPERCORE_CONFIG_KEYS = {
+    1: "WindowTransferSeconds",
+    2: "WindowOrderSeconds",
+    3: "MaxUsdClassTransferUsd6",
+    4: "PerpDexIds",
+    5: "SettlementMode",
+    6: "SpotSendBridgeEnabled",
+}
+_HYPERCORE_SETTLEMENT_MODES = {1: "TIMING", 2: "REPORTED"}
+
+
+def _decode_hypercore(hex_str: str) -> SubstrateInfo:
+    """Decode HyperCore typed substrates.
+
+    Source: HyperCoreSubstrateLib.sol -- ``bytes32(uint256(type) << 248 | data)``,
+    a one-byte type tag then a 31-byte (248-bit) payload:
+    - SpotToken (1): ``tokenIndex << 160 | evmAsset``.
+    - PerpMarket (2): ``asset << 216 | maxNotionalUsd6 << 128 |
+      reduceOnlyRequired << 120``; ``asset`` is the CoreWriter action asset
+      (``100000 + dex * 10000 + index`` for a HIP-3 market), the cap is USD
+      with 6 decimals, the low 120 bits are zero.
+    - Destination (3): address in the low 20 bytes.
+    - Builder (4): ``maxFeeRateDecibps << 160 | builder``.
+    - Config (5): ``key << 240 | uint240 value``. Keys 1..6 are
+      WindowTransferSeconds, WindowOrderSeconds, MaxUsdClassTransferUsd6,
+      PerpDexIds (bitmap: bit i enables perp dex i), SettlementMode (1 TIMING,
+      2 REPORTED) and SpotSendBridgeEnabled.
+    - SendCap (6): ``tokenIndex << 128 | maxWei`` (Core wei).
+    Words the library's decoders revert on come back raw with ``is_error``
+    (a tag outside 1..6, an unknown config key, reserved bits set, a
+    reduce-only flag other than 0/1): the fuses would reject them, so no
+    field of theirs may look granted.
+    """
+    type_byte = int(hex_str[0:2], 16)
+    label = _HYPERCORE_TYPES.get(type_byte)
+    if label is None:
+        return _hypercore_invalid(hex_str, f"type={type_byte}")
+    if type_byte == 5:
+        return _decode_hypercore_config(hex_str)
+    # Reserved bits the library requires to be zero, as hex spans of the word.
+    reserved = {1: (2, 8), 2: (34, 64), 3: (2, 24), 4: (2, 8), 6: (2, 16)}[type_byte]
+    if hex_str[reserved[0] : reserved[1]].strip("0"):
+        return _hypercore_invalid(hex_str, label)
+    if type_byte == 1:
+        return SubstrateInfo(
+            address=f"0x{hex_str[24:]}",
+            type_label=label,
+            extra={"token_index": str(int(hex_str[8:24], 16))},
+        )
+    if type_byte == 2:
+        reduce_flag = int(hex_str[32:34], 16)
+        if reduce_flag > 1:
+            return _hypercore_invalid(hex_str, label)
+        asset = int(hex_str[2:10], 16)
+        extra = {
+            "asset": str(asset),
+            "max_notional_usd6": str(int(hex_str[10:32], 16)),
+            "reduce_only_required": str(reduce_flag == 1).lower(),
+        }
+        # The HIP-3 coordinates the read precompiles want; absent for an asset
+        # outside the native and HIP-3 families, which the perp fuses reject.
+        if is_native_perp_asset(asset) or is_hip3_asset(asset):
+            extra["dex"] = str(perp_dex_of(asset))
+            extra["read_index"] = str(read_index_of(asset))
+        return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
+    if type_byte == 3:
+        return SubstrateInfo(address=f"0x{hex_str[24:]}", type_label=label)
+    if type_byte == 4:
+        return SubstrateInfo(
+            address=f"0x{hex_str[24:]}",
+            type_label=label,
+            extra={"max_fee_rate_decibps": str(int(hex_str[8:24], 16))},
+        )
+    return SubstrateInfo(
+        raw_hex=f"0x{hex_str}",
+        type_label=label,
+        extra={
+            "token_index": str(int(hex_str[16:32], 16)),
+            "max_wei": str(int(hex_str[32:], 16)),
+        },
+    )
+
+
+def _decode_hypercore_config(hex_str: str) -> SubstrateInfo:
+    key = int(hex_str[2:4], 16)
+    value = int(hex_str[4:], 16)
+    name = _HYPERCORE_CONFIG_KEYS.get(key)
+    if name is None:
+        return _hypercore_invalid(hex_str, f"CONFIG key={key}")
+    extra = {"key": name, "value": str(value)}
+    if key == 5:
+        extra["mode"] = _HYPERCORE_SETTLEMENT_MODES.get(value, f"mode={value}")
+    return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="CONFIG", extra=extra)
+
+
+def _hypercore_invalid(hex_str: str, label: str) -> SubstrateInfo:
+    """A word HyperCoreSubstrateLib would revert on: raw, flagged, no fields."""
+    return SubstrateInfo(
+        raw_hex=f"0x{hex_str}",
+        type_label=label,
+        is_error=True,
+        extra={"error": "invalid HyperCore substrate"},
+    )
+
+
 # Market ID → decoder function.  Markets not listed here get raw hex output.
 _SUBSTRATE_DECODERS: dict[int, Callable[[str], SubstrateInfo]] = {}
 
@@ -402,6 +522,11 @@ _register_markets(
     ],
     _decode_crosschain,
 )
+# HyperCore (55): typed substrates per HyperCoreSubstrateLib.sol, verified
+# against the 12 words granted on the first HyperEVM test vault (see
+# tests/fixtures/hypercore_hip3_flow.json; that run used id 54 before the
+# renumbering). Numeric 54 is the crosschain market, registered above.
+_register_markets([55], _decode_hypercore)
 
 
 def _build_market_lookup() -> dict[int, str]:

@@ -31,6 +31,7 @@ from ipor_fusion.errors import MorphoMarketNotFoundError
 from ipor_fusion.guide import RESOURCES
 from ipor_fusion.mcp.models import (
     FeesSection,
+    HyperCoreSection,
     OracleNodeModel,
     WithdrawManagerDetails,
 )
@@ -632,6 +633,7 @@ class TestVaultOracleMapping:
 # block or cross-reference added to one alone fails in the other.
 _MODEL_BY_BLOCK = {
     "fees": FeesSection,
+    "hypercore": HyperCoreSection,
     "withdraw_manager_details": WithdrawManagerDetails,
 }
 _CROSS_REFERENCES = {("withdraw_manager_details", "fees")}

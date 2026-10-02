@@ -36,6 +36,26 @@ from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappSupplyFuse,
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
+from ipor_fusion.fuses.hypercore import (
+    USDC_SYSTEM_ADDRESS,
+    HyperCoreBuilderFeeFuse,
+    HyperCoreCancelFuse,
+    HyperCoreConfigKey,
+    HyperCoreDepositFuse,
+    HyperCoreMarginFuse,
+    HyperCoreOrderFuse,
+    HyperCoreSendFuse,
+    HyperCoreSubstrates,
+    SettlementMode,
+    TimeInForce,
+    hip3_action_asset,
+    is_hip3_asset,
+    is_native_perp_asset,
+    is_supported_perp_dex,
+    perp_dex_of,
+    read_index_of,
+    system_address,
+)
 from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
     MorphoBorrowFuse,
@@ -2041,3 +2061,175 @@ class TestExternalStateSubstrates:
         # field -- so there is nothing field-specific to assert.
         with pytest.raises(ValueError, match="20-byte"):
             encoder("0x1234")
+
+
+class TestHyperCoreFuses:
+    """Selectors match the live HyperEVM run (see test_hypercore_flow.py for
+    the byte-level parity); here each method round-trips and validates."""
+
+    def test_deposit(self):
+        action = HyperCoreDepositFuse(FUSE_ADDR).enter(token_index=0, amount=15_000_000)
+        assert action.data[:4] == bytes.fromhex("8ccc0e0e")
+        assert action.data[:4] == _selector("enter((uint64,uint256))")
+        assert decode(["(uint64,uint256)"], action.data[4:]) == ((0, 15_000_000),)
+        with pytest.raises(ValueError, match="amount"):
+            HyperCoreDepositFuse(FUSE_ADDR).enter(token_index=0, amount=0)
+
+    def test_margin(self):
+        action = HyperCoreMarginFuse(FUSE_ADDR).enter(usd6=2_500_000, to_perp=True)
+        assert action.data[:4] == _selector("enter((uint64,bool))")
+        assert decode(["(uint64,bool)"], action.data[4:]) == ((2_500_000, True),)
+        with pytest.raises(ValueError, match="usd6"):
+            HyperCoreMarginFuse(FUSE_ADDR).enter(usd6=0, to_perp=False)
+
+    def test_send_asset_and_spot_send(self):
+        fuse = HyperCoreSendFuse(FUSE_ADDR)
+        action = fuse.send_asset(
+            destination=VAULT_ADDR,
+            source_dex=0xFFFFFFFF,
+            destination_dex=1,
+            token_index=0,
+            amount_wei=1_490_000_000,
+        )
+        assert action.data[:4] == bytes.fromhex("882bb329")
+        ((dest, src, dst, token, wei),) = decode(
+            ["(address,uint32,uint32,uint64,uint64)"], action.data[4:]
+        )
+        assert (dest.lower(), src, dst, token, wei) == (
+            VAULT_ADDR_LOW,
+            0xFFFFFFFF,
+            1,
+            0,
+            1_490_000_000,
+        )
+        spot = fuse.spot_send(destination=TOKEN_A, token_index=0, amount_wei=5)
+        assert spot.data[:4] == _selector("enterSpotSend((address,uint64,uint64))")
+        assert decode(["(address,uint64,uint64)"], spot.data[4:])[0][1:] == (0, 5)
+        with pytest.raises(ValueError, match="destination"):
+            fuse.spot_send(destination=ZERO_ADDRESS, token_index=0, amount_wei=5)
+        with pytest.raises(ValueError, match="source_dex"):
+            fuse.send_asset(
+                destination=VAULT_ADDR,
+                source_dex=1 << 32,
+                destination_dex=1,
+                token_index=0,
+                amount_wei=1,
+            )
+
+    def test_order(self):
+        fuse = HyperCoreOrderFuse(FUSE_ADDR)
+        action = fuse.enter(
+            asset=110_002,
+            is_buy=False,
+            limit_px=225_47_000_000,
+            sz=5_000_000,
+            tif=TimeInForce.IOC,
+            cloid=0x5103,
+            reduce_only=True,
+        )
+        assert action.data[:4] == bytes.fromhex("7b91322b")
+        assert decode(
+            ["(uint32,bool,uint64,uint64,bool,uint8,uint128)"], action.data[4:]
+        ) == ((110_002, False, 225_47_000_000, 5_000_000, True, 3, 0x5103),)
+        with pytest.raises(ValueError):
+            fuse.enter(asset=1, is_buy=True, limit_px=1, sz=1, tif=4, cloid=1)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="sz"):
+            fuse.enter(
+                asset=1, is_buy=True, limit_px=1, sz=0, tif=TimeInForce.GTC, cloid=1
+            )
+        with pytest.raises(ValueError, match="cloid"):
+            fuse.enter(
+                asset=1,
+                is_buy=True,
+                limit_px=1,
+                sz=1,
+                tif=TimeInForce.GTC,
+                cloid=1 << 128,
+            )
+
+    def test_cancel(self):
+        fuse = HyperCoreCancelFuse(FUSE_ADDR)
+        by_cloid = fuse.cancel_by_cloid(asset=110_002, cloid=0x5102)
+        assert by_cloid.data[:4] == bytes.fromhex("d43b04d7")
+        assert decode(["(uint32,uint128)"], by_cloid.data[4:]) == ((110_002, 0x5102),)
+        by_oid = fuse.cancel_by_oid(asset=110_002, oid=558_877_746_685)
+        assert by_oid.data[:4] == _selector("enterCancelByOid((uint32,uint64))")
+        assert decode(["(uint32,uint64)"], by_oid.data[4:]) == (
+            (110_002, 558_877_746_685),
+        )
+        with pytest.raises(ValueError, match="oid"):
+            fuse.cancel_by_oid(asset=1, oid=0)
+
+    def test_builder_fee(self):
+        action = HyperCoreBuilderFeeFuse(FUSE_ADDR).enter(
+            builder=TOKEN_B, max_fee_rate_decibps=1
+        )
+        assert action.data[:4] == _selector("enter((address,uint64))")
+        ((builder, rate),) = decode(["(address,uint64)"], action.data[4:])
+        assert (builder.lower(), rate) == (TOKEN_B_LOW, 1)
+
+    def test_system_address(self):
+        assert system_address(0) == USDC_SYSTEM_ADDRESS
+        assert system_address(1) == "0x2000000000000000000000000000000000000001"
+        assert system_address(2**32 - 1).lower().endswith("ffffffff")
+        with pytest.raises(ValueError, match="uint32"):
+            system_address(1 << 32)
+
+    def test_hip3_identifiers(self):
+        # HyperCoreLib: native assets are < 10_000, HIP-3 assets are
+        # 110_000 <= asset < 100_000_000; everything else is rejected.
+        assert hip3_action_asset(1, 2) == 110_002
+        assert hip3_action_asset(0, 7) == 7
+        assert hip3_action_asset(9_989, 9_999) == 99_999_999
+        assert is_hip3_asset(110_000) and is_hip3_asset(99_999_999)
+        assert not is_hip3_asset(7) and not is_hip3_asset(100_000)
+        assert not is_hip3_asset(109_999) and not is_hip3_asset(100_000_000)
+        assert is_native_perp_asset(9_999) and not is_native_perp_asset(10_000)
+        assert perp_dex_of(110_002) == 1 and perp_dex_of(7) == 0
+        assert read_index_of(110_002) == 10_002 and read_index_of(7) == 7
+        assert is_supported_perp_dex(0) and is_supported_perp_dex(1)
+        assert not is_supported_perp_dex(2) and not is_supported_perp_dex(240)
+        for bad in (10_000, 100_000, 109_999, 100_000_000):
+            with pytest.raises(ValueError, match="neither"):
+                perp_dex_of(bad)
+            with pytest.raises(ValueError, match="neither"):
+                read_index_of(bad)
+        with pytest.raises(ValueError, match="uint32"):
+            is_hip3_asset(1 << 32)
+        with pytest.raises(ValueError, match="index_in_dex"):
+            hip3_action_asset(1, 10_000)
+        with pytest.raises(ValueError, match="index_in_dex"):
+            hip3_action_asset(0, 10_000)
+        with pytest.raises(ValueError, match="HIP-3 asset range"):
+            hip3_action_asset(9_990, 0)
+
+    def test_substrates_mirror_the_library(self):
+        # Words granted on the live vault (tests/fixtures/hypercore_hip3_flow.json).
+        usdc = Web3.to_checksum_address("0xb88339cb7199b77e23db6e890353e22632ba630f")
+        assert HyperCoreSubstrates.spot_token(0, usdc).hex() == (
+            "010000000000000000000000b88339cb7199b77e23db6e890353e22632ba630f"
+        )
+        assert HyperCoreSubstrates.perp_market(110_002, 15_000_000).hex() == (
+            "020001adb20000000000000000e4e1c000000000000000000000000000000000"
+        )
+        assert HyperCoreSubstrates.perp_market(1, 1, reduce_only_required=True)[16] == 1
+        assert HyperCoreSubstrates.send_cap(0, 100 * 10**8).hex() == (
+            "06000000000000000000000000000000000000000000000000000002540be400"
+        )
+        assert HyperCoreSubstrates.config(HyperCoreConfigKey.PERP_DEX_IDS, 2).hex() == (
+            "0504000000000000000000000000000000000000000000000000000000000002"
+        )
+        assert HyperCoreSubstrates.config(
+            HyperCoreConfigKey.SETTLEMENT_MODE, SettlementMode.TIMING
+        ).hex() == ("0505000000000000000000000000000000000000000000000000000000000001")
+        assert HyperCoreSubstrates.builder(
+            Web3.to_checksum_address("0xcee5c4272e246a424aede992c987966736e0f63b"), 1
+        ).hex() == ("040000000000000000000001cee5c4272e246a424aede992c987966736e0f63b")
+        with pytest.raises(ValueError):
+            HyperCoreSubstrates.config(0, 1)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="value"):
+            HyperCoreSubstrates.config(HyperCoreConfigKey.PERP_DEX_IDS, 1 << 240)
+        with pytest.raises(ValueError, match="max_notional_usd6"):
+            HyperCoreSubstrates.perp_market(1, 1 << 88)
+        with pytest.raises(ValueError, match="destination"):
+            HyperCoreSubstrates.destination(ZERO_ADDRESS)
