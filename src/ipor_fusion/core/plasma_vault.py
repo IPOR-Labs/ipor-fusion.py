@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any, TypeVar
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
+from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.types import LogReceipt, Timestamp
@@ -11,6 +14,8 @@ from web3.types import LogReceipt, Timestamp
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
+
+T = TypeVar("T")
 
 _BALANCE_FUSE_ADDED_TOPIC = HexBytes(
     Web3.keccak(text="BalanceFuseAdded(uint256,address)")
@@ -50,6 +55,26 @@ class ManagementFeeData:
 
 def _market_id_list_decoder(value: list) -> list[MarketId]:
     return [MarketId(v) for v in value]
+
+
+_BALANCE_OF_SELECTOR = function_signature_to_4byte_selector("balanceOf()")
+
+
+def _universal_read_decoder(
+    output_types: list[str] | None, decoder: Callable[..., Any] | None
+) -> Callable[[tuple], Any]:
+    """Unwrap ``ReadResult.data`` and, given ``output_types``, decode it the way
+    `Call.decode` decodes a view's return data."""
+
+    def _decode(result: tuple) -> Any:
+        payload = bytes(result[0])
+        if output_types is None:
+            return payload
+        values = tuple(decode(output_types, payload))
+        single: Any = values[0] if len(values) == 1 else values
+        return decoder(single) if decoder is not None else single
+
+    return _decode
 
 
 def _address_list_decoder(value: list) -> list[ChecksumAddress]:
@@ -147,6 +172,93 @@ class PlasmaVault(ContractWrapper):
         `remove_fuses` for partial-failure rollback."""
         return self._write(
             "removeBalanceFuse(uint256,address)", market_id, balance_fuse
+        )
+
+    def set_pre_hook_implementations(
+        self,
+        selectors: list[bytes],
+        implementations: list[ChecksumAddress],
+        substrates: list[list[bytes]],
+    ) -> Call[None]:
+        """PRE_HOOKS_MANAGER-only configuration call: route each vault function
+        selector to a pre-hook implementation (the zero address removes the
+        hook) with that hook's bytes32 substrates. One implementation and one
+        substrate list per selector, in the same order; a HyperCore vault, for
+        example, puts the pending-action hook on ``execute`` and
+        ``updateMarketsBalances`` and the capital-flow hook on the deposit,
+        mint, withdraw and redeem entry points."""
+        if not (len(selectors) == len(implementations) == len(substrates)):
+            raise ValueError(
+                "selectors, implementations and substrates must have equal length"
+            )
+        for selector in selectors:
+            if len(selector) != 4 or selector == b"\x00" * 4:
+                raise ValueError(f"invalid pre-hook selector {selector.hex()!r}")
+        for group in substrates:
+            for word in group:
+                if len(word) != 32:
+                    raise ValueError(f"invalid pre-hook substrate {word.hex()!r}")
+        return self._write(
+            "setPreHookImplementations(bytes4[],address[],bytes32[][])",
+            list(selectors),
+            list(implementations),
+            [list(group) for group in substrates],
+        )
+
+    def read(self, target: ChecksumAddress, data: bytes) -> Call[bytes]:
+        """``UniversalReader.read``: delegatecall ``data`` on ``target`` in the
+        vault's own storage context and return the raw ABI-encoded result, for
+        helpers that must see the vault's storage (a market's pending-action
+        reader, a balance fuse's ``balanceOf()``)."""
+        return self._view(
+            "read(address,bytes)",
+            target,
+            data,
+            output_types=["(bytes)"],
+            decoder=_universal_read_decoder(None, None),
+        )
+
+    def read_as(
+        self,
+        target: ChecksumAddress,
+        data: bytes,
+        *,
+        output_types: list[str],
+        decoder: Callable[..., T] | None = None,
+    ) -> Call[T]:
+        """:meth:`read` with the result decoded like a view's return value."""
+        return self._view(
+            "read(address,bytes)",
+            target,
+            data,
+            output_types=["(bytes)"],
+            decoder=_universal_read_decoder(output_types, decoder),
+        )
+
+    def balance_fuse_value(self, balance_fuse: ChecksumAddress) -> Call[Amount]:
+        """``balanceOf()`` of ``balance_fuse`` evaluated in the vault's context:
+        the figure ``updateMarketsBalances`` would store for its market now."""
+        return self.read_as(
+            balance_fuse, _BALANCE_OF_SELECTOR, output_types=["uint256"], decoder=Amount
+        )
+
+    def get_pre_hook_selectors(self) -> Call[list[bytes]]:
+        """The vault function selectors that currently have a pre-hook."""
+        return self._view(
+            "getPreHookSelectors()",
+            output_types=["bytes4[]"],
+            decoder=lambda values: [bytes(v) for v in values],
+        )
+
+    def get_pre_hook_implementation(self, selector: bytes) -> Call[ChecksumAddress]:
+        """The pre-hook behind ``selector`` (the zero address when none)."""
+        if len(selector) != 4:
+            raise ValueError(f"invalid pre-hook selector {selector.hex()!r}")
+        return self._view(
+            "getPreHookImplementation(bytes4)",
+            selector,
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
         )
 
     def update_dependency_balance_graphs(

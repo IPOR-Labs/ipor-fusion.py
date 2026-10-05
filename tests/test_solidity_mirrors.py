@@ -78,9 +78,10 @@ def _solidity_constants(file_name: str) -> dict[str, int]:
 
 
 # Constants the SDK carries ahead of the pinned public contracts (sourced from
-# a contracts feature branch). Each must be ABSENT upstream at the pinned ref;
-# once it lands, drop it here and bump IPOR_FUSION_REF in the same change.
-_AHEAD_OF_UPSTREAM = {"CROSSCHAIN": 54}
+# a live deployment or a contracts feature branch). Each must be ABSENT
+# upstream at the pinned ref; once it lands, drop it here and bump
+# IPOR_FUSION_REF in the same change.
+_AHEAD_OF_UPSTREAM = {"CROSSCHAIN": 54, "HYPERCORE": 55}
 
 
 def _member_words(body: str) -> list[list[str]]:

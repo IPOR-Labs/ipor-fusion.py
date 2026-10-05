@@ -70,6 +70,9 @@ class AccessManager(ContractWrapper):
             "grantRole(uint64,address,uint32)", role_id, account, execution_delay
         )
 
+    def revoke_role(self, role_id: int, account: ChecksumAddress) -> Call[None]:
+        return self._write("revokeRole(uint64,address)", role_id, account)
+
     def get_target_function_role(
         self, target: ChecksumAddress, selector: bytes
     ) -> Call[RoleId]:

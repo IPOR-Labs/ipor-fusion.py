@@ -40,11 +40,18 @@ from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
+from ipor_fusion.errors import EmptyCallResultError
+from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import (
     AaveV3FuseReader,
     AaveV3PoolAddressesProvider,
     AaveV3PositionBreakdown,
     AaveV3Reader,
+)
+from ipor_fusion.readers.hypercore import (
+    HYPEREVM_CHAIN_ID,
+    HyperCoreVaultState,
+    read_hypercore_vault_state,
 )
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
@@ -178,6 +185,9 @@ class _VaultData:
     # Substrates registered for each balance-fuse market. Allows the fuse
     # tables to report substrate counts per fuse without duplicating reads.
     market_substrates: dict[int, list[bytes]] | None = None
+    # The HyperCore market's live state (NAV legs, pending action, perp
+    # markets); only on HyperEVM and only for a vault with a market-55 balance fuse.
+    hypercore: HyperCoreVaultState | None = None
     # Confirmed AccessManager role holders, sorted by role_account_sort_key.
     # None when the RoleGranted log scan failed (see _ROLE_SCAN_ERRORS).
     role_accounts: list[RoleAccount] | None = None
@@ -809,6 +819,9 @@ def _fetch_vault_data(
         )
 
         markets = f_markets.result()
+        f_hypercore = pool.submit(
+            _fetch_hypercore_state, ctx, vault_addr, chain_id, markets
+        )
         lending = (
             _fetch_lending_reads(ctx, pool, vault_addr, chain_id, markets)
             if chain_id
@@ -861,7 +874,37 @@ def _fetch_vault_data(
             token_prices_usd=token_prices_usd,
             unpriceable_priced_tokens=unpriceable_priced_tokens,
             role_accounts=f_roles.result(),
+            hypercore=f_hypercore.result(),
         )
+
+
+def _fetch_hypercore_state(
+    ctx: Web3Context,
+    vault_addr: ChecksumAddress,
+    chain_id: int,
+    markets: _MarketReads,
+) -> HyperCoreVaultState | None:
+    """The HyperCore market's state, on HyperEVM only (the Core precompiles
+    exist nowhere else) and only when the vault has a market-55 balance fuse.
+    A failed read (a precompile, the oracle, a layout the valuation library
+    would revert on) leaves the block out rather than failing `vault info`."""
+    if chain_id != HYPEREVM_CHAIN_ID:
+        return None
+    fuse = next(
+        (
+            bf.fuse
+            for bf in markets.balance_fuses
+            if bf.market_id == IporFusionMarkets.HYPERCORE
+        ),
+        None,
+    )
+    if fuse is None:
+        return None
+    try:
+        return _safe_call(partial(read_hypercore_vault_state, ctx, vault_addr, fuse))
+    except (ValueError, EmptyCallResultError) as exc:
+        _logger.debug("HyperCore state unavailable: %s", exc)
+        return None
 
 
 def _fetch_deployment_info(

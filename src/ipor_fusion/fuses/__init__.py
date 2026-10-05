@@ -46,6 +46,29 @@ from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappSupplyFuse,
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
+from ipor_fusion.fuses.hypercore import (
+    HyperCoreBuilderFeeFuse,
+    HyperCoreCancelFuse,
+    HyperCoreConfigKey,
+    HyperCoreDepositFuse,
+    HyperCoreMarginFuse,
+    HyperCoreOrderFuse,
+    HyperCoreSendFuse,
+    HyperCoreSubstrates,
+    SettlementMode,
+    TimeInForce,
+    system_address,
+)
+from ipor_fusion.fuses.hypercore_events import (
+    HYPERCORE_EVENT_SPECS,
+    HYPERCORE_EVENTS,
+    HyperCoreEvent,
+    HyperCoreEventSpec,
+    decode_hypercore_event,
+    find_hypercore_events,
+    hypercore_event_name,
+    hypercore_events,
+)
 from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
     MorphoBorrowFuse,
@@ -78,6 +101,14 @@ from ipor_fusion.fuses.universal import (
 )
 
 __all__ = [
+    "HYPERCORE_EVENTS",
+    "HYPERCORE_EVENT_SPECS",
+    "HyperCoreEvent",
+    "HyperCoreEventSpec",
+    "decode_hypercore_event",
+    "find_hypercore_events",
+    "hypercore_event_name",
+    "hypercore_events",
     "FuseAction",
     "Fuse",
     "StakeFuse",
@@ -127,6 +158,17 @@ __all__ = [
     "ExternalStateAction",
     "ExternalStateOperationFuse",
     "ExternalStateSubstrates",
+    "HyperCoreBuilderFeeFuse",
+    "HyperCoreCancelFuse",
+    "HyperCoreConfigKey",
+    "HyperCoreDepositFuse",
+    "HyperCoreMarginFuse",
+    "HyperCoreOrderFuse",
+    "HyperCoreSendFuse",
+    "HyperCoreSubstrates",
+    "SettlementMode",
+    "TimeInForce",
+    "system_address",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",

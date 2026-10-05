@@ -90,6 +90,55 @@ DOCS: dict[str, dict[str, str]] = {
     # Exit fees are NOT here — they live in the top-level `fees` object;
     # `fees` below is the cross-reference that keeps a reader from concluding
     # the vault charges nothing on exit.
+    "hypercore": {
+        "core_user_exists": (
+            "Whether the vault has a HyperCore account; false until its first "
+            "EVM -> Core deposit, and the NAV is 0 until then."
+        ),
+        "perp_dex_bitmap": (
+            "PerpDexIds config substrate: bit i enables HIP-3 perp dex i in "
+            "the NAV; the native dex (0) is always valued."
+        ),
+        "nav_wad": (
+            "Signed NAV the HyperCore valuation library computes (18 decimals): "
+            "granted spot tokens at the oracle price plus every valued dex's "
+            "account value. The balance fuse reverts when it is negative."
+        ),
+        "balance_fuse_value_wad": (
+            "balanceOf() of the HyperCore balance fuse evaluated in the vault's "
+            "storage context through the universal reader: the figure "
+            "updateMarketsBalances would store now. Null when the read failed."
+        ),
+        "nav_matches_balance_fuse": (
+            "nav_wad == balance_fuse_value_wad at this block; null when the "
+            "fuse value is unavailable. A mismatch means the SDK's identity and "
+            "the contract disagree and must be investigated."
+        ),
+        "spot": (
+            "One entry per granted SpotToken substrate: Core balance in Core "
+            "wei, the EVM asset it is priced through, the oracle price and the "
+            "USD value. A token with no balance is listed unpriced at 0."
+        ),
+        "native_perp": (
+            "Account value on Hyperliquid's native perp dex (USD, 6 decimals, "
+            "signed): margin, PnL, funding and fees already netted."
+        ),
+        "hip3": (
+            "Account value per HIP-3 perp dex the PerpDexIds config enables, in "
+            "the valuation library's fixed order (xyz, abcd, para, mkts, io)."
+        ),
+        "perp_markets": (
+            "Granted PerpMarket substrates: action asset, HIP-3 dex and read "
+            "index, the perpAssetInfo coin name, the per-order notional cap "
+            "(USD, 6 decimals) and whether only reduce-only orders are admitted."
+        ),
+        "pending": (
+            "HyperCorePendingReader.pendingState(): whether a HyperCore action "
+            "blocks execute and updateMarketsBalances, the settled predicate, and "
+            "the raw last action (class, id, nonce, window). Null when no reader "
+            "is known for the chain."
+        ),
+    },
     "withdraw_manager_details": {
         "withdraw_window_seconds": (
             "Length of the window, starting at request time, in which a "

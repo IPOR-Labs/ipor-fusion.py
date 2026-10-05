@@ -357,6 +357,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Use
 `crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` for that deployment;
 `open_lane` discovers the vault's actual market grants rather than assuming 54.
+| HyperCore (Hyperliquid, market 55) | `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` |
 
 ### Readers (`ipor_fusion.readers`)
 
