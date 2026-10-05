@@ -12,6 +12,7 @@ from _hypercore_model import (
     HYPERCORE_SHADOW_CORE_WRITER,
     HyperCoreSimulationModel,
     hypercore_shadow_address,
+    market55_model,
 )
 from _hypercore_shadow import (
     _assert_only_address_redirects,
@@ -26,11 +27,9 @@ from ipor_fusion import (
     HyperCoreAccountMarginSummary,
     HyperCoreDepositFuse,
     HyperCoreOrderFuse,
-    HyperCorePerpAssetInfo,
     HyperCoreReader,
     HyperCoreSendFuse,
     HyperCoreSpotBalance,
-    HyperCoreTokenInfo,
     PlasmaVault,
     TimeInForce,
     VaultSimulator,
@@ -58,30 +57,7 @@ ADDRESSES["HyperCorePendingActionPreHook"] = Web3.to_checksum_address(
 
 
 def _model() -> HyperCoreSimulationModel:
-    zero = HyperCoreAccountMarginSummary(0, 0, 0, 0)
-    return HyperCoreSimulationModel(
-        l1_block_number=1_000_000_000,
-        core_users={VAULT: True},
-        spot_balances={(VAULT, 0): HyperCoreSpotBalance(1_500_000_000, 0, 0)},
-        account_summaries={(0, VAULT): zero, (1, VAULT): zero},
-        token_infos={
-            0: HyperCoreTokenInfo(
-                name="USDC",
-                spots=(),
-                deployer_trading_fee_share=0,
-                deployer=Web3.to_checksum_address(
-                    "0x0000000000000000000000000000000000000000"
-                ),
-                evm_contract=Web3.to_checksum_address(
-                    "0x6B9E773128f453f5c2C60935Ee2DE2CBc5390A24"
-                ),
-                sz_decimals=8,
-                wei_decimals=8,
-                evm_extra_wei_decimals=-2,
-            )
-        },
-        perp_asset_infos={10_002: HyperCorePerpAssetInfo("xyz:NVDA", 20, 3, 20, False)},
-    )
+    return market55_model(VAULT)
 
 
 def test_shadow_runtime_guard_rejects_other_instruction_changes() -> None:
