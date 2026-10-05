@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from click.testing import CliRunner
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
@@ -36,10 +37,14 @@ from ipor_fusion import (
     read_hypercore_transfer_snapshot,
     read_hypercore_vault_state,
 )
+from ipor_fusion.cli import config_store, vault_cmd
+from ipor_fusion.cli.config_store import FusionConfig
+from ipor_fusion.cli.main import cli
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.fuses.hypercore import SPOT_DEX, USDC_SYSTEM_ADDRESS, read_index_of
+from ipor_fusion.mcp import server
 from ipor_fusion.types import MarketId
 
 FIXTURE = json.loads(
@@ -152,6 +157,41 @@ def test_transfer_snapshot_and_evm_exit_ceiling(ctx: Web3Context):
     assert ceiling.upper_bound_assets == min(
         ceiling.share_assets, ceiling.idle_underlying
     )
+
+
+def test_full_cli_and_mcp_vault_info_on_hyperevm(
+    ctx: Web3Context, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg = FusionConfig(providers={"999": os.environ["HYPEREVM_PROVIDER_URL"]})
+    monkeypatch.setattr(vault_cmd, "load_config", lambda: cfg)
+    monkeypatch.setattr(vault_cmd, "save_config", lambda _cfg: None)
+    monkeypatch.setattr(server, "load_config", lambda: cfg)
+    monkeypatch.setattr(config_store, "CACHE_FILE", tmp_path / "contract_cache.json")
+    monkeypatch.setattr(
+        config_store, "DEPLOYMENT_CACHE_FILE", tmp_path / "deployment_cache.json"
+    )
+    block = int(ctx.default_block)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "vault",
+            "info",
+            VAULT,
+            "--chain-id",
+            "999",
+            "--block-number",
+            str(block),
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, type(result.exception).__name__
+    cli_data = json.loads(result.output[result.output.index("{") :])
+    assert cli_data["chain_id"] == 999
+    assert cli_data["hypercore"] is not None
+
+    mcp_data = server.vault_info(VAULT, chain_id=999, block_number=block)
+    assert mcp_data.chain_id == 999
+    assert mcp_data.hypercore is not None
 
 
 def _dry_run(ctx: Web3Context, call: Call) -> int:

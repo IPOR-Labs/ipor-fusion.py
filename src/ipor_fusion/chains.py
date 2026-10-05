@@ -31,7 +31,7 @@ CHAIN_NAME_TO_ID: dict[str, int] = {name: cid for cid, name in CHAIN_NAMES.items
 # deeper in the stack — e.g. the withdraw-manager event scan exceeds
 # eth_getLogs range caps on Unichain/Plasma and times out on Avalanche.
 # Extend only after the full vault_info path passes on that chain.
-SUPPORTED_CHAIN_IDS: frozenset[int] = frozenset({1, 42161, 8453})
+SUPPORTED_CHAIN_IDS: frozenset[int] = frozenset({1, 999, 42161, 8453})
 
 
 def ensure_supported_chain(chain_id: int) -> None:
