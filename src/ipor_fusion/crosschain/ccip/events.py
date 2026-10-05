@@ -72,7 +72,7 @@ def _event(name: str, *params: str) -> CcipEventSpec:
 
 #: Every event, one spec per signature, sorted by signature. Mirrored from
 #: ``contracts/crosschain/ccip/**/*.sol`` at the contracts revision
-#: ``7eccea2`` (the v3 factory pair's source) and held to it by
+#: ``84c1923`` (the v3 factory pair's source) and held to it by
 #: ``tests/test_crosschain_ccip_events.py``.
 CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
     _event("AssetClaimed", "address manager", "uint256 amount"),

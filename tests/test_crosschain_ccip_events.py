@@ -287,8 +287,9 @@ def test_accounting_readers_encode_selector_and_decode_return(
 
 # --- mirrored from a contracts checkout ------------------------------------------
 
-#: The v3 factory pair's source (the ticket's own gas limit on the pilot-v2 revision ``810e260``).
-CONTRACTS_REVISION = "7eccea2357f25e0f795dd9b895e1c497677c2cd4"
+#: The v3 factory pair's source: the ticket's own gas limit on the pilot-v2
+#: revision ``810e260``.
+CONTRACTS_REVISION = "84c1923408d8aec4b6c2f769567798c716cc8b4c"
 CCIP_SOURCES = "contracts/crosschain/ccip"
 # Stripped before parsing, as tests/test_solidity_mirrors.py does: a trailing
 # `// note` would otherwise become a member and a `)` inside prose would
