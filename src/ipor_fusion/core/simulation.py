@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,6 +16,9 @@ from web3.utils.address import get_create_address
 from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.errors import SimulationError, decode_custom_error
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
+
+#: ``n`` (the sent block's index in the run) -> account overrides for it.
+StateOverrideProvider = Callable[[int], Mapping[str, Mapping[str, Any]]]
 
 DEFAULT_BLOCK_TIME_INCREMENT = 12
 
@@ -40,6 +43,7 @@ class _Block:
     calls: list[_Call] = field(default_factory=list)
     block_overrides: dict[str, Any] = field(default_factory=dict)
     state_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    override_provider: StateOverrideProvider | None = None
 
 
 @dataclass(slots=True)
@@ -241,6 +245,20 @@ class VaultSimulator:
         self._current.state_overrides[checksum_address] = _compose_account_overrides(
             current, overrides
         )
+        return self
+
+    def with_state_override_provider(
+        self, provider: StateOverrideProvider
+    ) -> VaultSimulator:
+        """Derive state overrides per sent block from this block on.
+
+        ``provider(n)`` returns account overrides for the ``n``-th block that
+        carries calls (0 for the first in the run), merged under the block's
+        own overrides. A later provider replaces an earlier one and ``n`` keeps
+        counting across the swap. For state that must evolve with the simulated
+        chain, such as a modelled precompile answering per block.
+        """
+        self._current.override_provider = provider
         return self
 
     def with_erc20_balance(
@@ -446,7 +464,10 @@ class VaultSimulator:
         state_overrides: dict[str, dict[str, Any]] = {}
         modeled_time = self._baseline()
         previous_sent_time = modeled_time
+        provider: StateOverrideProvider | None = None
+        sent_blocks = 0
         for block in self._blocks:
+            provider = block.override_provider or provider
             block_overrides = {**block_overrides, **block.block_overrides}
             for address, fields in block.state_overrides.items():
                 state_overrides[address] = _compose_account_overrides(
@@ -454,6 +475,8 @@ class VaultSimulator:
                 )
             if not block.calls:
                 continue
+            _apply_override_provider(state_overrides, provider, sent_blocks)
+            sent_blocks += 1
             if "time" in block_overrides:
                 modeled_time = int(block_overrides["time"], 16)
             else:
@@ -582,6 +605,20 @@ class VaultSimulator:
             observations=observations,
             calls=parsed,
             failed_calls=failed_calls,
+        )
+
+
+def _apply_override_provider(
+    overrides: dict[str, dict[str, Any]],
+    provider: StateOverrideProvider | None,
+    sent_block: int,
+) -> None:
+    """Merge the provider's overrides for this sent block under the block's own."""
+    if provider is None:
+        return
+    for address, fields in provider(sent_block).items():
+        overrides[address] = _compose_account_overrides(
+            dict(fields), overrides.get(address, {})
         )
 
 

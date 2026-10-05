@@ -28,7 +28,7 @@ def test_unsupported_unknown_chain_plain_id():
 def test_message_lists_supported_chains():
     with pytest.raises(
         UnsupportedChainError,
-        match=r"ethereum \(1\), base \(8453\), arbitrum \(42161\)",
+        match=r"ethereum \(1\), hyperevm \(999\), base \(8453\), arbitrum \(42161\)",
     ):
         ensure_supported_chain(9745)
 
