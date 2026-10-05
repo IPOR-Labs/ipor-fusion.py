@@ -16,7 +16,8 @@ executor, each with a dispatcher at the same address on every spoke, and every
 fuse was built with the keccak-derived POC market id. ``CANARY`` is the live
 Arbitrum -> HyperEVM USDC canary (pilot-v2 CCIP factory pair, market 54) that
 the canary runner drove end to end on 2026-10-02, pinned just after its last
-transaction with every bucket at zero. Adding a chain is one ``Chain`` entry
+transaction with every bucket at zero; ``CANARY_V3`` is the same run on the v3
+factory pair later that day. Adding a chain is one ``Chain`` entry
 plus a ``web3_<name>`` fixture in ``conftest.py``.
 
 Block pinning: pin every chain of a deployment within a couple of minutes of
@@ -436,6 +437,43 @@ CANARY = Deployment(
     ),
     ccip_debits_sent_amount=True,
     attestation_zero_dust_sd=10_000,
+)
+
+# The same canary repeated on the v3 factory pair (route message gas 2 M, the
+# dispatcher deployment ticket 6 M), state ``state-usdc-v3.json``: pinned after
+# its claim at Arbitrum 510974745, five seconds after the HyperEVM pin. Fresh
+# vaults, fuses and executor; the attesters and the canary EOA are the same.
+CANARY_V3_ARBITRUM = replace(CHAINS["arbitrum"], block=510_974_745)
+CANARY_V3_HYPEREVM = replace(CHAINS["hyperevm"], block=47_463_297, pending=None)
+
+CANARY_V3 = replace(
+    CANARY,
+    hub=CANARY_V3_ARBITRUM,
+    vault=Web3.to_checksum_address("0x8BeED16DB1f354B0BFa31eF7e747102e26eb8FbF"),
+    transports={
+        CrosschainTransportKind.CHAINLINK_CCIP: TransportDeployment(
+            executor=Web3.to_checksum_address(
+                "0xcb83A78BD8e8c284d5704B62945EF2C454266dB0"
+            ),
+            factory=Web3.to_checksum_address(
+                "0x048A95955De3A5d837FE2861a34A9c2DDcb964CD"
+            ),
+            supply_fuse=Web3.to_checksum_address(
+                "0xEF726AB71dD2642fdB055afdE56D5C0Cf895E9C3"
+            ),
+            command_fuse=Web3.to_checksum_address(
+                "0x5BAF2726249F864f1b68d1bD78a2B9DB8b1f6669"
+            ),
+        ),
+    },
+    claim_fuse=Web3.to_checksum_address("0x685e628DE1D1E3794c5f72bAbF2eb9341E269acD"),
+    spokes=(
+        Spoke(
+            CANARY_V3_HYPEREVM,
+            Web3.to_checksum_address("0xA342eBA00bD725799828A34EA55D25a55958f643"),
+            transports=frozenset({CrosschainTransportKind.CHAINLINK_CCIP}),
+        ),
+    ),
 )
 
 # Kept for the offline transport tests and as the single POC executor address.

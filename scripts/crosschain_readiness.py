@@ -8,7 +8,9 @@ signed, sent or simulated. The report separates what Chainlink controls
 controls (``factories_ready``: the USDC asset and route configuration of the
 crosschain factories), and lists per-chain re-pin candidates only when both
 real token lanes serve the pair. Block heights of different chains are never
-compared.
+compared. ``hyperevm_delivery`` says which deliveries into HyperEVM still need
+manual execution, from the hub route's gas limits and the big-block status of
+the Chainlink executors observed delivering into HyperEVM.
 
 Provider URLs come from ``ARBITRUM_PROVIDER_URL`` and ``HYPEREVM_PROVIDER_URL``
 (environment or ``.env``) and are never printed; errors are reported by stage
@@ -41,10 +43,10 @@ from web3.types import RPCEndpoint
 
 from ipor_fusion import ERC20, Web3Context, ccip_token_lane
 from ipor_fusion.core.contract import Call
-from ipor_fusion.crosschain import CcipCrosschainFactory
+from ipor_fusion.crosschain import CcipCrosschainFactory, CcipOffRamp, CcipRouter
 from ipor_fusion.types import ChainId
 
-SCHEMA = "ipor-fusion.crosschain-readiness/2"
+SCHEMA = "ipor-fusion.crosschain-readiness/4"
 EXIT_OK = 0
 EXIT_CONFIG = 2
 EXIT_INCOMPLETE = 3
@@ -65,30 +67,58 @@ EXPECTED_FACTORY_INTERFACE_VERSION = 1
 #: HyperEVM's small blocks; Chainlink's executors on this lane send into them
 #: (`eth_usingBigBlocks` false, observed 2026-10-02), so a delivery whose gas
 #: limit exceeds this is never executed by them and needs manual execution
-#: (`OffRamp.execute` from an address on big blocks). The route's message gas
-#: limit applies to every non-token message: commands, recall requests and
-#: deployment tickets alike.
+#: (`OffRamp.execute` from an address on big blocks). Commands and recall
+#: requests carry the route's message gas limit; a dispatcher deployment ticket
+#: carries the factory's dispatcher deployment gas limit for the peer, or the
+#: message gas limit when that is unset (0).
 HYPEREVM_SMALL_BLOCK_GAS_LIMIT = 3_000_000
-#: Receiver-side gas of a dispatcher creation on HyperEVM (v2 simulation,
-#: 2026-10-02); a message gas limit below this leaves tickets to manual
-#: execution with a higher `gasLimitOverride` whatever the executor does.
+#: Receiver-side gas of a dispatcher creation on HyperEVM (simulation and the
+#: live tickets, 2026-10-02); a ticket limit below this fails on delivery
+#: whoever executes it, so it needs manual execution with a higher
+#: `gasLimitOverride`.
 DISPATCHER_DEPLOYMENT_GAS = 5_700_000
 
-#: The pilot-v2 CCIP crosschain factory (contracts source ``810e260`` plus the
-#: three 5-minute patches), at one CREATE3 address on both chains. The first
-#: pilot pair (``0x3a745…``) keeps the old recall accounting and is retired
+#: Window of HyperEVM blocks (~1 s each, so about two weeks) scanned for
+#: executions of the OffRamp from the hub; long enough to see the lane's whole
+#: executor rotation, so an executor still on small blocks is not missed.
+EXECUTOR_WINDOW_BLOCKS = 1_200_000
+#: ``eth_getLogs`` span per request inside that window.
+LOG_CHUNK_BLOCKS = 200_000
+#: Fewer Chainlink executions than this in the window: too few to claim every
+#: executor was seen, so the executors section is incomplete and deliveries
+#: stay manual.
+MIN_OBSERVED_EXECUTIONS = 20
+#: OffRamp 2.0 emits this once per execution attempt. The OffRamp serves every
+#: source chain and one executor pool delivers all of them, so executions from
+#: any source count. `SourceChainConfigSet` and other admin logs from the same
+#: address are not executions and their senders are not executors.
+EXECUTION_STATE_CHANGED = keccak(
+    text="ExecutionStateChanged(uint64,uint64,bytes32,uint8,bytes)"
+)
+SUPPORTED_OFF_RAMP_PREFIX = "OffRamp 2."
+
+#: The v3 CCIP crosschain factory, at one CREATE3 address on both chains: the
+#: v2 source plus a per-peer dispatcher deployment gas limit, so commands run
+#: at a route gas limit that fits HyperEVM's small blocks while the deployment
+#: ticket keeps the gas a dispatcher creation needs. Older pairs are retired
 #: from this probe.
-FACTORY = Web3.to_checksum_address("0x3BB74623A229Ff463bDe6B5b267B7c8d9086fd4b")
-#: keccak of the creation codes the pilot-v2 factories store; a different value
+FACTORY = Web3.to_checksum_address("0x048A95955De3A5d837FE2861a34A9c2DDcb964CD")
+#: keccak of the creation codes the v3 factories store; a different value
 #: means another build at this address.
 EXPECTED_CREATION_CODE_HASHES = {
-    "executor": "0x11e28748e1cda094e2b80620b85bfb01e008172a69f2592be72493caad285cd1",
-    "dispatcher": "0xcc2edfa5791f504e730114ed80fcd535a927e5e11e53045a2584bb1e161d5e03",
+    "executor": "0xa97dc5b70d6d455a09693a0f8da6c5b684e616ef2a4edd24f5fb3d69be3cf865",
+    "dispatcher": "0x5adc3c16319f2863f9f2cc16b699eda0b4770c433e59396c4cd89b211b9f79a3",
 }
 #: The canary's creator EOA: `createExecutor` sender on the hub, so it must be
 #: an allowed creator, hold native gas, and sit on HyperEVM big blocks (its
 #: vault clone there needs ~9 M gas).
 CREATOR = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+#: Senders known to execute manually (``OffRamp.execute`` is permissionless):
+#: reported apart, never counted as Chainlink executors. Any other manual
+#: executor counts as one. It cannot make ``all_on_big_blocks`` true while a
+#: Chainlink executor is still on small blocks, but its executions do count
+#: towards ``MIN_OBSERVED_EXECUTIONS``.
+NON_CHAINLINK_EXECUTORS = {CREATOR: "IPOR canary EOA (manual executions)"}
 
 
 @dataclass(frozen=True)
@@ -240,12 +270,125 @@ def _using_big_blocks(ctx: Web3Context, address: ChecksumAddress) -> bool:
     return bool(response["result"])
 
 
+def _off_ramp_from(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> Any:
+    """The CCIP 2.0 OffRamp delivering ``peer``'s messages on ``spec``."""
+    candidates = [
+        ramp
+        for selector, ramp in CcipRouter(ctx, spec.router).get_off_ramps().call()
+        if selector == peer.chain_selector
+    ]
+    current = [
+        ramp
+        for ramp in candidates
+        if CcipOffRamp(ctx, ramp)
+        .type_and_version()
+        .call()
+        .startswith(SUPPORTED_OFF_RAMP_PREFIX)
+    ]
+    if len(current) != 1:
+        raise ValueError(f"expected one OffRamp 2.x from {peer.name}, got {current}")
+    return current[0]
+
+
+def _execution_logs(
+    ctx: Web3Context, off_ramp: ChecksumAddress, start: int
+) -> list[Any]:
+    logs: list[Any] = []
+    for first in range(start, ctx.default_block + 1, LOG_CHUNK_BLOCKS):
+        last = min(first + LOG_CHUNK_BLOCKS - 1, ctx.default_block)
+        logs += ctx.web3.eth.get_logs(
+            {
+                "address": off_ramp,
+                "fromBlock": first,
+                "toBlock": last,
+                "topics": ["0x" + EXECUTION_STATE_CHANGED.hex()],
+            }
+        )
+    return logs
+
+
+def _executions_by_sender(
+    ctx: Web3Context, logs: list[Any]
+) -> dict[ChecksumAddress, dict[str, int]]:
+    """Per transaction sender: execution transactions and how many of them
+    landed in a big block. One block read (with transactions) per block."""
+    by_block: dict[int, set[bytes]] = {}
+    for log in logs:
+        by_block.setdefault(int(log["blockNumber"]), set()).add(
+            bytes(log["transactionHash"])
+        )
+    senders: dict[ChecksumAddress, dict[str, int]] = {}
+    for number, hashes in sorted(by_block.items()):
+        block = ctx.web3.eth.get_block(number, full_transactions=True)
+        big = int(block["gasLimit"]) > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
+        for tx in block["transactions"]:
+            if bytes(tx["hash"]) not in hashes:
+                continue
+            row = senders.setdefault(
+                Web3.to_checksum_address(tx["from"]),
+                {"executions": 0, "executions_in_big_blocks": 0},
+            )
+            row["executions"] += 1
+            row["executions_in_big_blocks"] += int(big)
+    return senders
+
+
+def _read_chainlink_executors(
+    ctx: Web3Context, spec: ChainSpec, peer: ChainSpec
+) -> dict[str, Any]:
+    """Who executed deliveries on ``spec``'s OffRamp for ``peer`` over the
+    window (from every source chain: one executor pool serves them all), and
+    whether each of them sends into big blocks now.
+
+    The set is derived on every run (operators rotate executor addresses).
+    ``eth_usingBigBlocks`` takes no block argument, so the flags are the
+    latest state, not the pinned block's.
+    """
+    off_ramp = _off_ramp_from(ctx, spec, peer)
+    start = max(0, ctx.default_block - EXECUTOR_WINDOW_BLOCKS + 1)
+    observed = _executions_by_sender(ctx, _execution_logs(ctx, off_ramp, start))
+    executors, excluded = [], []
+    for address, row in sorted(observed.items()):
+        if address in NON_CHAINLINK_EXECUTORS:
+            excluded.append(
+                {"address": address, "reason": NON_CHAINLINK_EXECUTORS[address], **row}
+            )
+            continue
+        executors.append(
+            {
+                "address": address,
+                **row,
+                "using_big_blocks": _using_big_blocks(ctx, address),
+            }
+        )
+    executions = sum(e["executions"] for e in executors)
+    opted_in = sum(e["using_big_blocks"] for e in executors)
+    complete = executions >= MIN_OBSERVED_EXECUTIONS
+    return {
+        "off_ramp": off_ramp,
+        "window": {"from_block": start, "to_block": ctx.default_block},
+        "executions_observed": executions,
+        "min_executions": MIN_OBSERVED_EXECUTIONS,
+        "complete": complete,
+        "executors": executors,
+        "excluded": excluded,
+        "opted_in": opted_in,
+        "total": len(executors),
+        "all_on_big_blocks": complete and opted_in == len(executors) > 0,
+        "big_block_flags_read_at": "latest",
+    }
+
+
 def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[str, Any]:
     """The factory's USDC asset, its route to ``peer``, the creation gates and
     the canary creator's standing, each read once; ``gates`` holds every
     boolean ``ready`` is made of."""
     factory = CcipCrosschainFactory(ctx, FACTORY)
     route = factory.ccip_route(peer.chain_id).call()
+    configured_deployment_gas = int(
+        factory.dispatcher_deployment_gas_limit(peer.chain_id).call()
+    )
+    deployment_gas = configured_deployment_gas or route.message_gas_limit
     token, shared_decimals, enabled = factory.asset_config(USDC_ASSET_ID).call()
     testtr_token, testtr_decimals, testtr_enabled = factory.asset_config(
         TESTTR_ASSET_ID
@@ -332,20 +475,8 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
             "max_fee": route.max_fee,
             "selector_maps_to_peer": peer_chain_id == int(peer.chain_id),
             "ready": route_ready,
-            # The small-block constraint is on deliveries INTO HyperEVM: this
-            # route's messages are executed on the peer, so it binds the hub
-            # factory's route to the spoke, not the spoke's route back.
-            "manual_execution_required": (
-                peer is SPOKE
-                and route.message_gas_limit > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
-            ),
-            "dispatcher_deployment_manual": (
-                peer is SPOKE
-                and (
-                    route.message_gas_limit > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
-                    or route.message_gas_limit < DISPATCHER_DEPLOYMENT_GAS
-                )
-            ),
+            "dispatcher_deployment_gas_limit": int(configured_deployment_gas),
+            "effective_dispatcher_deployment_gas_limit": int(deployment_gas),
         },
         "gates": gates,
         "ready": all(gates.values()),
@@ -423,15 +554,22 @@ def _read_sections(
             snapshot[name] = read()
         except Exception as exc:  # noqa: BLE001 - reported by class name only
             snapshot["errors"].append({"stage": name, "type": type(exc).__name__})
-    # The TESTTR lane is reported, never gating: the verdict is about USDC, and
-    # a test token that is disabled or unreadable must not hide a ready pair.
-    try:
-        snapshot["testtr_lane_out"] = _read_lane(ctx, spec, peer, spec.testtr)
-    except Exception as exc:  # noqa: BLE001 - reported by class name only
-        snapshot["testtr_lane_out"] = {
-            "error": type(exc).__name__,
-            "informational": True,
-        }
+    # The TESTTR lane and the executors are reported, never gating: the
+    # verdict is about USDC, and an unreadable informational section must not
+    # hide a ready pair. An unreadable executors section keeps deliveries
+    # into HyperEVM manual (`hyperevm_delivery`).
+    informational: list[tuple[str, Callable[[], Any]]] = [
+        ("testtr_lane_out", lambda: _read_lane(ctx, spec, peer, spec.testtr)),
+    ]
+    if spec is SPOKE:
+        informational.append(
+            ("chainlink_executors", lambda: _read_chainlink_executors(ctx, spec, peer))
+        )
+    for name, read in informational:
+        try:
+            snapshot[name] = read()
+        except Exception as exc:  # noqa: BLE001 - reported by class name only
+            snapshot[name] = {"error": type(exc).__name__, "informational": True}
 
 
 def _confirm_block(ctx: Web3Context, snapshot: dict[str, Any]) -> None:
@@ -484,8 +622,43 @@ def build_report(hub: dict[str, Any], spoke: dict[str, Any]) -> dict[str, Any]:
         "observed_blocks": {s["role"]: s.get("block") for s in chains},
         "repin_candidates": candidates,
         "repin_status": repin_status,
+        "hyperevm_delivery": hyperevm_delivery(hub, spoke),
         "simulation_governance": SIMULATION_GOVERNANCE,
     }
+
+
+def hyperevm_delivery(hub: dict[str, Any], spoke: dict[str, Any]) -> dict[str, Any]:
+    """Which deliveries from the hub into HyperEVM need manual execution.
+
+    Commands and recall requests carry the hub route's message gas limit, the
+    dispatcher deployment ticket the effective deployment gas limit. Above
+    HyperEVM's small-block limit a delivery is executed by Chainlink only if
+    every observed executor sends into big blocks (the round robin can pick
+    any of them); below a dispatcher creation's gas the ticket fails whoever
+    executes it. Unknown executor state counts as small blocks.
+    """
+    route = hub.get("factory", {}).get("route_to_peer")
+    executors = spoke.get("chainlink_executors", {})
+    all_on = bool(executors.get("all_on_big_blocks"))
+    verdict: dict[str, Any] = {
+        "executors_on_big_blocks": all_on,
+        "executors_opted_in": executors.get("opted_in"),
+        "executors_total": executors.get("total"),
+        "executors_complete": executors.get("complete", False),
+        "manual_execution_required": None,
+        "dispatcher_deployment_manual": None,
+    }
+    if route is None:
+        return verdict
+    commands = route["message_gas_limit"]
+    ticket = route["effective_dispatcher_deployment_gas_limit"]
+    verdict["manual_execution_required"] = (
+        commands > HYPEREVM_SMALL_BLOCK_GAS_LIMIT and not all_on
+    )
+    verdict["dispatcher_deployment_manual"] = ticket < DISPATCHER_DEPLOYMENT_GAS or (
+        ticket > HYPEREVM_SMALL_BLOCK_GAS_LIMIT and not all_on
+    )
+    return verdict
 
 
 def _now() -> str:
@@ -604,6 +777,7 @@ def config_error_report(message: str) -> dict[str, Any]:
         "observed_blocks": {},
         "repin_candidates": None,
         "repin_status": "not eligible: no observation",
+        "hyperevm_delivery": hyperevm_delivery({}, {}),
         "error": {"type": ReadinessConfigError.__name__, "message": message},
         "simulation_governance": SIMULATION_GOVERNANCE,
     }
@@ -643,6 +817,15 @@ def _summary(report: dict[str, Any]) -> str:
         if block:
             lines.append(f"{name}: block {block['number']} ts {block['timestamp']}")
     lines.append(f"repin: {report['repin_status']}")
+    delivery = report.get("hyperevm_delivery")
+    if delivery:
+        lines.append(
+            "hyperevm executors on big blocks: "
+            f"{delivery['executors_opted_in']}/{delivery['executors_total']}"
+            f" (complete={delivery['executors_complete']}); manual: commands="
+            f"{delivery['manual_execution_required']} ticket="
+            f"{delivery['dispatcher_deployment_manual']}"
+        )
     lines.extend(f"blocked_by: {reason}" for reason in report["blocked_by"])
     return "\n".join(lines)
 

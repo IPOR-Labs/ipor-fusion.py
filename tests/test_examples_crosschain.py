@@ -3,7 +3,7 @@
 They run without a provider: importing the module proves import has no chain
 side effects, the pure builders are decoded back, the fail-loud helpers are
 pinned on both branches, and every hard-coded address is held to the canary
-fixture the SDK's own crosschain tests drive (``tests/_crosschain.py``). The
+v3 fixture the SDK's own crosschain tests drive (``tests/_crosschain.py``). The
 simulation itself is covered by ``test_simulate_examples_crosschain.py``.
 """
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 from types import ModuleType
 
 import pytest
-from _crosschain import CANARY
+from _crosschain import CANARY_V3
 from eth_abi.abi import decode
 from test_examples_vaults import Loader, _simulated_call, _simulation_result
 
@@ -21,8 +21,8 @@ from ipor_fusion.crosschain.transport import CrosschainTransportKind
 from ipor_fusion.types import Amount, Shares
 
 MODULE = "crosschain_ccip_usdc_arbitrum_hyperevm.py"
-CANARY_CCIP = CANARY.transports[CrosschainTransportKind.CHAINLINK_CCIP]
-CANARY_SPOKE = CANARY.spokes[0]
+CANARY_CCIP = CANARY_V3.transports[CrosschainTransportKind.CHAINLINK_CCIP]
+CANARY_SPOKE = CANARY_V3.spokes[0]
 
 
 class TestCrosschainCcipUsdcArbitrumHyperevm:
@@ -106,14 +106,14 @@ class TestCrosschainCcipUsdcArbitrumHyperevm:
     def test_addresses_match_the_canary_fixture(self) -> None:
         # The example and the SDK's crosschain tests drive the same live
         # deployment; one drifting from the other fails here, offline.
-        hub, spoke = CANARY.hub, CANARY_SPOKE.chain
+        hub, spoke = CANARY_V3.hub, CANARY_SPOKE.chain
         expected = {
-            "HUB_VAULT": CANARY.vault,
+            "HUB_VAULT": CANARY_V3.vault,
             "EXECUTOR": CANARY_CCIP.executor,
             "SPOKE_VAULT": CANARY_SPOKE.remote_vault,
-            "ALPHA": CANARY.owner,
-            "BALANCE_PROPOSER": CANARY.balance_proposer,
-            "BALANCE_APPROVER": CANARY.balance_approver,
+            "ALPHA": CANARY_V3.owner,
+            "BALANCE_PROPOSER": CANARY_V3.balance_proposer,
+            "BALANCE_APPROVER": CANARY_V3.balance_approver,
             "ARBITRUM_USDC": hub.usdc,
             "HYPEREVM_USDC": spoke.usdc,
             "ARBITRUM_CCIP_ROUTER": hub.ccip_router,
@@ -124,7 +124,7 @@ class TestCrosschainCcipUsdcArbitrumHyperevm:
             "HYPEREVM_CHAIN_ID": spoke.chain_id,
             "ARBITRUM_PINNED_BLOCK": hub.block,
             "HYPEREVM_PINNED_BLOCK": spoke.block,
-            "CROSSCHAIN_MARKET": CANARY.market_id,
+            "CROSSCHAIN_MARKET": CANARY_V3.market_id,
         }
         for name, value in expected.items():
             assert getattr(self.mod, name) == value, name

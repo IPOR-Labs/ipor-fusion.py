@@ -1,33 +1,36 @@
-"""The live Arbitrum -> HyperEVM USDC canary as a regression fixture.
+"""The live Arbitrum -> HyperEVM USDC canaries as regression fixtures.
 
-``CANARY`` (``_crosschain.py``) is the deployment the canary runner drove end
-to end on 2026-10-02: the pilot-v2 CCIP factory pair, one executor with its
-dispatcher at the same address on HyperEVM, a 1 USDC round trip credited in
-full both ways. Pinned right after its last transaction, with every bucket at
+``CANARY`` and ``CANARY_V3`` (``_crosschain.py``) are the deployments the
+canary runner drove end to end on 2026-10-02, on the pilot-v2 and the v3 CCIP
+factory pair: one executor with its dispatcher at the same address on
+HyperEVM, a 1 USDC round trip credited in full both ways. Pinned right after its last transaction, with every bucket at
 zero, it is driven through the same ``prepare_deployed_run`` / ``run_lifecycle``
 path as the Ethereum POC, then held to the gates the live run ended on and to
-the gas limits of the routes its messages travel. Live, every non-token hub ->
-HyperEVM delivery needed a manual ``OffRamp.execute`` (Chainlink's executors
-there submit in 3 M small blocks); the relay delivers directly, so that
-constraint is the readiness probe's, not this test's.
+the gas limits of the routes its messages travel. Live on v2, every non-token
+hub -> HyperEVM delivery needed a manual ``OffRamp.execute`` (Chainlink's
+executors there submit in 3 M small blocks, the v2 route stamps 6 M); on v3
+(2 M) they executed automatically. The relay delivers directly, so that
+constraint is the readiness probe's; this test holds every delivery to the
+route limit it was sent with.
 """
 
 from __future__ import annotations
 
 import pytest
-from _crosschain import CANARY, Deployment, Spoke
+from _crosschain import CANARY, CANARY_V3, Deployment, Spoke
 from _crosschain_lifecycle import Run, prepare_deployed_run, run_lifecycle
 
 from ipor_fusion import CcipLane
 
 CANARY_LIFECYCLES = [
     pytest.param(
-        CANARY,
+        canary,
         spoke,
         transport_kind,
-        id=f"ccip-{CANARY.hub.name}-to-{spoke.name}",
+        id=f"{factory}-ccip-{canary.hub.name}-to-{spoke.name}",
     )
-    for spoke in CANARY.spokes
+    for factory, canary in (("v2", CANARY), ("v3", CANARY_V3))
+    for spoke in canary.spokes
     for transport_kind in spoke.transport_kinds
 ]
 

@@ -39,6 +39,19 @@ class CcipRouter(ContractWrapper):
             decoder=_address,
         )
 
+    def get_off_ramps(self) -> Call[list[tuple[int, ChecksumAddress]]]:
+        """Every ``(source chain selector, OffRamp)`` the router accepts
+        deliveries from. A source can have several (one per CCIP version
+        still draining); tell them apart with the OffRamp's
+        ``typeAndVersion``."""
+        return self._view(
+            "getOffRamps()",
+            output_types=["(uint64,address)[]"],
+            decoder=lambda ramps: [
+                (int(selector), _address(ramp)) for selector, ramp in ramps
+            ],
+        )
+
 
 class CcipOnRamp(ContractWrapper):
     """The ``OnRamp`` of one lane. ``getStaticConfig()`` on OnRamp 2.0.0 is
