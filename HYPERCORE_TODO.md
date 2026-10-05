@@ -18,7 +18,7 @@ by a test in this repository, not by that run.
 | Fuses run on the live node with the HyperCore precompiles | old vault only, market 54 | `tests/test_hypercore_live.py` is opt-in and checks the historical vault's current state. Independent `eth_call` / `eth_estimateGas` calls carry no earlier EVM state and cannot settle Core actions, so this never proves a step-by-step cycle or a market-55 vault |
 | Sequence simulation (`VaultSimulator`, `eth_simulateV1`) | not possible on this node | the precompiles fail inside `eth_simulateV1`; no historical Core state, so no replay of past transactions either |
 | State reads: pending action and nonce (`HyperCorePendingReader`), the precompiles (`HyperCoreReader`), the NAV identity (`read_hypercore_nav` == `PlasmaVault.balance_fuse_value`) | offline done; market-55 path pending | `tests/test_hypercore_readers.py` offline; the old vault's live identity at block 47453068 is historical evidence only |
-| `vault info` / MCP: market 55 label, decoded substrates with HIP-3 coordinates, NAV legs vs the balance fuse, pending state, perp markets with coin names | done | `hypercore` block (`HyperCoreSection`), `tests/test_cli_hypercore.py`, `tests/test_mcp_hypercore.py`; HyperEVM only, vaults with a market-55 balance fuse |
+| `vault info` / MCP: market 55 label, decoded substrates with HIP-3 coordinates, NAV legs vs the balance fuse, pending state, perp markets with coin names | inner rendering/models done; entrypoints gated | `hypercore` block (`HyperCoreSection`), `tests/test_cli_hypercore.py`, `tests/test_mcp_hypercore.py`; `ensure_supported_chain(999)` still rejects HyperEVM before the normal CLI/MCP path reaches the block |
 | Events: `HyperCoreActionEnqueued`/`Settled`, the fuse events, the settlement fuse's and the reporter's | done | `fuses/hypercore_events.py`; `tests/test_hypercore_events.py` pins the topics to the run's receipts and the per-action receipt shape |
 | Send pipeline (plan with fingerprint, calldata review, throwaway keystore, pinned-nonce send, settle window, `/info` verification) | outside the SDK | the run's tooling; not re-homed here (see "Beyond the SDK") |
 | An end-to-end run executed from this SDK | not done | needs a funded signer and an explicit go; asynchronous Core effects (fills, spot credits) are only visible through Hyperliquid `/info` |
@@ -27,6 +27,10 @@ by a test in this repository, not by that run.
 
 - [ ] **`eth_simulateV1` for market 55.** Re-probe when the node is upgraded
   and record the result here; until then the live test stays `eth_call`-only.
+- [ ] **HyperEVM CLI/MCP support gate.** Run the complete `vault info` and MCP
+  paths against a market-55 vault, then extend `SUPPORTED_CHAIN_IDS` only if
+  the full path succeeds. The current tests cover inner functions and models,
+  not the guarded entrypoints.
 - [ ] **Encoders never exercised on-chain.** `HyperCoreMarginFuse.enter`,
   `HyperCoreBuilderFeeFuse.enter`, `HyperCoreSendFuse.spot_send`,
   `HyperCoreCancelFuse.cancel_by_oid` are verified against the Solidity
