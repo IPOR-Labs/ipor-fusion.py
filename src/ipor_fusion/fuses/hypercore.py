@@ -192,7 +192,10 @@ class HyperCoreDepositFuse(Fuse):
 
     def enter(self, *, token_index: int, amount: Amount) -> FuseAction:
         """Deposit up to ``amount`` (ERC-20 units) of Core token
-        ``token_index``; the fuse caps it at the vault's balance."""
+        ``token_index``; the fuse caps it at the vault's balance. A fresh Core
+        account pays an activation fee from its first deposit, so the Core
+        credit may be smaller. Check ``HyperCoreReader.core_user_exists``
+        before depositing and read the Core balance after pending settles."""
         _validate_uint(token_index, 64, "token_index")
         self._validate_amount(amount, "amount")
         return self._action_raw("enter((uint64,uint256))", [[token_index, amount]])
@@ -237,7 +240,11 @@ class HyperCoreSendFuse(Fuse):
         """Move ``amount_wei`` of ``token_index`` between ``source_dex`` and
         ``destination_dex`` (:data:`SPOT_DEX`, 0 or a configured HIP-3 dex).
         Any leg touching a HIP-3 dex must be a self-send of USDC; the
-        spot -> spot route to :data:`USDC_SYSTEM_ADDRESS` bridges Core -> EVM."""
+        spot -> spot route to :data:`USDC_SYSTEM_ADDRESS` bridges Core -> EVM.
+        That route charges a variable Core fee on top of ``amount_wei``: leave
+        a reserve above the requested amount. An EVM-successful CoreWriter
+        call can still be dropped by Core; check the pending window and the
+        resulting balances with ``read_hypercore_transfer_outcome``."""
         _validate_not_zero_address(destination, "destination")
         _validate_uint(source_dex, 32, "source_dex")
         _validate_uint(destination_dex, 32, "destination_dex")

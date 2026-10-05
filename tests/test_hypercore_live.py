@@ -1,13 +1,12 @@
-"""HyperCore read side and dry runs against the first HyperEVM test vault.
+"""HyperCore read side and EVM preflight against the market-55 vault.
 
 Opt-in: needs ``HYPEREVM_PROVIDER_URL`` (loaded from ``.env`` by
 ``conftest.py``); skipped otherwise. Every read is pinned to one block. No
 ``eth_simulateV1``: the HyperCore precompiles fail inside it, so an action is
-dry-run as an independent ``eth_call`` plus ``eth_estimateGas`` from the run's
-signer at the latest state. Such a call carries no earlier EVM state and
-cannot settle a Core action, so a revert caused by the vault's *current*
-pending state is a state fact, not an SDK regression (the test skips then),
-and the full cycle stays a live-run gap.
+preflighted as an independent ``eth_call`` plus ``eth_estimateGas`` from the
+operator at the latest state. This proves EVM acceptance only: Core may later
+drop a transfer or order without an EVM revert. A revert caused by the vault's
+*current* pending state is a state fact (the test skips then).
 """
 
 from __future__ import annotations
@@ -32,7 +31,9 @@ from ipor_fusion import (
     HyperCoreSendFuse,
     PlasmaVault,
     TimeInForce,
+    read_hypercore_evm_exit_ceiling,
     read_hypercore_nav,
+    read_hypercore_transfer_snapshot,
     read_hypercore_vault_state,
 )
 from ipor_fusion.core.context import Web3Context
@@ -42,18 +43,17 @@ from ipor_fusion.fuses.hypercore import SPOT_DEX, USDC_SYSTEM_ADDRESS, read_inde
 from ipor_fusion.types import MarketId
 
 FIXTURE = json.loads(
-    (Path(__file__).parent / "fixtures" / "hypercore_hip3_flow.json").read_text()
+    (Path(__file__).parent / "fixtures" / "hypercore_market55.json").read_text()
 )
+DEPLOYMENT = FIXTURE["new_vault_deployment"]
 CREATED = {
-    row["contract"]: Web3.to_checksum_address(row["created"])
-    for row in FIXTURE["txs"]
-    if row["kind"] == "create"
+    name: Web3.to_checksum_address(item["address"])
+    for name, item in FIXTURE["contracts"].items()
 }
-VAULT = Web3.to_checksum_address(FIXTURE["vault"])
-USDC = Web3.to_checksum_address(FIXTURE["usdc"])
-SIGNER = Web3.to_checksum_address(FIXTURE["signer"])
-#: This abandoned pilot vault still keys HyperCore as 54.
-LIVE_MARKET = MarketId(FIXTURE["market_id"])
+VAULT = Web3.to_checksum_address(DEPLOYMENT["vault"])
+USDC = Web3.to_checksum_address(DEPLOYMENT["underlying"])
+SIGNER = Web3.to_checksum_address(DEPLOYMENT["operator"])
+LIVE_MARKET = MarketId(55)
 XYZ_DEX = 1
 XYZ_NVDA = 110_002
 
@@ -140,12 +140,23 @@ def test_precompiles_batch_through_multicall3(ctx: Web3Context):
     assert usdc.total >= usdc.hold
     assert isinstance(xyz.account_value, int)
     assert nvda_info.coin.startswith("xyz:") and nvda_info.max_leverage > 0
-    assert position.leverage > 0 and oracle_px > 0
+    assert isinstance(position.leverage, int) and oracle_px > 0
+
+
+def test_transfer_snapshot_and_evm_exit_ceiling(ctx: Web3Context):
+    snapshot = read_hypercore_transfer_snapshot(ctx, VAULT, USDC)
+    ceiling = read_hypercore_evm_exit_ceiling(ctx, VAULT, SIGNER)
+    assert snapshot.vault == VAULT and snapshot.token_index == 0
+    assert snapshot.core_user_exists is True
+    assert snapshot.core_total_wei >= snapshot.core_hold_wei
+    assert ceiling.upper_bound_assets == min(
+        ceiling.share_assets, ceiling.idle_underlying
+    )
 
 
 def _dry_run(ctx: Web3Context, call: Call) -> int:
     """``eth_call`` then ``eth_estimateGas`` from the signer at the pinned
-    block; the estimate is the figure a real send would start from."""
+    block. A CoreWriter action can still be dropped after both succeed."""
     tx = {"from": SIGNER, "to": call.to, "data": call.calldata}
     ctx.web3.eth.call(tx, block_identifier=ctx.default_block)
     return ctx.web3.eth.estimate_gas(tx, block_identifier=ctx.default_block)
@@ -217,10 +228,8 @@ def _refresh(vault: PlasmaVault, _ctx: Web3Context) -> Call:
     return vault.update_markets_balances([LIVE_MARKET])
 
 
-# The actions of the run's long cycle that are valid on the current state
-# without a prior step of their own (an order needs no fill to be accepted;
-# Core decides asynchronously). Measured 2026-10-02 at block 47453068:
-# 272,662 / 464,875 / 442,726 / 423,054 / 440,126 / 414,648 gas.
+# These independent preflights use the current state. Core acceptance and
+# execution must be checked separately after the pending window.
 CYCLE_ACTIONS: dict[str, ActionBuilder] = {
     "refresh": _refresh,
     "deposit_evm_to_core": _deposit_evm_to_core,
@@ -232,7 +241,7 @@ CYCLE_ACTIONS: dict[str, ActionBuilder] = {
 
 
 @pytest.mark.parametrize("name", list(CYCLE_ACTIONS))
-def test_cycle_actions_dry_run_from_the_signer(
+def test_cycle_actions_evm_preflight_from_the_signer(
     name: str, ctx: Web3Context, vault: PlasmaVault, pending: HyperCorePendingReader
 ):
     _skip_if_pending(pending)

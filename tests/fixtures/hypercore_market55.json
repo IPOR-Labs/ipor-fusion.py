@@ -4,10 +4,18 @@
   "deployer": "0x3F48E1FfC0Ea0b1f908770Ec3372eA0F50dA2af2",
   "bound_vault": "0x41C46C328036FA7865d5CB15d531D7C5120f05C8",
   "new_vault_deployment": {
-    "vault": null,
-    "settlement_reporter": null,
-    "settlement_fuse": null,
-    "pending_action_hook": null
+    "vault": "0xB8De01Ca5ca57A14671E1c696337134a02B4A478",
+    "settlement_reporter": "0xF0876b4b3C47cF0a203629CE351E457B14Ede6f9",
+    "settlement_fuse": "0x022ccf6Ec6BE25313f0E095B5a39c2f608a46199",
+    "pending_action_hook": "0xbc0d844B6BA2F72C995Bce79e811b979d9f8Cdff",
+    "operator": "0x533ac556E288625B267bD71B7928E0a8B46DcE82",
+    "underlying": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+    "snapshot_block": 47735769,
+    "creation_txs": {
+      "vault": "0x4c9feb99afa9c138dd2eca5fd5a4046b8f0789de6b03c2262c7704bd23491ff7",
+      "settlement_reporter": "0x4cea49d8243ff6de1950afd1ceadf1a6bfeeec965dd74c00c3ca7684cfbebb64",
+      "pending_action_hook": "0x26b07cd7247059fd103bd0c5c41f93d7fc78a894c2db48d4d0b30d1e9ba8ffcf"
+    }
   },
   "contracts": {
     "HyperCoreDepositFuse": {

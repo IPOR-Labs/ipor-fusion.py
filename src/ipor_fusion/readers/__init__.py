@@ -25,6 +25,16 @@ from ipor_fusion.readers.hypercore import (
     read_hypercore_nav,
     read_hypercore_vault_state,
 )
+from ipor_fusion.readers.hypercore_outcome import (
+    HyperCoreEvmExitCeiling,
+    HyperCoreTransferOutcome,
+    HyperCoreTransferSnapshot,
+    HyperCoreTransferStatus,
+    compare_hypercore_transfer,
+    read_hypercore_evm_exit_ceiling,
+    read_hypercore_transfer_outcome,
+    read_hypercore_transfer_snapshot,
+)
 from ipor_fusion.readers.lending_health import (
     LendingMarketHealth,
     VaultLendingHealth,
@@ -74,6 +84,14 @@ __all__ = [
     "HyperCorePerpMarket",
     "HyperCoreTokenInfo",
     "HyperCoreVaultState",
+    "HyperCoreEvmExitCeiling",
+    "HyperCoreTransferOutcome",
+    "HyperCoreTransferSnapshot",
+    "HyperCoreTransferStatus",
+    "compare_hypercore_transfer",
+    "read_hypercore_evm_exit_ceiling",
+    "read_hypercore_transfer_outcome",
+    "read_hypercore_transfer_snapshot",
     "convert_to_wad_int",
     "read_hypercore_nav",
     "read_hypercore_vault_state",

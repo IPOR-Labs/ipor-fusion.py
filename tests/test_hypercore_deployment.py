@@ -7,7 +7,10 @@ from pathlib import Path
 import pytest
 from web3 import Web3
 
+from ipor_fusion import HyperCoreSubstrates, PlasmaVault
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.readers.hypercore import HYPERCORE_PENDING_READERS
+from ipor_fusion.types import MarketId
 
 FIXTURE = json.loads(
     (Path(__file__).parent / "fixtures" / "hypercore_market55.json").read_text()
@@ -20,10 +23,10 @@ def test_default_pending_reader_matches_broadcast() -> None:
     assert HYPERCORE_PENDING_READERS[FIXTURE["chain_id"]] == expected
 
 
-def _read_address(web3: Web3, target: str, signature: str) -> str:
+def _read_address(web3: Web3, target: str, signature: str, block: int) -> str:
     result = web3.eth.call(
         {"to": target, "data": Web3.keccak(text=signature)[:4]},
-        block_identifier=FIXTURE["snapshot_block"],
+        block_identifier=block,
     )
     return Web3.to_checksum_address(result[-20:])
 
@@ -85,10 +88,68 @@ def test_market55_vault_bound_contracts(hyper_web3: Web3) -> None:
     reporter = contracts["HyperCoreSettlementReporter"]["address"]
     settlement_fuse = contracts["HyperCoreSettlementFuse"]["address"]
     pending_hook = contracts["HyperCorePendingActionPreHook"]["address"]
-    assert _read_address(hyper_web3, reporter, "vault()") == FIXTURE["bound_vault"]
-    assert _read_address(hyper_web3, reporter, "settlementFuse()") == settlement_fuse
+    block = FIXTURE["snapshot_block"]
     assert (
-        _read_address(hyper_web3, settlement_fuse, "VAULT()") == FIXTURE["bound_vault"]
+        _read_address(hyper_web3, reporter, "vault()", block) == FIXTURE["bound_vault"]
     )
-    assert _read_address(hyper_web3, settlement_fuse, "REPORTER()") == reporter
-    assert _read_address(hyper_web3, pending_hook, "settlementReporter()") == reporter
+    assert (
+        _read_address(hyper_web3, reporter, "settlementFuse()", block)
+        == settlement_fuse
+    )
+    assert (
+        _read_address(hyper_web3, settlement_fuse, "VAULT()", block)
+        == FIXTURE["bound_vault"]
+    )
+    assert _read_address(hyper_web3, settlement_fuse, "REPORTER()", block) == reporter
+    assert (
+        _read_address(hyper_web3, pending_hook, "settlementReporter()", block)
+        == reporter
+    )
+
+
+def test_new_vault_deployment(hyper_web3: Web3) -> None:
+    deployment = FIXTURE["new_vault_deployment"]
+    block = deployment["snapshot_block"]
+    operator = deployment["operator"]
+    for name in (
+        "vault",
+        "settlement_reporter",
+        "settlement_fuse",
+        "pending_action_hook",
+    ):
+        assert hyper_web3.eth.get_code(deployment[name], block_identifier=block)
+    for name, tx_hash in deployment["creation_txs"].items():
+        tx = hyper_web3.eth.get_transaction(tx_hash)
+        receipt = hyper_web3.eth.get_transaction_receipt(tx_hash)
+        assert tx["from"] == operator
+        assert receipt["status"] == 1
+        assert receipt["blockNumber"] <= block
+        if name != "vault":
+            assert receipt["contractAddress"] == deployment[name]
+
+    vault_address = deployment["vault"]
+    reporter = deployment["settlement_reporter"]
+    fuse = deployment["settlement_fuse"]
+    hook = deployment["pending_action_hook"]
+    assert _read_address(hyper_web3, reporter, "vault()", block) == vault_address
+    assert _read_address(hyper_web3, reporter, "settlementFuse()", block) == fuse
+    assert _read_address(hyper_web3, fuse, "VAULT()", block) == vault_address
+    assert _read_address(hyper_web3, fuse, "REPORTER()", block) == reporter
+    assert _read_address(hyper_web3, hook, "settlementReporter()", block) == reporter
+
+    ctx = Web3Context(hyper_web3, FIXTURE["chain_id"])
+    ctx.default_block = block
+    vault = PlasmaVault(ctx, vault_address)
+    assert vault.underlying_asset_address().call() == deployment["underlying"]
+    fuses = set(vault.get_fuses().call())
+    for name in FUSE_NAMES - {"HyperCoreSettlementFuse", "HyperCoreBalanceFuse"}:
+        assert FIXTURE["contracts"][name]["address"] in fuses
+    assert fuse in fuses
+    assert any(
+        item.market_id == 55
+        and item.fuse == FIXTURE["contracts"]["HyperCoreBalanceFuse"]["address"]
+        for item in vault.get_balance_fuses()
+    )
+    substrates = vault.get_market_substrates(MarketId(55)).call()
+    assert len(substrates) == 12
+    assert HyperCoreSubstrates.destination(vault_address) in substrates
