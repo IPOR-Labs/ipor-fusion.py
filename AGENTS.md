@@ -184,6 +184,7 @@ the lifecycle matrix follows that.
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`
   (+ `morpho_api.py`), `vault_cmd.py` orchestration; `vault_fetcher.py` on-chain fetch
   (`_fetch_vault_data`, `_safe_call`); `vault_health.py` checks + reconciliation;
+  `vault_unpriceable.py` middleware-priced tokens of granted substrates the oracle cannot price;
   `vault_rendering.py` pure formatting; `vault_dep_graph.py`; `config_store.py` (XDG
   `~/.config/ipor-fusion/`, `~/.cache/ipor-fusion/`); `explorer.py` Etherscan V2
   (single endpoint, needs API key)

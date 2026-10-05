@@ -22,6 +22,10 @@ from ipor_fusion.cli.config_store import (
     update_deployment_cache,
 )
 from ipor_fusion.cli.explorer import get_deployment_tx
+from ipor_fusion.cli.vault_unpriceable import (
+    MiddlewarePricedToken,
+    fetch_unpriceable_priced_tokens,
+)
 from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sort_key
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
@@ -162,6 +166,9 @@ class _VaultData:
     # vault's PriceOracleMiddleware. Missing keys mean the oracle has no source
     # configured for that token.
     token_prices_usd: dict[str, float] | None = None
+    # Middleware-priced tokens of granted substrates the PriceOracleMiddleware
+    # cannot price (see vault_unpriceable). None when the check did not run.
+    unpriceable_priced_tokens: list[MiddlewarePricedToken] | None = None
     # MARKET_ID() reported by each registered action fuse. Keyed by checksummed
     # fuse address. Fuses that don't expose MARKET_ID() (or whose call reverts)
     # are absent from the dict — used to detect orphan markets (action fuses
@@ -819,6 +826,21 @@ def _fetch_vault_data(
             if chain_id
             else None
         )
+        unpriceable_priced_tokens = (
+            _safe_call(
+                partial(
+                    fetch_unpriceable_priced_tokens,
+                    ctx,
+                    vault_reads["price_oracle_addr"],
+                    vault_reads["asset"],
+                    markets.balance_fuses,
+                    markets.market_substrates,
+                    lending.morpho_positions,
+                )
+            )
+            if chain_id
+            else None
+        )
         resolved_block, block_timestamp = f_block.result()
         withdraw_manager, withdraw_manager_data = f_withdraw.result()
 
@@ -837,6 +859,7 @@ def _fetch_vault_data(
             morpho_positions=lending.morpho_positions,
             aave_positions=lending.aave_positions,
             token_prices_usd=token_prices_usd,
+            unpriceable_priced_tokens=unpriceable_priced_tokens,
             role_accounts=f_roles.result(),
         )
 

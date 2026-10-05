@@ -503,6 +503,31 @@ def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
     ]
 
 
+def _compute_unpriceable_token_criticals(data: _VaultData) -> list[str]:
+    """Flag granted substrates whose middleware-priced token cannot be priced:
+    the market's balanceOf() reverts, and with it totalAssets."""
+    lines = []
+    for token in data.unpriceable_priced_tokens or []:
+        trigger = (
+            "reverts even with no position"
+            if token.zero_balance_reverts
+            else "reverts once a position exists, and third parties can open "
+            "one on the vault's behalf"
+        )
+        source = (
+            f"its price source {token.price_source} reverts"
+            if token.price_source
+            else "it has no price source"
+        )
+        lines.append(
+            f"CRITICAL — market {format_market_label(token.market_id)}: "
+            f"{token.via} — PriceOracleMiddleware.getAssetPrice({token.token}) "
+            f"reverts ({source}) — balanceOf() {trigger}, which blocks "
+            f"updateMarketsBalances and every execute on this market"
+        )
+    return lines
+
+
 def _compute_health_check(  # noqa: C901
     data: _VaultData,
     bf_totals: _BalanceFuseTotals,
@@ -517,6 +542,7 @@ def _compute_health_check(  # noqa: C901
 
     result.criticals.extend(_compute_orphan_fuse_criticals(data))
     result.criticals.extend(_compute_missing_erc20_dep_criticals(data))
+    result.criticals.extend(_compute_unpriceable_token_criticals(data))
 
     # Lending health warnings
     if data.lending_health and data.lending_health.has_lending_positions:
