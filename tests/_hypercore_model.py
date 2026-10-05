@@ -1,5 +1,9 @@
 """Explicit, test-only HyperCore model for ``VaultSimulator``.
 
+Lives in the tests because it is only usable with runtimes compiled from
+redirected source (``_hypercore_shadow.py``, which needs Foundry). Plug it into
+a simulation with ``VaultSimulator.with_state_override_provider(model.provider())``.
+
 The current HyperEVM RPC ignores code overrides at native precompile addresses.
 Callers must redirect contract source to the ordinary shadow addresses below,
 compile that source, and override the deployed callers' code in the simulation.
@@ -87,7 +91,7 @@ class HyperCoreSimulationModel:
     """Caller-supplied precompile answers for one simulated baseline state.
 
     Unknown ABI inputs return no data, making ``HyperCoreLib`` fail closed.
-    Values stay fixed within a simulated block. Call ``with_hypercore_model``
+    Values stay fixed within a simulated block. Pass a replaced model through ``with_state_override_provider``
     on a later block to supply new balances or positions; its L1 block number
     advances automatically for each simulated block with calls.
     """
@@ -108,6 +112,11 @@ class HyperCoreSimulationModel:
     withdrawables: dict[ChecksumAddress, int] = field(default_factory=dict)
     oracle_prices: dict[int, int] = field(default_factory=dict)
     mark_prices: dict[int, int] = field(default_factory=dict)
+
+    def provider(self):
+        """A ``VaultSimulator`` state-override provider: the ``n``-th sent
+        block of the run sees L1 block ``l1_block_number + n``."""
+        return lambda n: self.state_overrides(self.l1_block_number + n)
 
     def state_overrides(
         self, l1_block_number: int

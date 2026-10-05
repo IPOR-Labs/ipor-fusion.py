@@ -8,6 +8,11 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from _hypercore_model import (
+    HYPERCORE_SHADOW_CORE_WRITER,
+    HyperCoreSimulationModel,
+    hypercore_shadow_address,
+)
 from _hypercore_shadow import (
     _assert_only_address_redirects,
     compile_hypercore_shadow_runtimes,
@@ -18,14 +23,12 @@ from web3 import Web3
 
 from ipor_fusion import (
     ERC20,
-    HYPERCORE_SHADOW_CORE_WRITER,
     HyperCoreAccountMarginSummary,
     HyperCoreDepositFuse,
     HyperCoreOrderFuse,
     HyperCorePerpAssetInfo,
     HyperCoreReader,
     HyperCoreSendFuse,
-    HyperCoreSimulationModel,
     HyperCoreSpotBalance,
     HyperCoreTokenInfo,
     PlasmaVault,
@@ -33,7 +36,6 @@ from ipor_fusion import (
     VaultSimulator,
     Web3Context,
     erc20_balance_slot,
-    hypercore_shadow_address,
 )
 from ipor_fusion.fuses.hypercore import SPOT_DEX
 from ipor_fusion.types import MarketId
@@ -116,7 +118,7 @@ def test_market55_vault_flow_with_explicit_hypercore_model() -> None:
     for address, code in runtimes.items():
         sim.with_state_override(address, code="0x" + code.hex())
     model = _model()
-    sim.with_hypercore_model(model)
+    sim.with_state_override_provider(model.provider())
     balance_fuse = ADDRESSES["HyperCoreBalanceFuse"]
     sim.observe("balance_before", vault.balance_fuse_value(balance_fuse))
     l1_call = replace(
@@ -139,11 +141,11 @@ def test_market55_vault_flow_with_explicit_hypercore_model() -> None:
         ]
     )
     sim.next_block(60)
-    sim.with_hypercore_model(
+    sim.with_state_override_provider(
         replace(
             model,
             spot_balances={(VAULT, 0): HyperCoreSpotBalance(2_500_000_000, 0, 0)},
-        )
+        ).provider()
     )
     sim.execute(
         [
@@ -157,14 +159,14 @@ def test_market55_vault_flow_with_explicit_hypercore_model() -> None:
         ]
     )
     sim.next_block(60)
-    sim.with_hypercore_model(
+    sim.with_state_override_provider(
         replace(
             model,
             account_summaries={
                 (0, VAULT): HyperCoreAccountMarginSummary(0, 0, 0, 0),
                 (1, VAULT): HyperCoreAccountMarginSummary(10_000_000, 0, 0, 10_000_000),
             },
-        )
+        ).provider()
     )
     sim.execute(
         [

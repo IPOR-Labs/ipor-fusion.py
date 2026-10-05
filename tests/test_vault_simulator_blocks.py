@@ -407,3 +407,35 @@ def test_erc20_balance_slot_batches_every_candidate_in_one_request():
     with pytest.raises(ValueError, match="no balances mapping slot"):
         erc20_balance_slot(web3, TOKEN, block=100, max_slot=-1)
     assert len(web3.provider.payloads) == 2
+
+
+def test_override_provider_sees_each_sent_block_and_survives_a_swap():
+    sim, provider = _simulator()
+    seen: list[int] = []
+
+    def first(n: int) -> dict:
+        seen.append(n)
+        return {PAYER: {"balance": hex(100 + n), "nonce": hex(1)}}
+
+    sim.with_state_override_provider(first)
+    sim.observe("a", _read())
+    # An empty block takes no index; the next sent block is n = 1.
+    sim.next_block(time_shift_seconds=10)
+    sim.next_block(time_shift_seconds=10)
+    sim.observe("b", _read())
+    sim.next_block(time_shift_seconds=10)
+    # The block's own override wins over the provider's for the same field.
+    sim.with_state_override_provider(lambda n: {PAYER: {"balance": hex(200 + n)}})
+    sim.with_state_override(PAYER, balance=hex(7))
+    sim.observe("c", _read())
+    sim.run()
+    entries = _sent_blocks(provider)
+    assert seen == [0, 1]
+    assert [e["stateOverrides"][PAYER]["balance"] for e in entries] == [
+        hex(100),
+        hex(101),
+        hex(7),
+    ]
+    # Each sent block carries only what its provider returns; state set by an
+    # earlier block's override persists inside the simulated chain itself.
+    assert "nonce" not in entries[2]["stateOverrides"][PAYER]
