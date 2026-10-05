@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -16,6 +16,9 @@ from web3.utils.address import get_create_address
 from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.errors import SimulationError, decode_custom_error
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
+
+if TYPE_CHECKING:
+    from ipor_fusion.core.hypercore_simulation import HyperCoreSimulationModel
 
 DEFAULT_BLOCK_TIME_INCREMENT = 12
 
@@ -40,6 +43,7 @@ class _Block:
     calls: list[_Call] = field(default_factory=list)
     block_overrides: dict[str, Any] = field(default_factory=dict)
     state_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    hypercore_model: HyperCoreSimulationModel | None = None
 
 
 @dataclass(slots=True)
@@ -241,6 +245,17 @@ class VaultSimulator:
         self._current.state_overrides[checksum_address] = _compose_account_overrides(
             current, overrides
         )
+        return self
+
+    def with_hypercore_model(self, model: HyperCoreSimulationModel) -> VaultSimulator:
+        """Use explicit HyperCore shadow precompile answers in this simulation.
+
+        The caller must separately override HyperCore fuse/hook code compiled
+        with reads redirected to the shadow addresses. Native HyperEVM
+        precompiles ignore code overrides on the current RPC. This is an EVM
+        validation model, not evidence of HyperCore acceptance or fills.
+        """
+        self._current.hypercore_model = model
         return self
 
     def with_erc20_balance(
@@ -446,7 +461,12 @@ class VaultSimulator:
         state_overrides: dict[str, dict[str, Any]] = {}
         modeled_time = self._baseline()
         previous_sent_time = modeled_time
+        hypercore_model: HyperCoreSimulationModel | None = None
+        hypercore_l1_block = 0
         for block in self._blocks:
+            hypercore_model, hypercore_l1_block = _current_hypercore_model(
+                block, hypercore_model, hypercore_l1_block
+            )
             block_overrides = {**block_overrides, **block.block_overrides}
             for address, fields in block.state_overrides.items():
                 state_overrides[address] = _compose_account_overrides(
@@ -454,6 +474,11 @@ class VaultSimulator:
                 )
             if not block.calls:
                 continue
+            if hypercore_model is not None:
+                _merge_hypercore_overrides(
+                    state_overrides, hypercore_model, hypercore_l1_block
+                )
+                hypercore_l1_block += 1
             if "time" in block_overrides:
                 modeled_time = int(block_overrides["time"], 16)
             else:
@@ -582,6 +607,29 @@ class VaultSimulator:
             observations=observations,
             calls=parsed,
             failed_calls=failed_calls,
+        )
+
+
+def _current_hypercore_model(
+    block: _Block,
+    current: HyperCoreSimulationModel | None,
+    l1_block_number: int,
+) -> tuple[HyperCoreSimulationModel | None, int]:
+    if block.hypercore_model is not None:
+        return block.hypercore_model, max(
+            l1_block_number, block.hypercore_model.l1_block_number
+        )
+    return current, l1_block_number
+
+
+def _merge_hypercore_overrides(
+    overrides: dict[str, dict[str, Any]],
+    model: HyperCoreSimulationModel,
+    l1_block_number: int,
+) -> None:
+    for address, fields in model.state_overrides(l1_block_number).items():
+        overrides[address] = _compose_account_overrides(
+            fields, overrides.get(address, {})
         )
 
 

@@ -33,6 +33,11 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
+from ipor_fusion.core.hypercore_simulation import (
+    HYPERCORE_SHADOW_CORE_WRITER,
+    HyperCoreSimulationModel,
+    hypercore_shadow_address,
+)
 from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
@@ -322,6 +327,9 @@ __all__ = [
     "Multicall3",
     "MULTICALL3_ADDRESS",
     "VaultSimulator",
+    "HyperCoreSimulationModel",
+    "HYPERCORE_SHADOW_CORE_WRITER",
+    "hypercore_shadow_address",
     "SimulationResult",
     "SimulatedCallResult",
     "is_simulate_v1_supported",
