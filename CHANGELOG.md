@@ -2,6 +2,253 @@
 
 <!-- version list -->
 
+## v3.8.0 (2026-10-05)
+
+### Bug Fixes
+
+- **readiness**: Flag manual execution on deliveries into HyperEVM and keep TESTTR informational
+  ([`7acd620`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7acd620042ac1e6558cefbd1f51031737576e114))
+
+- **sdk**: Compose folded simulation overrides
+  ([`3638e7d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3638e7d70b8495e236a6eede39ca484abbfb60c7))
+
+- **sdk**: Distinguish HyperCore transfers in transit
+  ([`413e568`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/413e568e1416e9c13bf7f10de2851c37423bd282))
+
+- **sdk**: Gate attestations on command receipts
+  ([`05c22c2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/05c22c2bb3780bbab74e9a2708cd397aefccd670))
+
+- **sdk**: Gate attestations on in-flight CCIP recalls
+  ([`e716bcb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e716bcbcdd23f6613849a990391f40fa2b5957d0))
+
+- **sdk**: Gate CCIP OnRamp layout by version
+  ([`995533d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/995533dc640b9e08453e28dddd097f5114b24d8a))
+
+- **sdk**: Harden crosschain simulation and readiness gates
+  ([`36967f2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/36967f22ae0fd45fd071a8df007925878e81e098))
+
+- **sdk**: Keep an empty simulated block's overrides for the next sent block
+  ([`353e256`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/353e256371ef4286b14543a78826c9d97cb8c81a))
+
+- **sdk**: Merge same-block state overrides
+  ([`65cddf4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/65cddf47b899884a5a77fbb6513e05d7a8273cc2))
+
+- **sdk**: Model simulated block timestamps explicitly
+  ([`e0a04ce`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e0a04cefd0ff51ebc419c1b2581248b32ca49d60))
+
+- **sdk**: Read CCIP decimal conversion rate
+  ([`c136a24`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c136a24d49b0e6c2927648d8aa79f43daad2b08f))
+
+- **sdk**: Refuse CCIP relay across differing token decimals
+  ([`286dc93`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/286dc93953a155b71877f27fe93258be84fd3745))
+
+- **sdk**: Reject duplicate chain config in crosschain transports
+  ([`eb1cb3e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/eb1cb3e5bcf49906e63aea75347fec84d2fd72f1))
+
+- **sdk**: Reject noncanonical crosschain substrates
+  ([`3407e29`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3407e2902bbada74af5485a2e5ba0332e2833149))
+
+- **sdk**: Reject unenforceable CCIP receive floors
+  ([`3408f55`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3408f5544b491403970c62ba0c18a359724356bd))
+
+- **sdk**: Report no revert reason for a successful simulated call
+  ([`291fd3f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/291fd3f6d414035d6f14f112e5882d1bd2530342))
+
+- **sdk**: Require explicit Stargate asset and decimals config
+  ([`a7bfc3f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a7bfc3f300b6109b59a35198524f6e5187fca990))
+
+- **sdk**: Settle crosschain relay at round limit
+  ([`a649068`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a649068d5a9fa121234ee515a86cb62d5f78e15a))
+
+- **sdk**: Validate crosschain envelope types
+  ([`1333575`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/13335756290f6fe55d7bb2bb5461275b161d0c7e))
+
+### Build System
+
+- Bump vulnerable transitive deps in uv.lock
+  ([`72dadf8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/72dadf8dbef7f5c81e35bb0e14de2fdeb635a5dd))
+
+### Chores
+
+- **sdk**: Move the HyperCore open items to the monitoring repository
+  ([`2fa49a2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2fa49a227b97907ab12bf85ec9e191c28cd9ade3))
+
+- **sdk**: Reword the fix references in the crosschain test comments
+  ([`b5b9d84`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b5b9d84dab023037f8db32fc81e7ffd049185af5))
+
+### Continuous Integration
+
+- Drop the crosschain readiness GitHub workflow; the probe runs locally or from the monitoring
+  repository
+  ([`a67a25e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a67a25e3918dc4f9e4a6e0a48139e4aa67e30312))
+
+- Isolate crosschain readiness checks and report USDC availability
+  ([`cdefe19`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cdefe1958ac379af46bc6d61cb45d704841fb44b))
+
+- Run the crosschain readiness workflow on demand only
+  ([`ddddedf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ddddedf5b25e69704940c539ce50da3d9a4f5e52))
+
+### Documentation
+
+- Mark HyperEVM vault tooling gate as open
+  ([`cea63dd`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cea63dd18e5a1a22a0dee9c956cdea564e515a41))
+
+- Track crosschain SDK follow-ups
+  ([`ba3271d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ba3271d74bfe16ac6f75c0dfbbf6113322347bda))
+
+- **guide**: Document the flash-loan callback handler step and HandlerNotFound
+  ([`72fd4be`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/72fd4bec7320dca2e52a9a779d9da467c0c68757))
+
+- **readiness**: State what an unlisted manual executor does to the executor verdict
+  ([`1a81958`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1a819585ae7503e0d297b9a698d17b55cdf1a525))
+
+- **sdk**: Add the crosschain CCIP lifecycle example (Arbitrum hub, HyperEVM spoke)
+  ([`eedbc8b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/eedbc8b363ffb9e6f96f23f27338b8ae13d277f8))
+
+- **sdk**: Drive the crosschain example on the v3 canary deployment
+  ([`129fd8c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/129fd8c91d281519c226bbed1c84c473f55436fa))
+
+- **sdk**: Hand off crosschain follow-ups before draft PR
+  ([`7049457`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7049457623840a3c07660f042255c22fa4a74274))
+
+### Features
+
+- **cli**: Flag granted substrates whose middleware-priced token cannot be priced
+  ([`8b24430`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8b244301f9e2632c2127bc5a4e7881ae2785f4aa))
+
+- **readiness**: Derive HyperEVM manual execution from the Chainlink executors' big-block status
+  ([`3726be9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3726be92c82212c9b0c2b4692e1709fd4e99ea48))
+
+- **readiness**: Flag deliveries above HyperEVM's small-block gas limit
+  ([`f88eb12`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f88eb12a3cfeecc7028ea14d4a5708c10d83533c))
+
+- **readiness**: Flag the dispatcher deployment as manual on the HyperEVM lane
+  ([`71a5b67`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/71a5b67fec084b84f75696564522c2eed5604efe))
+
+- **readiness**: Gate the TESTTR asset and lane on the v2 pair
+  ([`28c6b5f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/28c6b5ff5bd505e9b86ff5e9695f7cbde5ee4564))
+
+- **readiness**: Probe the pilot-v2 factory pair and the canary creator
+  ([`28d92c4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/28d92c4c3a0d7204621e5c8dfd8bd9ab82583c2b))
+
+- **readiness**: Probe the v3 factory pair and flag manual execution per message kind
+  ([`8719100`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/87191002045caa712026a906b527cd747bec5be0))
+
+- **sdk**: Add crosschain Plasma Vault support over Stargate and CCIP
+  ([`a49902d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a49902d57efa114c1d6daf00be35f43d9b3db02d))
+
+- **sdk**: Cap a simulated call's gas explicitly
+  ([`f47ba01`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f47ba016accef90cb6e0f21ce9156e8bb881c7e8))
+
+- **sdk**: Compose call result transformations
+  ([`667ca5e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/667ca5e7719d39686c3549d646ac55597ffe62aa))
+
+- **sdk**: Crosschain discovery, lane attestation and named custom errors
+  ([`d1b8c7f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d1b8c7ff57918e48897d4d0d728a901927d0cc7b))
+
+- **sdk**: Decode PathConfigOptionsInvalid and RouteToLocalChain reverts
+  ([`6518061`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6518061af23ad5d83e8783262ba781fac86f88d6))
+
+- **sdk**: Decode the CCIP crosschain events of both contract generations
+  ([`52605bf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/52605bff968a0b60d041b08d6d122bdaf8efad19))
+
+- **sdk**: Encode the CCIP factory's governance calls
+  ([`4e7296d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4e7296d7e7abf4f0a2d303b2e3185b1cc012fbaf))
+
+- **sdk**: Expose a simulated call's decoded revert reason
+  ([`c695541`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c6955412f808208b81155b2d562b946701260373))
+
+- **sdk**: Expose HyperCore transfer outcomes for market 55
+  ([`684dd68`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/684dd68383fc265b4fd7a1d1bdb2f14af2fbf59a))
+
+- **sdk**: Fund simulations by ERC-20 storage override and track spoke readiness
+  ([`c6cfc84`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c6cfc843fe82bf07030f3dd3e37aedf880aab870))
+
+- **sdk**: List a CCIP router's OffRamps per source chain
+  ([`27e6943`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/27e6943f2fc855c9adb0ab350fb9135b9985af6a))
+
+- **sdk**: Name the Botanix and Ink chains
+  ([`4472205`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/44722058c22351ed30ed86376bf795e250e7038e))
+
+- **sdk**: Quote a CCIP send's native fee by simulation
+  ([`cd7210a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cd7210a9c0cbfe90da705f56bc3c2c7d0327ddb4))
+
+- **sdk**: Read CCIP lane and token-pool readiness on Chainlink's contracts
+  ([`a180329`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a18032915ff427772fd26ee7893c93796d982d96))
+
+- **sdk**: Read the CCIP 2.0 OffRamp and execute a verified message manually
+  ([`94e4c7a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/94e4c7a8a621e25fb9c559650e233a9bd05f26b7))
+
+- **sdk**: Simulate crosschain contract deployments
+  ([`3ae8abb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3ae8abbe2e7cac8ba2b29a5cf60bb9b6059ee37e))
+
+- **sdk**: Wrap the v3 CCIP factory's dispatcher deployment gas limit and keep one event registry
+  ([`4935a62`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4935a629b840658ed43ec2d2eb5abcc34b5f3911))
+
+### Performance Improvements
+
+- **sdk**: Batch ERC-20 balance slot probes
+  ([`bb8c1ce`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bb8c1cebb32853e6d0d4478f0ab154a5276b9727))
+
+### Refactoring
+
+- **readiness**: Read the dispatcher deployment gas limit through the factory wrapper
+  ([`46e5c61`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/46e5c61f087455f96ddc9ca9568ebd642d7db46f))
+
+- **sdk**: Polish crosschain SDK surface
+  ([`44b7cc5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/44b7cc581d82094c7cf04f252f2c364b33d06fc2))
+
+### Testing
+
+- **sdk**: Attest the redeemed amount before the recall and read the executor's update interval
+  ([`c5bbc50`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c5bbc502836651341d37b6d59dd24c8a2fe42077))
+
+- **sdk**: Compile the crosschain contracts from the fixed v3 source
+  ([`0515209`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0515209fe8b452b6d960dc759b5b061c46a19857))
+
+- **sdk**: Cover CCIP recovery and USDC deployment rehearsals
+  ([`51b8eb4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/51b8eb4191d727b8884e6273ef7dcf6794ceb6c9))
+
+- **sdk**: Cover full Arbitrum-HyperEVM CCIP lifecycle in simulation
+  ([`f5f2ec1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f5f2ec1d7ab2a3666694ffa90f39f5a06b2eb027))
+
+- **sdk**: Drive the crosschain lifecycle on a moving clock
+  ([`9e51316`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9e51316d9815a4f3249ce92b068120c3febc0c25))
+
+- **sdk**: Fail closed on unlinked placeholders and read the rehearsal's own delay and route limits
+  ([`c511f52`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c511f52f48680173495edbb393f82b5bde7bef4c))
+
+- **sdk**: Link Foundry library placeholders in compiled artifacts
+  ([`a2fc487`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a2fc4877213e1084fa222a53aaeb94eafe823bed))
+
+- **sdk**: Pin HyperCore market-55 deployment identity
+  ([`eb47ce2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/eb47ce292f7790e4eb7b5a4debe88522c08c34c6))
+
+- **sdk**: Pin the factory runtime code and run the v3 deployment-gas timelock live
+  ([`2f51583`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2f515833851bcc2471caffca1b0eceaf585832d2))
+
+- **sdk**: Pin the fuse source, re-pin USDC acceptance and check token delivery gas
+  ([`53eb5ef`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/53eb5ef334dc1072a09e5ce9cb10442a17bcd0bb))
+
+- **sdk**: Pin the live Arbitrum → HyperEVM USDC canary as a lifecycle fixture
+  ([`71d8ac9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/71d8ac90f4203dea62cd2afc476b8f9facd05b1d))
+
+- **sdk**: Pin the reconstructed CCIP pilot build identity
+  ([`f7fe270`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f7fe270ccd0d757196edcee1946da8e6901c63d4))
+
+- **sdk**: Pre-wire HyperEVM as the next crosschain spoke
+  ([`0960705`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0960705d1b1c9eb03f3106b118c67de1cd3aeee4))
+
+- **sdk**: Rehearse a source-generation factory pair on both CCIP accounting generations
+  ([`e7ec5aa`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e7ec5aaef1c1c01a5204ab13dd860673bbb55975))
+
+- **sdk**: Rehearse the v3 factory pair and its canary, retire the pilot generation
+  ([`5f353cb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5f353cbe5abb4c24b9226a6199f8757c6d8195ab))
+
+- **sdk**: Run the lifecycle on the live pilot-v2 factory pair as a third generation
+  ([`9376e12`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9376e125b00c56c3e2048700d6ec4d7346232f89))
+
+
 ## v3.7.0 (2026-10-02)
 
 ### Build System
