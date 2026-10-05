@@ -1,0 +1,63 @@
+{
+  "chain_id": 999,
+  "snapshot_block": 47732052,
+  "deployer": "0x3F48E1FfC0Ea0b1f908770Ec3372eA0F50dA2af2",
+  "bound_vault": "0x41C46C328036FA7865d5CB15d531D7C5120f05C8",
+  "new_vault_deployment": {
+    "vault": null,
+    "settlement_reporter": null,
+    "settlement_fuse": null,
+    "pending_action_hook": null
+  },
+  "contracts": {
+    "HyperCoreDepositFuse": {
+      "address": "0xDbE31Da504ac89B618664bB02e1521c335a41E73",
+      "creation_tx": "0xd18f01418c8445864bfb2877bfa08da1fdf7195b1c66eb0d012e0af8c13d1d12"
+    },
+    "HyperCoreMarginFuse": {
+      "address": "0x4D8b1184CF034AE657C9f47dbB59ee871edb3BBb",
+      "creation_tx": "0x772e0be62cd45adf02a729c71716de04beffee286bee41e35fb17ad358f90c1a"
+    },
+    "HyperCoreSendFuse": {
+      "address": "0x984D84183008C52d9A645C3ba4863F0A29b4785A",
+      "creation_tx": "0x3b67dee715ef495554107c2c4e8e1778ed35c22ddcb8a15ff49af837487d1f61"
+    },
+    "HyperCoreOrderFuse": {
+      "address": "0x8Dc849FC55D9195cc987CA4ddFF5eA022651c173",
+      "creation_tx": "0x03d850c34e612297be410c49f46dd2c4fb1054551c2afc35c90792af5daa472f"
+    },
+    "HyperCoreCancelFuse": {
+      "address": "0xb17D5bf74e35a7Eb70238522d9ba3D387C5Fd75c",
+      "creation_tx": "0x9c78d7fa9cce6c733bd287fb67d15022170bc40dbf023f28aeb22454b41027fa"
+    },
+    "HyperCoreBuilderFeeFuse": {
+      "address": "0x01443a3a2E2E0326F6Ab7568A12eaE1Aa957DC3d",
+      "creation_tx": "0xa1c9562a42611446cfbf88efeee22947332a765e1e1f6df45d52a80de2a7414a"
+    },
+    "HyperCoreBalanceFuse": {
+      "address": "0xaC7404Ec2Bc3F2d3c0853633e0c3edfA25DC50F9",
+      "creation_tx": "0x7c9fb5e7f6dae08e96fcf52ba49e73cc9ce991d5ad4f538772536c31284c3799"
+    },
+    "HyperCoreSettlementFuse": {
+      "address": "0x9276e1EAd57fFbEe2e7ACE4630D3267bF20f783f",
+      "creation_tx": "0x34b63c468b6c00ac3df48e61470ba64258c40bab6d9e2589a976b0359137e91f",
+      "internal_create": true
+    },
+    "HyperCoreCapitalFlowPreHook": {
+      "address": "0x8caed17dBBfBB1E6FAC7Bea5Cc88d2e86291d3aB",
+      "creation_tx": "0xf921495a84fc8e7026f1047529759d7c4cceb1b5f82bfc18ac67341061e14b62"
+    },
+    "HyperCoreSettlementReporter": {
+      "address": "0xc6043ca47d9e3aBaB5Ce383a36eEb996344937a9",
+      "creation_tx": "0x34b63c468b6c00ac3df48e61470ba64258c40bab6d9e2589a976b0359137e91f"
+    },
+    "HyperCorePendingActionPreHook": {
+      "address": "0xa9a510F0D3f0B079372D3E5Bf11B1666F954A24C",
+      "creation_tx": "0x2fcb5e1e636ac2e1de3dceab9423e4d45121a4498f5d7da591ced6c5fe08e617"
+    },
+    "HyperCorePendingReader": {
+      "address": "0x83F54bc9eA4Dd19cb579Daa70368562C7a7534C4",
+      "creation_tx": "0x2679f715fc9005185e055915a67b59a2151702692155a9eff7997d088f2e483f"
+    }
+  }
+}

@@ -51,17 +51,17 @@ from ipor_fusion.types import MarketId, Price
 
 T = TypeVar("T")
 
-#: The market id HyperCore vaults are keyed under once migrated (55); the first
-#: HyperEVM test vault still keys it as 54 until its migration.
+#: New HyperCore vaults use market 55; the abandoned pilot still keys 54.
 HYPERCORE_MARKET = MarketId(IporFusionMarkets.HYPERCORE)
 #: The only chain with the HyperCore precompiles.
 HYPEREVM_CHAIN_ID = 999
 #: Known ``HyperCorePendingReader`` deployments per chain. The reader is a
-#: stateless helper and any deployment serves any vault; this is the HIP-3
-#: run's instance until ``ipor-abi`` publishes one.
+#: stateless helper and any deployment serves any vault. The market-55 reader
+#: is pinned in ``tests/fixtures/hypercore_market55.json`` until ``ipor-abi``
+#: publishes it.
 HYPERCORE_PENDING_READERS: dict[int, ChecksumAddress] = {
     HYPEREVM_CHAIN_ID: Web3.to_checksum_address(
-        "0x01fcd96f5049946bd10396b86e0b3d3ae7fff539"
+        "0x83F54bc9eA4Dd19cb579Daa70368562C7a7534C4"
     ),
 }
 WAD_DECIMALS = 18

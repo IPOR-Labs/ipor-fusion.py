@@ -387,7 +387,9 @@ class TestVaultState:
         ctx.chain_id = 999
         ctx.call.side_effect = multicall_aware(_vault_state_handler(xyz_value=0))
 
-        state = read_hypercore_vault_state(ctx, VAULT, BALANCE_FUSE, MARKET)
+        state = read_hypercore_vault_state(
+            ctx, VAULT, BALANCE_FUSE, MARKET, pending_reader=READER
+        )
 
         assert isinstance(state, HyperCoreVaultState)
         assert (state.market_id, state.balance_fuse) == (MARKET, BALANCE_FUSE)

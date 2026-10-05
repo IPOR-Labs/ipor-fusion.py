@@ -4,17 +4,20 @@ Delete an entry in the change that resolves it; delete this file when it is empt
 
 ## Where the HyperEVM HIP-3 flow stands in this SDK
 
-The reference is the 47-transaction HyperEVM mainnet run pinned in
-`tests/fixtures/hypercore_hip3_flow.json` (11 creates, the market 47 -> 54
-migration, one long and one short xyz:NVDA cycle). "Works" below means proven
+The historical reference is the 47-transaction HyperEVM mainnet run pinned in
+`tests/fixtures/hypercore_hip3_flow.json` (11 creates, an old market-id
+change, one long and one short xyz:NVDA cycle). Its vault is abandoned. The
+market-55 reporter, settlement fuse and pending hook broadcast for that vault
+remain bound to it and cannot serve the new vault. "Works" below means proven
 by a test in this repository, not by that run.
 
 | Layer | Status | Evidence |
 |---|---|---|
-| SDK expresses the run's calls: fuse wiring, migration (pre-hooks included), approve, deposit, EVM -> Core, spot -> HIP-3 dex, IOC/GTC orders, cancel, reduce-only close, dex -> spot, Core -> EVM, balance refresh, redeem | 36 of 36 calls | `tests/test_hypercore_flow.py`: byte parity with the on-chain calldata |
-| Fuses run on the live node with the HyperCore precompiles | six actions | `tests/test_hypercore_live.py` (opt-in, `HYPEREVM_PROVIDER_URL`): `eth_call` + `eth_estimateGas` from the signer of the refresh, EVM -> Core deposit, Core -> EVM and spot -> xyz sends, an IOC order and a cancel on the current state; skips while an action is pending. Independent calls carry no earlier EVM state and cannot settle Core actions, so this never proves a step-by-step cycle. `redeem` beyond the vault's EVM USDC reverts (no instant-withdraw fuse), pinned as a test |
+| SDK expresses the historical run's calls: fuse wiring, old market-id change (pre-hooks included), approve, deposit, EVM -> Core, spot -> HIP-3 dex, IOC/GTC orders, cancel, reduce-only close, dex -> spot, Core -> EVM, balance refresh, redeem | 36 of 36 calls | `tests/test_hypercore_flow.py`: byte parity with the on-chain calldata; this does not prescribe a migration for the new vault |
+| Market-55 deployment identity | 12 contracts | `tests/fixtures/hypercore_market55.json` and `tests/test_hypercore_deployment.py`: code, fuse market id/version, creation transactions, deployer and the three vault-bound contracts at block 47732052 |
+| Fuses run on the live node with the HyperCore precompiles | old vault only, market 54 | `tests/test_hypercore_live.py` is opt-in and checks the historical vault's current state. Independent `eth_call` / `eth_estimateGas` calls carry no earlier EVM state and cannot settle Core actions, so this never proves a step-by-step cycle or a market-55 vault |
 | Sequence simulation (`VaultSimulator`, `eth_simulateV1`) | not possible on this node | the precompiles fail inside `eth_simulateV1`; no historical Core state, so no replay of past transactions either |
-| State reads: pending action and nonce (`HyperCorePendingReader`), the precompiles (`HyperCoreReader`), the NAV identity (`read_hypercore_nav` == `PlasmaVault.balance_fuse_value`) | done | `tests/test_hypercore_readers.py` offline; the identity holds live at block 47453068 (`test_hypercore_live.py`) |
+| State reads: pending action and nonce (`HyperCorePendingReader`), the precompiles (`HyperCoreReader`), the NAV identity (`read_hypercore_nav` == `PlasmaVault.balance_fuse_value`) | offline done; market-55 path pending | `tests/test_hypercore_readers.py` offline; the old vault's live identity at block 47453068 is historical evidence only |
 | `vault info` / MCP: market 55 label, decoded substrates with HIP-3 coordinates, NAV legs vs the balance fuse, pending state, perp markets with coin names | done | `hypercore` block (`HyperCoreSection`), `tests/test_cli_hypercore.py`, `tests/test_mcp_hypercore.py`; HyperEVM only, vaults with a market-55 balance fuse |
 | Events: `HyperCoreActionEnqueued`/`Settled`, the fuse events, the settlement fuse's and the reporter's | done | `fuses/hypercore_events.py`; `tests/test_hypercore_events.py` pins the topics to the run's receipts and the per-action receipt shape |
 | Send pipeline (plan with fingerprint, calldata review, throwaway keystore, pinned-nonce send, settle window, `/info` verification) | outside the SDK | the run's tooling; not re-homed here (see "Beyond the SDK") |
@@ -24,9 +27,6 @@ by a test in this repository, not by that run.
 
 - [ ] **`eth_simulateV1` for market 55.** Re-probe when the node is upgraded
   and record the result here; until then the live test stays `eth_call`-only.
-- [ ] **Pending reader address.** `HYPERCORE_PENDING_READERS` carries the
-  HIP-3 run's `HyperCorePendingReader` for HyperEVM until `ipor-abi` publishes
-  one; the `hypercore` block shows the pending state only through it.
 - [ ] **Encoders never exercised on-chain.** `HyperCoreMarginFuse.enter`,
   `HyperCoreBuilderFeeFuse.enter`, `HyperCoreSendFuse.spot_send`,
   `HyperCoreCancelFuse.cancel_by_oid` are verified against the Solidity
@@ -35,25 +35,18 @@ by a test in this repository, not by that run.
 - [ ] **Settlement reporter / REPORTED mode.** The settlement fuse is callable
   only by the reporter contract; the SDK has no reader for the reporter
   (observers, report digest, `Report` type) and no REPORTED-mode rehearsal.
-- [ ] **Market id: HyperCore is 55, crosschain keeps 54** (contracts-team
-  decision, 2026-09-29). The SDK mirrors 55 ahead of upstream. The market-55
-  fuse set for HyperEVM is prepared on the contracts side (deployment only;
-  the vault migrates 54 → 55 in a separate step, the same wiring sequence the
-  parity fixture covers) but was not broadcast as of 2026-10-01; once it is,
-  pin the real addresses here and in a fixture with `MARKET_ID() == 55`
-  checks, and point the live dry-run at the fuses the vault actually
-  whitelists. The first HyperEVM test vault (`0x41C4…05C8`, live on mainnet)
-  still runs on 54 until that migration. **Known limitation until then:** once the crosschain SDK
-  lands, `vault info` and the MCP tools label that vault's market 54 as
-  crosschain and the crosschain decoder **mis-types** its SpotToken and
-  PerpMarket words as plausible `EXECUTOR` / `REMOTE_VAULT` rows while the
-  other tags come back raw; this branch alone shows the market as
-  `no_decoder`. Do not read either output as that vault's HyperCore state.
-  When the contracts land: bump the mirror-test pinned ref, drop `HYPERCORE`
-  from `_AHEAD_OF_UPSTREAM`, and update downstream consumers (registry,
-  monitoring) that keyed on 54.
+- [ ] **New market-55 vault.** The 12 broadcast addresses and creation
+  transactions are pinned in `tests/fixtures/hypercore_market55.json`. Reuse
+  the seven market fuses, capital-flow hook and pending reader. The broadcast
+  settlement reporter, its settlement fuse and pending-action hook are bound
+  to the abandoned market-54 vault and cannot be reused. Fill the fixture's
+  `new_vault_deployment` slots with the new vault and its three bound
+  contracts after the deployment, then point the opt-in live dry-run at the
+  new vault and its granted fuses/substrates. No live deployment is authorized
+  by this SDK change. Once the contracts land in the pinned Solidity mirror
+  revision, remove `HYPERCORE` from `_AHEAD_OF_UPSTREAM`.
 - [ ] **Address book and docs.** `ipor-abi` `mainnet-hyperevm-fusion/addresses.json`
-  carries none of the HyperCore fuse, hook, reporter or reader addresses;
+  does not yet publish these HyperCore fuse, hook, reporter or reader addresses;
   `ipor.io/llms.txt` has no HyperCore / market 55 page and no market-id list.
 
 ## Beyond the SDK (decisions pending)
@@ -66,7 +59,7 @@ by a test in this repository, not by that run.
   abort conditions, `/info` checks after every Core action, and an explicit
   go; only this closes the "works end to end" column above.
 
-## Composed crosschain -> HyperCore spoke (after the crosschain SDK lands)
+## Composed crosschain -> HyperCore spoke
 
 - [ ] Rehearse the hub lifecycle with a HyperCore PlasmaVault as the remote
   vault: the dispatcher needs `WHITELIST_ROLE` on the spoke; DEPOSIT and

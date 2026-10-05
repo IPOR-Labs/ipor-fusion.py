@@ -52,7 +52,7 @@ CREATED = {
 VAULT = Web3.to_checksum_address(FIXTURE["vault"])
 USDC = Web3.to_checksum_address(FIXTURE["usdc"])
 SIGNER = Web3.to_checksum_address(FIXTURE["signer"])
-#: The vault keys HyperCore as 54 until its migration to 55.
+#: This abandoned pilot vault still keys HyperCore as 54.
 LIVE_MARKET = MarketId(FIXTURE["market_id"])
 XYZ_DEX = 1
 XYZ_NVDA = 110_002
