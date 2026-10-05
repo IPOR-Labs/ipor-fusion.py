@@ -95,6 +95,7 @@ class TestResources:
             ("0x8745fbfd", "DaoFeePackagesArrayEmpty"),
             ("0x9996b315", "AddressEmptyCode"),
             ("0x068ca9d8", "AccessManagedUnauthorized"),
+            ("0x4bf4de4e", "HandlerNotFound"),
         ]:
             assert selector in text
             assert name in text

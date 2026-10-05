@@ -46,7 +46,14 @@ greppable.
    what is not optional is that all three precede `execute`. `execute` on a market with no
    balance fuse reverts `AddressEmptyCode(address)` (`0x9996b315`) with the
    zero address; an action outside the granted substrates reverts inside the
-   fuse.
+   fuse. A flash-loan fuse needs one more step: the lender calls back into the
+   vault mid-`execute`, which reverts `HandlerNotFound()` (`0x4bf4de4e`) unless
+   `update_callback_handler(handler, sender, selector)` registered a handler
+   for that caller and selector. Morpho Blue (`MorphoFlashLoanFuse`) calls
+   `onMorphoFlashLoan(uint256,bytes)`, served by `CallbackHandlerMorpho`; the
+   Euler EVC calls `onEulerFlashLoan(bytes)` from an `EulerV2BatchFuse` batch,
+   served by the Euler callback handler. Take the handler address from the
+   chain's `addresses.json` in ipor-abi.
 4. **A fresh clone is private.** `deposit` and `mint` revert
    `AccessManagedUnauthorized(address)` (`0x068ca9d8`) until either the
    depositor holds `WHITELIST_ROLE` (800), which keeps the vault private, or an
@@ -72,7 +79,8 @@ greppable.
 |---|---|---|---|
 | `0x8745fbfd` | `DaoFeePackagesArrayEmpty()` | `clone()` was sent to `IporFusionFactoryImpl` | Send it to `IporFusionFactoryProxy` for that chain |
 | `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse | `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
-| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, 0)` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
+| `0x4bf4de4e` | `HandlerNotFound()` | A protocol called back into the vault during `execute()` (a flash loan) and no handler is registered for its address and selector | `update_callback_handler(handler, sender, selector)` before the first `execute` that triggers the callback |
+| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`, `update_callback_handler`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, 0)` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
 | `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send()` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
 
 ## Quickstart
