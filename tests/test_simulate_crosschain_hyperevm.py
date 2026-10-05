@@ -126,7 +126,7 @@ V2 = FactoryPair(
         ),
     ),
 )
-# Source `7eccea2` (`810e260` plus the ticket's own gas limit) plus the same
+# Source `84c1923` (`810e260` plus the ticket's own gas limit) plus the same
 # patches (2026-10-02). Commands carry 2 M, which fits HyperEVM's 3 M small
 # blocks with the OffRamp's overhead; the ticket carries 6 M.
 V3 = FactoryPair(
@@ -218,15 +218,12 @@ FUSE_CONTRACTS = (
         "CrosschainBalanceFuse",
     ),
 )
-# The checkout every compiled contract comes from: the v2 pair's source. On
+# The checkout every compiled contract comes from: the v3 pair's source. On
 # the deployed generations only the four fuses are compiled (the executors and
 # dispatchers come from the creation code the live factories store); on
-# `source` the whole CCIP core is. The v3 source `7eccea2` changes only the
-# factory, but that commit does not compile as pushed (the new functions sit
-# inside `scheduleAsset`), so `source` rehearses the v2 factory until a
-# compiling revision lands. Bump deliberately, with the fuse ABI re-checked
-# against the encoders.
-FUSE_SOURCE_REVISION = "810e260c7a9004ca4a23142efb60abfe6a78bb99"
+# `source` the whole CCIP core is. Bump deliberately, with the fuse ABI
+# re-checked against the encoders.
+FUSE_SOURCE_REVISION = "84c1923408d8aec4b6c2f769567798c716cc8b4c"
 CROSSCHAIN_MARKET = MarketId(54)
 
 # The CCIP core of the source generation: libraries in link order
@@ -502,8 +499,9 @@ def _configure_source_factory(
     config_delay: int,
 ) -> bytes:
     """The owner's governance on a fresh factory: the creation codes
-    (write-once), then the asset and the factory-to-factory route through the
-    factory's own timelock. Returns the keccak of the executor creation code."""
+    (write-once), then the asset, the factory-to-factory route and the
+    dispatcher deployment gas limit through the factory's own timelock.
+    Returns the keccak of the executor creation code."""
     executor_code = artifacts[EXECUTOR_CONTRACT].link(libraries).creation_code
     dispatcher_code = artifacts[DISPATCHER_CONTRACT].link(libraries).creation_code
     route = replace(route_template, peer=factory.address)
@@ -525,6 +523,13 @@ def _configure_source_factory(
         from_=OWNER,
         label="schedule_factory_route",
     )
+    chain.add_call(
+        factory.schedule_dispatcher_deployment_gas_limit(
+            peer_chain_id, V3.ticket_gas_limit
+        ),
+        from_=OWNER,
+        label="schedule_dispatcher_deployment_gas_limit",
+    )
     chain.next_block(time_shift_seconds=config_delay + 1).with_block_override(
         gasLimit=30_000_000
     )
@@ -538,20 +543,25 @@ def _configure_source_factory(
         from_=OWNER,
         label="execute_factory_route",
     )
+    chain.add_call(
+        factory.execute_dispatcher_deployment_gas_limit(
+            peer_chain_id, V3.ticket_gas_limit
+        ),
+        from_=OWNER,
+        label="execute_dispatcher_deployment_gas_limit",
+    )
     return bytes(Web3.keccak(executor_code))
 
 
 def _source_route(peer_selector: int, max_fee: int) -> CcipRouteConfig:
-    """The v2 pair's factory route toward ``peer_selector``, the shape a
-    factory built from FUSE_SOURCE_REVISION needs: without a separate
-    deployment gas limit the ticket carries ``message_gas_limit``. The peer is
-    set to the factory being configured."""
+    """The v3 pair's factory route toward ``peer_selector``; the peer is set to
+    the factory being configured."""
     return CcipRouteConfig(
         chain_selector=peer_selector,
         peer=ZERO_ADDRESS,
         fee_token=ZERO_ADDRESS,
-        message_gas_limit=V2.message_gas_limit,
-        token_gas_limit=V2.token_gas_limit,
+        message_gas_limit=V3.message_gas_limit,
+        token_gas_limit=V3.token_gas_limit,
         max_fee=max_fee,
         enabled=True,
     )
@@ -566,7 +576,7 @@ def _deploy_source_generation(
     artifacts: dict[FoundryContract, SolidityArtifact],
     asset: RehearsalAsset,
 ) -> ChecksumAddress:
-    """A factory pair from the source generation, configured like the v2 pair
+    """A factory pair from the source generation, configured like the v3 pair
     for ``asset`` and for each other, verified after one relay; returns the
     factory address (the same on both chains)."""
     factory_address, libraries = _deploy_source_core(
@@ -625,6 +635,11 @@ def _deploy_source_generation(
             chain_id, "source_factory_asset", factory.asset_config(asset.asset_id)
         )
         simulator.observe(chain_id, "source_factory_route", factory.ccip_route(peer))
+        simulator.observe(
+            chain_id,
+            "source_deployment_gas_limit",
+            factory.dispatcher_deployment_gas_limit(peer),
+        )
     results = simulator.relay()
     for chain_id, index, peer_selector in (
         (ARBITRUM, 0, HYPEREVM_SELECTOR),
@@ -634,6 +649,7 @@ def _deploy_source_generation(
         result.raise_for_failure()
         assert result.get("source_creation_codes") is True
         assert result.get("source_executor_code_hash") == executor_code_hash
+        assert result.get("source_deployment_gas_limit") == V3.ticket_gas_limit
         assert result.get("source_factory_asset") == (
             asset.tokens[index],
             asset.decimals,
@@ -919,7 +935,8 @@ def test_simulate_v3_dispatcher_deployment_gas_governance(web3_arb):
 
 def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
     """The deployment the operator would send, as labeled calls: libraries,
-    factory, creation codes, asset and route on both chains."""
+    factory, creation codes, asset, route and dispatcher deployment gas limit
+    on both chains."""
     artifacts = _compile_crosschain_contracts()
     arb_ctx = _ctx(web3_arb, ARBITRUM, USDC.blocks[0])
     hyper_ctx = _ctx(web3_hyperevm, HYPEREVM, USDC.blocks[1])
@@ -938,8 +955,10 @@ def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
         "configure_creation_codes",
         "schedule_factory_asset",
         "schedule_factory_route",
+        "schedule_dispatcher_deployment_gas_limit",
         "enable_factory_asset",
         "execute_factory_route",
+        "execute_dispatcher_deployment_gas_limit",
     ]
     deployment = [f"deploy_{contract.name}" for contract in CORE_LIBRARIES] + [
         "deploy_CcipCrosschainFactory"
