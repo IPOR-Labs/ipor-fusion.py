@@ -47,3 +47,15 @@ def test_cli_reexport_is_same_object():
     from ipor_fusion.cli.vault_cmd import CHAIN_NAMES as cli_chain_names
 
     assert cli_chain_names is CHAIN_NAMES
+
+
+def test_every_factory_chain_in_the_guide_has_its_name():
+    import re
+
+    from ipor_fusion.guide import guide_text
+
+    rows = re.findall(
+        r"^\| (\w+) \| (\d+) \| `0x", guide_text("quickstart"), flags=re.MULTILINE
+    )
+    assert rows
+    assert {int(cid): name.lower() for name, cid in rows}.items() <= CHAIN_NAMES.items()
