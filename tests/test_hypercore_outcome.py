@@ -56,6 +56,15 @@ def test_core_to_evm_reports_silent_drop_after_settlement() -> None:
     )
 
 
+def test_core_to_evm_reports_in_transit_before_evm_credit() -> None:
+    before = _snapshot()
+    after = _snapshot(block_number=105, action_nonce=8, core_total_wei=4_709_200)
+    assert (
+        compare_hypercore_transfer(before, after, "core_to_evm").status
+        == HyperCoreTransferStatus.IN_TRANSIT
+    )
+
+
 def test_first_deposit_reports_activation_even_if_fee_consumes_credit() -> None:
     before = _snapshot(
         core_total_wei=0, evm_balance=Amount(1_000_000), core_user_exists=False
@@ -83,7 +92,7 @@ def test_first_deposit_reports_activation_even_if_fee_consumes_credit() -> None:
         ),
         ({"block_number": 101, "action_nonce": 9}, HyperCoreTransferStatus.SUPERSEDED),
         (
-            {"block_number": 101, "action_nonce": 8, "core_total_wei": 1_000_000_000},
+            {"block_number": 101, "action_nonce": 8, "core_total_wei": 1_500_000_000},
             HyperCoreTransferStatus.INDETERMINATE,
         ),
     ],

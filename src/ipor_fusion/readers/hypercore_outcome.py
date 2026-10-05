@@ -1,4 +1,8 @@
-"""Read-only checks for asynchronous HyperCore transfers and vault exits."""
+"""Read-only checks for EVM/Core transfers and vault exits.
+
+Transfer outcomes cover EVM-to-Core and Core-to-EVM only. Dex-to-dex sends and
+orders need their own evidence, such as fills or the position precompile.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +32,7 @@ class HyperCoreTransferStatus(StrEnum):
     PENDING = "pending"
     APPLIED = "applied"
     DROPPED = "dropped"
+    IN_TRANSIT = "in_transit"
     INDETERMINATE = "indeterminate"
     SUPERSEDED = "superseded"
 
@@ -53,9 +58,10 @@ class HyperCoreTransferSnapshot:
 class HyperCoreTransferOutcome:
     """Observed transfer result after one pending window.
 
-    ``DROPPED`` means the expected destination stayed unchanged after the
-    action settled. This is an inference, valid only without concurrent Core
-    or ERC-20 movements. An IOC order with no fill needs a different check.
+    ``DROPPED`` means no Core credit or account activation for an EVM deposit,
+    or neither a Core debit nor EVM credit for a Core withdrawal.
+    ``IN_TRANSIT`` means Core was debited but EVM was not credited yet. These
+    are inferences, valid only without concurrent Core or ERC-20 movements.
     """
 
     status: HyperCoreTransferStatus
@@ -216,6 +222,11 @@ def _core_to_evm_status(
 ) -> HyperCoreTransferStatus:
     if after.evm_balance > before.evm_balance:
         return HyperCoreTransferStatus.APPLIED
+    if (
+        after.evm_balance == before.evm_balance
+        and after.core_total_wei < before.core_total_wei
+    ):
+        return HyperCoreTransferStatus.IN_TRANSIT
     if (
         after.evm_balance == before.evm_balance
         and after.core_total_wei == before.core_total_wei
