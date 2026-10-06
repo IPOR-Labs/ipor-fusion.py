@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v3.9.0 (2026-10-06)
+
+### Features
+
+- **cli**: Enable HyperEVM vault inspection
+  ([`eeaf5ff`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/eeaf5ffe0ed89dc1255501f02e9d56fd146ca9e0))
+
+- **sdk**: Model HyperCore reads in simulations
+  ([`a447497`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a44749752f3fe84161cffaaad7fba69d2cb02647))
+
+### Refactoring
+
+- **sdk**: Keep the HyperCore model in the tests behind a generic simulator hook
+  ([`9f03b51`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9f03b51f079111d1790d8cfe6198d401af399619))
+
+### Testing
+
+- **sdk**: Simulate a crosschain supply into the HyperCore vault and back
+  ([`86f5d9b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/86f5d9b599bc5c26594b4e529c3e799dbdb998f1))
+
+
 ## v3.8.0 (2026-10-05)
 
 ### Bug Fixes
