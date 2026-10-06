@@ -72,6 +72,19 @@ gas against its route limit; a `Chain.simulated_gas_limit` lifts HyperEVM's 3 M
 small-block pin to 30 M and `Deployment.ccip_debits_sent_amount` /
 `attestation_zero_dust_sd` carry the executor generation's accounting into `Run`.
 It needs `ARBITRUM_PROVIDER_URL` and `HYPEREVM_PROVIDER_URL`.
+HyperCore (market 55) cannot be simulated directly: the HyperEVM RPC ignores code
+overrides at the precompile addresses `0x800`–`0x813`, and the public Hyperliquid RPC
+has no `eth_simulateV1`. `tests/_hypercore_shadow.py` therefore compiles the HyperCore
+fuses and pre-hooks from `IPOR_FUSION_HYPERCORE_SOURCE_DIR` (a contracts checkout whose
+executable code matches the deployed set) with only `HyperCoreLib`'s precompile and
+CoreWriter constants redirected to ordinary addresses, proves the rest is identical to
+the deployed runtimes, and `tests/_hypercore_model.py` answers those addresses through
+`VaultSimulator.with_state_override_provider`. Core never applies anything there: the
+tests prove EVM validation under supplied Core state. `test_hypercore_simulation.py`
+runs one vault cycle; `test_simulate_crosschain_hypercore.py` runs the composed flow
+(v3 canary hub → CCIP → the market-55 vault → a trade → recall → claim) and holds every
+CCIP delivery to its route gas limit. Both skip without the source directory and both
+RPCs.
 `test_crosschain_readiness.py` checks the Ethereum-hub POC's live bridge and IPOR
 preconditions. Its `readiness` marker requires `--run-readiness`: ordinary runs
 exclude it even with `-m sdk`. Known HyperEVM gaps are non-strict xfails restricted

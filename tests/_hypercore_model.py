@@ -221,3 +221,32 @@ class HyperCoreSimulationModel:
             "code": "0x" + _writer_runtime().hex()
         }
         return overrides
+
+
+def market55_model(vault: ChecksumAddress) -> HyperCoreSimulationModel:
+    """A market-55 vault with an active Core account holding 15 USDC on spot,
+    flat on the native and xyz dexes; USDC and xyz:NVDA metadata as on Core."""
+    zero = HyperCoreAccountMarginSummary(0, 0, 0, 0)
+    return HyperCoreSimulationModel(
+        l1_block_number=1_000_000_000,
+        core_users={vault: True},
+        spot_balances={(vault, 0): HyperCoreSpotBalance(1_500_000_000, 0, 0)},
+        account_summaries={(0, vault): zero, (1, vault): zero},
+        token_infos={
+            0: HyperCoreTokenInfo(
+                name="USDC",
+                spots=(),
+                deployer_trading_fee_share=0,
+                deployer=Web3.to_checksum_address(
+                    "0x0000000000000000000000000000000000000000"
+                ),
+                evm_contract=Web3.to_checksum_address(
+                    "0x6B9E773128f453f5c2C60935Ee2DE2CBc5390A24"
+                ),
+                sz_decimals=8,
+                wei_decimals=8,
+                evm_extra_wei_decimals=-2,
+            )
+        },
+        perp_asset_infos={10_002: HyperCorePerpAssetInfo("xyz:NVDA", 20, 3, 20, False)},
+    )
