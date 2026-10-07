@@ -638,6 +638,20 @@ class TestTransportAgnosticCommandOperations:
         assert values[0] == int(CcipCommandType.UPDATE_VAULTS)
         assert values[4:7] == ((REMOTE_VAULT_BASE.lower(),), True, True)
         assert values[8:] == (10**16, ZERO_ADDRESS, 1_200_000)
+        # additive: a second remote vault joins a live lane without
+        # dropping the vaults already allowed
+        values = _decoded(
+            fuse.update_vaults(
+                executor=EXECUTOR,
+                chain_id=8453,
+                plasma_vaults=[REMOTE_VAULT_BASE],
+                send=send,
+                replace=False,
+            ),
+            self.CCIP_SIG,
+        )
+        assert values[0] == int(CcipCommandType.UPDATE_VAULTS)
+        assert values[4:7] == ((REMOTE_VAULT_BASE.lower(),), True, False)
         with pytest.raises(TypeError, match="takes CcipSendParams, got NoneType"):
             fuse.send_command(executor=EXECUTOR, chain_id=8453, command=cmd)
 

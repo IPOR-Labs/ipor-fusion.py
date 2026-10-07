@@ -222,9 +222,13 @@ class CcipCrosschainCommandFuse(CrosschainCommandFuse):
         chain_id: ChainId,
         plasma_vaults: Sequence[ChecksumAddress],
         send: SendParams | None = None,
+        replace: bool = True,
     ) -> FuseAction:
-        """Replace semantics (``vaultsAllowed`` and ``vaultsReplace`` set), the
-        same remote state the Stargate ``UPDATE_PLASMA_VAULTS`` produces."""
+        """Allow ``plasma_vaults`` on the dispatcher. ``replace=True`` (the
+        default) installs them as the whole allowlist, the same remote state
+        the Stargate ``UPDATE_PLASMA_VAULTS`` produces; ``replace=False`` adds
+        them to the vaults already allowed, which is how a second remote vault
+        (a HyperCore vault next to a plain spoke) joins a live lane."""
         params = _ccip_send(send, self)
         return self.enter(
             CcipCommandType.UPDATE_VAULTS,
@@ -232,7 +236,7 @@ class CcipCrosschainCommandFuse(CrosschainCommandFuse):
             chain_id=chain_id,
             plasma_vaults=plasma_vaults,
             vaults_allowed=True,
-            vaults_replace=True,
+            vaults_replace=replace,
             max_fee=params.max_fee,
             fee_token=params.fee_token,
             gas_limit=params.gas_limit,
