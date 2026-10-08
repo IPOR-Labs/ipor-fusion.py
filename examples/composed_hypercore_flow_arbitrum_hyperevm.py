@@ -564,7 +564,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                 "",
                 None,
                 None,
-                f"skipped: dex {XYZ_DEX} account value is {xyz_equity_usd6} USD6 at head (the EVM equity gate); nothing to send",
+                f"skipped: dex {XYZ_DEX} account value {xyz_equity_usd6} USD6 at head (the EVM equity gate) within the SendCap {send_cap} wei leaves nothing to send",
             )
         )
     # A6. Core -> EVM: a spot -> spot send to the USDC system address. The
