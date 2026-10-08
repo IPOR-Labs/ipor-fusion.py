@@ -26,7 +26,7 @@ class PreviewFeature:
 # behind these are under active development, their mainnet deployments are
 # a proof of concept and IPOR Labs canaries, and their interfaces may change
 # between minor versions. Nothing under these names should route production
-# capital. Every other feature of the package is production.
+# capital.
 PREVIEW_FEATURES: tuple[PreviewFeature, ...] = (
     PreviewFeature(
         "crosschain",

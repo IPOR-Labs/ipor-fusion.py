@@ -56,6 +56,8 @@ Run it (the shell snippets assume a POSIX shell -- bash or zsh):
 
 Both providers must be archive nodes that implement ``eth_simulateV1`` and serve
 state at the pinned blocks below.
+
+Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
 
 from __future__ import annotations

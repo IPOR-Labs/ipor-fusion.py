@@ -2,6 +2,8 @@
 
 Transfer outcomes cover EVM-to-Core and Core-to-EVM only. Dex-to-dex sends and
 orders need their own evidence, such as fills or the position precompile.
+
+Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
 
 from __future__ import annotations

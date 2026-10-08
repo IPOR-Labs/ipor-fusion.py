@@ -918,6 +918,5 @@ class ServerInfoResponse(_Base):
     preview_features: list[PreviewFeatureModel] = Field(
         default_factory=list,
         description="Package areas that are preview, not production (currently "
-        "crosschain and HyperCore). Everything the package ships outside these "
-        "is production.",
+        "crosschain and HyperCore).",
     )
