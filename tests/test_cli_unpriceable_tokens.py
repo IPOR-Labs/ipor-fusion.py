@@ -7,7 +7,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.cli import vault_unpriceable
-from ipor_fusion.cli.vault_health import _compute_unpriceable_token_criticals
+from ipor_fusion.cli.vault_health import _compute_unpriceable_token_findings
 from ipor_fusion.cli.vault_unpriceable import (
     MiddlewarePricedToken,
     fetch_unpriceable_priced_tokens,
@@ -167,18 +167,66 @@ class TestFetch:
         chain.answers.update(
             _oracle_answers({PRICED: ZERO, UNPRICED: ZERO}, priced={PRICED})
         )
-        position = SimpleNamespace(
-            market_id="ab" * 32, loan_token=PRICED, collateral_token=UNPRICED
+        supplied = SimpleNamespace(
+            market_id="ab" * 32,
+            loan_token=PRICED,
+            collateral_token=UNPRICED,
+            collateral=0,
+            supply_assets=10,
+            borrow_assets=0,
+        )
+        collateralized = SimpleNamespace(
+            market_id="ef" * 32,
+            loan_token=PRICED,
+            collateral_token=UNPRICED,
+            collateral=1,
+            supply_assets=0,
+            borrow_assets=0,
         )
         idle = SimpleNamespace(
-            market_id="cd" * 32, loan_token=PRICED, collateral_token=ZERO
+            market_id="cd" * 32,
+            loan_token=PRICED,
+            collateral_token=ZERO,
+            collateral=0,
+            supply_assets=0,
+            borrow_assets=0,
+        )
+        flagged = _fetch(
+            chain,
+            {},
+            morpho_positions={
+                IporFusionMarkets.MORPHO: [supplied, collateralized, idle]
+            },
+        )
+        assert [(f.via, f.position_open) for f in flagged] == [
+            (f"collateral token of Morpho market {'ab' * 32}", False),
+            (f"collateral token of Morpho market {'ef' * 32}", True),
+        ]
+        assert all(f.token == UNPRICED for f in flagged)
+        assert all(f.morpho_collateral for f in flagged)
+        assert not any(f.zero_balance_reverts for f in flagged)
+
+    @pytest.mark.parametrize(
+        ("supply", "borrow", "position_open"),
+        [(0, 5, True), (7, 5, True), (5, 5, None), (0, 0, False)],
+    )
+    def test_morpho_loan_leg_follows_the_net_amount(
+        self, chain, supply, borrow, position_open
+    ):
+        chain.answers.update(_oracle_answers({UNPRICED: ZERO}, priced=set()))
+        position = SimpleNamespace(
+            market_id="ab" * 32,
+            loan_token=UNPRICED,
+            collateral_token=ZERO,
+            collateral=0,
+            supply_assets=supply,
+            borrow_assets=borrow,
         )
         (flagged,) = _fetch(
-            chain, {}, morpho_positions={IporFusionMarkets.MORPHO: [position, idle]}
+            chain, {}, morpho_positions={IporFusionMarkets.MORPHO: [position]}
         )
-        assert flagged.token == UNPRICED
-        assert flagged.via == f"collateral token of Morpho market {'ab' * 32}"
-        assert not flagged.zero_balance_reverts
+        assert flagged.position_open is position_open
+        assert not flagged.morpho_collateral
 
     @pytest.mark.parametrize(
         ("code", "flagged"),
@@ -222,32 +270,77 @@ class TestFetch:
         ]
 
 
-class TestCriticals:
-    def test_messages(self):
-        data = SimpleNamespace(
-            unpriceable_priced_tokens=[
-                MiddlewarePricedToken(
-                    IporFusionMarkets.ERC20_VAULT_BALANCE,
-                    UNPRICED,
-                    "granted ERC20 substrate",
-                    zero_balance_reverts=True,
-                ),
-                MiddlewarePricedToken(
-                    IporFusionMarkets.DOLOMITE,
-                    UNPRICED,
-                    "granted Dolomite asset substrate",
-                    zero_balance_reverts=False,
-                    price_source=BROKEN_FEED,
-                ),
-            ]
+def _token(**overrides) -> MiddlewarePricedToken:
+    fields = {
+        "market_id": IporFusionMarkets.MORPHO,
+        "token": UNPRICED,
+        "via": f"collateral token of Morpho market {'ab' * 32}",
+        "zero_balance_reverts": False,
+        "position_open": False,
+        "morpho_collateral": True,
+    } | overrides
+    return MiddlewarePricedToken(**fields)
+
+
+def _findings(*tokens: MiddlewarePricedToken) -> tuple[list[str], list[str]]:
+    data = SimpleNamespace(unpriceable_priced_tokens=list(tokens))
+    return _compute_unpriceable_token_findings(data)  # type: ignore[arg-type]
+
+
+class TestFindings:
+    def test_reverts_without_position_is_critical(self):
+        (line,), warnings = _findings(
+            _token(
+                market_id=IporFusionMarkets.ERC20_VAULT_BALANCE,
+                via="granted ERC20 substrate",
+                zero_balance_reverts=True,
+                position_open=None,
+                morpho_collateral=False,
+            )
         )
-        no_position, on_behalf = _compute_unpriceable_token_criticals(data)  # type: ignore[arg-type]
-        assert no_position.startswith("CRITICAL — market ERC20_VAULT_BALANCE (7)")
-        assert "it has no price source" in no_position
-        assert "even with no position" in no_position
-        assert f"its price source {BROKEN_FEED} reverts" in on_behalf
-        assert "on the vault's behalf" in on_behalf
+        assert warnings == []
+        assert line.startswith("CRITICAL — market ERC20_VAULT_BALANCE (7)")
+        assert "it has no price source" in line
+        assert "even with no position" in line
+
+    def test_open_position_is_critical(self):
+        (line,), warnings = _findings(_token(position_open=True))
+        assert warnings == []
+        assert "the vault holds it, so balanceOf() reverts now" in line
+
+    def test_unread_position_is_a_warning(self):
+        criticals, (line,) = _findings(
+            _token(
+                market_id=IporFusionMarkets.DOLOMITE,
+                via="granted Dolomite asset substrate",
+                position_open=None,
+                morpho_collateral=False,
+                price_source=BROKEN_FEED,
+            )
+        )
+        assert criticals == []
+        assert line.startswith("WARNING — market DOLOMITE")
+        assert f"its price source {BROKEN_FEED} reverts" in line
+        assert "position not read, so current impact is unknown" in line
+        assert line.endswith("fix: add a price source")
+
+    def test_latent_morpho_collateral_is_a_warning_with_the_fuse_hint(self):
+        criticals, (line,) = _findings(_token())
+        assert criticals == []
+        assert line.startswith("WARNING — market MORPHO (14)")
+        assert "the vault holds none in this position" in line
+        assert "if every Morpho market of this market is and stays supply-only" in line
+        assert "MorphoOnlyLiquidityBalanceFuse" in line
+
+    def test_latent_loan_token_gets_no_fuse_hint(self):
+        _, (line,) = _findings(
+            _token(
+                via=f"loan token of Morpho market {'ab' * 32}",
+                morpho_collateral=False,
+            )
+        )
+        assert line.endswith("fix: add a price source")
 
     def test_none_when_not_run(self):
         data = SimpleNamespace(unpriceable_priced_tokens=None)
-        assert _compute_unpriceable_token_criticals(data) == []  # type: ignore[arg-type]
+        assert _compute_unpriceable_token_findings(data) == ([], [])  # type: ignore[arg-type]

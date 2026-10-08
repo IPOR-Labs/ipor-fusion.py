@@ -53,6 +53,10 @@ class MiddlewarePricedToken:
     balance check, so a missing price reverts ``balanceOf()`` with no
     position; otherwise only a non-zero position does, and third parties can
     create one (a transfer, or a deposit on the vault's behalf).
+    ``position_open`` says whether the vault holds a non-zero amount of the
+    token in that position now; ``None`` when it was not read.
+    ``morpho_collateral`` marks a Morpho collateral token, which
+    MorphoOnlyLiquidityBalanceFuse never prices.
     ``price_source`` is the middleware's explicit source for the token, set
     on flagged tokens only; ``None`` means none (or unreadable).
     """
@@ -61,6 +65,8 @@ class MiddlewarePricedToken:
     token: ChecksumAddress
     via: str
     zero_balance_reverts: bool
+    position_open: bool | None = None
+    morpho_collateral: bool = False
     price_source: ChecksumAddress | None = None
 
 
@@ -125,6 +131,15 @@ def _plain_tokens(
     return tokens
 
 
+def _loan_leg_open(pb: MorphoPositionBreakdown) -> bool | None:
+    """The balance fuse prices the loan token only for supply minus borrow.
+    Both legs non-zero and equal here may still differ at the fuse's accrual,
+    so that case is unknown."""
+    if pb.supply_assets == pb.borrow_assets:
+        return None if pb.supply_assets else False
+    return True
+
+
 def _morpho_tokens(
     morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None,
 ) -> list[MiddlewarePricedToken]:
@@ -138,10 +153,15 @@ def _morpho_tokens(
             token,
             f"{leg} token of Morpho market {pb.market_id}",
             zero_balance_reverts=False,
+            position_open=position_open,
+            morpho_collateral=leg == "collateral",
         )
         for market_id, breakdowns in (morpho_positions or {}).items()
         for pb in breakdowns
-        for leg, token in (("loan", pb.loan_token), ("collateral", pb.collateral_token))
+        for leg, token, position_open in (
+            ("loan", pb.loan_token, _loan_leg_open(pb)),
+            ("collateral", pb.collateral_token, pb.collateral > 0),
+        )
         if token != _ZERO
     ]
 
@@ -278,8 +298,8 @@ def fetch_unpriceable_priced_tokens(
     oracle = PriceOracleMiddleware(ctx, Web3.to_checksum_address(oracle_address))
     unpriceable = _unpriceable(ctx, oracle, (p.token for p in priced))
     flagged = {
-        (p.market_id, p.token): replace(p, price_source=unpriceable[p.token])
+        (p.market_id, p.token, p.via): replace(p, price_source=unpriceable[p.token])
         for p in priced
         if p.token in unpriceable
     }
-    return sorted(flagged.values(), key=lambda p: (p.market_id, p.token))
+    return [flagged[key] for key in sorted(flagged)]
