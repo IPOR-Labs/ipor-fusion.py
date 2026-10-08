@@ -39,6 +39,8 @@ ABI (one struct argument per method)::
     HyperCoreCancelFuse.enterCancelByOid((uint32 asset, uint64 oid))
     HyperCoreCancelFuse.enterCancelByCloid((uint32 asset, uint128 cloid))
     HyperCoreBuilderFeeFuse.enter((address builder, uint64 maxFeeRateDecibps))
+
+Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
 
 from __future__ import annotations

@@ -19,6 +19,8 @@ Every read runs at ``ctx.default_block``; pin it to compare
 :func:`read_hypercore_nav` with :meth:`PlasmaVault.balance_fuse_value` at one
 block. Precompile reads need a live HyperEVM node: they fail inside
 ``eth_simulateV1`` and have no historical Core state.
+
+Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
 
 from __future__ import annotations

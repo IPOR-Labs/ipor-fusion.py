@@ -34,6 +34,10 @@ Vault, a fuse, a balance fuse, a market and a substrate are.
 2. Read `fusion://invariants` before you write or review any code that deploys, \
 configures or operates a vault. Each rule there names the revert you get when \
 you break it.
+3. Know what is preview: `server_info` lists `preview_features` (crosschain, \
+market 54, and HyperCore, market 55). Their contracts are under active \
+development and their mainnet deployments are a proof of concept and canaries; \
+treat their interfaces as unstable and route no production capital through them.
 
 What this server does: read-only inspection. Start by listing vaults \
 (`vault_list` or `vaults_list`, whichever this server has), then \

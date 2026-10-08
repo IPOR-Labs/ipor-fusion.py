@@ -222,6 +222,12 @@ class TestServerInfo:
         assert result.version == opts.server_version
         assert result.repository == (opts.website_url or "")
 
+    def test_lists_the_preview_features(self):
+        result = server_info()
+        assert [f.name for f in result.preview_features] == ["crosschain", "hypercore"]
+        assert {f.status for f in result.preview_features} == {"preview"}
+        assert all(f.scope for f in result.preview_features)
+
     def test_default_returns_only_the_running_version(self):
         result = server_info()
         assert [entry.version for entry in result.changelog] == [result.version]

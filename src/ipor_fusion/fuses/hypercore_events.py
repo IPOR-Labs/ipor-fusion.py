@@ -8,6 +8,8 @@ fuse's own address (``VERSION``). ``HyperCoreActionEnqueued`` is emitted by
 the vault (the fuses run as delegatecalls) once per enqueued action and
 ``HyperCoreActionSettled`` only from a settlement fuse transaction; TIMING
 settlements emit nothing.
+
+Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
 
 from __future__ import annotations

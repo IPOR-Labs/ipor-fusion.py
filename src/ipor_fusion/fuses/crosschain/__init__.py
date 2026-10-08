@@ -1,6 +1,9 @@
 """Crosschain market fuses, split by transport like the contracts:
 ``base`` (substrates, the transport-agnostic bases, the claim fuse),
-``stargate`` and ``ccip``."""
+``stargate`` and ``ccip``.
+
+Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
+"""
 
 from ipor_fusion.fuses.crosschain.base import (
     CrosschainClaimFuse,

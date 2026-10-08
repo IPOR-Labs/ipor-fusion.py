@@ -9,6 +9,8 @@ imported the encoders back would re-enter a half-initialized module. The
 modules that need the encoders, ``lane``, ``discovery``, ``transport``,
 ``simulation`` and the per-transport ``lane``/``transport``, are exported from
 :mod:`ipor_fusion` and importable by module path.
+
+Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
 
 from ipor_fusion.crosschain.ccip.chainlink import (

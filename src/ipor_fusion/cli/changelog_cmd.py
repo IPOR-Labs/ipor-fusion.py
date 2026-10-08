@@ -7,7 +7,13 @@ from dataclasses import asdict
 
 import click
 
-from ipor_fusion.about import ChangelogEntry, package_version, read_changelog
+from ipor_fusion.about import (
+    PREVIEW_FEATURES,
+    PREVIEW_STATEMENT,
+    ChangelogEntry,
+    package_version,
+    read_changelog,
+)
 
 # The CLI's only top-level leaf command: every other one is a group, because
 # every other one has more than one verb. Named after the data it prints, like
@@ -36,6 +42,7 @@ def changelog(since: str, json_output: bool) -> None:
     if json_output:
         click.echo(json.dumps([asdict(entry) for entry in entries], indent=2))
         return
+    _print_preview_status()
     if not entries:
         click.echo(_nothing_to_show(since))
         return
@@ -43,6 +50,15 @@ def changelog(since: str, json_output: bool) -> None:
         if index:
             click.echo()
         _print_entry(entry)
+
+
+def _print_preview_status() -> None:
+    """The one status line a reader of release notes must not miss: which
+    package areas are preview. JSON output leaves it to `server_info`."""
+    click.secho(PREVIEW_STATEMENT, bold=True)
+    for feature in PREVIEW_FEATURES:
+        click.echo(f"  - {feature.name}: {feature.scope}")
+    click.echo()
 
 
 def _nothing_to_show(since: str) -> str:
