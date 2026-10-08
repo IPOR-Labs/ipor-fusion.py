@@ -293,8 +293,8 @@ ever signed or broadcast.
   and claim, driven through `CrosschainLane` and relayed by `CrosschainSimulator`.
 - [Composed HyperCore flow](examples/composed_hypercore_flow_arbitrum_hyperevm.py) (preview feature) — the
   same hub funding a HyperCore vault (market 55) that trades on Hyperliquid Core: the Core leg
-  (bridge, dex transfer, order, close, exit) built from the vault's substrate grants and previewed
-  with `eth_call` at head, the REDEEM sized by the vault's EVM exit ceiling behind the executor's
+  (bridge, dex transfer, order, close, exit) built from the vault's substrate grants and estimated
+  with `eth_estimateGas` at head (EVM acceptance only, Core executes later), the REDEEM sized by the vault's EVM exit ceiling behind the executor's
   fee gate, then recall, residual attestation and claim replayed in `CrosschainSimulator` at
   blocks pinned inside the second live cycle.
 

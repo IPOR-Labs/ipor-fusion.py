@@ -13,22 +13,34 @@ and splits it by what a node can do without signing anything:
 
   A. the Core leg is PREVIEWED at head on HyperEVM. ``eth_simulateV1`` cannot
      run the HyperCore read precompiles (the RPC ignores code overrides at
-     0x800-0x813), but ``eth_call`` and ``eth_estimateGas`` execute them, and
-     this RPC accepts state overrides. So each Core action -- bridge EVM -> Core,
-     spot -> perp dex, a limit order, its reduce-only close, dex -> spot,
-     Core -> EVM -- is built from the vault's own substrate grants, previewed
-     from the alpha and reported with its gas or its decoded revert. Sends that
-     need a Core balance are sized to the vault's live Core inventory, because
-     Core-side balances cannot be overridden from the EVM;
+     0x800-0x813), but ``eth_estimateGas`` executes them, and this RPC accepts
+     state overrides. So each Core action -- bridge EVM -> Core, spot -> perp
+     dex, a limit order, its reduce-only close, dex -> spot, Core -> EVM -- is
+     built from the vault's own substrate grants, estimated from the alpha and
+     reported with its gas or its decoded revert. The six previews are
+     independent reads against the live inventory: the bridge preview funds
+     nothing for the next one, the buy preview opens no position for the
+     close, and a gas estimate proves only that the EVM side accepts the
+     action -- not that Core accepts it, fills it or changes a balance. Sends
+     the fuse checks against a Core balance are sized to the vault's live Core
+     inventory, because Core-side state cannot be overridden from the EVM;
   B. the hub legs that never touch the HyperCore vault are SIMULATED in
-     ``CrosschainSimulator`` at blocks pinned inside the live cycle: the REDEEM
-     command sized by the vault's EVM exit ceiling behind the executor's fee
-     gate, then the recall, the token return, the residual attestation and the
-     claim, replayed over the relay exactly as cycle 2 ran them.
+     ``CrosschainSimulator`` at blocks pinned inside the live cycle. B1 sizes
+     a REDEEM command with the live planner's policy and simulates its hub
+     side behind the executor's fee gate; B2 is a separate replay that starts
+     after the live redeem had settled: recall, token return, residual
+     attestation and claim, exactly as cycle 2 ran them.
 
 The two spoke deliveries that execute the HyperCore vault's own deposit and
-redeem (DEPOSIT and REDEEM commands) are the one thing neither tool reproduces:
-their live receipts are cited instead.
+redeem are the one thing neither tool reproduces. Live they were, on HyperEVM,
+DEPOSIT 0x3ff1586ed161310d1f23017bce6bb0b2b60e69c85d9958e57e764f161a3422e7
+(block 47,896,918; acknowledged on Arbitrum in
+0x8dce572918c2e1877e1b318c3fef877bcaecdc25a25ced98b27dc20b35be0f13, block
+512,534,204) and REDEEM
+0xf11a551a6a6e2ce1352ef6492307e65adc54d1046b81af3f8d1ec35198bab08b (block
+47,984,367; acknowledged in
+0xb2a578a440093a94ec28fa92d750e60ed6f849f845ce4e81af1af71a334a21dc, block
+512,850,108).
 
 Run it (POSIX shell):
 
@@ -37,7 +49,7 @@ Run it (POSIX shell):
     uv run python examples/composed_hypercore_flow_arbitrum_hyperevm.py
 
 The Arbitrum provider must be an archive node with ``eth_simulateV1`` serving the
-pinned blocks; the HyperEVM provider must serve ``eth_call`` with state
+pinned blocks; the HyperEVM provider must serve ``eth_estimateGas`` with state
 overrides at head and state at its pinned block.
 
 Status: preview, not production. The contracts behind both markets are under
@@ -77,6 +89,7 @@ from ipor_fusion import (
     quote_ccip_native_fee,
     read_hypercore_evm_exit_ceiling,
     read_hypercore_vault_state,
+    register_custom_errors,
 )
 from ipor_fusion.fuses import (
     HyperCoreDepositFuse,
@@ -94,6 +107,17 @@ from ipor_fusion.readers.hypercore import HyperCoreReader
 from ipor_fusion.types import Amount, ChainId, MarketId, Period, Shares
 
 log = logging.getLogger("composed_hypercore_flow_arbitrum_hyperevm")
+
+# The send fuse's balance checks, so a preview that trips them reads by name
+# (contracts/fuses/hypercore/HyperCoreSendFuse.sol; selectors 0x9b94bcad and
+# 0x99a5f02c). The spot check compares the requested Core wei with the spot
+# balance's ``total - hold``; the HIP-3 check compares it with the dex account
+# value (equity) scaled to USD6 -- equity, not withdrawable collateral.
+HYPERCORE_SEND_FUSE_ERRORS = (
+    "HyperCoreSendFuseInsufficientBalance(uint256,uint256)",
+    "HyperCoreSendFuseInsufficientDexEquity(uint32,uint256,uint256)",
+)
+register_custom_errors(HYPERCORE_SEND_FUSE_ERRORS)
 
 # ── Live infrastructure (do NOT change) ──────────────────────────────────────
 ARBITRUM_CHAIN_ID = ChainId(42161)
@@ -201,6 +225,64 @@ def _to_hex(data: bytes | str) -> str:
     return data if isinstance(data, str) else "0x" + bytes(data).hex()
 
 
+# ── Pure sizing rules (no chain access, unit-tested offline) ─────────────────
+def _available_spot_wei(total: int, hold: int) -> int:
+    """What the send fuse lets leave spot: ``total - hold`` (held funds back
+    open orders and do not count)."""
+    return max(int(total) - int(hold), 0)
+
+
+def _size_send(
+    available_wei: int, reserve_wei: int, cap_wei: int, *, step_wei: int = 1
+) -> int:
+    """Core wei a send may carry: the available balance minus the reserve,
+    capped by the token's SendCap, rounded down to ``step_wei`` (the Core ->
+    EVM route needs an amount representable in the EVM token's decimals:
+    10 ** (Core wei decimals - EVM decimals), 100 for USDC). Zero when the cap
+    is zero or nothing is above the reserve."""
+    amount = min(max(int(available_wei) - int(reserve_wei), 0), max(int(cap_wei), 0))
+    return amount - amount % max(int(step_wei), 1)
+
+
+def _dex_equity_wei(account_value_usd6: int, cap_wei: int) -> int:
+    """The HIP-3 leg of ``send_asset`` is gated on the dex account value in
+    USD6 (100 Core wei per 1e-6 USD); the SendCap still applies. This is
+    equity, not withdrawable collateral: a transfer Core refuses for margin
+    reasons still passes this EVM check."""
+    return min(max(int(account_value_usd6), 0) * 100, max(int(cap_wei), 0))
+
+
+def _redeem_size(shares: int, share_assets: int, idle: int, max_withdraw: int) -> int:
+    """The live planner's REDEEM sizing (composed_hypercore_trade_plan):
+    everything the holder has when its value fits the vault's idle and
+    ``maxWithdraw``; otherwise ``min(idle, maxWithdraw) - 1_000`` underlying
+    units, converted to shares by the caller. The 99 % ``min_assets`` floor
+    protects the proceeds; it is not liquidity headroom, this buffer is."""
+    if min(shares, share_assets, idle, max_withdraw) <= 0:
+        return 0
+    if share_assets <= min(idle, max_withdraw):
+        return shares
+    return max(0, min(idle, max_withdraw) - 1_000)
+
+
+def _fee_gate(quote_wei: int, max_fee_wei: int, balance_wei: int) -> tuple[bool, str]:
+    """The planner's gate before any CCIP send: the executor's native balance
+    must cover the route's maxFee (the contract cap), not merely today's quote,
+    and the quote must be within the cap. Cycle 2's first REDEEM was gated on
+    the quote alone and reverted when the fee moved before the broadcast."""
+    if quote_wei > max_fee_wei:
+        return (
+            False,
+            f"quote {quote_wei} above the route maxFee {max_fee_wei}: the executor would refuse",
+        )
+    if balance_wei < max_fee_wei:
+        return False, (
+            f"executor balance {balance_wei} below the route maxFee {max_fee_wei}: "
+            f"do not send, even though the quote {quote_wei} fits"
+        )
+    return True, "balance covers the cap and the quote is within it"
+
+
 class Preview(NamedTuple):
     """One Core action as the alpha would send it, and what the node says."""
 
@@ -220,11 +302,13 @@ def _preview(
     override: dict[str, Any] | None,
     note: str,
 ) -> Preview:
-    """``eth_call`` + ``eth_estimateGas`` of ``execute([action])`` from the
-    alpha at head. A revert is decoded by name through the SDK registry
+    """``eth_estimateGas`` of ``execute([action])`` from the alpha at head: the
+    node runs the fuse, the precompile reads included, and answers gas or the
+    revert. A revert is decoded by name through the SDK registry
     (``decode_custom_error``) and reported, never raised: at head the vault's
     Core inventory is whatever the last live cycle left, and a preview that
-    reverts on a balance is information, not a failure of the example."""
+    reverts on a balance is information, not a failure of the example. A gas
+    figure proves EVM acceptance only; Core executes the queued action later."""
     calldata = _to_hex(vault.execute([action]).calldata)
     params: list[Any] = [
         {"from": ALPHA, "to": HYPERCORE_VAULT, "data": calldata},
@@ -247,7 +331,8 @@ def _preview(
 # ── Part A: the Core leg, previewed at head ──────────────────────────────────
 def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     """Build the six Core actions of the live cycle from the vault's own
-    substrate grants and preview each one from the alpha at head."""
+    substrate grants and estimate each one from the alpha at head. Six
+    independent previews against the live inventory; none changes state."""
     ctx = Web3Context(web3_hype, chain_id=HYPEREVM_CHAIN_ID)
     vault = PlasmaVault(ctx, HYPERCORE_VAULT)
 
@@ -289,13 +374,14 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     )
     market = perp_markets[XYZ_NVDA_ASSET]
     max_notional_usd6 = int(market.extra["max_notional_usd6"])
+    send_cap = send_caps[0]
     log.info(
         "grants: spot tokens %s, perp markets %s (xyz:NVDA cap %d USD6, reduce-only %s), send cap USDC %d wei, config %s",
         sorted(spot_tokens),
         sorted(perp_markets),
         max_notional_usd6,
         market.extra["reduce_only_required"],
-        send_caps[0],
+        send_cap,
         config,
     )
 
@@ -315,36 +401,43 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
             fuse.address in fuses, f"fuse {fuse.address} is not registered on the vault"
         )
 
-    # 3. Live Core inventory and the pending gate: only one Core action may be
-    #    pending per vault, and execute() reverts while one is.
+    # 3. Live Core inventory, read the way the fuses read it: spot total and
+    #    hold (the spot check uses total - hold), the dex-1 account value (the
+    #    HIP-3 check uses equity in USD6), the token's Core wei decimals (the
+    #    Core -> EVM amount must be representable on the EVM), the mark, and
+    #    the pending gate: only one Core action may be pending per vault.
     state = read_hypercore_vault_state(ctx, HYPERCORE_VAULT, HYPERCORE_BALANCE_FUSE)
     reader = HyperCoreReader(ctx)
     pending = bool(state.pending and state.pending.pending)
     spot = reader.spot_balance(HYPERCORE_VAULT, 0).call()
-    spot_wei = int(spot.total)
+    spot_available = _available_spot_wei(spot.total, spot.hold)
+    usdc_info = reader.token_info(0).call()
+    evm_step = 10 ** max(int(usdc_info.wei_decimals) - 6, 0)
+    xyz_equity_usd6 = int(
+        reader.account_margin_summary(XYZ_DEX, HYPERCORE_VAULT).call().account_value
+    )
     read_index = read_index_of(XYZ_NVDA_ASSET)
     # The precompile quotes a perp price with ``6 - szDecimals`` decimals; the
-    # order fuse takes 8 implied decimals. Read the market's szDecimals rather
-    # than assuming it, then rescale.
+    # order fuse takes 8 implied decimals. Read szDecimals, then rescale.
     sz_decimals = int(reader.perp_asset_info(read_index).call().sz_decimals)
-    mark_raw = int(reader.mark_px(read_index).call())
-    mark = mark_raw * 10 ** (2 + sz_decimals)
+    mark = int(reader.mark_px(read_index).call()) * 10 ** (2 + sz_decimals)
     _check(
         10 * CORE_WEI < mark < 100_000 * CORE_WEI,
         f"mark {mark} (8 dp) is not a sane NVDA price",
     )
     position = reader.position(HYPERCORE_VAULT, read_index).call()
-    withdrawable = int(reader.withdrawable(HYPERCORE_VAULT).call())
     log.info(
-        "live: nav_wad=%s balance_fuse_wad=%s pending=%s spot=%d wei position_szi=%d (szDecimals %d) mark=%d (8 dp) withdrawable=%d",
+        "live: nav_wad=%s balance_fuse_wad=%s pending=%s spot total=%d hold=%d (available %d wei) xyz account value=%d USD6 position_szi=%d (szDecimals %d) mark=%d (8 dp)",
         state.nav.value_wad,
         state.balance_fuse_value_wad,
         pending,
-        spot_wei,
+        spot.total,
+        spot.hold,
+        spot_available,
+        xyz_equity_usd6,
         position.szi,
         sz_decimals,
         mark,
-        withdrawable,
     )
     _check(not pending, "a Core action is pending; previews would all revert")
 
@@ -365,9 +458,9 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
             note="14 USDC EVM -> Core spot through the CoreDepositWallet; vault USDC balance overridden for the preview",
         )
     )
-    # A2. spot -> xyz dex: the fuse checks the live Core spot balance through
-    #     the precompile, which no override reaches; size to what is there.
-    to_dex = max(min(spot_wei - CORE_FEE_RESERVE_WEI, send_caps[0]), 0)
+    # A2. spot -> xyz dex: the fuse checks the live spot balance (total minus
+    #     hold) through the precompile, which no override reaches; size to it.
+    to_dex = _size_send(spot_available, CORE_FEE_RESERVE_WEI, send_cap)
     if to_dex > 0:
         previews.append(
             _preview(
@@ -382,7 +475,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                     amount_wei=to_dex,
                 ),
                 override=None,
-                note=f"self-send of {to_dex} Core wei USDC from spot to dex {XYZ_DEX}, sized to the live spot balance minus the fee reserve",
+                note=f"self-send of {to_dex} Core wei USDC from spot to dex {XYZ_DEX}: available {spot_available} minus the {CORE_FEE_RESERVE_WEI} reserve, within the SendCap {send_cap}",
             )
         )
     else:
@@ -392,12 +485,13 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                 "",
                 None,
                 None,
-                f"skipped: live spot balance {spot_wei} wei leaves nothing above the {CORE_FEE_RESERVE_WEI} reserve",
+                f"skipped: available spot {spot_available} wei (total {spot.total} - hold {spot.hold}) minus the {CORE_FEE_RESERVE_WEI} reserve, within the SendCap {send_cap}, leaves nothing to send",
             )
         )
     # A3/A4. A limit order through the mark (fills like a market order) and
     #        its reduce-only close. The order fuse validates the market grant,
-    #        the notional cap and the order window on the EVM side.
+    #        the notional cap and the order window on the EVM side; the close
+    #        preview does not depend on the buy preview having run.
     limit_buy = mark * (10_000 + LIMIT_SLIPPAGE_BPS) // 10_000
     limit_sell = mark * (10_000 - LIMIT_SLIPPAGE_BPS) // 10_000
     notional_usd6 = ORDER_SIZE * limit_buy // CORE_WEI // 100  # 8+8 dp -> 6 dp
@@ -437,11 +531,16 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                 reduce_only=True,
             ),
             override=None,
-            note="reduce-only close of the same size, limit mark -1 %",
+            note="reduce-only close of the same size, limit mark -1 % (independent of the buy preview)",
         )
     )
-    # A5. xyz dex -> spot: needs withdrawable margin on the dex.
-    if withdrawable > 0:
+    # A5. xyz dex -> spot: the HIP-3 leg is gated on the dex account value
+    #     (equity, accountMarginSummary for dex 1), not on anything
+    #     withdrawable; what Core will actually release is a Core-side
+    #     question the EVM preview cannot answer. The live planner sized this
+    #     leg to the dex's withdrawable from the Core API instead.
+    from_dex = _dex_equity_wei(xyz_equity_usd6, send_cap)
+    if from_dex > 0:
         previews.append(
             _preview(
                 web3_hype,
@@ -452,10 +551,10 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                     source_dex=XYZ_DEX,
                     destination_dex=SPOT_DEX,
                     token_index=0,
-                    amount_wei=withdrawable,
+                    amount_wei=from_dex,
                 ),
                 override=None,
-                note=f"self-send of the dex's withdrawable {withdrawable} wei back to spot",
+                note=f"self-send of {from_dex} Core wei from dex {XYZ_DEX} to spot, sized to the dex account value {xyz_equity_usd6} USD6 (equity, not withdrawable collateral) within the SendCap",
             )
         )
     else:
@@ -465,12 +564,17 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                 "",
                 None,
                 None,
-                "skipped: nothing withdrawable on the xyz dex at head",
+                f"skipped: dex {XYZ_DEX} account value is {xyz_equity_usd6} USD6 at head (the EVM equity gate); nothing to send",
             )
         )
-    # A6. Core -> EVM: a spot -> spot send to the USDC system address, which
-    #     needs Config{SpotSendBridgeEnabled}; keep the fee reserve.
-    to_evm = max(min(spot_wei - CORE_FEE_RESERVE_WEI, send_caps[0]), 0)
+    # A6. Core -> EVM: a spot -> spot send to the USDC system address. The
+    #     amount must be representable on the EVM (a multiple of 100 Core wei
+    #     for USDC) and Core charges its fee from what stays behind.
+    #     ``Config{SpotSendBridgeEnabled}`` gates ``spotSend`` (action 6), not
+    #     this ``sendAsset`` route.
+    to_evm = _size_send(
+        spot_available, CORE_FEE_RESERVE_WEI, send_cap, step_wei=evm_step
+    )
     if to_evm > 0:
         previews.append(
             _preview(
@@ -485,7 +589,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                     amount_wei=to_evm,
                 ),
                 override=None,
-                note=f"{to_evm} Core wei to the USDC system address; Core charges its fee from the reserve left behind",
+                note=f"{to_evm} Core wei to the USDC system address (available {spot_available} minus the reserve, rounded down to {evm_step}-wei EVM precision, within the SendCap)",
             )
         )
     else:
@@ -495,7 +599,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                 "",
                 None,
                 None,
-                "skipped: live spot balance leaves nothing above the fee reserve",
+                f"skipped: available spot {spot_available} wei minus the {CORE_FEE_RESERVE_WEI} reserve, within the SendCap {send_cap} and rounded to {evm_step}-wei EVM precision, leaves nothing to send",
             )
         )
 
@@ -508,9 +612,6 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
             else (f"revert {p.revert}" if p.revert else "skipped"),
             p.note,
         )
-    # The REDEEM the hub will send is sized by the vault's EVM exit ceiling,
-    # not by the shares: shares whose value sits on Core cannot leave through
-    # the EVM in one step, and the remainder stays attested as residual shares.
     ceiling = read_hypercore_evm_exit_ceiling(ctx, HYPERCORE_VAULT, EXECUTOR)
     log.info("EVM exit ceiling for the dispatcher at head: %s", ceiling)
     return previews
@@ -574,36 +675,47 @@ class _Tail(NamedTuple):
 
 
 def redeem_command_preview(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
-    """B1. The REDEEM the hub sends, sized by the HyperCore vault's EVM exit
-    ceiling, behind the executor's fee gate; the hub side is simulated at the
-    block before the live send. The spoke delivery executes the HyperCore
-    vault's redeem (precompile reads) and is not simulated: live it was
-    HyperEVM tx 0xf11a551a…bab08b, acknowledged on the hub in 0xb2a578a4…21dc."""
+    """B1. A REDEEM command sized by the live planner's rule, its hub side
+    simulated at the block before the live send, behind the executor's fee
+    gate. The spoke delivery executes the HyperCore vault's own redeem
+    (precompile reads) and is not simulated; this is a sizing and gating
+    demonstration at the pin, not the exact live send (the live planner read
+    the same rule one block later and sent 1,606,105,561 shares)."""
     hub_ctx = _pinned(web3_arb, ARBITRUM_CHAIN_ID, ARBITRUM_BLOCK_BEFORE_REDEEM)
     spoke_ctx = _pinned(web3_hype, HYPEREVM_CHAIN_ID, HYPEREVM_BLOCK_BEFORE_REDEEM)
     lane = open_lane(hub_ctx, spoke_ctx, executor=EXECUTOR, market_id=CROSSCHAIN_MARKET)
     hub_vault = PlasmaVault(hub_ctx, HUB_VAULT)
     remote = PlasmaVault(spoke_ctx, HYPERCORE_VAULT)
 
-    # Size by what can actually leave the HyperCore vault through the EVM in
-    # one step: its idle underlying, not the dispatcher's share value. The
-    # remainder stays as shares and is attested as residual later.
+    # Everything the dispatcher holds when its value fits what can leave the
+    # vault through the EVM (idle underlying and maxWithdraw), otherwise
+    # min(idle, maxWithdraw) less a 1,000-unit buffer, converted to shares.
+    # Whatever stays is attested as residual shares later.
     ceiling = read_hypercore_evm_exit_ceiling(spoke_ctx, HYPERCORE_VAULT, EXECUTOR)
-    shares = Shares(
-        int(remote.convert_to_shares(Amount(ceiling.upper_bound_assets)).call())
+    max_withdraw = int(remote.max_withdraw(EXECUTOR).call())
+    sized = _redeem_size(
+        ceiling.shares, ceiling.share_assets, ceiling.idle_underlying, max_withdraw
     )
-    _check(
-        0 < shares <= ceiling.shares, "exit ceiling sizing left no redeemable shares"
-    )
+    _check(sized > 0, "the sizing rule found nothing redeemable at this pin")
+    if sized == ceiling.shares:
+        shares = Shares(int(sized))
+        branch = "all shares: their value fits idle and maxWithdraw"
+    else:
+        shares = Shares(int(remote.convert_to_shares(Amount(sized)).call()))
+        branch = f"partial: min(idle {ceiling.idle_underlying}, maxWithdraw {max_withdraw}) - 1,000 = {sized} units"
+    _check(0 < shares <= ceiling.shares, "sizing left no redeemable shares")
     expected = int(remote.convert_to_assets(shares).call())
+    _check(
+        expected <= min(ceiling.idle_underlying, max_withdraw),
+        f"expected {expected} does not fit idle {ceiling.idle_underlying} / maxWithdraw {max_withdraw}",
+    )
     min_assets = Amount(expected * 99 // 100)
     command = Command.redeem(HYPERCORE_VAULT, shares, min_assets)
     send = hub_vault.execute([lane.send_command(command)])
 
-    # The fee gate the planner applies before any CCIP step: the executor pays
-    # the CCIP fee from its own native balance, the quote moves between
-    # samples, so the balance must cover the route's maxFee (the contract cap),
-    # not merely today's quote.
+    # The fee gate: the executor pays the CCIP fee from its own native
+    # balance and the quote moves between samples, so the balance must cover
+    # the route's maxFee (the contract cap), not merely today's quote.
     route = (
         CcipCrosschainExecutor(hub_ctx, EXECUTOR).ccip_route(HYPEREVM_CHAIN_ID).call()
     )
@@ -613,28 +725,22 @@ def redeem_command_preview(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
     balance = web3_arb.eth.get_balance(
         EXECUTOR, block_identifier=ARBITRUM_BLOCK_BEFORE_REDEEM
     )
+    ready, why = _fee_gate(quote, route.max_fee, balance)
     log.info(
-        "REDEEM: shares=%d (of %d) expected=%d min_assets=%d | fee quote=%d wei, route maxFee=%d, executor balance=%d",
+        "REDEEM: shares=%d of %d (%s) expected=%d min_assets=%d | fee quote=%d wei, route maxFee=%d, executor balance=%d -> %s",
         shares,
         ceiling.shares,
+        branch,
         expected,
         min_assets,
         quote,
         route.max_fee,
         balance,
+        why,
     )
-    _check(
-        quote <= route.max_fee,
-        "the quote is above the route cap: the executor would refuse",
-    )
-    _check(
-        balance >= route.max_fee,
-        "executor float below the route maxFee: do not send (cycle 2's first attempt did, and reverted)",
-    )
+    _check(ready, why)
 
-    # The hub side alone, in one simulated block at the pin: the spoke
-    # delivery is the HyperCore vault's own redeem and is not reproducible
-    # here (see the docstring).
+    # The hub side alone, in one simulated block at the pin.
     hub = VaultSimulator(
         web3_arb, vault=HUB_VAULT, alpha=ALPHA, block=ARBITRUM_BLOCK_BEFORE_REDEEM
     )
@@ -652,12 +758,13 @@ def redeem_command_preview(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
         fee_paid == quote, f"the simulated send paid {fee_paid}, the quote said {quote}"
     )
     log.info(
-        "REDEEM simulated on the hub: CommandSent seq %s, CcipMessageSent fee %d wei (the live send of 09:53:33 UTC paid 1,732,275,459,170,300)",
+        "REDEEM simulated on the hub: CommandSent seq %s, CcipMessageSent fee %d wei (the live send of 09:53:33 UTC paid 1,732,275,459,170,300; a matching fee says nothing about the spoke redemption, which this preview does not run)",
         events["CommandSent"].get("sequence"),
         fee_paid,
     )
     return {
         "redeem_shares": int(shares),
+        "redeem_all_shares": int(ceiling.shares),
         "redeem_expected_assets": expected,
         "fee_quote": quote,
         "fee_paid_simulated": fee_paid,
@@ -883,11 +990,11 @@ def main() -> None:
     log.info("A. the Core leg, previewed at HyperEVM head (nothing is sent):")
     core_leg_previews(web3_hype)
     log.info(
-        "B1. the REDEEM command, hub side simulated at the block before the live send:"
+        "B1. a REDEEM command sized by the live rule, hub side simulated at the block before the live send:"
     )
     numbers = redeem_command_preview(web3_arb, web3_hype)
     log.info(
-        "B2. recall, return, residual attestation and claim, replayed from the block before the live recall:"
+        "B2. separate replay from the block before the live recall (after the live redeem settled): recall, return, residual attestation, claim:"
     )
     numbers.update(recall_attest_claim(web3_arb, web3_hype))
     log.info("done: %s", numbers)

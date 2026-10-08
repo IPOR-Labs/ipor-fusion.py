@@ -169,10 +169,71 @@ class TestComposedHypercoreFlow:
 
     def test_transport_covers_both_chains(self) -> None:
         transport = self.mod._transport()
-        chains = (
-            {c.chain_id for c in transport.chains}
-            if hasattr(transport, "chains")
-            else None
+        assert transport.chain_ids == frozenset(
+            {self.mod.ARBITRUM_CHAIN_ID, self.mod.HYPEREVM_CHAIN_ID}
         )
-        if chains is not None:
-            assert chains == {self.mod.ARBITRUM_CHAIN_ID, self.mod.HYPEREVM_CHAIN_ID}
+
+    def test_send_fuse_errors_decode_by_name(self) -> None:
+        from ipor_fusion import decode_custom_error
+
+        sel = Web3.keccak(text=self.mod.HYPERCORE_SEND_FUSE_ERRORS[0])[:4]
+        assert sel.hex().removeprefix("0x") == "9b94bcad"
+        data = encode(["uint256", "uint256"], [4_825_100, 13_950_000_000])
+        assert decode_custom_error(sel, data) == (
+            "HyperCoreSendFuseInsufficientBalance(4825100, 13950000000)"
+        )
+        sel = Web3.keccak(text=self.mod.HYPERCORE_SEND_FUSE_ERRORS[1])[:4]
+        assert sel.hex().removeprefix("0x") == "99a5f02c"
+
+    # ── the sizing rules, offline ────────────────────────────────────────
+    def test_available_spot_subtracts_held_funds(self) -> None:
+        assert self.mod._available_spot_wei(10_000_001, 6_000_000) == 4_000_001
+        assert self.mod._available_spot_wei(5, 9) == 0
+
+    def test_size_send_applies_reserve_cap_and_evm_precision(self) -> None:
+        size = self.mod._size_send
+        reserve = self.mod.CORE_FEE_RESERVE_WEI
+        # held funds: total 10,000,001, hold 6,000,000 -> 4,000,001 available,
+        # nothing above the 5,000,000 reserve
+        available = self.mod._available_spot_wei(10_000_001, 6_000_000)
+        assert size(available, reserve, 10**10) == 0
+        # above the reserve, under the cap
+        assert size(1_400_000_000, reserve, 10**10) == 1_400_000_000 - reserve
+        # the SendCap binds
+        assert size(1_400_000_000, reserve, 1_000) == 1_000
+        # a zero SendCap sends nothing whatever the inventory
+        assert size(1_400_000_000, reserve, 0) == 0
+        # Core -> EVM: rounded down to the EVM's precision (100 Core wei per unit)
+        assert size(10_000_001 + reserve, reserve, 10**10, step_wei=100) == 10_000_000
+
+    def test_dex_equity_scales_usd6_to_core_wei_and_caps(self) -> None:
+        # the native/xyz divergence: a native withdrawable says nothing about
+        # dex 1; only the dex-1 account value sizes this leg
+        assert self.mod._dex_equity_wei(0, 10**10) == 0
+        assert self.mod._dex_equity_wei(1_000_000, 10**10) == 100_000_000
+        assert self.mod._dex_equity_wei(1_000_000, 50) == 50
+
+    def test_redeem_size_follows_the_live_planner_policy(self) -> None:
+        size = self.mod._redeem_size
+        assert size(0, 0, 10, 10) == 0
+        assert size(100, 50, 0, 10) == 0
+        # all shares when their value fits idle and maxWithdraw
+        assert size(238_862, 2_225, 1_022_000, 1_022_000) == 238_862
+        # partial: min(idle, maxWithdraw) - 1,000 units, in underlying
+        assert size(1_606_344_423, 14_967_640, 14_966_415, 14_967_640) == 14_965_415
+        # idle is plenty but maxWithdraw binds: still partial, with the buffer
+        assert size(1_606_344_423, 14_967_640, 20_000_000, 14_960_000) == 14_959_000
+        # the holder's value fits both: everything, no buffer
+        assert size(1_606_344_423, 14_967_640, 20_000_000, 14_967_640) == 1_606_344_423
+
+    def test_fee_gate_requires_the_cap_not_the_quote(self) -> None:
+        gate = self.mod._fee_gate
+        cap = 10**16
+        ready, _ = gate(1_732_275_459_170_300, cap, 16_071_382_564_562_993)
+        assert ready
+        # cycle 2's first attempt: the quote fit the balance, the balance did
+        # not cover the cap
+        ready, why = gate(97_703_093_334_382, cap, 1_071_382_564_562_993)
+        assert not ready and "below the route maxFee" in why
+        ready, why = gate(cap + 1, cap, 10**18)
+        assert not ready and "above the route maxFee" in why

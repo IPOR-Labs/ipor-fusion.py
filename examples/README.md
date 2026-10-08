@@ -52,10 +52,11 @@ transaction.
   HyperEVM (a Plasma Vault that is itself a Hyperliquid Core account) and the
   trade inside it. Part A builds the Core leg from the vault's market-55
   substrate grants (bridge EVM -> Core, spot -> perp dex, a limit order and its
-  reduce-only close, dex -> spot, Core -> EVM) and previews each action with
-  `eth_call` / `eth_estimateGas` at head, with a balance override where the
-  vault holds no USDC and sized to the live Core inventory where a Core balance
-  is checked, because `eth_simulateV1` cannot run the HyperCore precompiles.
+  reduce-only close, dex -> spot, Core -> EVM) and estimates each action with
+  `eth_estimateGas` at head -- six independent previews, EVM acceptance only --
+  with a balance override where the vault holds no USDC and sized to the live
+  Core inventory where the fuse checks a Core balance or dex equity, because
+  `eth_simulateV1` cannot run the HyperCore precompiles.
   Part B replays the hub legs of the second live cycle in `CrosschainSimulator`
   at pinned blocks: the REDEEM sized by `read_hypercore_evm_exit_ceiling` behind
   the executor's maxFee gate, then recall, token return, the residual
