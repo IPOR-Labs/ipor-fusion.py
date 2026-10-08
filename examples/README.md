@@ -47,6 +47,19 @@ transaction.
   the idle to the hub and claim it back into the vault. Both chains run under
   `eth_simulateV1` and `CrosschainSimulator` relays each CCIP message between
   them, so it needs an Arbitrum and a HyperEVM archive RPC.
+- [`composed_hypercore_flow_arbitrum_hyperevm.py`](composed_hypercore_flow_arbitrum_hyperevm.py) --
+  the composed flow: the same Arbitrum hub funding a HyperCore vault on
+  HyperEVM (a Plasma Vault that is itself a Hyperliquid Core account) and the
+  trade inside it. Part A builds the Core leg from the vault's market-55
+  substrate grants (bridge EVM -> Core, spot -> perp dex, a limit order and its
+  reduce-only close, dex -> spot, Core -> EVM) and previews each action with
+  `eth_call` / `eth_estimateGas` at head, with a balance override where the
+  vault holds no USDC and sized to the live Core inventory where a Core balance
+  is checked, because `eth_simulateV1` cannot run the HyperCore precompiles.
+  Part B replays the hub legs of the second live cycle in `CrosschainSimulator`
+  at pinned blocks: the REDEEM sized by `read_hypercore_evm_exit_ceiling` behind
+  the executor's maxFee gate, then recall, token return, the residual
+  attestation and the claim. Nothing is signed; it needs the same two RPCs.
 
 ## Prerequisites
 
