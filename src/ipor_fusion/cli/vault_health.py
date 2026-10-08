@@ -17,6 +17,7 @@ from ipor_fusion.cli.vault_fetcher import (
     _VaultData,
 )
 from ipor_fusion.cli.vault_rendering import _format_amount, _format_usd, _print_table
+from ipor_fusion.cli.vault_unpriceable import MiddlewarePricedToken
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.oracle import PriceOracleMiddleware
@@ -503,29 +504,66 @@ def _compute_missing_erc20_dep_criticals(data: _VaultData) -> list[str]:
     ]
 
 
-def _compute_unpriceable_token_criticals(data: _VaultData) -> list[str]:
-    """Flag granted substrates whose middleware-priced token cannot be priced:
-    the market's balanceOf() reverts, and with it totalAssets."""
-    lines = []
+_UNPRICEABLE_BLOCKS = "updateMarketsBalances and every execute on this market"
+
+
+def _unpriceable_token_finding(token: MiddlewarePricedToken) -> tuple[bool, str]:
+    """(is_critical, line) for one token the middleware cannot price."""
+    source = (
+        f"its price source {token.price_source} reverts"
+        if token.price_source
+        else "it has no price source"
+    )
+    head = (
+        f"market {format_market_label(token.market_id)}: {token.via} — "
+        f"PriceOracleMiddleware.getAssetPrice({token.token}) reverts ({source})"
+    )
+    if token.zero_balance_reverts:
+        return True, (
+            f"CRITICAL — {head} — balanceOf() reverts even with no position, "
+            f"which blocks {_UNPRICEABLE_BLOCKS}"
+        )
+    if token.position_open:
+        return True, (
+            f"CRITICAL — {head} — the vault holds it, so balanceOf() reverts "
+            f"now and blocks {_UNPRICEABLE_BLOCKS}"
+        )
+    if token.position_open is None:
+        state = (
+            "position not read, so current impact is unknown; balanceOf() "
+            "reverts while the vault holds any"
+        )
+    else:
+        state = (
+            "the vault holds none in this position, so it does not revert yet, "
+            "but anyone can open one for the vault (deposits on its behalf "
+            "need no consent); balanceOf() then reverts"
+        )
+    fix = "add a price source"
+    if token.morpho_collateral:
+        fix += (
+            ", or, if every Morpho market of this market is and stays "
+            "supply-only (no borrow, no collateral counted in NAV), register "
+            "a deployed MorphoOnlyLiquidityBalanceFuse as its balance fuse; "
+            "it values supply only"
+        )
+    return False, (
+        f"WARNING — {head} — {state} and blocks {_UNPRICEABLE_BLOCKS} — fix: {fix}"
+    )
+
+
+def _compute_unpriceable_token_findings(
+    data: _VaultData,
+) -> tuple[list[str], list[str]]:
+    """(criticals, warnings) for granted substrates whose middleware-priced
+    token cannot be priced. CRITICAL only when balanceOf() demonstrably
+    reverts now; a latent or unread position is a WARNING."""
+    criticals: list[str] = []
+    warnings: list[str] = []
     for token in data.unpriceable_priced_tokens or []:
-        trigger = (
-            "reverts even with no position"
-            if token.zero_balance_reverts
-            else "reverts once a position exists, and third parties can open "
-            "one on the vault's behalf"
-        )
-        source = (
-            f"its price source {token.price_source} reverts"
-            if token.price_source
-            else "it has no price source"
-        )
-        lines.append(
-            f"CRITICAL — market {format_market_label(token.market_id)}: "
-            f"{token.via} — PriceOracleMiddleware.getAssetPrice({token.token}) "
-            f"reverts ({source}) — balanceOf() {trigger}, which blocks "
-            f"updateMarketsBalances and every execute on this market"
-        )
-    return lines
+        is_critical, line = _unpriceable_token_finding(token)
+        (criticals if is_critical else warnings).append(line)
+    return criticals, warnings
 
 
 def _compute_health_check(  # noqa: C901
@@ -542,7 +580,11 @@ def _compute_health_check(  # noqa: C901
 
     result.criticals.extend(_compute_orphan_fuse_criticals(data))
     result.criticals.extend(_compute_missing_erc20_dep_criticals(data))
-    result.criticals.extend(_compute_unpriceable_token_criticals(data))
+    unpriceable_criticals, unpriceable_warnings = _compute_unpriceable_token_findings(
+        data
+    )
+    result.criticals.extend(unpriceable_criticals)
+    result.warnings.extend(unpriceable_warnings)
 
     # Lending health warnings
     if data.lending_health and data.lending_health.has_lending_positions:
