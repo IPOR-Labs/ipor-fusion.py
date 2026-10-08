@@ -1,5 +1,8 @@
 from ipor_fusion.about import (
+    PREVIEW_FEATURES,
+    PREVIEW_STATEMENT,
     ChangelogEntry,
+    PreviewFeature,
     package_version,
     read_changelog,
     repository_url,
@@ -315,6 +318,9 @@ __all__ = [
     "__version__",
     "ChangelogEntry",
     "package_version",
+    "PREVIEW_FEATURES",
+    "PREVIEW_STATEMENT",
+    "PreviewFeature",
     "read_changelog",
     "repository_url",
     "Web3Context",

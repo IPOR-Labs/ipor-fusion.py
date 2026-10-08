@@ -1,6 +1,9 @@
 """Chainlink CCIP: wire codecs and contract wrappers. The transport and lane
 (``ccip.transport``, ``ccip.lane``) import the fuse encoders and are exported
-from :mod:`ipor_fusion` instead, see :mod:`ipor_fusion.crosschain`."""
+from :mod:`ipor_fusion` instead, see :mod:`ipor_fusion.crosschain`.
+
+Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
+"""
 
 from ipor_fusion.crosschain.ccip.chainlink import (
     CcipCommitteeVerifier,

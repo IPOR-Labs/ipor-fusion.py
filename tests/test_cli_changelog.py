@@ -33,6 +33,14 @@ class TestChangelog:
         assert "add a server_info tool" in result.output
 
     @patch("ipor_fusion.cli.changelog_cmd.read_changelog")
+    def test_human_output_states_the_preview_features(self, mock_read):
+        mock_read.return_value = [ENTRY_LATEST]
+        result = CliRunner().invoke(cli, ["changelog"])
+        assert result.exit_code == 0
+        assert "Preview, not production" in result.output
+        assert "crosschain" in result.output and "hypercore" in result.output
+
+    @patch("ipor_fusion.cli.changelog_cmd.read_changelog")
     def test_since_is_passed_through(self, mock_read):
         mock_read.return_value = [ENTRY_LATEST, ENTRY_OLDER]
 

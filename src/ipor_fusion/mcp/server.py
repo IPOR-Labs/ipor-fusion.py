@@ -10,7 +10,12 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from web3 import Web3
 
-from ipor_fusion.about import package_version, read_changelog, repository_url
+from ipor_fusion.about import (
+    PREVIEW_FEATURES,
+    package_version,
+    read_changelog,
+    repository_url,
+)
 from ipor_fusion.chains import CHAIN_NAMES, ensure_supported_chain
 from ipor_fusion.cli.config_store import (
     FusionConfig,
@@ -46,6 +51,7 @@ from ipor_fusion.mcp.models import (
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     OracleMappingResponse,
+    PreviewFeatureModel,
     RoleAccountsResponse,
     ServerInfoResponse,
     VaultInfoResponse,
@@ -132,7 +138,8 @@ def server_info(
         ),
     ] = "",
 ) -> ServerInfoResponse:
-    """Identify this MCP server and report what changed in its releases."""
+    """Identify this MCP server, report what changed in its releases and which
+    package areas are preview rather than production."""
     return ServerInfoResponse(
         name=mcp.name,
         version=package_version(),
@@ -140,6 +147,10 @@ def server_info(
         changelog=[
             ChangelogEntryModel.from_entry(entry)
             for entry in read_changelog(changelog_since)
+        ],
+        preview_features=[
+            PreviewFeatureModel(name=feature.name, scope=feature.scope)
+            for feature in PREVIEW_FEATURES
         ],
     )
 

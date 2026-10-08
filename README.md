@@ -7,6 +7,14 @@
 
 Maintained by <a href="https://ipor.io">IPOR Labs AG</a>.
 
+> **Preview, not production:** the crosschain market (54: Stargate and CCIP executors,
+> dispatchers, lanes, fuses) and the HyperCore market (55: fuses, readers, events) are
+> under active development. Their contracts are not production releases, the mainnet
+> deployments are a proof of concept and IPOR Labs canaries, and their interfaces may
+> change between minor versions. Route no production capital through them. Everything
+> else in the package is production. `server_info` and `fusion changelog` list the same
+> status (`PREVIEW_FEATURES`).
+
 [Documentation](https://docs.ipor.io/build-on-fusion) · [SDK docs](https://docs.ipor.io/build-on-fusion/alpha/sdk) · [llms.txt for AI agents](https://ipor.io/llms.txt) · [Hosted MCP server](https://mcp.ipor.io/mcp) · [Example bot](https://github.com/IPOR-Labs/ipor-fusion-alpha-example) · [Contracts](https://github.com/IPOR-Labs/ipor-fusion)
 
 <table>
@@ -279,7 +287,7 @@ ever signed or broadcast.
 - [External-state margin leg](examples/external_state_margin_leg_base.py) — a vault whose capital
   sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
   the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
-- [Crosschain CCIP lifecycle](examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) — a vault
+- [Crosschain CCIP lifecycle](examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) (preview feature) — a vault
   whose capital works on another chain: supply USDC from an Arbitrum hub to a HyperEVM spoke
   over CCIP, attest the remote balance with two keys, deposit and redeem on the spoke, recall
   and claim, driven through `CrosschainLane` and relayed by `CrosschainSimulator`.
@@ -326,7 +334,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
 | `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50) |
-| `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
+| `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | **Preview.** Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
 | `StargateCrosschainDispatcher`, `CcipCrosschainDispatcher` | Remote dispatcher state (`observation`, tracked idle, command lane) |
 | `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |
 | `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation (`attestation`, `needs_attestation`, `staleness_max`); `enforces_min_received` identifies real supply floors (CCIP requires zero); `open_lane` detects the transport and finds the fuses |
@@ -352,12 +360,12 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Merkl | `MerklClaimWrapperFuse` |
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
-| Crosschain | `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse` (market 54); transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` |
+| Crosschain (preview) | `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse` (market 54); transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` |
 
 The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Use
 `crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` for that deployment;
 `open_lane` discovers the vault's actual market grants rather than assuming 54.
-| HyperCore (Hyperliquid, market 55) | `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` |
+| HyperCore (Hyperliquid, market 55, preview) | `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` |
 
 ### Readers (`ipor_fusion.readers`)
 

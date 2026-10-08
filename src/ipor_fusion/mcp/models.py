@@ -886,6 +886,20 @@ class ChangelogEntryModel(_Base):
         return cls(version=entry.version, date=entry.date, notes=entry.notes)
 
 
+class PreviewFeatureModel(_Base):
+    """A feature shipped for integration testing, not production."""
+
+    name: str = Field(description="Feature name: the package area it covers.")
+    scope: str = Field(description="What the preview status applies to.")
+    status: Literal["preview"] = Field(
+        default="preview",
+        description="Always 'preview': not production. The contracts are under "
+        "active development, the mainnet deployments are a proof of concept "
+        "and IPOR Labs canaries, and interfaces may change between minor "
+        "versions. Route no production capital through these features.",
+    )
+
+
 class ServerInfoResponse(_Base):
     """Identity of the running MCP server, plus what changed in its releases."""
 
@@ -900,4 +914,10 @@ class ServerInfoResponse(_Base):
         "the running version's entry alone unless changelog_since asked for "
         "more. Empty when nothing matches: no section for the running "
         "version, or no release newer than changelog_since."
+    )
+    preview_features: list[PreviewFeatureModel] = Field(
+        default_factory=list,
+        description="Package areas that are preview, not production (currently "
+        "crosschain and HyperCore). Everything the package ships outside these "
+        "is production.",
     )

@@ -12,6 +12,38 @@ from importlib import resources
 from importlib.metadata import PackageNotFoundError, metadata, version
 from pathlib import Path
 
+
+@dataclass(frozen=True)
+class PreviewFeature:
+    """A feature shipped for integration testing, not production."""
+
+    name: str
+    scope: str
+
+
+# Stated once here and surfaced by `server_info`, `fusion changelog`, the
+# README and the module docstrings, so no reader can miss it: the contracts
+# behind these are under active development, their mainnet deployments are
+# a proof of concept and IPOR Labs canaries, and their interfaces may change
+# between minor versions. Nothing under these names should route production
+# capital. Every other feature of the package is production.
+PREVIEW_FEATURES: tuple[PreviewFeature, ...] = (
+    PreviewFeature(
+        "crosschain",
+        "crosschain Plasma Vaults, market 54: Stargate and CCIP executors, "
+        "dispatchers, factories, lanes, discovery, simulation relay and fuses",
+    ),
+    PreviewFeature(
+        "hypercore",
+        "HyperCore (Hyperliquid) vaults, market 55: fuses, readers and events",
+    ),
+)
+PREVIEW_STATEMENT = (
+    "Preview, not production: the contracts are under active development, the "
+    "mainnet deployments are a proof of concept and IPOR Labs canaries, and "
+    "interfaces may change between minor versions."
+)
+
 _DISTRIBUTION = "ipor-fusion"
 _CHANGELOG_NAME = "CHANGELOG.md"
 _REPOSITORY_LABEL = "repository"
