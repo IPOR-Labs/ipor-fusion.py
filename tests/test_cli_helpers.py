@@ -1619,6 +1619,31 @@ class TestInlineHealth:
         assert "ab" * 32 in morpho_index
         assert 1 in aave_index
 
+    def test_index_lending_health_keys_aave_v4_by_spoke(self):
+        spoke = "0x17905db0E4a3514467539956C084180616ae7B8d"
+        v4 = _make_lending_market(protocol="aave_v4", market_id=49, substrate_id=spoke)
+
+        _, aave_index = _index_lending_health(VaultLendingHealth(markets=[v4]))
+
+        assert aave_index == {spoke: v4}
+
+    def test_aave_v4_health_rendered_per_spoke(self, capsys):
+        spoke = "0x17905db0E4a3514467539956C084180616ae7B8d"
+        v4 = _make_lending_market(
+            protocol="aave_v4",
+            market_id=49,
+            market_name="AAVE_V4",
+            substrate_id=spoke,
+            health_factor=1.4681,
+        )
+        data = _make_data(lending_health=VaultLendingHealth(markets=[v4]))
+
+        _print_lending_health(MagicMock(), data)
+
+        out = capsys.readouterr().out
+        assert f"spoke {spoke}:" in out
+        assert "Health Factor: 1.4681" in out
+
     def test_index_lending_health_handles_none(self):
         morpho_index, aave_index = _index_lending_health(None)
         assert not morpho_index

@@ -1,4 +1,4 @@
-"""Lending health computation for Morpho Blue and Aave V3 markets.
+"""Lending health computation for Morpho Blue, Aave V3 and Aave V4 markets.
 
 Provides a unified view of LTV, liquidation thresholds, and health factors
 for lending positions held by Plasma Vaults.
@@ -22,17 +22,19 @@ from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
+from ipor_fusion.readers.aave_v4 import AaveV4OracleReader, AaveV4SpokeReader
 from ipor_fusion.readers.morpho import (
     MORPHO_BLUE_ADDRESSES,
     MorphoReader,
     morpho_blue_address,
 )
-from ipor_fusion.substrates import market_name
+from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import MorphoBlueMarketId
 
 _logger = logging.getLogger(__name__)
 
 WAD = 10**18
+RAY = 10**27
 ORACLE_PRICE_SCALE = 10**36
 
 # Deprecated: only valid on Ethereum and Base — use `morpho_blue_address(chain_id)`.
@@ -77,6 +79,14 @@ AAVE_V3_MARKET_IDS = frozenset(
     }
 )
 
+# Market IDs served by the Aave V4 fuses. A substrate names its (Spoke, reserve),
+# and health is account-level per Spoke.
+AAVE_V4_MARKET_IDS = frozenset(
+    {
+        IporFusionMarkets.AAVE_V4,
+    }
+)
+
 
 @dataclass(slots=True)
 class LendingMarketHealth:
@@ -85,6 +95,7 @@ class LendingMarketHealth:
     `substrate_id` identifies the underlying market within the IPOR market_id:
     - Morpho: the 64-char hex morpho market id (one row per substrate).
     - Aave V3: None — Aave health is account-level, aggregated across reserves.
+    - Aave V4: the Spoke address — account-level per Spoke, across its reserves.
     """
 
     protocol: str
@@ -286,16 +297,77 @@ def _compute_aave_market_health(
     )
 
 
+def _compute_aave_v4_market_health(
+    ctx: Web3Context,
+    spoke: ChecksumAddress,
+    vault_address: ChecksumAddress,
+    ipor_market_id: int,
+    market_name: str,
+) -> LendingMarketHealth | None:
+    """Compute LTV health for the vault's account on one Aave V4 Spoke."""
+    reader = AaveV4SpokeReader(ctx, spoke)
+    try:
+        data = reader.get_user_account_data(vault_address).call()
+        oracle_decimals = AaveV4OracleReader(ctx, reader.oracle().call()).decimals()
+        value_scale = 10 ** (oracle_decimals.call() + 18)
+    except Exception:
+        _logger.debug("Failed to read Aave V4 account data on spoke %s", spoke)
+        return None
+
+    max_ltv = data.avg_collateral_factor / WAD
+    current_ltv: float | None
+    health_factor: float | None
+    # healthFactor is type(uint256).max while nothing is borrowed.
+    if data.borrow_count == 0:
+        current_ltv, health_factor = 0.0, None
+    elif data.total_collateral_value == 0:
+        current_ltv, health_factor = None, data.health_factor / WAD
+    else:
+        current_ltv = data.total_debt_value_ray / (data.total_collateral_value * RAY)
+        health_factor = data.health_factor / WAD
+    ltv_usage = (
+        current_ltv / max_ltv * 100 if current_ltv is not None and max_ltv > 0 else None
+    )
+
+    return LendingMarketHealth(
+        protocol="aave_v4",
+        market_id=ipor_market_id,
+        market_name=market_name,
+        current_ltv=round(current_ltv, 6) if current_ltv is not None else None,
+        max_ltv=round(max_ltv, 6),
+        health_factor=round(health_factor, 4) if health_factor is not None else None,
+        total_collateral_usd=round(data.total_collateral_value / value_scale, 2),
+        total_debt_usd=round(data.total_debt_value_ray / RAY / value_scale, 2),
+        ltv_usage_percent=round(ltv_usage, 2) if ltv_usage is not None else None,
+        substrate_id=spoke,
+    )
+
+
+def _aave_v4_spokes(substrates: list[bytes]) -> list[ChecksumAddress]:
+    """Unique Spokes named by Aave V4 reserve substrates, in grant order."""
+    spokes: dict[ChecksumAddress, None] = {}
+    for sub in substrates:
+        info = decode_substrate(sub, market_id=IporFusionMarkets.AAVE_V4)
+        if info.type_label == "AAVE_V4_RESERVE":
+            spokes[Web3.to_checksum_address(info.address)] = None
+    return list(spokes)
+
+
+@dataclass(slots=True)
+class _LendingMarkets:
+    morpho: list[tuple[int, str, MorphoBlueMarketId]]
+    aave_v3: list[tuple[int, str, ChecksumAddress]]
+    aave_v4: list[tuple[int, str, ChecksumAddress]]
+
+
 def _collect_lending_markets(
     balance_fuse_market_ids: list[int],
     market_substrates: dict[int, list[bytes]],
     aave_pools: dict[int, ChecksumAddress],
-) -> tuple[
-    list[tuple[int, str, MorphoBlueMarketId]], list[tuple[int, str, ChecksumAddress]]
-]:
-    """Pick the positions to read: Morpho substrates, and Aave V3 markets with a Pool."""
-    morpho_markets: list[tuple[int, str, MorphoBlueMarketId]] = []
-    aave_markets: list[tuple[int, str, ChecksumAddress]] = []
+) -> _LendingMarkets:
+    """Pick the positions to read: Morpho substrates, Aave V3 markets with a Pool,
+    and the Spokes of Aave V4 markets."""
+    markets = _LendingMarkets(morpho=[], aave_v3=[], aave_v4=[])
 
     for mid in balance_fuse_market_ids:
         name = market_name(mid)
@@ -304,14 +376,17 @@ def _collect_lending_markets(
             for sub in substrates:
                 hex_str = sub.hex()
                 if len(hex_str) == 64:
-                    morpho_markets.append((mid, name, MorphoBlueMarketId(hex_str)))
+                    markets.morpho.append((mid, name, MorphoBlueMarketId(hex_str)))
         elif mid in AAVE_V3_MARKET_IDS:
             if aave_pool := aave_pools.get(mid):
-                aave_markets.append((mid, name, aave_pool))
+                markets.aave_v3.append((mid, name, aave_pool))
             else:
                 _logger.debug("No Aave V3 pool for market %d, skipping", mid)
+        elif mid in AAVE_V4_MARKET_IDS:
+            for spoke in _aave_v4_spokes(market_substrates.get(mid, [])):
+                markets.aave_v4.append((mid, name, spoke))
 
-    return morpho_markets, aave_markets
+    return markets
 
 
 def fetch_vault_lending_health(
@@ -330,6 +405,7 @@ def fetch_vault_lending_health(
         chain_id: Chain ID (selects the default Aave V3 Core pool).
         balance_fuse_market_ids: List of market IDs from balance fuses.
         market_substrates: Map of market_id -> list of raw substrate bytes.
+            Morpho market ids and Aave V4 Spokes are read from it.
         aave_pools: Map of Aave V3 market_id -> the Pool its balance fuse
             reads (`AaveV3FuseReader.pool`). Aave V3 markets without an entry
             are skipped. Defaults to the chain's Core pool for AAVE_V3 only:
@@ -340,7 +416,7 @@ def fetch_vault_lending_health(
         core_pool = AAVE_V3_POOL.get(chain_id)
         aave_pools = {IporFusionMarkets.AAVE_V3: core_pool} if core_pool else {}
 
-    morpho_markets, aave_markets = _collect_lending_markets(
+    markets = _collect_lending_markets(
         balance_fuse_market_ids, market_substrates, aave_pools
     )
 
@@ -349,9 +425,9 @@ def fetch_vault_lending_health(
     with ThreadPoolExecutor() as pool:
         futures = []
 
-        if morpho_markets:
+        if markets.morpho:
             morpho_reader = MorphoReader(ctx, morpho_blue_address(ctx.chain_id))
-            for ipor_mid, name, morpho_mid in morpho_markets:
+            for ipor_mid, name, morpho_mid in markets.morpho:
                 futures.append(
                     pool.submit(
                         _compute_morpho_market_health,
@@ -365,11 +441,23 @@ def fetch_vault_lending_health(
                 )
 
         # Aave V3 health is account-level per Pool, so each market reads its own.
-        for ipor_mid, name, aave_pool in aave_markets:
+        for ipor_mid, name, aave_pool in markets.aave_v3:
             futures.append(
                 pool.submit(
                     _compute_aave_market_health,
                     AaveV3Reader(ctx, aave_pool),
+                    vault_address,
+                    ipor_mid,
+                    name,
+                )
+            )
+
+        for ipor_mid, name, spoke in markets.aave_v4:
+            futures.append(
+                pool.submit(
+                    _compute_aave_v4_market_health,
+                    ctx,
+                    spoke,
                     vault_address,
                     ipor_mid,
                     name,

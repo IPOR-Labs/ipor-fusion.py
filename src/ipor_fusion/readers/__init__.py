@@ -4,6 +4,11 @@ from ipor_fusion.readers.aave_v3 import (
     AaveV3Reader,
     AaveV3UserAccountData,
 )
+from ipor_fusion.readers.aave_v4 import (
+    AaveV4OracleReader,
+    AaveV4SpokeReader,
+    AaveV4UserAccountData,
+)
 from ipor_fusion.readers.compound_v3 import CompoundV3Reader
 from ipor_fusion.readers.hypercore import (
     HyperCoreAccountMarginSummary,
@@ -68,6 +73,9 @@ __all__ = [
     "AaveV3PoolAddressesProvider",
     "AaveV3Reader",
     "AaveV3UserAccountData",
+    "AaveV4OracleReader",
+    "AaveV4SpokeReader",
+    "AaveV4UserAccountData",
     "CompoundV3Reader",
     "HyperCoreAccountMarginSummary",
     "HyperCoreActionClass",

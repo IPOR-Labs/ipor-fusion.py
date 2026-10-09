@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from _multicall import sequenced
 from eth_abi import encode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -12,12 +13,14 @@ from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
     AAVE_V3_POOL,
+    AAVE_V4_MARKET_IDS,
     MORPHO_BLUE_ADDRESS,
     MORPHO_MARKET_IDS,
     ORACLE_PRICE_SCALE,
     LendingMarketHealth,
     VaultLendingHealth,
     _compute_aave_market_health,
+    _compute_aave_v4_market_health,
     _compute_morpho_market_health,
     _shares_to_assets_up,
     fetch_vault_lending_health,
@@ -31,6 +34,51 @@ TOKEN_A = Web3.to_checksum_address("0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB")
 TOKEN_B = Web3.to_checksum_address("0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC")
 IRM_ADDR = Web3.to_checksum_address("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE")
 MORPHO_MARKET_ID = MorphoBlueMarketId("a" * 64)
+
+AAVE_V4_SPOKE = Web3.to_checksum_address("0x17905db0e4a3514467539956c084180616ae7b8d")
+AAVE_V4_SPOKE_B = Web3.to_checksum_address("0x" + "5b" * 20)
+AAVE_V4_ORACLE = Web3.to_checksum_address("0xaBaf048fD7675Ea34a84332371ffd5D55E322A47")
+_SELECTOR_ACCOUNT_DATA = function_signature_to_4byte_selector(
+    "getUserAccountData(address)"
+)
+_SELECTOR_ORACLE = function_signature_to_4byte_selector("ORACLE()")
+_SELECTOR_DECIMALS = function_signature_to_4byte_selector("decimals()")
+
+# Live `getUserAccountData` of vault 0x31744e44…641b ("Apple Carry Trade",
+# Base) on its Spoke, 2026-10-09: AAPLc collateral, USDC debt, 8-decimal oracle.
+APPLE_CARRY_ACCOUNT = (
+    0,
+    780_000_000_000_000_000,
+    1_468_096_760_188_303_344,
+    5_015_412_721_457_600_000_000_000_000_000,
+    2_664_689_432_483_427_092_993_009_501_428_797_296_391_519_279_000_000_000_000,
+    1,
+    1,
+)
+NO_DEBT_ACCOUNT = (0, 780_000_000_000_000_000, 2**256 - 1, 10**30, 0, 1, 0)
+
+
+def _aave_v4_ctx(accounts: dict[str, tuple[int, ...]]) -> MagicMock:
+    """Answer Spoke and oracle reads; `accounts` maps Spoke -> account tuple."""
+
+    def call(to, data, *_):
+        selector = bytes(data[:4])
+        if selector == _SELECTOR_ACCOUNT_DATA:
+            return encode(["uint256"] * 7, list(accounts[to]))
+        if selector == _SELECTOR_ORACLE:
+            return encode(["address"], [AAVE_V4_ORACLE])
+        assert selector == _SELECTOR_DECIMALS and to == AAVE_V4_ORACLE
+        return encode(["uint8"], [8])
+
+    ctx = MagicMock()
+    ctx.call.side_effect = call
+    return ctx
+
+
+def _aave_v4_substrate(spoke: str, reserve_id: int, flags: int) -> bytes:
+    """AaveV4SubstrateLib: type 1 << 248 | spoke << 88 | reserveId << 56 | flags << 48."""
+    word = 1 << 248 | int(spoke, 16) << 88 | reserve_id << 56 | flags << 48
+    return word.to_bytes(32, "big")
 
 
 def _make_morpho_reader():
@@ -468,6 +516,64 @@ class TestComputeAaveMarketHealth:
         assert result is None
 
 
+class TestComputeAaveV4MarketHealth:
+    def test_live_carry_position(self):
+        ctx = _aave_v4_ctx({AAVE_V4_SPOKE: APPLE_CARRY_ACCOUNT})
+
+        result = _compute_aave_v4_market_health(
+            ctx, AAVE_V4_SPOKE, VAULT_ADDR, 49, "AAVE_V4"
+        )
+
+        assert result is not None
+        assert result.protocol == "aave_v4"
+        assert result.substrate_id == AAVE_V4_SPOKE
+        assert result.total_collateral_usd == 50154.13
+        assert result.total_debt_usd == 26646.89
+        assert result.current_ltv == 0.5313
+        assert result.max_ltv == 0.78
+        assert result.health_factor == 1.4681
+        assert result.ltv_usage_percent == 68.12
+        assert not result.is_warning
+
+    def test_no_borrow_has_no_health_factor(self):
+        ctx = _aave_v4_ctx({AAVE_V4_SPOKE: NO_DEBT_ACCOUNT})
+
+        result = _compute_aave_v4_market_health(
+            ctx, AAVE_V4_SPOKE, VAULT_ADDR, 49, "AAVE_V4"
+        )
+
+        assert result is not None
+        assert result.health_factor is None
+        assert result.current_ltv == 0.0
+        assert result.ltv_usage_percent == 0.0
+        assert result.total_collateral_usd == 10_000.0
+        assert result.total_debt_usd == 0.0
+
+    def test_debt_without_collateral_is_critical(self):
+        account = (0, 0, 0, 0, 10**27 * 10**26, 0, 1)
+        ctx = _aave_v4_ctx({AAVE_V4_SPOKE: account})
+
+        result = _compute_aave_v4_market_health(
+            ctx, AAVE_V4_SPOKE, VAULT_ADDR, 49, "AAVE_V4"
+        )
+
+        assert result is not None
+        assert result.current_ltv is None
+        assert result.ltv_usage_percent is None
+        assert result.total_debt_usd == 1.0
+        assert result.is_critical
+
+    def test_read_failure_returns_none(self):
+        ctx = MagicMock()
+        ctx.call.side_effect = Exception("RPC error")
+
+        result = _compute_aave_v4_market_health(
+            ctx, AAVE_V4_SPOKE, VAULT_ADDR, 49, "AAVE_V4"
+        )
+
+        assert result is None
+
+
 # ── fetch_vault_lending_health integration ───────────────────────────
 
 
@@ -589,6 +695,38 @@ class TestFetchVaultLendingHealth:
         assert result.has_lending_positions
         assert len(result.markets) == 1
         assert result.markets[0].protocol == "morpho"
+
+    def test_aave_v4_market_ids_recognized(self):
+        assert IporFusionMarkets.AAVE_V4 in AAVE_V4_MARKET_IDS
+
+    def test_aave_v4_one_row_per_spoke(self):
+        """Health is account-level per Spoke: reserves of one Spoke collapse
+        into one row, and substrates of another type are skipped."""
+        mid = IporFusionMarkets.AAVE_V4
+        substrates = [
+            _aave_v4_substrate(AAVE_V4_SPOKE, 7, 0b10),
+            _aave_v4_substrate(AAVE_V4_SPOKE, 0, 0b01),
+            _aave_v4_substrate(AAVE_V4_SPOKE_B, 3, 0b11),
+            (2 << 248).to_bytes(32, "big"),
+        ]
+        ctx = _aave_v4_ctx(
+            {AAVE_V4_SPOKE: APPLE_CARRY_ACCOUNT, AAVE_V4_SPOKE_B: NO_DEBT_ACCOUNT}
+        )
+
+        result = fetch_vault_lending_health(
+            ctx,
+            VAULT_ADDR,
+            8453,
+            balance_fuse_market_ids=[mid],
+            market_substrates={mid: substrates},
+        )
+
+        by_spoke = {m.substrate_id: m for m in result.markets}
+        assert by_spoke.keys() == {AAVE_V4_SPOKE, AAVE_V4_SPOKE_B}
+        assert by_spoke[AAVE_V4_SPOKE].health_factor == 1.4681
+        assert by_spoke[AAVE_V4_SPOKE_B].health_factor is None
+        assert all(m.market_name == "AAVE_V4" for m in result.markets)
+        assert result.worst_ltv_usage == 68.12
 
     def test_unknown_chain_skips_aave(self):
         ctx = MagicMock()

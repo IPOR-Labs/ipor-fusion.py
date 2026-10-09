@@ -289,6 +289,7 @@ def _full_vault_info_dict() -> dict:
                     "protocol": "morpho",
                     "market_id": "0xMID",
                     "market_name": "WETH/USDC",
+                    "substrate_id": "0xMID",
                     "current_ltv": 0.5,
                     "max_ltv": 0.86,
                     "health_factor": 1.72,
