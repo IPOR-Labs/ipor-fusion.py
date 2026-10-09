@@ -85,7 +85,7 @@ def _silos_call(ctx: Web3Context, config: ChecksumAddress) -> Call:
         to=config,
         data=_GET_SILOS_SELECTOR,
         output_types=["address", "address"],
-        decoder=lambda *silos: [Web3.to_checksum_address(s) for s in silos],
+        decoder=lambda silos: [Web3.to_checksum_address(s) for s in silos],
         ctx=ctx,
     )
 

@@ -156,6 +156,11 @@ class TestFetch:
             ),
         ]
 
+    def test_get_silos_decodes_both_silos(self, chain):
+        call = vault_unpriceable._silos_call(chain.ctx, SILO_CONFIG)
+        raw = encode(["address", "address"], [SILO_0, SILO_1])
+        assert call.decode(raw) == [SILO_0, SILO_1]
+
     def test_unreadable_vault_asset_and_silos_are_skipped(self, chain):
         substrates = {
             IporFusionMarkets.EULER_V2: [_high(VAULT)],
