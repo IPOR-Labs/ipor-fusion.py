@@ -234,6 +234,17 @@ from ipor_fusion.fuses import (
     hypercore_events,
     system_address,
 )
+from ipor_fusion.fuses.external_state_events import (
+    EXTERNAL_STATE_EVENT_SPECS,
+    EXTERNAL_STATE_EVENTS,
+    EXTERNAL_STATE_TOPICS,
+    ExternalStateEvent,
+    ExternalStateEventDecodeError,
+    ExternalStateEventSpec,
+    decode_external_state_event,
+    external_state_event_name,
+    external_state_events,
+)
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers import (
     AaveV3FuseReader,
@@ -317,6 +328,15 @@ from ipor_fusion.types import (
 __version__ = package_version()
 
 __all__ = [
+    "EXTERNAL_STATE_EVENT_SPECS",
+    "EXTERNAL_STATE_EVENTS",
+    "EXTERNAL_STATE_TOPICS",
+    "ExternalStateEvent",
+    "ExternalStateEventDecodeError",
+    "ExternalStateEventSpec",
+    "decode_external_state_event",
+    "external_state_event_name",
+    "external_state_events",
     "HYPERCORE_EVENTS",
     "HYPERCORE_EVENT_SPECS",
     "HyperCoreEvent",
