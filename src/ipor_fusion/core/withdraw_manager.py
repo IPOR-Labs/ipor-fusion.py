@@ -114,9 +114,12 @@ class WithdrawManager(ContractWrapper):
 
     def get_pending_requests(
         self,
-        from_block: BlockNumber = BlockNumber(0),  # noqa: B008  # NewType, immutable
+        from_block: BlockNumber | None = None,
     ) -> list[AccountRequest]:
-        """Return per-account validated withdrawal requests (active only)."""
+        """Return per-account validated withdrawal requests (active only).
+
+        Replays `WithdrawRequestUpdated` from ``from_block``, or from the
+        WithdrawManager's creation when None."""
         current_timestamp = self._ctx.get_block()["timestamp"]
         events = self._get_withdraw_request_updated_events(from_block=from_block)
 
@@ -159,7 +162,7 @@ class WithdrawManager(ContractWrapper):
 
     def get_pending_requests_info(
         self,
-        from_block: BlockNumber = BlockNumber(0),  # noqa: B008  # NewType, immutable
+        from_block: BlockNumber | None = None,
     ) -> PendingRequestsInfo:
         current_timestamp = self._ctx.get_block()["timestamp"]
         requests = self.get_pending_requests(from_block=from_block)
@@ -171,7 +174,7 @@ class WithdrawManager(ContractWrapper):
 
     def _get_withdraw_request_updated_events(
         self,
-        from_block: BlockNumber = BlockNumber(0),  # noqa: B008  # NewType, immutable
+        from_block: BlockNumber | None = None,
     ) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="WithdrawRequestUpdated(address,uint256,uint32)")

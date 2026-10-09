@@ -1278,7 +1278,7 @@ class _FakeLogCtx:
         self._logs = logs
         self.captured: dict[str, Any] = {}
 
-    def get_logs(self, *, contract_address, topics, from_block, to_block):
+    def get_logs(self, *, contract_address, topics, from_block=None, to_block):
         self.captured = {
             "contract_address": contract_address,
             "topics": topics,
@@ -1305,7 +1305,8 @@ class TestAssetSourceEvents:
 
         # historical correctness: the log scan is capped at the target block
         assert ctx.captured["to_block"] == 12345
-        assert ctx.captured["from_block"] == 0
+        # no lower bound: the scan starts at the oracle's creation
+        assert ctx.captured["from_block"] is None
         assert ctx.captured["topics"] == [om.ASSET_PRICE_SOURCE_UPDATED_TOPIC]
         assert out == [(100, a, s)]
 

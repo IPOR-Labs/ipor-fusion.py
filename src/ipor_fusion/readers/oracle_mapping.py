@@ -300,7 +300,6 @@ class OracleMappingReader:
         logs = self._ctx.get_logs(
             contract_address=self._oracle_addr,
             topics=[ASSET_PRICE_SOURCE_UPDATED_TOPIC],
-            from_block=0,
             to_block=to_block,
         )
         out: list[tuple[int, ChecksumAddress, ChecksumAddress]] = []

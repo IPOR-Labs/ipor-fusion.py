@@ -176,6 +176,22 @@ class UnsupportedVaultVersionError(IporFusionError, ValueError):
     """
 
 
+class LogScanError(IporFusionError):
+    """An `eth_getLogs` scan could not cover its whole block range.
+
+    Raised instead of returning a partial result: the provider kept rejecting
+    the range even one block at a time, or the scan ran out of its time or
+    request budget. ``address``, ``from_block`` and ``to_block``
+    name the unscanned range.
+    """
+
+    def __init__(self, message: str, *, address: str, from_block: int, to_block: int):
+        self.address = address
+        self.from_block = from_block
+        self.to_block = to_block
+        super().__init__(message)
+
+
 class EmptyCallResultError(IporFusionError, InsufficientDataBytes):
     """`eth_call` returned no data for a call that declares return values.
 

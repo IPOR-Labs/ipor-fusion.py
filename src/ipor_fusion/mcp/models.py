@@ -257,10 +257,13 @@ class WithdrawManagerDetails(_Base):
     )
     last_release_funds_utc: str | None
     last_release_funds_timestamp_note: str
-    pending_requests: list[PendingRequestEntry] = Field(
-        description="Requests whose window has not yet closed, one per account."
+    pending_requests: list[PendingRequestEntry] | None = Field(
+        description="Requests whose window has not yet closed, one per account; "
+        "null when the WithdrawRequestUpdated log scan could not complete."
     )
-    total_pending_shares: Amount = Field(description=_WM_DOCS["total_pending_shares"])
+    total_pending_shares: Amount | None = Field(
+        description=_WM_DOCS["total_pending_shares"]
+    )
     total_pending_shares_note: str
 
 
@@ -831,8 +834,8 @@ class VaultInfoResponse(_Base):
     role_accounts: list[RoleAccountEntry] | None = Field(
         default=None,
         description="All confirmed role holders on the AccessManager; "
-        "null when the RoleGranted log scan failed (provider without "
-        "broad eth_getLogs support).",
+        "null when the RoleGranted log scan could not complete "
+        "(the provider kept rejecting eth_getLogs pages, or the scan timed out).",
     )
     fees: FeesSection | None = None
     withdraw_manager_details: WithdrawManagerDetails | None = None
