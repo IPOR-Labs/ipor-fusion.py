@@ -549,9 +549,12 @@ def oracle_mapping(
     except (ContractNotFoundError, NotPlasmaVaultError) as exc:
         raise click.UsageError(str(exc)) from exc
 
-    mapping = build_oracle_mapping(
-        ctx, Web3.to_checksum_address(vault_address), effective_block, max_depth
-    )
+    try:
+        mapping = build_oracle_mapping(
+            ctx, Web3.to_checksum_address(vault_address), effective_block, max_depth
+        )
+    except UnsupportedVaultVersionError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if json_output:
         click.echo(json.dumps(mapping.to_dict(), indent=2))

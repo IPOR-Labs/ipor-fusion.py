@@ -2,9 +2,11 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.types import Timestamp
 
 from ipor_fusion.core.plasma_vault import (
@@ -12,6 +14,7 @@ from ipor_fusion.core.plasma_vault import (
     PerformanceFeeData,
     PlasmaVault,
 )
+from ipor_fusion.errors import UnsupportedVaultVersionError
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
@@ -266,6 +269,38 @@ class TestPlasmaVaultCallMethods:
         result = vault.get_price_oracle_middleware_address().call()
 
         assert result == PRICE_ORACLE
+
+    def test_price_oracle_address_prefers_the_middleware_getter(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = encode(["address"], [PRICE_ORACLE])
+
+        assert vault.price_oracle_address() == PRICE_ORACLE
+        assert ctx.call.call_count == 1
+
+    def test_price_oracle_address_falls_back_to_pre_audit_getter(self):
+        vault, ctx = _make_vault()
+        ctx.call.side_effect = [b"", encode(["address"], [PRICE_ORACLE])]
+
+        assert vault.price_oracle_address() == PRICE_ORACLE
+        selectors = [bytes(c.args[1][:4]) for c in ctx.call.call_args_list]
+        assert selectors == [
+            function_signature_to_4byte_selector("getPriceOracleMiddleware()"),
+            function_signature_to_4byte_selector("getPriceOracle()"),
+        ]
+
+    def test_price_oracle_address_without_either_getter(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = b""
+
+        with pytest.raises(UnsupportedVaultVersionError, match="getPriceOracle"):
+            vault.price_oracle_address()
+
+    def test_price_oracle_address_revert_propagates(self):
+        vault, ctx = _make_vault()
+        ctx.call.side_effect = ContractLogicError("execution reverted")
+
+        with pytest.raises(ContractLogicError):
+            vault.price_oracle_address()
 
     def test_get_fuses(self):
         vault, ctx = _make_vault()

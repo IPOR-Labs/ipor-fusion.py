@@ -12,6 +12,7 @@ from web3 import Web3
 from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.errors import EmptyCallResultError, UnsupportedVaultVersionError
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
@@ -427,6 +428,25 @@ class PlasmaVault(ContractWrapper):
             "getPriceOracle()",
             output_types=["address"],
             decoder=Web3.to_checksum_address,
+        )
+
+    def price_oracle_address(self) -> ChecksumAddress:
+        """The vault's price oracle: ``getPriceOracleMiddleware()``, or
+        ``getPriceOracle()`` on vaults deployed before the August 2024 audit.
+
+        Raises `UnsupportedVaultVersionError` when the vault answers neither
+        with data; a revert or RPC error propagates."""
+        for call in (
+            self.get_price_oracle_middleware_address(),
+            self.get_price_oracle_address(),
+        ):
+            try:
+                return call.call()
+            except EmptyCallResultError:
+                continue
+        raise UnsupportedVaultVersionError(
+            f"Plasma Vault {self._address} implements neither "
+            "getPriceOracleMiddleware() nor getPriceOracle()"
         )
 
     def get_fuses(self) -> Call[list[ChecksumAddress]]:

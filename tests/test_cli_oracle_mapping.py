@@ -9,7 +9,7 @@ from click.testing import CliRunner
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
-from ipor_fusion.errors import NotPlasmaVaultError
+from ipor_fusion.errors import NotPlasmaVaultError, UnsupportedVaultVersionError
 from ipor_fusion.readers.oracle_mapping import (
     OracleAsset,
     OracleMapping,
@@ -404,6 +404,22 @@ class TestOracleMappingCommand:
 
         assert result.exit_code != 0
         assert "--chain-id" in result.output
+
+    def test_vault_without_oracle_getter_is_friendly_error(
+        self, mock_ctx_cls, _resolve, mock_build, tmp_config
+    ):
+        mock_ctx_cls.from_url.return_value = _fake_ctx()
+        mock_build.side_effect = UnsupportedVaultVersionError(
+            "implements neither getPriceOracleMiddleware() nor getPriceOracle()"
+        )
+
+        result = CliRunner().invoke(
+            cli, ["vault", "oracle-mapping", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code != 0
+        assert "getPriceOracle()" in result.output
+        assert "Traceback" not in result.output
 
     def test_not_a_vault_is_usage_error(
         self, mock_ctx_cls, mock_resolve, mock_build, tmp_config

@@ -1378,8 +1378,8 @@ class _FakeVault:
         self._name = name
         self._name_raises = name_raises
 
-    def get_price_oracle_middleware_address(self) -> _Ret:
-        return _Ret(self._oracle)
+    def price_oracle_address(self) -> str:
+        return self._oracle
 
     def underlying_asset_address(self) -> _Ret:
         return _Ret(self._asset)
