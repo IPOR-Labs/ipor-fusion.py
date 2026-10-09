@@ -4,6 +4,7 @@ import pytest
 
 from ipor_fusion.chains import (
     CHAIN_NAMES,
+    GET_LOGS_RANGE_HINTS,
     SUPPORTED_CHAIN_IDS,
     ensure_supported_chain,
 )
@@ -16,8 +17,8 @@ def test_supported_chains_pass():
 
 
 def test_unsupported_known_chain_includes_name():
-    with pytest.raises(UnsupportedChainError, match=r"chain 130 \(unichain\)"):
-        ensure_supported_chain(130)
+    with pytest.raises(UnsupportedChainError, match=r"chain 239 \(tac\)"):
+        ensure_supported_chain(239)
 
 
 def test_unsupported_unknown_chain_plain_id():
@@ -28,9 +29,11 @@ def test_unsupported_unknown_chain_plain_id():
 def test_message_lists_supported_chains():
     with pytest.raises(
         UnsupportedChainError,
-        match=r"ethereum \(1\), hyperevm \(999\), base \(8453\), arbitrum \(42161\)",
+        match=r"ethereum \(1\), unichain \(130\), monad \(143\), hyperevm \(999\), "
+        r"base \(8453\), plasma \(9745\), arbitrum \(42161\), avalanche \(43114\), "
+        r"katana \(747474\)$",
     ):
-        ensure_supported_chain(9745)
+        ensure_supported_chain(57073)
 
 
 def test_error_hierarchy():
@@ -41,6 +44,32 @@ def test_error_hierarchy():
 
 def test_supported_ids_all_have_names():
     assert SUPPORTED_CHAIN_IDS <= CHAIN_NAMES.keys()
+
+
+def test_supported_chains():
+    names = {CHAIN_NAMES[cid] for cid in SUPPORTED_CHAIN_IDS}
+    assert names == {
+        "ethereum",
+        "unichain",
+        "monad",
+        "hyperevm",
+        "base",
+        "plasma",
+        "arbitrum",
+        "avalanche",
+        "katana",
+    }
+
+
+@pytest.mark.parametrize("chain_id", [239, 57073, 4663, 3637])
+def test_chains_without_validated_vaults_stay_gated(chain_id):
+    with pytest.raises(UnsupportedChainError):
+        ensure_supported_chain(chain_id)
+
+
+def test_log_range_hints_name_known_chains():
+    assert GET_LOGS_RANGE_HINTS.keys() <= CHAIN_NAMES.keys()
+    assert all(size > 0 for size in GET_LOGS_RANGE_HINTS.values())
 
 
 def test_cli_reexport_is_same_object():

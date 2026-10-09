@@ -22,6 +22,7 @@ CHAIN_NAMES: dict[int, str] = {
     747474: "katana",
     3637: "botanix",
     57073: "ink",
+    14: "flare",
 }
 
 CHAIN_NAME_TO_ID: dict[str, int] = {name: cid for cid, name in CHAIN_NAMES.items()}
@@ -29,9 +30,11 @@ CHAIN_NAME_TO_ID: dict[str, int] = {name: cid for cid, name in CHAIN_NAMES.items
 # Chains the on-chain vault tooling (vault info/health/substrate fetch) is
 # validated on. A provider for another chain may connect fine and still fail
 # deeper in the stack (a missing Multicall3, an oracle quirk, an eth_getLogs
-# cap the adaptive scan cannot page through).
-# Extend only after the full vault_info path passes on that chain.
-SUPPORTED_CHAIN_IDS: frozenset[int] = frozenset({1, 999, 42161, 8453})
+# cap the adaptive scan cannot page through). Extend only after the full
+# vault_info path passes on every live vault of that chain.
+SUPPORTED_CHAIN_IDS: frozenset[int] = frozenset(
+    {1, 130, 143, 999, 8453, 9745, 42161, 43114, 747474}
+)
 
 # First eth_getLogs page size, in blocks, on chains whose providers cap the
 # range (10,000 blocks) or time out on wide queries. The scan still shrinks a

@@ -388,9 +388,26 @@ Read-only aggregators over positions and health, no fuses involved:
 
 ### Supported networks
 
+The on-chain vault tooling (`fusion vault info`, `role-accounts`, `oracle-mapping`) is
+validated on every live vault of these chains (`SUPPORTED_CHAIN_IDS`):
+
 - **Ethereum** mainnet
 - **Arbitrum** One
 - **Base**
+- **HyperEVM**
+- **Unichain**
+- **Plasma**
+- **Avalanche** C-Chain
+- **Katana**
+- **Monad**
+
+Balance fuses and the withdraw manager are read from vault storage. The remaining event
+scans (role holders, pending withdraw requests) page `eth_getLogs` within the provider's
+limits (`get_logs_adaptive`). Where a provider caps the range, such as 10,000 blocks on
+Unichain and Plasma, an old contract needs thousands of requests: past
+`Web3Context.log_scan_max_requests` (1,000 by default; `None` lifts it) or
+`log_scan_timeout_s` the scan raises `LogScanError`, and `vault info` reports those two
+fields as unavailable (`null`) rather than partial.
 
 ## Development
 
