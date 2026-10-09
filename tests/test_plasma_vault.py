@@ -2,9 +2,11 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.types import Timestamp
 
 from ipor_fusion.core.plasma_vault import (
@@ -12,6 +14,7 @@ from ipor_fusion.core.plasma_vault import (
     PerformanceFeeData,
     PlasmaVault,
 )
+from ipor_fusion.errors import UnsupportedVaultVersionError
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
@@ -33,6 +36,19 @@ def _make_vault() -> tuple[PlasmaVault, MagicMock]:
     ctx = MagicMock()
     vault = PlasmaVault(ctx, VAULT_ADDR)
     return vault, ctx
+
+
+def _make_legacy_vault() -> tuple[PlasmaVault, MagicMock]:
+    """A vault that predates getActiveMarketsInBalanceFuses and keeps no
+    address in the WithdrawManager slot: both reads fall back to events."""
+    vault, ctx = _make_vault()
+    ctx.call.return_value = b""
+    ctx.get_storage_at.return_value = b"\x00" * 32
+    return vault, ctx
+
+
+def _word(address: str) -> bytes:
+    return encode(["address"], [address])
 
 
 class TestPlasmaVaultSendMethods:
@@ -267,6 +283,38 @@ class TestPlasmaVaultCallMethods:
 
         assert result == PRICE_ORACLE
 
+    def test_price_oracle_address_prefers_the_middleware_getter(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = encode(["address"], [PRICE_ORACLE])
+
+        assert vault.price_oracle_address() == PRICE_ORACLE
+        assert ctx.call.call_count == 1
+
+    def test_price_oracle_address_falls_back_to_pre_audit_getter(self):
+        vault, ctx = _make_vault()
+        ctx.call.side_effect = [b"", encode(["address"], [PRICE_ORACLE])]
+
+        assert vault.price_oracle_address() == PRICE_ORACLE
+        selectors = [bytes(c.args[1][:4]) for c in ctx.call.call_args_list]
+        assert selectors == [
+            function_signature_to_4byte_selector("getPriceOracleMiddleware()"),
+            function_signature_to_4byte_selector("getPriceOracle()"),
+        ]
+
+    def test_price_oracle_address_without_either_getter(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = b""
+
+        with pytest.raises(UnsupportedVaultVersionError, match="getPriceOracle"):
+            vault.price_oracle_address()
+
+    def test_price_oracle_address_revert_propagates(self):
+        vault, ctx = _make_vault()
+        ctx.call.side_effect = ContractLogicError("execution reverted")
+
+        with pytest.raises(ContractLogicError):
+            vault.price_oracle_address()
+
     def test_get_fuses(self):
         vault, ctx = _make_vault()
         ctx.call.return_value = encode(["address[]"], [[FUSE_ADDR, FUSE_ADDR_2]])
@@ -394,7 +442,7 @@ class TestPlasmaVaultEventDecoding:
     """Methods that decode log events."""
 
     def test_get_balance_fuses(self):
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         added = [
             {
                 "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
@@ -416,7 +464,7 @@ class TestPlasmaVaultEventDecoding:
         assert by_market == {1: FUSE_ADDR, 2: FUSE_ADDR_2}
 
     def test_get_balance_fuses_nets_removed_entries(self):
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         added = [
             {
                 "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
@@ -445,7 +493,7 @@ class TestPlasmaVaultEventDecoding:
         assert result[0].fuse == FUSE_ADDR_2
 
     def test_get_balance_fuses_deduplicates_per_market(self):
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         added = [
             {
                 "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
@@ -468,7 +516,7 @@ class TestPlasmaVaultEventDecoding:
 
     def test_get_balance_fuses_picks_latest_on_unsorted_added(self):
         """Provider may return logs out of order; chronological replay must win."""
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         added = [
             {
                 "data": encode(["uint256", "address"], [1, FUSE_ADDR_2]),
@@ -491,7 +539,7 @@ class TestPlasmaVaultEventDecoding:
 
     def test_get_balance_fuses_readded_after_removal(self):
         """Add -> Remove -> Add of the same fuse must result in active fuse."""
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         added = [
             {
                 "data": encode(["uint256", "address"], [1, FUSE_ADDR]),
@@ -521,7 +569,7 @@ class TestPlasmaVaultEventDecoding:
 
     def test_get_balance_fuses_same_block_logindex_tiebreak(self):
         """Events in the same block are ordered by logIndex."""
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         added = [
             {
                 "data": encode(["uint256", "address"], [1, FUSE_ADDR_2]),
@@ -542,7 +590,7 @@ class TestPlasmaVaultEventDecoding:
         assert result[0].fuse == FUSE_ADDR_2
 
     def test_get_balance_fuses_reads_both_events_in_one_query(self):
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         ctx.get_logs.return_value = []
 
         vault.get_balance_fuses()
@@ -555,7 +603,7 @@ class TestPlasmaVaultEventDecoding:
         ]
 
     def test_get_balance_fuses_empty(self):
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         ctx.get_logs.return_value = _balance_fuse_logs([], [])
 
         result = vault.get_balance_fuses()
@@ -563,7 +611,7 @@ class TestPlasmaVaultEventDecoding:
         assert not result
 
     def test_withdraw_manager_address_returns_latest(self):
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         old_addr = Web3.to_checksum_address(
             "0x7777777777777777777777777777777777777777"
         )
@@ -579,7 +627,7 @@ class TestPlasmaVaultEventDecoding:
         assert result == WITHDRAW_MANAGER
 
     def test_withdraw_manager_address_no_events(self):
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         ctx.get_logs.return_value = []
 
         result = vault.withdraw_manager_address()
@@ -587,7 +635,7 @@ class TestPlasmaVaultEventDecoding:
         assert result is None
 
     def test_withdraw_manager_address_single_event(self):
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         event_data = encode(["address"], [WITHDRAW_MANAGER])
         ctx.get_logs.return_value = [
             {"data": event_data, "blockNumber": 50},
@@ -600,7 +648,7 @@ class TestPlasmaVaultEventDecoding:
     def test_withdraw_manager_address_zero_address_means_unset(self):
         # Legacy vaults emit WithdrawManagerChanged(address(0)) at init;
         # the zero address must not be reported as a queryable manager.
-        vault, ctx = _make_vault()
+        vault, ctx = _make_legacy_vault()
         event_data = encode(["address"], [ZERO_ADDRESS])
         ctx.get_logs.return_value = [
             {"data": event_data, "blockNumber": 50},
@@ -609,6 +657,99 @@ class TestPlasmaVaultEventDecoding:
         result = vault.withdraw_manager_address()
 
         assert result is None
+
+
+class TestPlasmaVaultStorageReads:
+    def test_balance_fuses_from_storage(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = encode(["uint256[]"], [[3, 7, 3]])
+        slots = {
+            int.from_bytes(
+                Web3.keccak(encode(["uint256", "uint256"], [market_id, base]))
+            ): fuse
+            for market_id, fuse in ((3, FUSE_ADDR), (7, FUSE_ADDR_2))
+            for base in [
+                0x150144DD6AF711BAC4392499881EC6649090601BD196A5ECE5174C1400B1F700
+            ]
+        }
+        ctx.get_storage_at.side_effect = lambda _addr, slot: _word(slots[slot])
+
+        result = vault.get_balance_fuses()
+
+        assert [(bf.market_id, bf.fuse) for bf in result] == [
+            (3, FUSE_ADDR),
+            (7, FUSE_ADDR_2),
+        ]
+        ctx.get_logs.assert_not_called()
+
+    def test_balance_fuses_without_markets(self):
+        vault, ctx = _make_vault()
+        ctx.call.return_value = encode(["uint256[]"], [[]])
+
+        assert vault.get_balance_fuses() == []
+        ctx.get_logs.assert_not_called()
+
+    def test_balance_fuses_view_revert_falls_back_to_events(self):
+        vault, ctx = _make_vault()
+        ctx.call.side_effect = ContractLogicError("execution reverted")
+        ctx.get_logs.return_value = []
+
+        assert vault.get_balance_fuses() == []
+        ctx.get_logs.assert_called_once()
+
+    def test_withdraw_manager_from_storage(self):
+        vault, ctx = _make_vault()
+        ctx.get_storage_at.return_value = _word(WITHDRAW_MANAGER)
+
+        assert vault.withdraw_manager_address() == WITHDRAW_MANAGER
+        (_, slot), _ = ctx.get_storage_at.call_args
+        assert slot == (
+            0x465D2FF0062318FE6F4C7E9AC78CFCD70BC86A1D992722875EF83A9770513100
+        )
+        ctx.get_logs.assert_not_called()
+
+
+LEGACY_WM_SLOT = 0xB37E8684757599DA669B8AEA811EE2B3693B2582D2C730FAB3F4965FA2EC3E11
+
+
+def _legacy_slot_vault(owner: str) -> tuple[PlasmaVault, MagicMock]:
+    """Empty WithdrawManager slot, WITHDRAW_MANAGER in the legacy slot, and
+    `getPlasmaVaultAddress()` there answering ``owner``."""
+    vault, ctx = _make_vault()
+    ctx.get_storage_at.side_effect = lambda _addr, slot: (
+        _word(WITHDRAW_MANAGER) if slot == LEGACY_WM_SLOT else b"\x00" * 32
+    )
+    ctx.call.return_value = _word(owner)
+    return vault, ctx
+
+
+class TestWithdrawManagerLegacySlot:
+    def test_bound_manager_in_the_legacy_slot(self):
+        vault, ctx = _legacy_slot_vault(VAULT_ADDR)
+
+        assert vault.withdraw_manager_address() == WITHDRAW_MANAGER
+        ctx.get_logs.assert_not_called()
+        (to, data), _ = ctx.call.call_args
+        assert to == WITHDRAW_MANAGER
+        assert bytes(data) == function_signature_to_4byte_selector(
+            "getPlasmaVaultAddress()"
+        )
+
+    def test_foreign_value_in_the_legacy_slot_falls_back_to_events(self):
+        vault, ctx = _legacy_slot_vault(USER_ADDR)
+        ctx.get_logs.return_value = []
+
+        assert vault.withdraw_manager_address() is None
+        ctx.get_logs.assert_called_once()
+
+    def test_non_manager_in_the_legacy_slot_falls_back_to_events(self):
+        vault, ctx = _legacy_slot_vault(VAULT_ADDR)
+        ctx.call.return_value = b""
+        ctx.get_logs.return_value = [
+            {"data": _word(FEE_ACCOUNT), "blockNumber": 1},
+        ]
+
+        assert vault.withdraw_manager_address() == FEE_ACCOUNT
 
 
 class TestPlasmaVaultFeeData:

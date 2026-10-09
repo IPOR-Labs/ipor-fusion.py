@@ -3,11 +3,31 @@ from __future__ import annotations
 from eth_account import Account
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
+from requests import ConnectionError as RequestsConnectionError
+from requests import HTTPError, Timeout
 from web3 import Web3
-from web3.types import BlockIdentifier, FilterParams, LogReceipt, TxReceipt
+from web3.providers.rpc.utils import (
+    REQUEST_RETRY_ALLOWLIST,
+    ExceptionRetryConfiguration,
+)
+from web3.types import BlockIdentifier, LogReceipt, TxReceipt
 
+from ipor_fusion.chains import GET_LOGS_RANGE_HINTS
+from ipor_fusion.core.logs import (
+    DEFAULT_LOG_SCAN_MAX_REQUESTS,
+    DEFAULT_LOG_SCAN_TIMEOUT_S,
+    get_logs_adaptive,
+)
 from ipor_fusion.errors import TransactionError, get_revert_reason
 from ipor_fusion.types import ChainId
+
+# web3 retries every allowlisted method on any HTTP error, a 400 included;
+# a too-wide eth_getLogs answered with HTTP 400/413 or a query timeout would be
+# sent five times before the adaptive scan could shrink it.
+_RETRY_EXCEPT_GET_LOGS = ExceptionRetryConfiguration(
+    errors=(RequestsConnectionError, HTTPError, Timeout),
+    method_allowlist=[m for m in REQUEST_RETRY_ALLOWLIST if m != "eth_getLogs"],
+)
 
 
 class Web3Context:
@@ -34,9 +54,15 @@ class Web3Context:
         signer: ChecksumAddress | None = None,
         private_key: str | None = None,
         gas_multiplier: float = 1.25,
+        log_scan_timeout_s: float = DEFAULT_LOG_SCAN_TIMEOUT_S,
+        log_scan_max_requests: int | None = DEFAULT_LOG_SCAN_MAX_REQUESTS,
     ):
         self._web3 = web3
         self._chain_id = chain_id
+        # Bounds of every `get_logs` scan: wall clock, and eth_getLogs requests
+        # (None: unbounded); see `core.logs.get_logs_adaptive`.
+        self.log_scan_timeout_s = log_scan_timeout_s
+        self.log_scan_max_requests = log_scan_max_requests
         self._private_key = private_key
         self._gas_multiplier = gas_multiplier
         self._default_block: BlockIdentifier = "latest"
@@ -75,9 +101,15 @@ class Web3Context:
         private_key: str | None = None,
         gas_multiplier: float = 1.25,
         request_timeout_s: float = DEFAULT_RPC_TIMEOUT_S,
+        log_scan_timeout_s: float = DEFAULT_LOG_SCAN_TIMEOUT_S,
+        log_scan_max_requests: int | None = DEFAULT_LOG_SCAN_MAX_REQUESTS,
     ) -> Web3Context:
         web3 = Web3(
-            Web3.HTTPProvider(url, request_kwargs={"timeout": request_timeout_s})
+            Web3.HTTPProvider(
+                url,
+                request_kwargs={"timeout": request_timeout_s},
+                exception_retry_configuration=_RETRY_EXCEPT_GET_LOGS,
+            )
         )
         # web3's validation middleware fetches eth_chainId (uncached) on the
         # request AND the response of every eth_call/eth_estimateGas, tripling
@@ -91,6 +123,8 @@ class Web3Context:
             chain_id=chain_id,
             private_key=private_key,
             gas_multiplier=gas_multiplier,
+            log_scan_timeout_s=log_scan_timeout_s,
+            log_scan_max_requests=log_scan_max_requests,
         )
 
     def call(
@@ -179,16 +213,24 @@ class Web3Context:
         contract_address: ChecksumAddress,
         # Per position: one topic, or a list of alternatives (OR).
         topics: list[str | list[str]],
-        from_block: BlockIdentifier = 0,
+        from_block: BlockIdentifier | None = None,
         to_block: BlockIdentifier = "latest",
     ) -> list[LogReceipt]:
-        filter_params: FilterParams = {
-            "fromBlock": from_block,
-            "toBlock": to_block,
-            "address": contract_address,
-            "topics": topics,  # type: ignore[typeddict-item]
-        }
-        return self.web3.eth.get_logs(filter_params)
+        """Every matching log in the range, paged within the provider's
+        `eth_getLogs` caps (`core.logs.get_logs_adaptive`); raises
+        `LogScanError` rather than return a partial result. ``from_block=None``
+        scans from the contract's creation."""
+        return get_logs_adaptive(
+            self.web3,
+            contract_address,
+            topics,
+            from_block,
+            to_block,
+            chain_id=self.chain_id,
+            chunk_hint=GET_LOGS_RANGE_HINTS.get(self.chain_id),
+            timeout_s=self.log_scan_timeout_s,
+            max_requests=self.log_scan_max_requests,
+        )
 
     def get_block(self, block: BlockIdentifier = "latest"):
         return self.web3.eth.get_block(block)

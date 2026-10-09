@@ -40,7 +40,11 @@ from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
-from ipor_fusion.errors import EmptyCallResultError, UnsupportedVaultVersionError
+from ipor_fusion.errors import (
+    EmptyCallResultError,
+    LogScanError,
+    UnsupportedVaultVersionError,
+)
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import (
     AaveV3FuseReader,
@@ -118,7 +122,8 @@ class _WithdrawManagerData:
     withdraw_fee: int | None
     shares_to_release: int
     last_release_funds_timestamp: int
-    pending_requests: list[AccountRequest]
+    # None when the WithdrawRequestUpdated scan or its reads failed.
+    pending_requests: list[AccountRequest] | None
 
 
 @dataclass
@@ -196,15 +201,26 @@ class _VaultData:
     unimplemented_getters: list[str] = field(default_factory=list)
 
 
-# Failure modes of the heavy RoleGranted scan: JSON-RPC rejections/limits plus
-# transport-level errors — web3's HTTPProvider re-raises raw requests
-# exceptions (read timeouts, 429/5xx via raise_for_status).
+# Failure modes of the event scans behind optional data (role holders, pending
+# withdraw requests): a log scan the provider would not let complete
+# (LogScanError), plus JSON-RPC and transport errors from the reads that follow.
 _ROLE_SCAN_ERRORS = (
+    LogScanError,
     ContractLogicError,
     Web3RPCError,
     TimeExhausted,
     requests.RequestException,
 )
+
+
+def _scan_or_none(func: Callable[[], T]) -> T | None:
+    """An event scan behind optional data; None (never a partial result) when
+    it cannot complete."""
+    try:
+        return func()
+    except _ROLE_SCAN_ERRORS as exc:
+        _logger.debug("scan unavailable: %s: %s", type(exc).__name__, exc)
+        return None
 
 
 def _safe_call(func: Callable[[], T]) -> T | None:
@@ -346,7 +362,7 @@ def _fetch_withdraw_manager(
         withdraw_fee=withdraw_fee,
         shares_to_release=shares or 0,
         last_release_funds_timestamp=last_ts or 0,
-        pending_requests=_safe_call(wm.get_pending_requests) or [],
+        pending_requests=_scan_or_none(wm.get_pending_requests),
     )
 
 
@@ -773,8 +789,9 @@ def _fetch_role_accounts(
     ctx: Web3Context, plasma_vault: PlasmaVault
 ) -> list[RoleAccount] | None:
     """All confirmed role holders on the vault's AccessManager, sorted; None
-    when the RoleGranted log scan fails (provider without broad eth_getLogs
-    support, or a transport-level failure on the heavy query)."""
+    when the RoleGranted log scan cannot complete (the provider rejects even
+    small eth_getLogs pages, or the scan runs out of time) or a transport-level
+    failure hits the reads."""
     try:
         manager = AccessManager(ctx, plasma_vault.get_access_manager_address().call())
         accounts = manager.get_all_role_accounts()
@@ -881,8 +898,7 @@ def _fetch_vault_data(
     chain_id: int = 0,
 ) -> _VaultData:
     # Fail fast with a client-mappable typed error instead of letting the
-    # fetch die deep in the stack (e.g. eth_getLogs range caps) on chains
-    # the tooling is not validated on.
+    # fetch die deep in the stack on chains the tooling is not validated on.
     ensure_supported_chain(chain_id or ctx.chain_id)
     vault_addr = Web3.to_checksum_address(plasma_vault.address)
     with ThreadPoolExecutor() as pool:

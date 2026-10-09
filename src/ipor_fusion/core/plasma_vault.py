@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
-from eth_abi import decode
+from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.errors import EmptyCallResultError, UnsupportedVaultVersionError
 from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
 
@@ -22,6 +25,23 @@ _BALANCE_FUSE_ADDED_TOPIC = HexBytes(
 )
 _BALANCE_FUSE_REMOVED_TOPIC = HexBytes(
     Web3.keccak(text="BalanceFuseRemoved(uint256,address)")
+)
+
+# ERC-7201 slots in PlasmaVaultStorageLib. BalanceFuses.fuseAddresses is the
+# struct's first member, so a market's fuse sits at keccak(marketId . slot).
+_BALANCE_FUSES_SLOT = 0x150144DD6AF711BAC4392499881EC6649090601BD196A5ECE5174C1400B1F700
+# WithdrawManager.manager at the slot corrected in the contracts' IL-6952, and
+# the slot older vaults use. The legacy slot overlaps the callback-handler
+# storage, so its value counts only if that contract is a WithdrawManager bound
+# to this vault.
+_WITHDRAW_MANAGER_SLOT = (
+    0x465D2FF0062318FE6F4C7E9AC78CFCD70BC86A1D992722875EF83A9770513100
+)
+_WITHDRAW_MANAGER_LEGACY_SLOT = (
+    0xB37E8684757599DA669B8AEA811EE2B3693B2582D2C730FAB3F4965FA2EC3E11
+)
+_GET_PLASMA_VAULT_ADDRESS = function_signature_to_4byte_selector(
+    "getPlasmaVaultAddress()"
 )
 
 
@@ -75,6 +95,10 @@ def _universal_read_decoder(
         return decoder(single) if decoder is not None else single
 
     return _decode
+
+
+def _address_in_word(word: bytes) -> ChecksumAddress:
+    return Web3.to_checksum_address(bytes(word)[-20:])
 
 
 def _address_list_decoder(value: list) -> list[ChecksumAddress]:
@@ -429,6 +453,25 @@ class PlasmaVault(ContractWrapper):
             decoder=Web3.to_checksum_address,
         )
 
+    def price_oracle_address(self) -> ChecksumAddress:
+        """The vault's price oracle: ``getPriceOracleMiddleware()``, or
+        ``getPriceOracle()`` on vaults deployed before the August 2024 audit.
+
+        Raises `UnsupportedVaultVersionError` when the vault answers neither
+        with data; a revert or RPC error propagates."""
+        for call in (
+            self.get_price_oracle_middleware_address(),
+            self.get_price_oracle_address(),
+        ):
+            try:
+                return call.call()
+            except EmptyCallResultError:
+                continue
+        raise UnsupportedVaultVersionError(
+            f"Plasma Vault {self._address} implements neither "
+            "getPriceOracleMiddleware() nor getPriceOracle()"
+        )
+
     def get_fuses(self) -> Call[list[ChecksumAddress]]:
         return self._view(
             "getFuses()", output_types=["address[]"], decoder=_address_list_decoder
@@ -468,9 +511,60 @@ class PlasmaVault(ContractWrapper):
             decoder=list,
         )
 
-    # ── Compound methods: event replay, no `Call` shape ─────────────────────
+    def get_active_markets_in_balance_fuses(self) -> Call[list[MarketId]]:
+        """Markets with a balance fuse, in storage order. Vaults deployed
+        before the view existed revert or return nothing."""
+        return self._view(
+            "getActiveMarketsInBalanceFuses()",
+            output_types=["uint256[]"],
+            decoder=_market_id_list_decoder,
+        )
+
+    # ── Compound methods: storage reads or event replay, no `Call` shape ────
 
     def get_balance_fuses(self) -> list[BalanceFuse]:
+        """The balance fuse of every market that has one.
+
+        Read from storage (`getActiveMarketsInBalanceFuses` plus each market's
+        fuse slot, at ``ctx.default_block``); vaults that predate the view
+        fall back to replaying BalanceFuseAdded/BalanceFuseRemoved logs."""
+        try:
+            market_ids = self.get_active_markets_in_balance_fuses().call()
+        except (EmptyCallResultError, ContractLogicError):
+            return self._replay_balance_fuses()
+        # The list can repeat a market (seen for the zero-balance market); the
+        # fuse mapping holds one fuse per market either way.
+        market_ids = list(dict.fromkeys(market_ids))
+        with ThreadPoolExecutor(max(1, min(len(market_ids), 16))) as pool:
+            fuses = list(pool.map(self._balance_fuse_in_storage, market_ids))
+        return [
+            BalanceFuse(market_id=market_id, fuse=fuse)
+            for market_id, fuse in zip(market_ids, fuses, strict=True)
+        ]
+
+    def _address_at(self, slot: int) -> ChecksumAddress:
+        return _address_in_word(self._ctx.get_storage_at(self._address, slot))
+
+    def _is_own_withdraw_manager(self, candidate: ChecksumAddress) -> bool:
+        call = Call(
+            to=candidate,
+            data=_GET_PLASMA_VAULT_ADDRESS,
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+            ctx=self._ctx,
+        )
+        try:
+            return call.call() == self._address
+        except (EmptyCallResultError, ContractLogicError):
+            return False
+
+    def _balance_fuse_in_storage(self, market_id: MarketId) -> ChecksumAddress:
+        slot = Web3.keccak(
+            encode(["uint256", "uint256"], [market_id, _BALANCE_FUSES_SLOT])
+        )
+        return self._address_at(int.from_bytes(slot))
+
+    def _replay_balance_fuses(self) -> list[BalanceFuse]:
         # Replay Added/Removed events chronologically to mirror on-chain storage.
         # Sorting by (blockNumber, logIndex) handles provider-side ordering quirks
         # and re-add-after-remove cases that a set-subtraction approach misses.
@@ -493,12 +587,24 @@ class PlasmaVault(ContractWrapper):
         return list(state.values())
 
     def withdraw_manager_address(self) -> ChecksumAddress | None:
-        """Latest ``WithdrawManagerChanged`` address, or None when unset.
+        """The vault's WithdrawManager, or None when unset.
 
-        Vaults deployed without a withdraw manager emit the event with
-        ``address(0)`` (e.g. legacy Base vaults), so the zero address means
-        "none" — it is not a contract that can be queried.
+        Read from storage, as the contracts resolve it: the WithdrawManager
+        slot, else the legacy slot of older vaults (accepted only when the
+        contract there names this vault as its Plasma Vault). Storage is what
+        the vault uses: a manager swapped in by a maintenance fuse emits no
+        ``WithdrawManagerChanged``, so the events can name a retired one. Only
+        when neither slot answers does the latest event decide. Vaults
+        deployed without a withdraw manager emit the event with ``address(0)``
+        (e.g. legacy Base vaults), so the zero address means "none" — it is
+        not a contract that can be queried.
         """
+        stored = self._address_at(_WITHDRAW_MANAGER_SLOT)
+        if stored != ZERO_ADDRESS:
+            return stored
+        legacy = self._address_at(_WITHDRAW_MANAGER_LEGACY_SLOT)
+        if legacy != ZERO_ADDRESS and self._is_own_withdraw_manager(legacy):
+            return legacy
         events = self._get_withdraw_manager_changed_events()
         sorted_events = sorted(
             events, key=lambda event: event["blockNumber"], reverse=True

@@ -14,7 +14,7 @@ from ipor_fusion.cli.main import cli
 from ipor_fusion.cli.vault_cmd import _role_accounts_json
 from ipor_fusion.cli.vault_fetcher import _fetch_role_accounts, _VaultData
 from ipor_fusion.core.access import RoleAccount
-from ipor_fusion.errors import NotPlasmaVaultError
+from ipor_fusion.errors import LogScanError, NotPlasmaVaultError
 from ipor_fusion.types import Period, RoleId
 
 VAULT = "0x2222222222222222222222222222222222222222"
@@ -165,7 +165,22 @@ class TestRoleAccounts:
         )
 
         assert result.exit_code != 0
-        assert "eth_getLogs" in result.output
+        assert "RoleGranted log scan failed" in result.output
+        assert "Traceback" not in result.output
+
+    def test_incomplete_scan_is_friendly_error(self, _ctx, mock_resolve, tmp_config):
+        manager = _mock_manager([])
+        manager.get_all_role_accounts.side_effect = LogScanError(
+            "eth_getLogs scan incomplete", address=MANAGER, from_block=1, to_block=2
+        )
+        mock_resolve.return_value = manager
+
+        result = CliRunner().invoke(
+            cli, ["vault", "role-accounts", VAULT, "--chain-id", "1"]
+        )
+
+        assert result.exit_code != 0
+        assert "LogScanError" in result.output
         assert "Traceback" not in result.output
 
     def test_scan_transport_failure_is_friendly_error(
@@ -182,7 +197,7 @@ class TestRoleAccounts:
         )
 
         assert result.exit_code != 0
-        assert "eth_getLogs" in result.output
+        assert "RoleGranted log scan failed" in result.output
         assert "Traceback" not in result.output
 
 
@@ -207,6 +222,14 @@ class TestFetchRoleAccounts:
     def test_transport_failure_degrades_to_none(self):
         ctx = MagicMock()
         ctx.get_logs.side_effect = requests.exceptions.ReadTimeout("timed out")
+
+        assert _fetch_role_accounts(ctx, self._vault()) is None
+
+    def test_incomplete_scan_degrades_to_none(self):
+        ctx = MagicMock()
+        ctx.get_logs.side_effect = LogScanError(
+            "timed out", address=MANAGER, from_block=1, to_block=2
+        )
 
         assert _fetch_role_accounts(ctx, self._vault()) is None
 

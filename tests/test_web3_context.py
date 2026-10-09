@@ -8,7 +8,7 @@ from hexbytes import HexBytes
 from web3 import Web3
 from web3.providers.rpc import HTTPProvider
 
-from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.context import _RETRY_EXCEPT_GET_LOGS, Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.errors import TransactionError
 from ipor_fusion.types import ChainId
@@ -86,6 +86,7 @@ class TestFromUrl:
         mock_web3_cls.HTTPProvider.assert_called_once_with(
             "http://localhost:8545",
             request_kwargs={"timeout": Web3Context.DEFAULT_RPC_TIMEOUT_S},
+            exception_retry_configuration=_RETRY_EXCEPT_GET_LOGS,
         )
         mock_web3_cls.assert_called_once_with(mock_provider)
         assert ctx.chain_id == ChainId(42161)
@@ -110,7 +111,9 @@ class TestFromUrl:
         Web3Context.from_url("http://localhost:8545", request_timeout_s=10.0)
 
         mock_web3_cls.HTTPProvider.assert_called_once_with(
-            "http://localhost:8545", request_kwargs={"timeout": 10.0}
+            "http://localhost:8545",
+            request_kwargs={"timeout": 10.0},
+            exception_retry_configuration=_RETRY_EXCEPT_GET_LOGS,
         )
 
     def test_reads_do_not_refetch_the_chain_id(self):

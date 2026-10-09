@@ -249,14 +249,14 @@ def vault_role_accounts(
 
     TECH_* roles are held by protocol contracts, not EOAs.
     Cost: scans RoleGranted logs + one hasRole read per unique
-    (role, account) pair; can be slow on vaults with many grants and
-    needs a provider that serves broad eth_getLogs queries.
+    (role, account) pair; the scan pages eth_getLogs within the provider's
+    range caps, so it is slower on chains whose providers cap the range.
     """
     cfg = load_config()
     role_id = None if role is None else Roles.resolve(role)
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
-    # The RoleGranted scan needs broad eth_getLogs — fail fast (before any
-    # RPC) on chains the vault tooling is not validated on.
+    # Fail fast (before any RPC) on chains the vault tooling is not
+    # validated on.
     ensure_supported_chain(chain_id)
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
     checksum = Web3.to_checksum_address(vault_address)

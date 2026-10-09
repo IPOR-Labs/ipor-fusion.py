@@ -153,7 +153,11 @@ the lifecycle matrix follows that.
   used by the CLI, MCP and `readers/lending_health`
 - `config/roles.py` — `Roles` IntEnum
 - `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
-  `multicall` (`Multicall3`), `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
+  `multicall` (`Multicall3`), `logs` (`get_logs_adaptive`: every event scan pages
+  `eth_getLogs` within the provider's caps from the contract's creation block, within a
+  time and request budget, and raises `LogScanError` rather than return partial logs;
+  prefer a storage or view read over a scan, as `get_balance_fuses` and
+  `withdraw_manager_address` do), `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
   `simulation` (`VaultSimulator`, eth_simulateV1, `erc20_balance_slot` and ERC-20 balance
   overrides), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`

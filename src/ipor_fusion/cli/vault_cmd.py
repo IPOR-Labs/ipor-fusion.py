@@ -456,8 +456,7 @@ def role_accounts(
         )
     except _ROLE_SCAN_ERRORS as exc:
         raise click.ClickException(
-            f"RoleGranted log scan failed ({type(exc).__name__}: {exc}). "
-            "The provider must serve broad eth_getLogs queries."
+            f"RoleGranted log scan failed ({type(exc).__name__}: {exc})."
         ) from exc
     rows = [ra.to_dict() for ra in sorted(accounts, key=role_account_sort_key)]
 
@@ -549,9 +548,12 @@ def oracle_mapping(
     except (ContractNotFoundError, NotPlasmaVaultError) as exc:
         raise click.UsageError(str(exc)) from exc
 
-    mapping = build_oracle_mapping(
-        ctx, Web3.to_checksum_address(vault_address), effective_block, max_depth
-    )
+    try:
+        mapping = build_oracle_mapping(
+            ctx, Web3.to_checksum_address(vault_address), effective_block, max_depth
+        )
+    except UnsupportedVaultVersionError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if json_output:
         click.echo(json.dumps(mapping.to_dict(), indent=2))
@@ -779,7 +781,7 @@ def _print_role_accounts_table(role_accounts: list[dict[str, Any]]) -> None:
 def _print_role_accounts(role_accounts: list[dict[str, Any]] | None) -> None:
     click.echo("Role Accounts:")
     if role_accounts is None:
-        click.echo("  (unavailable — provider could not serve the log scan)")
+        click.echo("  (unavailable — the RoleGranted log scan did not complete)")
     else:
         _print_role_accounts_table(role_accounts)
     click.echo()
@@ -1210,10 +1212,11 @@ def _build_withdraw_manager_json(
     sdec = data.share_decimals
     adec = data.asset_decimals
 
-    total_pending_shares = sum((r.shares for r in wmd.pending_requests), 0)
+    pending = wmd.pending_requests
+    total_pending_shares = sum((r.shares for r in pending or []), 0)
 
     requests_json = []
-    for req in wmd.pending_requests:
+    for req in pending or []:
         assets: int | None = _safe_call(
             lambda s=req.shares: plasma_vault.convert_to_assets(s).call()  # type: ignore[misc]
         )
@@ -1257,8 +1260,10 @@ def _build_withdraw_manager_json(
             else None
         ),
         "last_release_funds_timestamp_note": _WM_DOCS["last_release_funds_timestamp"],
-        "pending_requests": requests_json,
-        "total_pending_shares": {
+        "pending_requests": None if pending is None else requests_json,
+        "total_pending_shares": None
+        if pending is None
+        else {
             "raw": total_pending_shares,
             "formatted": _format_amount(total_pending_shares, sdec),
         },
@@ -1886,6 +1891,12 @@ def _print_hypercore_pending(pending: HyperCorePendingState | None) -> None:
 
 def _print_pending_requests(data: _VaultData, plasma_vault: PlasmaVault) -> None:
     if (wmd := data.withdraw_manager_data) is None:
+        return
+    if wmd.pending_requests is None:
+        click.echo(
+            "  Pending requests: (unavailable — the WithdrawRequestUpdated "
+            "log scan did not complete)"
+        )
         return
     if not (requests := wmd.pending_requests):
         click.echo("  Pending requests: (none)")

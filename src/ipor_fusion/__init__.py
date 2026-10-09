@@ -10,6 +10,7 @@ from ipor_fusion.about import (
 from ipor_fusion.chains import (
     CHAIN_NAME_TO_ID,
     CHAIN_NAMES,
+    GET_LOGS_RANGE_HINTS,
     SUPPORTED_CHAIN_IDS,
     ensure_supported_chain,
 )
@@ -39,6 +40,7 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
+from ipor_fusion.core.logs import find_creation_block, get_logs_adaptive
 from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
@@ -133,6 +135,7 @@ from ipor_fusion.errors import (
     ContractNotFoundError,
     EmptyCallResultError,
     IporFusionError,
+    LogScanError,
     MorphoMarketNotFoundError,
     NotPlasmaVaultError,
     SimulationError,
@@ -332,6 +335,8 @@ __all__ = [
     "repository_url",
     "Web3Context",
     "Call",
+    "get_logs_adaptive",
+    "find_creation_block",
     "Multicall3",
     "MULTICALL3_ADDRESS",
     "VaultSimulator",
@@ -518,6 +523,7 @@ __all__ = [
     "ContractNotFoundError",
     "EmptyCallResultError",
     "IporFusionError",
+    "LogScanError",
     "MorphoMarketNotFoundError",
     "NotPlasmaVaultError",
     "TransactionError",
@@ -530,6 +536,7 @@ __all__ = [
     "CHAIN_NAMES",
     "CHAIN_NAME_TO_ID",
     "SUPPORTED_CHAIN_IDS",
+    "GET_LOGS_RANGE_HINTS",
     "ensure_supported_chain",
     "Amount",
     "Shares",

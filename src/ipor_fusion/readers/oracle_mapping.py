@@ -300,7 +300,6 @@ class OracleMappingReader:
         logs = self._ctx.get_logs(
             contract_address=self._oracle_addr,
             topics=[ASSET_PRICE_SOURCE_UPDATED_TOPIC],
-            from_block=0,
             to_block=to_block,
         )
         out: list[tuple[int, ChecksumAddress, ChecksumAddress]] = []
@@ -972,10 +971,12 @@ def build_oracle_mapping(
     """Build the full oracle mapping for ``vault_address``.
 
     ``ctx`` must already be pinned to ``effective_block`` (the caller sets
-    ``ctx.default_block``); the block is echoed in the output.
+    ``ctx.default_block``); the block is echoed in the output. Raises
+    `UnsupportedVaultVersionError` for a vault that exposes no price-oracle
+    getter.
     """
     vault = PlasmaVault(ctx, vault_address)
-    oracle_addr = vault.get_price_oracle_middleware_address().call()
+    oracle_addr = vault.price_oracle_address()
     asset_addr = vault.underlying_asset_address().call()
 
     try:
