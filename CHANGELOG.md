@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.10.2 (2026-10-09)
+
+### Features
+
+- **sdk**: Report Aave V4 lending health per Spoke
+  ([`fde42da`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fde42da8ae0cf7d68a856f1354c4fbf152f3dfa1))
+
+
 ## v3.10.1 (2026-10-09)
 
 ### Bug Fixes
