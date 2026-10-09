@@ -1625,5 +1625,6 @@ class TestExecutorViews:
         call = executor.get_balance_fuse_snapshot()
         assert bytes(call.data)[:4] == Web3.keccak(text="getBalanceFuseSnapshot()")[:4]
         assert call.output_types == ["uint256", "uint256", "uint256"]
+        assert call.decoder is not None
         snap = call.decoder((32_928_135, 50_000, 1_791_458_983))
         assert snap == BalanceFuseSnapshot(32_928_135, 50_000, 1_791_458_983)
