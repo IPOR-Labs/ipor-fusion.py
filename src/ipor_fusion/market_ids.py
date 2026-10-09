@@ -76,7 +76,7 @@ class IporFusionMarkets:
     # substrate type: DolomiteSubstrate (asset, subAccountId, canBorrow)
     DOLOMITE = 47
     LITE_PSM = 48
-    # substrate type: AaveV4SubstrateType (Asset or Spoke)
+    # substrate type: AaveV4Substrate Reserve (spoke, reserveId, isCollateral, canBorrow)
     AAVE_V4 = 49
     # External-state market (id 50): off-vault capital via the external-state
     # operation fuse (e.g. Hyperliquid / Boros margin legs). On-chain substrate

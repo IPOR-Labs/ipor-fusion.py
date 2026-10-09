@@ -639,7 +639,7 @@ def _print_lending_health(  # noqa: C901
     click.echo("Position Breakdown:")
     morpho_health, aave_health = _index_lending_health(lh)
     consumed_morpho_subs: set[str] = set()
-    consumed_aave_mids: set[int] = set()
+    consumed_aave_mids: set[int | str] = set()
     prices = data.token_prices_usd or {}
 
     for ipor_mid, positions in (data.morpho_positions or {}).items():
@@ -687,20 +687,25 @@ def _print_lending_health(  # noqa: C901
             click.echo(f"  {format_market_label(m.market_id)}:")
             click.echo(f"    morpho market 0x{sid}:")
             _print_health_lines(m, indent="      ")
-    for mid, m in aave_health.items():
-        if mid not in consumed_aave_mids:
-            click.echo(f"  {format_market_label(mid)}:")
+    for key, m in aave_health.items():
+        if key not in consumed_aave_mids:
+            click.echo(f"  {format_market_label(m.market_id)}:")
+            if m.protocol == "aave_v4":
+                click.echo(f"    spoke {m.substrate_id}:")
             _print_health_lines(m, indent="    ")
 
 
-def _index_lending_health(lh: Any) -> tuple[dict[str, Any], dict[int, Any]]:
+def _index_lending_health(
+    lh: Any,
+) -> tuple[dict[str, Any], dict[int | str, Any]]:
     """Split lending health rows by protocol for fast lookup during rendering.
 
     Morpho rows are keyed by morpho substrate id (one row per substrate).
-    Aave rows are keyed by IPOR market id (account-aggregated, one row per market).
+    Aave V3 rows are keyed by IPOR market id (account-aggregated, one row per
+    market); Aave V4 rows by Spoke address (account-aggregated per Spoke).
     """
     morpho: dict[str, Any] = {}
-    aave: dict[int, Any] = {}
+    aave: dict[int | str, Any] = {}
     if lh is None:
         return morpho, aave
     for m in lh.markets:
@@ -708,6 +713,8 @@ def _index_lending_health(lh: Any) -> tuple[dict[str, Any], dict[int, Any]]:
             morpho[str(m.substrate_id).lower().removeprefix("0x")] = m
         elif m.protocol == "aave_v3":
             aave[m.market_id] = m
+        elif m.protocol == "aave_v4" and m.substrate_id:
+            aave[m.substrate_id] = m
     return morpho, aave
 
 
@@ -1361,6 +1368,13 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     }
 
 
+def _lending_substrate_ref(substrate_id: str | None) -> str | None:
+    """0x-prefixed Morpho market id or Aave V4 Spoke; None for Aave V3 rows."""
+    if substrate_id is None:
+        return None
+    return substrate_id if substrate_id.startswith("0x") else f"0x{substrate_id}"
+
+
 def _build_json_output(  # noqa: C901, PLR0912, PLR0915
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -1637,6 +1651,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
                     "protocol": m.protocol,
                     "market_id": m.market_id,
                     "market_name": m.market_name,
+                    "substrate_id": _lending_substrate_ref(m.substrate_id),
                     "current_ltv": m.current_ltv,
                     "max_ltv": m.max_ltv,
                     "health_factor": m.health_factor,

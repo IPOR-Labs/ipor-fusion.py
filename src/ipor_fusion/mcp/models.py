@@ -325,6 +325,7 @@ class LendingMarketHealth(_Base):
     protocol: str
     market_id: str | int
     market_name: str
+    substrate_id: str | None = None
     current_ltv: float | None
     max_ltv: float | None
     health_factor: float | None
