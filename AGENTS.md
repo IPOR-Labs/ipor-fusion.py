@@ -297,6 +297,12 @@ are not validated.
   PlasmaVaultBase, so Etherscan's ABI for the vault address omits callable
   view functions such as `getDependencyBalanceGraph`. An empty dependency graph
   means "unconfigured on-chain", not "missing function".
+- Vaults deployed before the August 2024 audit (no `PLASMA_VAULT_BASE`, e.g.
+  early Arbitrum USDC vaults) answer `getMarketSubstrates`, `getTotalSupplyCap`
+  and `getPriceOracleMiddleware` with empty data and name the oracle getter
+  `getPriceOracle()`. `_fetch_vault_data` records them in
+  `unimplemented_getters` (a health-check warning each) instead of failing; a
+  required getter answering empty raises `UnsupportedVaultVersionError`.
 - WithdrawManager: `request_fee` (scheduled exit) and `withdraw_fee` (instant
   exit) are mutually exclusive paths, never summed. `redeemFromRequest` charges
   no fee; the request already paid `request_fee`.

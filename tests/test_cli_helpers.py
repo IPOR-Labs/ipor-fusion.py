@@ -760,7 +760,6 @@ class TestPrintErc20Balances:
         pv.address = ADDR_1
 
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
-        pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
 
         mock_erc20 = MagicMock()
         mock_erc20.decimals.return_value.call.return_value = 6
@@ -796,6 +795,7 @@ class TestPrintErc20Balances:
                 )
             ],
             instant_fuses=[],
+            market_substrates={IporFusionMarkets.ERC20_VAULT_BALANCE: [addr_bytes]},
         )
         _print_erc20_balances(ctx, pv, data)
         captured = capsys.readouterr()
@@ -813,7 +813,6 @@ class TestPrintErc20Balances:
         pv.address = ADDR_1
 
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
-        pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
 
         mock_erc20 = MagicMock()
         mock_erc20.decimals.return_value.call.side_effect = ContractLogicError("fail")
@@ -846,6 +845,7 @@ class TestPrintErc20Balances:
                 )
             ],
             instant_fuses=[],
+            market_substrates={IporFusionMarkets.ERC20_VAULT_BALANCE: [addr_bytes]},
         )
         _print_erc20_balances(ctx, pv, data)
         captured = capsys.readouterr()
@@ -856,7 +856,6 @@ class TestPrintErc20Balances:
         ctx = MagicMock()
         pv = MagicMock()
         pv.address = ADDR_1
-        pv.get_market_substrates.return_value.call.return_value = []
 
         data = _VaultData(
             block_number=1,
@@ -948,7 +947,6 @@ class TestUnderlyingOnVault:
         pv = MagicMock()
         pv.address = ADDR_1
         # ERC20_VAULT_BALANCE market exists but lists NO substrates (live config).
-        pv.get_market_substrates.return_value.call.return_value = []
         pv.total_assets_in_market.return_value.call.return_value = 0
 
         data = self._make_data(
@@ -981,7 +979,6 @@ class TestUnderlyingOnVault:
         ctx = MagicMock()
         pv = MagicMock()
         pv.address = ADDR_1
-        pv.get_market_substrates.return_value.call.return_value = []
         pv.total_assets_in_market.return_value.call.return_value = 0
 
         data = self._make_data(
@@ -1020,62 +1017,59 @@ class TestPrintSubstrates:
         )
 
     def test_no_substrates(self, capsys):
-        ctx = MagicMock()
-        pv = MagicMock()
-        pv.get_market_substrates.return_value.call.return_value = []
-        _print_substrates(ctx, pv, [FakeBalanceFuse(market_id=1, fuse=ADDR_1)], 1, None)
+        _print_substrates(
+            MagicMock(), {}, [FakeBalanceFuse(market_id=1, fuse=ADDR_1)], 1, None
+        )
         captured = capsys.readouterr()
         assert "(none)" in captured.out
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="TestContract")
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="WETH")
     def test_with_substrates(self, mock_resolve, mock_get_name, capsys):
-        ctx = MagicMock()
-        pv = MagicMock()
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
-        pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
-
         _print_substrates(
-            ctx, pv, [FakeBalanceFuse(market_id=7, fuse=ADDR_1)], 1, "key"
+            MagicMock(),
+            {7: [addr_bytes]},
+            [FakeBalanceFuse(market_id=7, fuse=ADDR_1)],
+            1,
+            "key",
         )
         captured = capsys.readouterr()
         assert "WETH" in captured.out
         assert "TestContract" in captured.out
 
     def test_with_morpho_substrate(self, capsys):
-        ctx = MagicMock()
-        pv = MagicMock()
         raw_bytes32 = bytes.fromhex("ff" * 32)
-        pv.get_market_substrates.return_value.call.return_value = [raw_bytes32]
-
         _print_substrates(
-            ctx, pv, [FakeBalanceFuse(market_id=14, fuse=ADDR_1)], 1, None
+            MagicMock(),
+            {14: [raw_bytes32]},
+            [FakeBalanceFuse(market_id=14, fuse=ADDR_1)],
+            1,
+            None,
         )
         captured = capsys.readouterr()
         assert "morpho_market_id" in captured.out
         assert "[encoding error]" not in captured.out
 
     def test_with_encoding_error_substrate(self, capsys):
-        ctx = MagicMock()
-        pv = MagicMock()
         bad_bytes = bytes.fromhex("ff" * 16)
-        pv.get_market_substrates.return_value.call.return_value = [bad_bytes]
-
-        _print_substrates(ctx, pv, [FakeBalanceFuse(market_id=7, fuse=ADDR_1)], 1, None)
+        _print_substrates(
+            MagicMock(),
+            {7: [bad_bytes]},
+            [FakeBalanceFuse(market_id=7, fuse=ADDR_1)],
+            1,
+            None,
+        )
         captured = capsys.readouterr()
         assert "[encoding error]" in captured.out
 
     def test_encoding_error_includes_decoded_details(self, capsys):
-        ctx = MagicMock()
-        pv = MagicMock()
         malformed_executor = bytes.fromhex(
             "01" + (8453).to_bytes(11, "big").hex() + "ab" * 20
         )
-        pv.get_market_substrates.return_value.call.return_value = [malformed_executor]
-
         _print_substrates(
-            ctx,
-            pv,
+            MagicMock(),
+            {54: [malformed_executor]},
             [FakeBalanceFuse(market_id=54, fuse=ADDR_1)],
             1,
             None,
@@ -1238,7 +1232,6 @@ class TestErc20BalancesNotes:
         pv.address = ADDR_1
 
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
-        pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
 
         mock_erc20 = MagicMock()
         mock_erc20.decimals.return_value.call.return_value = 18
@@ -1274,6 +1267,7 @@ class TestErc20BalancesNotes:
                 )
             ],
             instant_fuses=[],
+            market_substrates={IporFusionMarkets.ERC20_VAULT_BALANCE: [addr_bytes]},
         )
         totals = _print_erc20_balances(ctx, pv, data)
         captured = capsys.readouterr()
@@ -1293,10 +1287,6 @@ class TestErc20BalancesNotes:
         # Two substrates: underlying asset (ADDR_2) and another token
         underlying_bytes = bytes.fromhex("00" * 12 + ADDR_2[2:].lower())
         other_bytes = bytes.fromhex("00" * 12 + "cc" * 20)
-        pv.get_market_substrates.return_value.call.return_value = [
-            underlying_bytes,
-            other_bytes,
-        ]
         pv.total_assets_in_market.return_value.call.return_value = (
             1  # tiny cached value
         )
@@ -1335,6 +1325,12 @@ class TestErc20BalancesNotes:
                 )
             ],
             instant_fuses=[],
+            market_substrates={
+                IporFusionMarkets.ERC20_VAULT_BALANCE: [
+                    underlying_bytes,
+                    other_bytes,
+                ]
+            },
         )
         totals = _print_erc20_balances(ctx, pv, data)
         captured = capsys.readouterr()

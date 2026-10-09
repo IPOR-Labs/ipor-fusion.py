@@ -20,6 +20,7 @@ from ipor_fusion.cli.explorer import get_contract_name
 from ipor_fusion.cli.vault_fetcher import (
     _ROLE_SCAN_ERRORS,
     _ZERO_ADDRESS,
+    GET_MARKET_SUBSTRATES,
     _fetch_deployment_info,
     _fetch_vault_data,
     _resolve_token_decimals,
@@ -56,6 +57,7 @@ from ipor_fusion.errors import (
     ContractNotFoundError,
     NotPlasmaVaultError,
     UnsupportedChainError,
+    UnsupportedVaultVersionError,
 )
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.readers.hypercore import HyperCorePendingState, HyperCorePerpLeg
@@ -395,7 +397,10 @@ def info(
 
     _auto_save_vault(cfg, vault_address, chain_id, plasma_vault)
 
-    data = _fetch_vault_data(ctx, plasma_vault, block_number, chain_id=chain_id)
+    try:
+        data = _fetch_vault_data(ctx, plasma_vault, block_number, chain_id=chain_id)
+    except UnsupportedVaultVersionError as exc:
+        raise click.ClickException(str(exc)) from exc
     _print_vault_info(
         ctx, plasma_vault, cfg, data, vault_address, chain_id, json_output
     )
@@ -913,9 +918,7 @@ def _print_vault_info(
     _print_dependency_graph(data)
 
     click.echo("Substrates per Market:")
-    all_substrate_addrs = _print_substrates(
-        ctx, plasma_vault, data.balance_fuses, chain_id, api_key
-    )
+    all_substrate_addrs = _print_market_substrates(ctx, data, chain_id, api_key)
     click.echo()
 
     click.echo("ERC20 Balances (vault holdings):")
@@ -1393,10 +1396,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
             pool.submit(plasma_vault.total_assets_in_market(bf.market_id).call)
             for bf in data.balance_fuses
         ]
-        substrate_futs = [
-            pool.submit(plasma_vault.get_market_substrates(bf.market_id).call)
-            for bf in data.balance_fuses
-        ]
+        market_substrates = data.market_substrates or {}
 
         fuse_markets = data.fuse_markets or {}
 
@@ -1504,9 +1504,9 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
         # Substrates - also resolve symbols/contracts for addresses
         all_sub_addresses: set[str] = set()
         market_subs_raw: list[tuple[str, int, list]] = []
-        for i, bf in enumerate(data.balance_fuses):
+        for bf in data.balance_fuses:
             market_str = format_market_label(bf.market_id)
-            if subs := substrate_futs[i].result():
+            if subs := market_substrates.get(bf.market_id):
                 market_subs_raw.append((market_str, bf.market_id, subs))
                 for sub in subs:
                     sub_info = decode_substrate(sub, market_id=bf.market_id)
@@ -2041,30 +2041,35 @@ def _print_balance_fuses_table(
     return totals
 
 
+def _print_market_substrates(
+    ctx: Web3Context, data: _VaultData, chain_id: int, api_key: str | None
+) -> set[str]:
+    if GET_MARKET_SUBSTRATES in data.unimplemented_getters:
+        click.secho(
+            f"  (unavailable: the vault predates {GET_MARKET_SUBSTRATES})",
+            fg="yellow",
+        )
+        return set()
+    return _print_substrates(
+        ctx, data.market_substrates or {}, data.balance_fuses, chain_id, api_key
+    )
+
+
 def _print_substrates(  # noqa: C901
     ctx: Web3Context,
-    plasma_vault: PlasmaVault,
+    substrates_by_market: dict[int, list[bytes]],
     balance_fuses: list,
     chain_id: int,
     api_key: str | None,
 ) -> set[str]:
-    # Phase 1: fetch all substrates in parallel
-    with ThreadPoolExecutor() as pool:
-        substrate_futures: list[tuple[str, int, Future]] = []
-        for balance_fuse in balance_fuses:
-            market_id_str = format_market_label(balance_fuse.market_id)
-            fut = pool.submit(
-                plasma_vault.get_market_substrates(balance_fuse.market_id).call
-            )
-            substrate_futures.append((market_id_str, balance_fuse.market_id, fut))
-
-    # Collect substrates and identify addresses to resolve
+    # Phase 1: collect each balance fuse's substrates and the addresses to resolve
     market_substrates: list[tuple[str, int, list]] = []
     all_addresses: set[str] = set()
-    for market_id_str, mid, fut in substrate_futures:
-        if not (substrates := fut.result()):
+    for balance_fuse in balance_fuses:
+        mid = balance_fuse.market_id
+        if not (substrates := substrates_by_market.get(mid)):
             continue
-        market_substrates.append((market_id_str, mid, substrates))
+        market_substrates.append((format_market_label(mid), mid, substrates))
         for sub in substrates:
             sub_info = decode_substrate(sub, market_id=mid)
             if sub_info.address:

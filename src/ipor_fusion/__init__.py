@@ -138,6 +138,7 @@ from ipor_fusion.errors import (
     SimulationError,
     TransactionError,
     UnsupportedChainError,
+    UnsupportedVaultVersionError,
     decode_custom_error,
     register_custom_errors,
 )
@@ -519,6 +520,7 @@ __all__ = [
     "TransactionError",
     "SimulationError",
     "UnsupportedChainError",
+    "UnsupportedVaultVersionError",
     "CUSTOM_ERRORS",
     "decode_custom_error",
     "register_custom_errors",

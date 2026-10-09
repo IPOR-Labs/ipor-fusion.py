@@ -420,6 +420,15 @@ class PlasmaVault(ContractWrapper):
             decoder=Web3.to_checksum_address,
         )
 
+    def get_price_oracle_address(self) -> Call[ChecksumAddress]:
+        """``getPriceOracle()``: the name of ``getPriceOracleMiddleware()`` in
+        vaults deployed before the August 2024 audit, which lack the new name."""
+        return self._view(
+            "getPriceOracle()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
     def get_fuses(self) -> Call[list[ChecksumAddress]]:
         return self._view(
             "getFuses()", output_types=["address[]"], decoder=_address_list_decoder
