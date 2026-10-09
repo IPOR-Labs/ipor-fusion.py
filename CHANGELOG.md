@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+## v3.10.1 (2026-10-09)
+
+### Bug Fixes
+
+- **cli**: Fetch vaults that predate getMarketSubstrates
+  ([`0b28bd0`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0b28bd01a61d9ceb632836cc996ae2c6d0c8ee69))
+
+- **sdk**: Resolve the external-state snapshot's block with its meaning and reject oversized storage
+  words
+  ([`a6b54cd`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a6b54cdf12661a54e513db4888cb684d170099e8))
+
+
 ## v3.10.0 (2026-10-09)
 
 ### Bug Fixes
