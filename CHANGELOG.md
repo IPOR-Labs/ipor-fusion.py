@@ -2,6 +2,47 @@
 
 <!-- version list -->
 
+## v3.10.0 (2026-10-09)
+
+### Bug Fixes
+
+- **cli**: Decode Silo V2 getSilos() pair as one tuple
+  ([`ab3e0f3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ab3e0f3c73d075deb178c128ea10811c715dcfe2))
+
+- **cli**: Report unpriceable tokens the vault does not hold as warnings
+  ([`4d31304`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4d3130482ba555587f5ba0b19c9b8c25937b29e5))
+
+- **mcp**: Default server_info preview_features to the package's list
+  ([`4e04e68`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4e04e68b097504464c1eb729e293d7beda99f482))
+
+- **sdk**: Size the composed example's Core sends and REDEEM the way the fuses and the planner do
+  ([`dad89f2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dad89f2e8dc1f127f315fa106500d90ce7892193))
+
+### Documentation
+
+- **sdk**: Name the SendCap in the example's dex-to-spot skip
+  ([`5883cca`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5883ccab7be4ee9db519a6125e4ce236bc54d56d))
+
+### Features
+
+- **sdk**: Add the composed HyperCore flow example
+  ([`abc223a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/abc223a0cf986de4b002a4f596eddc7d68d4ed13))
+
+- **sdk**: Additive CCIP update_vaults
+  ([`daab510`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/daab510a6f623dfcef0a20527eda4b4e0087b6b8))
+
+- **sdk**: Read the external-state market's vault state and the executor's live aggregate
+  ([`13a0d59`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/13a0d592bc972f50381d2412110ca08604e7325a))
+
+- **sdk**: State that crosschain and HyperCore are preview, not production
+  ([`9c2ef06`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9c2ef065adc12b1303b5942203ab68437fbcb853))
+
+### Testing
+
+- **sdk**: Narrow the snapshot decoder before calling it (pyright)
+  ([`2dc41e8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2dc41e838a1fb84602cbf90920fff4366a1a55b7))
+
+
 ## v3.9.0 (2026-10-06)
 
 ### Features
