@@ -12,6 +12,9 @@ from ipor_fusion.cli.vault_dep_graph import (
     find_orphan_fuse_markets,
 )
 from ipor_fusion.cli.vault_fetcher import (
+    GET_MARKET_SUBSTRATES,
+    GET_PRICE_ORACLE_MIDDLEWARE,
+    GET_TOTAL_SUPPLY_CAP,
     _resolve_token_symbol,
     _safe_call,
     _VaultData,
@@ -90,7 +93,7 @@ def _compute_erc20_balances(  # noqa: C901
 
     totals.cached_bf_value = plasma_vault.total_assets_in_market(erc20_market).call()
 
-    substrates = plasma_vault.get_market_substrates(erc20_market).call()
+    substrates = (data.market_substrates or {}).get(erc20_market, [])
     vault_addr = Web3.to_checksum_address(plasma_vault.address)
     oracle = PriceOracleMiddleware(
         ctx, Web3.to_checksum_address(data.price_oracle_addr)
@@ -566,6 +569,26 @@ def _compute_unpriceable_token_findings(
     return criticals, warnings
 
 
+# What a vault loses by predating each getter `_fetch_vault_data` tolerates.
+_UNIMPLEMENTED_GETTER_IMPACT = {
+    GET_MARKET_SUBSTRATES: (
+        "substrates are unavailable, so substrate-based checks (ERC20 "
+        "coverage, lending positions, unpriceable tokens) were skipped"
+    ),
+    GET_TOTAL_SUPPLY_CAP: "it has no supply cap, reported as unlimited",
+    GET_PRICE_ORACLE_MIDDLEWARE: (
+        "its price oracle was read through the older getPriceOracle()"
+    ),
+}
+
+
+def _compute_unimplemented_getter_warnings(data: _VaultData) -> list[str]:
+    return [
+        f"WARNING — vault predates {getter}: {_UNIMPLEMENTED_GETTER_IMPACT[getter]}"
+        for getter in data.unimplemented_getters
+    ]
+
+
 def _compute_health_check(  # noqa: C901
     data: _VaultData,
     bf_totals: _BalanceFuseTotals,
@@ -578,6 +601,7 @@ def _compute_health_check(  # noqa: C901
     underlying = data.asset.lower()
     result = _HealthCheckData()
 
+    result.warnings.extend(_compute_unimplemented_getter_warnings(data))
     result.criticals.extend(_compute_orphan_fuse_criticals(data))
     result.criticals.extend(_compute_missing_erc20_dep_criticals(data))
     unpriceable_criticals, unpriceable_warnings = _compute_unpriceable_token_findings(

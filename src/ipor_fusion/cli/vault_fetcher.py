@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, TypeVar
 
@@ -40,7 +40,7 @@ from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
-from ipor_fusion.errors import EmptyCallResultError
+from ipor_fusion.errors import EmptyCallResultError, UnsupportedVaultVersionError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import (
     AaveV3FuseReader,
@@ -191,6 +191,9 @@ class _VaultData:
     # Confirmed AccessManager role holders, sorted by role_account_sort_key.
     # None when the RoleGranted log scan failed (see _ROLE_SCAN_ERRORS).
     role_accounts: list[RoleAccount] | None = None
+    # Getters the vault does not implement because it predates them (see
+    # GET_MARKET_SUBSTRATES and friends); the data they serve is degraded.
+    unimplemented_getters: list[str] = field(default_factory=list)
 
 
 # Failure modes of the heavy RoleGranted scan: JSON-RPC rejections/limits plus
@@ -227,6 +230,35 @@ def _fuse_market_id_call(ctx: Web3Context, fuse: ChecksumAddress) -> Call[int]:
         output_types=["uint256"],
         decoder=int,
         ctx=ctx,
+    )
+
+
+GET_MARKET_SUBSTRATES = "getMarketSubstrates(uint256)"
+GET_TOTAL_SUPPLY_CAP = "getTotalSupplyCap()"
+GET_PRICE_ORACLE_MIDDLEWARE = "getPriceOracleMiddleware()"
+_UNCAPPED = 2**256 - 1
+
+
+def _unless_unimplemented(value: T | None, call: Call[T]) -> T | None:
+    """An optional batch read, re-run when it failed: ``None`` only when the
+    contract returned no data (it predates the getter); a revert or RPC error
+    raises exactly what `Call.call()` would, so real failures stay loud."""
+    if value is not None:
+        return value
+    try:
+        return call.call()
+    except EmptyCallResultError:
+        return None
+
+
+def _missing_required_getter(
+    plasma_vault: PlasmaVault, exc: EmptyCallResultError
+) -> UnsupportedVaultVersionError:
+    """A required vault read returned no data: the probe already proved a
+    Plasma Vault lives there, so it predates the getter."""
+    return UnsupportedVaultVersionError(
+        f"Plasma Vault {plasma_vault.address} predates a getter the vault "
+        f"tooling requires: {exc}"
     )
 
 
@@ -617,6 +649,30 @@ def _fetch_block(ctx: Web3Context, block_number: int | None) -> tuple[int, int]:
     return resolved, ctx.web3.eth.get_block(resolved)["timestamp"]
 
 
+def _resolve_price_oracle(
+    pv: PlasmaVault,
+    middleware: ChecksumAddress | None,
+    legacy: ChecksumAddress | None,
+    unimplemented: list[str],
+) -> ChecksumAddress:
+    """The vault's price oracle from its batched reads. Vaults deployed before
+    the August 2024 audit name the getter getPriceOracle(); without either
+    getter the vault is too old for the tooling."""
+    address = _unless_unimplemented(
+        middleware, pv.get_price_oracle_middleware_address()
+    )
+    if address is not None:
+        return address
+    address = _unless_unimplemented(legacy, pv.get_price_oracle_address())
+    if address is None:
+        raise UnsupportedVaultVersionError(
+            f"Plasma Vault {pv.address} implements neither "
+            f"{GET_PRICE_ORACLE_MIDDLEWARE} nor getPriceOracle()"
+        )
+    unimplemented.append(GET_PRICE_ORACLE_MIDDLEWARE)
+    return address
+
+
 def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str, Any]:
     """Vault and underlying-asset state, as `_VaultData` fields.
 
@@ -625,33 +681,48 @@ def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str,
     each fuse's MARKET_ID()).
     """
     pv = plasma_vault
-    (
+    try:
         (
-            share_decimals,
-            total_assets,
-            total_supply,
-            supply_cap,
-            asset,
-            access_manager,
-            price_oracle_addr,
-            fuses,
-            instant_fuses,
-        ),
-        (vault_name, rewards_manager),
-    ) = _read_batch(
-        ctx,
-        [
-            pv.decimals(),
-            pv.total_assets(),
-            pv.total_supply(),
-            pv.get_total_supply_cap(),
-            pv.underlying_asset_address(),
-            pv.get_access_manager_address(),
-            pv.get_price_oracle_middleware_address(),
-            pv.get_fuses(),
-            pv.get_instant_withdrawal_fuses(),
-        ],
-        [pv.name(), pv.get_rewards_claim_manager_address()],
+            (
+                share_decimals,
+                total_assets,
+                total_supply,
+                asset,
+                access_manager,
+                fuses,
+                instant_fuses,
+            ),
+            (vault_name, rewards_manager, supply_cap, middleware_oracle, legacy_oracle),
+        ) = _read_batch(
+            ctx,
+            [
+                pv.decimals(),
+                pv.total_assets(),
+                pv.total_supply(),
+                pv.underlying_asset_address(),
+                pv.get_access_manager_address(),
+                pv.get_fuses(),
+                pv.get_instant_withdrawal_fuses(),
+            ],
+            [
+                pv.name(),
+                pv.get_rewards_claim_manager_address(),
+                pv.get_total_supply_cap(),
+                pv.get_price_oracle_middleware_address(),
+                pv.get_price_oracle_address(),
+            ],
+        )
+    except EmptyCallResultError as exc:
+        raise _missing_required_getter(pv, exc) from exc
+    unimplemented: list[str] = []
+    # Vaults deployed before the August 2024 audit have no supply cap, so
+    # nothing caps them.
+    supply_cap = _unless_unimplemented(supply_cap, pv.get_total_supply_cap())
+    if supply_cap is None:
+        unimplemented.append(GET_TOTAL_SUPPLY_CAP)
+        supply_cap = _UNCAPPED
+    price_oracle_addr = _resolve_price_oracle(
+        pv, middleware_oracle, legacy_oracle, unimplemented
     )
 
     asset_erc20 = ERC20(ctx, asset)
@@ -694,6 +765,7 @@ def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str,
         "asset_symbol": symbol or "?",
         "asset_price_usd": price.readable() if price else None,
         "fuse_markets": fuse_markets or None,
+        "unimplemented_getters": unimplemented,
     }
 
 
@@ -718,6 +790,8 @@ class _MarketReads:
     # Only markets with at least one substrate.
     market_substrates: dict[int, list[bytes]]
     aave_pools: dict[int, ChecksumAddress]
+    # False when the vault predates getMarketSubstrates (substrates unknown).
+    substrates_available: bool = True
 
 
 def _fetch_market_reads(
@@ -727,15 +801,19 @@ def _fetch_market_reads(
     one batch, then (optionally) the Aave V3 Pools behind the markets."""
     balance_fuses = plasma_vault.get_balance_fuses()
     market_ids = [bf.market_id for bf in balance_fuses]
-    graph_and_substrates, _ = _read_batch(
-        ctx,
-        [
-            *(plasma_vault.get_dependency_balance_graph(mid) for mid in market_ids),
-            *(plasma_vault.get_market_substrates(mid) for mid in market_ids),
-        ],
-    )
-    graphs = graph_and_substrates[: len(market_ids)]
-    substrates = graph_and_substrates[len(market_ids) :]
+    substrate_calls = [plasma_vault.get_market_substrates(mid) for mid in market_ids]
+    try:
+        graphs, batched_substrates = _read_batch(
+            ctx,
+            [plasma_vault.get_dependency_balance_graph(mid) for mid in market_ids],
+            substrate_calls,
+        )
+    except EmptyCallResultError as exc:
+        raise _missing_required_getter(plasma_vault, exc) from exc
+    substrates = [
+        _unless_unimplemented(value, call)
+        for value, call in zip(batched_substrates, substrate_calls, strict=True)
+    ]
     return _MarketReads(
         balance_fuses=balance_fuses,
         dependency_graph={
@@ -747,6 +825,7 @@ def _fetch_market_reads(
             mid: subs for mid, subs in zip(market_ids, substrates, strict=True) if subs
         },
         aave_pools=_fetch_aave_pools(ctx, balance_fuses) if with_aave_pools else {},
+        substrates_available=None not in substrates,
     )
 
 
@@ -856,6 +935,8 @@ def _fetch_vault_data(
         )
         resolved_block, block_timestamp = f_block.result()
         withdraw_manager, withdraw_manager_data = f_withdraw.result()
+        if not markets.substrates_available:
+            vault_reads["unimplemented_getters"].append(GET_MARKET_SUBSTRATES)
 
         return _VaultData(
             **vault_reads,

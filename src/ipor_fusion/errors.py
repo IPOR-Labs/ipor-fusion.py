@@ -168,6 +168,14 @@ class UnsupportedChainError(IporFusionError, ValueError):
     """
 
 
+class UnsupportedVaultVersionError(IporFusionError, ValueError):
+    """A Plasma Vault predates a getter the on-chain vault tooling requires.
+
+    Also a ValueError, so callers that report ValueError as a user error
+    surface it as one.
+    """
+
+
 class EmptyCallResultError(IporFusionError, InsufficientDataBytes):
     """`eth_call` returned no data for a call that declares return values.
 
