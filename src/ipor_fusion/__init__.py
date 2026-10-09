@@ -25,10 +25,13 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.external_state_executor import (
+    BalanceFuseSnapshot,
     BalanceProposal,
     ExternalStateExecutor,
+    ExternalStateVaultState,
     NavMark,
     RawLog,
+    read_external_state,
 )
 from ipor_fusion.core.fee_manager import (
     FeeAccount,
@@ -354,6 +357,9 @@ __all__ = [
     "PriceOracleMiddlewareManager",
     "AssetPriceSource",
     "ExternalStateExecutor",
+    "BalanceFuseSnapshot",
+    "ExternalStateVaultState",
+    "read_external_state",
     "NavMark",
     "CrosschainExecutor",
     "StargateCrosschainExecutor",

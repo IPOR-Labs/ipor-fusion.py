@@ -139,6 +139,89 @@ class NavMark:
     refresh_receipt: TxReceipt | None
 
 
+@dataclass(frozen=True, slots=True)
+class ExternalStateVaultState:
+    """The external-state market's vault-scoped state, read from the vault's
+    ERC-7201 namespace ``io.ipor.externalState.Executor``
+    (`ExternalStateExecutorStorageLib`) at one block.
+
+    `executor` is the executor the vault deployed (``None`` while none is);
+    `last_total_balance` is the balance fuse's cache of the executor's total in
+    raw underlying units, as of the fuse's last refresh -- not the live total,
+    which `ExternalStateExecutor.get_balance_fuse_snapshot` reads;
+    `last_checked_custodian_timestamp` is the executor custodian timestamp the
+    balance fuse last processed -- not necessarily the latest custodian update
+    and not the pre-hook's staleness clock, which is
+    `ExternalStateExecutor.get_oldest_update_timestamp`; `paused` is the flag
+    the balance fuse sets on a big change and `ExternalStateUnpauseFuse` clears
+    with an atomist signature. `ExternalStatePausePreHook` blocks the vault's
+    gated user operations while the flag is set, and also, flag or not, while
+    the oldest custodian update is older than `staleness_max` or an unprocessed
+    custodian change exceeds `big_change_bps` against this cache. No contract
+    exposes these four values as getters.
+    """
+
+    executor: ChecksumAddress | None
+    last_total_balance: Amount
+    last_checked_custodian_timestamp: int
+    paused: bool
+    block: int
+
+
+@dataclass(frozen=True, slots=True)
+class BalanceFuseSnapshot:
+    """`ExternalStateExecutor.getBalanceFuseSnapshot()`: the live sum of the
+    tracked balances in raw underlying units, the cached big-change threshold
+    in basis points and the timestamp of the last confirmed custodian update."""
+
+    total_balance: Amount
+    big_change_bps: int
+    last_custodian_update_timestamp: int
+
+
+def _storage_word(raw: bytes) -> int:
+    return int.from_bytes(bytes(raw).rjust(32, b"\x00"), "big")
+
+
+def read_external_state(
+    ctx: Web3Context, vault_address: ChecksumAddress
+) -> ExternalStateVaultState:
+    """Read the external-state market's vault state as one coherent snapshot.
+
+    Four storage reads of the vault (slots +0 .. +3 of the namespace) at one
+    block: ``ctx.default_block`` when it is pinned to a number, otherwise the
+    chain head resolved once before the reads, so the four values never mix
+    blocks; the block is returned so executor reads can be pinned to it.
+    Decoding is canonical: an executor word with bits above the address, or a
+    pause word other than 0 or 1, raises ``ValueError`` rather than passing as
+    a plausible value; a zero executor word is ``None`` (no executor deployed),
+    which is a state, while an RPC or decoding failure raises.
+    """
+    vault = Web3.to_checksum_address(vault_address)
+    block = ctx.default_block
+    if not isinstance(block, int):
+        block = int(ctx.web3.eth.block_number)
+    base = ExternalStateExecutor._EXECUTOR_STORAGE_SLOT
+    words = [
+        _storage_word(ctx.get_storage_at(vault, base + i, block)) for i in range(4)
+    ]
+    if words[0] >> 160:
+        raise ValueError(
+            f"malformed executor word in the external-state storage of {vault}"
+        )
+    if words[3] not in (0, 1):
+        raise ValueError(
+            f"malformed pause flag in the external-state storage of {vault}"
+        )
+    return ExternalStateVaultState(
+        executor=Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None,
+        last_total_balance=Amount(words[1]),
+        last_checked_custodian_timestamp=words[2],
+        paused=words[3] == 1,
+        block=block,
+    )
+
+
 class ExternalStateExecutor(ContractWrapper):
     """Per-vault ExternalStateExecutor: NAV propose/confirm plus its reads.
 
@@ -241,6 +324,46 @@ class ExternalStateExecutor(ContractWrapper):
         return self._view(
             "lastUpdated(address)", balance_account, output_types=["uint256"]
         )
+
+    def get_balance_fuse_snapshot(self) -> Call[BalanceFuseSnapshot]:
+        """The live aggregate the balance fuse reads: the sum of the tracked
+        balances, the big-change threshold and the last confirmed custodian
+        update timestamp, in one call. Pin the context's block to the one
+        `read_external_state` returned to compare live against cached."""
+        return self._view(
+            "getBalanceFuseSnapshot()",
+            output_types=["uint256", "uint256", "uint256"],
+        ).map(
+            lambda values: BalanceFuseSnapshot(
+                Amount(values[0]), int(values[1]), int(values[2])
+            )
+        )
+
+    def get_oldest_update_timestamp(self) -> Call[int]:
+        """The pre-hook's staleness clock: the oldest non-zero `lastUpdated`
+        across the balance accounts, 0 when no account was ever updated. The
+        hook blocks when it is non-zero and older than `staleness_max` by more
+        than the limit (strictly)."""
+        return self._view("getOldestUpdateTimestamp()", output_types=["uint256"])
+
+    def staleness_max(self) -> Call[int]:
+        """Seconds after which a custodian report counts as stale: the pre-hook
+        blocks the vault's gated user operations past it."""
+        return self._view("stalenessMax()", output_types=["uint256"])
+
+    def big_change_bps(self) -> Call[int]:
+        """Basis points of total-balance change between two custodian updates
+        that set the vault's pause flag (`ExternalStateBigChangeDetected`)."""
+        return self._view("bigChangeBps()", output_types=["uint256"])
+
+    def dust_threshold(self) -> Call[int]:
+        """Underlying units below which a leftover is dust, not a balance."""
+        return self._view("dustThreshold()", output_types=["uint256"])
+
+    def min_update_interval(self) -> Call[int]:
+        """Seconds a balance account must wait between two custodian
+        updates."""
+        return self._view("minUpdateInterval()", output_types=["uint256"])
 
     def nonce(self) -> Call[int]:
         """Monotonic proposal nonce, incremented on every `proposeBalance`.
