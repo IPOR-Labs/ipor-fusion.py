@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v3.11.0 (2026-10-09)
+
+### Bug Fixes
+
+- **cli**: Resolve the price oracle of vaults that predate getPriceOracleMiddleware
+  ([`6351781`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/635178151b0d0f0183a4a50f75276768471b2712))
+
+- **sdk**: Page eth_getLogs scans within provider limits instead of one call from block 0
+  ([`5be5d19`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5be5d19a86d96805d62a9d3f8382a25e41d9ba45))
+
+- **sdk**: Read balance fuses and the withdraw manager from vault storage
+  ([`d081e43`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d081e43144be51ea4f9482fc70a403d2c5f91d23))
+
+### Features
+
+- **sdk**: Support Unichain, Plasma, Avalanche, Katana and Monad in the vault tooling
+  ([`cdac61e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cdac61e69b42f1caec280df9600ccf2eb221760a))
+
+
 ## v3.10.2 (2026-10-09)
 
 ### Features
