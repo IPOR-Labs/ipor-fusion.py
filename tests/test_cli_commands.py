@@ -421,7 +421,7 @@ class TestVaultInfo:
 
     @patch("ipor_fusion.cli.vault_fetcher.WithdrawManager")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
@@ -544,7 +544,7 @@ class TestVaultInfo:
         assert "accrued, uncollected: 5" in result.output
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
@@ -617,7 +617,7 @@ class TestVaultInfo:
         assert mock_ctx.default_block == 99999
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
@@ -678,7 +678,7 @@ class TestVaultInfo:
         assert "Supply Cap:       unlimited" in result.output
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
@@ -749,7 +749,7 @@ class TestVaultInfo:
         return_value=("0xdeadbeef", None),
     )
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
@@ -814,7 +814,7 @@ class TestVaultInfo:
         assert "2023-11-14" in result.output
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
@@ -913,7 +913,7 @@ class TestVaultInfoJson:
     @patch("ipor_fusion.cli.vault_fetcher._fetch_morpho_positions", return_value=None)
     @patch("ipor_fusion.cli.vault_fetcher.WithdrawManager")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
@@ -1086,7 +1086,7 @@ class TestVaultInfoJson:
         return_value=("0xdeadbeef", None),
     )
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
@@ -1157,11 +1157,11 @@ class TestVaultInfoJson:
         assert isinstance(data["deployment"]["age_days"], int)
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
-    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_health.ERC20")
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
-    @patch("ipor_fusion.cli.vault_fetcher.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_fetcher.ERC20")
     @patch("ipor_fusion.cli.vault_cmd.PlasmaVault")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")

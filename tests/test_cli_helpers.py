@@ -750,7 +750,7 @@ class TestPrintErc20Balances:
         assert "(no ERC20_VAULT_BALANCE market)" in captured.out
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="USDC")
-    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_health.ERC20")
     def test_with_erc20_tokens(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
@@ -803,7 +803,7 @@ class TestPrintErc20Balances:
         assert "$1.00" in captured.out
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="?")
-    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_health.ERC20")
     def test_with_error_balances(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
@@ -851,7 +851,7 @@ class TestPrintErc20Balances:
         captured = capsys.readouterr()
         assert "error" in captured.out
 
-    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
     def test_no_token_addrs(self, mock_oracle_cls, capsys):
         ctx = MagicMock()
         pv = MagicMock()
@@ -939,7 +939,7 @@ class TestUnderlyingOnVault:
             underlying_balance_on_vault=underlying_balance_on_vault,
         )
 
-    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
     def test_underlying_counted_when_erc20_market_has_no_substrate(
         self, mock_oracle_cls
     ):
@@ -974,7 +974,7 @@ class TestUnderlyingOnVault:
 
         assert totals.underlying_balance_raw == 10 * 10**6
 
-    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
     def test_no_false_reconciliation_warning_for_idle_underlying(self, mock_oracle_cls):
         ctx = MagicMock()
         pv = MagicMock()
@@ -1222,7 +1222,7 @@ class TestErc20BalancesNotes:
         )
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="TKN")
-    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_health.ERC20")
     def test_balance_zero_note(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
@@ -1275,7 +1275,7 @@ class TestErc20BalancesNotes:
         assert isinstance(totals.raw_asset_total, int)
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
-    @patch("ipor_fusion.cli.vault_health.PriceOracleMiddleware")
+    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
     @patch("ipor_fusion.cli.vault_health.ERC20")
     def test_underlying_and_stale_notes(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
