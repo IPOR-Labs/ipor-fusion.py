@@ -340,7 +340,8 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `FeeAccount` | Fee escrow account, resolves its `FeeManager` |
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
-| `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50) |
+| `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50); the executor's thresholds (`staleness_max`, `big_change_bps`, `dust_threshold`, `min_update_interval`), the live aggregate (`get_balance_fuse_snapshot`) and the pre-hook's staleness clock (`get_oldest_update_timestamp`) |
+| `read_external_state`, `ExternalStateVaultState` | The market's vault-scoped state from the vault's ERC-7201 storage at one block: executor, the balance fuse's cached total, the custodian timestamp it last checked and the pause flag the pre-hook enforces (no getter exposes them) |
 | `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | **Preview.** Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
 | `StargateCrosschainDispatcher`, `CcipCrosschainDispatcher` | Remote dispatcher state (`observation`, tracked idle, command lane) |
 | `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |

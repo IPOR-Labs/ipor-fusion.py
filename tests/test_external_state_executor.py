@@ -1517,3 +1517,114 @@ class TestMarkNav:
             )
         proposer_ctx.send.assert_not_called()
         confirmer_ctx.send.assert_not_called()
+
+
+class TestReadExternalState:
+    BASE = ExternalStateExecutor._EXECUTOR_STORAGE_SLOT
+
+    def _ctx(self, words, default_block="latest", head=4_805_000):
+        ctx = MagicMock()
+        ctx.default_block = default_block
+        ctx.web3.eth.block_number = head
+        by_slot = {
+            self.BASE + i: HexBytes(w.to_bytes(32, "big")) for i, w in enumerate(words)
+        }
+        ctx.get_storage_at.side_effect = lambda vault, slot, block=None: by_slot[slot]
+        return ctx
+
+    def test_reads_the_four_slots_at_one_resolved_block(self):
+        from ipor_fusion import read_external_state
+
+        ctx = self._ctx([int(EXECUTOR_ADDR, 16), 32_928_135, 1_791_458_983, 1])
+
+        state = read_external_state(ctx, VAULT_ADDR)
+
+        assert state.executor == EXECUTOR_ADDR
+        assert state.last_total_balance == 32_928_135
+        assert state.last_checked_custodian_timestamp == 1_791_458_983
+        assert state.paused is True
+        assert state.block == 4_805_000  # "latest" resolved once, before the reads
+        assert [c.args for c in ctx.get_storage_at.call_args_list] == [
+            (VAULT_ADDR, self.BASE + i, 4_805_000) for i in range(4)
+        ]
+
+    def test_a_pinned_context_block_is_used_as_is(self):
+        from ipor_fusion import read_external_state
+
+        ctx = self._ctx([0, 0, 0, 0], default_block=4_700_000)
+
+        state = read_external_state(ctx, VAULT_ADDR)
+
+        assert state.block == 4_700_000
+        assert state.executor is None and state.paused is False
+        assert (state.last_total_balance, state.last_checked_custodian_timestamp) == (
+            0,
+            0,
+        )
+        assert all(c.args[2] == 4_700_000 for c in ctx.get_storage_at.call_args_list)
+
+    def test_tolerates_leading_zero_stripped_words(self):
+        from ipor_fusion import read_external_state
+
+        ctx = self._ctx([0, 0, 0, 0])
+        short = {
+            self.BASE: HexBytes(bytes.fromhex(EXECUTOR_ADDR[2:])),
+            self.BASE + 1: HexBytes(b"\x05"),
+            self.BASE + 2: HexBytes(b""),
+            self.BASE + 3: HexBytes(b"\x01"),
+        }
+        ctx.get_storage_at.side_effect = lambda vault, slot, block=None: short[slot]
+
+        state = read_external_state(ctx, VAULT_ADDR)
+
+        assert (state.executor, state.last_total_balance, state.paused) == (
+            EXECUTOR_ADDR,
+            5,
+            True,
+        )
+        assert state.last_checked_custodian_timestamp == 0
+
+    def test_malformed_words_raise_instead_of_passing_as_values(self):
+        from ipor_fusion import read_external_state
+
+        with pytest.raises(ValueError, match="malformed executor word"):
+            read_external_state(self._ctx([1 << 161, 0, 0, 0]), VAULT_ADDR)
+        with pytest.raises(ValueError, match="malformed pause flag"):
+            read_external_state(self._ctx([0, 0, 0, 2]), VAULT_ADDR)
+
+    def test_an_rpc_failure_propagates(self):
+        from ipor_fusion import read_external_state
+
+        ctx = self._ctx([0, 0, 0, 0])
+        ctx.get_storage_at.side_effect = ConnectionError("rpc down")
+        with pytest.raises(ConnectionError):
+            read_external_state(ctx, VAULT_ADDR)
+
+
+class TestExecutorViews:
+    @pytest.mark.parametrize(
+        ("method", "signature"),
+        [
+            ("staleness_max", "stalenessMax()"),
+            ("big_change_bps", "bigChangeBps()"),
+            ("dust_threshold", "dustThreshold()"),
+            ("min_update_interval", "minUpdateInterval()"),
+            ("get_oldest_update_timestamp", "getOldestUpdateTimestamp()"),
+        ],
+    )
+    def test_uint256_views(self, method, signature):
+        executor = ExternalStateExecutor(MagicMock(), EXECUTOR_ADDR)
+        call = getattr(executor, method)()
+        assert bytes(call.data)[:4] == Web3.keccak(text=signature)[:4]
+        assert call.output_types == ["uint256"]
+
+    def test_balance_fuse_snapshot_decodes_to_the_dataclass(self):
+        from ipor_fusion import BalanceFuseSnapshot
+
+        executor = ExternalStateExecutor(MagicMock(), EXECUTOR_ADDR)
+        call = executor.get_balance_fuse_snapshot()
+        assert bytes(call.data)[:4] == Web3.keccak(text="getBalanceFuseSnapshot()")[:4]
+        assert call.output_types == ["uint256", "uint256", "uint256"]
+        assert call.decoder is not None
+        snap = call.decoder((32_928_135, 50_000, 1_791_458_983))
+        assert snap == BalanceFuseSnapshot(32_928_135, 50_000, 1_791_458_983)
