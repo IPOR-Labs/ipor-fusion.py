@@ -44,8 +44,10 @@ from ipor_fusion.core.logs import find_creation_block, get_logs_adaptive
 from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
+    LegacyPriceOracleMiddleware,
     PriceOracleMiddleware,
     PriceOracleMiddlewareManager,
+    price_oracle_middleware,
 )
 from ipor_fusion.core.plasma_vault import (
     BalanceFuse,
@@ -362,8 +364,10 @@ __all__ = [
     "WithdrawRequestInfo",
     "PendingRequestsInfo",
     "BalanceFuse",
+    "LegacyPriceOracleMiddleware",
     "PriceOracleMiddleware",
     "PriceOracleMiddlewareManager",
+    "price_oracle_middleware",
     "AssetPriceSource",
     "ExternalStateExecutor",
     "BalanceFuseSnapshot",

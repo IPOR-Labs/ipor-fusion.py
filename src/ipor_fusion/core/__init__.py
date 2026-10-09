@@ -11,6 +11,7 @@ from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInst
 from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
+    LegacyPriceOracleMiddleware,
     PriceOracleMiddleware,
     PriceOracleMiddlewareManager,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "HighWaterMarkPerformanceFee",
     "PerformanceFeeData",
     "ManagementFeeData",
+    "LegacyPriceOracleMiddleware",
     "PriceOracleMiddleware",
     "PriceOracleMiddlewareManager",
     "AssetPriceSource",
