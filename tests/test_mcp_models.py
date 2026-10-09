@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from ipor_fusion import DOCS
+from ipor_fusion import DOCS, PREVIEW_FEATURES
 from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.mcp import models as mcp_models
 from ipor_fusion.mcp.models import (
@@ -28,6 +28,7 @@ from ipor_fusion.mcp.models import (
     OracleNodeModel,
     Reconciliation,
     RoleAccountsResponse,
+    ServerInfoResponse,
     VaultInfoResponse,
     VaultListEntry,
     WithdrawManagerDetails,
@@ -719,6 +720,17 @@ class TestSimpleResponseContracts:
         }
         recon = Reconciliation.model_validate(d)
         assert recon.implied_market_total.usd is None
+
+    def test_server_info_defaults_to_the_package_preview_features(self):
+        """A server that omits preview_features still reports the package's."""
+        info = ServerInfoResponse(
+            name="x", version="0.0.0", repository="", changelog=[]
+        )
+        assert [(f.name, f.scope) for f in info.preview_features] == [
+            (f.name, f.scope) for f in PREVIEW_FEATURES
+        ]
+        assert [f.name for f in info.preview_features] == ["crosschain", "hypercore"]
+        assert {f.status for f in info.preview_features} == {"preview"}
 
 
 def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:

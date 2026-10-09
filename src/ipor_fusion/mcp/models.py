@@ -900,6 +900,15 @@ class PreviewFeatureModel(_Base):
     )
 
 
+def _package_preview_features() -> list[PreviewFeatureModel]:
+    from ipor_fusion.about import PREVIEW_FEATURES
+
+    return [
+        PreviewFeatureModel(name=feature.name, scope=feature.scope)
+        for feature in PREVIEW_FEATURES
+    ]
+
+
 class ServerInfoResponse(_Base):
     """Identity of the running MCP server, plus what changed in its releases."""
 
@@ -916,7 +925,7 @@ class ServerInfoResponse(_Base):
         "version, or no release newer than changelog_since."
     )
     preview_features: list[PreviewFeatureModel] = Field(
-        default_factory=list,
+        default_factory=_package_preview_features,
         description="Package areas that are preview, not production (currently "
         "crosschain and HyperCore). Everything the package ships outside these "
         "is production.",
