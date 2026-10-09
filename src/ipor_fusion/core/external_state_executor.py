@@ -27,7 +27,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import TxReceipt
+from web3.types import BlockIdentifier, TxReceipt
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
@@ -180,7 +180,37 @@ class BalanceFuseSnapshot:
 
 
 def _storage_word(raw: bytes) -> int:
-    return int.from_bytes(bytes(raw).rjust(32, b"\x00"), "big")
+    """A storage slot as an unsigned 256-bit integer: an RPC may strip leading
+    zero bytes (padded back), but a word longer than 32 bytes is malformed data,
+    never a value an EVM slot can hold."""
+    data = bytes(raw)
+    if len(data) > 32:
+        raise ValueError(f"storage word of {len(data)} bytes, more than a 32-byte slot")
+    return int.from_bytes(data.rjust(32, b"\x00"), "big")
+
+
+_SNAPSHOT_TAGS = ("latest", "safe", "finalized", "earliest")
+
+
+def _snapshot_block(ctx: Web3Context) -> tuple[BlockIdentifier, int]:
+    """Resolve ``ctx.default_block`` once into (the identifier the storage reads
+    use, the block number it denotes), keeping its meaning: a number as is; a
+    tag (latest, safe, finalized, earliest) as the number it denotes now, so
+    the four reads share one block; a block hash by identity, with its number
+    reported; ``pending`` has no mined snapshot and is rejected."""
+    ident = ctx.default_block
+    if isinstance(ident, int) and not isinstance(ident, bool):
+        return ident, ident
+    if isinstance(ident, bytes | bytearray) or (
+        isinstance(ident, str) and ident.startswith("0x") and len(ident) == 66
+    ):
+        return ident, int(ctx.web3.eth.get_block(ident)["number"])
+    if ident in _SNAPSHOT_TAGS:
+        number = int(ctx.web3.eth.get_block(ident)["number"])
+        return number, number
+    raise ValueError(
+        f"the external-state snapshot needs a mined block; {ident!r} denotes none"
+    )
 
 
 def read_external_state(
@@ -189,21 +219,20 @@ def read_external_state(
     """Read the external-state market's vault state as one coherent snapshot.
 
     Four storage reads of the vault (slots +0 .. +3 of the namespace) at one
-    block: ``ctx.default_block`` when it is pinned to a number, otherwise the
-    chain head resolved once before the reads, so the four values never mix
-    blocks; the block is returned so executor reads can be pinned to it.
-    Decoding is canonical: an executor word with bits above the address, or a
-    pause word other than 0 or 1, raises ``ValueError`` rather than passing as
+    block: ``ctx.default_block`` resolved once with its meaning kept (a number
+    as is, a tag such as ``finalized`` as the block it denotes now, a block
+    hash by identity; ``pending`` is rejected), so the four values never mix
+    blocks; the block number is returned so executor reads can be pinned to
+    it. Decoding is canonical: a word longer than 32 bytes, an executor word
+    with bits above the address, or a pause word other than 0 or 1, raises ``ValueError`` rather than passing as
     a plausible value; a zero executor word is ``None`` (no executor deployed),
     which is a state, while an RPC or decoding failure raises.
     """
     vault = Web3.to_checksum_address(vault_address)
-    block = ctx.default_block
-    if not isinstance(block, int):
-        block = int(ctx.web3.eth.block_number)
+    read_at, block = _snapshot_block(ctx)
     base = ExternalStateExecutor._EXECUTOR_STORAGE_SLOT
     words = [
-        _storage_word(ctx.get_storage_at(vault, base + i, block)) for i in range(4)
+        _storage_word(ctx.get_storage_at(vault, base + i, read_at)) for i in range(4)
     ]
     if words[0] >> 160:
         raise ValueError(

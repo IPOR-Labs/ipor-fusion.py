@@ -1522,10 +1522,15 @@ class TestMarkNav:
 class TestReadExternalState:
     BASE = ExternalStateExecutor._EXECUTOR_STORAGE_SLOT
 
+    BLOCKS = {"safe": 4_804_990, "finalized": 4_804_900, "earliest": 0}
+    HASH = "0x" + "ab" * 32
+
     def _ctx(self, words, default_block="latest", head=4_805_000):
         ctx = MagicMock()
         ctx.default_block = default_block
-        ctx.web3.eth.block_number = head
+        blocks = dict(self.BLOCKS, latest=head)
+        blocks[self.HASH] = 4_700_123
+        ctx.web3.eth.get_block.side_effect = lambda ident: {"number": blocks[ident]}
         by_slot = {
             self.BASE + i: HexBytes(w.to_bytes(32, "big")) for i, w in enumerate(words)
         }
@@ -1547,6 +1552,54 @@ class TestReadExternalState:
         assert [c.args for c in ctx.get_storage_at.call_args_list] == [
             (VAULT_ADDR, self.BASE + i, 4_805_000) for i in range(4)
         ]
+
+    @pytest.mark.parametrize("tag", ["safe", "finalized", "earliest"])
+    def test_a_tag_is_resolved_once_with_its_meaning(self, tag):
+        from ipor_fusion import read_external_state
+
+        ctx = self._ctx([0, 0, 0, 0], default_block=tag)
+
+        state = read_external_state(ctx, VAULT_ADDR)
+
+        assert state.block == self.BLOCKS[tag]
+        ctx.web3.eth.get_block.assert_called_once_with(tag)
+        assert all(
+            c.args[2] == self.BLOCKS[tag] for c in ctx.get_storage_at.call_args_list
+        )
+
+    def test_a_block_hash_keeps_its_identity_for_the_reads(self):
+        from ipor_fusion import read_external_state
+
+        ctx = self._ctx([0, 0, 0, 0], default_block=self.HASH)
+
+        state = read_external_state(ctx, VAULT_ADDR)
+
+        assert state.block == 4_700_123
+        assert all(c.args[2] == self.HASH for c in ctx.get_storage_at.call_args_list)
+
+    def test_pending_is_rejected(self):
+        from ipor_fusion import read_external_state
+
+        ctx = self._ctx([0, 0, 0, 0], default_block="pending")
+        with pytest.raises(ValueError, match="pending"):
+            read_external_state(ctx, VAULT_ADDR)
+
+    def test_oversized_words_raise_and_uint256_max_passes(self):
+        from ipor_fusion import read_external_state
+
+        for slot in (1, 2):
+            ctx = self._ctx([0, 0, 0, 0])
+            words = {self.BASE + i: HexBytes(b"") for i in range(4)}
+            words[self.BASE + slot] = HexBytes(b"\x01" + b"\x00" * 32)
+            ctx.get_storage_at.side_effect = lambda v, s, b=None, w=words: w[s]
+            with pytest.raises(ValueError, match="more than a 32-byte slot"):
+                read_external_state(ctx, VAULT_ADDR)
+
+        top = read_external_state(
+            self._ctx([0, (1 << 256) - 1, (1 << 256) - 1, 0]), VAULT_ADDR
+        )
+        assert top.last_total_balance == (1 << 256) - 1
+        assert top.last_checked_custodian_timestamp == (1 << 256) - 1
 
     def test_a_pinned_context_block_is_used_as_is(self):
         from ipor_fusion import read_external_state
