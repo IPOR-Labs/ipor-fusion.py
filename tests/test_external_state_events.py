@@ -119,6 +119,46 @@ def test_an_unknown_topic_is_none_and_a_malformed_listed_one_raises():
         decode_external_state_event(dict(good, topics=good["topics"] + [b"\x00" * 32]))
 
 
+@pytest.mark.parametrize(
+    ("change", "match"),
+    [
+        ({"data": "0xzz"}, "invalid hex"),
+        ({"data": "00" * 32}, "without 0x prefix"),
+        ({"data": 32}, "unsupported type int"),
+        ({"data": None}, "unsupported type NoneType"),
+        ({"blockNumber": "0xzz"}, "invalid quantity"),
+        ({"logIndex": True}, "boolean"),
+        ({"logIndex": 2.0}, "unsupported quantity"),
+    ],
+)
+def test_a_recognized_topic_with_malformed_parts_raises_the_declared_error(
+    change, match
+):
+    log = dict(_log("ExternalStateAssetRescued", (SIGNER,)), **change)
+    with pytest.raises(ExternalStateEventDecodeError, match=match):
+        decode_external_state_event(log)
+
+
+def test_missing_data_on_a_recognized_topic_raises():
+    log = _log("ExternalStateAssetRescued", (SIGNER,))
+    del log["data"]
+    with pytest.raises(ExternalStateEventDecodeError, match="no data"):
+        decode_external_state_event(log)
+
+
+def test_an_unrecognizable_topic_is_simply_not_ours():
+    assert (
+        decode_external_state_event({"address": VAULT, "topics": [12345], "data": 32})
+        is None
+    )
+    assert (
+        decode_external_state_event(
+            {"address": VAULT, "topics": ["0xzz"], "data": "0x"}
+        )
+        is None
+    )
+
+
 def test_both_executor_events_are_distinct_facts():
     created = decode_external_state_event(_log("ExecutorCreated", (SIGNER, 50)))
     deployed = decode_external_state_event(
