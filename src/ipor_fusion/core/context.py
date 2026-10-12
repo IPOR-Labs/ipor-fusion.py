@@ -6,6 +6,7 @@ from hexbytes import HexBytes
 from requests import ConnectionError as RequestsConnectionError
 from requests import HTTPError, Timeout
 from web3 import Web3
+from web3.middleware import ExtraDataToPOAMiddleware
 from web3.providers.rpc.utils import (
     REQUEST_RETRY_ALLOWLIST,
     ExceptionRetryConfiguration,
@@ -116,6 +117,11 @@ class Web3Context:
         # round trips, only to check a tx "chainId" field. Reads never carry
         # one, and `build_transaction` sets it from the chain id read below.
         web3.middleware_onion.remove("validation")
+        # Some chains put more than 32 bytes in a block's extraData (Avalanche:
+        # 66 bytes in ~1 block of 140), which web3's block formatter rejects
+        # with a ValueError. The middleware moves it to proofOfAuthorityData
+        # and leaves every other block untouched.
+        web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         chain_id = ChainId(web3.eth.chain_id)
 
         return cls(
