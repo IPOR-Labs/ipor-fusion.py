@@ -337,6 +337,14 @@ from ipor_fusion.validation import (
     validate_vault,
     validate_vault_state,
 )
+from ipor_fusion.vault_data import (
+    FeeData,
+    VaultData,
+    WithdrawManagerData,
+    fetch_deployment_info,
+    fetch_vault_data,
+)
+from ipor_fusion.vault_info import build_vault_info_json
 
 __version__ = package_version()
 
@@ -650,4 +658,10 @@ __all__ = [
     "read_erc20_holdings",
     "validate_vault",
     "validate_vault_state",
+    "FeeData",
+    "VaultData",
+    "WithdrawManagerData",
+    "fetch_deployment_info",
+    "fetch_vault_data",
+    "build_vault_info_json",
 ]

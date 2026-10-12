@@ -1,7 +1,7 @@
 """Contract tests for mcp/models.py.
 
 Models use extra="forbid", so the test below must mirror the full shape that
-cli/vault_cmd.py::_build_json_output produces. If you add a top-level key
+vault_info.py::build_vault_info_json produces. If you add a top-level key
 there, this test will fail until the model is updated. That is the point.
 """
 
@@ -53,12 +53,12 @@ _HC_NOTES = DOCS["hypercore"]
 
 
 def _full_vault_info_dict() -> dict:
-    """Mirror of cli/vault_cmd.py::_build_json_output with every optional
+    """Mirror of vault_info.py::build_vault_info_json with every optional
     block populated (lending positions, withdraw manager, substrates with
     address+symbol+contract, fuses with optional market info, balance fuses
     with both Morpho and Aave position breakdowns, ERC20 with full token
     detail). Keep in sync with the dict literal at the bottom of
-    _build_json_output — the sync itself is enforced by the producer contract
+    build_vault_info_json — the sync itself is enforced by the producer contract
     check in test_cli_commands.py::TestVaultInfoJson::test_json_output."""
     return {
         "vault": "0xVAULT",

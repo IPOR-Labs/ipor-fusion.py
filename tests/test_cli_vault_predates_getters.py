@@ -24,16 +24,16 @@ from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
 from ipor_fusion.cli.vault_cmd import _print_market_substrates
-from ipor_fusion.cli.vault_fetcher import (
+from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
+from ipor_fusion.types import MarketId
+from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
     GET_PRICE_ORACLE_MIDDLEWARE,
     GET_TOTAL_SUPPLY_CAP,
+    VaultData,
     _fetch_market_reads,
     _fetch_vault_reads,
-    _VaultData,
 )
-from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
-from ipor_fusion.types import MarketId
 
 VAULT = Web3.to_checksum_address("0x" + "11" * 20)
 ASSET = Web3.to_checksum_address("0x" + "22" * 20)
@@ -229,8 +229,8 @@ class TestVaultReads:
             _fetch_vault_reads(ctx, _vault(ctx))
 
 
-def _vault_data(unimplemented: list[str]) -> _VaultData:
-    return _VaultData(
+def _vault_data(unimplemented: list[str]) -> VaultData:
+    return VaultData(
         block_number=1,
         is_latest=True,
         block_timestamp=0,
@@ -291,7 +291,7 @@ class TestVaultInfoCommand:
     @patch("ipor_fusion.cli.vault_cmd._auto_save_vault")
     @patch("ipor_fusion.cli.vault_cmd.resolve_access_manager")
     @patch("ipor_fusion.cli.vault_cmd.Web3Context")
-    @patch("ipor_fusion.cli.vault_cmd._fetch_vault_data")
+    @patch("ipor_fusion.cli.vault_cmd.fetch_vault_data")
     def test_unsupported_vault_version_is_a_clean_error(
         self, mock_fetch, _ctx_cls, _probe, _save
     ):

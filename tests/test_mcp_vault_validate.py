@@ -21,6 +21,7 @@ from ipor_fusion.validation import (
     Reconciliation,
     VaultValidation,
 )
+from ipor_fusion.vault_data import resolve_token_symbol
 
 VAULT = "0x31744E44d6aF88225C1dBEFbe5Df8308fAeA641B"
 
@@ -240,7 +241,7 @@ class TestTool:
     def test_symbols_resolve_through_the_cached_resolver(self):
         _, validate = self._run()
         resolve_symbol = validate.call_args.kwargs["resolve_symbol"]
-        assert resolve_symbol.func.__name__ == "_resolve_token_symbol"
+        assert resolve_symbol.func is resolve_token_symbol
 
     def test_an_unsupported_vault_version_reaches_the_caller(self):
         validate = MagicMock(

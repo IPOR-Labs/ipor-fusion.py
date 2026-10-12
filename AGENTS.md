@@ -139,7 +139,7 @@ the lifecycle matrix follows that.
 | Python 3.12 runtime, 3.11 floor | `.python-version` + CI `python-version` default; `requires-python`, ruff `target-version`, pyright `pythonVersion` |
 | `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors An id sourced from a contracts feature branch ahead of the pinned ref goes in the test's `_AHEAD_OF_UPSTREAM` allowlist and is removed when the ref catches up |
 | substrate decoders | `substrates.py` registry mirrors each market's `contracts/fuses/<protocol>/*SubstrateLib.sol` or `*FuseLib.sol` |
-| `vault_info` JSON shape | `_build_json_output` in `cli/vault_cmd.py`, models in `mcp/models.py` (`extra="forbid"`), `_full_vault_info_dict` fixture in `test_mcp_models.py` |
+| `vault_info` JSON shape | `build_vault_info_json` in `vault_info.py`, models in `mcp/models.py` (`extra="forbid"`), `_full_vault_info_dict` fixture in `test_mcp_models.py` |
 | CLI command set | every CLI command has a matching tool in `mcp/server.py` (`changelog` maps to `server_info`) |
 
 ## Layout (`src/ipor_fusion/`)
@@ -155,7 +155,14 @@ the lifecycle matrix follows that.
   `validate_vault_state` for an already-fetched state typed by the `VaultState` protocol):
   `VaultValidation` with ordered `Finding`s, an ok/warning/critical verdict, the
   `Reconciliation`, `Erc20Holdings` and lending health; `dependency_graph.py` holds the
-  balance-graph checks. `validate_vault` still fetches through `cli/vault_fetcher`
+  balance-graph checks
+- `vault_data.py` — public vault read: `fetch_vault_data` → `VaultData` (with `FeeData`,
+  `WithdrawManagerData`), `fetch_deployment_info`, cached `resolve_token_symbol` /
+  `resolve_token_decimals`; `vault_info.py` — `build_vault_info_json`, the
+  `fusion vault info --json` document (contract names via an injected `resolve_name`),
+  and `health_check_lists`; `explorer.py` Etherscan V2 (single endpoint, needs API key);
+  `cache.py` the on-disk contract and deployment caches (`~/.cache/ipor-fusion/`).
+  None of them imports `cli/` (`tests/test_sdk_layering.py`)
 - `config/roles.py` — `Roles` IntEnum
 - `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
   `multicall` (`Multicall3`), `logs` (`get_logs_adaptive`: every event scan pages
@@ -202,14 +209,13 @@ the lifecycle matrix follows that.
   function-level or `TYPE_CHECKING` imports in either package); never work around
   a cycle with a lazy import, move the module instead.
 - `readers/` — read side: lending_health, oracle_mapping, position_manager, aave_v3,
-  compound_v3, morpho, ramses_v2, uniswap_v3
+  compound_v3, morpho, ramses_v2, uniswap_v3, unpriceable (middleware-priced tokens of
+  granted substrates the oracle cannot price)
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`
-  (+ `morpho_api.py`), `vault_cmd.py` orchestration; `vault_fetcher.py` on-chain fetch
-  (`_fetch_vault_data`, `_safe_call`); `vault_health.py` renders the validation;
-  `vault_unpriceable.py` middleware-priced tokens of granted substrates the oracle cannot price;
+  (+ `morpho_api.py`), `vault_cmd.py` orchestration and text output over `vault_data` /
+  `vault_info`; `vault_health.py` renders the validation;
   `vault_rendering.py` pure formatting; `config_store.py` (XDG
-  `~/.config/ipor-fusion/`, `~/.cache/ipor-fusion/`); `explorer.py` Etherscan V2
-  (single endpoint, needs API key)
+  `~/.config/ipor-fusion/`)
 - `mcp/` — `server.py` tools call the SDK directly (no subprocess); `models.py` pydantic output
 - Entry points: `entry_cli.py`, `entry_mcp.py` via `[project.scripts]`
 
@@ -291,7 +297,7 @@ structured home: a one-line summary, behavioral notes, cost warnings. Do not
 repeat schema content as prose; it drifts.
 
 `mcp/models.py` forbids extra keys. Adding a top-level field to
-`_build_json_output` requires adding it to the matching model (with a default
+`build_vault_info_json` requires adding it to the matching model (with a default
 for back-compat) and to the `_full_vault_info_dict` fixture; `test_mcp_models.py`
 enforces the mirror. Conditionally shaped blocks (`withdraw_manager_details`,
 `substrates`, `dependency_graph`) are `dict[str, Any]`, so their inner keys
@@ -299,7 +305,7 @@ are not validated.
 
 ## Domain rules (verified against the contracts)
 
-- `_fetch_vault_data(..., chain_id=0)` (the default) skips lending_health,
+- `fetch_vault_data(..., chain_id=0)` (the default) skips lending_health,
   Morpho/Aave position breakdowns and token prices, all guarded by `if chain_id:`.
   Pass a real chain_id or those come back null/empty, silently.
 - PlasmaVault serves governance/view functions via `fallback()` delegatecall to
@@ -309,7 +315,7 @@ are not validated.
 - Vaults deployed before the August 2024 audit (no `PLASMA_VAULT_BASE`, e.g.
   early Arbitrum USDC vaults) answer `getMarketSubstrates`, `getTotalSupplyCap`
   and `getPriceOracleMiddleware` with empty data and name the oracle getter
-  `getPriceOracle()`. `_fetch_vault_data` records them in
+  `getPriceOracle()`. `fetch_vault_data` records them in
   `unimplemented_getters` (a health-check warning each) instead of failing; a
   required getter answering empty raises `UnsupportedVaultVersionError`.
 - WithdrawManager: `request_fee` (scheduled exit) and `withdraw_fee` (instant

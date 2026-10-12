@@ -32,18 +32,11 @@ from ipor_fusion.cli.morpho_api import (
     fetch_market,
     fetch_vault,
 )
-from ipor_fusion.cli.vault_cmd import (
-    _build_json_output,
-)
-from ipor_fusion.cli.vault_fetcher import (
-    _fetch_deployment_info,
-    _fetch_vault_data,
-    _resolve_token_symbol,
-)
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.mcp.guide import register_guide
 from ipor_fusion.mcp.models import (
     ActionResult,
@@ -62,6 +55,12 @@ from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
 from ipor_fusion.types import MorphoBlueMarketId
 from ipor_fusion.validation import validate_vault
+from ipor_fusion.vault_data import (
+    fetch_deployment_info,
+    fetch_vault_data,
+    resolve_token_symbol,
+)
+from ipor_fusion.vault_info import build_vault_info_json
 
 mcp = FastMCP(
     "ipor-fusion",
@@ -192,7 +191,7 @@ def vault_info(
     resolve_access_manager(ctx, checksum)
 
     plasma_vault = PlasmaVault(ctx, checksum)
-    data = _fetch_vault_data(ctx, plasma_vault, effective_block, chain_id=chain_id)
+    data = fetch_vault_data(ctx, plasma_vault, effective_block, chain_id=chain_id)
 
     api_key = cfg.etherscan_api_key
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
@@ -200,10 +199,16 @@ def vault_info(
         data.deployment_block,
         data.deployment_timestamp,
         data.deployment_error,
-    ) = _fetch_deployment_info(ctx, chain_id, vault_address, api_key)
+    ) = fetch_deployment_info(ctx, chain_id, vault_address, api_key)
 
-    result = _build_json_output(
-        ctx, plasma_vault, data, vault_address, chain_id, chain_label, api_key
+    result = build_vault_info_json(
+        ctx,
+        plasma_vault,
+        data,
+        vault_address,
+        chain_id,
+        chain_label,
+        resolve_name=partial(get_contract_name, chain_id, api_key=api_key),
     )
     return VaultInfoResponse.model_validate(result)
 
@@ -237,7 +242,7 @@ def vault_validate(
         ctx,
         checksum,
         effective_block,
-        resolve_symbol=partial(_resolve_token_symbol, ctx),
+        resolve_symbol=partial(resolve_token_symbol, ctx),
     )
     return VaultValidationResponse.from_validation(
         validation, CHAIN_NAMES.get(chain_id, str(chain_id))

@@ -1,3 +1,12 @@
+"""A Plasma Vault's on-chain state at one block, read in a few batched round
+trips: `fetch_vault_data` returns a `VaultData` snapshot (vault and asset,
+fees, WithdrawManager, markets, substrates, lending positions, role holders),
+and `fetch_deployment_info` resolves the vault's deployment block.
+
+Token symbols, decimals and deployment blocks are cached on disk
+(`ipor_fusion.cache`).
+"""
+
 from __future__ import annotations
 
 import logging
@@ -14,18 +23,13 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import ChecksumAddress, HexStr
 
-from ipor_fusion.chains import ensure_supported_chain
-from ipor_fusion.cli.config_store import (
+from ipor_fusion.cache import (
     load_contract_cache,
     load_deployment_cache,
     update_contract_cache,
     update_deployment_cache,
 )
-from ipor_fusion.cli.explorer import get_deployment_tx
-from ipor_fusion.cli.vault_unpriceable import (
-    MiddlewarePricedToken,
-    fetch_unpriceable_priced_tokens,
-)
+from ipor_fusion.chains import ensure_supported_chain
 from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sort_key
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
@@ -45,6 +49,7 @@ from ipor_fusion.errors import (
     LogScanError,
     UnsupportedVaultVersionError,
 )
+from ipor_fusion.explorer import get_deployment_tx
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import (
     AaveV3FuseReader,
@@ -68,14 +73,19 @@ from ipor_fusion.readers.morpho import (
     MorphoReader,
     morpho_blue_address,
 )
-from ipor_fusion.types import MorphoBlueMarketId
-from ipor_fusion.validation import (
-    GET_MARKET_SUBSTRATES,
-    GET_PRICE_ORACLE_MIDDLEWARE,
-    GET_TOTAL_SUPPLY_CAP,
+from ipor_fusion.readers.unpriceable import (
+    MiddlewarePricedToken,
+    fetch_unpriceable_priced_tokens,
 )
+from ipor_fusion.types import MorphoBlueMarketId
 
 T = TypeVar("T")
+
+# Vault getters newer than some deployed vaults; a vault that predates one is
+# read in a degraded way and reports it in `VaultData.unimplemented_getters`.
+GET_MARKET_SUBSTRATES = "getMarketSubstrates(uint256)"
+GET_TOTAL_SUPPLY_CAP = "getTotalSupplyCap()"
+GET_PRICE_ORACLE_MIDDLEWARE = "getPriceOracleMiddleware()"
 
 _logger = logging.getLogger(__name__)
 
@@ -85,7 +95,7 @@ _ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
 @dataclass
-class _FeeData:
+class FeeData:
     """Vault fee configuration: vault-level fee data plus FeeManager state.
 
     Every field is optional because each degrades independently: a vault may
@@ -117,7 +127,7 @@ class _FeeData:
 
 
 @dataclass
-class _WithdrawManagerData:
+class WithdrawManagerData:
     """On-chain state snapshot from the WithdrawManager contract."""
 
     withdraw_window: int
@@ -132,7 +142,13 @@ class _WithdrawManagerData:
 
 
 @dataclass
-class _VaultData:
+class VaultData:
+    """A Plasma Vault's state at one block, as `fetch_vault_data` reads it.
+
+    Amounts are raw on-chain integers. Optional data that could not be read
+    is ``None`` (or empty) rather than an error.
+    """
+
     block_number: int
     is_latest: bool
     block_timestamp: int
@@ -154,18 +170,18 @@ class _VaultData:
     # Underlying asset balance held directly on the vault (raw). Part of
     # totalAssets via ERC4626 base accounting; by design NOT tracked as an
     # ERC20_VAULT_BALANCE substrate, so it is read directly in
-    # _fetch_vault_data rather than derived from substrates.
+    # fetch_vault_data rather than derived from substrates.
     underlying_balance_on_vault: int = 0
     vault_name: str = ""
     deployment_block: int | None = None
     deployment_timestamp: int | None = None
-    # Short error code from `_fetch_deployment_info` when block/timestamp could
+    # Short error code from `fetch_deployment_info` when block/timestamp could
     # not be resolved. Surfaced in CLI output and the JSON `deployment` field
     # so users can distinguish "lookup not attempted/failed" from
     # "no deployment exists" (e.g. `etherscan-paid-tier-required` on Base).
     deployment_error: str | None = None
-    withdraw_manager_data: _WithdrawManagerData | None = None
-    fee_data: _FeeData | None = None
+    withdraw_manager_data: WithdrawManagerData | None = None
+    fee_data: FeeData | None = None
     dependency_graph: dict[int, list[int]] | None = None
     lending_health: VaultLendingHealth | None = None
     # Morpho per-substrate position breakdown (collateral / borrow / supply),
@@ -184,7 +200,7 @@ class _VaultData:
     # configured for that token.
     token_prices_usd: dict[str, float] | None = None
     # Middleware-priced tokens of granted substrates the PriceOracleMiddleware
-    # cannot price (see vault_unpriceable). None when the check did not run.
+    # cannot price (see readers.unpriceable). None when the check did not run.
     unpriceable_priced_tokens: list[MiddlewarePricedToken] | None = None
     # MARKET_ID() reported by each registered action fuse. Keyed by checksummed
     # fuse address. Fuses that don't expose MARKET_ID() (or whose call reverts)
@@ -298,7 +314,9 @@ def _read_batch(
     return head, results[len(required) :]
 
 
-def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
+def resolve_token_symbol(ctx: Web3Context, address: str) -> str:
+    """ERC-20 symbol, cached; ``"no contract"`` when nothing is deployed at
+    ``address`` and ``""`` when the symbol cannot be read."""
     cache = load_contract_cache()
     cache_key = f"symbol:{address}"
     if cached := cache.get(cache_key):
@@ -319,7 +337,7 @@ def _resolve_token_symbol(ctx: Web3Context, address: str) -> str:
     return symbol
 
 
-def _resolve_token_decimals(ctx: Web3Context, address: str) -> int | None:
+def resolve_token_decimals(ctx: Web3Context, address: str) -> int | None:
     """Resolve ERC-20 decimals, cached. Returns None if address is not a contract."""
     cache = load_contract_cache()
     cache_key = f"decimals:{address}"
@@ -341,7 +359,7 @@ def _resolve_token_decimals(ctx: Web3Context, address: str) -> int | None:
 
 def _fetch_withdraw_manager(
     ctx: Web3Context, plasma_vault: PlasmaVault
-) -> tuple[ChecksumAddress | None, _WithdrawManagerData | None]:
+) -> tuple[ChecksumAddress | None, WithdrawManagerData | None]:
     """Resolve the vault's WithdrawManager and snapshot its state."""
     address = plasma_vault.withdraw_manager_address()
     if not address:
@@ -358,7 +376,7 @@ def _fetch_withdraw_manager(
             wm.get_last_release_funds_timestamp(),
         ],
     )
-    return address, _WithdrawManagerData(
+    return address, WithdrawManagerData(
         withdraw_window=window or 0,
         request_fee=request_fee,
         withdraw_fee=withdraw_fee,
@@ -384,7 +402,7 @@ def _fetch_fee_manager_address(
         return None
 
 
-def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> _FeeData:
+def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> FeeData:
     """Fetch the vault's fee configuration, including the FeeManager hop.
 
     Three dependent round trips: vault-level fee data, then
@@ -402,7 +420,7 @@ def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> _FeeData:
             plasma_vault.get_unrealized_management_fee(),
         ],
     )
-    result = _FeeData(
+    result = FeeData(
         performance_fee_vault_bps=perf.fee_in_percentage if perf else None,
         management_fee_vault_bps=mgmt.fee_in_percentage if mgmt else None,
         management_fee_last_update=mgmt.last_update_timestamp if mgmt else None,
@@ -692,7 +710,7 @@ def _resolve_price_oracle(
 
 
 def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str, Any]:
-    """Vault and underlying-asset state, as `_VaultData` fields.
+    """Vault and underlying-asset state, as `VaultData` fields.
 
     Two Multicall3 round trips: vault getters, then everything that needs the
     asset, the oracle or the fuse list (asset metadata, idle balance, price,
@@ -893,12 +911,23 @@ def _fetch_lending_reads(
     )
 
 
-def _fetch_vault_data(
+def fetch_vault_data(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
-    block_number: int | None,
+    block_number: int | None = None,
     chain_id: int = 0,
-) -> _VaultData:
+) -> VaultData:
+    """Read the vault's state at ``block_number`` (latest when ``None``).
+
+    Pin the reads themselves with ``ctx.default_block``; ``block_number`` only
+    selects the block reported in `VaultData`. ``chain_id=0`` skips lending
+    health, the Morpho / Aave position breakdowns, their token prices and the
+    unpriceable-token check: pass the real chain id for those.
+
+    Raises `UnsupportedChainError` on a chain the tooling is not validated on
+    and `UnsupportedVaultVersionError` when the vault predates a getter the
+    read cannot do without.
+    """
     # Fail fast with a client-mappable typed error instead of letting the
     # fetch die deep in the stack on chains the tooling is not validated on.
     ensure_supported_chain(chain_id or ctx.chain_id)
@@ -956,7 +985,7 @@ def _fetch_vault_data(
         if not markets.substrates_available:
             vault_reads["unimplemented_getters"].append(GET_MARKET_SUBSTRATES)
 
-        return _VaultData(
+        return VaultData(
             **vault_reads,
             block_number=resolved_block,
             is_latest=block_number is None,
@@ -1006,7 +1035,7 @@ def _fetch_hypercore_state(
         return None
 
 
-def _fetch_deployment_info(
+def fetch_deployment_info(
     ctx: Web3Context,
     chain_id: int,
     vault_address: str,

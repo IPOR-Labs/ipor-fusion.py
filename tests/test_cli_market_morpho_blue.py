@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from eth_abi import encode
 from web3 import Web3
 
+from ipor_fusion import cache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
@@ -108,10 +109,10 @@ def _setup_provider(tmp_path, monkeypatch):
     cache_dir = tmp_path / ".cache"
     monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
     monkeypatch.setattr(config_store, "CONFIG_FILE", config_file)
-    monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
-    monkeypatch.setattr(config_store, "CACHE_FILE", cache_dir / "contract_cache.json")
+    monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
     monkeypatch.setattr(
-        config_store,
+        cache,
         "DEPLOYMENT_CACHE_FILE",
         cache_dir / "deployment_cache.json",
     )

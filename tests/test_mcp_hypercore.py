@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 from web3 import Web3
 
-from ipor_fusion.cli.vault_cmd import _build_hypercore_json
 from ipor_fusion.mcp.models import HyperCoreSection, VaultInfoResponse
 from ipor_fusion.readers.hypercore import (
     HyperCoreActionClass,
@@ -20,6 +19,9 @@ from ipor_fusion.readers.hypercore import (
     HyperCoreVaultState,
 )
 from ipor_fusion.types import Amount, Decimals, MarketId, Price
+from ipor_fusion.vault_info import (
+    _build_hypercore_json,
+)
 
 USDC = Web3.to_checksum_address("0xb88339cb7199b77e23db6e890353e22632ba630f")
 FUSE = Web3.to_checksum_address("0x66f605b579dbe23c552edcf480de71198f3c4cd1")

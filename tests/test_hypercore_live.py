@@ -32,12 +32,13 @@ from ipor_fusion import (
     HyperCoreSendFuse,
     PlasmaVault,
     TimeInForce,
+    cache,
     read_hypercore_evm_exit_ceiling,
     read_hypercore_nav,
     read_hypercore_transfer_snapshot,
     read_hypercore_vault_state,
 )
-from ipor_fusion.cli import config_store, vault_cmd
+from ipor_fusion.cli import vault_cmd
 from ipor_fusion.cli.config_store import FusionConfig
 from ipor_fusion.cli.main import cli
 from ipor_fusion.core.context import Web3Context
@@ -166,9 +167,9 @@ def test_full_cli_and_mcp_vault_info_on_hyperevm(
     monkeypatch.setattr(vault_cmd, "load_config", lambda: cfg)
     monkeypatch.setattr(vault_cmd, "save_config", lambda _cfg: None)
     monkeypatch.setattr(server, "load_config", lambda: cfg)
-    monkeypatch.setattr(config_store, "CACHE_FILE", tmp_path / "contract_cache.json")
+    monkeypatch.setattr(cache, "CACHE_FILE", tmp_path / "contract_cache.json")
     monkeypatch.setattr(
-        config_store, "DEPLOYMENT_CACHE_FILE", tmp_path / "deployment_cache.json"
+        cache, "DEPLOYMENT_CACHE_FILE", tmp_path / "deployment_cache.json"
     )
     block = int(ctx.default_block)
     result = CliRunner().invoke(

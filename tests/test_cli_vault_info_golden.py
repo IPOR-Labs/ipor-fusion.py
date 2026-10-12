@@ -23,20 +23,23 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
+from ipor_fusion import cache
+from ipor_fusion.cache import save_contract_cache
 from ipor_fusion.cli import config_store
-from ipor_fusion.cli.config_store import FusionConfig, save_contract_cache
+from ipor_fusion.cli.config_store import FusionConfig
 from ipor_fusion.cli.vault_cmd import _print_vault_info
-from ipor_fusion.cli.vault_fetcher import (
-    GET_TOTAL_SUPPLY_CAP,
-    _VaultData,
-    _WithdrawManagerData,
-)
-from ipor_fusion.cli.vault_unpriceable import MiddlewarePricedToken
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import LendingMarketHealth, VaultLendingHealth
+from ipor_fusion.readers.unpriceable import MiddlewarePricedToken
 from ipor_fusion.types import ChainId, MarketId
+from ipor_fusion.vault_data import (
+    GET_TOTAL_SUPPLY_CAP,
+    VaultData,
+    WithdrawManagerData,
+)
+from ipor_fusion.vault_info import build_vault_info_json
 
 FIXTURES = Path(__file__).parent / "fixtures" / "vault_info_golden"
 
@@ -119,7 +122,7 @@ class _Chain:
         raise ContractLogicError(f"unexpected call to {to} 0x{data[:4].hex()}")
 
 
-def _rich_vault() -> tuple[_VaultData, _Chain]:
+def _rich_vault() -> tuple[VaultData, _Chain]:
     lending = VaultLendingHealth(
         markets=[
             LendingMarketHealth(
@@ -171,7 +174,7 @@ def _rich_vault() -> tuple[_VaultData, _Chain]:
             ),
         ]
     )
-    data = _VaultData(
+    data = VaultData(
         block_number=21_000_000,
         is_latest=False,
         block_timestamp=1_730_000_000,
@@ -197,7 +200,7 @@ def _rich_vault() -> tuple[_VaultData, _Chain]:
         instant_fuses=[],
         underlying_balance_on_vault=50 * USDC,
         vault_name="Golden Vault",
-        withdraw_manager_data=_WithdrawManagerData(
+        withdraw_manager_data=WithdrawManagerData(
             withdraw_window=86_400,
             request_fee=0,
             withdraw_fee=0,
@@ -262,8 +265,8 @@ def _rich_vault() -> tuple[_VaultData, _Chain]:
     return data, chain
 
 
-def _clean_vault() -> tuple[_VaultData, _Chain]:
-    data = _VaultData(
+def _clean_vault() -> tuple[VaultData, _Chain]:
+    data = VaultData(
         block_number=100,
         is_latest=True,
         block_timestamp=1_700_000_000,
@@ -290,25 +293,26 @@ def _clean_vault() -> tuple[_VaultData, _Chain]:
 
 SCENARIOS = {"rich": _rich_vault, "clean": _clean_vault}
 
+NAMES = {
+    FUSE_AAVE: "AaveV3BalanceFuse",
+    FUSE_MORPHO: "MorphoBalanceFuse",
+    FUSE_ERC20: "ERC20BalanceFuse",
+    FUSE_AAVE_DUP: "AaveV3BalanceFuse",
+    FUSE_ORPHAN: "CompoundV3SupplyFuse",
+    ASSET: "FiatTokenProxy",
+}
+
 
 @pytest.fixture
 def isolated_cache(tmp_path, monkeypatch):
     cache_dir = tmp_path / ".cache"
     monkeypatch.setattr(config_store, "CONFIG_DIR", tmp_path / ".fusion")
     monkeypatch.setattr(config_store, "CONFIG_FILE", tmp_path / ".fusion" / "c.json")
-    monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
-    monkeypatch.setattr(config_store, "CACHE_FILE", cache_dir / "contract_cache.json")
+    monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
     monkeypatch.setattr(
-        config_store, "DEPLOYMENT_CACHE_FILE", cache_dir / "deployment_cache.json"
+        cache, "DEPLOYMENT_CACHE_FILE", cache_dir / "deployment_cache.json"
     )
-    names = {
-        FUSE_AAVE: "AaveV3BalanceFuse",
-        FUSE_MORPHO: "MorphoBalanceFuse",
-        FUSE_ERC20: "ERC20BalanceFuse",
-        FUSE_AAVE_DUP: "AaveV3BalanceFuse",
-        FUSE_ORPHAN: "CompoundV3SupplyFuse",
-        ASSET: "FiatTokenProxy",
-    }
     symbols = {
         ASSET: "USDC",
         TOKEN_STALE: "STALE",
@@ -317,7 +321,7 @@ def isolated_cache(tmp_path, monkeypatch):
         TOKEN_BROKEN: "BROKEN",
     }
     save_contract_cache(
-        {f"1:{a}": n for a, n in names.items()}
+        {f"1:{a}": n for a, n in NAMES.items()}
         | {f"symbol:{a}": s for a, s in symbols.items()}
         | {f"symbol:{a.lower()}": s for a, s in symbols.items()}
     )
@@ -331,7 +335,7 @@ def _render(scenario: str, json_output: bool) -> str:
     runner = CliRunner()
     with (
         patch(
-            "ipor_fusion.cli.vault_cmd._fetch_deployment_info",
+            "ipor_fusion.cli.vault_cmd.fetch_deployment_info",
             return_value=(None, None, None),
         ),
         runner.isolation(color=True) as (out, _err, _in),
@@ -354,3 +358,24 @@ def test_vault_info_output_matches_fixture(scenario: str, json_output: bool) -> 
     assert rendered == path.read_text(encoding="utf-8")
     if json_output:
         json.loads(rendered)
+
+
+@pytest.mark.usefixtures("isolated_cache")
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+def test_public_builder_renders_the_cli_json(scenario: str) -> None:
+    """`build_vault_info_json` with an injected name resolver produces the
+    exact document `fusion vault info --json` prints."""
+    data, chain = SCENARIOS[scenario]()
+    ctx = Web3Context(web3=MagicMock(), chain_id=ChainId(1))
+    ctx.call = multicall_aware(chain.handle)  # type: ignore[method-assign]
+    result = build_vault_info_json(
+        ctx,
+        PlasmaVault(ctx, VAULT),  # type: ignore[arg-type]
+        data,
+        VAULT,
+        1,
+        "ethereum",
+        resolve_name=lambda address: NAMES.get(address, ""),
+    )
+    expected = (FIXTURES / f"{scenario}.json").read_text(encoding="utf-8")
+    assert json.dumps(result, indent=2) + "\n" == expected

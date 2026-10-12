@@ -15,9 +15,9 @@ from ipor_fusion import Finding, VaultValidation
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
-from ipor_fusion.cli.vault_fetcher import _VaultData
 from ipor_fusion.errors import NotPlasmaVaultError, UnsupportedVaultVersionError
 from ipor_fusion.validation import Erc20Holdings
+from ipor_fusion.vault_data import VaultData
 
 VAULT = Web3.to_checksum_address("0x" + "11" * 20)
 ASSET = Web3.to_checksum_address("0x" + "a1" * 20)
@@ -32,8 +32,8 @@ def tmp_config(tmp_path, monkeypatch):
     save_config(FusionConfig(providers={"1": "https://rpc.example.com"}))
 
 
-def _data() -> _VaultData:
-    return _VaultData(
+def _data() -> VaultData:
+    return VaultData(
         block_number=21_000_000,
         is_latest=False,
         block_timestamp=1_700_000_000,

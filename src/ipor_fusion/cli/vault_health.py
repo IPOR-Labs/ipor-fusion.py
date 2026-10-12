@@ -7,7 +7,6 @@ from functools import partial
 
 import click
 
-from ipor_fusion.cli.vault_fetcher import _resolve_token_symbol, _VaultData
 from ipor_fusion.cli.vault_rendering import _format_amount, _format_usd, _print_table
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
@@ -17,18 +16,20 @@ from ipor_fusion.validation import (
     VaultValidation,
     read_erc20_holdings,
 )
+from ipor_fusion.vault_data import VaultData, resolve_token_symbol
+from ipor_fusion.vault_info import health_check_lists
 
 
 def _read_erc20_holdings(
-    ctx: Web3Context, plasma_vault: PlasmaVault, data: _VaultData
+    ctx: Web3Context, plasma_vault: PlasmaVault, data: VaultData
 ) -> Erc20Holdings:
     """ERC20 holdings with token symbols from the CLI's contract cache."""
     return read_erc20_holdings(
-        ctx, plasma_vault, data, partial(_resolve_token_symbol, ctx)
+        ctx, plasma_vault, data, partial(resolve_token_symbol, ctx)
     )
 
 
-def _print_erc20_balances(data: _VaultData, erc20: Erc20Holdings) -> None:
+def _print_erc20_balances(data: VaultData, erc20: Erc20Holdings) -> None:
     if not erc20.tokens:
         has_erc20_market = any(
             market_name(bf.market_id) == "ERC20_VAULT_BALANCE"
@@ -60,7 +61,7 @@ def _print_erc20_balances(data: _VaultData, erc20: Erc20Holdings) -> None:
     _print_table(("Token", "Symbol", "Balance", "Price", "Note"), rows)
 
 
-def _print_reconciliation(data: _VaultData, validation: VaultValidation) -> None:
+def _print_reconciliation(data: VaultData, validation: VaultValidation) -> None:
     recon = validation.reconciliation
     erc20 = validation.erc20
     decimals = data.asset_decimals
@@ -153,26 +154,8 @@ def _print_erc20_cache_divergence(
         )
 
 
-def _health_check_lists(
-    validation: VaultValidation,
-) -> tuple[list[str], list[str], list[str]]:
-    """``(ok, warnings, criticals)`` for ``fusion vault info``, with the
-    uncovered-ERC20 finding split into one line per row."""
-    ok: list[str] = []
-    warnings: list[str] = []
-    criticals: list[str] = []
-    for finding in validation.findings:
-        if finding.severity == "ok":
-            ok.append(finding.message)
-        elif finding.severity == "critical":
-            criticals.append(finding.message)
-        else:
-            warnings.extend(finding.message.split("\n"))
-    return ok, warnings, criticals
-
-
 def _print_health_check(validation: VaultValidation) -> None:
-    ok, warnings, criticals = _health_check_lists(validation)
+    ok, warnings, criticals = health_check_lists(validation)
     click.echo("Health Check:")
     for line in ok:
         click.secho(f"  {line}", fg="green")

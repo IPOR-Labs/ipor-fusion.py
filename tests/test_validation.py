@@ -413,7 +413,7 @@ class TestReadErc20Holdings:
 class TestValidateVault:
     def _run(self, ctx: Web3Context, state: State, block: int | None = None):
         with patch(
-            "ipor_fusion.cli.vault_fetcher._fetch_vault_data", return_value=state
+            "ipor_fusion.validation.fetch_vault_data", return_value=state
         ) as fetch:
             validation = validate_vault(ctx, VAULT, block)
         return validation, fetch

@@ -11,11 +11,13 @@ from web3.exceptions import Web3RPCError
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
-from ipor_fusion.cli.vault_cmd import _role_accounts_json
-from ipor_fusion.cli.vault_fetcher import _fetch_role_accounts, _VaultData
 from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.errors import LogScanError, NotPlasmaVaultError
 from ipor_fusion.types import Period, RoleId
+from ipor_fusion.vault_data import VaultData, _fetch_role_accounts
+from ipor_fusion.vault_info import (
+    _role_accounts_json,
+)
 
 VAULT = "0x2222222222222222222222222222222222222222"
 MANAGER = "0x5555555555555555555555555555555555555555"
@@ -211,7 +213,7 @@ class TestFetchRoleAccounts:
     def test_returns_members_in_canonical_order(self):
         accounts = [_role_account(100, BOB), _role_account(1, ALICE)]
         with patch(
-            "ipor_fusion.cli.vault_fetcher.AccessManager",
+            "ipor_fusion.vault_data.AccessManager",
             return_value=_mock_manager(accounts),
         ) as manager_cls:
             result = _fetch_role_accounts(MagicMock(), self._vault())
@@ -249,8 +251,8 @@ class TestFetchRoleAccounts:
 
 class TestRoleAccountsJson:
     @staticmethod
-    def _data(role_accounts: list[RoleAccount] | None) -> _VaultData:
-        data = MagicMock(spec=_VaultData)
+    def _data(role_accounts: list[RoleAccount] | None) -> VaultData:
+        data = MagicMock(spec=VaultData)
         data.role_accounts = role_accounts
         return data
 

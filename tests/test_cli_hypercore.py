@@ -8,9 +8,9 @@ from test_mcp_hypercore import FUSE, PENDING, _state
 from web3 import Web3
 
 from ipor_fusion.cli.vault_cmd import _print_hypercore
-from ipor_fusion.cli.vault_fetcher import _fetch_hypercore_state
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.types import MarketId
+from ipor_fusion.vault_data import _fetch_hypercore_state
 
 VAULT = Web3.to_checksum_address("0x41c46c328036fa7865d5cb15d531d7c5120f05c8")
 
@@ -45,7 +45,7 @@ def _markets(*fuses: BalanceFuse) -> MagicMock:
     return MagicMock(balance_fuses=list(fuses))
 
 
-@patch("ipor_fusion.cli.vault_fetcher.read_hypercore_vault_state")
+@patch("ipor_fusion.vault_data.read_hypercore_vault_state")
 def test_fetch_only_on_hyperevm_with_a_hypercore_balance_fuse(read_state):
     ctx = MagicMock()
     hypercore = BalanceFuse(MarketId(55), FUSE)

@@ -7,24 +7,26 @@ import requests
 from click.testing import CliRunner
 
 from ipor_fusion.cli.vault_cmd import (
-    _build_withdraw_manager_json,
     _print_pending_requests,
-)
-from ipor_fusion.cli.vault_fetcher import (
-    _fetch_withdraw_manager,
-    _VaultData,
-    _WithdrawManagerData,
 )
 from ipor_fusion.core.withdraw_manager import AccountRequest
 from ipor_fusion.errors import LogScanError
 from ipor_fusion.mcp.models import WithdrawManagerDetails
+from ipor_fusion.vault_data import (
+    VaultData,
+    WithdrawManagerData,
+    _fetch_withdraw_manager,
+)
+from ipor_fusion.vault_info import (
+    _build_withdraw_manager_json,
+)
 
 WM = "0x6666666666666666666666666666666666666666"
 USER = "0x7777777777777777777777777777777777777777"
 
 
-def _wm_data(pending: list[AccountRequest] | None) -> _WithdrawManagerData:
-    return _WithdrawManagerData(
+def _wm_data(pending: list[AccountRequest] | None) -> WithdrawManagerData:
+    return WithdrawManagerData(
         withdraw_window=3600,
         request_fee=0,
         withdraw_fee=0,
@@ -35,7 +37,7 @@ def _wm_data(pending: list[AccountRequest] | None) -> _WithdrawManagerData:
 
 
 def _vault_data(pending: list[AccountRequest] | None) -> MagicMock:
-    data = MagicMock(spec=_VaultData)
+    data = MagicMock(spec=VaultData)
     data.withdraw_manager_data = _wm_data(pending)
     data.share_decimals = 18
     data.asset_decimals = 6
@@ -53,9 +55,9 @@ def _fetch(side_effect: BaseException | list[AccountRequest]):
     else:
         wm.get_pending_requests.return_value = side_effect
     with (
-        patch("ipor_fusion.cli.vault_fetcher.WithdrawManager", return_value=wm),
+        patch("ipor_fusion.vault_data.WithdrawManager", return_value=wm),
         patch(
-            "ipor_fusion.cli.vault_fetcher._read_batch",
+            "ipor_fusion.vault_data._read_batch",
             return_value=([], [3600, 0, 0, 0, 0]),
         ),
     ):
