@@ -8,10 +8,8 @@ import without click (the ``cli`` extra) and without loading
 
 from __future__ import annotations
 
-import ast
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -54,23 +52,14 @@ def test_core_module_imports_without_the_cli_layer(module: str) -> None:
     assert result.returncode == 0, result.stderr
 
 
-# The market modules leave the CLI in a follow-up change.
-MCP_SERVER_CLI_IMPORTS = {
-    "ipor_fusion.cli.config_store",
-    "ipor_fusion.cli.market_cmd",
-    "ipor_fusion.cli.morpho_api",
-}
-
-
-def test_mcp_server_imports_from_the_cli_only_its_config() -> None:
-    import ipor_fusion.mcp.server as server
-
-    tree = ast.parse(Path(server.__file__).read_text(encoding="utf-8"))
-    imported = {
-        node.module
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and node.module
-        and node.module.startswith("ipor_fusion.cli")
-    }
-    assert imported <= MCP_SERVER_CLI_IMPORTS, imported - MCP_SERVER_CLI_IMPORTS
+def test_mcp_server_loads_only_the_cli_config() -> None:
+    probe = """
+import sys
+import ipor_fusion.mcp.server
+loaded = sorted(m for m in sys.modules if m.startswith("ipor_fusion.cli"))
+assert loaded == ["ipor_fusion.cli", "ipor_fusion.cli.config_store"], loaded
+"""
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
