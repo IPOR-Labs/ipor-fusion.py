@@ -180,7 +180,7 @@ claude mcp add --transport http ipor-fusion https://mcp.ipor.io/mcp
 }
 ```
 
-Tools: `vaults_list`, `vault_info`, `vault_oracle_mapping`, `fusion_addresses_list`, `fusion_address_names`, `fusion_address_lookup`, `market_morpho_blue`, `market_meta_morpho`.
+Tools: `vaults_list`, `vault_info`, `vault_validate`, `vault_oracle_mapping`, `fusion_addresses_list`, `fusion_address_names`, `fusion_address_lookup`, `market_morpho_blue`, `market_meta_morpho`.
 
 ### Local server (from the SDK)
 
@@ -213,6 +213,7 @@ Available tools:
 | `config_set_provider` | Set RPC provider URL for a chain (auto-detects chain ID) |
 | `config_set_etherscan_key` | Set Etherscan API key (enables contract name resolution) |
 | `vault_info` | Full on-chain vault state — assets, fuses, balances, fees, lending health, reconciliation |
+| `vault_validate` | Health verdict (ok / warning / critical) with the reconciliation, lending-health and ERC20 numbers behind it |
 | `vault_role_accounts` | Accounts holding each AccessManager role on a vault |
 | `vault_oracle_mapping` | Price-oracle sources per asset for a vault |
 | `vault_list` | List all saved vaults |

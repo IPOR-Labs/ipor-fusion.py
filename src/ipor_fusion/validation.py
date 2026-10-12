@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Literal, Protocol, TypeVar
+from typing import Protocol, TypeVar
 
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
@@ -30,7 +30,10 @@ from ipor_fusion.dependency_graph import (
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import VaultLendingHealth
 from ipor_fusion.substrates import decode_substrate, format_market_label, market_name
+from ipor_fusion.types import Check as Check
+from ipor_fusion.types import Severity as Severity
 from ipor_fusion.types import Shares
+from ipor_fusion.types import Verdict as Verdict
 from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
     GET_PRICE_ORACLE_MIDDLEWARE,
@@ -39,22 +42,6 @@ from ipor_fusion.vault_data import (
 )
 
 T = TypeVar("T")
-
-Severity = Literal["ok", "warning", "critical"]
-Verdict = Literal["ok", "warning", "critical"]
-Check = Literal[
-    "unimplemented_getter",
-    "orphan_fuse",
-    "missing_erc20_dependency",
-    "unpriceable_token",
-    "lending_health",
-    "total_assets_reconciliation",
-    "pending_withdrawals",
-    "market_storage_drift",
-    "uncovered_erc20",
-    "erc20_cache_stale",
-    "missing_price_feed",
-]
 
 _UNIMPLEMENTED_GETTER_IMPACT = {
     GET_MARKET_SUBSTRATES: (
