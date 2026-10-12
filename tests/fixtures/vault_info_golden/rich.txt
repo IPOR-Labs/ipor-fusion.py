@@ -1,0 +1,108 @@
+Vault:            0x0000000000000000000000000000000000001111 (Golden Vault)
+Etherscan:        https://etherscan.io/address/0x0000000000000000000000000000000000001111
+IPOR app:         https://app.ipor.io/fusion/ethereum/0x0000000000000000000000000000000000001111
+Chain:            ethereum (chain-id=1)
+Block:            21000000
+Block time:       1730000000 (2024-10-27T03:33:20Z)
+Deployed at:      N/A
+Asset:            0x00000000000000000000000000000000000000A1 (USDC)
+Asset decimals:   6
+Share decimals:   8
+Asset price:      $1.00
+Total Assets:     3,000.0 USDC ($3,000.00)
+Total Supply:     2,900.0 shares
+Share Price:      1.034483 USDC ($1.034483)
+Supply Cap:       unlimited
+Access Manager:   0x00000000000000000000000000000000000000AC
+Price Oracle:     0x000000000000000000000000000000000000000C
+Rewards Manager:  N/A
+Withdraw Manager: 0x000000000000000000000000000000000000003D
+  Window:         86400s (24.0h)
+  Fees:           see the "Fees" section below
+  Shares to release: 40.0
+  Pending requests: (none)
+
+
+Role Accounts:
+  (unavailable — the RoleGranted log scan did not complete)
+
+Fuses (3 unique):
+  #  Address                                     Contract              Market                Substrates
+  -  ------------------------------------------  --------------------  --------------------  ----------
+  1  0x00000000000000000000000000000000000000f1  AaveV3BalanceFuse     AAVE_V3 (1)           1         
+  2  0x00000000000000000000000000000000000000F2  MorphoBalanceFuse     MORPHO (14)           1         
+  3  0x00000000000000000000000000000000000000F5  CompoundV3SupplyFuse  COMPOUND_V3_USDC (2)  0         
+
+Instant Withdrawal Fuses (0 unique):
+  (none)
+
+Balance Fuses (4):
+  #  Market                   Balance                            Fuse                                        Contract         
+  -  -----------------------  ---------------------------------  ------------------------------------------  -----------------
+  1  AAVE_V3 (1)              1,000.0 USDC ($1,000.00) (cached)  0x00000000000000000000000000000000000000f1  AaveV3BalanceFuse
+  2  MORPHO (14)              2,000.0 USDC ($2,000.00) (cached)  0x00000000000000000000000000000000000000F2  MorphoBalanceFuse
+  3  ERC20_VAULT_BALANCE (7)  5.0 USDC ($5.00) (cached)          0x00000000000000000000000000000000000000f3  ERC20BalanceFuse 
+  4  AAVE_V3 (1)              1,000.0 USDC ($1,000.00) (cached)  0x00000000000000000000000000000000000000F4  AaveV3BalanceFuse
+
+Dependency Balance Graph:
+  AAVE_V3 (1) → ERC20_VAULT_BALANCE (7)
+  MORPHO (14) → 
+
+  Update reach (calling updateMarketsBalances for root market):
+    AAVE_V3 (1) refreshes: ERC20_VAULT_BALANCE (7)
+
+Substrates per Market:
+  AAVE_V3 (1):
+    0x00000000000000000000000000000000000000a1 (symbol=USDC)
+  MORPHO (14):
+    0xabababababababababababababababababababababababababababababababab (morpho_market_id)[0m
+  ERC20_VAULT_BALANCE (7):
+    0x00000000000000000000000000000000000000a1 (symbol=USDC)
+    0x00000000000000000000000000000000000000b1 (symbol=STALE)
+    0x00000000000000000000000000000000000000b2 (symbol=NOPRICE)
+    0x00000000000000000000000000000000000000b3 (symbol=EMPTY)
+    0x00000000000000000000000000000000000000b4 (symbol=BROKEN)
+  AAVE_V3 (1):
+    0x00000000000000000000000000000000000000a1 (symbol=USDC)
+
+ERC20 Balances (vault holdings):
+  Token                                       Symbol   Balance        Price  Note                                             
+  ------------------------------------------  -------  -------------  -----  -------------------------------------------------
+  0x00000000000000000000000000000000000000a1  USDC     50.0 ($50.00)  $1.00  underlying asset                                 
+  0x00000000000000000000000000000000000000b1  STALE    10.0 ($20.00)  $2.00  $20.00 not reflected in totalAssets (stale cache)
+  0x00000000000000000000000000000000000000b2  NOPRICE  3.0            N/A    in ERC20_VAULT_BALANCE                           
+  0x00000000000000000000000000000000000000b3  EMPTY    0.0 ($0.00)    $1.00  in ERC20_VAULT_BALANCE, balance=0                
+  0x00000000000000000000000000000000000000b4  BROKEN   error                                                                  
+
+Balance Reconciliation:
+  Balance fuses total:  3,005.0 USDC ($3,005.00)   [sum balance fuses, cached]
+  Underlying on vault:  50.0 USDC ($50.00)   [USDC held directly]
+  Sum:                  3,055.0 USDC ($3,055.00)
+  On-chain totalAssets: 3,000.0 USDC ($3,000.00)
+[31m  Delta:                +55.0 USDC ($55.00)   (1.83%) !!! MISMATCH[0m
+[33m  Market storage drift: sum(per-market)=3,005.0 vs implied global=2,950.0 USDC, divergence=55.0 USDC[0m
+[33m  → updateMarketsBalances() needed for all markets to resync[0m
+  Pending withdrawals:  41.0 USDC ($41.00)   [sharesToRelease converted to assets]
+[33m  → Pending withdrawals explain ~75% of the delta[0m
+[33m  ERC20_VAULT_BALANCE cached=5.0, ERC20 direct=20.0 — significant divergence[0m
+
+Position Breakdown:
+
+Health Check:
+[32m  Morpho wstETH/USDC: LTV 0.5000/0.8600 (58.1% usage), health_factor=1.7200[0m
+[31m[1m  CRITICAL — action fuse(s) registered for market COMPOUND_V3_USDC (2) but no balance fuse — positions via these fuses will not contribute to totalAssets: 0x00000000000000000000000000000000000000F5[0m
+[31m[1m  CRITICAL — market MORPHO (14) has a balance fuse but its dependency graph omits ERC20_VAULT_BALANCE — updateMarketsBalances(14) will not refresh the ERC20 cache, causing totalAssets drift after deposits/withdrawals through this market[0m
+[31m[1m  CRITICAL — market MORPHO (14): collateral token — PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000b2) reverts (it has no price source) — balanceOf() reverts even with no position, which blocks updateMarketsBalances and every execute on this market[0m
+[31m[1m  CRITICAL — market MORPHO (14): loan token — PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000b2) reverts (its price source 0x000000000000000000000000000000000000005E reverts) — the vault holds it, so balanceOf() reverts now and blocks updateMarketsBalances and every execute on this market[0m
+[33m  WARNING — vault predates getTotalSupplyCap(): it has no supply cap, reported as unlimited[0m
+[33m  WARNING — market AAVE_V3 (1): reserve — PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000b3) reverts (it has no price source) — the vault holds none in this position, so it does not revert yet, but anyone can open one for the vault (deposits on its behalf need no consent); balanceOf() then reverts and blocks updateMarketsBalances and every execute on this market — fix: add a price source, or, if every Morpho market of this market is and stays supply-only (no borrow, no collateral counted in NAV), register a deployed MorphoOnlyLiquidityBalanceFuse as its balance fuse; it values supply only[0m
+[33m  WARNING — market AAVE_V3 (1): reserve — PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000B1) reverts (it has no price source) — position not read, so current impact is unknown; balanceOf() reverts while the vault holds any and blocks updateMarketsBalances and every execute on this market — fix: add a price source[0m
+[33m  WARNING — Aave V3 AAVE_V3: LTV 0.7500/0.8000 (93.8% usage), health_factor=1.0800 — approaching liquidation[0m
+[33m  CRITICAL — Morpho WBTC/USDC: LTV 0.8400/0.8600 (97.7% usage), health_factor=1.0200 — NEAR LIQUIDATION[0m
+[33m  Balance fuses + underlying = 3,055.0 USDC vs totalAssets 3,000.0 USDC (1.83%)[0m
+[33m  Pending withdrawals: 41.0 USDC (sharesToRelease) — market storage may be stale[0m
+[33m  Market storage drift: 55.0 USDC between sum(per-market) and global total — updateMarketsBalances() needed for all markets[0m
+[33m  ERC20 holdings not covered by balance fuses:[0m
+[33m      STALE            10.0 ($20.00) — ($20.00) not reflected in totalAssets (stale cache)[0m
+[33m  updateMarketsBalances needed — ERC20_VAULT_BALANCE cache stale[0m
+[33m  No price feed for 0x00000000000000000000000000000000000000b2 (NOPRICE)[0m
