@@ -462,17 +462,15 @@ def _lending_health_json(health: VaultLendingHealth | None) -> dict[str, Any] | 
 def health_check_lists(
     validation: VaultValidation,
 ) -> tuple[list[str], list[str], list[str]]:
-    """``(ok, warnings, criticals)`` as ``fusion vault info`` has always
-    reported them: a near-liquidation lending position stays among the
-    warnings (its line reads ``CRITICAL — ...``), and the uncovered-ERC20
-    finding is one line per row."""
+    """``(ok, warnings, criticals)`` for ``fusion vault info``, with the
+    uncovered-ERC20 finding split into one line per row."""
     ok: list[str] = []
     warnings: list[str] = []
     criticals: list[str] = []
     for finding in validation.findings:
         if finding.severity == "ok":
             ok.append(finding.message)
-        elif finding.severity == "critical" and finding.check != "lending_health":
+        elif finding.severity == "critical":
             criticals.append(finding.message)
         else:
             warnings.extend(finding.message.split("\n"))
