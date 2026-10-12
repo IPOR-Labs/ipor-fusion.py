@@ -180,7 +180,7 @@ claude mcp add --transport http ipor-fusion https://mcp.ipor.io/mcp
 }
 ```
 
-Tools: `vaults_list`, `vault_info`, `vault_oracle_mapping`, `fusion_addresses_list`, `fusion_address_names`, `fusion_address_lookup`, `market_morpho_blue`, `market_meta_morpho`.
+Tools: `vaults_list`, `vault_info`, `vault_validate`, `vault_oracle_mapping`, `fusion_addresses_list`, `fusion_address_names`, `fusion_address_lookup`, `market_morpho_blue`, `market_meta_morpho`.
 
 ### Local server (from the SDK)
 
