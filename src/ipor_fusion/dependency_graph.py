@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence, Set
+
 from ipor_fusion.market_ids import IporFusionMarkets
 
 # Markets where action fuses are intentionally registered without a matching
@@ -35,8 +37,8 @@ _ERC20_DEP_NOT_REQUIRED: frozenset[int] = frozenset(
 
 
 def find_orphan_fuse_markets(
-    fuse_markets: dict[str, int],
-    balance_fuse_market_ids: set[int],
+    fuse_markets: Mapping[str, int],
+    balance_fuse_market_ids: Set[int],
 ) -> dict[int, list[str]]:
     """Return markets claimed by action fuses but lacking a balance fuse.
 
@@ -66,8 +68,8 @@ def find_orphan_fuse_markets(
 
 
 def find_markets_missing_erc20_dependency(
-    balance_fuse_market_ids: set[int],
-    dependency_graph: dict[int, list[int]],
+    balance_fuse_market_ids: Set[int],
+    dependency_graph: Mapping[int, Sequence[int]],
 ) -> list[int]:
     """Return balance-fuse markets that should depend on ERC20_VAULT_BALANCE
     but don't.
@@ -94,7 +96,7 @@ def find_markets_missing_erc20_dependency(
 
 
 def erc20_balance_tracks_non_underlying(
-    erc20_substrate_addrs: set[str], underlying_addr: str
+    erc20_substrate_addrs: Set[str], underlying_addr: str
 ) -> bool:
     """True if the ERC20_VAULT_BALANCE market tracks any token besides the
     underlying.

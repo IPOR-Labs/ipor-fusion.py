@@ -4,6 +4,7 @@
 from unittest.mock import MagicMock, patch
 
 from _multicall import sequenced
+from _validation import validate
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -747,11 +748,6 @@ class TestFetchVaultLendingHealth:
 class TestHealthCheckLendingWarnings:
     def test_lending_warnings_in_health_check(self):
         from ipor_fusion.cli.vault_fetcher import _VaultData
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
         lending = VaultLendingHealth(
@@ -793,22 +789,14 @@ class TestHealthCheckLendingWarnings:
             lending_health=lending,
         )
 
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals()
+        health = validate(data, 100 * 10**18)
 
-        health = _compute_health_check(data, bf, erc20, set())
-
-        critical_warnings = [w for w in health.warnings if "CRITICAL" in w]
-        assert len(critical_warnings) == 1
-        assert "NEAR LIQUIDATION" in critical_warnings[0]
+        assert len(health.criticals) == 1
+        assert "NEAR LIQUIDATION" in health.criticals[0]
+        assert not any("CRITICAL" in w for w in health.warnings)
 
     def test_healthy_lending_in_ok(self):
         from ipor_fusion.cli.vault_fetcher import _VaultData
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
         lending = VaultLendingHealth(
@@ -850,21 +838,13 @@ class TestHealthCheckLendingWarnings:
             lending_health=lending,
         )
 
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals()
-
-        health = _compute_health_check(data, bf, erc20, set())
+        health = validate(data, 100 * 10**18)
 
         assert any("aave_v3" in ok and "35.3%" in ok for ok in health.ok)
         assert not any("CRITICAL" in w or "WARNING" in w for w in health.warnings)
 
     def test_no_lending_health_no_warnings(self):
         from ipor_fusion.cli.vault_fetcher import _VaultData
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
 
@@ -891,10 +871,7 @@ class TestHealthCheckLendingWarnings:
             lending_health=None,
         )
 
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals()
-
-        health = _compute_health_check(data, bf, erc20, set())
+        health = validate(data, 100 * 10**18)
 
         # Only the standard reconciliation check, no lending warnings
         assert not any("CRITICAL" in w for w in health.warnings)
@@ -946,11 +923,6 @@ class TestOrphanFuseMarketsHealthCheck:
         return bytes.fromhex(addr.lower().removeprefix("0x").rjust(64, "0"))
 
     def test_morpho_orphan_marked_critical(self):
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 
         fuse_addr = "0x" + "aa" * 20
@@ -963,9 +935,7 @@ class TestOrphanFuseMarketsHealthCheck:
             balance_fuses=[balance_fuse],
         )
 
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(raw_total=100 * 10**18), _Erc20Totals(), set()
-        )
+        health = validate(data, 100 * 10**18)
 
         assert len(health.criticals) == 1
         line = health.criticals[0]
@@ -975,34 +945,20 @@ class TestOrphanFuseMarketsHealthCheck:
         assert "totalAssets" in line
 
     def test_flash_loan_action_fuse_not_flagged(self):
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
 
         data = self._make_data(
             fuse_markets={"0x" + "cc" * 20: IporFusionMarkets.MORPHO_FLASH_LOAN},
             balance_fuses=[],
         )
 
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(), _Erc20Totals(), set()
-        )
+        health = validate(data)
 
         assert not health.criticals
 
     def test_no_fuse_markets_no_criticals(self):
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
 
         data = self._make_data(fuse_markets=None, balance_fuses=[])
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(), _Erc20Totals(), set()
-        )
+        health = validate(data)
         assert not health.criticals
 
     def test_balance_fuse_market_missing_erc20_dep_marked_critical(self):
@@ -1011,11 +967,6 @@ class TestOrphanFuseMarketsHealthCheck:
         ERC20_VAULT_BALANCE — updateMarketsBalances(41) silently skips the
         ERC20 cache refresh. The vault tracks a non-underlying token idle
         (ERC20_VAULT_BALANCE substrate), so the dependency genuinely matters."""
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 
         morpho_lim = 41
@@ -1034,9 +985,7 @@ class TestOrphanFuseMarketsHealthCheck:
             },
         )
 
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(), _Erc20Totals(), set()
-        )
+        health = validate(data)
 
         critical_lines = [c for c in health.criticals if "ERC20_VAULT_BALANCE" in c]
         assert len(critical_lines) == 1
@@ -1047,11 +996,6 @@ class TestOrphanFuseMarketsHealthCheck:
         underlying (or no such market at all). Idle underlying is already in
         totalAssets via ERC4626, so a missing dependency edge is NOT a bug and
         must not be flagged — even though the dependency graph omits it."""
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 
         bf = BalanceFuse(
@@ -1070,20 +1014,13 @@ class TestOrphanFuseMarketsHealthCheck:
             },
         )
 
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(), _Erc20Totals(), set()
-        )
+        health = validate(data)
 
         assert not [c for c in health.criticals if "ERC20_VAULT_BALANCE" in c]
 
     def test_no_erc20_balance_market_missing_dep_not_flagged(self):
         """No ERC20_VAULT_BALANCE market at all (no idle-token tracking): there
         is nothing to depend on, so the check must not fire."""
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 
         bf = BalanceFuse(
@@ -1097,18 +1034,11 @@ class TestOrphanFuseMarketsHealthCheck:
             market_substrates=None,
         )
 
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(), _Erc20Totals(), set()
-        )
+        health = validate(data)
 
         assert not [c for c in health.criticals if "ERC20_VAULT_BALANCE" in c]
 
     def test_balance_fuse_with_correct_erc20_dep_no_critical(self):
-        from ipor_fusion.cli.vault_health import (
-            _BalanceFuseTotals,
-            _compute_health_check,
-            _Erc20Totals,
-        )
         from ipor_fusion.core.plasma_vault import BalanceFuse
 
         bf = BalanceFuse(
@@ -1123,8 +1053,6 @@ class TestOrphanFuseMarketsHealthCheck:
             },
         )
 
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(), _Erc20Totals(), set()
-        )
+        health = validate(data)
 
         assert not [c for c in health.criticals if "ERC20_VAULT_BALANCE" in c]

@@ -1157,8 +1157,8 @@ class TestVaultInfoJson:
         assert isinstance(data["deployment"]["age_days"], int)
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
-    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
-    @patch("ipor_fusion.cli.vault_health.ERC20")
+    @patch("ipor_fusion.validation.price_oracle_middleware")
+    @patch("ipor_fusion.validation.ERC20")
     @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.cli.vault_fetcher.price_oracle_middleware")

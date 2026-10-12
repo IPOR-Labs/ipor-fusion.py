@@ -146,6 +146,9 @@ fusion config set-provider https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY
 # Inspect a vault (auto-saves to config on first use)
 fusion vault info 0xB8a451107A9f87FDe481D4D686247D6e43Ed715e --chain-id ethereum
 
+# Validate a vault: ok / warning / critical verdict, exit status 1 on critical
+fusion vault validate 0xB8a451107A9f87FDe481D4D686247D6e43Ed715e --chain-id ethereum
+
 # List saved vaults
 fusion vault list
 

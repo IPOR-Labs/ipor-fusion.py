@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import click
 import pytest
 from _multicall import decode_aggregate3, multicall_aware
+from _validation import holding, validate
 from click.testing import CliRunner
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -51,14 +52,10 @@ from ipor_fusion.cli.vault_fetcher import (
     _WithdrawManagerData,
 )
 from ipor_fusion.cli.vault_health import (
-    _BalanceFuseTotals,
-    _compute_erc20_balances,
-    _compute_health_check,
-    _Erc20Totals,
     _print_erc20_balances,
     _print_health_check,
     _print_reconciliation,
-    _TokenInfo,
+    _read_erc20_holdings,
 )
 from ipor_fusion.cli.vault_rendering import (
     _format_age,
@@ -82,6 +79,7 @@ from ipor_fusion.readers.lending_health import (
 from ipor_fusion.readers.morpho import MORPHO_BLUE_ADDRESSES, MorphoPositionBreakdown
 from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import Amount, MarketId, MorphoBlueMarketId
+from ipor_fusion.validation import Erc20Holdings
 
 VALID_ADDR_LOWER = "0x" + "ab" * 20
 VALID_ADDR_UPPER = "0x" + "AB" * 20
@@ -745,13 +743,13 @@ class TestPrintErc20Balances:
             balance_fuses=[FakeBalanceFuse(market_id=999, fuse=ADDR_1)],
             instant_fuses=[],
         )
-        _print_erc20_balances(ctx, pv, data)
+        _print_erc20_balances(data, _read_erc20_holdings(ctx, pv, data))
         captured = capsys.readouterr()
         assert "(no ERC20_VAULT_BALANCE market)" in captured.out
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="USDC")
-    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
-    @patch("ipor_fusion.cli.vault_health.ERC20")
+    @patch("ipor_fusion.validation.price_oracle_middleware")
+    @patch("ipor_fusion.validation.ERC20")
     def test_with_erc20_tokens(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -797,14 +795,14 @@ class TestPrintErc20Balances:
             instant_fuses=[],
             market_substrates={IporFusionMarkets.ERC20_VAULT_BALANCE: [addr_bytes]},
         )
-        _print_erc20_balances(ctx, pv, data)
+        _print_erc20_balances(data, _read_erc20_holdings(ctx, pv, data))
         captured = capsys.readouterr()
         assert "USDC" in captured.out
         assert "$1.00" in captured.out
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="?")
-    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
-    @patch("ipor_fusion.cli.vault_health.ERC20")
+    @patch("ipor_fusion.validation.price_oracle_middleware")
+    @patch("ipor_fusion.validation.ERC20")
     def test_with_error_balances(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -847,11 +845,11 @@ class TestPrintErc20Balances:
             instant_fuses=[],
             market_substrates={IporFusionMarkets.ERC20_VAULT_BALANCE: [addr_bytes]},
         )
-        _print_erc20_balances(ctx, pv, data)
+        _print_erc20_balances(data, _read_erc20_holdings(ctx, pv, data))
         captured = capsys.readouterr()
         assert "error" in captured.out
 
-    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
+    @patch("ipor_fusion.validation.price_oracle_middleware")
     def test_no_token_addrs(self, mock_oracle_cls, capsys):
         ctx = MagicMock()
         pv = MagicMock()
@@ -881,7 +879,7 @@ class TestPrintErc20Balances:
             ],
             instant_fuses=[],
         )
-        _print_erc20_balances(ctx, pv, data)
+        _print_erc20_balances(data, _read_erc20_holdings(ctx, pv, data))
         captured = capsys.readouterr()
         assert "(none)" in captured.out
 
@@ -891,9 +889,9 @@ class TestUnderlyingOnVault:
 
     Idle underlying held directly on the vault is part of ``totalAssets`` via
     ERC4626 base accounting, but by design it is NOT registered as an
-    ``ERC20_VAULT_BALANCE`` substrate. ``_compute_erc20_balances`` must still
-    report it in ``underlying_balance_raw`` — otherwise reconciliation reports a
-    false-positive delta (and a cascading "market storage drift" warning).
+    ``ERC20_VAULT_BALANCE`` substrate. Reconciliation must still count it in
+    ``underlying_on_vault`` — otherwise it reports a false-positive delta (and a
+    cascading "market storage drift" warning).
 
     Reproduces BASE vault 0x7743931f74157C8aC65697660102555d40D09a77 at block
     46334673, where 10 idle USDC (not yet supplied to Aave) produced a 100%
@@ -939,7 +937,7 @@ class TestUnderlyingOnVault:
             underlying_balance_on_vault=underlying_balance_on_vault,
         )
 
-    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
+    @patch("ipor_fusion.validation.price_oracle_middleware")
     def test_underlying_counted_when_erc20_market_has_no_substrate(
         self, mock_oracle_cls
     ):
@@ -957,9 +955,11 @@ class TestUnderlyingOnVault:
             ],
             underlying_balance_on_vault=10 * 10**6,
         )
-        totals = _compute_erc20_balances(ctx, pv, data)
+        erc20 = _read_erc20_holdings(ctx, pv, data)
 
-        assert totals.underlying_balance_raw == 10 * 10**6
+        assert erc20.tokens == ()
+        recon = validate(data, erc20=erc20).reconciliation
+        assert recon.underlying_on_vault == 10 * 10**6
 
     def test_underlying_counted_when_no_erc20_market(self):
         ctx = MagicMock()
@@ -970,11 +970,13 @@ class TestUnderlyingOnVault:
             [FakeBalanceFuse(market_id=999, fuse=ADDR_1)],
             underlying_balance_on_vault=10 * 10**6,
         )
-        totals = _compute_erc20_balances(ctx, pv, data)
+        erc20 = _read_erc20_holdings(ctx, pv, data)
 
-        assert totals.underlying_balance_raw == 10 * 10**6
+        assert erc20 == Erc20Holdings()
+        recon = validate(data, erc20=erc20).reconciliation
+        assert recon.underlying_on_vault == 10 * 10**6
 
-    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
+    @patch("ipor_fusion.validation.price_oracle_middleware")
     def test_no_false_reconciliation_warning_for_idle_underlying(self, mock_oracle_cls):
         ctx = MagicMock()
         pv = MagicMock()
@@ -989,11 +991,9 @@ class TestUnderlyingOnVault:
             ],
             underlying_balance_on_vault=10 * 10**6,
         )
-        totals = _compute_erc20_balances(ctx, pv, data)
+        erc20 = _read_erc20_holdings(ctx, pv, data)
         # Nothing is deployed to markets at this block — only idle underlying.
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(raw_total=0), totals, set()
-        )
+        health = validate(data, erc20=erc20)
 
         recon_warnings = [w for w in health.warnings if "totalAssets" in w]
         assert recon_warnings == []
@@ -1143,21 +1143,14 @@ class TestPrintReconciliation:
             fuses=[],
             balance_fuses=[],
             instant_fuses=[],
+            underlying_balance_on_vault=40 * 10**18,
         )
-        bf = _BalanceFuseTotals(raw_total=60 * 10**18, usd_total=120000.0)
-        erc20 = _Erc20Totals(
-            raw_asset_total=40 * 10**18,
-            usd_total=80000.0,
-            underlying_balance_raw=40 * 10**18,
-            token_info={
-                ADDR_2.lower(): _TokenInfo(
-                    symbol="WETH",
-                    balance_str="40.0",
-                    usd_value=80000.0,
-                )
-            },
+        erc20 = Erc20Holdings(
+            tokens=(holding(ADDR_2, "WETH", balance=40 * 10**18, price_usd=2000.0),),
+            value_in_asset=40 * 10**18,
+            value_usd=80000.0,
         )
-        _print_reconciliation(data, bf, erc20)
+        _print_reconciliation(data, validate(data, 60 * 10**18, erc20))
         captured = capsys.readouterr()
         assert "Balance Reconciliation:" in captured.out
         assert "Balance fuses total:" in captured.out
@@ -1185,21 +1178,14 @@ class TestPrintReconciliation:
             fuses=[],
             balance_fuses=[],
             instant_fuses=[],
+            underlying_balance_on_vault=40 * 10**18,
         )
-        bf = _BalanceFuseTotals(raw_total=80 * 10**18, usd_total=160000.0)
-        erc20 = _Erc20Totals(
-            raw_asset_total=40 * 10**18,
-            usd_total=80000.0,
-            underlying_balance_raw=40 * 10**18,
-            token_info={
-                ADDR_2.lower(): _TokenInfo(
-                    symbol="WETH",
-                    balance_str="40.0",
-                    usd_value=80000.0,
-                )
-            },
+        erc20 = Erc20Holdings(
+            tokens=(holding(ADDR_2, "WETH", balance=40 * 10**18, price_usd=2000.0),),
+            value_in_asset=40 * 10**18,
+            value_usd=80000.0,
         )
-        _print_reconciliation(data, bf, erc20)
+        _print_reconciliation(data, validate(data, 80 * 10**18, erc20))
         captured = capsys.readouterr()
         assert "MISMATCH" in captured.out
 
@@ -1222,8 +1208,8 @@ class TestErc20BalancesNotes:
         )
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="TKN")
-    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
-    @patch("ipor_fusion.cli.vault_health.ERC20")
+    @patch("ipor_fusion.validation.price_oracle_middleware")
+    @patch("ipor_fusion.validation.ERC20")
     def test_balance_zero_note(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -1269,14 +1255,15 @@ class TestErc20BalancesNotes:
             instant_fuses=[],
             market_substrates={IporFusionMarkets.ERC20_VAULT_BALANCE: [addr_bytes]},
         )
-        totals = _print_erc20_balances(ctx, pv, data)
+        erc20 = _read_erc20_holdings(ctx, pv, data)
+        _print_erc20_balances(data, erc20)
         captured = capsys.readouterr()
         assert "balance=0" in captured.out
-        assert isinstance(totals.raw_asset_total, int)
+        assert erc20.value_in_asset == 0
 
     @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
-    @patch("ipor_fusion.cli.vault_health.price_oracle_middleware")
-    @patch("ipor_fusion.cli.vault_health.ERC20")
+    @patch("ipor_fusion.validation.price_oracle_middleware")
+    @patch("ipor_fusion.validation.ERC20")
     def test_underlying_and_stale_notes(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -1332,11 +1319,12 @@ class TestErc20BalancesNotes:
                 ]
             },
         )
-        totals = _print_erc20_balances(ctx, pv, data)
+        erc20 = _read_erc20_holdings(ctx, pv, data)
+        _print_erc20_balances(data, erc20)
         captured = capsys.readouterr()
         assert "underlying asset" in captured.out
         assert "not reflected in totalAssets" in captured.out
-        assert totals.token_addrs_on_vault
+        assert all(token.balance for token in erc20.tokens)
 
 
 def _make_data(**overrides):
@@ -1370,54 +1358,45 @@ def _make_data(**overrides):
 class TestHealthCheck:
     def test_balanced(self, capsys):
         data = _make_data()
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals()
-        _print_health_check(data, bf, erc20, set())
+        _print_health_check(validate(data, 100 * 10**18))
         captured = capsys.readouterr()
         assert "0.00%" in captured.out
 
     def test_imbalanced(self, capsys):
         data = _make_data()
-        bf = _BalanceFuseTotals(raw_total=50 * 10**18)
-        erc20 = _Erc20Totals()
-        _print_health_check(data, bf, erc20, set())
+        _print_health_check(validate(data, 50 * 10**18))
         captured = capsys.readouterr()
         assert "50.00%" in captured.out
 
     def test_stale_cache(self, capsys):
         data = _make_data()
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals(raw_asset_total=50 * 10**18, cached_bf_value=1 * 10**18)
-        _print_health_check(data, bf, erc20, set())
+        erc20 = Erc20Holdings(
+            value_in_asset=50 * 10**18, market_cached_value=1 * 10**18
+        )
+        _print_health_check(validate(data, 100 * 10**18, erc20))
         captured = capsys.readouterr()
         assert "updateMarketsBalances" in captured.out
 
     def test_uncovered_token(self, capsys):
         data = _make_data()
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals(
-            token_addrs_on_vault={"0xabc"},
-            token_info={
-                "0xabc": _TokenInfo(symbol="TKN", balance_str="100", usd_value=500.0)
-            },
+        erc20 = Erc20Holdings(
+            tokens=(holding("0xabc", balance=100 * 10**18, price_usd=5.0),)
         )
-        _print_health_check(data, bf, erc20, set())
+        _print_health_check(validate(data, 100 * 10**18, erc20))
         captured = capsys.readouterr()
         assert "not in any balance fuse substrate" in captured.out
 
     def test_underlying_not_flagged(self, capsys):
         data = _make_data()
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals(token_addrs_on_vault={ADDR_2.lower()})
-        _print_health_check(data, bf, erc20, set())
+        erc20 = Erc20Holdings(tokens=(holding(ADDR_2, balance=10**18),))
+        _print_health_check(validate(data, 100 * 10**18, erc20))
         captured = capsys.readouterr()
         assert "not in any" not in captured.out
 
     def test_no_price_feed(self, capsys):
         data = _make_data()
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals(tokens_without_price=["0xabc (TKN)"])
-        _print_health_check(data, bf, erc20, set())
+        erc20 = Erc20Holdings(unpriced_tokens=("0xabc (TKN)",))
+        _print_health_check(validate(data, 100 * 10**18, erc20))
         captured = capsys.readouterr()
         assert "No price feed" in captured.out
 
@@ -1490,27 +1469,21 @@ class TestHealthCheckLendingIntegration:
     def test_lending_ok_in_health_check(self, capsys):
         m = _make_lending_market(ltv_usage_percent=50.0)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals()
-        _print_health_check(data, bf, erc20, set())
+        _print_health_check(validate(data, 100 * 10**18))
         captured = capsys.readouterr()
         assert "morpho Morpho" in captured.out
 
     def test_lending_warning_in_health_check(self, capsys):
         m = _make_lending_market(health_factor=1.08)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals()
-        _print_health_check(data, bf, erc20, set())
+        _print_health_check(validate(data, 100 * 10**18))
         captured = capsys.readouterr()
         assert "WARNING" in captured.out
 
     def test_lending_critical_in_health_check(self, capsys):
         m = _make_lending_market(health_factor=1.03)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals()
-        _print_health_check(data, bf, erc20, set())
+        _print_health_check(validate(data, 100 * 10**18))
         captured = capsys.readouterr()
         assert "CRITICAL" in captured.out
         assert "NEAR LIQUIDATION" in captured.out
@@ -1518,9 +1491,7 @@ class TestHealthCheckLendingIntegration:
     def test_lending_none_usage_skipped(self, capsys):
         m = _make_lending_market(ltv_usage_percent=None, health_factor=None)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        bf = _BalanceFuseTotals(raw_total=100 * 10**18)
-        erc20 = _Erc20Totals()
-        _print_health_check(data, bf, erc20, set())
+        _print_health_check(validate(data, 100 * 10**18))
         captured = capsys.readouterr()
         assert "morpho" not in captured.out
 

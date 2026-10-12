@@ -151,6 +151,11 @@ the lifecycle matrix follows that.
 - `substrates.py` — public per-market bytes32 substrate decoding (`decode_substrate`,
   `SubstrateInfo`, `format_market_label`, `market_name`; re-exported from `ipor_fusion`),
   used by the CLI, MCP and `readers/lending_health`
+- `validation.py` — public vault validation (`validate_vault`; `read_erc20_holdings` +
+  `validate_vault_state` for an already-fetched state typed by the `VaultState` protocol):
+  `VaultValidation` with ordered `Finding`s, an ok/warning/critical verdict, the
+  `Reconciliation`, `Erc20Holdings` and lending health; `dependency_graph.py` holds the
+  balance-graph checks. `validate_vault` still fetches through `cli/vault_fetcher`
 - `config/roles.py` — `Roles` IntEnum
 - `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
   `multicall` (`Multicall3`), `logs` (`get_logs_adaptive`: every event scan pages
@@ -200,9 +205,9 @@ the lifecycle matrix follows that.
   compound_v3, morpho, ramses_v2, uniswap_v3
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`
   (+ `morpho_api.py`), `vault_cmd.py` orchestration; `vault_fetcher.py` on-chain fetch
-  (`_fetch_vault_data`, `_safe_call`); `vault_health.py` checks + reconciliation;
+  (`_fetch_vault_data`, `_safe_call`); `vault_health.py` renders the validation;
   `vault_unpriceable.py` middleware-priced tokens of granted substrates the oracle cannot price;
-  `vault_rendering.py` pure formatting; `vault_dep_graph.py`; `config_store.py` (XDG
+  `vault_rendering.py` pure formatting; `config_store.py` (XDG
   `~/.config/ipor-fusion/`, `~/.cache/ipor-fusion/`); `explorer.py` Etherscan V2
   (single endpoint, needs API key)
 - `mcp/` — `server.py` tools call the SDK directly (no subprocess); `models.py` pydantic output
