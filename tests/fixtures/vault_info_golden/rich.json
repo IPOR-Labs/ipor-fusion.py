@@ -363,7 +363,6 @@
       "WARNING \u2014 market AAVE_V3 (1): reserve \u2014 PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000b3) reverts (it has no price source) \u2014 the vault holds none in this position, so it does not revert yet, but anyone can open one for the vault (deposits on its behalf need no consent); balanceOf() then reverts and blocks updateMarketsBalances and every execute on this market \u2014 fix: add a price source, or, if every Morpho market of this market is and stays supply-only (no borrow, no collateral counted in NAV), register a deployed MorphoOnlyLiquidityBalanceFuse as its balance fuse; it values supply only",
       "WARNING \u2014 market AAVE_V3 (1): reserve \u2014 PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000B1) reverts (it has no price source) \u2014 position not read, so current impact is unknown; balanceOf() reverts while the vault holds any and blocks updateMarketsBalances and every execute on this market \u2014 fix: add a price source",
       "WARNING \u2014 Aave V3 AAVE_V3: LTV 0.7500/0.8000 (93.8% usage), health_factor=1.0800 \u2014 approaching liquidation",
-      "CRITICAL \u2014 Morpho WBTC/USDC: LTV 0.8400/0.8600 (97.7% usage), health_factor=1.0200 \u2014 NEAR LIQUIDATION",
       "Balance fuses + underlying = 3,055.0 USDC vs totalAssets 3,000.0 USDC (1.83%)",
       "Pending withdrawals: 41.0 USDC (sharesToRelease) \u2014 market storage may be stale",
       "Market storage drift: 55.0 USDC between sum(per-market) and global total \u2014 updateMarketsBalances() needed for all markets",
@@ -376,7 +375,8 @@
       "CRITICAL \u2014 action fuse(s) registered for market COMPOUND_V3_USDC (2) but no balance fuse \u2014 positions via these fuses will not contribute to totalAssets: 0x00000000000000000000000000000000000000F5",
       "CRITICAL \u2014 market MORPHO (14) has a balance fuse but its dependency graph omits ERC20_VAULT_BALANCE \u2014 updateMarketsBalances(14) will not refresh the ERC20 cache, causing totalAssets drift after deposits/withdrawals through this market",
       "CRITICAL \u2014 market MORPHO (14): collateral token \u2014 PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000b2) reverts (it has no price source) \u2014 balanceOf() reverts even with no position, which blocks updateMarketsBalances and every execute on this market",
-      "CRITICAL \u2014 market MORPHO (14): loan token \u2014 PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000b2) reverts (its price source 0x000000000000000000000000000000000000005E reverts) \u2014 the vault holds it, so balanceOf() reverts now and blocks updateMarketsBalances and every execute on this market"
+      "CRITICAL \u2014 market MORPHO (14): loan token \u2014 PriceOracleMiddleware.getAssetPrice(0x00000000000000000000000000000000000000b2) reverts (its price source 0x000000000000000000000000000000000000005E reverts) \u2014 the vault holds it, so balanceOf() reverts now and blocks updateMarketsBalances and every execute on this market",
+      "CRITICAL \u2014 Morpho WBTC/USDC: LTV 0.8400/0.8600 (97.7% usage), health_factor=1.0200 \u2014 NEAR LIQUIDATION"
     ]
   }
 }
