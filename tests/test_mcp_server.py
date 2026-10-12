@@ -16,17 +16,6 @@ from ipor_fusion import (
     Roles,
     UnsupportedChainError,
 )
-from ipor_fusion.cli.morpho_api import (
-    MorphoApiError,
-    MorphoApiMarket,
-    VaultAllocation,
-    VaultFlowCap,
-    VaultV1Info,
-    VaultV1MarketAllocation,
-    VaultV2Adapter,
-    VaultV2Cap,
-    VaultV2Info,
-)
 from ipor_fusion.errors import MorphoMarketNotFoundError
 from ipor_fusion.guide import RESOURCES
 from ipor_fusion.mcp.models import (
@@ -49,6 +38,17 @@ from ipor_fusion.mcp.server import (
     vault_oracle_mapping,
     vault_remove,
     vault_role_accounts,
+)
+from ipor_fusion.morpho_api import (
+    MorphoApiError,
+    MorphoApiMarket,
+    VaultAllocation,
+    VaultFlowCap,
+    VaultV1Info,
+    VaultV1MarketAllocation,
+    VaultV2Adapter,
+    VaultV2Cap,
+    VaultV2Info,
 )
 from ipor_fusion.readers import oracle_mapping
 from ipor_fusion.readers.morpho import (

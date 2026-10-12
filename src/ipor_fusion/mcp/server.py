@@ -24,19 +24,15 @@ from ipor_fusion.cli.config_store import (
     mask_provider_url,
     save_config,
 )
-from ipor_fusion.cli.market_cmd import _build_json as _build_morpho_blue_json
-from ipor_fusion.cli.market_cmd import _meta_morpho_json
-from ipor_fusion.cli.morpho_api import (
-    PUBLIC_ALLOCATOR_ADDRESSES,
-    MorphoApiError,
-    fetch_market,
-    fetch_vault,
-)
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.explorer import get_contract_name
+from ipor_fusion.market_info import (
+    build_meta_morpho_json,
+    build_morpho_blue_market_json,
+)
 from ipor_fusion.mcp.guide import register_guide
 from ipor_fusion.mcp.models import (
     ActionResult,
@@ -50,6 +46,12 @@ from ipor_fusion.mcp.models import (
     VaultInfoResponse,
     VaultListEntry,
     VaultValidationResponse,
+)
+from ipor_fusion.morpho_api import (
+    PUBLIC_ALLOCATOR_ADDRESSES,
+    MorphoApiError,
+    fetch_market,
+    fetch_vault,
 )
 from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
@@ -589,7 +591,7 @@ def market_morpho_blue(
             api_error = str(exc)
 
     public_allocator = PUBLIC_ALLOCATOR_ADDRESSES.get(chain_id)
-    payload = _build_morpho_blue_json(
+    payload = build_morpho_blue_market_json(
         raw, chain_id, params, state, rates, api_market, api_error, public_allocator
     )
     return MorphoBlueMarketResponse.model_validate(payload)
@@ -626,7 +628,7 @@ def market_meta_morpho(
         info = fetch_vault(vault_address, chain_id)
     except MorphoApiError as exc:
         raise ValueError(str(exc)) from exc
-    payload = _meta_morpho_json(info, chain_id)
+    payload = build_meta_morpho_json(info, chain_id)
     return MetaMorphoVaultResponse.model_validate(payload)
 
 
