@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v3.13.0 (2026-10-12)
+
+### Bug Fixes
+
+- **cli**: List a near-liquidation lending position among the criticals
+  ([`8d57497`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8d57497c20ea17b497f30cb2524ba7ea30678852))
+
+### Documentation
+
+- List vault_validate among the hosted server's tools
+  ([`a04b037`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a04b037c66388418533b40a0ecbbe7df22ca3063))
+
+### Features
+
+- **mcp**: Vault_validate tool, the MCP twin of fusion vault validate
+  ([`396305f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/396305f951acad67cc05580bdcbbe55267297283))
+
+- **sdk**: Public Morpho API client and market JSON builders
+  ([`55834a0`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/55834a02b0be5fef7f2858fe00fbf77a6329fc09))
+
+- **sdk**: Public vault read and vault-info JSON API
+  ([`44122aa`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/44122aad0435854aefc0526f3407f3d6d99fab5b))
+
+### Testing
+
+- **sdk**: The MCP server loads only the CLI config from the CLI layer
+  ([`78201ba`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/78201bacd5ac676906e2fe5cd6cc04efcf21d75d))
+
+### Additional Release Information
+
+- **sdk**: Ipor_fusion.cli.morpho_api moved to ipor_fusion.morpho_api; cli.market_cmd._build_json
+  and _meta_morpho_json are now ipor_fusion.market_info.build_morpho_blue_market_json and
+  build_meta_morpho_json.
+
+
 ## v3.12.0 (2026-10-12)
 
 ### Features
