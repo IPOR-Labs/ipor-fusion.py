@@ -4,14 +4,7 @@ from datetime import UTC, datetime
 
 import click
 
-
-def _format_amount(raw: int, decimals: int) -> str:
-    if decimals == 0:
-        return f"{raw:,}"
-    integer_part = raw // (10**decimals)
-    fractional_part = raw % (10**decimals)
-    frac_str = str(fractional_part).zfill(decimals)[:6].rstrip("0") or "0"
-    return f"{integer_part:,}.{frac_str}"
+from ipor_fusion.validation import _format_amount as _format_amount
 
 
 def _format_remaining(seconds: int) -> str:

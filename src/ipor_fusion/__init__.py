@@ -326,6 +326,17 @@ from ipor_fusion.types import (
     Tick,
     TokenId,
 )
+from ipor_fusion.validation import (
+    Erc20Holding,
+    Erc20Holdings,
+    Finding,
+    Reconciliation,
+    VaultState,
+    VaultValidation,
+    read_erc20_holdings,
+    validate_vault,
+    validate_vault_state,
+)
 
 __version__ = package_version()
 
@@ -630,4 +641,13 @@ __all__ = [
     "UniswapV3Position",
     "RamsesV2Reader",
     "RamsesV2Position",
+    "Erc20Holding",
+    "Erc20Holdings",
+    "Finding",
+    "Reconciliation",
+    "VaultState",
+    "VaultValidation",
+    "read_erc20_holdings",
+    "validate_vault",
+    "validate_vault_state",
 ]

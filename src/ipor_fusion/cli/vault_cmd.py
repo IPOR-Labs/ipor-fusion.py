@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any
 
 import click
@@ -29,13 +31,12 @@ from ipor_fusion.cli.vault_fetcher import (
     _VaultData,
 )
 from ipor_fusion.cli.vault_health import (
-    _BalanceFuseTotals,
-    _compute_erc20_balances,
-    _compute_health_check,
-    _compute_reconciliation,
+    _health_check_lists,
     _print_erc20_balances,
     _print_health_check,
     _print_reconciliation,
+    _print_validation,
+    _read_erc20_holdings,
 )
 from ipor_fusion.cli.vault_rendering import (
     _format_age,
@@ -61,6 +62,7 @@ from ipor_fusion.errors import (
 )
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.readers.hypercore import HyperCorePendingState, HyperCorePerpLeg
+from ipor_fusion.readers.lending_health import VaultLendingHealth
 from ipor_fusion.readers.oracle_mapping import (
     TYPE_CHAINLINK,
     TYPE_CHAINLINK_STYLE,
@@ -75,6 +77,12 @@ from ipor_fusion.substrates import (
     decode_substrate,
     format_market_label,
     market_name,
+)
+from ipor_fusion.validation import (
+    Reconciliation,
+    VaultValidation,
+    validate_vault,
+    validate_vault_state,
 )
 
 
@@ -404,6 +412,92 @@ def info(
     _print_vault_info(
         ctx, plasma_vault, cfg, data, vault_address, chain_id, json_output
     )
+
+
+@vault.command("validate")
+@click.argument("vault_address", type=ADDRESS)
+@click.option(
+    "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
+)
+@click.option(
+    "--block-number",
+    type=int,
+    default=None,
+    help="Block number (default: latest).",
+)
+@click.option(
+    "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
+)
+def validate(
+    vault_address: str,
+    chain_id: int | None,
+    block_number: int | None,
+    json_output: bool,
+) -> None:
+    """Validate a vault: health findings, totalAssets reconciliation and
+    lending health, with an ok / warning / critical verdict.
+
+    The same checks as the Health Check of `vault info`. Exits with status 1
+    when the verdict is critical.
+    """
+    cfg = load_config()
+    chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
+    try:
+        resolve_access_manager(ctx, vault_address)
+    except (ContractNotFoundError, NotPlasmaVaultError) as exc:
+        raise click.UsageError(str(exc)) from exc
+
+    try:
+        validation = validate_vault(
+            ctx,
+            vault_address,
+            block_number,
+            resolve_symbol=partial(_resolve_token_symbol, ctx),
+        )
+    except UnsupportedVaultVersionError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
+    if json_output:
+        click.echo(json.dumps(_validation_json(validation, chain_label), indent=2))
+    else:
+        click.echo(f"Vault:   {validation.vault}")
+        click.echo(f"Chain:   {chain_label} (chain-id={chain_id})")
+        block_iso = _unix_to_iso(validation.block_timestamp)
+        click.echo(f"Block:   {validation.block_number} ({block_iso})")
+        _print_validation(validation)
+    if validation.verdict == "critical":
+        sys.exit(1)
+
+
+def _validation_json(validation: VaultValidation, chain_label: str) -> dict[str, Any]:
+    return {
+        "vault": validation.vault,
+        "chain": chain_label,
+        "chain_id": validation.chain_id,
+        "block": validation.block_number,
+        "block_timestamp": validation.block_timestamp,
+        "block_timestamp_utc": _unix_to_iso(validation.block_timestamp),
+        "asset": {
+            "address": validation.asset,
+            "symbol": validation.asset_symbol,
+            "decimals": validation.asset_decimals,
+            "price_usd": validation.asset_price_usd,
+        },
+        "verdict": validation.verdict,
+        "criticals": list(validation.criticals),
+        "warnings": list(validation.warnings),
+        "ok": list(validation.ok),
+        "findings": [
+            {"check": f.check, "severity": f.severity, "message": f.message}
+            for f in validation.findings
+        ],
+        "reconciliation": _reconciliation_json(
+            validation.reconciliation, validation.asset_decimals
+        ),
+        "erc20_balances": _erc20_balances_json(validation),
+        "lending_health": _lending_health_json(validation.lending_health),
+    }
 
 
 @vault.command("role-accounts")
@@ -913,7 +1007,7 @@ def _print_vault_info(
     )
     click.echo()
 
-    bf_totals = _print_balance_fuses_table(
+    market_balances = _print_balance_fuses_table(
         plasma_vault,
         data.balance_fuses,
         data.asset_decimals,
@@ -927,28 +1021,28 @@ def _print_vault_info(
     _print_dependency_graph(data)
 
     click.echo("Substrates per Market:")
-    all_substrate_addrs = _print_market_substrates(ctx, data, chain_id, api_key)
+    _print_market_substrates(ctx, data, chain_id, api_key)
     click.echo()
 
-    click.echo("ERC20 Balances (vault holdings):")
-    erc20_totals = _print_erc20_balances(ctx, plasma_vault, data)
-    click.echo()
-
-    _print_reconciliation(
-        data,
-        bf_totals,
-        erc20_totals,
+    validation = validate_vault_state(
+        ctx,
         plasma_vault,
+        data,
+        market_balances,
+        _read_erc20_holdings(ctx, plasma_vault, data),
     )
+    click.echo("ERC20 Balances (vault holdings):")
+    _print_erc20_balances(data, validation.erc20)
+    click.echo()
+
+    _print_reconciliation(data, validation)
     click.echo()
 
     _print_lending_health(ctx, data)
     click.echo()
     _print_hypercore(data)
 
-    _print_health_check(
-        data, bf_totals, erc20_totals, all_substrate_addrs, plasma_vault
-    )
+    _print_health_check(validation)
 
 
 def _format_fee_percent(value: float | None) -> str:
@@ -1322,7 +1416,7 @@ def _print_dependency_graph(data: _VaultData) -> None:
     if not data.dependency_graph:
         return
 
-    from ipor_fusion.cli.vault_dep_graph import (
+    from ipor_fusion.dependency_graph import (
         compute_update_reach,
     )
 
@@ -1347,7 +1441,7 @@ def _build_dependency_graph_json(data: _VaultData) -> dict | None:
     if not data.dependency_graph:
         return None
 
-    from ipor_fusion.cli.vault_dep_graph import (
+    from ipor_fusion.dependency_graph import (
         compute_update_groups,
         compute_update_reach,
     )
@@ -1380,6 +1474,84 @@ def _lending_substrate_ref(substrate_id: str | None) -> str | None:
     return substrate_id if substrate_id.startswith("0x") else f"0x{substrate_id}"
 
 
+def _erc20_balances_json(validation: VaultValidation) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for token in validation.erc20.tokens:
+        entry: dict[str, Any] = {"address": token.address, "symbol": token.symbol}
+        if token.decimals is not None and token.balance is not None:
+            entry["decimals"] = token.decimals
+            entry["balance"] = {
+                "raw": token.balance,
+                "formatted": _format_amount(token.balance, token.decimals),
+            }
+            entry["price_usd"] = token.price_usd
+            entry["usd_value"] = token.usd_value
+        entry["note"] = token.note
+        entries.append(entry)
+    return entries
+
+
+def _amount_json(raw: int, decimals: int, usd: float | None) -> dict[str, Any]:
+    return {"raw": raw, "formatted": _format_amount(raw, decimals), "usd": usd}
+
+
+def _reconciliation_json(recon: Reconciliation, decimals: int) -> dict[str, Any]:
+    return {
+        "balance_fuses_total": _amount_json(
+            recon.balance_fuses_total, decimals, recon.balance_fuses_total_usd
+        ),
+        "underlying_on_vault": _amount_json(
+            recon.underlying_on_vault, decimals, recon.underlying_on_vault_usd
+        ),
+        "erc20_direct_total": _amount_json(
+            recon.erc20_direct_total, decimals, recon.erc20_direct_total_usd
+        ),
+        "sum": _amount_json(recon.sum, decimals, recon.sum_usd),
+        "on_chain_total_assets": _amount_json(
+            recon.on_chain_total_assets, decimals, recon.on_chain_total_assets_usd
+        ),
+        "delta": {
+            "raw": recon.delta,
+            "formatted": _format_amount(abs(recon.delta), decimals),
+            "usd": recon.delta_usd,
+            "percent": recon.delta_percent,
+        },
+        "pending_withdrawals": _amount_json(
+            recon.pending_withdrawals, decimals, recon.pending_withdrawals_usd
+        ),
+        "implied_market_total": {
+            "raw": recon.implied_market_total,
+            "formatted": _format_amount(recon.implied_market_total, decimals),
+        },
+        "market_storage_divergence": recon.market_storage_divergence,
+    }
+
+
+def _lending_health_json(health: VaultLendingHealth | None) -> dict[str, Any] | None:
+    if not health or not health.has_lending_positions:
+        return None
+    return {
+        "markets": [
+            {
+                "protocol": m.protocol,
+                "market_id": m.market_id,
+                "market_name": m.market_name,
+                "substrate_id": _lending_substrate_ref(m.substrate_id),
+                "current_ltv": m.current_ltv,
+                "max_ltv": m.max_ltv,
+                "health_factor": m.health_factor,
+                "total_collateral_usd": m.total_collateral_usd,
+                "total_debt_usd": m.total_debt_usd,
+                "ltv_usage_percent": m.ltv_usage_percent,
+                "is_warning": m.is_warning,
+                "is_critical": m.is_critical,
+            }
+            for m in health.markets
+        ],
+        "worst_ltv_usage_percent": health.worst_ltv_usage,
+    }
+
+
 def _build_json_output(  # noqa: C901, PLR0912, PLR0915
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
@@ -1398,7 +1570,7 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
 
     with ThreadPoolExecutor() as pool:
         # Runs its own fan-out; submitted first so it overlaps the name lookups.
-        erc20_fut = pool.submit(_compute_erc20_balances, ctx, plasma_vault, data)
+        erc20_fut = pool.submit(_read_erc20_holdings, ctx, plasma_vault, data)
         fuse_name_futs = {
             addr: pool.submit(get_contract_name, chain_id, addr, api_key)
             for addr in data.fuses
@@ -1570,117 +1742,14 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
                     entries.append(raw_entry)
             substrates_json[market_str] = entries
 
-    # ERC20 balances
-    erc20_totals = erc20_fut.result()
-    erc20_json = []
-    for td in erc20_totals.token_details:
-        erc20_entry: dict = {"address": td.address, "symbol": td.symbol}
-        if td.decimals is not None and td.balance is not None:
-            erc20_entry["decimals"] = td.decimals
-            erc20_entry["balance"] = {
-                "raw": td.balance,
-                "formatted": _format_amount(td.balance, td.decimals),
-            }
-            erc20_entry["price_usd"] = td.price_usd
-            erc20_entry["usd_value"] = td.usd_value
-        erc20_entry["note"] = td.note
-        erc20_json.append(erc20_entry)
-
-    # Balance fuse totals for reconciliation (deduplicate by market_id)
-    bf_totals = _BalanceFuseTotals()
-    seen_json_markets: set[int] = set()
+    # Venues only, once per market: zero-balance fuses never hold assets.
+    market_balances: dict[int, int] = {}
     for bfj in balance_fuses_json:
-        mid = bfj["market_id"]
-        if mid in seen_json_markets:
-            continue
-        seen_json_markets.add(mid)
-        bf_totals.raw_total += bfj["balance"]["raw"]
-        if data.asset_price_usd is not None:
-            bf_totals.usd_total += (
-                bfj["balance"]["raw"] / 10**data.asset_decimals
-            ) * data.asset_price_usd
-
-    # Reconciliation
-    recon = _compute_reconciliation(data, bf_totals, erc20_totals, plasma_vault)
-    decimals = data.asset_decimals
-    reconciliation_json: dict = {
-        "balance_fuses_total": {
-            "raw": recon.bf_total_raw,
-            "formatted": _format_amount(recon.bf_total_raw, decimals),
-            "usd": recon.bf_total_usd,
-        },
-        "underlying_on_vault": {
-            "raw": recon.underlying_raw,
-            "formatted": _format_amount(recon.underlying_raw, decimals),
-            "usd": recon.underlying_usd,
-        },
-        "erc20_direct_total": {
-            "raw": recon.erc20_total_raw,
-            "formatted": _format_amount(recon.erc20_total_raw, decimals),
-            "usd": recon.erc20_total_usd,
-        },
-        "sum": {
-            "raw": recon.sum_raw,
-            "formatted": _format_amount(recon.sum_raw, decimals),
-            "usd": recon.sum_usd,
-        },
-        "on_chain_total_assets": {
-            "raw": recon.on_chain_raw,
-            "formatted": _format_amount(recon.on_chain_raw, decimals),
-            "usd": recon.on_chain_usd,
-        },
-        "delta": {
-            "raw": recon.delta_raw,
-            "formatted": _format_amount(abs(recon.delta_raw), decimals),
-            "usd": recon.delta_usd,
-            "percent": recon.delta_percent,
-        },
-        "pending_withdrawals": {
-            "raw": recon.pending_withdrawal_raw,
-            "formatted": _format_amount(recon.pending_withdrawal_raw, decimals),
-            "usd": recon.pending_withdrawal_usd,
-        },
-        "implied_market_total": {
-            "raw": recon.implied_market_total,
-            "formatted": _format_amount(recon.implied_market_total, decimals),
-        },
-        "market_storage_divergence": recon.bf_total_raw - recon.implied_market_total,
-    }
-
-    # Lending health
-    lending_health_json = None
-    if data.lending_health and data.lending_health.has_lending_positions:
-        lending_health_json = {
-            "markets": [
-                {
-                    "protocol": m.protocol,
-                    "market_id": m.market_id,
-                    "market_name": m.market_name,
-                    "substrate_id": _lending_substrate_ref(m.substrate_id),
-                    "current_ltv": m.current_ltv,
-                    "max_ltv": m.max_ltv,
-                    "health_factor": m.health_factor,
-                    "total_collateral_usd": m.total_collateral_usd,
-                    "total_debt_usd": m.total_debt_usd,
-                    "ltv_usage_percent": m.ltv_usage_percent,
-                    "is_warning": m.is_warning,
-                    "is_critical": m.is_critical,
-                }
-                for m in data.lending_health.markets
-            ],
-            "worst_ltv_usage_percent": data.lending_health.worst_ltv_usage,
-        }
-
-    # Health check
-    all_sub_lower = {a.lower() for a in all_sub_addresses}
-    health = _compute_health_check(
-        data, bf_totals, erc20_totals, all_sub_lower, plasma_vault
+        market_balances.setdefault(bfj["market_id"], bfj["balance"]["raw"])
+    validation = validate_vault_state(
+        ctx, plasma_vault, data, market_balances, erc20_fut.result()
     )
-    health_json = {
-        "ok": health.ok,
-        "warnings": health.warnings,
-        "criticals": health.criticals,
-    }
+    ok, warnings, criticals = _health_check_lists(validation)
 
     explorer_base = BLOCK_EXPLORER_URLS.get(chain_id)
     links: dict[str, str] = {
@@ -1741,11 +1810,13 @@ def _build_json_output(  # noqa: C901, PLR0912, PLR0915
         "instant_withdrawal_fuses": instant_json,
         "substrates": substrates_json,
         "dependency_graph": _build_dependency_graph_json(data),
-        "erc20_balances": erc20_json,
-        "reconciliation": reconciliation_json,
-        "lending_health": lending_health_json,
+        "erc20_balances": _erc20_balances_json(validation),
+        "reconciliation": _reconciliation_json(
+            validation.reconciliation, data.asset_decimals
+        ),
+        "lending_health": _lending_health_json(data.lending_health),
         "hypercore": _build_hypercore_json(data),
-        "health_check": health_json,
+        "health_check": {"ok": ok, "warnings": warnings, "criticals": criticals},
     }
 
 
@@ -2009,9 +2080,10 @@ def _print_balance_fuses_table(
     asset_price_usd: float | None,
     chain_id: int,
     api_key: str | None,
-) -> _BalanceFuseTotals:
-    totals = _BalanceFuseTotals()
-    seen_market_ids: set[int] = set()
+) -> dict[int, int]:
+    """Print the table; return each market's cached balance, once per market
+    (several balance fuses can share a market's single storage slot)."""
+    market_balances: dict[int, int] = {}
     with ThreadPoolExecutor() as pool:
         futures: list[tuple[int, int, str, Future, Future]] = []
         for idx, balance_fuse in enumerate(balance_fuses, 1):
@@ -2030,17 +2102,7 @@ def _print_balance_fuses_table(
         zero_rows: list[tuple[str, ...]] = []
         for idx, market_id, market_id_str, f_balance, f_contract in futures:
             assets_in_market = f_balance.result()
-            # Deduplicate: only count each market_id once in totals
-            # (multiple balance fuses can reference the same market,
-            # but totalAssetsInMarket is a single storage slot per market).
-            if market_id not in seen_market_ids:
-                totals.raw_total += assets_in_market
-                totals.per_market[market_id_str] = assets_in_market
-                if asset_price_usd is not None:
-                    totals.usd_total += (
-                        assets_in_market / 10**decimals
-                    ) * asset_price_usd
-                seen_market_ids.add(market_id)
+            market_balances.setdefault(market_id, assets_in_market)
             contract_name = f_contract.result() or "?"
             balance_str = (
                 f"{_format_amount(assets_in_market, decimals)} {asset_symbol}"
@@ -2064,7 +2126,7 @@ def _print_balance_fuses_table(
         click.echo()
         click.echo(f"Zero-Balance Fuses ({len(zero_rows)}):")
         _print_table(header, [(str(i), *row) for i, row in enumerate(zero_rows, 1)])
-    return totals
+    return market_balances
 
 
 def _print_market_substrates(

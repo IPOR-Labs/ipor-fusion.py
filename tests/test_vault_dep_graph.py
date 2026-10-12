@@ -1,6 +1,6 @@
 """Tests for dependency balance graph analysis."""
 
-from ipor_fusion.cli.vault_dep_graph import (
+from ipor_fusion.dependency_graph import (
     NO_BALANCE_FUSE_MARKETS,
     compute_update_groups,
     compute_update_reach,

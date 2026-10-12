@@ -69,6 +69,11 @@ from ipor_fusion.readers.morpho import (
     morpho_blue_address,
 )
 from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.validation import (
+    GET_MARKET_SUBSTRATES,
+    GET_PRICE_ORACLE_MIDDLEWARE,
+    GET_TOTAL_SUPPLY_CAP,
+)
 
 T = TypeVar("T")
 
@@ -249,9 +254,6 @@ def _fuse_market_id_call(ctx: Web3Context, fuse: ChecksumAddress) -> Call[int]:
     )
 
 
-GET_MARKET_SUBSTRATES = "getMarketSubstrates(uint256)"
-GET_TOTAL_SUPPLY_CAP = "getTotalSupplyCap()"
-GET_PRICE_ORACLE_MIDDLEWARE = "getPriceOracleMiddleware()"
 _UNCAPPED = 2**256 - 1
 
 

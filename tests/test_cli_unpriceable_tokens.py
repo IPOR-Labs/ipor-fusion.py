@@ -7,7 +7,6 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.cli import vault_unpriceable
-from ipor_fusion.cli.vault_health import _compute_unpriceable_token_findings
 from ipor_fusion.cli.vault_unpriceable import (
     MiddlewarePricedToken,
     fetch_unpriceable_priced_tokens,
@@ -15,6 +14,7 @@ from ipor_fusion.cli.vault_unpriceable import (
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import MarketId
+from ipor_fusion.validation import _unpriceable_token_findings
 
 
 def _addr(byte: int) -> str:
@@ -289,7 +289,12 @@ def _token(**overrides) -> MiddlewarePricedToken:
 
 def _findings(*tokens: MiddlewarePricedToken) -> tuple[list[str], list[str]]:
     data = SimpleNamespace(unpriceable_priced_tokens=list(tokens))
-    return _compute_unpriceable_token_findings(data)  # type: ignore[arg-type]
+    findings = _unpriceable_token_findings(data)  # type: ignore[arg-type]
+    assert {f.check for f in findings} <= {"unpriceable_token"}
+    return (
+        [f.message for f in findings if f.severity == "critical"],
+        [f.message for f in findings if f.severity == "warning"],
+    )
 
 
 class TestFindings:
@@ -348,4 +353,4 @@ class TestFindings:
 
     def test_none_when_not_run(self):
         data = SimpleNamespace(unpriceable_priced_tokens=None)
-        assert _compute_unpriceable_token_findings(data) == ([], [])  # type: ignore[arg-type]
+        assert _unpriceable_token_findings(data) == []  # type: ignore[arg-type]

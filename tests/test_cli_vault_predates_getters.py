@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from _multicall import multicall_aware
+from _validation import validate
 from click.testing import CliRunner
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
@@ -30,11 +31,6 @@ from ipor_fusion.cli.vault_fetcher import (
     _fetch_market_reads,
     _fetch_vault_reads,
     _VaultData,
-)
-from ipor_fusion.cli.vault_health import (
-    _BalanceFuseTotals,
-    _compute_health_check,
-    _Erc20Totals,
 )
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.types import MarketId
@@ -261,19 +257,15 @@ class TestReporting:
     def test_health_check_warns_per_unimplemented_getter(self):
         data = _vault_data([GET_TOTAL_SUPPLY_CAP, GET_MARKET_SUBSTRATES])
 
-        health = _compute_health_check(
-            data, _BalanceFuseTotals(), _Erc20Totals(), set()
-        )
+        health = validate(data)
 
         predates = [w for w in health.warnings if "vault predates" in w]
         assert len(predates) == 2
         assert f"vault predates {GET_MARKET_SUBSTRATES}: substrates are" in predates[1]
-        assert health.criticals == []
+        assert health.criticals == ()
 
     def test_current_vault_has_no_predates_warning(self):
-        health = _compute_health_check(
-            _vault_data([]), _BalanceFuseTotals(), _Erc20Totals(), set()
-        )
+        health = validate(_vault_data([]))
 
         assert not [w for w in health.warnings if "vault predates" in w]
 
