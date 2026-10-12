@@ -134,6 +134,33 @@ class TestFromUrl:
 
         assert methods == ["eth_chainId", "eth_call", "eth_call"]
 
+    def test_reads_a_block_with_long_extra_data(self):
+        """Avalanche block extraData can be 66 bytes; without the POA
+        middleware web3 raises ValueError on get_block."""
+        extra = (
+            "0x00000000000184e29e3690047cd74c4b287eb04eed1d0d5852d7b84fa1457da9"
+            "a13266378ca800000001020000000000000000000000000000000000000500000000"
+        )
+        block = {
+            "number": "0x10",
+            "hash": "0x" + "ab" * 32,
+            "parentHash": "0x" + "cd" * 32,
+            "timestamp": "0x6700000a",
+            "extraData": extra,
+            "transactions": [],
+        }
+
+        def make_request(_provider, method, _params):
+            result = "0xa86a" if method == "eth_chainId" else block
+            return {"jsonrpc": "2.0", "id": 1, "result": result}
+
+        with patch.object(HTTPProvider, "make_request", make_request):
+            ctx = Web3Context.from_url("http://localhost:8545")
+            got = ctx.web3.eth.get_block(16)
+
+        assert got["timestamp"] == 0x6700000A
+        assert got["proofOfAuthorityData"] == HexBytes(extra)
+
 
 # ── send ────────────────────────────────────────────────────────────────
 
