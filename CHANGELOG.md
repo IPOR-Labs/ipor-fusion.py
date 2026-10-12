@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.11.1 (2026-10-12)
+
+### Bug Fixes
+
+- **sdk**: Decode getAssetPrice of the pre-audit PriceOracleMiddleware
+  ([`4002a96`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4002a960ddebb5eec4120f3a12a3f4cf0263e028))
+
+### Features
+
+- **sdk**: Decode the ExternalState events the vault emits
+  ([`b1eac06`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b1eac06a391bf6da45a0fc6805f9883c809bfd34))
+
+
 ## v3.11.0 (2026-10-09)
 
 ### Bug Fixes
