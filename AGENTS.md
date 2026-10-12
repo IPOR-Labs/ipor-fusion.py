@@ -271,7 +271,7 @@ byte, e.g. Ebisu ZAPPER/REGISTRY).
 ## CLI and MCP
 
 `fusion config` (set-provider, set-etherscan-key, show), `fusion market`
-(morpho-blue, meta-morpho), `fusion vault` (add, remove, list, info,
+(morpho-blue, meta-morpho), `fusion vault` (add, remove, list, info, validate,
 role-accounts, oracle-mapping). `vault info` runs independent fetch pipelines
 (vault/asset, fees, WithdrawManager, markets, roles) concurrently on a
 `ThreadPoolExecutor`, each a short chain of `Multicall3` batches; keep new
@@ -279,8 +279,8 @@ reads inside a batch rather than adding per-call round trips. Contract names
 and token symbols are cached in `~/.cache/ipor-fusion/contract_cache.json`.
 
 Every CLI command has an MCP tool (`fusion changelog` maps to `server_info`;
-the rest share names). Read-only: `vault_info`, `vault_list`,
-`vault_role_accounts`, `vault_oracle_mapping`, `market_morpho_blue`,
+the rest share names). Read-only: `vault_info`, `vault_validate`,
+`vault_list`, `vault_role_accounts`, `vault_oracle_mapping`, `market_morpho_blue`,
 `market_meta_morpho`, `config_show`, `server_info`. Mutating: `vault_add`,
 `vault_remove`, `config_set_provider`, `config_set_etherscan_key`. Every new
 CLI command gets a matching MCP tool. Put every fact in its structured home:

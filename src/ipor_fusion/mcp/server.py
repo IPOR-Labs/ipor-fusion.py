@@ -4,6 +4,7 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
+from functools import partial
 from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -37,6 +38,7 @@ from ipor_fusion.cli.vault_cmd import (
 from ipor_fusion.cli.vault_fetcher import (
     _fetch_deployment_info,
     _fetch_vault_data,
+    _resolve_token_symbol,
 )
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import resolve_access_manager
@@ -54,10 +56,12 @@ from ipor_fusion.mcp.models import (
     ServerInfoResponse,
     VaultInfoResponse,
     VaultListEntry,
+    VaultValidationResponse,
 )
 from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
 from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.validation import validate_vault
 
 mcp = FastMCP(
     "ipor-fusion",
@@ -202,6 +206,42 @@ def vault_info(
         ctx, plasma_vault, data, vault_address, chain_id, chain_label, api_key
     )
     return VaultInfoResponse.model_validate(result)
+
+
+@mcp.tool()
+def vault_validate(
+    vault_address: Annotated[str, Field(description="Plasma Vault address.")],
+    chain_id: Annotated[int, Field(description="Chain ID (auto-detected if 0).")] = 0,
+    block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
+) -> VaultValidationResponse:
+    """Check a Plasma Vault's health and return an ok / warning / critical verdict.
+
+    Use this to answer "is this vault OK?": the verdict, each finding, and the
+    reconciliation, lending-health and ERC20 numbers behind them. Use
+    vault_info for what the vault is and holds (roles, fees, fuses,
+    substrates). Every read is pinned to one block, so the result is
+    consistent. It reads about as much as vault_info and takes about as long.
+    """
+    if block_number < 0:
+        raise ValueError("block_number must be >= 0")
+    cfg = load_config()
+    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    ensure_supported_chain(chain_id)
+    ctx, effective_block = _build_ctx(cfg, chain_id, block_number)
+    checksum = Web3.to_checksum_address(vault_address)
+
+    # Same cheap probe as vault_info: "not a vault" fails before the fetch.
+    resolve_access_manager(ctx, checksum)
+
+    validation = validate_vault(
+        ctx,
+        checksum,
+        effective_block,
+        resolve_symbol=partial(_resolve_token_symbol, ctx),
+    )
+    return VaultValidationResponse.from_validation(
+        validation, CHAIN_NAMES.get(chain_id, str(chain_id))
+    )
 
 
 # Static mirror of Roles member names: pyright rejects a dynamically built
