@@ -43,6 +43,7 @@ treat their interfaces as unstable and route no production capital through them.
 What this server does: read-only inspection. Start by listing vaults \
 (`vault_list` or `vaults_list`, whichever this server has), then \
 `vault_info(chain_id, vault_address)` for the full state of one vault, \
+`vault_validate` for its health verdict and the numbers behind it, \
 `vault_oracle_mapping` for how it prices each asset, and `market_morpho_blue` / \
 `market_meta_morpho` for Morpho markets. These tools need no key and change \
 nothing on-chain.

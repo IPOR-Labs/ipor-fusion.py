@@ -25,17 +25,38 @@ Design notes:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ipor_fusion.field_docs import DOCS
-from ipor_fusion.types import AssetSource, MappingStatus, NodeStatus
+from ipor_fusion.types import (
+    AssetSource,
+    Check,
+    MappingStatus,
+    NodeStatus,
+    Severity,
+    Verdict,
+)
 
 if TYPE_CHECKING:
     from ipor_fusion.about import ChangelogEntry
     from ipor_fusion.core.access import RoleAccount
+    from ipor_fusion.readers.lending_health import (
+        LendingMarketHealth as ReaderLendingMarketHealth,
+    )
+    from ipor_fusion.readers.lending_health import VaultLendingHealth
     from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode
+    from ipor_fusion.validation import (
+        Erc20Holding,
+        Erc20Holdings,
+        VaultValidation,
+    )
+    from ipor_fusion.validation import (
+        Reconciliation as ValidationReconciliation,
+    )
 
 
 class _Base(BaseModel):
@@ -587,6 +608,234 @@ class OracleMappingResponse(_Base):
                 OracleNodeModel.from_node(node) for node in mapping.configured_assets
             ],
             unresolved=[OracleNodeModel.from_node(node) for node in mapping.unresolved],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Vault-validation models
+# ---------------------------------------------------------------------------
+
+
+def _formatted(raw: int, decimals: int) -> str:
+    return format(Decimal(raw).scaleb(-decimals).normalize(), "f") if raw else "0"
+
+
+def _amount(raw: int, decimals: int, usd: float | None = None) -> Amount:
+    """An Amount in vault_info's convention, the sign kept in `formatted`."""
+    return Amount(raw=raw, formatted=_formatted(raw, decimals), usd=usd)
+
+
+class FindingModel(_Base):
+    check: Check
+    severity: Severity
+    message: str
+
+
+class ReconciliationModel(_Base):
+    """totalAssets against balance fuses plus idle underlying."""
+
+    balance_fuses_total: Amount
+    underlying_on_vault: Amount
+    erc20_direct_total: Amount = Field(
+        description="Informational: already valued by the ERC20_VAULT_BALANCE "
+        "balance fuse, never added to sum."
+    )
+    sum: Amount
+    on_chain_total_assets: Amount
+    delta: Amount
+    delta_percent: float
+    pending_withdrawals: Amount
+    implied_market_total: Amount
+    market_storage_divergence: int = Field(
+        description="balance_fuses_total minus implied_market_total, raw: "
+        "per-market caches drifting from the stored global total."
+    )
+
+    @classmethod
+    def from_reconciliation(
+        cls, rec: ValidationReconciliation, decimals: int
+    ) -> ReconciliationModel:
+        def amount(raw: int, usd: float | None = None) -> Amount:
+            return _amount(raw, decimals, usd)
+
+        return cls(
+            balance_fuses_total=amount(
+                rec.balance_fuses_total, rec.balance_fuses_total_usd
+            ),
+            underlying_on_vault=amount(
+                rec.underlying_on_vault, rec.underlying_on_vault_usd
+            ),
+            erc20_direct_total=amount(
+                rec.erc20_direct_total, rec.erc20_direct_total_usd
+            ),
+            sum=amount(rec.sum, rec.sum_usd),
+            on_chain_total_assets=amount(
+                rec.on_chain_total_assets, rec.on_chain_total_assets_usd
+            ),
+            delta=amount(rec.delta, rec.delta_usd),
+            delta_percent=rec.delta_percent,
+            pending_withdrawals=amount(
+                rec.pending_withdrawals, rec.pending_withdrawals_usd
+            ),
+            implied_market_total=amount(rec.implied_market_total),
+            market_storage_divergence=rec.market_storage_divergence,
+        )
+
+
+class LendingMarketModel(_Base):
+    protocol: str
+    market_id: int
+    market_name: str
+    substrate_id: str | None = Field(
+        description="0x-prefixed Morpho market id or Aave V4 Spoke; null for "
+        "Aave V3, whose health is account-level."
+    )
+    current_ltv: float | None
+    max_ltv: float
+    health_factor: float | None
+    total_collateral_usd: float | None
+    total_debt_usd: float | None
+    ltv_usage_percent: float | None
+
+    @classmethod
+    def from_market(cls, m: ReaderLendingMarketHealth) -> LendingMarketModel:
+        substrate_id = m.substrate_id
+        if substrate_id is not None and not substrate_id.startswith("0x"):
+            substrate_id = f"0x{substrate_id}"
+        return cls(
+            protocol=m.protocol,
+            market_id=m.market_id,
+            market_name=m.market_name,
+            substrate_id=substrate_id,
+            current_ltv=m.current_ltv,
+            max_ltv=m.max_ltv,
+            health_factor=m.health_factor,
+            total_collateral_usd=m.total_collateral_usd,
+            total_debt_usd=m.total_debt_usd,
+            ltv_usage_percent=m.ltv_usage_percent,
+        )
+
+
+class LendingHealthModel(_Base):
+    markets: list[LendingMarketModel]
+    worst_ltv_usage_percent: float | None
+
+    @classmethod
+    def from_health(cls, health: VaultLendingHealth) -> LendingHealthModel:
+        return cls(
+            markets=[LendingMarketModel.from_market(m) for m in health.markets],
+            worst_ltv_usage_percent=health.worst_ltv_usage,
+        )
+
+
+class Erc20HoldingModel(_Base):
+    address: str
+    symbol: str
+    decimals: int | None
+    balance: Amount | None
+    price_usd: float | None
+    usd_value: float | None
+    note: str
+
+    @classmethod
+    def from_holding(cls, token: Erc20Holding) -> Erc20HoldingModel:
+        balance = (
+            _amount(token.balance, token.decimals)
+            if token.balance is not None and token.decimals is not None
+            else None
+        )
+        return cls(
+            address=token.address,
+            symbol=token.symbol,
+            decimals=token.decimals,
+            balance=balance,
+            price_usd=token.price_usd,
+            usd_value=token.usd_value,
+            note=token.note,
+        )
+
+
+class Erc20HoldingsModel(_Base):
+    tokens: list[Erc20HoldingModel]
+    value_in_asset: Amount
+    market_cached_value: Amount = Field(
+        description="What the ERC20_VAULT_BALANCE market last stored for "
+        "these tokens, in the asset."
+    )
+    unpriced_tokens: list[str]
+
+    @classmethod
+    def from_holdings(cls, erc20: Erc20Holdings, decimals: int) -> Erc20HoldingsModel:
+        return cls(
+            tokens=[Erc20HoldingModel.from_holding(t) for t in erc20.tokens],
+            value_in_asset=_amount(erc20.value_in_asset, decimals, erc20.value_usd),
+            market_cached_value=_amount(erc20.market_cached_value, decimals),
+            unpriced_tokens=list(erc20.unpriced_tokens),
+        )
+
+
+class VaultValidationResponse(_Base):
+    """Health verdict of one Plasma Vault at one block."""
+
+    vault: str
+    chain: str
+    chain_id: int
+    block: int
+    block_timestamp_utc: str
+    asset: AssetInfo
+    verdict: Verdict = Field(
+        description="Worst severity found: critical if any critical finding, "
+        "else warning if any warning, else ok."
+    )
+    criticals: list[FindingModel]
+    warnings: list[FindingModel]
+    passed: list[FindingModel] = Field(
+        description="Checks that ran and found nothing wrong."
+    )
+    reconciliation: ReconciliationModel
+    lending_health: LendingHealthModel | None = Field(
+        description="LTV and health factor per lending market (Morpho, Aave "
+        "V3/V4); null when the vault has no lending position."
+    )
+    erc20: Erc20HoldingsModel
+
+    @classmethod
+    def from_validation(cls, v: VaultValidation, chain: str) -> VaultValidationResponse:
+        def by(severity: Severity) -> list[FindingModel]:
+            return [
+                FindingModel(check=f.check, severity=f.severity, message=f.message)
+                for f in v.findings
+                if f.severity == severity
+            ]
+
+        health = v.lending_health
+        return cls(
+            vault=v.vault,
+            chain=chain,
+            chain_id=v.chain_id,
+            block=v.block_number,
+            block_timestamp_utc=datetime.fromtimestamp(
+                v.block_timestamp, tz=UTC
+            ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            asset=AssetInfo(
+                address=v.asset,
+                symbol=v.asset_symbol,
+                decimals=v.asset_decimals,
+                price_usd=v.asset_price_usd,
+            ),
+            verdict=v.verdict,
+            criticals=by("critical"),
+            warnings=by("warning"),
+            passed=by("ok"),
+            reconciliation=ReconciliationModel.from_reconciliation(
+                v.reconciliation, v.asset_decimals
+            ),
+            lending_health=(
+                LendingHealthModel.from_health(health)
+                if health is not None and health.has_lending_positions
+                else None
+            ),
+            erc20=Erc20HoldingsModel.from_holdings(v.erc20, v.asset_decimals),
         )
 
 

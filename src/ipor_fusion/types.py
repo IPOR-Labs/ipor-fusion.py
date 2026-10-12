@@ -26,6 +26,24 @@ NodeStatus: TypeAlias = Literal["resolved", "partially_resolved", "partial"]
 MappingStatus: TypeAlias = Literal["resolved", "partially_resolved", "unresolved"]
 AssetSource: TypeAlias = Literal["getConfiguredAssets", "events"]
 
+# Vault-validation vocabulary of `ipor_fusion.validation`, here for the same
+# reason: the MCP models share it without importing the validation stack.
+Severity: TypeAlias = Literal["ok", "warning", "critical"]
+Verdict: TypeAlias = Literal["ok", "warning", "critical"]
+Check: TypeAlias = Literal[
+    "unimplemented_getter",
+    "orphan_fuse",
+    "missing_erc20_dependency",
+    "unpriceable_token",
+    "lending_health",
+    "total_assets_reconciliation",
+    "pending_withdrawals",
+    "market_storage_drift",
+    "uncovered_erc20",
+    "erc20_cache_stale",
+    "missing_price_feed",
+]
+
 
 @dataclass(slots=True)
 class Price:
