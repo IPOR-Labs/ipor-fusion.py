@@ -747,7 +747,7 @@ class TestFetchVaultLendingHealth:
 
 class TestHealthCheckLendingWarnings:
     def test_lending_warnings_in_health_check(self):
-        from ipor_fusion.cli.vault_fetcher import _VaultData
+        from ipor_fusion.vault_data import VaultData
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
         lending = VaultLendingHealth(
@@ -766,7 +766,7 @@ class TestHealthCheckLendingWarnings:
             ]
         )
 
-        data = _VaultData(
+        data = VaultData(
             block_number=123,
             is_latest=True,
             block_timestamp=1700000000,
@@ -796,7 +796,7 @@ class TestHealthCheckLendingWarnings:
         assert not any("CRITICAL" in w for w in health.warnings)
 
     def test_healthy_lending_in_ok(self):
-        from ipor_fusion.cli.vault_fetcher import _VaultData
+        from ipor_fusion.vault_data import VaultData
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
         lending = VaultLendingHealth(
@@ -815,7 +815,7 @@ class TestHealthCheckLendingWarnings:
             ]
         )
 
-        data = _VaultData(
+        data = VaultData(
             block_number=123,
             is_latest=True,
             block_timestamp=1700000000,
@@ -844,11 +844,11 @@ class TestHealthCheckLendingWarnings:
         assert not any("CRITICAL" in w or "WARNING" in w for w in health.warnings)
 
     def test_no_lending_health_no_warnings(self):
-        from ipor_fusion.cli.vault_fetcher import _VaultData
+        from ipor_fusion.vault_data import VaultData
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
 
-        data = _VaultData(
+        data = VaultData(
             block_number=123,
             is_latest=True,
             block_timestamp=1700000000,
@@ -889,10 +889,10 @@ class TestOrphanFuseMarketsHealthCheck:
         dependency_graph=None,
         market_substrates=None,
     ):
-        from ipor_fusion.cli.vault_fetcher import _VaultData
+        from ipor_fusion.vault_data import VaultData
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
-        return _VaultData(
+        return VaultData(
             block_number=123,
             is_latest=True,
             block_timestamp=1700000000,

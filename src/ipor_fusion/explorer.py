@@ -1,3 +1,7 @@
+"""Etherscan V2 client: contract names (cached on disk) and contract creation
+transactions. Every lookup needs an API key; without one, names come from the
+cache only."""
+
 from __future__ import annotations
 
 import json
@@ -6,7 +10,7 @@ import time
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from ipor_fusion.cli.config_store import load_contract_cache, update_contract_cache
+from ipor_fusion.cache import load_contract_cache, update_contract_cache
 
 ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api"
 

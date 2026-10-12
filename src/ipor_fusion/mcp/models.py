@@ -14,11 +14,11 @@ Design notes:
 - Truly dynamic sections (substrates keyed by market label, per-protocol
   position breakdowns) use dict[str, Any] / list[dict[str, Any]] — modelling
   every variant would be brittle without meaningful LLM-side benefit.
-- Models use extra="forbid": any new field added to _build_json_output that
+- Models use extra="forbid": any new field added to build_vault_info_json that
   is not declared here will fail VaultInfoResponse.model_validate(). Drift
   is caught at test time by the producer contract check in
   test_cli_commands.py::TestVaultInfoJson::test_json_output, which validates
-  the real _build_json_output dict against this model. The samples in
+  the real build_vault_info_json dict against this model. The samples in
   test_mcp_models.py document the expected shape but are hand-maintained —
   on their own they cannot detect producer drift.
 """
@@ -287,7 +287,7 @@ class BalanceFuseEntry(_Base):
 
     `position_breakdown` shape depends on the protocol (Morpho per-market or
     Aave V3 per-asset) and is intentionally untyped here — it is rendered
-    verbatim from _build_json_output.
+    verbatim from build_vault_info_json.
     """
 
     market: str

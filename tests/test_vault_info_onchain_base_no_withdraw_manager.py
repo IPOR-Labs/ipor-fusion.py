@@ -8,7 +8,7 @@ fetcher then queried ``getWithdrawWindow()`` on an address with no code, and the
 empty ``eth_call`` data failed ABI decoding (``InsufficientDataBytes``) — taking
 the whole ``vault info`` fetch down.
 
-Drives the real ``PlasmaVault`` event replay and ``_fetch_vault_data`` against
+Drives the real ``PlasmaVault`` event replay and ``fetch_vault_data`` against
 live chain data at a pinned block; assertions are on typed values. Only provider
 problems skip (missing, unreachable or non-archive ``BASE_PROVIDER_URL``) — the
 code under test runs unguarded, so a regression fails instead of skipping.
@@ -22,7 +22,7 @@ import pytest
 from web3 import Web3
 
 from ipor_fusion import PlasmaVault, Web3Context
-from ipor_fusion.cli.vault_fetcher import _fetch_vault_data
+from ipor_fusion.vault_data import fetch_vault_data
 
 VAULT = Web3.to_checksum_address("0x45aa96f0b3188D47a1DaFdbefCE1db6B37f58216")
 USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"  # BASE USDC (underlying)
@@ -49,7 +49,7 @@ def test_vault_without_withdraw_manager_fetches_on_real_base_vault():
     ctx, pv = _connect(url)
 
     withdraw_manager = pv.withdraw_manager_address()
-    data = _fetch_vault_data(ctx, pv, BLOCK, chain_id=CHAIN_ID)
+    data = fetch_vault_data(ctx, pv, BLOCK, chain_id=CHAIN_ID)
 
     # Sanity: confirm we are reading the expected vault at this block.
     assert data.vault_name == "IPOR USDC Lending Optimizer Base"

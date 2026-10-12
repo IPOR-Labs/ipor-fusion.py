@@ -31,6 +31,12 @@ from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import VaultLendingHealth
 from ipor_fusion.substrates import decode_substrate, format_market_label, market_name
 from ipor_fusion.types import Shares
+from ipor_fusion.vault_data import (
+    GET_MARKET_SUBSTRATES,
+    GET_PRICE_ORACLE_MIDDLEWARE,
+    GET_TOTAL_SUPPLY_CAP,
+    fetch_vault_data,
+)
 
 T = TypeVar("T")
 
@@ -49,12 +55,6 @@ Check = Literal[
     "erc20_cache_stale",
     "missing_price_feed",
 ]
-
-# Vault getters newer than some deployed vaults; a vault that predates one is
-# read in a degraded way and reports it in `VaultState.unimplemented_getters`.
-GET_MARKET_SUBSTRATES = "getMarketSubstrates(uint256)"
-GET_TOTAL_SUPPLY_CAP = "getTotalSupplyCap()"
-GET_PRICE_ORACLE_MIDDLEWARE = "getPriceOracleMiddleware()"
 
 _UNIMPLEMENTED_GETTER_IMPACT = {
     GET_MARKET_SUBSTRATES: (
@@ -79,7 +79,7 @@ class WithdrawQueue(Protocol):
 
 class UnpriceableToken(Protocol):
     """A token a balance fuse prices via the PriceOracleMiddleware, which
-    cannot price it (see the ``vault_unpriceable`` reader of the CLI)."""
+    cannot price it (see `ipor_fusion.readers.unpriceable`)."""
 
     @property
     def market_id(self) -> int: ...
@@ -278,14 +278,7 @@ def validate_vault(
     ``block_number`` defaults to ``ctx.default_block`` when that is a number,
     else the latest block; ``ctx`` itself is not modified. ``resolve_symbol``
     names ERC20 tokens in findings (default: their on-chain ``symbol()``).
-
-    The vault state is read by the CLI's vault fetcher, so this needs the
-    ``cli`` extra installed.
     """
-    # Debt: the fetch is still CLI-owned (and reads more than validation
-    # needs: roles, fees, pending requests); a public fetch API replaces this.
-    from ipor_fusion.cli.vault_fetcher import _fetch_vault_data
-
     if block_number is None:
         default = ctx.default_block
         block_number = default if isinstance(default, int) else None
@@ -300,7 +293,7 @@ def validate_vault(
     pinned.default_block = block_number
 
     plasma_vault = PlasmaVault(pinned, Web3.to_checksum_address(vault_address))
-    state = _fetch_vault_data(
+    state = fetch_vault_data(
         pinned, plasma_vault, block_number, chain_id=pinned.chain_id
     )
     markets = list(dict.fromkeys(bf.market_id for bf in state.balance_fuses))

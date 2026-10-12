@@ -26,7 +26,7 @@ from web3 import Web3
 from web3.providers.rpc import HTTPProvider
 
 from ipor_fusion import PlasmaVault, Web3Context, validate_vault
-from ipor_fusion.cli.vault_fetcher import _fetch_vault_data
+from ipor_fusion.vault_data import fetch_vault_data
 
 VAULT = Web3.to_checksum_address("0x7743931f74157C8aC65697660102555d40D09a77")
 CHAIN_ID = 8453
@@ -82,7 +82,7 @@ def test_fetch_stays_within_round_trip_budget():
             ctx = Web3Context.from_url(url)
             ctx.default_block = BLOCK
             methods.clear()
-            data = _fetch_vault_data(ctx, PlasmaVault(ctx, VAULT), BLOCK, CHAIN_ID)
+            data = fetch_vault_data(ctx, PlasmaVault(ctx, VAULT), BLOCK, CHAIN_ID)
     except Exception as exc:  # pylint: disable=broad-except
         pytest.skip(f"BASE on-chain read failed (provider missing/non-archive?): {exc}")
 

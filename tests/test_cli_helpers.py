@@ -13,16 +13,14 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
+from ipor_fusion import cache
+from ipor_fusion.cache import save_contract_cache
 from ipor_fusion.cli import config_store
-from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_contract_cache
+from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
 from ipor_fusion.cli.vault_cmd import (
     ADDRESS,
     CHAIN,
-    _build_dependency_graph_json,
-    _build_fees_json,
-    _build_share_price_json,
     _index_lending_health,
-    _partition_balance_fuses,
     _print_balance_fuses_table,
     _print_dependency_graph,
     _print_fees,
@@ -33,23 +31,6 @@ from ipor_fusion.cli.vault_cmd import (
     _print_substrates,
     _resolve_chain_id,
     _resolve_provider,
-)
-from ipor_fusion.cli.vault_fetcher import (
-    _collect_aave_substrate_assets,
-    _collect_breakdown_token_addresses,
-    _collect_morpho_substrates,
-    _FeeData,
-    _fetch_aave_pools,
-    _fetch_aave_positions,
-    _fetch_breakdown_token_prices,
-    _fetch_fee_data,
-    _fetch_morpho_positions,
-    _fuse_market_id_call,
-    _read_batch,
-    _resolve_token_symbol,
-    _safe_call,
-    _VaultData,
-    _WithdrawManagerData,
 )
 from ipor_fusion.cli.vault_health import (
     _print_erc20_balances,
@@ -80,6 +61,29 @@ from ipor_fusion.readers.morpho import MORPHO_BLUE_ADDRESSES, MorphoPositionBrea
 from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import Amount, MarketId, MorphoBlueMarketId
 from ipor_fusion.validation import Erc20Holdings
+from ipor_fusion.vault_data import (
+    FeeData,
+    VaultData,
+    WithdrawManagerData,
+    _collect_aave_substrate_assets,
+    _collect_breakdown_token_addresses,
+    _collect_morpho_substrates,
+    _fetch_aave_pools,
+    _fetch_aave_positions,
+    _fetch_breakdown_token_prices,
+    _fetch_fee_data,
+    _fetch_morpho_positions,
+    _fuse_market_id_call,
+    _read_batch,
+    _safe_call,
+    resolve_token_symbol,
+)
+from ipor_fusion.vault_info import (
+    _build_dependency_graph_json,
+    _build_fees_json,
+    _build_share_price_json,
+    _partition_balance_fuses,
+)
 
 VALID_ADDR_LOWER = "0x" + "ab" * 20
 VALID_ADDR_UPPER = "0x" + "AB" * 20
@@ -654,12 +658,10 @@ class TestResolveTokenSymbol:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
         monkeypatch.setattr(
-            config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
-        )
-        monkeypatch.setattr(
-            config_store,
+            cache,
             "DEPLOYMENT_CACHE_FILE",
             cache_dir / "deployment_cache.json",
         )
@@ -667,28 +669,28 @@ class TestResolveTokenSymbol:
     def test_returns_cached_symbol(self):
         save_contract_cache({"symbol:0xabc": "USDC"})
         ctx = MagicMock()
-        assert _resolve_token_symbol(ctx, "0xabc") == "USDC"
+        assert resolve_token_symbol(ctx, "0xabc") == "USDC"
 
     def test_returns_no_contract_for_eoa(self):
         ctx = MagicMock()
         ctx.web3.eth.get_code.return_value = b""
-        result = _resolve_token_symbol(ctx, "0x" + "ab" * 20)
+        result = resolve_token_symbol(ctx, "0x" + "ab" * 20)
         assert result == "no contract"
 
-    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
+    @patch("ipor_fusion.vault_data.ERC20")
     def test_fetches_symbol_from_chain(self, mock_erc20_cls):
         ctx = MagicMock()
         ctx.web3.eth.get_code.return_value = b"\x01"
         mock_erc20_cls.return_value.symbol.return_value.call.return_value = "WETH"
-        result = _resolve_token_symbol(ctx, "0x" + "ab" * 20)
+        result = resolve_token_symbol(ctx, "0x" + "ab" * 20)
         assert result == "WETH"
 
-    @patch("ipor_fusion.cli.vault_fetcher.ERC20")
+    @patch("ipor_fusion.vault_data.ERC20")
     def test_returns_empty_on_symbol_error(self, mock_erc20_cls):
         ctx = MagicMock()
         ctx.web3.eth.get_code.return_value = b"\x01"
         mock_erc20_cls.return_value.symbol.side_effect = RuntimeError("revert")
-        result = _resolve_token_symbol(ctx, "0x" + "ab" * 20)
+        result = resolve_token_symbol(ctx, "0x" + "ab" * 20)
         assert result == ""
 
 
@@ -710,12 +712,10 @@ class TestPrintErc20Balances:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
         monkeypatch.setattr(
-            config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
-        )
-        monkeypatch.setattr(
-            config_store,
+            cache,
             "DEPLOYMENT_CACHE_FILE",
             cache_dir / "deployment_cache.json",
         )
@@ -723,7 +723,7 @@ class TestPrintErc20Balances:
     def test_no_erc20_market(self, capsys):
         ctx = MagicMock()
         pv = MagicMock()
-        data = _VaultData(
+        data = VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -747,7 +747,7 @@ class TestPrintErc20Balances:
         captured = capsys.readouterr()
         assert "(no ERC20_VAULT_BALANCE market)" in captured.out
 
-    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.cli.vault_health.resolve_token_symbol", return_value="USDC")
     @patch("ipor_fusion.validation.price_oracle_middleware")
     @patch("ipor_fusion.validation.ERC20")
     def test_with_erc20_tokens(
@@ -770,7 +770,7 @@ class TestPrintErc20Balances:
             mock_price
         )
 
-        data = _VaultData(
+        data = VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -800,7 +800,7 @@ class TestPrintErc20Balances:
         assert "USDC" in captured.out
         assert "$1.00" in captured.out
 
-    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="?")
+    @patch("ipor_fusion.cli.vault_health.resolve_token_symbol", return_value="?")
     @patch("ipor_fusion.validation.price_oracle_middleware")
     @patch("ipor_fusion.validation.ERC20")
     def test_with_error_balances(
@@ -820,7 +820,7 @@ class TestPrintErc20Balances:
             ContractLogicError("fail")
         )
 
-        data = _VaultData(
+        data = VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -855,7 +855,7 @@ class TestPrintErc20Balances:
         pv = MagicMock()
         pv.address = ADDR_1
 
-        data = _VaultData(
+        data = VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -904,18 +904,16 @@ class TestUnderlyingOnVault:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
         monkeypatch.setattr(
-            config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
-        )
-        monkeypatch.setattr(
-            config_store,
+            cache,
             "DEPLOYMENT_CACHE_FILE",
             cache_dir / "deployment_cache.json",
         )
 
     def _make_data(self, balance_fuses, underlying_balance_on_vault=0):
-        return _VaultData(
+        return VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1006,12 +1004,10 @@ class TestPrintSubstrates:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
         monkeypatch.setattr(
-            config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
-        )
-        monkeypatch.setattr(
-            config_store,
+            cache,
             "DEPLOYMENT_CACHE_FILE",
             cache_dir / "deployment_cache.json",
         )
@@ -1024,7 +1020,7 @@ class TestPrintSubstrates:
         assert "(none)" in captured.out
 
     @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="TestContract")
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol", return_value="WETH")
     def test_with_substrates(self, mock_resolve, mock_get_name, capsys):
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
         _print_substrates(
@@ -1124,7 +1120,7 @@ class TestAddressTypeChecksumException:
 
 class TestPrintReconciliation:
     def test_within_threshold(self, capsys):
-        data = _VaultData(
+        data = VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1159,7 +1155,7 @@ class TestPrintReconciliation:
         assert "MISMATCH" not in captured.out
 
     def test_mismatch_over_1pct(self, capsys):
-        data = _VaultData(
+        data = VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1197,17 +1193,15 @@ class TestErc20BalancesNotes:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
+        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
         monkeypatch.setattr(
-            config_store, "CACHE_FILE", cache_dir / "contract_cache.json"
-        )
-        monkeypatch.setattr(
-            config_store,
+            cache,
             "DEPLOYMENT_CACHE_FILE",
             cache_dir / "deployment_cache.json",
         )
 
-    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="TKN")
+    @patch("ipor_fusion.cli.vault_health.resolve_token_symbol", return_value="TKN")
     @patch("ipor_fusion.validation.price_oracle_middleware")
     @patch("ipor_fusion.validation.ERC20")
     def test_balance_zero_note(
@@ -1230,7 +1224,7 @@ class TestErc20BalancesNotes:
             mock_price
         )
 
-        data = _VaultData(
+        data = VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1261,7 +1255,7 @@ class TestErc20BalancesNotes:
         assert "balance=0" in captured.out
         assert erc20.value_in_asset == 0
 
-    @patch("ipor_fusion.cli.vault_health._resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.cli.vault_health.resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.validation.price_oracle_middleware")
     @patch("ipor_fusion.validation.ERC20")
     def test_underlying_and_stale_notes(
@@ -1289,7 +1283,7 @@ class TestErc20BalancesNotes:
             mock_price
         )
 
-        data = _VaultData(
+        data = VaultData(
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1352,7 +1346,7 @@ def _make_data(**overrides):
         "lending_health": None,
     }
     defaults.update(overrides)
-    return _VaultData(**defaults)
+    return VaultData(**defaults)
 
 
 class TestHealthCheck:
@@ -1534,8 +1528,8 @@ class TestPrintLendingPositionBreakdown:
         captured = capsys.readouterr()
         assert "no lending positions" in captured.out
 
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=18)
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=18)
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
     def test_morpho_breakdown_renders_three_lines(self, _mock_sym, _mock_dec, capsys):
         data = _make_data(morpho_positions={14: [_morpho_breakdown()]})
         _print_lending_health(MagicMock(), data)
@@ -1546,8 +1540,8 @@ class TestPrintLendingPositionBreakdown:
         assert "Borrow:" in captured.out
         assert "Supply:" in captured.out
 
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="USDC")
     def test_aave_breakdown_omits_zero_stable_debt(self, _mock_sym, _mock_dec, capsys):
         data = _make_data(
             aave_positions={
@@ -1561,8 +1555,8 @@ class TestPrintLendingPositionBreakdown:
         assert "Variable Debt:" in captured.out
         assert "Stable Debt:" not in captured.out
 
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="USDC")
     def test_aave_breakdown_includes_stable_debt_when_nonzero(
         self, _mock_sym, _mock_dec, capsys
     ):
@@ -1640,9 +1634,9 @@ class TestInlineHealth:
         out = capsys.readouterr().out
         assert "CRITICAL" in out
 
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol")
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=18)
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol")
+    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=18)
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
     def test_morpho_market_renders_inline_health(
         self, _mock_fetcher_sym, _mock_dec, mock_cmd_sym, capsys
     ):
@@ -1667,9 +1661,9 @@ class TestInlineHealth:
         assert "Health Factor:" in out
         assert "Status:" in out
 
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_fetcher._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="USDC")
     def test_aave_market_renders_inline_health_after_assets(
         self, _mock_f_sym, _mock_dec, _mock_cmd_sym, capsys
     ):
@@ -1688,7 +1682,7 @@ class TestInlineHealth:
         assert out.count("LTV:") == 1
 
 
-# ── vault_fetcher Aave / Morpho substrate collectors and fetchers ──────
+# ── vault_data Aave / Morpho substrate collectors and fetchers ──────
 
 
 class TestFetcherCollectors:
@@ -1814,7 +1808,7 @@ class TestFetchAavePools:
 class TestFetchAavePositions:
     _ASSET_SUBSTRATE = bytes(12) + bytes.fromhex("22" * 20)
 
-    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    @patch("ipor_fusion.vault_data.AaveV3Reader")
     def test_returns_none_when_no_pool_resolved(self, mock_reader_cls):
         with ThreadPoolExecutor() as pool:
             result = _fetch_aave_positions(
@@ -1823,7 +1817,7 @@ class TestFetchAavePositions:
         assert result is None
         mock_reader_cls.assert_not_called()
 
-    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    @patch("ipor_fusion.vault_data.AaveV3Reader")
     def test_returns_none_when_no_aave_substrates(self, _mock_reader_cls):
         with ThreadPoolExecutor() as pool:
             result = _fetch_aave_positions(
@@ -1831,7 +1825,7 @@ class TestFetchAavePositions:
             )
         assert result is None
 
-    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    @patch("ipor_fusion.vault_data.AaveV3Reader")
     def test_drops_empty_breakdowns(self, mock_reader_cls):
         mock_reader = MagicMock()
         mock_reader.position_breakdown.return_value = _aave_breakdown(
@@ -1849,7 +1843,7 @@ class TestFetchAavePositions:
             )
         assert result is None
 
-    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    @patch("ipor_fusion.vault_data.AaveV3Reader")
     def test_returns_breakdowns_for_active_positions(self, mock_reader_cls):
         mock_reader = MagicMock()
         mock_reader.position_breakdown.return_value = _aave_breakdown(supply=42)
@@ -1865,7 +1859,7 @@ class TestFetchAavePositions:
             )
         assert result == {1: [_aave_breakdown(supply=42)]}
 
-    @patch("ipor_fusion.cli.vault_fetcher.AaveV3Reader")
+    @patch("ipor_fusion.vault_data.AaveV3Reader")
     def test_reads_each_market_from_its_own_pool(self, mock_reader_cls):
         """Markets granting the same assets still hold separate positions: each
         breakdown comes from that market's Pool, never another market's."""
@@ -1892,13 +1886,13 @@ class TestFetchAavePositions:
 
 
 class TestFetchMorphoPositions:
-    @patch("ipor_fusion.cli.vault_fetcher.MorphoReader")
+    @patch("ipor_fusion.vault_data.MorphoReader")
     def test_returns_none_when_no_morpho_substrates(self, _mock_reader_cls):
         with ThreadPoolExecutor() as pool:
             result = _fetch_morpho_positions(MagicMock(), pool, _VAULT_ADDR, {})
         assert result is None
 
-    @patch("ipor_fusion.cli.vault_fetcher.MorphoReader")
+    @patch("ipor_fusion.vault_data.MorphoReader")
     def test_returns_breakdowns_for_morpho_substrates(self, mock_reader_cls):
         mock_reader = MagicMock()
         mock_reader.position_breakdown.return_value = _morpho_breakdown()
@@ -1951,10 +1945,10 @@ class TestBreakdownTokenPrices:
 
 
 class TestBreakdownAmountJson:
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.vault_info.resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.vault_info.resolve_token_symbol", return_value="USDC")
     def test_includes_symbol_decimals_formatted_and_usd(self, _sym, _dec):
-        from ipor_fusion.cli.vault_cmd import (
+        from ipor_fusion.vault_info import (
             _build_breakdown_amount_json,
         )
 
@@ -1969,10 +1963,10 @@ class TestBreakdownAmountJson:
         assert entry["formatted"] == "1.0"
         assert entry["usd"] == 1.0
 
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.vault_info.resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.vault_info.resolve_token_symbol", return_value="USDC")
     def test_omits_usd_when_no_price(self, _sym, _dec):
-        from ipor_fusion.cli.vault_cmd import (
+        from ipor_fusion.vault_info import (
             _build_breakdown_amount_json,
         )
 
@@ -1982,8 +1976,8 @@ class TestBreakdownAmountJson:
 
 
 class TestFormatTokenAmountUsd:
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.cli.vault_cmd.resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol", return_value="USDC")
     def test_appends_usd_when_price_known(self, _sym, _dec):
         from ipor_fusion.cli.vault_cmd import (
             _format_token_amount,
@@ -1994,8 +1988,8 @@ class TestFormatTokenAmountUsd:
         assert "1.0 USDC" in out
         assert "$1.00" in out
 
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_cmd._resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.cli.vault_cmd.resolve_token_decimals", return_value=6)
+    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol", return_value="USDC")
     def test_no_usd_suffix_when_price_missing(self, _sym, _dec):
         from ipor_fusion.cli.vault_cmd import (
             _format_token_amount,
@@ -2016,7 +2010,7 @@ class TestPrintPendingRequests:
     def test_empty_pending_requests(self, capsys):
         data = _make_data(
             withdraw_manager=ADDR_1,
-            withdraw_manager_data=_WithdrawManagerData(
+            withdraw_manager_data=WithdrawManagerData(
                 withdraw_window=86400,
                 request_fee=0,
                 withdraw_fee=0,
@@ -2216,8 +2210,8 @@ class TestPartitionBalanceFuses:
         assert zero_balance == []
 
 
-def _fee_vault_data(**overrides) -> _VaultData:
-    """Minimal _VaultData for exercising the fees JSON builder."""
+def _fee_vault_data(**overrides) -> VaultData:
+    """Minimal VaultData for exercising the fees JSON builder."""
     base = {
         "block_number": 1,
         "is_latest": True,
@@ -2238,7 +2232,7 @@ def _fee_vault_data(**overrides) -> _VaultData:
         "balance_fuses": [],
         "instant_fuses": [],
     }
-    return _VaultData(**{**base, **overrides})
+    return VaultData(**{**base, **overrides})
 
 
 class TestBuildFeesJson:
@@ -2248,7 +2242,7 @@ class TestBuildFeesJson:
     def test_exit_fees_are_null_without_a_withdraw_manager(self):
         # Every key stays present so a consumer can tell "no withdraw manager"
         # from "the field was never emitted".
-        fees = _build_fees_json(_fee_vault_data(fee_data=_FeeData()))
+        fees = _build_fees_json(_fee_vault_data(fee_data=FeeData()))
         assert fees is not None
         assert fees["request_fee_percent"] is None
         assert fees["withdraw_fee_wad"] is None
@@ -2258,7 +2252,7 @@ class TestBuildFeesJson:
         # Old FeeManagers revert on getDepositFee / the high-water mark; the
         # fetcher turns that into None and the section must still build.
         fees = _build_fees_json(
-            _fee_vault_data(fee_data=_FeeData(performance_fee_vault_bps=1000))
+            _fee_vault_data(fee_data=FeeData(performance_fee_vault_bps=1000))
         )
         assert fees is not None
         assert fees["deposit_fee_percent"] is None
@@ -2270,12 +2264,12 @@ class TestBuildFeesJson:
         # the same percent unit — the trap this section has to get right.
         fees = _build_fees_json(
             _fee_vault_data(
-                fee_data=_FeeData(
+                fee_data=FeeData(
                     deposit_fee_wad=5 * 10**15,
                     performance_fee_vault_bps=1250,
                     management_fee_vault_bps=50,
                 ),
-                withdraw_manager_data=_WithdrawManagerData(
+                withdraw_manager_data=WithdrawManagerData(
                     withdraw_window=0,
                     request_fee=10**15,
                     withdraw_fee=2 * 10**15,
@@ -2297,8 +2291,8 @@ class TestBuildFeesJson:
         # read null, or "free exit" and "unknown" become indistinguishable.
         fees = _build_fees_json(
             _fee_vault_data(
-                fee_data=_FeeData(),
-                withdraw_manager_data=_WithdrawManagerData(
+                fee_data=FeeData(),
+                withdraw_manager_data=WithdrawManagerData(
                     withdraw_window=0,
                     request_fee=None,
                     withdraw_fee=0,
@@ -2319,7 +2313,7 @@ class TestBuildFeesJson:
         # shares must fall short of the total by exactly the DAO's cut.
         fees = _build_fees_json(
             _fee_vault_data(
-                fee_data=_FeeData(
+                fee_data=FeeData(
                     performance_fee_manager_bps=1000,
                     performance_fee_recipients=[
                         RecipientFee(recipient=ADDR_1, fee_value=600),
@@ -2338,7 +2332,7 @@ class TestBuildFeesJson:
         fees = _build_fees_json(
             _fee_vault_data(
                 asset_price_usd=2.0,
-                fee_data=_FeeData(unrealized_management_fee=3 * 10**6),
+                fee_data=FeeData(unrealized_management_fee=3 * 10**6),
             )
         )
         assert fees is not None
@@ -2353,26 +2347,26 @@ class TestPrintFees:
     def test_tiny_fee_is_not_shown_as_zero(self, capsys):
         # 1e12 WAD is 0.0001% — below that, four decimals would print
         # 0.0000% and a real fee would look like no fee at all.
-        _print_fees(_fee_vault_data(fee_data=_FeeData(deposit_fee_wad=10**11)))
+        _print_fees(_fee_vault_data(fee_data=FeeData(deposit_fee_wad=10**11)))
         out = capsys.readouterr().out
         assert "Onboarding Contribution (depositFee): <0.0001%" in out
 
     def test_smallest_possible_fee_is_not_shown_as_zero(self, capsys):
         # 1 wei of WAD is absurd but representable; the percent conversion
         # must not round it away, or "<0.0001%" degrades back to "0.0000%".
-        _print_fees(_fee_vault_data(fee_data=_FeeData(deposit_fee_wad=1)))
+        _print_fees(_fee_vault_data(fee_data=FeeData(deposit_fee_wad=1)))
         out = capsys.readouterr().out
         assert "Onboarding Contribution (depositFee): <0.0001%" in out
 
     def test_zero_fee_still_reads_zero(self, capsys):
-        _print_fees(_fee_vault_data(fee_data=_FeeData(deposit_fee_wad=0)))
+        _print_fees(_fee_vault_data(fee_data=FeeData(deposit_fee_wad=0)))
         out = capsys.readouterr().out
         assert "Onboarding Contribution (depositFee): 0.0000%" in out
 
     def test_never_updated_high_water_mark_says_so(self, capsys):
         _print_fees(
             _fee_vault_data(
-                fee_data=_FeeData(
+                fee_data=FeeData(
                     high_water_mark=HighWaterMarkPerformanceFee(
                         high_water_mark=10**18, last_update=0, update_interval=86400
                     )
@@ -2386,7 +2380,7 @@ class TestPrintFees:
         # that disagrees is a misconfiguration and must be visible.
         _print_fees(
             _fee_vault_data(
-                fee_data=_FeeData(
+                fee_data=FeeData(
                     performance_fee_vault_bps=1000, performance_fee_manager_bps=1500
                 )
             )
@@ -2403,7 +2397,7 @@ class TestPrintFees:
         # would report a partial fetch as a misconfiguration.
         _print_fees(
             _fee_vault_data(
-                fee_data=_FeeData(
+                fee_data=FeeData(
                     performance_fee_vault_bps=None, performance_fee_manager_bps=1500
                 )
             )
@@ -2415,7 +2409,7 @@ class TestPrintFees:
     def test_quiet_when_totals_agree(self, capsys):
         _print_fees(
             _fee_vault_data(
-                fee_data=_FeeData(
+                fee_data=FeeData(
                     performance_fee_vault_bps=1000, performance_fee_manager_bps=1000
                 )
             )
@@ -2450,7 +2444,7 @@ class TestFetchFeeData:
             raise DecodingError("Tried to read 32 bytes, only got 0 bytes.")
 
         with (
-            patch("ipor_fusion.cli.vault_fetcher.FeeAccount") as account_cls,
+            patch("ipor_fusion.vault_data.FeeAccount") as account_cls,
         ):
             account_cls.return_value.fee_manager.return_value.call = empty_return
             result = _fetch_fee_data(MagicMock(), vault)
@@ -2469,8 +2463,8 @@ class TestFetchFeeData:
             raise ContractLogicError("execution reverted")
 
         with (
-            patch("ipor_fusion.cli.vault_fetcher.FeeAccount") as account_cls,
-            patch("ipor_fusion.cli.vault_fetcher.FeeManager") as manager_cls,
+            patch("ipor_fusion.vault_data.FeeAccount") as account_cls,
+            patch("ipor_fusion.vault_data.FeeManager") as manager_cls,
         ):
             account_cls.return_value.fee_manager.return_value.call.return_value = ADDR_2
             manager = manager_cls.return_value

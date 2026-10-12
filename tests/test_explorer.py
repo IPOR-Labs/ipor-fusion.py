@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ipor_fusion.cli import config_store
-from ipor_fusion.cli.explorer import (
+from ipor_fusion import cache
+from ipor_fusion.explorer import (
     _fetch_contract_creation_tx,
     _fetch_contract_name,
     _fetch_getsourcecode,
@@ -15,12 +15,9 @@ from ipor_fusion.cli.explorer import (
 
 @pytest.fixture(autouse=True)
 def _patch_paths(tmp_path, monkeypatch):
-    config_dir = tmp_path / ".fusion"
     cache_dir = tmp_path / ".cache"
-    monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
-    monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-    monkeypatch.setattr(config_store, "CACHE_DIR", cache_dir)
-    monkeypatch.setattr(config_store, "CACHE_FILE", cache_dir / "contract_cache.json")
+    monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
 
 
 def _mock_urlopen(response_data: bytes):
@@ -40,13 +37,13 @@ class TestGetContractName:
             json.dumps(cache), encoding="utf-8"
         )
 
-        with patch("ipor_fusion.cli.explorer.urlopen") as mock_url:
+        with patch("ipor_fusion.explorer.urlopen") as mock_url:
             result = get_contract_name(1, "0xABC", api_key="key123")
 
         assert result == "MyToken"
         mock_url.assert_not_called()
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_fetches_and_caches(self, mock_urlopen_fn, tmp_path):
         response = {
             "status": "1",
@@ -82,7 +79,7 @@ class TestFetchContractName:
         result = _fetch_contract_name(1, "0xABC", api_key=None)
         assert result is None
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_network_error_returns_none(self, mock_urlopen_fn):
         mock_urlopen_fn.side_effect = OSError("connection refused")
 
@@ -90,7 +87,7 @@ class TestFetchContractName:
 
         assert result is None
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_invalid_json_returns_none(self, mock_urlopen_fn):
         mock_resp = _mock_urlopen(b"not valid json {{{")
         mock_urlopen_fn.return_value = mock_resp
@@ -99,7 +96,7 @@ class TestFetchContractName:
 
         assert result is None
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_status_not_one_returns_none(self, mock_urlopen_fn):
         response = {"status": "0", "result": []}
         mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
@@ -108,7 +105,7 @@ class TestFetchContractName:
 
         assert result is None
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_empty_contract_name_returns_none(self, mock_urlopen_fn):
         response = {"status": "1", "result": [{"ContractName": ""}]}
         mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
@@ -125,7 +122,7 @@ class TestFetchGetSourceCode:
     def test_no_api_key_returns_none(self):
         assert _fetch_getsourcecode(1, "0xABC", api_key=None) is None
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_returns_full_result_dict(self, mock_urlopen_fn):
         response = {
             "status": "1",
@@ -139,7 +136,7 @@ class TestFetchGetSourceCode:
         assert result["ContractName"] == "PlasmaVault"
         assert result["CompilerVersion"] == "v0.8.20"
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_network_error_returns_none(self, mock_urlopen_fn):
         mock_urlopen_fn.side_effect = OSError("connection refused")
         assert _fetch_getsourcecode(1, "0xABC", api_key="key123") is None
@@ -156,7 +153,7 @@ class TestFetchContractCreationTx:
         assert tx is None
         assert err == "no-api-key"
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_paid_tier_required(self, mock_urlopen_fn):
         response = {
             "status": "0",
@@ -171,7 +168,7 @@ class TestFetchContractCreationTx:
         assert tx is None
         assert err == "etherscan-paid-tier-required"
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_no_data_found_is_not_an_error(self, mock_urlopen_fn):
         response = {"status": "0", "message": "No data found", "result": []}
         mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
@@ -179,7 +176,7 @@ class TestFetchContractCreationTx:
         assert tx is None
         assert err is None
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_success_returns_tx_hash(self, mock_urlopen_fn):
         response = {
             "status": "1",
@@ -190,7 +187,7 @@ class TestFetchContractCreationTx:
         assert tx == "0xdeadbeef"
         assert err is None
 
-    @patch("ipor_fusion.cli.explorer.urlopen")
+    @patch("ipor_fusion.explorer.urlopen")
     def test_network_error(self, mock_urlopen_fn):
         mock_urlopen_fn.side_effect = OSError("connection refused")
         tx, err = _fetch_contract_creation_tx(1, "0xABC", api_key="key123")

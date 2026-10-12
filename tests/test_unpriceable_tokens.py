@@ -6,13 +6,13 @@ from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
-from ipor_fusion.cli import vault_unpriceable
-from ipor_fusion.cli.vault_unpriceable import (
+from ipor_fusion.core.plasma_vault import BalanceFuse
+from ipor_fusion.market_ids import IporFusionMarkets
+from ipor_fusion.readers import unpriceable
+from ipor_fusion.readers.unpriceable import (
     MiddlewarePricedToken,
     fetch_unpriceable_priced_tokens,
 )
-from ipor_fusion.core.plasma_vault import BalanceFuse
-from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import MarketId
 from ipor_fusion.validation import _unpriceable_token_findings
 
@@ -72,7 +72,7 @@ def _oracle_answers(sources: dict[str, str], priced: set[str]):
 @pytest.fixture
 def chain(monkeypatch):
     _FakeMulticall.answers = {}
-    monkeypatch.setattr(vault_unpriceable, "Multicall3", _FakeMulticall)
+    monkeypatch.setattr(unpriceable, "Multicall3", _FakeMulticall)
     ctx = MagicMock()
     ctx.web3.eth.get_code.return_value = b"\x60\x80"
     return SimpleNamespace(ctx=ctx, answers=_FakeMulticall.answers)
@@ -157,7 +157,7 @@ class TestFetch:
         ]
 
     def test_get_silos_decodes_both_silos(self, chain):
-        call = vault_unpriceable._silos_call(chain.ctx, SILO_CONFIG)
+        call = unpriceable._silos_call(chain.ctx, SILO_CONFIG)
         raw = encode(["address", "address"], [SILO_0, SILO_1])
         assert call.decode(raw) == [SILO_0, SILO_1]
 

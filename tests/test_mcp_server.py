@@ -676,7 +676,7 @@ class TestVaultInfoGuards:
             vault_info(vault_address=VAULT_ADDR, chain_id=1)
 
     @patch(
-        "ipor_fusion.mcp.server._fetch_vault_data",
+        "ipor_fusion.mcp.server.fetch_vault_data",
         side_effect=RuntimeError("some sub-call failed"),
     )
     @patch("ipor_fusion.mcp.server.resolve_access_manager")
