@@ -119,6 +119,46 @@ def test_an_unknown_topic_is_none_and_a_malformed_listed_one_raises():
         decode_external_state_event(dict(good, topics=good["topics"] + [b"\x00" * 32]))
 
 
+@pytest.mark.parametrize(
+    ("change", "match"),
+    [
+        ({"data": "0xzz"}, "invalid hex"),
+        ({"data": "00" * 32}, "without 0x prefix"),
+        ({"data": 32}, "unsupported type int"),
+        ({"data": None}, "unsupported type NoneType"),
+        ({"blockNumber": "0xzz"}, "invalid quantity"),
+        ({"logIndex": True}, "boolean"),
+        ({"logIndex": 2.0}, "unsupported quantity"),
+    ],
+)
+def test_a_recognized_topic_with_malformed_parts_raises_the_declared_error(
+    change, match
+):
+    log = dict(_log("ExternalStateAssetRescued", (SIGNER,)), **change)
+    with pytest.raises(ExternalStateEventDecodeError, match=match):
+        decode_external_state_event(log)
+
+
+def test_missing_data_on_a_recognized_topic_raises():
+    log = _log("ExternalStateAssetRescued", (SIGNER,))
+    del log["data"]
+    with pytest.raises(ExternalStateEventDecodeError, match="no data"):
+        decode_external_state_event(log)
+
+
+def test_an_unrecognizable_topic_is_simply_not_ours():
+    assert (
+        decode_external_state_event({"address": VAULT, "topics": [12345], "data": 32})
+        is None
+    )
+    assert (
+        decode_external_state_event(
+            {"address": VAULT, "topics": ["0xzz"], "data": "0x"}
+        )
+        is None
+    )
+
+
 def test_both_executor_events_are_distinct_facts():
     created = decode_external_state_event(_log("ExecutorCreated", (SIGNER, 50)))
     deployed = decode_external_state_event(
@@ -155,3 +195,30 @@ def test_a_receipt_yields_its_events_in_log_order():
         "ExternalStateBalanceFuseLastTotalBalanceUpdated",
         "ExternalStateBigChangeDetected",
     ]
+
+
+def test_a_full_raw_json_rpc_log_decodes_to_typed_identity():
+    """Every field as JSON-RPC or the indexer serves it: hex topic, data, hash
+    and quantities — the typed result has int identity."""
+    spec = next(
+        s for s in EXTERNAL_STATE_EVENT_SPECS if s.name == "ExternalStateAssetRescued"
+    )
+    raw = {
+        "address": VAULT.lower(),
+        "topics": ["0x" + spec.topic.hex()],
+        "data": "0x" + encode(["address"], [SIGNER]).hex(),
+        "blockNumber": "0x2dc1a73",
+        "transactionHash": "0x" + "fb" * 32,
+        "logIndex": "0x2",
+    }
+    event = decode_external_state_event(raw)
+    assert event is not None
+    assert event.args == {"asset": Web3.to_checksum_address(SIGNER)}
+    assert (event.block_number, event.log_index) == (0x2DC1A73, 2)
+    assert isinstance(event.block_number, int) and isinstance(event.log_index, int)
+    assert event.transaction_hash == "0x" + "fb" * 32 and event.emitter == VAULT
+
+
+def test_a_valid_unlisted_hex_topic_is_none():
+    raw = {"address": VAULT, "topics": ["0x" + "11" * 32], "data": "0x"}
+    assert decode_external_state_event(raw) is None
