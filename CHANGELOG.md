@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v3.11.2 (2026-10-12)
+
+### Bug Fixes
+
+- **sdk**: Read blocks whose extraData exceeds 32 bytes
+  ([`317e9b7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/317e9b7839fcc1226182151d616010af4bb931ce))
+
+- **sdk**: The ExternalState decoder normalizes raw JSON-RPC and indexer input and rejects coercions
+  ([`827f560`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/827f560fbacc34e7a5de21432a5645adfc55f7e9))
+
+### Testing
+
+- **sdk**: The full raw JSON-RPC log and the unlisted hex topic regressions
+  ([`1305888`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/13058881797711a7bbdd57720de87d533032503f))
+
+
 ## v3.11.1 (2026-10-12)
 
 ### Bug Fixes
