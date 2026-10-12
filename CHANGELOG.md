@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.12.0 (2026-10-12)
+
+### Features
+
+- **sdk**: Public vault validation API and fusion vault validate
+  ([`534d1df`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/534d1dff528a60a35ffec992a03a2b4adb59c161))
+
+### Testing
+
+- **cli**: Pin fusion vault info text and JSON output on recorded fixtures
+  ([`8b879f9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8b879f964cbe04bf7225e5eead5e5bce66a1a106))
+
+
 ## v3.11.2 (2026-10-12)
 
 ### Bug Fixes
