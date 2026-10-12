@@ -5,9 +5,12 @@ from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.types import LogReceipt
 
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.types import Price
 
 
@@ -50,6 +53,11 @@ class PriceOracleMiddleware(ContractWrapper):
             decoder=partial(_price_decoder, asset_address),
         )
 
+    def base_currency_decimals(self) -> Call[int]:
+        """Decimals of every ``getAssetPrice`` answer. Only the middleware
+        deployed before the August 2024 audit has this getter."""
+        return self._view("BASE_CURRENCY_DECIMALS()", output_types=["uint256"])
+
     # ── Compound method: event replay ──────────────────────────────────────
 
     def get_assets_price_sources(self) -> list[AssetPriceSource]:
@@ -74,6 +82,44 @@ class PriceOracleMiddleware(ContractWrapper):
                 contract_address=self._address, topics=[event_signature_hash]
             )
         )
+
+
+class LegacyPriceOracleMiddleware(PriceOracleMiddleware):
+    """The middleware deployed before the August 2024 audit: ``getAssetPrice``
+    returns the price alone, in ``BASE_CURRENCY_DECIMALS()``, instead of
+    ``(price, decimals)``."""
+
+    def __init__(
+        self, ctx: Web3Context, address: ChecksumAddress, base_currency_decimals: int
+    ):
+        super().__init__(ctx, address)
+        self._base_currency_decimals = base_currency_decimals
+
+    def get_asset_price(self, asset_address: ChecksumAddress) -> Call[Price]:
+        return self._view(
+            "getAssetPrice(address)",
+            asset_address,
+            output_types=["uint256"],
+            decoder=lambda amount: Price(
+                asset=asset_address,
+                amount=amount,
+                decimals=self._base_currency_decimals,
+            ),
+        )
+
+
+def price_oracle_middleware(
+    ctx: Web3Context, address: ChecksumAddress
+) -> PriceOracleMiddleware:
+    """Wrapper for the price oracle at ``address`` that decodes its
+    ``getAssetPrice``: the legacy one when the oracle answers
+    ``BASE_CURRENCY_DECIMALS()`` at ``ctx.default_block``."""
+    oracle = PriceOracleMiddleware(ctx, address)
+    try:
+        decimals = oracle.base_currency_decimals().call()
+    except (EmptyCallResultError, ContractLogicError):
+        return oracle
+    return LegacyPriceOracleMiddleware(ctx, address, decimals)
 
 
 class PriceOracleMiddlewareManager(ContractWrapper):

@@ -64,6 +64,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from functools import cached_property
 from typing import Any
 
 from eth_abi import decode
@@ -73,7 +74,11 @@ from web3 import Web3
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.oracle import PriceOracleMiddleware, PriceOracleMiddlewareManager
+from ipor_fusion.core.oracle import (
+    PriceOracleMiddleware,
+    PriceOracleMiddlewareManager,
+    price_oracle_middleware,
+)
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.types import AssetSource, MappingStatus, NodeStatus, Price
 
@@ -282,6 +287,12 @@ class OracleMappingReader:
         self._oracle = PriceOracleMiddleware(ctx, oracle)
         self._manager = PriceOracleMiddlewareManager(ctx, oracle)
 
+    @cached_property
+    def _pricing_oracle(self) -> PriceOracleMiddleware:
+        """The oracle wrapper matching its ``getAssetPrice`` ABI; probed on
+        first use, since most readers in a mapping never read a price."""
+        return price_oracle_middleware(self._ctx, self._oracle_addr)
+
     @staticmethod
     def _safe(call: Call[Any]) -> Any:
         try:
@@ -313,7 +324,10 @@ class OracleMappingReader:
         return self._safe(self._oracle.get_source_of_asset_price(asset))
 
     def asset_price(self, asset: ChecksumAddress) -> Price | None:
-        return self._safe(self._oracle.get_asset_price(asset))
+        try:
+            return self._pricing_oracle.get_asset_price(asset).call()
+        except Exception:
+            return None
 
     # -- oracle variant probes ---------------------------------------------
     def underlying_middleware(self) -> ChecksumAddress | None:

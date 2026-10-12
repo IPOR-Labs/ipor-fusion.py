@@ -20,7 +20,7 @@ from web3.types import ChecksumAddress
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
-from ipor_fusion.core.oracle import PriceOracleMiddleware
+from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import AAVE_V3_MARKET_IDS
@@ -295,7 +295,7 @@ def fetch_unpriceable_priced_tokens(
     ]
     if not priced:
         return []
-    oracle = PriceOracleMiddleware(ctx, Web3.to_checksum_address(oracle_address))
+    oracle = price_oracle_middleware(ctx, Web3.to_checksum_address(oracle_address))
     unpriceable = _unpriceable(ctx, oracle, (p.token for p in priced))
     flagged = {
         (p.market_id, p.token, p.via): replace(p, price_source=unpriceable[p.token])

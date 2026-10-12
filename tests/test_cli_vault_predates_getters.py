@@ -71,7 +71,6 @@ _COMMON: dict[str, Response] = {
     "getRewardsClaimManagerAddress()": _address("0x" + "00" * 20),
     "balanceOf(address)": _uint(5),
     "symbol()": encode(["string"], ["USDC"]),
-    "getAssetPrice(address)": encode(["uint256", "uint256"], [10**8, 8]),
     "MARKET_ID()": _uint(1),
     "getDependencyBalanceGraph(uint256)": encode(["uint256[]"], [[]]),
 }
@@ -83,6 +82,10 @@ PRE_AUDIT: dict[str, Response] = {
     GET_PRICE_ORACLE_MIDDLEWARE: b"",
     "getPriceOracle()": _address(LEGACY_ORACLE),
     GET_MARKET_SUBSTRATES: b"",
+    # The pre-audit middleware returns the price alone, in its base currency
+    # decimals, where the current one returns (price, decimals).
+    "BASE_CURRENCY_DECIMALS()": _uint(8),
+    "getAssetPrice(address)": _uint(10**8),
 }
 
 CURRENT: dict[str, Response] = {
@@ -93,6 +96,8 @@ CURRENT: dict[str, Response] = {
     GET_MARKET_SUBSTRATES: encode(
         ["bytes32[]"], [[bytes(12) + bytes.fromhex(ASSET[2:])]]
     ),
+    "BASE_CURRENCY_DECIMALS()": ContractLogicError("execution reverted"),
+    "getAssetPrice(address)": encode(["uint256", "uint256"], [10**8, 8]),
 }
 
 
@@ -195,6 +200,7 @@ class TestVaultReads:
             GET_PRICE_ORACLE_MIDDLEWARE,
         ]
         assert reads["total_assets"] == 1_000
+        assert reads["asset_price_usd"] == 1.0
 
     def test_current_vault_reports_no_unimplemented_getter(self):
         ctx = _ctx(CURRENT)
@@ -204,6 +210,7 @@ class TestVaultReads:
         assert reads["supply_cap"] == 10**12
         assert reads["price_oracle_addr"] == ORACLE
         assert reads["unimplemented_getters"] == []
+        assert reads["asset_price_usd"] == 1.0
 
     def test_vault_without_any_oracle_getter_raises_typed_error(self):
         ctx = _ctx({**PRE_AUDIT, "getPriceOracle()": b""})

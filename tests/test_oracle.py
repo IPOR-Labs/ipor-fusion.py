@@ -3,14 +3,18 @@ and decoding for both PriceOracleMiddleware and PriceOracleMiddlewareManager."""
 
 from unittest.mock import MagicMock
 
+import pytest
 from eth_abi import encode
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
+    LegacyPriceOracleMiddleware,
     PriceOracleMiddleware,
     PriceOracleMiddlewareManager,
+    price_oracle_middleware,
 )
 from ipor_fusion.types import Price
 
@@ -105,6 +109,53 @@ class TestGetAssetPrice:
         assert result.asset == ASSET_ADDR
         assert result.amount == 1_500_000_000
         assert result.decimals == 8
+
+
+class TestLegacyGetAssetPrice:
+    def test_price_is_the_bare_answer_in_base_currency_decimals(self):
+        ctx = MagicMock()
+        oracle = LegacyPriceOracleMiddleware(ctx, CONTRACT_ADDR, 8)
+        ctx.call.return_value = encode(["uint256"], [99_990_543])
+
+        result = oracle.get_asset_price(ASSET_ADDR).call()
+
+        assert result == Price(asset=ASSET_ADDR, amount=99_990_543, decimals=8)
+
+
+class TestPriceOracleMiddlewareFactory:
+    def test_oracle_answering_base_currency_decimals_is_legacy(self):
+        ctx = MagicMock()
+        ctx.call.return_value = encode(["uint256"], [8])
+
+        oracle = price_oracle_middleware(ctx, CONTRACT_ADDR)
+
+        assert isinstance(oracle, LegacyPriceOracleMiddleware)
+        assert oracle.address == CONTRACT_ADDR
+        ctx.call.return_value = encode(["uint256"], [10**8])
+        assert oracle.get_asset_price(ASSET_ADDR).call().decimals == 8
+
+    def test_reverting_probe_means_current_oracle(self):
+        ctx = MagicMock()
+        ctx.call.side_effect = ContractLogicError("execution reverted")
+
+        oracle = price_oracle_middleware(ctx, CONTRACT_ADDR)
+
+        assert type(oracle) is PriceOracleMiddleware
+
+    def test_empty_probe_answer_means_current_oracle(self):
+        ctx = MagicMock()
+        ctx.call.return_value = b""
+
+        oracle = price_oracle_middleware(ctx, CONTRACT_ADDR)
+
+        assert type(oracle) is PriceOracleMiddleware
+
+    def test_transport_failure_propagates(self):
+        ctx = MagicMock()
+        ctx.call.side_effect = TimeoutError("rpc down")
+
+        with pytest.raises(TimeoutError):
+            price_oracle_middleware(ctx, CONTRACT_ADDR)
 
 
 class TestGetAssetPriceSourceUpdatedEvents:

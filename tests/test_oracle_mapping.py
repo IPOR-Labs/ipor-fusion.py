@@ -12,7 +12,9 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from eth_abi import encode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
 from ipor_fusion.readers import oracle_mapping as om
 from ipor_fusion.types import NodeStatus, Price
@@ -1145,6 +1147,20 @@ class TestToDict:
 ORACLE = Web3.to_checksum_address("0x9999999999999999999999999999999999999999")
 
 
+def _by_selector(responses: dict[str, bytes | Exception]):
+    by_selector = {
+        function_signature_to_4byte_selector(sig): r for sig, r in responses.items()
+    }
+
+    def handler(_to: str, data: bytes) -> bytes:
+        response = by_selector[data[:4]]
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    return handler
+
+
 def _mock_reader() -> tuple[om.OracleMappingReader, MagicMock]:
     ctx = MagicMock()
     return om.OracleMappingReader(ctx, ORACLE), ctx
@@ -1176,10 +1192,30 @@ class TestOracleMappingReader:
         ctx.call.return_value = encode(["address"], [src])
         assert reader.source_of(addr(1)) == src
 
-        ctx.call.return_value = encode(["uint256", "uint256"], [10**8, 8])
+        ctx.call.side_effect = _by_selector(
+            {
+                "BASE_CURRENCY_DECIMALS()": ContractLogicError("execution reverted"),
+                "getAssetPrice(address)": encode(["uint256", "uint256"], [10**8, 8]),
+            }
+        )
         price = reader.asset_price(addr(1))
         assert price is not None
         assert price.amount == 10**8
+        assert price.decimals == 8
+
+    def test_legacy_oracle_price_is_the_bare_answer(self):
+        # Pre-audit middleware: getAssetPrice returns only the price, scaled
+        # by BASE_CURRENCY_DECIMALS() (Arbitrum 0x482b18Ae…7bcd answers 8).
+        reader, ctx = _mock_reader()
+        ctx.call.side_effect = _by_selector(
+            {
+                "BASE_CURRENCY_DECIMALS()": encode(["uint256"], [8]),
+                "getAssetPrice(address)": encode(["uint256"], [99_990_543]),
+            }
+        )
+        price = reader.asset_price(addr(1))
+        assert price is not None
+        assert price.amount == 99_990_543
         assert price.decimals == 8
 
     def test_token_metadata(self):

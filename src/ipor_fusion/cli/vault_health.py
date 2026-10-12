@@ -23,7 +23,7 @@ from ipor_fusion.cli.vault_rendering import _format_amount, _format_usd, _print_
 from ipor_fusion.cli.vault_unpriceable import MiddlewarePricedToken
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.oracle import PriceOracleMiddleware
+from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import (
@@ -95,7 +95,7 @@ def _compute_erc20_balances(  # noqa: C901
 
     substrates = (data.market_substrates or {}).get(erc20_market, [])
     vault_addr = Web3.to_checksum_address(plasma_vault.address)
-    oracle = PriceOracleMiddleware(
+    oracle = price_oracle_middleware(
         ctx, Web3.to_checksum_address(data.price_oracle_addr)
     )
 

@@ -37,7 +37,7 @@ from ipor_fusion.core.fee_manager import (
     RecipientFee,
 )
 from ipor_fusion.core.multicall import Multicall3
-from ipor_fusion.core.oracle import PriceOracleMiddleware
+from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
 from ipor_fusion.errors import (
@@ -742,7 +742,7 @@ def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str,
     )
 
     asset_erc20 = ERC20(ctx, asset)
-    oracle = PriceOracleMiddleware(ctx, price_oracle_addr)
+    oracle = price_oracle_middleware(ctx, price_oracle_addr)
     (asset_decimals, underlying_balance), (symbol, price, *fuse_market_ids) = (
         _read_batch(
             ctx,
@@ -926,7 +926,7 @@ def _fetch_vault_data(
         token_prices_usd = (
             _fetch_breakdown_token_prices(
                 ctx,
-                PriceOracleMiddleware(ctx, vault_reads["price_oracle_addr"]),
+                price_oracle_middleware(ctx, vault_reads["price_oracle_addr"]),
                 _collect_breakdown_token_addresses(
                     lending.morpho_positions, lending.aave_positions
                 ),
