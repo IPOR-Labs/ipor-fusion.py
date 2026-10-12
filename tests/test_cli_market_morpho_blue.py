@@ -12,7 +12,8 @@ from ipor_fusion import cache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
-from ipor_fusion.cli.morpho_api import (
+from ipor_fusion.errors import MorphoMarketNotFoundError
+from ipor_fusion.morpho_api import (
     MorphoApiError,
     MorphoApiMarket,
     VaultAllocation,
@@ -20,7 +21,6 @@ from ipor_fusion.cli.morpho_api import (
     fetch_market,
     fetch_vault,
 )
-from ipor_fusion.errors import MorphoMarketNotFoundError
 
 MARKET_ID = "ad656d430bb3d8c1469bf45c8ad4ebae1b04be04757c69fa424eec78d7b3f4dc"
 LOAN_TOKEN = Web3.to_checksum_address("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
@@ -357,7 +357,7 @@ class TestMorphoApiClient:
                 }
             }
         }
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(body).encode()
             mock_open.return_value.__enter__.return_value = mock_resp
@@ -380,7 +380,7 @@ class TestMorphoApiClient:
         assert vault.allocators == [PUBLIC_ALLOCATOR_ETH, ADMIN_ADDR]
 
     def test_fetch_market_handles_missing_market(self):
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(
                 {"data": {"marketById": None}}
@@ -395,7 +395,7 @@ class TestMorphoApiClient:
                 raise AssertionError("expected MorphoApiError")
 
     def test_fetch_market_propagates_graphql_errors(self):
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(
                 {"errors": [{"message": "bad query"}]}
@@ -441,7 +441,7 @@ class TestMorphoApiClient:
                 }
             }
         }
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(body).encode()
             mock_open.return_value.__enter__.return_value = mock_resp
@@ -546,7 +546,7 @@ class TestMetaMorphoCommand:
     def test_renders_v2_vault(self, tmp_path, monkeypatch):
         _setup_provider(tmp_path, monkeypatch)
         body = _v2_response()
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(body).encode()
             mock_open.return_value.__enter__.return_value = mock_resp
@@ -576,7 +576,7 @@ class TestMetaMorphoCommand:
     def test_v2_market_filter_keeps_only_match(self, tmp_path, monkeypatch):
         _setup_provider(tmp_path, monkeypatch)
         body = _v2_response()
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(body).encode()
             mock_open.return_value.__enter__.return_value = mock_resp
@@ -649,7 +649,7 @@ class TestMetaMorphoCommand:
             }
         }
         responses = iter([v2_not_found, v1_body])
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
 
             def side_effect(*_args, **_kwargs):
                 resp = MagicMock()
@@ -681,7 +681,7 @@ class TestMetaMorphoCommand:
             "errors": [{"status": "NOT_FOUND"}],
         }
         responses = iter([not_found, v1_not_found])
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
 
             def side_effect(*_args, **_kwargs):
                 resp = MagicMock()
@@ -703,7 +703,7 @@ class TestMetaMorphoCommand:
     def test_json_output_v2(self, tmp_path, monkeypatch):
         _setup_provider(tmp_path, monkeypatch)
         body = _v2_response()
-        with patch("ipor_fusion.cli.morpho_api.urlopen") as mock_open:
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(body).encode()
             mock_open.return_value.__enter__.return_value = mock_resp

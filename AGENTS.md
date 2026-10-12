@@ -162,6 +162,9 @@ the lifecycle matrix follows that.
   `fusion vault info --json` document (contract names via an injected `resolve_name`),
   and `health_check_lists`; `explorer.py` Etherscan V2 (single endpoint, needs API key);
   `cache.py` the on-disk contract and deployment caches (`~/.cache/ipor-fusion/`).
+  `morpho_api.py` the Morpho public GraphQL API client (`fetch_market`, `fetch_vault`,
+  `PUBLIC_ALLOCATOR_ADDRESSES`); `market_info.py` — `build_morpho_blue_market_json`,
+  `build_meta_morpho_json`, the `fusion market` JSON documents.
   None of them imports `cli/` (`tests/test_sdk_layering.py`)
 - `config/roles.py` — `Roles` IntEnum
 - `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
@@ -211,8 +214,8 @@ the lifecycle matrix follows that.
 - `readers/` — read side: lending_health, oracle_mapping, position_manager, aave_v3,
   compound_v3, morpho, ramses_v2, uniswap_v3, unpriceable (middleware-priced tokens of
   granted substrates the oracle cannot price)
-- `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`
-  (+ `morpho_api.py`), `vault_cmd.py` orchestration and text output over `vault_data` /
+- `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`,
+  `vault_cmd.py` orchestration and text output over `vault_data` /
   `vault_info`; `vault_health.py` renders the validation;
   `vault_rendering.py` pure formatting; `config_store.py` (XDG
   `~/.config/ipor-fusion/`)

@@ -1,6 +1,6 @@
 """The SDK core never depends on its CLI layer.
 
-The vault read, validation and vault-info modules are library API: they must
+The vault read, validation, vault-info and market modules are library API: they must
 import without click (the ``cli`` extra) and without loading
 ``ipor_fusion.cli``.
 """
@@ -16,6 +16,8 @@ CORE_MODULES = [
     "ipor_fusion",
     "ipor_fusion.cache",
     "ipor_fusion.explorer",
+    "ipor_fusion.market_info",
+    "ipor_fusion.morpho_api",
     "ipor_fusion.readers.unpriceable",
     "ipor_fusion.validation",
     "ipor_fusion.vault_data",
