@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.14.0 (2026-10-13)
+
+### Features
+
+- **sdk**: Answer get_logs from an optional LogSource
+  ([`4b10952`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4b10952df1efdb99a0f7bb555ce91465715cf18b))
+
+
 ## v3.13.0 (2026-10-12)
 
 ### Bug Fixes
