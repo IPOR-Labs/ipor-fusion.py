@@ -6,10 +6,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import ContractLogicError, Web3RPCError
 from web3.providers.rpc import HTTPProvider
 
 from ipor_fusion.core.context import _RETRY_EXCEPT_GET_LOGS, Web3Context
 from ipor_fusion.core.contract import Call
+from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.errors import LogSourceUnavailable, TransactionError
 from ipor_fusion.types import ChainId
 
@@ -160,6 +162,52 @@ class TestFromUrl:
 
         assert got["timestamp"] == 0x6700000A
         assert got["proofOfAuthorityData"] == HexBytes(extra)
+
+
+# ── call: RPC error shapes ──────────────────────────────────────────────
+
+
+def _context_answering_eth_call_with(error: dict) -> Web3Context:
+    def make_request(_provider, method, _params):
+        if method == "eth_chainId":
+            return {"jsonrpc": "2.0", "id": 1, "result": "0x3e7"}
+        return {"jsonrpc": "2.0", "id": 1, "error": error}
+
+    with patch.object(HTTPProvider, "make_request", make_request):
+        return Web3Context.from_url("http://localhost:8545")
+
+
+REVM_REVERT = {
+    "code": -32603,
+    "message": "Failed to call: InvalidTransaction(Revert(RevertError { output: None }))",
+}
+
+
+class TestCallErrorShapes:
+    def test_revm_style_revert_raises_contract_logic_error(self):
+        ctx = _context_answering_eth_call_with(REVM_REVERT)
+
+        with pytest.raises(ContractLogicError) as info:
+            ctx.call(TO_ADDR, b"\x31\x1d\x5c\x62")
+
+        assert isinstance(info.value.__cause__, Web3RPCError)
+
+    def test_oracle_probe_treats_revm_style_revert_as_current_middleware(self):
+        ctx = _context_answering_eth_call_with(REVM_REVERT)
+
+        oracle = price_oracle_middleware(ctx, TO_ADDR)
+
+        assert type(oracle) is PriceOracleMiddleware
+
+    def test_other_internal_errors_are_not_treated_as_reverts(self):
+        ctx = _context_answering_eth_call_with(
+            {"code": -32603, "message": "header not found"}
+        )
+
+        with pytest.raises(Web3RPCError) as info:
+            ctx.call(TO_ADDR, b"\x31\x1d\x5c\x62")
+
+        assert not isinstance(info.value, ContractLogicError)
 
 
 # ── send ────────────────────────────────────────────────────────────────

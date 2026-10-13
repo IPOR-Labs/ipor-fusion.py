@@ -8,6 +8,7 @@ from hexbytes import HexBytes
 from requests import ConnectionError as RequestsConnectionError
 from requests import HTTPError, Timeout
 from web3 import Web3
+from web3.exceptions import ContractLogicError, Web3RPCError
 from web3.middleware import ExtraDataToPOAMiddleware
 from web3.providers.rpc.utils import (
     REQUEST_RETRY_ALLOWLIST,
@@ -35,6 +36,19 @@ _RETRY_EXCEPT_GET_LOGS = ExceptionRetryConfiguration(
 )
 
 _logger = logging.getLogger(__name__)
+
+# Some revm/reth-based nodes report a revert without return data as
+# {"code": -32603, "message": "Failed to call: InvalidTransaction(Revert(
+# RevertError { output: None }))"}; web3 recognizes a revert only by code 3 or
+# "execution reverted" in the message, so it raises a generic Web3RPCError and
+# getter probes that expect ContractLogicError fail.
+_UNRECOGNIZED_REVERT_MARKER = "InvalidTransaction(Revert(RevertError"
+
+
+def _is_unrecognized_revert(exc: Web3RPCError) -> bool:
+    error = (exc.rpc_response or {}).get("error")
+    message = error.get("message") if isinstance(error, dict) else None
+    return isinstance(message, str) and _UNRECOGNIZED_REVERT_MARKER in message
 
 
 class Web3Context:
@@ -150,9 +164,14 @@ class Web3Context:
         data: bytes,
         block: BlockIdentifier | None = None,
     ) -> HexBytes:
-        return self.web3.eth.call(
-            {"to": to, "data": data}, block_identifier=self._resolve_block(block)
-        )
+        try:
+            return self.web3.eth.call(
+                {"to": to, "data": data}, block_identifier=self._resolve_block(block)
+            )
+        except Web3RPCError as exc:
+            if _is_unrecognized_revert(exc):
+                raise ContractLogicError("execution reverted", data=None) from exc
+            raise
 
     def _resolve_block(self, block: BlockIdentifier | None) -> BlockIdentifier:
         return block if block is not None else self._default_block
