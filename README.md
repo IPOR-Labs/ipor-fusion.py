@@ -405,6 +405,7 @@ validated on every live vault of these chains (`SUPPORTED_CHAIN_IDS`):
 - **Avalanche** C-Chain
 - **Katana**
 - **Monad**
+- **TAC**
 
 Balance fuses and the withdraw manager are read from vault storage. The remaining event
 scans (role holders, pending withdraw requests) page `eth_getLogs` within the provider's

@@ -33,7 +33,7 @@ CHAIN_NAME_TO_ID: dict[str, int] = {name: cid for cid, name in CHAIN_NAMES.items
 # cap the adaptive scan cannot page through). Extend only after the full
 # vault_info path passes on every live vault of that chain.
 SUPPORTED_CHAIN_IDS: frozenset[int] = frozenset(
-    {1, 130, 143, 999, 8453, 9745, 42161, 43114, 747474}
+    {1, 130, 143, 239, 999, 8453, 9745, 42161, 43114, 747474}
 )
 
 # First eth_getLogs page size, in blocks, on chains whose providers cap the
