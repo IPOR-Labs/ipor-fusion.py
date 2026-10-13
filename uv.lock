@@ -1108,7 +1108,7 @@ wheels = [
 
 [[package]]
 name = "ipor-fusion"
-version = "3.14.1"
+version = "3.15.0"
 source = { editable = "." }
 dependencies = [
     { name = "eth-abi" },

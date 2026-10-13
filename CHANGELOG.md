@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.15.0 (2026-10-13)
+
+### Features
+
+- **sdk**: Support TAC (239) in the vault tooling
+  ([`d6fcf2c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d6fcf2c43661fedfeb9bb5ceff3a8c14a0b7187b))
+
+
 ## v3.14.1 (2026-10-13)
 
 ### Bug Fixes
