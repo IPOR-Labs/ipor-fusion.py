@@ -10,7 +10,7 @@ from web3.providers.rpc import HTTPProvider
 
 from ipor_fusion.core.context import _RETRY_EXCEPT_GET_LOGS, Web3Context
 from ipor_fusion.core.contract import Call
-from ipor_fusion.errors import TransactionError
+from ipor_fusion.errors import LogSourceUnavailable, TransactionError
 from ipor_fusion.types import ChainId
 
 ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
@@ -447,3 +447,70 @@ class TestCallPreviewDelegation:
 
         assert call.build_transaction() is sentinel
         ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03")
+
+
+# ── get_logs through a LogSource ─────────────────────────────────────────
+
+GRANTED = "0x" + "aa" * 32
+REVOKED = "0x" + "bb" * 32
+
+
+class TestLogSource:
+    @staticmethod
+    def _ctx(source):
+        ctx = _make_ctx()
+        ctx.web3.eth.block_number = 500
+        ctx.log_source = source
+        return ctx
+
+    def test_a_topic0_filter_is_answered_by_the_source(self):
+        source = MagicMock()
+        source.get_logs.return_value = ["log"]
+        ctx = self._ctx(source)
+        with patch("ipor_fusion.core.context.get_logs_adaptive") as scan:
+            assert ctx.get_logs(ADDR, [[GRANTED, REVOKED]]) == ["log"]
+        source.get_logs.assert_called_once_with(1, ADDR, [GRANTED, REVOKED], 0, 500)
+        scan.assert_not_called()
+
+    def test_the_range_is_resolved_before_the_source_is_asked(self):
+        source = MagicMock()
+        source.get_logs.return_value = []
+        ctx = self._ctx(source)
+        ctx.get_logs(ADDR, [GRANTED], from_block=10, to_block=200)
+        source.get_logs.assert_called_once_with(1, ADDR, [GRANTED], 10, 200)
+
+    def test_an_unavailable_source_falls_back_to_the_rpc_scan(self):
+        source = MagicMock()
+        source.get_logs.side_effect = LogSourceUnavailable("index down")
+        ctx = self._ctx(source)
+        with patch(
+            "ipor_fusion.core.context.get_logs_adaptive", return_value=["rpc"]
+        ) as scan:
+            assert ctx.get_logs(ADDR, [GRANTED]) == ["rpc"]
+        assert scan.call_args.args[1:5] == (ADDR, [GRANTED], None, 500)
+
+    def test_any_other_source_error_is_not_swallowed(self):
+        source = MagicMock()
+        source.get_logs.side_effect = KeyError("bug")
+        ctx = self._ctx(source)
+        with (
+            patch("ipor_fusion.core.context.get_logs_adaptive") as scan,
+            pytest.raises(KeyError),
+        ):
+            ctx.get_logs(ADDR, [GRANTED])
+        scan.assert_not_called()
+
+    def test_a_filter_past_topic0_skips_the_source(self):
+        source = MagicMock()
+        ctx = self._ctx(source)
+        with patch("ipor_fusion.core.context.get_logs_adaptive", return_value=[]):
+            ctx.get_logs(ADDR, [GRANTED, "0x" + "00" * 32])
+        source.get_logs.assert_not_called()
+
+    def test_without_a_source_the_rpc_scan_runs(self):
+        ctx = self._ctx(None)
+        with patch(
+            "ipor_fusion.core.context.get_logs_adaptive", return_value=[]
+        ) as scan:
+            ctx.get_logs(ADDR, [GRANTED])
+        scan.assert_called_once()

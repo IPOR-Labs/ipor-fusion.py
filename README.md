@@ -412,7 +412,9 @@ limits (`get_logs_adaptive`). Where a provider caps the range, such as 10,000 bl
 Unichain and Plasma, an old contract needs thousands of requests: past
 `Web3Context.log_scan_max_requests` (1,000 by default; `None` lifts it) or
 `log_scan_timeout_s` the scan raises `LogScanError`, and `vault info` reports those two
-fields as unavailable (`null`) rather than partial.
+fields as unavailable (`null`) rather than partial. A `LogSource` on the context, such as
+a service that caches an explorer's log API, answers those scans instead
+(`Web3Context(log_source=…)`); when it raises `LogSourceUnavailable` the RPC scan runs.
 
 ## Development
 

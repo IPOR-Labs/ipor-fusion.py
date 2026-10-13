@@ -171,6 +171,8 @@ the lifecycle matrix follows that.
   `multicall` (`Multicall3`), `logs` (`get_logs_adaptive`: every event scan pages
   `eth_getLogs` within the provider's caps from the contract's creation block, within a
   time and request budget, and raises `LogScanError` rather than return partial logs;
+  `LogSource`: an optional index `Web3Context.get_logs` asks first for a topic0-only
+  filter, falling back to the scan on `LogSourceUnavailable`;
   prefer a storage or view read over a scan, as `get_balance_fuses` and
   `withdraw_manager_address` do), `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
   `simulation` (`VaultSimulator`, eth_simulateV1, `erc20_balance_slot` and ERC-20 balance

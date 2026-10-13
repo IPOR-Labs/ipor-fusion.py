@@ -16,6 +16,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Protocol
 
 import requests
 from eth_typing import ChecksumAddress
@@ -58,6 +59,27 @@ _TRANSIENT_TEXT = re.compile(
 )
 _TRANSIENT_STATUS = frozenset({429, 502, 503})
 _URL = re.compile(r"\w+://\S+")
+
+
+class LogSource(Protocol):
+    """An index of event logs that answers `Web3Context.get_logs` in place of
+    an `eth_getLogs` scan, such as a service that caches an explorer's log API.
+
+    ``topic0`` holds one or more event signatures, OR-ed. Return every
+    matching log ``address`` emitted in ``[from_block, to_block]``, in block
+    and log-index order, or raise `LogSourceUnavailable`: never a partial
+    list.
+    """
+
+    def get_logs(
+        self,
+        chain_id: int,
+        address: ChecksumAddress,
+        topic0: list[str],
+        from_block: int,
+        to_block: int,
+    ) -> list[LogReceipt]: ...
+
 
 _creation_blocks: dict[tuple[int, str], int] = {}
 _creation_locks: dict[tuple[int, str], threading.Lock] = {}
@@ -110,7 +132,7 @@ def get_logs_adaptive(
     ``max_requests`` (None: unbounded) its request count.
     """
     scan = _Scan(web3, address, topics, timeout_s, max_requests)
-    end = _block_number(web3, to_block)
+    end = block_number(web3, to_block)
     size = chunk_hint
     if from_block is None and size is None:
         try:
@@ -120,7 +142,7 @@ def get_logs_adaptive(
     if from_block is None:
         start = _creation_block_or_zero(web3, address, end, chain_id)
     else:
-        start = _block_number(web3, from_block)
+        start = block_number(web3, from_block)
     if start > end:
         return []
     size = min(size or end - start + 1, MAX_LOG_PAGE_BLOCKS)
@@ -313,7 +335,8 @@ def _has_code(web3: Web3, address: ChecksumAddress, block: int) -> bool:
     return len(web3.eth.get_code(address, block_identifier=block)) > 0
 
 
-def _block_number(web3: Web3, block: BlockIdentifier) -> int:
+def block_number(web3: Web3, block: BlockIdentifier) -> int:
+    """``block`` as a number; "latest" and other tags read from the node."""
     if isinstance(block, int):
         return block
     if block == "latest":
