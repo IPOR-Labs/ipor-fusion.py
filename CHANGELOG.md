@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.14.1 (2026-10-13)
+
+### Bug Fixes
+
+- **sdk**: Treat revm-style revert errors from eth_call as ContractLogicError
+  ([`089d1d7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/089d1d7914d38dd3a7e7158ed2a3ad2aa38c7dd6))
+
+
 ## v3.14.0 (2026-10-13)
 
 ### Features
