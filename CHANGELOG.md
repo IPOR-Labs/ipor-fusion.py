@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.15.1 (2026-10-13)
+
+### Bug Fixes
+
+- **sdk**: Drop TAC (239) from the supported chains
+  ([`1c5ebd2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1c5ebd2a735ca02d181c701fad63867ee0984319))
+
+
 ## v3.15.0 (2026-10-13)
 
 ### Features
