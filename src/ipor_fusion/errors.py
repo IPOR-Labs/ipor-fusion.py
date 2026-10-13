@@ -192,6 +192,11 @@ class LogScanError(IporFusionError):
         super().__init__(message)
 
 
+class LogSourceUnavailable(IporFusionError):
+    """A `LogSource` could not answer completely; `Web3Context.get_logs`
+    falls back to its own `eth_getLogs` scan."""
+
+
 class EmptyCallResultError(IporFusionError, InsufficientDataBytes):
     """`eth_call` returned no data for a call that declares return values.
 

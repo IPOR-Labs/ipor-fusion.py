@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from eth_account import Account
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
@@ -17,9 +19,11 @@ from ipor_fusion.chains import GET_LOGS_RANGE_HINTS
 from ipor_fusion.core.logs import (
     DEFAULT_LOG_SCAN_MAX_REQUESTS,
     DEFAULT_LOG_SCAN_TIMEOUT_S,
+    LogSource,
+    block_number,
     get_logs_adaptive,
 )
-from ipor_fusion.errors import TransactionError, get_revert_reason
+from ipor_fusion.errors import LogSourceUnavailable, TransactionError, get_revert_reason
 from ipor_fusion.types import ChainId
 
 # web3 retries every allowlisted method on any HTTP error, a 400 included;
@@ -29,6 +33,8 @@ _RETRY_EXCEPT_GET_LOGS = ExceptionRetryConfiguration(
     errors=(RequestsConnectionError, HTTPError, Timeout),
     method_allowlist=[m for m in REQUEST_RETRY_ALLOWLIST if m != "eth_getLogs"],
 )
+
+_logger = logging.getLogger(__name__)
 
 
 class Web3Context:
@@ -57,6 +63,7 @@ class Web3Context:
         gas_multiplier: float = 1.25,
         log_scan_timeout_s: float = DEFAULT_LOG_SCAN_TIMEOUT_S,
         log_scan_max_requests: int | None = DEFAULT_LOG_SCAN_MAX_REQUESTS,
+        log_source: LogSource | None = None,
     ):
         self._web3 = web3
         self._chain_id = chain_id
@@ -64,6 +71,8 @@ class Web3Context:
         # (None: unbounded); see `core.logs.get_logs_adaptive`.
         self.log_scan_timeout_s = log_scan_timeout_s
         self.log_scan_max_requests = log_scan_max_requests
+        # Asked first by `get_logs`; None scans the RPC only.
+        self.log_source = log_source
         self._private_key = private_key
         self._gas_multiplier = gas_multiplier
         self._default_block: BlockIdentifier = "latest"
@@ -104,6 +113,7 @@ class Web3Context:
         request_timeout_s: float = DEFAULT_RPC_TIMEOUT_S,
         log_scan_timeout_s: float = DEFAULT_LOG_SCAN_TIMEOUT_S,
         log_scan_max_requests: int | None = DEFAULT_LOG_SCAN_MAX_REQUESTS,
+        log_source: LogSource | None = None,
     ) -> Web3Context:
         web3 = Web3(
             Web3.HTTPProvider(
@@ -131,6 +141,7 @@ class Web3Context:
             gas_multiplier=gas_multiplier,
             log_scan_timeout_s=log_scan_timeout_s,
             log_scan_max_requests=log_scan_max_requests,
+            log_source=log_source,
         )
 
     def call(
@@ -225,13 +236,32 @@ class Web3Context:
         """Every matching log in the range, paged within the provider's
         `eth_getLogs` caps (`core.logs.get_logs_adaptive`); raises
         `LogScanError` rather than return a partial result. ``from_block=None``
-        scans from the contract's creation."""
+        scans from the contract's creation.
+
+        With a `log_source` set, a filter on the event signature alone is
+        asked there first; when it raises `LogSourceUnavailable` the RPC
+        scan runs as without one."""
+        end = block_number(self.web3, to_block)
+        if self.log_source is not None and len(topics) == 1:
+            topic0 = [topics[0]] if isinstance(topics[0], str) else list(topics[0])
+            start = 0 if from_block is None else block_number(self.web3, from_block)
+            try:
+                return self.log_source.get_logs(
+                    self.chain_id, contract_address, topic0, start, end
+                )
+            except LogSourceUnavailable as exc:
+                _logger.warning(
+                    "log source unavailable for %s on chain %s, scanning the RPC: %s",
+                    contract_address,
+                    self.chain_id,
+                    exc,
+                )
         return get_logs_adaptive(
             self.web3,
             contract_address,
             topics,
             from_block,
-            to_block,
+            end,
             chain_id=self.chain_id,
             chunk_hint=GET_LOGS_RANGE_HINTS.get(self.chain_id),
             timeout_s=self.log_scan_timeout_s,

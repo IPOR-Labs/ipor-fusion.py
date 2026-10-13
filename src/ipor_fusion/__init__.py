@@ -40,7 +40,7 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
-from ipor_fusion.core.logs import find_creation_block, get_logs_adaptive
+from ipor_fusion.core.logs import LogSource, find_creation_block, get_logs_adaptive
 from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
@@ -138,6 +138,7 @@ from ipor_fusion.errors import (
     EmptyCallResultError,
     IporFusionError,
     LogScanError,
+    LogSourceUnavailable,
     MorphoMarketNotFoundError,
     NotPlasmaVaultError,
     SimulationError,
@@ -378,6 +379,7 @@ __all__ = [
     "Call",
     "get_logs_adaptive",
     "find_creation_block",
+    "LogSource",
     "Multicall3",
     "MULTICALL3_ADDRESS",
     "VaultSimulator",
@@ -567,6 +569,7 @@ __all__ = [
     "EmptyCallResultError",
     "IporFusionError",
     "LogScanError",
+    "LogSourceUnavailable",
     "MorphoMarketNotFoundError",
     "NotPlasmaVaultError",
     "TransactionError",
