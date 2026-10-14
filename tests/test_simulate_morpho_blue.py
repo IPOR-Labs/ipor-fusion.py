@@ -82,3 +82,34 @@ def test_simulate_revert_surfaces_reason(web3_eth):
     log.info("decoded revert: %s", result.revert_reason)
     assert not result.success
     assert result.revert_reason is not None
+
+
+def test_simulate_the_pinned_transaction_a_signer_would_receive(web3_eth):
+    """A transaction built at the pinned block runs as is, nonce and EIP-1559
+    fees validated by the node, within the gas limit it was built with."""
+    ctx = Web3Context(
+        web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id), signer=ALPHA
+    )
+    supply = MorphoSupplyFuse(ETHEREUM_MORPHO_SUPPLY_FUSE).supply(
+        market_id=MARKET_ID, amount=SUPPLY_AMOUNT
+    )
+    call = PlasmaVault(ctx, VAULT).execute([supply])
+
+    transaction = call.build_transaction(block=PINNED_BLOCK)
+    assert transaction["nonce"] == web3_eth.eth.get_transaction_count(
+        ALPHA, block_identifier=PINNED_BLOCK
+    )
+    assert call.estimate_gas(block=PINNED_BLOCK) == transaction["gas"]
+
+    sim = VaultSimulator(
+        web3=web3_eth,
+        vault=VAULT,
+        alpha=ALPHA,
+        block=hex(PINNED_BLOCK),
+        validation=True,
+    )
+    sim.add_transaction(transaction, label="proposal")
+    result = sim.run()
+
+    assert_all_success(result)
+    assert 0 < result.gas_used <= transaction["gas"]

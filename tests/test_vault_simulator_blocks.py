@@ -439,3 +439,137 @@ def test_override_provider_sees_each_sent_block_and_survives_a_swap():
     # Each sent block carries only what its provider returns; state set by an
     # earlier block's override persists inside the simulated chain itself.
     assert "nonce" not in entries[2]["stateOverrides"][PAYER]
+
+
+def _built_transaction(**overrides) -> dict:
+    # The shape Web3Context.build_transaction returns, plus optional fields.
+    return {
+        "chainId": 8453,
+        "gas": 1_250_000,
+        "maxFeePerGas": 2_000_000,
+        "maxPriorityFeePerGas": 1_000,
+        "to": VAULT.lower(),
+        "from": ALPHA,
+        "nonce": 7,
+        "data": "0x1234",
+        **overrides,
+    }
+
+
+def test_add_transaction_sends_every_field_and_counts_as_execute():
+    sim, provider = _simulator()
+    key = "0x" + "ab" * 32
+    sim.add_transaction(
+        _built_transaction(
+            value=0,
+            type=2,
+            accessList=[
+                {"address": VAULT.lower(), "storageKeys": [bytes.fromhex("ab" * 32)]}
+            ],
+        ),
+        label="proposal",
+    )
+    sim.observe("after", _read())
+    provider.make_request = MagicMock(
+        wraps=provider.make_request,
+        side_effect=lambda method, params: (
+            provider.payloads.append(params)
+            or {
+                "result": [
+                    {
+                        "calls": [
+                            {
+                                "status": "0x1",
+                                "returnData": "0x",
+                                "gasUsed": "0x10",
+                                "logs": [],
+                            },
+                            {
+                                "status": "0x1",
+                                "returnData": "0x" + "00" * 32,
+                                "gasUsed": "0x1",
+                                "logs": [],
+                            },
+                        ]
+                    }
+                ]
+            }
+        ),
+    )
+
+    result = sim.run()
+
+    (entry,) = _sent_blocks(provider)
+    assert entry["calls"][0] == {
+        "from": ALPHA,
+        "to": VAULT,
+        "input": "0x1234",
+        "nonce": hex(7),
+        "gas": hex(1_250_000),
+        "value": hex(0),
+        "chainId": hex(8453),
+        "type": hex(2),
+        "maxFeePerGas": hex(2_000_000),
+        "maxPriorityFeePerGas": hex(1_000),
+        "accessList": [{"address": VAULT, "storageKeys": [key]}],
+    }
+    assert result.success
+    assert result.gas_used == 0x10
+    assert result.calls[0].label == "proposal"
+
+
+def test_add_transaction_failure_marks_the_run_unsuccessful():
+    sim, provider = _simulator()
+    sim.add_transaction(_built_transaction())
+    provider.make_request = MagicMock(
+        return_value={
+            "result": [
+                {
+                    "calls": [
+                        {
+                            "status": "0x0",
+                            "returnData": "0x",
+                            "gasUsed": "0x5",
+                            "logs": [],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+    result = sim.run()
+
+    assert not result.success
+    assert not result.all_success
+
+
+def test_add_transaction_accepts_input_and_hex_quantities():
+    sim, provider = _simulator()
+    tx = _built_transaction(nonce="0x7")
+    tx["input"] = tx.pop("data")
+    sim.add_transaction(tx)
+    sim.run()
+
+    (entry,) = _sent_blocks(provider)
+    assert entry["calls"][0]["input"] == "0x1234"
+    assert entry["calls"][0]["nonce"] == "0x7"
+    assert "data" not in entry["calls"][0]
+
+
+@pytest.mark.parametrize(
+    ("transaction", "message"),
+    [
+        (_built_transaction(blobVersionedHashes=[]), "unsupported transaction fields"),
+        (_built_transaction(input="0x"), "both data and input"),
+        ({**_built_transaction(), "from": None}, "requires from and to"),
+        (
+            {k: v for k, v in _built_transaction().items() if k != "to"},
+            "requires from and to",
+        ),
+    ],
+)
+def test_add_transaction_rejects_what_it_cannot_send_faithfully(transaction, message):
+    sim, _ = _simulator()
+    with pytest.raises(ValueError, match=message):
+        sim.add_transaction(transaction)
