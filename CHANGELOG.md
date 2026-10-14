@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.16.0 (2026-10-14)
+
+### Features
+
+- **sdk**: Pin transaction builds to a block and simulate built transactions as is
+  ([`858d840`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/858d8402c5c440a35d3b9c9cf53667123767acde))
+
+
 ## v3.15.1 (2026-10-13)
 
 ### Bug Fixes
