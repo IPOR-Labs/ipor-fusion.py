@@ -260,6 +260,13 @@ or examples.
 - Adding a protocol: new module in `fuses/`, re-export from `fuses/__init__.py`
   and the top-level `__all__`, encoding test in `test_fuse_encoding.py`, and a
   row in the README protocol table.
+- Keeping `examples/` current: a change to public API, SDK behavior or
+  defaults includes reading the examples for what it supersedes — hand-rolled
+  code a new helper replaces, workarounds for a gap it closes, prose describing
+  the old behavior, checks the SDK performs itself, hardcoded values it can
+  discover — and updating them in the same PR. The example tests catch an
+  example that breaks, not one that still works the old way. Authoring rules
+  live in `examples/CONTRIBUTING.md`.
 
 ## Substrate decoders: source of truth
 

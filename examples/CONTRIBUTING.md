@@ -79,6 +79,8 @@ imports.
 - This means the same few helpers recur across examples on purpose. Do not "DRY" them into a shared
   examples framework -- readability for a first-time reader outranks deduplication here. (This does
   not excuse accidental duplication elsewhere, e.g. between test files.)
+- Inline only glue the SDK does not offer publicly. Where a public SDK symbol does the job, use it:
+  an example also documents the API, and a hand-rolled copy teaches the wrong one.
 
 ## 4. Standard structure
 
@@ -165,7 +167,7 @@ per line, no reliance on 2D layout.
 
 ## 10. Tests and CI
 
-Every example ships with two tests so it cannot silently go stale:
+Every example ships with two tests so it cannot silently break:
 
 - An **offline** test (`tests/test_examples_*.py`, carrying the `examples` marker) that imports the
   module and exercises its pure builders -- calldata construction, fuse-action encoding, static
@@ -175,6 +177,9 @@ Every example ships with two tests so it cannot silently go stale:
   simulation at its pinned block and skips cleanly when no provider is configured.
 
 `ruff` and `pyright` must cover `examples/`, and the example must pass both.
+
+These tests do not catch an example that still works but no longer shows the current way to do the
+task. Keeping examples current is part of the SDK change that supersedes them (see `AGENTS.md`).
 
 ## 11. Run and commit conventions
 
