@@ -115,6 +115,13 @@ the lifecycle matrix follows that.
   `test(sdk):`, `ci:`, `build:`, `chore:`, `docs:`. `python-semantic-release`
   derives the version from them. Never hand-bump `project.version`; the
   release workflow stamps it and re-locks `uv.lock`.
+- Releases: a stable release is cut by hand (`release.yml`). Every push to
+  `main` that carries a `fix`/`feat`/breaking commit since the last tag also
+  publishes a dev build of the next version to PyPI (`cd.yml`):
+  `<next>.dev<commits since the last tag>`, e.g. `3.17.0.dev4`, with no commit,
+  tag, changelog entry or GitHub release. pip and uv skip it unless it is
+  pinned exactly (`ipor-fusion==3.17.0.dev4`). `fusion changelog` has no
+  section for a dev version.
 - Release notes render only the commit subject; body prose is dropped. Two
   footers survive: `BREAKING CHANGE: <what breaks, what to do instead>` is
   required whenever the subject carries `!` (the `!` bumps the version but
