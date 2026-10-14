@@ -176,7 +176,13 @@ class Web3Context:
     def _resolve_block(self, block: BlockIdentifier | None) -> BlockIdentifier:
         return block if block is not None else self._default_block
 
-    def build_transaction(self, to: ChecksumAddress, data: bytes) -> dict:
+    def build_transaction(
+        self,
+        to: ChecksumAddress,
+        data: bytes,
+        *,
+        block: BlockIdentifier = "latest",
+    ) -> dict:
         """Build the transaction dict for ``data`` against ``to`` without signing
         or broadcasting — the same dict `send` would submit, ready to hand to an
         external signer or to inspect for a gas/cost preview (`gas` and
@@ -189,17 +195,24 @@ class Web3Context:
         *state changes* instead of cost, use `VaultSimulator`
         (`core/simulation.py`, `eth_simulateV1`) — it answers "what happens",
         this answers "what it costs / here's the transaction to sign" on any RPC.
+
+        ``block`` pins the nonce, base fee and gas estimate to one block, so a
+        preview is reproducible and matches a simulation pinned to the same
+        parent. It is ``"latest"`` by default, not `default_block`: a dict
+        built for signing must reflect the chain head. The ``eth_gasPrice``
+        read that caps the priority fee has no block parameter and stays
+        current.
         """
         signer = self._require_signer("build a transaction")
-        nonce = self.web3.eth.get_transaction_count(signer)
+        nonce = self.web3.eth.get_transaction_count(signer, block_identifier=block)
         gas_price = self.web3.eth.gas_price
         max_priority_fee_per_gas = self._get_max_priority_fee(gas_price)
-        base_fee = self.get_block().get("baseFeePerGas")
+        base_fee = self.get_block(block).get("baseFeePerGas")
         max_fee_per_gas = self._calculate_max_fee_per_gas(
             gas_price, base_fee, max_priority_fee_per_gas
         )
         data_hex = self._data_hex(data)
-        estimated_gas = self._estimate_gas(to, data_hex, signer)
+        estimated_gas = self._estimate_gas(to, data_hex, signer, block)
         return {
             "chainId": self.chain_id,
             "gas": estimated_gas,
@@ -232,17 +245,24 @@ class Web3Context:
         receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
         return self._handle_receipt(tx_hash, receipt)
 
-    def estimate_gas(self, to: ChecksumAddress, data: bytes) -> int:
+    def estimate_gas(
+        self,
+        to: ChecksumAddress,
+        data: bytes,
+        *,
+        block: BlockIdentifier = "latest",
+    ) -> int:
         """Estimate gas for ``data`` against ``to`` (gas-multiplier applied, as
         in `send`) without signing or broadcasting.
 
         Like `build_transaction`, needs a signer address but no private key, and
         raises ``ValueError`` if no signer is configured. A would-revert
         transaction raises the underlying revert rather than returning a number
-        — the cheapest dry-run there is.
+        — the cheapest dry-run there is. ``block`` pins the estimate as in
+        `build_transaction`.
         """
         signer = self._require_signer("estimate gas")
-        return self._estimate_gas(to, self._data_hex(data), signer)
+        return self._estimate_gas(to, self._data_hex(data), signer, block)
 
     def get_logs(
         self,
@@ -300,9 +320,16 @@ class Web3Context:
             address, slot, block_identifier=self._resolve_block(block)
         )
 
-    def _estimate_gas(self, to: ChecksumAddress, data: str, from_address: str) -> int:
+    def _estimate_gas(
+        self,
+        to: ChecksumAddress,
+        data: str,
+        from_address: str,
+        block: BlockIdentifier = "latest",
+    ) -> int:
         estimated = self.web3.eth.estimate_gas(
-            {"to": to, "from": from_address, "data": data}  # type: ignore[typeddict-item]
+            {"to": to, "from": from_address, "data": data},  # type: ignore[typeddict-item]
+            block_identifier=block,
         )
         # State can shift between estimate and execution, so pad the limit; it is
         # only a ceiling, and unused gas is not charged.

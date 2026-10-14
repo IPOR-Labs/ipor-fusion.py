@@ -22,6 +22,25 @@ StateOverrideProvider = Callable[[int], Mapping[str, Mapping[str, Any]]]
 
 DEFAULT_BLOCK_TIME_INCREMENT = 12
 
+_TRANSACTION_QUANTITIES = (
+    "nonce",
+    "gas",
+    "value",
+    "chainId",
+    "type",
+    "gasPrice",
+    "maxFeePerGas",
+    "maxPriorityFeePerGas",
+)
+_TRANSACTION_KEYS = {
+    "from",
+    "to",
+    "data",
+    "input",
+    "accessList",
+    *_TRANSACTION_QUANTITIES,
+}
+
 
 @dataclass(slots=True)
 class _Call:
@@ -36,6 +55,8 @@ class _Call:
     value: int | None = None
     gas: int | None = None
     predicted_address: ChecksumAddress | None = None
+    # A complete serialized transaction (`add_transaction`), sent as is.
+    transaction: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -383,6 +404,42 @@ class VaultSimulator:
         )
         return self
 
+    def add_transaction(
+        self, transaction: Mapping[str, Any], label: str | None = None
+    ) -> VaultSimulator:
+        """Queue a complete transaction dict exactly as a signer would receive it,
+        e.g. the output of `Call.build_transaction` or `Web3Context.build_transaction`.
+
+        Every field is sent: nonce, gas, EIP-1559 fees, chainId, value and the
+        access list, so the simulation runs the transaction that would be
+        signed rather than a call rebuilt from its calldata. With
+        ``validation=True`` the node also checks nonce, fees and balance. The
+        result counts toward ``success`` and ``gas_used`` like `execute`. An
+        unknown key raises instead of being dropped.
+        """
+        unknown = set(transaction) - _TRANSACTION_KEYS
+        if unknown:
+            raise ValueError(f"unsupported transaction fields: {sorted(unknown)}")
+        if "data" in transaction and "input" in transaction:
+            raise ValueError("transaction cannot carry both data and input")
+        if not transaction.get("from") or not transaction.get("to"):
+            raise ValueError("transaction requires from and to")
+        data = HexBytes(transaction.get("data", transaction.get("input", b"")))
+        serialized = _serialize_transaction(transaction, data)
+        self._current.calls.append(
+            _Call(
+                to=serialized["to"],
+                data=bytes(data),
+                from_=serialized["from"],
+                label=label,
+                decode_types=None,
+                decoder=None,
+                is_execute=True,
+                transaction=serialized,
+            )
+        )
+        return self
+
     def deploy_contract(
         self,
         init_code: bytes,
@@ -513,6 +570,8 @@ class VaultSimulator:
         return self._parse_response(response["result"])
 
     def _serialize_call(self, call: _Call) -> dict[str, Any]:
+        if call.transaction is not None:
+            return dict(call.transaction)
         out: dict[str, Any] = {"input": "0x" + call.data.hex()}
         if call.to is not None:
             out["to"] = call.to
@@ -606,6 +665,29 @@ class VaultSimulator:
             calls=parsed,
             failed_calls=failed_calls,
         )
+
+
+def _serialize_transaction(
+    transaction: Mapping[str, Any], data: HexBytes
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "from": Web3.to_checksum_address(transaction["from"]),
+        "to": Web3.to_checksum_address(transaction["to"]),
+        "input": data.to_0x_hex(),
+    }
+    for key in _TRANSACTION_QUANTITIES:
+        value = transaction.get(key)
+        if value is not None:
+            out[key] = value if isinstance(value, str) else hex(value)
+    if (access_list := transaction.get("accessList")) is not None:
+        out["accessList"] = [
+            {
+                "address": Web3.to_checksum_address(entry["address"]),
+                "storageKeys": [HexBytes(k).to_0x_hex() for k in entry["storageKeys"]],
+            }
+            for entry in access_list
+        ]
+    return out
 
 
 def _apply_override_provider(

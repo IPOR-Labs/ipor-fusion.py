@@ -429,9 +429,44 @@ class TestPreview:
         assert tx["gas"] == int(1.25 * 21000)
         # from/to/data reach estimate_gas intact (0x-prefixed calldata).
         web3.eth.estimate_gas.assert_called_once_with(
-            {"to": TO_ADDR, "from": ADDR, "data": "0x0102"}
+            {"to": TO_ADDR, "from": ADDR, "data": "0x0102"}, block_identifier="latest"
         )
+        web3.eth.get_transaction_count.assert_called_once_with(
+            ADDR, block_identifier="latest"
+        )
+        web3.eth.get_block.assert_called_once_with("latest")
         web3.eth.send_raw_transaction.assert_not_called()
+
+    def test_build_transaction_pins_nonce_base_fee_and_estimate_to_block(self):
+        # A pinned build reads nonce, base fee and gas at the same block, and
+        # ignores default_block: only the explicit argument pins it.
+        ctx = _make_ctx(signer=ADDR)
+        ctx.default_block = 99
+        web3 = ctx.web3
+        web3.eth.get_transaction_count.return_value = 3
+        web3.eth.gas_price = 20 * GWEI
+        web3.eth.get_block.return_value = {"baseFeePerGas": 15 * GWEI}
+        web3.eth.estimate_gas.return_value = 21000
+
+        tx = ctx.build_transaction(TO_ADDR, b"\x01\x02", block=123)
+
+        assert tx["nonce"] == 3
+        web3.eth.get_transaction_count.assert_called_once_with(
+            ADDR, block_identifier=123
+        )
+        web3.eth.get_block.assert_called_once_with(123)
+        web3.eth.estimate_gas.assert_called_once_with(
+            {"to": TO_ADDR, "from": ADDR, "data": "0x0102"}, block_identifier=123
+        )
+
+    def test_build_transaction_ignores_default_block(self):
+        ctx = _make_ctx(signer=ADDR)
+        ctx.default_block = 99
+        _build_tx(ctx, gas_price=20 * GWEI, block={"baseFeePerGas": 15 * GWEI})
+        ctx.web3.eth.get_transaction_count.assert_called_once_with(
+            ADDR, block_identifier="latest"
+        )
+        ctx.web3.eth.get_block.assert_called_once_with("latest")
 
     def test_build_transaction_requires_signer(self):
         ctx = _make_ctx()  # no signer
@@ -458,7 +493,7 @@ class TestPreview:
 
         assert ctx.estimate_gas(TO_ADDR, b"\x01\x02") == int(2.0 * 21000)
         ctx.web3.eth.estimate_gas.assert_called_once_with(
-            {"to": TO_ADDR, "from": ADDR, "data": "0x0102"}
+            {"to": TO_ADDR, "from": ADDR, "data": "0x0102"}, block_identifier="latest"
         )
         # The cheap path skips the nonce / base-fee reads build_transaction makes.
         ctx.web3.eth.get_transaction_count.assert_not_called()
@@ -485,7 +520,14 @@ class TestCallPreviewDelegation:
         call = Call(to=TO_ADDR, data=b"\x01\x02", ctx=ctx)
 
         assert call.estimate_gas() == 12345
-        ctx.estimate_gas.assert_called_once_with(TO_ADDR, b"\x01\x02")
+        ctx.estimate_gas.assert_called_once_with(TO_ADDR, b"\x01\x02", block="latest")
+
+    def test_estimate_gas_forwards_the_pinned_block(self):
+        ctx = MagicMock(spec=Web3Context)
+        call = Call(to=TO_ADDR, data=b"\x01\x02", ctx=ctx)
+
+        call.estimate_gas(block=77)
+        ctx.estimate_gas.assert_called_once_with(TO_ADDR, b"\x01\x02", block=77)
 
     def test_build_transaction_delegates_to_ctx(self):
         ctx = MagicMock(spec=Web3Context)
@@ -494,7 +536,14 @@ class TestCallPreviewDelegation:
         call = Call(to=TO_ADDR, data=b"\x03", ctx=ctx)
 
         assert call.build_transaction() is sentinel
-        ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03")
+        ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03", block="latest")
+
+    def test_build_transaction_forwards_the_pinned_block(self):
+        ctx = MagicMock(spec=Web3Context)
+        call = Call(to=TO_ADDR, data=b"\x03", ctx=ctx)
+
+        call.build_transaction(block=77)
+        ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03", block=77)
 
 
 # ── get_logs through a LogSource ─────────────────────────────────────────
