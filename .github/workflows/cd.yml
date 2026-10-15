@@ -19,38 +19,14 @@ jobs:
       ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
       BASE_PROVIDER_URL: ${{ secrets.BASE_PROVIDER_URL }}
 
-  # Trusted Publishing on PyPI is bound to python-publish.yml and the
-  # `release` environment, so this caller needs no PyPI configuration.
-  dev-release:
-    needs: build
-    concurrency:
-      group: dev-release
-      cancel-in-progress: false
-    uses: ./.github/workflows/python-publish.yml
-    secrets:
-      ETHEREUM_PROVIDER_URL: ${{ secrets.ETHEREUM_PROVIDER_URL }}
-      ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
-      BASE_PROVIDER_URL: ${{ secrets.BASE_PROVIDER_URL }}
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      SSH_SIGN_KEY_PRIVATE: ${{ secrets.SSH_SIGN_KEY_PRIVATE }}
-      SSH_SIGN_KEY_PUBLIC: ${{ secrets.SSH_SIGN_KEY_PUBLIC }}
-    with:
-      publish-enabled: true
-      dev-build: true
-      build-enabled: false
-      test-enabled: false
-      format-code-enabled: false
-      static-code-analysis-enabled: false
-
   report:
     if: ${{ always() }}
     needs:
       - notify
       - build
-      - dev-release
     uses: ./.github/workflows/report-slack.yml
     secrets:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     with:
-      success: ${{ needs.build.result == 'success' && needs.dev-release.result == 'success' }}
+      success: ${{ needs.build.result == 'success' }}
       slack-status-msg-id: ${{ needs.notify.outputs.slack-status-msg-id }}

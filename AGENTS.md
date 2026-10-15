@@ -114,19 +114,20 @@ the lifecycle matrix follows that.
   `feat(sdk):`, `fix(sdk):`, `refactor(sdk):`, `feat(cli):`, `feat(mcp):`,
   `test(sdk):`, `ci:`, `build:`, `chore:`, `docs:`. Mandatory for every
   commit that reaches `main`: `python-semantic-release` derives the version,
-  the release notes and the dev builds from them, and nothing else checks
-  them. A change that ships behavior under `chore:` or `refactor:` gets no
-  dev build and no release; a breaking change without `!` gets a minor or
-  patch bump. With a squash merge the PR title becomes the commit subject, so
-  it follows the same format. Never hand-bump `project.version`; the
-  release workflow stamps it and re-locks `uv.lock`.
-- Releases: a stable release is cut by hand (`release.yml`). Every push to
-  `main` that carries a `fix`/`feat`/breaking commit since the last tag also
-  publishes a dev build of the next version to PyPI (`cd.yml`):
-  `<next>.dev<commits since the last tag>`, e.g. `3.17.0.dev4`, with no commit,
-  tag, changelog entry or GitHub release. pip and uv skip it unless it is
-  pinned exactly (`ipor-fusion==3.17.0.dev4`). `fusion changelog` has no
-  section for a dev version.
+  the release notes and the dev builds from them. A change that ships
+  behavior under `chore:` or `refactor:` gets no dev build and no release; a
+  breaking change without `!` gets a minor or patch bump. With a squash merge
+  the PR title becomes the commit subject, so it follows the same format.
+  `commit-lint.yml` fails a PR whose commit subjects or title break it. Never
+  hand-bump `project.version`; the release workflow stamps it and re-locks
+  `uv.lock`.
+- Releases: a stable release is cut by a manual run of `release.yml`. Every
+  push to `main` that carries a `fix`/`feat`/breaking commit since the last
+  tag also publishes a dev build of the next version to PyPI (`release.yml`
+  on push): `<next>.dev<commits since the last tag>`, e.g. `3.17.0.dev4`,
+  with no commit, tag, changelog entry or GitHub release. pip and uv skip it
+  unless it is pinned exactly (`ipor-fusion==3.17.0.dev4`). `fusion
+  changelog` has no section for a dev version.
 - Release notes render only the commit subject; body prose is dropped. Two
   footers survive: `BREAKING CHANGE: <what breaks, what to do instead>` is
   required whenever the subject carries `!` (the `!` bumps the version but
