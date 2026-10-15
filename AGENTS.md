@@ -112,8 +112,13 @@ the lifecycle matrix follows that.
 
 - Commits: conventional (angular) subjects with a scope, as in `git log` —
   `feat(sdk):`, `fix(sdk):`, `refactor(sdk):`, `feat(cli):`, `feat(mcp):`,
-  `test(sdk):`, `ci:`, `build:`, `chore:`, `docs:`. `python-semantic-release`
-  derives the version from them. Never hand-bump `project.version`; the
+  `test(sdk):`, `ci:`, `build:`, `chore:`, `docs:`. Mandatory for every
+  commit that reaches `main`: `python-semantic-release` derives the version,
+  the release notes and the dev builds from them, and nothing else checks
+  them. A change that ships behavior under `chore:` or `refactor:` gets no
+  dev build and no release; a breaking change without `!` gets a minor or
+  patch bump. With a squash merge the PR title becomes the commit subject, so
+  it follows the same format. Never hand-bump `project.version`; the
   release workflow stamps it and re-locks `uv.lock`.
 - Releases: a stable release is cut by hand (`release.yml`). Every push to
   `main` that carries a `fix`/`feat`/breaking commit since the last tag also
