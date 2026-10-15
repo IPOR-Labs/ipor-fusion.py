@@ -1,0 +1,41 @@
+name: Commit lint
+
+# python-semantic-release derives versions, release notes and dev builds from
+# commit subjects, so every commit a PR brings to main must follow them. The
+# PR title too: a squash merge makes it the commit subject.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  commit-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # from tag: v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Conventional subjects
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          PATTERN='^(feat|fix|perf|refactor|test|ci|build|chore|docs|style)(\([a-z0-9._,/-]+\))?!?: .+'
+          STATUS=0
+          BAD=$(git log --no-merges --format=%s "${BASE}..${HEAD}" | grep -vE "${PATTERN}" || true)
+          if [ -n "${BAD}" ]; then
+            echo "::error::Commit subjects not in the conventional format (type(scope): subject):"
+            printf '%s\n' "${BAD}"
+            STATUS=1
+          fi
+          if ! printf '%s\n' "${TITLE}" | grep -qE "${PATTERN}"; then
+            echo "::error::PR title not in the conventional format: ${TITLE}"
+            STATUS=1
+          fi
+          exit "${STATUS}"
