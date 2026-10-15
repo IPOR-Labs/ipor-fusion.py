@@ -2,7 +2,7 @@
 
 These run without a provider: they import each example module (proving import
 has no chain side effects) and exercise its pure calldata builders and static
-config. This is what keeps the examples from silently going stale against the
+config. This is what keeps the examples from silently breaking against the
 SDK even when no RPC is available. The on-chain simulation path is covered
 separately by the RPC-gated test_simulate_* suite.
 """
