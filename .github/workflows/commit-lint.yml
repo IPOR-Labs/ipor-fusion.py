@@ -1,0 +1,57 @@
+name: Commit lint
+
+# python-semantic-release derives versions, release notes and dev builds from
+# commit subjects, so every commit a PR brings to main must follow them. The
+# PR title too: a squash merge makes it the commit subject.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  commit-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # from tag: v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Conventional subjects
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          STATUS=0
+          while IFS= read -r SUBJECT; do
+            scripts/commit-check.sh subject "${SUBJECT}" || STATUS=1
+          done < <(git log --no-merges --format=%s "${BASE}..${HEAD}")
+          scripts/commit-check.sh subject "${TITLE}" || STATUS=1
+          [ "${STATUS}" -eq 0 ] || echo "::error::Commit subjects and the PR title must be conventional (see AGENTS.md)."
+          exit "${STATUS}"
+
+      # Commit messages, the branch name (merge commits carry it), the PR text
+      # and added lines are all public once merged. LEAK_PATTERNS holds the
+      # internal names; fork PRs do not get it and run the built-in ones only.
+      - name: No internal references
+        if: always()
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BRANCH: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          LEAK_PATTERNS: ${{ secrets.LEAK_PATTERNS }}
+        run: |
+          {
+            git log --format=%B "${BASE}..${HEAD}"
+            printf '%s\n%s\n%s\n' "${BRANCH}" "${TITLE}" "${BODY}"
+            git diff "${BASE}...${HEAD}" | sed -n '/^+++ /d; s/^+//p'
+          } | scripts/commit-check.sh leaks || {
+            echo "::error::Internal references found: reword the commits (rebase) and edit the PR text."
+            exit 1
+          }
