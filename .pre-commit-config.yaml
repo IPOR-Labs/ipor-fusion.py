@@ -10,6 +10,12 @@ repos:
       - id: ruff-format
   - repo: local
     hooks:
+      - id: leak-check
+        name: no internal references in added lines
+        entry: scripts/commit-check.sh staged
+        language: script
+        pass_filenames: false
+        always_run: true
       - id: commit-check
         name: conventional, no internal references
         entry: scripts/commit-check.sh commit-msg

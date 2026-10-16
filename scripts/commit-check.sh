@@ -4,6 +4,7 @@
 #   commit-check.sh subject TEXT   conventional format: type(scope)!: subject
 #   commit-check.sh leaks          stdin must not match a leak pattern
 #   commit-check.sh commit-msg F   hook mode: both checks on a commit message file
+#   commit-check.sh staged         hook mode: leak check on the lines a commit adds
 #
 # Leak patterns: the built-in ones below, plus one extended regex per line from
 # $LEAK_PATTERNS (CI, a repository secret) or from the file
@@ -45,7 +46,9 @@ case "${1:-}" in
   subject) check_subject "$2" ;;
   leaks) check_leaks ;;
   commit-msg)
-    MESSAGE=$(git stripspace --strip-comments < "$2")
+    # `git commit -v` appends the diff below a scissors line; it is not part
+    # of the message (staged mode checks the added lines).
+    MESSAGE=$(sed '/^# -* >8 -*$/,$d' "$2" | git stripspace --strip-comments)
     SUBJECT=$(printf '%s\n' "${MESSAGE}" | head -n 1)
     STATUS=0
     # git merge runs this hook too; CI skips merge commits the same way.
@@ -56,5 +59,6 @@ case "${1:-}" in
     printf '%s\n' "${MESSAGE}" | check_leaks || STATUS=1
     exit "${STATUS}"
     ;;
-  *) echo "usage: $0 subject TEXT | leaks | commit-msg FILE" >&2; exit 2 ;;
+  staged) git diff --cached --no-color -U0 | sed -n '/^+++ /d; s/^+//p' | check_leaks ;;
+  *) echo "usage: $0 subject TEXT | leaks | commit-msg FILE | staged" >&2; exit 2 ;;
 esac

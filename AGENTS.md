@@ -125,8 +125,8 @@ the lifecycle matrix follows that.
   inside the wheel. No issue-tracker keys (`IL-` plus a number), internal hosts,
   dashboard links or private repository names in commits, branch names, PR
   text or code. `scripts/commit-check.sh` enforces both rules: as a
-  `commit-msg` hook (`uvx pre-commit install` installs it) and in
-  `commit-lint.yml`. Its built-in patterns cover only issue keys; the rest are
+  `commit-msg` hook plus a check of staged lines (`uvx pre-commit install`
+  installs both) and in `commit-lint.yml`. Its built-in patterns cover only issue keys; the rest are
   read from the `LEAK_PATTERNS` secret in CI and from
   `~/.config/ipor/leak-patterns` locally, one extended regex per line.
 - Releases: a stable release is cut by a manual run of `release.yml`. Every
