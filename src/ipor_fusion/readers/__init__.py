@@ -50,7 +50,9 @@ from ipor_fusion.readers.morpho import (
     MorphoMarketParams,
     MorphoMarketRates,
     MorphoPosition,
+    MorphoPositionBreakdown,
     MorphoReader,
+    morpho_blue_address,
 )
 from ipor_fusion.readers.oracle_mapping import (
     OracleAsset,
@@ -59,9 +61,14 @@ from ipor_fusion.readers.oracle_mapping import (
     OraclePrice,
     build_oracle_mapping,
 )
+from ipor_fusion.readers.oracle_mapping_reader import OracleMappingReader
 from ipor_fusion.readers.position_manager import PositionData
 from ipor_fusion.readers.ramses_v2 import RamsesV2Position, RamsesV2Reader
 from ipor_fusion.readers.uniswap_v3 import UniswapV3Position, UniswapV3Reader
+from ipor_fusion.readers.unpriceable import (
+    MiddlewarePricedToken,
+    fetch_unpriceable_priced_tokens,
+)
 
 __all__ = [
     "MorphoReader",
@@ -69,6 +76,8 @@ __all__ = [
     "MorphoMarketRates",
     "MorphoPosition",
     "MorphoMarketParams",
+    "MorphoPositionBreakdown",
+    "morpho_blue_address",
     "AaveV3FuseReader",
     "AaveV3PoolAddressesProvider",
     "AaveV3Reader",
@@ -111,6 +120,9 @@ __all__ = [
     "OracleNode",
     "OraclePrice",
     "build_oracle_mapping",
+    "OracleMappingReader",
+    "MiddlewarePricedToken",
+    "fetch_unpriceable_priced_tokens",
     "PositionData",
     "UniswapV3Reader",
     "UniswapV3Position",

@@ -34,12 +34,12 @@ from web3 import Web3
 from ipor_fusion import (
     ERC20,
     AccessManager,
+    FusionFactory,
     IporFusionMarkets,
     PlasmaVault,
     Roles,
     Web3Context,
 )
-from ipor_fusion.core import FusionFactory
 from ipor_fusion.fuses import AaveV3SupplyFuse
 
 # A Base RPC, or an anvil fork of Base: anvil --fork-url <BASE_RPC_URL> --chain-id 8453

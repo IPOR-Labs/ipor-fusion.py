@@ -319,6 +319,30 @@ No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) run
 the box — it supports `eth_simulateV1` and serves their pinned blocks. It is rate-limited, so use a
 dedicated archive node for repeated or CI runs.
 
+## Public API and stability
+
+The supported API is `ipor_fusion.__all__`: import from `ipor_fusion`. Removing or
+renaming a name in it, or changing a signature incompatibly, waits for a major
+release; adding one does not.
+
+- **Public subpackages** declare their own `__all__`, each a subset of the top
+  level: `ipor_fusion.core`, `config`, `fuses`, `fuses.crosschain`, `readers`,
+  `crosschain`, `crosschain.ccip` and `crosschain.stargate`. `ipor_fusion.guide`
+  (the packaged docs) keeps its names in its own namespace.
+- **Public modules** stay importable for the top-level names they define:
+  `about`, `chains`, `dependency_graph`, `errors`, `explorer`, `field_docs`,
+  `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`, `validation`,
+  `vault_data` and `vault_info` (all under `ipor_fusion.`).
+- **Internal:** `ipor_fusion.cli`, `ipor_fusion.mcp`, every other module (e.g.
+  `cache`, `vault_reads`, the submodules of the public subpackages), underscore
+  names, and names in no `__all__`. They change without notice; the CLI and the
+  MCP server are stable as commands and tools, not as Python modules.
+- **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`: crosschain,
+  HyperCore) are exported like the rest but may change in a minor release.
+
+`tests/test_public_api.py` snapshots every `__all__`, so a change to the surface
+is a deliberate, reviewed edit.
+
 ## Architecture
 
 The SDK uses a **fuse adapter pattern**:
