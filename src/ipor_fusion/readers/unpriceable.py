@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
+from eth_typing import HexAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import ChecksumAddress
@@ -280,8 +281,8 @@ def _unpriceable(
 
 def fetch_unpriceable_priced_tokens(
     ctx: Web3Context,
-    oracle_address: str,
-    underlying: str,
+    oracle_address: HexAddress,
+    underlying: HexAddress,
     balance_fuses: list[BalanceFuse],
     market_substrates: dict[int, list[bytes]],
     morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None,

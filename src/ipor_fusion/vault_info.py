@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
+from eth_typing import HexAddress
+
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
@@ -332,7 +334,7 @@ def _build_withdraw_manager_json(
 def _build_breakdown_amount_json(
     ctx: Web3Context,
     raw: int,
-    token_address: str,
+    token_address: HexAddress,
     prices_usd: dict[str, float] | None,
 ) -> dict[str, Any]:
     """Build the JSON entry for one breakdown amount (collateral/borrow/supply/debt).
@@ -603,7 +605,7 @@ def _substrates_json(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
     data: VaultData,
-    resolve_name: Callable[[str], str],
+    resolve_name: Callable[[HexAddress], str],
 ) -> dict[str, list[dict[str, Any]]]:
     """Decoded substrates per balance-fuse market, with symbols and contract
     names resolved concurrently for every substrate address."""
@@ -629,7 +631,7 @@ def _substrates_json(
 
 
 def _links_json(
-    chain_id: ChainId, chain_label: str, vault_address: str
+    chain_id: ChainId, chain_label: str, vault_address: HexAddress
 ) -> dict[str, str]:
     links = {"ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}"}
     if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
@@ -673,7 +675,7 @@ def _markets_json(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: VaultData,
-    resolve_name: Callable[[str], str],
+    resolve_name: Callable[[HexAddress], str],
 ) -> tuple[dict[str, Any], Erc20Holdings]:
     """The fuse, balance-fuse and substrate blocks, in document order, plus the
     vault's ERC20 holdings, read concurrently with the name lookups."""
@@ -728,11 +730,11 @@ def build_vault_info_json(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: VaultData,
-    vault_address: str,
+    vault_address: HexAddress,
     chain_id: ChainId,
     chain_label: str,
     *,
-    resolve_name: Callable[[str], str] | None = None,
+    resolve_name: Callable[[HexAddress], str] | None = None,
 ) -> dict[str, Any]:
     """Everything known about the vault as one JSON-serializable dict: the
     ``fusion vault info --json`` document.
