@@ -23,6 +23,7 @@ from ipor_fusion.types import (
     ChainId,
     CommandId,
     DeploymentRequestId,
+    PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
     ReturnRequestId,
@@ -63,7 +64,7 @@ class ExecutorInitParams:
     ``StargateCrosschainFactory.createExecutor`` bakes into an executor."""
 
     asset_id: AssetId
-    manager: ChecksumAddress
+    manager: PlasmaVaultAddress
     admin: ChecksumAddress
     rescue_guardian: ChecksumAddress
     rescue_delay: int

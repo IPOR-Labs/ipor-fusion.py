@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, Self, TypeVar
 
 from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
@@ -156,7 +156,7 @@ class PlasmaVault(ContractWrapper):
         return PlasmaVaultAddress(self._address)
 
     @classmethod
-    def encoder(cls, address: PlasmaVaultAddress | None = None) -> PlasmaVault:  # type: ignore[override]
+    def encoder(cls, address: PlasmaVaultAddress | None = None) -> Self:  # type: ignore[override]
         return super().encoder(address)
 
     def execute(self, actions: list[FuseAction]) -> Call[None]:

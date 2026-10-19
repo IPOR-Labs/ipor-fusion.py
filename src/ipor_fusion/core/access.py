@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Self
 
 from eth_abi import decode
 from eth_abi.exceptions import InsufficientDataBytes
@@ -71,7 +72,7 @@ class AccessManager(ContractWrapper):
         return AccessManagerAddress(self._address)
 
     @classmethod
-    def encoder(cls, address: AccessManagerAddress | None = None) -> "AccessManager":  # type: ignore[override]
+    def encoder(cls, address: AccessManagerAddress | None = None) -> Self:  # type: ignore[override]
         return super().encoder(address)
 
     def grant_role(

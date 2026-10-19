@@ -46,32 +46,35 @@ a `bytes32` return (recall) request is `ReturnRequestId`.
 ## What changed, by area
 
 **Vault reads and validation.** `fetch_vault_data(chain_id=)`, `fetch_deployment_info`,
-`build_vault_info_json`, `ensure_supported_chain`, `fetch_vault_lending_health` take
-`ChainId`; vault and oracle addresses
-(`validate_vault`, `fetch_deployment_info`, `build_vault_info_json`,
-`fetch_unpriceable_priced_tokens`) take `ChecksumAddress`; `resolve_token_symbol`,
-`resolve_token_decimals`, `get_contract_name`, `get_deployment_tx` take `HexAddress`
-(a checksum address fits). The `resolve_name` / `resolve_symbol` callbacks receive a
-`HexAddress` (a callback typed for `str` still fits). Market-keyed data is keyed by
-`MarketId`: `VaultData.market_substrates`, `dependency_graph`, `fuse_markets`,
-`morpho_positions`, `aave_positions`; the `VaultState` protocol, `validate_vault_state`
+`build_vault_info_json`, `ensure_supported_chain` and `fetch_vault_lending_health`
+take `ChainId`. The vault is a `PlasmaVaultAddress` (see *Address roles*) in
+`validate_vault` and `fetch_deployment_info`; `build_vault_info_json(ctx, plasma_vault,
+data, chain_id, chain_label)` takes no address and labels the document with
+`plasma_vault.address`. `fetch_unpriceable_priced_tokens` takes the oracle and
+underlying as `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,
+`get_contract_name` and `get_deployment_tx` take `HexAddress` (a checksum address
+fits), and the `resolve_name` / `resolve_symbol` callbacks receive one (a callback
+typed for `str` still fits). Market-keyed data is keyed by `MarketId`:
+`VaultData.market_substrates`, `dependency_graph`, `morpho_positions`,
+`aave_positions`; the `VaultState` protocol, `validate_vault_state`
 (`market_balances`), `fetch_vault_lending_health`, `fetch_unpriceable_priced_tokens`
 and the `dependency_graph` helpers (`compute_update_reach`, `compute_update_groups`,
 `find_orphan_fuse_markets`, `find_markets_missing_erc20_dependency`).
-A custom `VaultState` implementation also annotates `asset` as `ChecksumAddress` and
-its `unpriceable_priced_tokens` items' `market_id` as `MarketId`
-(`UnpriceableToken`), and `price_oracle_addr` / `fuse_markets` keys as
-`ChecksumAddress`. `VaultData.asset`, `access_manager`, `price_oracle_addr`,
-`rewards_manager`, `withdraw_manager`, `fuses` and `instant_fuses` (and the
-`fuse_markets` keys), `FeeData.fee_manager` / `ipor_dao_fee_recipient`, and
-`VaultValidation.vault` / `asset` are `ChecksumAddress`; `VaultData.balance_fuses`
-is `list[BalanceFuse]` and `token_prices_usd` is keyed by `HexAddress` (lowercase);
-the Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` are
-`ChecksumAddress`;
-`VaultValidation.chain_id` is `ChainId`; `LendingMarketHealth.market_id` and
-`MiddlewarePricedToken.market_id` are `MarketId`; `Erc20Holding.address` is
-`HexAddress`, and `SubstrateInfo.address` is `HexAddress | None` (`None`, no longer
-`""`, when a substrate carries no address).
+
+`VaultData.asset`, `price_oracle_addr`, `rewards_manager`, `withdraw_manager`,
+`FeeData.fee_manager` / `ipor_dao_fee_recipient` and `VaultValidation.vault` /
+`asset` are `ChecksumAddress` (`VaultValidation.vault` a `PlasmaVaultAddress`);
+`VaultData.access_manager` is an `AccessManagerAddress`, `fuses` / `instant_fuses`
+and the `fuse_markets` keys are `FuseAddress`, `balance_fuses` is
+`list[BalanceFuse]`, and `token_prices_usd` is keyed by lowercase `HexAddress`. A
+custom `VaultState` implementation annotates `asset` and `price_oracle_addr` as
+`ChecksumAddress`, `fuse_markets` keys as `FuseAddress`, and its
+`unpriceable_priced_tokens` items' `market_id` as `MarketId` (`UnpriceableToken`).
+The Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` are
+`ChecksumAddress`. `VaultValidation.chain_id` is `ChainId`;
+`LendingMarketHealth.market_id` and `MiddlewarePricedToken.market_id` are
+`MarketId`; `Erc20Holding.address` is `HexAddress`, and `SubstrateInfo.address` is
+`HexAddress | None` (`None`, no longer `""`, when a substrate carries no address).
 `LegacyPriceOracleMiddleware` takes `base_currency_decimals: Decimals`.
 `get_logs_adaptive(chain_id=)` and `LogSource.get_logs` take `ChainId`;
 `quote_ccip_native_fee(block=)` and `OracleMappingReader.asset_source_events` take a
@@ -80,19 +83,24 @@ the Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` 
 **Address roles.** `PlasmaVault(ctx, address)`, `PlasmaVault.encoder(address)`,
 `validate_vault`, `fetch_deployment_info`, the HyperCore, lending-health and
 oracle-mapping readers, `read_external_state`, `VaultSimulator(vault=)`,
-`CrosschainSimulator`, crosschain discovery, `Command.deposit` / `redeem` /
-`request_redeem` and the remote-vault substrate take a `PlasmaVaultAddress`;
-`.address` and `FusionInstance.plasma_vault` return one. Every fuse constructor,
-`FuseAction.fuse`, `BalanceFuse.fuse`, `PlasmaVault.add_fuses` / `remove_fuses` /
-`add_balance_fuse` / `remove_balance_fuse` / `balance_fuse_value`, `LaneFuses` and the
-HyperCore balance-fuse argument take a `FuseAddress`, and `get_fuses()`,
-`get_instant_withdrawal_fuses()`, `VaultData.fuses` / `instant_fuses` /
-`fuse_markets` keys return it. `AccessManager(ctx, address)` takes an
-`AccessManagerAddress`; `get_access_manager_address()`, `VaultData.access_manager`
-and `FusionInstance.access_manager` return one. `resolve_access_manager` still takes
-any `ChecksumAddress`: it is what checks that the address is a vault.
-`build_vault_info_json` no longer takes `vault_address`; the document's vault comes
-from the `plasma_vault` argument.
+`CrosschainSimulator`, crosschain discovery, the hub-manager inputs
+(`ExecutorInitParams.manager`, `create_executor(manager=)`, `executors_of(manager=)`),
+the async command helpers `Command.request_shares` / `redeem_from_request`,
+`pending_request_shares` and `WithdrawManager.update_plasma_vault_address` take a
+`PlasmaVaultAddress`; `.address`, `FusionInstance.plasma_vault` and the executor's
+`manager()` return one. Crosschain deposit and redeem destinations stay
+`ChecksumAddress`: `Command.deposit` / `redeem`, `is_allowed_vault`,
+`is_tracked_vault` and the remote-vault substrate accept any allowlisted ERC4626.
+Every fuse constructor, `FuseAction.fuse`, `BalanceFuse.fuse`,
+`PlasmaVault.add_fuses` / `remove_fuses` / `add_balance_fuse` / `remove_balance_fuse`
+/ `balance_fuse_value`, `RewardsManager.add_reward_fuses` / `is_reward_fuse_supported`,
+`LaneFuses` and the HyperCore balance-fuse argument take a `FuseAddress`, and
+`get_fuses()`, `get_instant_withdrawal_fuses()`, `get_rewards_fuses()` and
+`VaultData.fuses` / `instant_fuses` / `fuse_markets` keys return it.
+`AccessManager(ctx, address)` takes an `AccessManagerAddress`;
+`get_access_manager_address()`, `VaultData.access_manager` and
+`FusionInstance.access_manager` return one. `resolve_access_manager` still takes any
+`ChecksumAddress`: it is what checks that the address is a vault.
 
 **Markets and substrates.** Every `IporFusionMarkets` member is a `MarketId`.
 `decode_substrate`, `market_name`, `format_market_label` take `MarketId`.

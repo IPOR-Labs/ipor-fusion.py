@@ -178,8 +178,9 @@ class Command:
 
     @property
     def target_vault(self) -> ChecksumAddress | None:
-        """The remote PlasmaVault this command acts on, or ``None`` for an
-        action without a vault target."""
+        """The remote vault this command acts on: any allowlisted ERC4626 for a
+        deposit or redeem, a Plasma Vault for the async request path; ``None``
+        for an action without a vault target."""
         index = _ACTION_VAULT_INDEX.get(self.action)
         if index is None:
             return None
@@ -196,7 +197,7 @@ class Command:
     @classmethod
     def deposit(
         cls,
-        vault: PlasmaVaultAddress,
+        vault: ChecksumAddress,
         amount_sd: Amount,
         min_shares: Shares = _ZERO_SHARES,
     ) -> Command:
@@ -212,7 +213,7 @@ class Command:
     @classmethod
     def redeem(
         cls,
-        vault: PlasmaVaultAddress,
+        vault: ChecksumAddress,
         shares: Shares,
         min_assets: Amount = _ZERO_AMOUNT,
     ) -> Command:

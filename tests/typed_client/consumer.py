@@ -28,6 +28,7 @@ from ipor_fusion.chains import ensure_supported_chain
 from ipor_fusion.core.access import AccessManager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.core.rewards_manager import RewardsManager
 from ipor_fusion.crosschain.ccip.contracts import (
     CcipCrosschainDispatcher,
     CcipCrosschainExecutor,
@@ -38,7 +39,9 @@ from ipor_fusion.crosschain.contracts import (
     CrosschainExecutor,
     CrosschainFactory,
 )
+from ipor_fusion.crosschain.messages import Command
 from ipor_fusion.crosschain.stargate.contracts import (
+    StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
 )
@@ -48,6 +51,7 @@ from ipor_fusion.morpho_api import fetch_market, fetch_vault
 from ipor_fusion.readers.morpho import morpho_blue_address
 from ipor_fusion.readers.unpriceable import fetch_unpriceable_priced_tokens
 from ipor_fusion.types import (
+    Amount,
     AssetId,
     ChainId,
     CommandId,
@@ -130,3 +134,16 @@ def roles_flow_from_getters_into_writes(ctx: Web3Context) -> None:
     vault.remove_fuses(fuses)
     for balance_fuse in vault.get_balance_fuses():
         vault.balance_fuse_value(balance_fuse.fuse)
+
+
+def reward_fuses_flow(manager: RewardsManager) -> None:
+    fuses = manager.get_rewards_fuses().call()
+    manager.add_reward_fuses(fuses)
+    manager.is_reward_fuse_supported(fuses[0])
+
+
+def remote_erc4626_destination(dispatcher: StargateCrosschainDispatcher) -> None:
+    # Allowlisted destinations are any ERC4626, not only Plasma Vaults.
+    target = dispatcher.get_allowed_vaults().call()[0]
+    Command.deposit(target, Amount(1))
+    dispatcher.is_allowed_vault(target)

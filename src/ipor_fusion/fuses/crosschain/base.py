@@ -38,7 +38,7 @@ from ipor_fusion.fuses.base import (
     _substrate_address_bytes,
     _validate_not_zero_address,
 )
-from ipor_fusion.types import Amount, ChainId, MarketId, PlasmaVaultAddress
+from ipor_fusion.types import Amount, ChainId, MarketId
 
 _NO_CHAIN = ChainId(0)
 _ZERO_AMOUNT = Amount(0)
@@ -116,9 +116,7 @@ class CrosschainSubstrateLib:
         )
 
     @classmethod
-    def remote_vault_substrate(
-        cls, chain_id: ChainId, vault: PlasmaVaultAddress
-    ) -> bytes:
+    def remote_vault_substrate(cls, chain_id: ChainId, vault: ChecksumAddress) -> bytes:
         """``remoteVaultSubstrate(chainId, vault)``."""
         if chain_id == 0:
             raise ValueError("chain_id must not be zero")

@@ -211,10 +211,10 @@ class CrosschainDispatcher(ContractWrapper):
     def command_config_epoch(self) -> Call[int]:
         return self._view("commandConfigEpoch()", output_types=["uint64"])
 
-    def is_allowed_vault(self, vault: PlasmaVaultAddress) -> Call[bool]:
+    def is_allowed_vault(self, vault: ChecksumAddress) -> Call[bool]:
         return self._view("isAllowedVault(address)", vault, output_types=["bool"])
 
-    def is_tracked_vault(self, vault: PlasmaVaultAddress) -> Call[bool]:
+    def is_tracked_vault(self, vault: ChecksumAddress) -> Call[bool]:
         return self._view("isTrackedVault(address)", vault, output_types=["bool"])
 
     def pending_request_shares(self, vault: PlasmaVaultAddress) -> Call[int]:
@@ -247,7 +247,7 @@ class CrosschainFactory(ContractWrapper):
             decoder=_address,
         )
 
-    def executors_of(self, manager: ChecksumAddress) -> Call[list[ChecksumAddress]]:
+    def executors_of(self, manager: PlasmaVaultAddress) -> Call[list[ChecksumAddress]]:
         """Every executor created with ``manager`` (a PlasmaVault) as its MANAGER."""
         return self._view(
             "executorsOf(address)",

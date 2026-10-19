@@ -25,6 +25,7 @@ from ipor_fusion.types import (
     CommandId,
     MessageId,
     OperationId,
+    PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
 )
@@ -346,7 +347,7 @@ class CcipCrosschainFactory(CrosschainFactory):
         self,
         user_salt: bytes,
         asset_id: AssetId,
-        manager: ChecksumAddress,
+        manager: PlasmaVaultAddress,
         safety: SafetyConfig,
     ) -> Call[ChecksumAddress]:
         """Deploy a CCIP executor bound to ``manager``. Same write/preview
