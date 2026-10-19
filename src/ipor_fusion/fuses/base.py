@@ -7,19 +7,19 @@ from eth_utils import function_signature_to_4byte_selector
 from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.core.fuse_action import FuseAction
-from ipor_fusion.types import MAX_UINT256, Amount
+from ipor_fusion.types import MAX_UINT256, Amount, FuseAddress
 from ipor_fusion.types import ZERO_ADDRESS as ZERO_ADDRESS
 
 
 class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
     """Abstract base class for all protocol fuse adapters."""
 
-    def __init__(self, address: ChecksumAddress):
+    def __init__(self, address: FuseAddress):
         _validate_not_zero_address(address, "fuse address")
         self._address = address
 
     @property
-    def address(self) -> ChecksumAddress:
+    def address(self) -> FuseAddress:
         return self._address
 
     @staticmethod
@@ -57,7 +57,7 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
 class StakeFuse(Fuse):
     """Base fuse for stake/unstake operations on a staking contract."""
 
-    def __init__(self, fuse_address: ChecksumAddress, staking_address: ChecksumAddress):
+    def __init__(self, fuse_address: FuseAddress, staking_address: ChecksumAddress):
         super().__init__(fuse_address)
         self._staking_address = staking_address
 

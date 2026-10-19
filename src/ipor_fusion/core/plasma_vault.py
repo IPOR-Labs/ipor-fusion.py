@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, TypeVar
@@ -13,10 +13,21 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 from web3.types import LogReceipt, Timestamp
 
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.errors import EmptyCallResultError, UnsupportedVaultVersionError
-from ipor_fusion.types import ZERO_ADDRESS, Amount, Decimals, Fee, MarketId, Shares
+from ipor_fusion.types import (
+    ZERO_ADDRESS,
+    AccessManagerAddress,
+    Amount,
+    Decimals,
+    Fee,
+    FuseAddress,
+    MarketId,
+    PlasmaVaultAddress,
+    Shares,
+)
 
 T = TypeVar("T")
 
@@ -50,7 +61,7 @@ class BalanceFuse:
     """Mapping between a market and its balance-tracking fuse contract."""
 
     market_id: MarketId
-    fuse: ChecksumAddress
+    fuse: FuseAddress
 
 
 @dataclass(slots=True)
@@ -105,6 +116,14 @@ def _address_list_decoder(value: list) -> list[ChecksumAddress]:
     return [Web3.to_checksum_address(item) for item in value]
 
 
+def _fuse_list_decoder(value: list) -> list[FuseAddress]:
+    return [FuseAddress(Web3.to_checksum_address(item)) for item in value]
+
+
+def _access_manager_decoder(value: str) -> AccessManagerAddress:
+    return AccessManagerAddress(Web3.to_checksum_address(value))
+
+
 def _performance_fee_data_decoder(value: tuple) -> PerformanceFeeData:
     fee_account, fee_in_percentage = value
     return PerformanceFeeData(
@@ -128,6 +147,17 @@ class PlasmaVault(ContractWrapper):
     Each method returns a `Call[T]`. For external-signer flows (HTTP signing
     service, multisig), grab the bytes directly: `vault.add_fuses(...).calldata`.
     """
+
+    def __init__(self, ctx: Web3Context, address: PlasmaVaultAddress):
+        super().__init__(ctx, address)
+
+    @property
+    def address(self) -> PlasmaVaultAddress:
+        return PlasmaVaultAddress(self._address)
+
+    @classmethod
+    def encoder(cls, address: PlasmaVaultAddress | None = None) -> PlasmaVault:  # type: ignore[override]
+        return super().encoder(address)
 
     def execute(self, actions: list[FuseAction]) -> Call[None]:
         data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
@@ -156,10 +186,10 @@ class PlasmaVault(ContractWrapper):
             "redeemFromRequest(uint256,address,address)", shares, receiver, owner
         )
 
-    def add_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
+    def add_fuses(self, fuses: Sequence[FuseAddress]) -> Call[None]:
         return self._write("addFuses(address[])", fuses)
 
-    def remove_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
+    def remove_fuses(self, fuses: Sequence[FuseAddress]) -> Call[None]:
         """FUSE_MANAGER-only inverse of `add_fuses`. Used by partial-failure
         rollback flows where a setter batch aborted mid-sequence and prior
         `addFuses` steps must be reverted before the vault is usable."""
@@ -184,13 +214,13 @@ class PlasmaVault(ContractWrapper):
         )
 
     def add_balance_fuse(
-        self, market_id: MarketId, balance_fuse: ChecksumAddress
+        self, market_id: MarketId, balance_fuse: FuseAddress
     ) -> Call[None]:
         """FUSE_MANAGER-only: link a balance-tracking fuse to a market id."""
         return self._write("addBalanceFuse(uint256,address)", market_id, balance_fuse)
 
     def remove_balance_fuse(
-        self, market_id: MarketId, balance_fuse: ChecksumAddress
+        self, market_id: MarketId, balance_fuse: FuseAddress
     ) -> Call[None]:
         """FUSE_MANAGER-only inverse of `add_balance_fuse`. Pairs with
         `remove_fuses` for partial-failure rollback."""
@@ -259,7 +289,7 @@ class PlasmaVault(ContractWrapper):
             decoder=_universal_read_decoder(output_types, decoder),
         )
 
-    def balance_fuse_value(self, balance_fuse: ChecksumAddress) -> Call[Amount]:
+    def balance_fuse_value(self, balance_fuse: FuseAddress) -> Call[Amount]:
         """``balanceOf()`` of ``balance_fuse`` evaluated in the vault's context:
         the figure ``updateMarketsBalances`` would store for its market now."""
         return self.read_as(
@@ -403,11 +433,11 @@ class PlasmaVault(ContractWrapper):
             "asset()", output_types=["address"], decoder=Web3.to_checksum_address
         )
 
-    def get_access_manager_address(self) -> Call[ChecksumAddress]:
+    def get_access_manager_address(self) -> Call[AccessManagerAddress]:
         return self._view(
             "getAccessManagerAddress()",
             output_types=["address"],
-            decoder=Web3.to_checksum_address,
+            decoder=_access_manager_decoder,
         )
 
     def get_rewards_claim_manager_address(self) -> Call[ChecksumAddress]:
@@ -472,20 +502,20 @@ class PlasmaVault(ContractWrapper):
             "getPriceOracleMiddleware() nor getPriceOracle()"
         )
 
-    def get_fuses(self) -> Call[list[ChecksumAddress]]:
+    def get_fuses(self) -> Call[list[FuseAddress]]:
         return self._view(
-            "getFuses()", output_types=["address[]"], decoder=_address_list_decoder
+            "getFuses()", output_types=["address[]"], decoder=_fuse_list_decoder
         )
 
-    def get_instant_withdrawal_fuses(self) -> Call[list[ChecksumAddress]]:
+    def get_instant_withdrawal_fuses(self) -> Call[list[FuseAddress]]:
         return self._view(
             "getInstantWithdrawalFuses()",
             output_types=["address[]"],
-            decoder=_address_list_decoder,
+            decoder=_fuse_list_decoder,
         )
 
     def get_instant_withdrawal_fuses_params(
-        self, fuse: ChecksumAddress, index: int
+        self, fuse: FuseAddress, index: int
     ) -> Call[list[bytes]]:
         return self._view(
             "getInstantWithdrawalFusesParams(address,uint256)",
@@ -558,11 +588,11 @@ class PlasmaVault(ContractWrapper):
         except (EmptyCallResultError, ContractLogicError):
             return False
 
-    def _balance_fuse_in_storage(self, market_id: MarketId) -> ChecksumAddress:
+    def _balance_fuse_in_storage(self, market_id: MarketId) -> FuseAddress:
         slot = Web3.keccak(
             encode(["uint256", "uint256"], [market_id, _BALANCE_FUSES_SLOT])
         )
-        return self._address_at(int.from_bytes(slot))
+        return FuseAddress(self._address_at(int.from_bytes(slot)))
 
     def _replay_balance_fuses(self) -> list[BalanceFuse]:
         # Replay Added/Removed events chronologically to mirror on-chain storage.
@@ -576,7 +606,7 @@ class PlasmaVault(ContractWrapper):
         state: dict[MarketId, BalanceFuse] = {}
         for event in events:
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
-            checksum = Web3.to_checksum_address(fuse)
+            checksum = FuseAddress(Web3.to_checksum_address(fuse))
             if HexBytes(event["topics"][0]) == _BALANCE_FUSE_ADDED_TOPIC:
                 state[market_id] = BalanceFuse(market_id=market_id, fuse=checksum)
             else:

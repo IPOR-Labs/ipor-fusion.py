@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
-from eth_typing import ChecksumAddress, HexAddress
+from eth_typing import HexAddress
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
@@ -26,7 +26,13 @@ from ipor_fusion.substrates import (
     format_market_label,
     market_name,
 )
-from ipor_fusion.types import ChainId, MarketId, parse_hex_address
+from ipor_fusion.types import (
+    ChainId,
+    FuseAddress,
+    MarketId,
+    PlasmaVaultAddress,
+    parse_hex_address,
+)
 from ipor_fusion.validation import (
     Erc20Holdings,
     Reconciliation,
@@ -492,9 +498,9 @@ def health_check_lists(
 
 
 def _fuse_entry(
-    addr: ChecksumAddress,
+    addr: FuseAddress,
     contract: str | None,
-    fuse_markets: dict[ChecksumAddress, MarketId],
+    fuse_markets: dict[FuseAddress, MarketId],
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {"address": addr, "contract": contract or "?"}
     if (mid := fuse_markets.get(addr)) is not None:
@@ -636,7 +642,7 @@ def _substrates_json(
 
 
 def _links_json(
-    chain_id: ChainId, chain_label: str, vault_address: ChecksumAddress
+    chain_id: ChainId, chain_label: str, vault_address: PlasmaVaultAddress
 ) -> dict[str, str]:
     links = {"ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}"}
     if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
@@ -735,7 +741,6 @@ def build_vault_info_json(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: VaultData,
-    vault_address: ChecksumAddress,
     chain_id: ChainId,
     chain_label: str,
     *,
@@ -764,9 +769,9 @@ def build_vault_info_json(
     ok, warnings, criticals = health_check_lists(validation)
 
     return {
-        "vault": vault_address,
+        "vault": plasma_vault.address,
         "name": data.vault_name or None,
-        "links": _links_json(chain_id, chain_label, vault_address),
+        "links": _links_json(chain_id, chain_label, plasma_vault.address),
         "chain": chain_label,
         "chain_id": chain_id,
         "block": data.block_number,

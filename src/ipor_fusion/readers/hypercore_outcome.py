@@ -23,7 +23,7 @@ from ipor_fusion.readers.hypercore import (
     HyperCorePendingReader,
     HyperCoreReader,
 )
-from ipor_fusion.types import Amount, HyperCoreTokenIndex, Shares
+from ipor_fusion.types import Amount, HyperCoreTokenIndex, PlasmaVaultAddress, Shares
 
 TransferDirection = Literal["evm_to_core", "core_to_evm"]
 
@@ -43,7 +43,7 @@ class HyperCoreTransferSnapshot:
     """One block's Core spot, vault ERC-20 and pending-action observations."""
 
     block_number: int
-    vault: ChecksumAddress
+    vault: PlasmaVaultAddress
     token_index: HyperCoreTokenIndex
     evm_token: ChecksumAddress
     action_nonce: int
@@ -109,7 +109,7 @@ def _pinned_context(ctx: Web3Context) -> tuple[Web3Context, int]:
 
 def read_hypercore_transfer_snapshot(
     ctx: Web3Context,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     evm_token: ChecksumAddress,
     *,
     token_index: HyperCoreTokenIndex = USDC_TOKEN_INDEX,
@@ -255,7 +255,7 @@ def read_hypercore_transfer_outcome(
 
 
 def read_hypercore_evm_exit_ceiling(
-    ctx: Web3Context, vault_address: ChecksumAddress, holder: ChecksumAddress
+    ctx: Web3Context, vault_address: PlasmaVaultAddress, holder: ChecksumAddress
 ) -> HyperCoreEvmExitCeiling:
     """Read the holder's upper bound for an immediate EVM underlying exit.
 

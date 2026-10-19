@@ -1,7 +1,7 @@
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import Fuse, FuseAction, StakeFuse
-from ipor_fusion.types import Amount
+from ipor_fusion.types import Amount, FuseAddress
 
 
 class FluidInstadappSupplyFuse(Fuse):
@@ -23,7 +23,7 @@ class FluidInstadappStakingFuse(StakeFuse):
 
     def __init__(
         self,
-        fuse_address: ChecksumAddress,
+        fuse_address: FuseAddress,
         staking_address: ChecksumAddress,
     ):
         super().__init__(fuse_address, staking_address)

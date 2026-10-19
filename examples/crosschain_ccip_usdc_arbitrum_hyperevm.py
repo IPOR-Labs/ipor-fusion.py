@@ -81,6 +81,7 @@ from ipor_fusion import (
     erc20_balance_slot,
     is_simulate_v1_supported,
     open_lane,
+    parse_plasma_vault_address,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import Amount, ChainId, MarketId, Period, Shares
@@ -114,10 +115,10 @@ HYPEREVM_USDC = Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba
 # live as a regression fixture (the SDK's own tests pin the same addresses). Verify
 # them yourself with ``discover_deployment(hub_ctx, HUB_VAULT, CROSSCHAIN_MARKET)``,
 # which reads the executor, its fuses and its spoke from the vault's grants.
-HUB_VAULT = Web3.to_checksum_address("0x8BeED16DB1f354B0BFa31eF7e747102e26eb8FbF")
+HUB_VAULT = parse_plasma_vault_address("0x8BeED16DB1f354B0BFa31eF7e747102e26eb8FbF")
 # The executor on Arbitrum and the dispatcher on HyperEVM: one CREATE3 address.
 EXECUTOR = Web3.to_checksum_address("0xcb83A78BD8e8c284d5704B62945EF2C454266dB0")
-SPOKE_VAULT = Web3.to_checksum_address("0xA342eBA00bD725799828A34EA55D25a55958f643")
+SPOKE_VAULT = parse_plasma_vault_address("0xA342eBA00bD725799828A34EA55D25a55958f643")
 # ``IporFusionMarkets.CROSSCHAIN``: the market the four crosschain fuses are
 # registered under on the hub vault.
 CROSSCHAIN_MARKET = MarketId(int(IporFusionMarkets.CROSSCHAIN))

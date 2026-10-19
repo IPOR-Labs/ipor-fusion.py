@@ -55,7 +55,11 @@ from ipor_fusion.morpho_api import (
 )
 from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
-from ipor_fusion.types import ChainId, parse_morpho_market_id
+from ipor_fusion.types import (
+    ChainId,
+    parse_morpho_market_id,
+    parse_plasma_vault_address,
+)
 from ipor_fusion.validation import validate_vault
 from ipor_fusion.vault_data import (
     fetch_deployment_info,
@@ -188,7 +192,7 @@ def vault_info(
     # UnsupportedChainError doubles as ValueError so FastMCP surfaces it.
     ensure_supported_chain(chain_id)
     ctx, effective_block = _build_ctx(cfg, chain_id, block_number)
-    checksum = Web3.to_checksum_address(vault_address)
+    checksum = parse_plasma_vault_address(vault_address)
 
     # Cheap single-call probe: raises the typed ContractNotFoundError /
     # NotPlasmaVaultError ("not a vault" in both revert and empty-return
@@ -212,7 +216,6 @@ def vault_info(
         ctx,
         plasma_vault,
         data,
-        checksum,
         chain_id,
         chain_label,
         resolve_name=partial(get_contract_name, chain_id, api_key=api_key),
@@ -242,7 +245,7 @@ def vault_validate(
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
     ensure_supported_chain(chain_id)
     ctx, effective_block = _build_ctx(cfg, chain_id, block_number)
-    checksum = Web3.to_checksum_address(vault_address)
+    checksum = parse_plasma_vault_address(vault_address)
 
     # Same cheap probe as vault_info: "not a vault" fails before the fetch.
     resolve_access_manager(ctx, checksum)
@@ -315,7 +318,7 @@ def vault_role_accounts(
     # validated on.
     ensure_supported_chain(chain_id)
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
-    checksum = Web3.to_checksum_address(vault_address)
+    checksum = parse_plasma_vault_address(vault_address)
 
     access_manager = resolve_access_manager(ctx, checksum)
     accounts = (
@@ -396,7 +399,7 @@ def vault_oracle_mapping(
     # (before any RPC) on chains the vault tooling is not validated on.
     ensure_supported_chain(chain_id)
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
-    checksum = Web3.to_checksum_address(vault_address)
+    checksum = parse_plasma_vault_address(vault_address)
 
     # The event-replay fallback and the output both need a concrete block
     # number, so resolve "latest" up front and pin the context to it.
@@ -437,7 +440,7 @@ def vault_add(
         label: Human-readable label (fetched from on-chain name() if empty).
         chain_id: Chain ID (auto-detected when only one provider configured).
     """
-    checksum = Web3.to_checksum_address(address)
+    checksum = parse_plasma_vault_address(address)
     cfg = load_config()
 
     if not chain_id:

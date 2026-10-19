@@ -8,7 +8,6 @@ executed.
 """
 
 from eth_typing import ChecksumAddress
-from web3 import Web3
 
 from ipor_fusion import (
     IporFusionMarkets,
@@ -21,6 +20,7 @@ from ipor_fusion import (
     market_name,
     parse_hex_address,
     parse_morpho_market_id,
+    parse_plasma_vault_address,
     parse_tx_hash,
     validate_vault,
 )
@@ -59,7 +59,7 @@ from ipor_fusion.types import (
 from ipor_fusion.vault_data import resolve_token_symbol
 
 ETHEREUM = ChainId(1)
-VAULT = Web3.to_checksum_address("0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2")
+VAULT = parse_plasma_vault_address("0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2")
 
 
 def access(am: AccessManager, account: ChecksumAddress) -> None:
@@ -74,7 +74,7 @@ def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     ensure_supported_chain(ETHEREUM)
     data = fetch_vault_data(ctx, vault, chain_id=ETHEREUM)
     fetch_deployment_info(ctx, ETHEREUM, VAULT, None)
-    build_vault_info_json(ctx, vault, data, VAULT, ETHEREUM, "ethereum")
+    build_vault_info_json(ctx, vault, data, ETHEREUM, "ethereum")
     validate_vault(ctx, VAULT)
     resolve_token_symbol(ctx, VAULT)
     fetch_unpriceable_priced_tokens(ctx, VAULT, VAULT, [], {}, None)
@@ -120,3 +120,13 @@ def crosschain_reads_feed_writes(
     stargate_factory.cancel_pending_deployment(
         stargate.pending_request_by_chain(ETHEREUM).call()
     )
+
+
+def roles_flow_from_getters_into_writes(ctx: Web3Context) -> None:
+    vault = PlasmaVault(ctx, VAULT)
+    manager = AccessManager(ctx, vault.get_access_manager_address().call())
+    manager.has_role(Roles.ATOMIST_ROLE, vault.address)
+    fuses = vault.get_fuses().call()
+    vault.remove_fuses(fuses)
+    for balance_fuse in vault.get_balance_fuses():
+        vault.balance_fuse_value(balance_fuse.fuse)

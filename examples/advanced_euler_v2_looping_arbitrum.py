@@ -44,6 +44,7 @@ from ipor_fusion import (
     VaultSimulator,
     Web3Context,
     is_simulate_v1_supported,
+    parse_fuse_address,
 )
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.contract import Call
@@ -77,31 +78,21 @@ MORPHO_FLASH_MARKET = MarketId(IporFusionMarkets.MORPHO_FLASH_LOAN)
 ARBITRUM_FUSION_FACTORY = Web3.to_checksum_address(
     "0x134fCAce7a2C7Ef3dF2479B62f03ddabAEa922d5"
 )
-EULER_SUPPLY_FUSE = Web3.to_checksum_address(
-    "0x920f6c81666877490A8D6dcFEFd85d151Ef04B7d"
-)
-EULER_COLLATERAL_FUSE = Web3.to_checksum_address(
-    "0x6D35934cB431B36338fF88641BEBF540e826bd7D"
-)
-EULER_CONTROLLER_FUSE = Web3.to_checksum_address(
-    "0x2A02Ae392816441E804aa9eCcf5c0333911Dc989"
-)
-EULER_BORROW_FUSE = Web3.to_checksum_address(
-    "0x10eb9B247e7Ce00F3290F66d8B5E83BfD311375F"
-)
-EULER_BALANCE_FUSE = Web3.to_checksum_address(
-    "0xF7dF7b8eB5B0c6d02b1b8FEC769dFE65D9a27E3b"
-)
-MORPHO_FLASH_LOAN_FUSE = Web3.to_checksum_address(
+EULER_SUPPLY_FUSE = parse_fuse_address("0x920f6c81666877490A8D6dcFEFd85d151Ef04B7d")
+EULER_COLLATERAL_FUSE = parse_fuse_address("0x6D35934cB431B36338fF88641BEBF540e826bd7D")
+EULER_CONTROLLER_FUSE = parse_fuse_address("0x2A02Ae392816441E804aa9eCcf5c0333911Dc989")
+EULER_BORROW_FUSE = parse_fuse_address("0x10eb9B247e7Ce00F3290F66d8B5E83BfD311375F")
+EULER_BALANCE_FUSE = parse_fuse_address("0xF7dF7b8eB5B0c6d02b1b8FEC769dFE65D9a27E3b")
+MORPHO_FLASH_LOAN_FUSE = parse_fuse_address(
     "0xeA36D6478CAAE9a5CDbEA0814bDe98533320d742"
 )
-MORPHO_FLASH_BALANCE_FUSE = Web3.to_checksum_address(
+MORPHO_FLASH_BALANCE_FUSE = parse_fuse_address(
     "0xAD5EdaEc3cd9a25C8Cc42284dDeF57dCFF40341d"
 )
-UNIVERSAL_SWAPPER_FUSE_V2 = Web3.to_checksum_address(
+UNIVERSAL_SWAPPER_FUSE_V2 = parse_fuse_address(
     "0x799b979A2377268ac2D5E43247cbd6F797229Ef3"
 )
-UNIVERSAL_SWAPPER_BALANCE_FUSE_V2 = Web3.to_checksum_address(
+UNIVERSAL_SWAPPER_BALANCE_FUSE_V2 = parse_fuse_address(
     "0x69199E8360b3Baa536Cda2bd71dFFb30F79fBeF7"
 )
 MORPHO_CALLBACK_HANDLER = Web3.to_checksum_address(

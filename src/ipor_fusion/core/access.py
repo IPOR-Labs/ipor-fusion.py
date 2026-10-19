@@ -15,7 +15,7 @@ from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
-from ipor_fusion.types import Period, RoleId
+from ipor_fusion.types import AccessManagerAddress, Period, PlasmaVaultAddress, RoleId
 
 
 @dataclass(slots=True)
@@ -62,6 +62,17 @@ def _role_status_decoder(values: tuple) -> RoleStatus:
 
 class AccessManager(ContractWrapper):
     """Manages role-based access control for PlasmaVault operations."""
+
+    def __init__(self, ctx: Web3Context, address: AccessManagerAddress):
+        super().__init__(ctx, address)
+
+    @property
+    def address(self) -> AccessManagerAddress:
+        return AccessManagerAddress(self._address)
+
+    @classmethod
+    def encoder(cls, address: AccessManagerAddress | None = None) -> "AccessManager":  # type: ignore[override]
+        return super().encoder(address)
 
     def grant_role(
         self, role_id: RoleId | Roles, account: ChecksumAddress, execution_delay: Period
@@ -193,7 +204,11 @@ def resolve_access_manager(
             f"No contract found at {checksum} on chain {ctx.chain_id}{block_note}."
         )
     try:
-        manager_address = PlasmaVault(ctx, checksum).get_access_manager_address().call()
+        manager_address = (
+            PlasmaVault(ctx, PlasmaVaultAddress(checksum))
+            .get_access_manager_address()
+            .call()
+        )
     except (InsufficientDataBytes, ContractLogicError) as exc:
         raise NotPlasmaVaultError(
             f"Address {checksum} on chain {ctx.chain_id} does not appear "

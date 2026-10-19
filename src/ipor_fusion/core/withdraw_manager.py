@@ -12,7 +12,7 @@ from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.multicall import Multicall3
-from ipor_fusion.types import Amount, Fee, Period, Shares
+from ipor_fusion.types import Amount, Fee, Period, PlasmaVaultAddress, Shares
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class WithdrawManager(ContractWrapper):
     def update_withdraw_window(self, window: Period) -> Call[None]:
         return self._write("updateWithdrawWindow(uint256)", window)
 
-    def update_plasma_vault_address(self, vault: ChecksumAddress) -> Call[None]:
+    def update_plasma_vault_address(self, vault: PlasmaVaultAddress) -> Call[None]:
         return self._write("updatePlasmaVaultAddress(address)", vault)
 
     def release_funds(

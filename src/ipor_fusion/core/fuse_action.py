@@ -1,15 +1,16 @@
 from dataclasses import dataclass
 
 from eth_abi import encode
-from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
+
+from ipor_fusion.types import FuseAddress
 
 
 @dataclass(frozen=True, slots=True)
 class FuseAction:
     """Immutable calldata payload targeting a specific fuse contract."""
 
-    fuse: ChecksumAddress
+    fuse: FuseAddress
     data: bytes
 
     def encode(self) -> bytes:

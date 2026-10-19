@@ -5,7 +5,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
 
 import click
-from eth_typing import ChecksumAddress, HexAddress
+from eth_typing import HexAddress
 
 from ipor_fusion.cli.vault_rendering import (
     _format_amount,
@@ -20,7 +20,7 @@ from ipor_fusion.substrates import (
     decode_substrate,
     format_market_label,
 )
-from ipor_fusion.types import ChainId, MarketId, parse_hex_address
+from ipor_fusion.types import ChainId, FuseAddress, MarketId, parse_hex_address
 from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
     VaultData,
@@ -260,8 +260,8 @@ def _print_dependency_graph(data: VaultData) -> None:
 
 def _print_fuse_section(
     title: str,
-    fuses: Sequence[ChecksumAddress],
-    fuse_markets: dict[ChecksumAddress, MarketId] | None,
+    fuses: Sequence[FuseAddress],
+    fuse_markets: dict[FuseAddress, MarketId] | None,
     market_substrates: dict[MarketId, list[bytes]] | None,
     chain_id: ChainId,
     api_key: str | None,
@@ -276,7 +276,7 @@ def _print_fuse_section(
     whenever the same address appears multiple times (typical for
     instant-withdrawal fuses).
     """
-    counts: dict[ChecksumAddress, int] = {}
+    counts: dict[FuseAddress, int] = {}
     for addr in fuses:
         counts[addr] = counts.get(addr, 0) + 1
 

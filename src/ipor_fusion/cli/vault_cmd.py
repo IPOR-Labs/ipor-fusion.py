@@ -6,7 +6,6 @@ from functools import partial
 from typing import Any
 
 import click
-from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.chains import CHAIN_NAMES
@@ -16,7 +15,7 @@ from ipor_fusion.cli.config_store import (
     load_config,
     save_config,
 )
-from ipor_fusion.cli.options import ADDRESS, CHAIN, _build_ctx, _resolve_provider
+from ipor_fusion.cli.options import CHAIN, VAULT_ADDRESS, _build_ctx, _resolve_provider
 from ipor_fusion.cli.oracle_mapping_view import _print_oracle_mapping
 from ipor_fusion.cli.vault_health import (
     _print_validation,
@@ -43,7 +42,7 @@ from ipor_fusion.errors import (
 from ipor_fusion.readers.oracle_mapping import (
     build_oracle_mapping,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, PlasmaVaultAddress
 from ipor_fusion.validation import (
     VaultValidation,
     validate_vault,
@@ -63,7 +62,7 @@ from ipor_fusion.vault_info import (
 
 def _auto_save_vault(
     cfg: FusionConfig,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     chain_id: ChainId,
     plasma_vault: PlasmaVault,
 ) -> None:
@@ -85,7 +84,7 @@ def vault() -> None:
 
 
 @vault.command("add")
-@click.argument("address", type=ADDRESS)
+@click.argument("address", type=VAULT_ADDRESS)
 @click.option(
     "--label", default=None, help="Label (default: fetched from on-chain name())."
 )
@@ -95,7 +94,9 @@ def vault() -> None:
     default=None,
     help="Chain ID or name (auto-detected when only one provider is configured).",
 )
-def add(address: ChecksumAddress, label: str | None, chain_id: ChainId | None) -> None:
+def add(
+    address: PlasmaVaultAddress, label: str | None, chain_id: ChainId | None
+) -> None:
     """Save a vault to the config."""
     cfg = load_config()
 
@@ -111,7 +112,7 @@ def add(address: ChecksumAddress, label: str | None, chain_id: ChainId | None) -
     if label is None:
         provider_url = _resolve_provider(cfg, chain_id)
         ctx = Web3Context.from_url(provider_url)
-        checksum = Web3.to_checksum_address(address)
+        checksum = address
         try:
             label = PlasmaVault(ctx, checksum).name().call()
         except Exception:
@@ -130,8 +131,8 @@ def add(address: ChecksumAddress, label: str | None, chain_id: ChainId | None) -
 
 
 @vault.command("remove")
-@click.argument("address", type=ADDRESS)
-def remove(address: ChecksumAddress) -> None:
+@click.argument("address", type=VAULT_ADDRESS)
+def remove(address: PlasmaVaultAddress) -> None:
     """Remove a saved vault."""
     cfg = load_config()
     before = len(cfg.vaults)
@@ -180,7 +181,7 @@ vault.add_command(list_vaults, "ls")
 
 
 @vault.command("info")
-@click.argument("vault_address", type=ADDRESS)
+@click.argument("vault_address", type=VAULT_ADDRESS)
 @click.option(
     "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
 )
@@ -194,7 +195,7 @@ vault.add_command(list_vaults, "ls")
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def info(
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     chain_id: ChainId | None,
     block_number: int | None,
     json_output: bool,
@@ -206,7 +207,7 @@ def info(
     """
     cfg = load_config()
     chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
-    checksum_address = Web3.to_checksum_address(vault_address)
+    checksum_address = vault_address
 
     # Cheap single-call probe: friendly errors for "nothing deployed here" and
     # "not a Plasma Vault" (revert and empty-return flavors alike) before the
@@ -230,7 +231,7 @@ def info(
 
 
 @vault.command("validate")
-@click.argument("vault_address", type=ADDRESS)
+@click.argument("vault_address", type=VAULT_ADDRESS)
 @click.option(
     "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
 )
@@ -244,7 +245,7 @@ def info(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def validate(
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     chain_id: ChainId | None,
     block_number: int | None,
     json_output: bool,
@@ -316,7 +317,7 @@ def _validation_json(validation: VaultValidation, chain_label: str) -> dict[str,
 
 
 @vault.command("role-accounts")
-@click.argument("vault_address", type=ADDRESS)
+@click.argument("vault_address", type=VAULT_ADDRESS)
 @click.option(
     "--role",
     default="",
@@ -336,7 +337,7 @@ def _validation_json(validation: VaultValidation, chain_label: str) -> dict[str,
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def role_accounts(
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     role: str,
     chain_id: ChainId | None,
     block_number: int | None,
@@ -385,7 +386,7 @@ def role_accounts(
 
 
 @vault.command("oracle-mapping")
-@click.argument("vault_address", type=ADDRESS)
+@click.argument("vault_address", type=VAULT_ADDRESS)
 @click.option(
     "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
 )
@@ -406,7 +407,7 @@ def role_accounts(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def oracle_mapping(
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     chain_id: ChainId | None,
     block_number: int | None,
     max_depth: int,
@@ -458,9 +459,7 @@ def oracle_mapping(
         raise click.UsageError(str(exc)) from exc
 
     try:
-        mapping = build_oracle_mapping(
-            ctx, Web3.to_checksum_address(vault_address), effective_block, max_depth
-        )
+        mapping = build_oracle_mapping(ctx, vault_address, effective_block, max_depth)
     except UnsupportedVaultVersionError as exc:
         raise click.ClickException(str(exc)) from exc
 

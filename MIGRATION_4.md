@@ -32,6 +32,7 @@ widths or address spelling.
 | `HexAddress` | any `ChecksumAddress`, or `parse_hex_address(value)` (20 bytes or hex in any spelling → lowercase `0x` form) |
 | `MorphoBlueMarketId` | `parse_morpho_market_id(value)`: 32 bytes or hex in any spelling, always `0x` + 64 lowercase digits |
 | `TxHash` | `parse_tx_hash(value)` (32 bytes or hex in any spelling) |
+| `PlasmaVaultAddress`, `FuseAddress`, `AccessManagerAddress` | from the SDK (`PlasmaVault.address`, `get_fuses()`, `get_access_manager_address()`, `FusionInstance`, discovery), or `parse_plasma_vault_address` / `parse_fuse_address` / `parse_access_manager_address(value)` for a raw address; they label the role and check nothing on chain |
 | crosschain ids | `CommandId(b)`, `MessageId(b)`, `AssetId(b)`, `OperationId(b)`, `TransferId(b)`, `ReturnRequestId(b)`, `PositionSetHash(b)` (bytes32); `ProposalId(n)`, `DeploymentRequestId(n)`, `StargateAssetId(n)` (int) |
 | HyperCore ids | `HyperCoreTokenIndex(n)` (or `USDC_TOKEN_INDEX`), `HyperCoreAsset(n)` (or `hip3_action_asset(dex, index)`), `HyperCoreOrderId(n)`, `HyperCoreClientOrderId(n)`, `MarginTableId(n)`, `HyperCoreActionId(n)`, `PayloadHash(b)` |
 | external state | `ProposalHash(b)` |
@@ -75,6 +76,23 @@ the Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` 
 `get_logs_adaptive(chain_id=)` and `LogSource.get_logs` take `ChainId`;
 `quote_ccip_native_fee(block=)` and `OracleMappingReader.asset_source_events` take a
 `BlockIdentifier`.
+
+**Address roles.** `PlasmaVault(ctx, address)`, `PlasmaVault.encoder(address)`,
+`validate_vault`, `fetch_deployment_info`, the HyperCore, lending-health and
+oracle-mapping readers, `read_external_state`, `VaultSimulator(vault=)`,
+`CrosschainSimulator`, crosschain discovery, `Command.deposit` / `redeem` /
+`request_redeem` and the remote-vault substrate take a `PlasmaVaultAddress`;
+`.address` and `FusionInstance.plasma_vault` return one. Every fuse constructor,
+`FuseAction.fuse`, `BalanceFuse.fuse`, `PlasmaVault.add_fuses` / `remove_fuses` /
+`add_balance_fuse` / `remove_balance_fuse` / `balance_fuse_value`, `LaneFuses` and the
+HyperCore balance-fuse argument take a `FuseAddress`, and `get_fuses()`,
+`get_instant_withdrawal_fuses()`, `VaultData.fuses` / `instant_fuses` /
+`fuse_markets` keys return it. `AccessManager(ctx, address)` takes an
+`AccessManagerAddress`; `get_access_manager_address()`, `VaultData.access_manager`
+and `FusionInstance.access_manager` return one. `resolve_access_manager` still takes
+any `ChecksumAddress`: it is what checks that the address is a vault.
+`build_vault_info_json` no longer takes `vault_address`; the document's vault comes
+from the `plasma_vault` argument.
 
 **Markets and substrates.** Every `IporFusionMarkets` member is a `MarketId`.
 `decode_substrate`, `market_name`, `format_market_label` take `MarketId`.

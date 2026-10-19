@@ -5,7 +5,6 @@ from functools import partial
 from typing import Any
 
 import click
-from eth_typing import ChecksumAddress
 
 from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.cli.config_store import (
@@ -33,7 +32,7 @@ from ipor_fusion.readers.hypercore import HyperCorePendingState
 from ipor_fusion.substrates import (
     format_market_label,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, PlasmaVaultAddress
 from ipor_fusion.validation import (
     validate_vault_state,
 )
@@ -85,7 +84,7 @@ def _print_vault_info(
     plasma_vault: PlasmaVault,
     cfg: FusionConfig,
     data: VaultData,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     chain_id: ChainId,
     json_output: bool = False,
 ) -> None:
@@ -103,7 +102,6 @@ def _print_vault_info(
             ctx,
             plasma_vault,
             data,
-            vault_address,
             chain_id,
             chain_label,
             resolve_name=partial(get_contract_name, chain_id, api_key=api_key),
@@ -145,7 +143,10 @@ def _print_vault_info(
 
 
 def _print_identity(
-    data: VaultData, vault_address: ChecksumAddress, chain_id: ChainId, chain_label: str
+    data: VaultData,
+    vault_address: PlasmaVaultAddress,
+    chain_id: ChainId,
+    chain_label: str,
 ) -> None:
     name_suffix = f" ({data.vault_name})" if data.vault_name else ""
     click.echo(f"Vault:            {vault_address}{name_suffix}")

@@ -50,12 +50,14 @@ from ipor_fusion.fuses.hypercore import (
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import (
+    FuseAddress,
     HyperCoreActionId,
     HyperCoreAsset,
     HyperCoreTokenIndex,
     MarginTableId,
     MarketId,
     PayloadHash,
+    PlasmaVaultAddress,
     Price,
 )
 
@@ -565,7 +567,7 @@ def _perp_leg(
 
 def read_hypercore_nav(
     ctx: Web3Context,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     market_id: MarketId = HYPERCORE_MARKET,
 ) -> HyperCoreNav:
     """Reproduce ``HyperCoreValuationLib.liveValueWad(market_id)`` for the
@@ -642,7 +644,7 @@ class HyperCoreVaultState:
     perp markets."""
 
     market_id: MarketId
-    balance_fuse: ChecksumAddress
+    balance_fuse: FuseAddress
     nav: HyperCoreNav
     balance_fuse_value_wad: int | None
     pending: HyperCorePendingState | None
@@ -675,8 +677,8 @@ def _granted_perp_markets(
 
 def read_hypercore_vault_state(
     ctx: Web3Context,
-    vault_address: ChecksumAddress,
-    balance_fuse: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
+    balance_fuse: FuseAddress,
     market_id: MarketId = HYPERCORE_MARKET,
     *,
     pending_reader: ChecksumAddress | None = None,

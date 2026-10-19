@@ -90,6 +90,7 @@ from ipor_fusion import (
     Web3Context,
     WithdrawManager,
     is_simulate_v1_supported,
+    parse_fuse_address,
 )
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.fusion_factory import FusionInstance
@@ -124,12 +125,12 @@ EXTERNAL_STATE_MARKET = MarketId(IporFusionMarkets.EXTERNAL_STATE)
 
 # External-state *operation* fuse (enter/exit) -- the functional fuse. It also
 # lazily deploys the per-vault ExternalStateExecutor on the first enter.
-BASE_EXTERNAL_STATE_OPERATION_FUSE = Web3.to_checksum_address(
+BASE_EXTERNAL_STATE_OPERATION_FUSE = parse_fuse_address(
     "0x01f05736B79C7abcFbeeCe76B1C27e54f7A07D03"
 )
 # External-state *balance* fuse -- distinct from the operation fuse; this is what
 # lets total_assets_in_market(EXTERNAL_STATE_MARKET) value the attested figure.
-BASE_EXTERNAL_STATE_BALANCE_FUSE = Web3.to_checksum_address(
+BASE_EXTERNAL_STATE_BALANCE_FUSE = parse_fuse_address(
     "0xCDEb32ACF766587b5Eac9dbfB875145ec05E3517"
 )
 

@@ -24,6 +24,7 @@ from ipor_fusion.types import (
     AssetId,
     ChainId,
     CommandId,
+    PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
 )
@@ -70,8 +71,13 @@ class CrosschainExecutor(ContractWrapper):
     approve and the claim (``claimAsset`` is manager-only: use
     ``CrosschainClaimFuse`` from the vault; the wrapper is for previews)."""
 
-    def manager(self) -> Call[ChecksumAddress]:
-        return self._view("MANAGER()", output_types=["address"], decoder=_address)
+    def manager(self) -> Call[PlasmaVaultAddress]:
+        """The hub Plasma Vault this executor serves."""
+        return self._view(
+            "MANAGER()",
+            output_types=["address"],
+            decoder=lambda value: PlasmaVaultAddress(_address(value)),
+        )
 
     def asset(self) -> Call[ChecksumAddress]:
         return self._view("ASSET()", output_types=["address"], decoder=_address)
@@ -205,13 +211,13 @@ class CrosschainDispatcher(ContractWrapper):
     def command_config_epoch(self) -> Call[int]:
         return self._view("commandConfigEpoch()", output_types=["uint64"])
 
-    def is_allowed_vault(self, vault: ChecksumAddress) -> Call[bool]:
+    def is_allowed_vault(self, vault: PlasmaVaultAddress) -> Call[bool]:
         return self._view("isAllowedVault(address)", vault, output_types=["bool"])
 
-    def is_tracked_vault(self, vault: ChecksumAddress) -> Call[bool]:
+    def is_tracked_vault(self, vault: PlasmaVaultAddress) -> Call[bool]:
         return self._view("isTrackedVault(address)", vault, output_types=["bool"])
 
-    def pending_request_shares(self, vault: ChecksumAddress) -> Call[int]:
+    def pending_request_shares(self, vault: PlasmaVaultAddress) -> Call[int]:
         return self._view(
             "pendingRequestShares(address)", vault, output_types=["uint256"]
         )

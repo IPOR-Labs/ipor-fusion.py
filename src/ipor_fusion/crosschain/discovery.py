@@ -36,7 +36,13 @@ from ipor_fusion.fuses.crosschain.base import (
     CrosschainSubstrateLib,
     CrosschainSubstrateType,
 )
-from ipor_fusion.types import ZERO_ADDRESS, ChainId, MarketId
+from ipor_fusion.types import (
+    ZERO_ADDRESS,
+    ChainId,
+    FuseAddress,
+    MarketId,
+    PlasmaVaultAddress,
+)
 
 T = TypeVar("T")
 
@@ -78,7 +84,7 @@ def detect_transport(
 
 def discover_lane_fuses(
     ctx: Web3Context,
-    fuses: Iterable[ChecksumAddress],
+    fuses: Iterable[FuseAddress],
     transport_kind: CrosschainTransportKind,
     market_id: MarketId,
 ) -> LaneFuses:
@@ -94,7 +100,7 @@ def discover_lane_fuses(
         ),
         "claim": function_signature_to_4byte_selector("enter((address,uint256))"),
     }
-    found: dict[str, ChecksumAddress] = {}
+    found: dict[str, FuseAddress] = {}
     for fuse in fuses:
         if _probe(_market_id_call(ctx, fuse)) != market_id:
             continue
@@ -140,7 +146,7 @@ class CrosschainExecutorInfo:
 class CrosschainDeployment:
     """A hub vault's crosschain market as granted on chain."""
 
-    vault: ChecksumAddress
+    vault: PlasmaVaultAddress
     market_id: MarketId
     executors: tuple[CrosschainExecutorInfo, ...]
     #: Spoke vaults a command may target, per spoke chain.
@@ -165,7 +171,7 @@ class CrosschainDeployment:
 
 
 def discover_deployment(
-    hub_ctx: Web3Context, vault: ChecksumAddress, market_id: MarketId
+    hub_ctx: Web3Context, vault: PlasmaVaultAddress, market_id: MarketId
 ) -> CrosschainDeployment:
     """Read ``vault``'s crosschain market: its executors (transport, factory,
     fuses, attestation keys, spokes served) and the remote vaults per spoke."""

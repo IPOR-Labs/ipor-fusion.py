@@ -1,7 +1,7 @@
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.fuses.base import Fuse, FuseAction, StakeFuse
-from ipor_fusion.types import Amount
+from ipor_fusion.types import Amount, FuseAddress
 
 
 class GearboxSupplyFuse(Fuse):
@@ -21,5 +21,5 @@ class GearboxSupplyFuse(Fuse):
 class GearboxStakeFuse(StakeFuse):
     """Fuse for staking and unstaking dTokens on Gearbox V3."""
 
-    def __init__(self, fuse_address: ChecksumAddress, staking_address: ChecksumAddress):
+    def __init__(self, fuse_address: FuseAddress, staking_address: ChecksumAddress):
         super().__init__(fuse_address, staking_address)

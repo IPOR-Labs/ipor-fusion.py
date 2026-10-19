@@ -18,7 +18,7 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.address import _validate_not_zero_address
-from ipor_fusion.types import Amount, CommandId, Shares
+from ipor_fusion.types import Amount, CommandId, PlasmaVaultAddress, Shares
 
 #: ``CrosschainConstants.CODEC_VERSION`` -- the Stargate/LayerZero envelope version.
 CODEC_VERSION = 3
@@ -196,7 +196,7 @@ class Command:
     @classmethod
     def deposit(
         cls,
-        vault: ChecksumAddress,
+        vault: PlasmaVaultAddress,
         amount_sd: Amount,
         min_shares: Shares = _ZERO_SHARES,
     ) -> Command:
@@ -211,7 +211,10 @@ class Command:
 
     @classmethod
     def redeem(
-        cls, vault: ChecksumAddress, shares: Shares, min_assets: Amount = _ZERO_AMOUNT
+        cls,
+        vault: PlasmaVaultAddress,
+        shares: Shares,
+        min_assets: Amount = _ZERO_AMOUNT,
     ) -> Command:
         """``encodeRedeemAction(vault, shares, minAssets)``: the dispatcher
         redeems ``shares`` of ``vault`` into its tracked idle."""
@@ -225,7 +228,7 @@ class Command:
     def request_shares(
         cls,
         withdraw_manager: ChecksumAddress,
-        plasma_vault: ChecksumAddress,
+        plasma_vault: PlasmaVaultAddress,
         shares: Shares,
     ) -> Command:
         """``encodeRequestSharesAction(withdrawManager, plasmaVault, shares)``:
@@ -243,7 +246,7 @@ class Command:
     def redeem_from_request(
         cls,
         withdraw_manager: ChecksumAddress,
-        plasma_vault: ChecksumAddress,
+        plasma_vault: PlasmaVaultAddress,
         shares: Shares,
         min_assets: Amount,
         receiver: ChecksumAddress,

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import ClassVar, Literal, NewType, TypeAlias
 
 from eth_typing import ChecksumAddress, HexAddress, HexStr
+from eth_utils import to_checksum_address
 
 Amount = NewType("Amount", int)
 Shares = NewType("Shares", int)
@@ -46,6 +47,12 @@ MarginTableId = NewType("MarginTableId", int)
 # EVM-side deposit): what kind of action, not which one (that is the nonce).
 HyperCoreActionId = NewType("HyperCoreActionId", int)
 PayloadHash = NewType("PayloadHash", bytes)
+# Addresses whose role the SDK relies on: the wrappers, getters and records that
+# produce them return the role type, so a vault, a fuse and an access manager
+# cannot be passed for each other. They assert the role; nothing checks on chain.
+PlasmaVaultAddress = NewType("PlasmaVaultAddress", ChecksumAddress)
+FuseAddress = NewType("FuseAddress", ChecksumAddress)
+AccessManagerAddress = NewType("AccessManagerAddress", ChecksumAddress)
 # A transaction hash as 0x and 64 hex digits (a HexStr, so web3 takes it).
 TxHash = NewType("TxHash", HexStr)
 # ExternalStateExecutor's bytes32 balance proposal hash.
@@ -155,3 +162,24 @@ def parse_tx_hash(value: str | bytes) -> TxHash:
     """A transaction hash as ``0x`` and 64 lowercase hex digits, from 32 raw bytes
     or hex in any spelling; raises ``ValueError`` on anything else."""
     return TxHash(HexStr("0x" + _hex_digits(value, 32, "transaction hash")))
+
+
+def _checksum(value: str | bytes) -> ChecksumAddress:
+    return to_checksum_address("0x" + _hex_digits(value, 20, "address"))
+
+
+def parse_plasma_vault_address(value: str | bytes) -> PlasmaVaultAddress:
+    """A Plasma Vault's address, checksummed from 20 raw bytes or hex in any
+    spelling; raises ``ValueError`` on anything else. It labels the role and
+    checks nothing on chain."""
+    return PlasmaVaultAddress(_checksum(value))
+
+
+def parse_fuse_address(value: str | bytes) -> FuseAddress:
+    """A fuse's address, checksummed; see `parse_plasma_vault_address`."""
+    return FuseAddress(_checksum(value))
+
+
+def parse_access_manager_address(value: str | bytes) -> AccessManagerAddress:
+    """An access manager's address, checksummed; see `parse_plasma_vault_address`."""
+    return AccessManagerAddress(_checksum(value))
