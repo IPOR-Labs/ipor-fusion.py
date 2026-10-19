@@ -165,9 +165,12 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             "lastRemoteStateVersion(uint256)", chain_id, output_types=["uint64"]
         )
 
-    def active_return(self, chain_id: ChainId) -> Call[bytes]:
+    def active_return(self, chain_id: ChainId) -> Call[OperationId]:
         return self._view(
-            "activeReturn(uint256)", chain_id, output_types=["bytes32"], decoder=bytes
+            "activeReturn(uint256)",
+            chain_id,
+            output_types=["bytes32"],
+            decoder=lambda v: OperationId(bytes(v)),
         )
 
     def active_command(self, chain_id: ChainId) -> Call[CommandId]:
@@ -194,11 +197,14 @@ class CcipCrosschainExecutor(CrosschainExecutor):
         every value-moving operation bumps to invalidate the active proposal."""
         return self._view("accountingEpoch(uint256)", chain_id, output_types=["uint64"])
 
-    def active_proposal_id(self, chain_id: ChainId) -> Call[int]:
+    def active_proposal_id(self, chain_id: ChainId) -> Call[ProposalId]:
         """``activeProposalId(uint256)``: the active balance proposal id for
         the chain, 0 when there is none."""
         return self._view(
-            "activeProposalId(uint256)", chain_id, output_types=["uint256"]
+            "activeProposalId(uint256)",
+            chain_id,
+            output_types=["uint256"],
+            decoder=ProposalId,
         )
 
     def attestation_anchor_principal(self, chain_id: ChainId) -> Call[Amount]:
@@ -233,7 +239,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             "processedCcipMessage(bytes32)", message_id, output_types=["bool"]
         )
 
-    def propose_balance(self, observation: BalanceObservation) -> Call[int]:
+    def propose_balance(self, observation: BalanceObservation) -> Call[ProposalId]:
         """``BALANCE_PROPOSER`` only; ``settled_balance`` in local decimals.
 
         A write: ``.send()`` it, or ``.call()`` inside a simulation to preview
@@ -243,6 +249,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             "proposeBalance(uint256,uint256,uint64,uint64,uint64,uint64,bytes32)",
             *observation.as_tuple(),
             output_types=["uint256"],
+            decoder=ProposalId,
         )
 
     def reject_balance_and_block(self, proposal_id: ProposalId) -> Call[None]:
@@ -285,9 +292,11 @@ class CcipCrosschainDispatcher(CrosschainDispatcher):
     def tracked_vaults_length(self) -> Call[int]:
         return self._view("trackedVaultsLength()", output_types=["uint256"])
 
-    def tracked_position_set_hash(self) -> Call[bytes]:
+    def tracked_position_set_hash(self) -> Call[PositionSetHash]:
         return self._view(
-            "trackedPositionSetHash()", output_types=["bytes32"], decoder=bytes
+            "trackedPositionSetHash()",
+            output_types=["bytes32"],
+            decoder=lambda v: PositionSetHash(bytes(v)),
         )
 
     def response_queue_head(self) -> Call[int]:

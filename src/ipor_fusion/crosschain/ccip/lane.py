@@ -22,7 +22,7 @@ from ipor_fusion.fuses.crosschain.ccip import (
     CcipCrosschainSupplyFuse,
     CcipSendParams,
 )
-from ipor_fusion.types import Amount, ChainId
+from ipor_fusion.types import Amount, ChainId, ProposalId
 
 
 class CcipLane(CrosschainLane):
@@ -134,7 +134,7 @@ class CcipLane(CrosschainLane):
             lambda observation: _to_lane(observation, rate)
         )
 
-    def propose_balance(self, observation: BalanceObservation) -> Call[int]:
+    def propose_balance(self, observation: BalanceObservation) -> Call[ProposalId]:
         """Returns the proposal id (the function's return value)."""
         self._require_spoke(observation)
         return self.executor.propose_balance(observation)
