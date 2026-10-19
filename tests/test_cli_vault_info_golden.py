@@ -362,6 +362,10 @@ def test_vault_info_output_matches_fixture(scenario: str, json_output: bool) -> 
         json.loads(rendered)
 
 
+# The CLI's cached lookup matches an address in any spelling; so does this one.
+_NAMES_BY_ADDRESS = {address.lower(): name for address, name in NAMES.items()}
+
+
 @pytest.mark.usefixtures("isolated_cache")
 @pytest.mark.parametrize("scenario", sorted(SCENARIOS))
 def test_public_builder_renders_the_cli_json(scenario: str) -> None:
@@ -377,7 +381,7 @@ def test_public_builder_renders_the_cli_json(scenario: str) -> None:
         VAULT,
         1,
         "ethereum",
-        resolve_name=lambda address: NAMES.get(address, ""),
+        resolve_name=lambda address: _NAMES_BY_ADDRESS.get(address.lower(), ""),
     )
     expected = (FIXTURES / f"{scenario}.json").read_text(encoding="utf-8")
     assert json.dumps(result, indent=2) + "\n" == expected

@@ -143,7 +143,8 @@
     "AAVE_V3 (1)": [
       {
         "address": "0x00000000000000000000000000000000000000a1",
-        "symbol": "USDC"
+        "symbol": "USDC",
+        "contract": "FiatTokenProxy"
       }
     ],
     "MORPHO (14)": [
@@ -155,7 +156,8 @@
     "ERC20_VAULT_BALANCE (7)": [
       {
         "address": "0x00000000000000000000000000000000000000a1",
-        "symbol": "USDC"
+        "symbol": "USDC",
+        "contract": "FiatTokenProxy"
       },
       {
         "address": "0x00000000000000000000000000000000000000b1",

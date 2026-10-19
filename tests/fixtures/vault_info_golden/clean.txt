@@ -36,7 +36,7 @@ Balance Fuses (1):
 
 Substrates per Market:
   AAVE_V3 (1):
-    0x00000000000000000000000000000000000000a1 (symbol=USDC)
+    0x00000000000000000000000000000000000000a1 (symbol=USDC, contract=FiatTokenProxy)
 
 ERC20 Balances (vault holdings):
   (no ERC20_VAULT_BALANCE market)

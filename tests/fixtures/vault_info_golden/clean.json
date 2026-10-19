@@ -69,7 +69,8 @@
     "AAVE_V3 (1)": [
       {
         "address": "0x00000000000000000000000000000000000000a1",
-        "symbol": "USDC"
+        "symbol": "USDC",
+        "contract": "FiatTokenProxy"
       }
     ]
   },

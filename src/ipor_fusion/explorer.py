@@ -12,7 +12,7 @@ from urllib.request import urlopen
 
 from eth_typing import HexAddress, HexStr
 
-from ipor_fusion.cache import load_contract_cache, update_contract_cache
+from ipor_fusion.cache import cache_key, load_contract_cache, update_contract_cache
 from ipor_fusion.types import ChainId, TxHash
 
 ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api"
@@ -44,13 +44,13 @@ def get_contract_name(
     chain_id: ChainId, address: HexAddress, api_key: str | None = None
 ) -> str:
     cache = load_contract_cache()
-    cache_key = f"{chain_id}:{address}"
+    key = cache_key(chain_id, address)
 
-    if cached := cache.get(cache_key):
+    if cached := cache.get(key):
         return cached
 
     if name := _fetch_contract_name(chain_id, address, api_key):
-        update_contract_cache(cache_key, name)
+        update_contract_cache(key, name)
         return name
     return ""
 
