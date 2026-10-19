@@ -13,7 +13,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Protocol, TypeVar
 
-from eth_typing import HexAddress
+from eth_typing import ChecksumAddress, HexAddress
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 
@@ -31,7 +31,7 @@ from ipor_fusion.dependency_graph import (
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import VaultLendingHealth
 from ipor_fusion.substrates import decode_substrate, format_market_label, market_name
-from ipor_fusion.types import ChainId, Shares
+from ipor_fusion.types import ChainId, MarketId, Shares
 from ipor_fusion.types import Check as Check
 from ipor_fusion.types import Severity as Severity
 from ipor_fusion.types import Verdict as Verdict
@@ -70,7 +70,7 @@ class UnpriceableToken(Protocol):
     cannot price it (see `ipor_fusion.readers.unpriceable`)."""
 
     @property
-    def market_id(self) -> int: ...
+    def market_id(self) -> MarketId: ...
     @property
     def token(self) -> str: ...
     @property
@@ -114,11 +114,11 @@ class VaultState(Protocol):
     @property
     def balance_fuses(self) -> Sequence[BalanceFuse]: ...
     @property
-    def market_substrates(self) -> Mapping[int, Sequence[bytes]] | None: ...
+    def market_substrates(self) -> Mapping[MarketId, Sequence[bytes]] | None: ...
     @property
-    def fuse_markets(self) -> Mapping[str, int] | None: ...
+    def fuse_markets(self) -> Mapping[str, MarketId] | None: ...
     @property
-    def dependency_graph(self) -> Mapping[int, Sequence[int]] | None: ...
+    def dependency_graph(self) -> Mapping[MarketId, Sequence[MarketId]] | None: ...
     @property
     def withdraw_manager_data(self) -> WithdrawQueue | None: ...
     @property
@@ -256,7 +256,7 @@ class VaultValidation:
 
 def validate_vault(
     ctx: Web3Context,
-    vault_address: HexAddress,
+    vault_address: ChecksumAddress,
     block_number: int | None = None,
     *,
     resolve_symbol: Callable[[HexAddress], str] | None = None,
@@ -301,7 +301,7 @@ def validate_vault_state(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     state: VaultState,
-    market_balances: Mapping[int, int],
+    market_balances: Mapping[MarketId, int],
     erc20: Erc20Holdings,
 ) -> VaultValidation:
     """Validate an already-fetched vault.
@@ -394,7 +394,7 @@ def _read_tokens(
         ctx, Web3.to_checksum_address(state.price_oracle_addr)
     )
     with ThreadPoolExecutor() as pool:
-        futures: list[tuple[str, Future, Future, Future, Future]] = []
+        futures: list[tuple[HexAddress, Future, Future, Future, Future]] = []
         for address in addresses:
             checksum = Web3.to_checksum_address(address)
             token = ERC20(ctx, checksum)
@@ -489,7 +489,7 @@ def _reconcile(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     state: VaultState,
-    market_balances: Mapping[int, int],
+    market_balances: Mapping[MarketId, int],
     erc20: Erc20Holdings,
 ) -> Reconciliation:
     decimals = state.asset_decimals
@@ -818,7 +818,11 @@ def _uncovered_erc20_lines(state: VaultState, erc20: Erc20Holdings) -> list[str]
     lines: list[str] = []
     for address in sorted(held):
         token = held[address]
-        if address == state.asset.lower() or token.decimals is None:
+        if (
+            address == state.asset.lower()
+            or token.decimals is None
+            or token.balance is None
+        ):
             continue
         usd = f" (${token.usd_value:,.2f})" if token.usd_value else ""
         row = (

@@ -74,6 +74,7 @@ from eth_abi.abi import decode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.types import Timestamp
 
 from ipor_fusion import (
     ERC20,
@@ -1025,7 +1026,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # of scope here.
     sim.add_call(
         call=withdraw_manager.release_funds(
-            timestamp=baseline_timestamp + RELEASE_OFFSET - 1, shares=requested_shares
+            timestamp=Timestamp(baseline_timestamp + RELEASE_OFFSET - 1),
+            shares=requested_shares,
         ),
         from_=ALPHA,
     )

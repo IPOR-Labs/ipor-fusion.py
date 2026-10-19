@@ -78,7 +78,7 @@ from ipor_fusion.readers.unpriceable import (
     MiddlewarePricedToken,
     fetch_unpriceable_priced_tokens,
 )
-from ipor_fusion.types import ChainId, MorphoBlueMarketId
+from ipor_fusion.types import ChainId, MarketId, MorphoBlueMarketId
 
 T = TypeVar("T")
 
@@ -184,18 +184,18 @@ class VaultData:
     deployment_error: str | None = None
     withdraw_manager_data: WithdrawManagerData | None = None
     fee_data: FeeData | None = None
-    dependency_graph: dict[int, list[int]] | None = None
+    dependency_graph: dict[MarketId, list[MarketId]] | None = None
     lending_health: VaultLendingHealth | None = None
     # Morpho per-substrate position breakdown (collateral / borrow / supply),
     # keyed by IPOR market_id. Populated only for markets in MORPHO_MARKET_IDS
     # whose substrates resolve to valid Morpho Blue market IDs.
-    morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None = None
+    morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None = None
     # Aave V3 per-asset position breakdown (supply / variable_debt / stable_debt),
     # keyed by IPOR market_id. Populated only for markets in AAVE_V3_MARKET_IDS
     # whose balance fuse resolves to a Pool and whose substrates decode to
     # valid asset addresses. Empty positions are filtered out (a vault may
     # allow an asset without using it).
-    aave_positions: dict[int, list[AaveV3PositionBreakdown]] | None = None
+    aave_positions: dict[MarketId, list[AaveV3PositionBreakdown]] | None = None
     # USD price per token address (lowercase) for tokens appearing in lending
     # breakdowns (Morpho loan/collateral, Aave reserve assets). Sourced from the
     # vault's PriceOracleMiddleware. Missing keys mean the oracle has no source
@@ -209,10 +209,10 @@ class VaultData:
     # are absent from the dict — used to detect orphan markets (action fuses
     # with no matching balance fuse, which silently drop positions from
     # totalAssets).
-    fuse_markets: dict[str, int] | None = None
+    fuse_markets: dict[str, MarketId] | None = None
     # Substrates registered for each balance-fuse market. Allows the fuse
     # tables to report substrate counts per fuse without duplicating reads.
-    market_substrates: dict[int, list[bytes]] | None = None
+    market_substrates: dict[MarketId, list[bytes]] | None = None
     # The HyperCore market's live state (NAV legs, pending action, perp
     # markets); only on HyperEVM and only for a vault with a market-55 balance fuse.
     hypercore: HyperCoreVaultState | None = None
@@ -390,7 +390,7 @@ def _fetch_withdraw_manager(
 
 def _fetch_fee_manager_address(
     ctx: Web3Context, fee_account: ChecksumAddress
-) -> str | None:
+) -> ChecksumAddress | None:
     """Resolve FeeAccount.FEE_MANAGER(); None when it is not a FeeAccount.
 
     The fee account reported by a vault is not guaranteed to be a FeeAccount
@@ -477,10 +477,10 @@ def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> FeeData:
 
 
 def _collect_morpho_substrates(
-    market_substrates: dict[int, list[bytes]],
-) -> dict[int, list[MorphoBlueMarketId]]:
+    market_substrates: dict[MarketId, list[bytes]],
+) -> dict[MarketId, list[MorphoBlueMarketId]]:
     """Filter + parse Morpho Blue market IDs from raw substrate bytes."""
-    result: dict[int, list[MorphoBlueMarketId]] = {}
+    result: dict[MarketId, list[MorphoBlueMarketId]] = {}
     for mid, subs in market_substrates.items():
         if mid not in MORPHO_MARKET_IDS:
             continue
@@ -496,8 +496,8 @@ def _fetch_morpho_positions(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
     vault_addr: ChecksumAddress,
-    market_substrates: dict[int, list[bytes]],
-) -> dict[int, list[MorphoPositionBreakdown]] | None:
+    market_substrates: dict[MarketId, list[bytes]],
+) -> dict[MarketId, list[MorphoPositionBreakdown]] | None:
     """Fetch collateral / borrow / supply breakdown for every Morpho substrate.
 
     Each IPOR Morpho market (MORPHO_MARKET_IDS) can hold multiple morpho
@@ -510,7 +510,7 @@ def _fetch_morpho_positions(
         return None
 
     reader = MorphoReader(ctx, morpho_blue_address(ctx.chain_id))
-    futures: dict[int, list[Future]] = {
+    futures: dict[MarketId, list[Future]] = {
         mid: [
             pool.submit(
                 _safe_call,
@@ -523,7 +523,7 @@ def _fetch_morpho_positions(
         for mid, morpho_mids in per_market_substrates.items()
     }
 
-    result: dict[int, list[MorphoPositionBreakdown]] = {}
+    result: dict[MarketId, list[MorphoPositionBreakdown]] = {}
     for mid, per_market in futures.items():
         breakdowns = [bd for fut in per_market if (bd := fut.result()) is not None]
         if breakdowns:
@@ -532,14 +532,14 @@ def _fetch_morpho_positions(
 
 
 def _collect_aave_substrate_assets(
-    market_substrates: dict[int, list[bytes]],
-) -> dict[int, list[ChecksumAddress]]:
+    market_substrates: dict[MarketId, list[bytes]],
+) -> dict[MarketId, list[ChecksumAddress]]:
     """Filter + parse asset addresses from Aave V3 substrate bytes.
 
     Aave substrates are zero-padded plain addresses (12 zero bytes + 20 address
     bytes). Returns a per-market list of checksummed asset addresses.
     """
-    result: dict[int, list[ChecksumAddress]] = {}
+    result: dict[MarketId, list[ChecksumAddress]] = {}
     for mid, subs in market_substrates.items():
         if mid not in AAVE_V3_MARKET_IDS:
             continue
@@ -556,7 +556,7 @@ def _collect_aave_substrate_assets(
 
 def _fetch_aave_pools(
     ctx: Web3Context, balance_fuses: list[BalanceFuse]
-) -> dict[int, ChecksumAddress]:
+) -> dict[MarketId, ChecksumAddress]:
     """Map every Aave V3 market to the Pool its balance fuse reads.
 
     Aave V3 Core, Aave V3 Prime and SparkLend share the fuse contracts but not
@@ -596,9 +596,9 @@ def _fetch_aave_positions(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
     vault_addr: ChecksumAddress,
-    aave_pools: dict[int, ChecksumAddress],
-    market_substrates: dict[int, list[bytes]],
-) -> dict[int, list[AaveV3PositionBreakdown]] | None:
+    aave_pools: dict[MarketId, ChecksumAddress],
+    market_substrates: dict[MarketId, list[bytes]],
+) -> dict[MarketId, list[AaveV3PositionBreakdown]] | None:
     """Fetch supply / variable / stable debt per Aave V3 asset substrate.
 
     The on-chain `getUserAccountData` aggregates all reserves into a single
@@ -616,7 +616,7 @@ def _fetch_aave_positions(
         return None
 
     readers = {mid: AaveV3Reader(ctx, aave_pools[mid]) for mid in per_market_assets}
-    futures: dict[int, list[Future]] = {
+    futures: dict[MarketId, list[Future]] = {
         mid: [
             pool.submit(
                 _safe_call, partial(readers[mid].position_breakdown, asset, vault_addr)
@@ -626,7 +626,7 @@ def _fetch_aave_positions(
         for mid, assets in per_market_assets.items()
     }
 
-    result: dict[int, list[AaveV3PositionBreakdown]] = {}
+    result: dict[MarketId, list[AaveV3PositionBreakdown]] = {}
     for mid, per_market in futures.items():
         breakdowns = [
             bd
@@ -639,8 +639,8 @@ def _fetch_aave_positions(
 
 
 def _collect_breakdown_token_addresses(
-    morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None,
-    aave_positions: dict[int, list[AaveV3PositionBreakdown]] | None,
+    morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None,
+    aave_positions: dict[MarketId, list[AaveV3PositionBreakdown]] | None,
 ) -> set[ChecksumAddress]:
     """Return the set of unique token addresses appearing in any breakdown.
 
@@ -825,10 +825,10 @@ def _fetch_role_accounts(
 @dataclass
 class _MarketReads:
     balance_fuses: list[BalanceFuse]
-    dependency_graph: dict[int, list[int]]
+    dependency_graph: dict[MarketId, list[MarketId]]
     # Only markets with at least one substrate.
-    market_substrates: dict[int, list[bytes]]
-    aave_pools: dict[int, ChecksumAddress]
+    market_substrates: dict[MarketId, list[bytes]]
+    aave_pools: dict[MarketId, ChecksumAddress]
     # False when the vault predates getMarketSubstrates (substrates unknown).
     substrates_available: bool = True
 
@@ -856,7 +856,7 @@ def _fetch_market_reads(
     return _MarketReads(
         balance_fuses=balance_fuses,
         dependency_graph={
-            mid: [int(dep) for dep in deps]
+            mid: [MarketId(dep) for dep in deps]
             for mid, deps in zip(market_ids, graphs, strict=True)
             if deps
         },
@@ -871,8 +871,8 @@ def _fetch_market_reads(
 @dataclass
 class _LendingReads:
     lending_health: VaultLendingHealth | None = None
-    morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None = None
-    aave_positions: dict[int, list[AaveV3PositionBreakdown]] | None = None
+    morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None = None
+    aave_positions: dict[MarketId, list[AaveV3PositionBreakdown]] | None = None
 
 
 def _fetch_lending_reads(
@@ -1040,7 +1040,7 @@ def _fetch_hypercore_state(
 def fetch_deployment_info(
     ctx: Web3Context,
     chain_id: ChainId,
-    vault_address: HexAddress,
+    vault_address: ChecksumAddress,
     api_key: str | None,
 ) -> tuple[int | None, int | None, str | None]:
     """Return ``(block, timestamp, error)`` for the vault deployment, using cache.

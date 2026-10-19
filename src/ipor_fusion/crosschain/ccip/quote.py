@@ -14,6 +14,7 @@ from eth_abi import decode
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from web3 import Web3
+from web3.types import BlockIdentifier
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.simulation import VaultSimulator
@@ -31,7 +32,7 @@ def quote_ccip_native_fee(
     *,
     payer: ChecksumAddress,
     from_: ChecksumAddress,
-    block: int | str = "latest",
+    block: BlockIdentifier = "latest",
     gas: int | None = None,
 ) -> int:
     """The native fee ``call`` would pay for its CCIP message, in wei of the

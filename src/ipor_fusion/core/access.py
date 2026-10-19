@@ -64,13 +64,15 @@ class AccessManager(ContractWrapper):
     """Manages role-based access control for PlasmaVault operations."""
 
     def grant_role(
-        self, role_id: RoleId, account: ChecksumAddress, execution_delay: Period
+        self, role_id: RoleId | Roles, account: ChecksumAddress, execution_delay: Period
     ) -> Call[None]:
         return self._write(
             "grantRole(uint64,address,uint32)", role_id, account, execution_delay
         )
 
-    def revoke_role(self, role_id: RoleId, account: ChecksumAddress) -> Call[None]:
+    def revoke_role(
+        self, role_id: RoleId | Roles, account: ChecksumAddress
+    ) -> Call[None]:
         return self._write("revokeRole(uint64,address)", role_id, account)
 
     def get_target_function_role(
@@ -85,7 +87,9 @@ class AccessManager(ContractWrapper):
             decoder=RoleId,
         )
 
-    def has_role(self, role_id: RoleId, account: ChecksumAddress) -> Call[RoleStatus]:
+    def has_role(
+        self, role_id: RoleId | Roles, account: ChecksumAddress
+    ) -> Call[RoleStatus]:
         return self._view(
             "hasRole(uint64,address)",
             role_id,
@@ -113,7 +117,7 @@ class AccessManager(ContractWrapper):
             for role_account in self.get_accounts_with_role(Roles.ATOMIST_ROLE)
         ]
 
-    def get_accounts_with_role(self, role_id: RoleId) -> list[RoleAccount]:
+    def get_accounts_with_role(self, role_id: RoleId | Roles) -> list[RoleAccount]:
         return self._resolve_role_accounts(
             self._get_grant_role_events(),
             predicate=lambda rid, _: rid == role_id,
@@ -128,14 +132,16 @@ class AccessManager(ContractWrapper):
     def _resolve_role_accounts(
         self,
         events: list[LogReceipt],
-        predicate: "Callable[[int, str], bool]",
+        predicate: "Callable[[RoleId, ChecksumAddress], bool]",
     ) -> list[RoleAccount]:
         # A re-granted (role, account) emits multiple RoleGranted events; the
         # dict keeps each candidate once, in first-grant order.
-        candidates: dict[tuple[int, str], None] = {}
+        candidates: dict[tuple[RoleId, ChecksumAddress], None] = {}
         for event in events:
-            (role_id,) = decode(["uint64"], event["topics"][1])
-            (account,) = decode(["address"], event["topics"][2])
+            (raw_role,) = decode(["uint64"], event["topics"][1])
+            (raw_account,) = decode(["address"], event["topics"][2])
+            role_id = RoleId(raw_role)
+            account = Web3.to_checksum_address(raw_account)
             if predicate(role_id, account):
                 candidates[(role_id, account)] = None
 
@@ -144,7 +150,7 @@ class AccessManager(ContractWrapper):
         )
         return [
             RoleAccount(
-                account=Web3.to_checksum_address(account),
+                account=account,
                 role_id=role_id,
                 is_member=status.is_member,
                 execution_delay=status.execution_delay,

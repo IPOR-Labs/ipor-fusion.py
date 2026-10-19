@@ -283,6 +283,13 @@ or examples.
   local node.
 - Amounts are raw on-chain integers; `types.py` `NewType`s (`Amount`, `Shares`,
   `MarketId`, ...) name the unit, and nothing scales by decimals.
+- Ids and addresses are nominal in every signature: `ChainId`, `MarketId` (each
+  `IporFusionMarkets` member is one), `RoleId | Roles`, `ChecksumAddress`;
+  `HexAddress` only for the lowercase addresses decoded from substrates. Raw input
+  is parsed once at the boundary (click param types, MCP tools, the user config).
+  `src/`, `examples/` and `tests/typed_client/` are checked with
+  `reportArgumentType` on, so a bare `int`/`str` passed for one fails pyright; the
+  other tests keep it off and pass literals.
 - Addresses: fuse, factory and manager addresses per chain come from
   `ipor-abi` `addresses.json`; a fuse must be registered on the vault
   (`PlasmaVault.get_fuses()`) and its market granted substrates before an

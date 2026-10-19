@@ -66,7 +66,7 @@ NATIVE_PERP_DEX = 0
 USDC_TOKEN_INDEX = 0
 #: Core -> EVM route for token 0: a spot -> spot ``sendAsset`` to this address
 #: credits the sender's EVM balance. Never the target of an ERC-20 transfer.
-USDC_SYSTEM_ADDRESS: ChecksumAddress = ChecksumAddress(
+USDC_SYSTEM_ADDRESS: ChecksumAddress = to_checksum_address(
     "0x2000000000000000000000000000000000000000"
 )
 _SYSTEM_ADDRESS_BASE = 0x2000000000000000000000000000000000000000
@@ -185,7 +185,7 @@ def system_address(token_index: int) -> ChecksumAddress:
     for token 0). A spot -> spot ``sendAsset`` or ``spotSend`` to it credits the
     sender's EVM balance; tokens above ``uint32`` have no system address."""
     _validate_uint(token_index, 32, "token_index")
-    return to_checksum_address(_SYSTEM_ADDRESS_BASE + token_index)
+    return to_checksum_address((_SYSTEM_ADDRESS_BASE + token_index).to_bytes(20, "big"))
 
 
 class HyperCoreDepositFuse(Fuse):

@@ -70,6 +70,7 @@ from typing import Any
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
+from web3.types import BlockIdentifier
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
@@ -305,7 +306,7 @@ class OracleMappingReader:
         return self._safe(self._manager.get_configured_assets())
 
     def asset_source_events(
-        self, to_block: int | str
+        self, to_block: BlockIdentifier
     ) -> list[tuple[int, ChecksumAddress, ChecksumAddress]]:
         """Replay ``AssetPriceSourceUpdated`` logs as ``(block, asset, source)``."""
         logs = self._ctx.get_logs(

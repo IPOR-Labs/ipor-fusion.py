@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from typing import Any
 
-from eth_typing import HexAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import ChecksumAddress
@@ -92,7 +92,9 @@ def _silos_call(ctx: Web3Context, config: ChecksumAddress) -> Call:
     )
 
 
-def _substrate_addresses(market_id: int, subs: list[bytes]) -> list[ChecksumAddress]:
+def _substrate_addresses(
+    market_id: MarketId, subs: list[bytes]
+) -> list[ChecksumAddress]:
     addresses = []
     for sub in subs:
         info = decode_substrate(sub, market_id)
@@ -102,7 +104,7 @@ def _substrate_addresses(market_id: int, subs: list[bytes]) -> list[ChecksumAddr
 
 
 def _plain_tokens(
-    market_substrates: dict[int, list[bytes]], underlying: ChecksumAddress
+    market_substrates: dict[MarketId, list[bytes]], underlying: ChecksumAddress
 ) -> list[MiddlewarePricedToken]:
     """Substrates that are the priced token itself (no reads needed)."""
     tokens = [
@@ -143,7 +145,7 @@ def _loan_leg_open(pb: MorphoPositionBreakdown) -> bool | None:
 
 
 def _morpho_tokens(
-    morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None,
+    morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None,
 ) -> list[MiddlewarePricedToken]:
     """Loan and collateral tokens of every whitelisted Morpho market.
 
@@ -169,12 +171,12 @@ def _morpho_tokens(
 
 
 def _vault_asset_tokens(
-    ctx: Web3Context, market_substrates: dict[int, list[bytes]]
+    ctx: Web3Context, market_substrates: dict[MarketId, list[bytes]]
 ) -> list[MiddlewarePricedToken]:
     """``asset()`` of granted ERC4626 vaults (Euler V2, generic ERC4626) and
     of both silos of every granted Silo Config. All three fuses price it
     before reading the balance."""
-    vaults: list[tuple[int, ChecksumAddress, str]] = []
+    vaults: list[tuple[MarketId, ChecksumAddress, str]] = []
     configs: list[ChecksumAddress] = []
     for market_id, subs in market_substrates.items():
         if market_id == IporFusionMarkets.EULER_V2:
@@ -223,7 +225,7 @@ def _vault_asset_tokens(
 def _aave_v3_middleware_tokens(
     ctx: Web3Context,
     balance_fuses: list[BalanceFuse],
-    market_substrates: dict[int, list[bytes]],
+    market_substrates: dict[MarketId, list[bytes]],
 ) -> list[MiddlewarePricedToken]:
     """Granted assets of Aave V3 markets whose balance fuse is the
     middleware-priced variant; it prices every asset before reading it."""
@@ -262,16 +264,15 @@ def _unpriceable(
     transport failure raises instead of flagging.
     """
     ordered = sorted(set(tokens))
-    reads = Multicall3(ctx).try_aggregate(
-        [
-            call
-            for token in ordered
-            for call in (
-                oracle.get_source_of_asset_price(token),
-                oracle.get_asset_price(token),
-            )
-        ]
-    )
+    calls: list[Call[Any]] = [
+        call
+        for token in ordered
+        for call in (
+            oracle.get_source_of_asset_price(token),
+            oracle.get_asset_price(token),
+        )
+    ]
+    reads = Multicall3(ctx).try_aggregate(calls)
     return {
         token: source if source != _ZERO else None
         for token, source, price in zip(ordered, reads[::2], reads[1::2], strict=True)
@@ -281,11 +282,11 @@ def _unpriceable(
 
 def fetch_unpriceable_priced_tokens(
     ctx: Web3Context,
-    oracle_address: HexAddress,
-    underlying: HexAddress,
+    oracle_address: ChecksumAddress,
+    underlying: ChecksumAddress,
     balance_fuses: list[BalanceFuse],
-    market_substrates: dict[int, list[bytes]],
-    morpho_positions: dict[int, list[MorphoPositionBreakdown]] | None,
+    market_substrates: dict[MarketId, list[bytes]],
+    morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None,
 ) -> list[MiddlewarePricedToken]:
     """Every middleware-priced token of a granted substrate the middleware
     cannot price, in market order."""

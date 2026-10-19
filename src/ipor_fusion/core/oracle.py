@@ -11,7 +11,7 @@ from web3.types import LogReceipt
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.errors import EmptyCallResultError
-from ipor_fusion.types import Price
+from ipor_fusion.types import Decimals, Price
 
 
 @dataclass(slots=True)
@@ -90,7 +90,10 @@ class LegacyPriceOracleMiddleware(PriceOracleMiddleware):
     ``(price, decimals)``."""
 
     def __init__(
-        self, ctx: Web3Context, address: ChecksumAddress, base_currency_decimals: int
+        self,
+        ctx: Web3Context,
+        address: ChecksumAddress,
+        base_currency_decimals: Decimals,
     ):
         super().__init__(ctx, address)
         self._base_currency_decimals = base_currency_decimals
@@ -119,7 +122,7 @@ def price_oracle_middleware(
         decimals = oracle.base_currency_decimals().call()
     except (EmptyCallResultError, ContractLogicError):
         return oracle
-    return LegacyPriceOracleMiddleware(ctx, address, decimals)
+    return LegacyPriceOracleMiddleware(ctx, address, Decimals(decimals))
 
 
 class PriceOracleMiddlewareManager(ContractWrapper):

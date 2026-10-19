@@ -10,7 +10,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import BlockIdentifier, RPCEndpoint
+from web3.types import BlockIdentifier, Nonce, RPCEndpoint
 from web3.utils.address import get_create_address
 
 from ipor_fusion.core.contract import Call, _encode_calldata
@@ -199,7 +199,7 @@ class VaultSimulator:
         self._web3 = web3
         self._vault = Web3.to_checksum_address(vault)
         self._alpha = Web3.to_checksum_address(alpha)
-        self._block = block
+        self._block: BlockIdentifier = block
         self._validation = validation
         self._trace_transfers = trace_transfers
         self._blocks: list[_Block] = [_Block()]
@@ -468,7 +468,7 @@ class VaultSimulator:
         if gas is not None and gas <= 0:
             raise ValueError(f"gas must be positive, got {gas}")
         sender = Web3.to_checksum_address(from_)
-        predicted_address = get_create_address(sender, nonce)
+        predicted_address = get_create_address(sender, Nonce(nonce))
         self._current.calls.append(
             _Call(
                 to=None,

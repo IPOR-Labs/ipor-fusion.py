@@ -512,7 +512,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # Repay the full debt. MAX_UINT256 caps at the outstanding amount; with no time
     # advance in this run, interest is negligible and the borrowed WETH covers it.
     # (Advancing time would accrue interest, requiring a small extra WETH buffer.)
-    sim.execute([repay_action(MAX_UINT256)])
+    sim.execute([repay_action(Amount(MAX_UINT256))])
     sim.observe("debt_after_repay", _evault_debt_of(ctx, EVAULT_WETH, euler_account))
     plan.append("repay the full WETH debt")
 
@@ -527,7 +527,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
 
     # Withdraw the cbETH back to the vault -- the reverse of the initial supply --
     # to fully exit the position, then re-value the market so the exit surfaces.
-    sim.execute([withdraw_collateral_action(MAX_UINT256)])
+    sim.execute([withdraw_collateral_action(Amount(MAX_UINT256))])
     sim.add_call(call=plasma_vault.update_markets_balances([EULER_MARKET]), from_=ALPHA)
     sim.observe("euler_value_closed", plasma_vault.total_assets_in_market(EULER_MARKET))
     sim.observe("vault_cbeth_closed", cbeth.balance_of(preview.plasma_vault))

@@ -38,7 +38,7 @@ class GuideResource:
 
 @cache
 def _read(filename: str) -> str:
-    return resources.files(__package__).joinpath(filename).read_text(encoding="utf-8")
+    return resources.files(__name__).joinpath(filename).read_text(encoding="utf-8")
 
 
 GLOSSARY = GuideResource(
