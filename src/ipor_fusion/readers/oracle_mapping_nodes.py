@@ -25,25 +25,13 @@ ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
 # source_type values (also the human label in the path / output). Adding a
-# type? Follow the "Adding a feed type" checklist in the module docstring.
+# type? Follow the "Adding a feed type" checklist in readers/oracle_mapping.py.
 TYPE_CHAINLINK = "ChainlinkAggregator"
-
-
 TYPE_CHAINLINK_STYLE = "chainlink_style"
-
-
 TYPE_ERC4626 = "ERC4626PriceFeed"
-
-
 TYPE_MORPHO = "CollateralTokenOnMorphoMarketPriceFeed"
-
-
 TYPE_DUAL_XREF = "DualCrossReferencePriceFeed"
-
-
 TYPE_MIDDLEWARE_FALLBACK = "middleware_fallback"
-
-
 TYPE_UNKNOWN = "custom_unknown"
 
 
