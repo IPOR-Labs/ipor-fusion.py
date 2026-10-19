@@ -17,18 +17,9 @@ from ipor_fusion import cache
 from ipor_fusion.cache import save_contract_cache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
-from ipor_fusion.cli.vault_cmd import (
+from ipor_fusion.cli.options import (
     ADDRESS,
     CHAIN,
-    _index_lending_health,
-    _print_balance_fuses_table,
-    _print_dependency_graph,
-    _print_fees,
-    _print_fuse_section,
-    _print_health_lines,
-    _print_lending_health,
-    _print_pending_requests,
-    _print_substrates,
     _resolve_chain_id,
     _resolve_provider,
 )
@@ -37,6 +28,19 @@ from ipor_fusion.cli.vault_health import (
     _print_health_check,
     _print_reconciliation,
     _read_erc20_holdings,
+)
+from ipor_fusion.cli.vault_info_view import (
+    _print_fees,
+    _print_pending_requests,
+)
+from ipor_fusion.cli.vault_markets_view import (
+    _index_lending_health,
+    _print_balance_fuses_table,
+    _print_dependency_graph,
+    _print_fuse_section,
+    _print_health_lines,
+    _print_lending_health,
+    _print_substrates,
 )
 from ipor_fusion.cli.vault_rendering import (
     _format_age,
@@ -1019,8 +1023,13 @@ class TestPrintSubstrates:
         captured = capsys.readouterr()
         assert "(none)" in captured.out
 
-    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="TestContract")
-    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol", return_value="WETH")
+    @patch(
+        "ipor_fusion.cli.vault_markets_view.get_contract_name",
+        return_value="TestContract",
+    )
+    @patch(
+        "ipor_fusion.cli.vault_markets_view.resolve_token_symbol", return_value="WETH"
+    )
     def test_with_substrates(self, mock_resolve, mock_get_name, capsys):
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
         _print_substrates(
@@ -1075,7 +1084,7 @@ class TestPrintSubstrates:
 
 
 class TestPrintBalanceFusesTable:
-    @patch("ipor_fusion.cli.vault_cmd.get_contract_name")
+    @patch("ipor_fusion.cli.vault_markets_view.get_contract_name")
     def test_splits_venues_and_zero_balance(self, mock_get_name, capsys):
         mock_get_name.side_effect = lambda chain, addr, key: (
             "ZeroBalanceFuse" if addr == ADDR_2 else "MorphoBalanceFuse"
@@ -1093,7 +1102,7 @@ class TestPrintBalanceFusesTable:
         assert "Zero-Balance Fuses (1):" in out
 
     @patch(
-        "ipor_fusion.cli.vault_cmd.get_contract_name",
+        "ipor_fusion.cli.vault_markets_view.get_contract_name",
         return_value="MorphoBalanceFuse",
     )
     def test_no_zero_balance_section_when_all_venues(self, mock_get_name, capsys):
@@ -1108,7 +1117,7 @@ class TestPrintBalanceFusesTable:
 
 
 class TestAddressTypeChecksumException:
-    @patch("ipor_fusion.cli.vault_cmd.Web3.to_checksum_address")
+    @patch("ipor_fusion.cli.options.Web3.to_checksum_address")
     def test_checksum_exception_caught(self, mock_checksum):
         mock_checksum.side_effect = Exception("unexpected error")
         mixed = "0xAbCdEf1234567890aBcDeF1234567890AbCdEf12"
@@ -1634,7 +1643,7 @@ class TestInlineHealth:
         out = capsys.readouterr().out
         assert "CRITICAL" in out
 
-    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol")
+    @patch("ipor_fusion.cli.vault_markets_view.resolve_token_symbol")
     @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=18)
     @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
     def test_morpho_market_renders_inline_health(
@@ -1661,7 +1670,9 @@ class TestInlineHealth:
         assert "Health Factor:" in out
         assert "Status:" in out
 
-    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol", return_value="USDC")
+    @patch(
+        "ipor_fusion.cli.vault_markets_view.resolve_token_symbol", return_value="USDC"
+    )
     @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=6)
     @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="USDC")
     def test_aave_market_renders_inline_health_after_assets(
@@ -1976,10 +1987,12 @@ class TestBreakdownAmountJson:
 
 
 class TestFormatTokenAmountUsd:
-    @patch("ipor_fusion.cli.vault_cmd.resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.cli.vault_markets_view.resolve_token_decimals", return_value=6)
+    @patch(
+        "ipor_fusion.cli.vault_markets_view.resolve_token_symbol", return_value="USDC"
+    )
     def test_appends_usd_when_price_known(self, _sym, _dec):
-        from ipor_fusion.cli.vault_cmd import (
+        from ipor_fusion.cli.vault_markets_view import (
             _format_token_amount,
         )
 
@@ -1988,10 +2001,12 @@ class TestFormatTokenAmountUsd:
         assert "1.0 USDC" in out
         assert "$1.00" in out
 
-    @patch("ipor_fusion.cli.vault_cmd.resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.cli.vault_cmd.resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.cli.vault_markets_view.resolve_token_decimals", return_value=6)
+    @patch(
+        "ipor_fusion.cli.vault_markets_view.resolve_token_symbol", return_value="USDC"
+    )
     def test_no_usd_suffix_when_price_missing(self, _sym, _dec):
-        from ipor_fusion.cli.vault_cmd import (
+        from ipor_fusion.cli.vault_markets_view import (
             _format_token_amount,
         )
 
@@ -2031,7 +2046,8 @@ class TestPrintFuseSection:
     duplicate registrations in the section header."""
 
     @patch(
-        "ipor_fusion.cli.vault_cmd.get_contract_name", return_value="MorphoSupplyFuse"
+        "ipor_fusion.cli.vault_markets_view.get_contract_name",
+        return_value="MorphoSupplyFuse",
     )
     def test_renders_market_label_and_substrate_count(self, _mock_name, capsys):
         addr = ADDR_1
@@ -2051,7 +2067,10 @@ class TestPrintFuseSection:
         # Substrate count comes from market_substrates, not from registrations
         assert "  2  " in captured.out or "2\n" in captured.out
 
-    @patch("ipor_fusion.cli.vault_cmd.get_contract_name", return_value="UnknownFuse")
+    @patch(
+        "ipor_fusion.cli.vault_markets_view.get_contract_name",
+        return_value="UnknownFuse",
+    )
     def test_renders_question_mark_without_fuse_markets(self, _mock_name, capsys):
         _print_fuse_section(
             "Fuses",
@@ -2065,7 +2084,8 @@ class TestPrintFuseSection:
         assert "?" in captured.out
 
     @patch(
-        "ipor_fusion.cli.vault_cmd.get_contract_name", return_value="MorphoSupplyFuse"
+        "ipor_fusion.cli.vault_markets_view.get_contract_name",
+        return_value="MorphoSupplyFuse",
     )
     def test_dedupes_repeated_fuse_address(self, _mock_name, capsys):
         addr = ADDR_1
@@ -2082,7 +2102,8 @@ class TestPrintFuseSection:
         assert captured.out.count(addr) == 1
 
     @patch(
-        "ipor_fusion.cli.vault_cmd.get_contract_name", return_value="MorphoSupplyFuse"
+        "ipor_fusion.cli.vault_markets_view.get_contract_name",
+        return_value="MorphoSupplyFuse",
     )
     def test_no_registrations_suffix_when_unique(self, _mock_name, capsys):
         _print_fuse_section(

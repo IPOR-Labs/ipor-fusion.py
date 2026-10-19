@@ -245,10 +245,12 @@ the lifecycle matrix follows that.
   compound_v3, morpho, ramses_v2, uniswap_v3, unpriceable (middleware-priced tokens of
   granted substrates the oracle cannot price)
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`,
-  `vault_cmd.py` orchestration and text output over `vault_data` /
-  `vault_info`; `vault_health.py` renders the validation;
-  `vault_rendering.py` pure formatting; `config_store.py` (XDG
-  `~/.config/ipor-fusion/`)
+  `vault_cmd.py` command orchestration over `vault_data` / `vault_info`; `options.py`
+  the shared `--chain-id` / address param types and chain/provider resolution;
+  text output in `vault_info_view.py` (`fusion vault info`), `vault_markets_view.py`
+  (fuses, balance fuses, substrates, lending health) and `oracle_mapping_view.py`;
+  `vault_health.py` renders the validation; `vault_rendering.py` pure formatting;
+  `config_store.py` (XDG `~/.config/ipor-fusion/`)
 - `mcp/` — `server.py` tools call the SDK directly (no subprocess); `models.py` pydantic output
 - Entry points: `entry_cli.py`, `entry_mcp.py` via `[project.scripts]`
 

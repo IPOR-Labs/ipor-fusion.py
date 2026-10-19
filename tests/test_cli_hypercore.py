@@ -7,7 +7,9 @@ from unittest.mock import MagicMock, patch
 from test_mcp_hypercore import FUSE, PENDING, _state
 from web3 import Web3
 
-from ipor_fusion.cli.vault_cmd import _print_hypercore
+from ipor_fusion.cli.vault_info_view import (
+    _print_hypercore,
+)
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.types import MarketId
 from ipor_fusion.vault_data import _fetch_hypercore_state

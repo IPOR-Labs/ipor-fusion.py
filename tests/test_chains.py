@@ -73,7 +73,9 @@ def test_log_range_hints_name_known_chains():
 
 
 def test_cli_reexport_is_same_object():
-    from ipor_fusion.cli.vault_cmd import CHAIN_NAMES as cli_chain_names
+    from ipor_fusion.cli.vault_cmd import (
+        CHAIN_NAMES as cli_chain_names,
+    )
 
     assert cli_chain_names is CHAIN_NAMES
 

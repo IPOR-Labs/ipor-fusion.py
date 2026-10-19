@@ -150,7 +150,7 @@ def _fake_ctx(latest_block: int = 12345) -> MagicMock:
 
 @patch("ipor_fusion.cli.vault_cmd.build_oracle_mapping")
 @patch("ipor_fusion.cli.vault_cmd.resolve_access_manager")
-@patch("ipor_fusion.cli.vault_cmd.Web3Context")
+@patch("ipor_fusion.cli.options.Web3Context")
 class TestOracleMappingCommand:
     def test_human_output(self, mock_ctx_cls, _resolve, mock_build, tmp_config):
         mock_ctx_cls.from_url.return_value = _fake_ctx()
