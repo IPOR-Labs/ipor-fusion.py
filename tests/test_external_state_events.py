@@ -96,6 +96,13 @@ def test_hex_text_data_and_topics_from_an_indexer_decode_too():
     assert event.transaction_hash == "0x" + "fb" * 32
 
 
+def test_a_short_transaction_hash_is_a_decode_error():
+    log = _log("ExternalStateAssetRescued", (SIGNER,))
+    log["transactionHash"] = bytes(31)
+    with pytest.raises(ExternalStateEventDecodeError, match="transactionHash"):
+        decode_external_state_event(log)
+
+
 def test_an_unknown_topic_is_none_and_a_malformed_listed_one_raises():
     assert (
         decode_external_state_event(

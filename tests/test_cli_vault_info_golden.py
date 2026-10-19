@@ -378,8 +378,8 @@ def test_public_builder_renders_the_cli_json(scenario: str) -> None:
         ctx,
         PlasmaVault(ctx, VAULT),  # type: ignore[arg-type]
         data,
-        1,
-        "ethereum",
+        chain_id=1,
+        chain_label="ethereum",
         resolve_name=lambda address: _NAMES_BY_ADDRESS.get(address.lower(), ""),
     )
     expected = (FIXTURES / f"{scenario}.json").read_text(encoding="utf-8")

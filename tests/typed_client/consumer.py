@@ -78,7 +78,7 @@ def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     ensure_supported_chain(ETHEREUM)
     data = fetch_vault_data(ctx, vault, chain_id=ETHEREUM)
     fetch_deployment_info(ctx, ETHEREUM, VAULT, None)
-    build_vault_info_json(ctx, vault, data, ETHEREUM, "ethereum")
+    build_vault_info_json(ctx, vault, data, chain_id=ETHEREUM, chain_label="ethereum")
     validate_vault(ctx, VAULT)
     resolve_token_symbol(ctx, VAULT)
     fetch_unpriceable_priced_tokens(ctx, VAULT, VAULT, [], {}, None)

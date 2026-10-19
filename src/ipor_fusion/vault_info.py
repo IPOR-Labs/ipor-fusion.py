@@ -741,9 +741,9 @@ def build_vault_info_json(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: VaultData,
+    *,
     chain_id: ChainId,
     chain_label: str,
-    *,
     resolve_name: Callable[[HexAddress], str] | None = None,
 ) -> dict[str, Any]:
     """Everything known about the vault as one JSON-serializable dict: the
