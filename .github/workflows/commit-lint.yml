@@ -26,6 +26,7 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
           TITLE: ${{ github.event.pull_request.title }}
         run: |
+          git rev-parse -q --verify "${BASE}^{commit}" "${HEAD}^{commit}" > /dev/null
           STATUS=0
           while IFS= read -r SUBJECT; do
             scripts/commit-check.sh subject "${SUBJECT}" || STATUS=1
@@ -38,7 +39,7 @@ jobs:
       # and added lines are all public once merged. LEAK_PATTERNS holds the
       # internal names; fork PRs do not get it and run the built-in ones only.
       - name: No internal references
-        if: always()
+        if: ${{ !cancelled() }}
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
@@ -47,6 +48,7 @@ jobs:
           BODY: ${{ github.event.pull_request.body }}
           LEAK_PATTERNS: ${{ secrets.LEAK_PATTERNS }}
         run: |
+          git rev-parse -q --verify "${BASE}^{commit}" "${HEAD}^{commit}" > /dev/null
           {
             git log --format=%B "${BASE}..${HEAD}"
             printf '%s\n%s\n%s\n' "${BRANCH}" "${TITLE}" "${BODY}"

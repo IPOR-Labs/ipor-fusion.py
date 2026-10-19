@@ -33,10 +33,15 @@ check_subject() {
 }
 
 check_leaks() {
-  local patterns hits
-  patterns=$(leak_patterns | grep -v '^[[:space:]]*\(#\|$\)')
-  hits=$(grep -inE -f <(printf '%s\n' "${patterns}") || true)
-  [ -z "${hits}" ] && return 0
+  local patterns hits rc=0
+  patterns=$(leak_patterns | grep -vE '^[[:space:]]*(#|$)')
+  hits=$(grep -inE -f <(printf '%s\n' "${patterns}")) || rc=$?
+  case "${rc}" in
+    0) ;;
+    1) return 0 ;;
+    # A broken pattern must not pass everything, the built-in ones included.
+    *) echo "Leak check failed (grep exit ${rc}): fix the leak patterns." >&2; return 2 ;;
+  esac
   echo "Internal references (Jira keys, internal hosts, private names) do not belong in this public repository:" >&2
   printf '%s\n' "${hits}" >&2
   return 1

@@ -242,6 +242,9 @@ jobs:
         if: inputs.publish-enabled && inputs.dev-build
         id: release-dev
         run: |
+          # A stable release pushes the branch before its tag; the push run
+          # must not miss that tag and rebuild the released version as dev.
+          git fetch --quiet --force --tags origin
           NEXT=$(env -u GITHUB_OUTPUT uvx --from "python-semantic-release==10.5.3" semantic-release version --print)
           LAST=$(git describe --tags --abbrev=0 --match 'v*')
           if [ "v${NEXT}" = "${LAST}" ]; then

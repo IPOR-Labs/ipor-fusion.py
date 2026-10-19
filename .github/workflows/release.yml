@@ -34,8 +34,11 @@ jobs:
 
   release:
     needs: notify
+    # Stable releases run one at a time. A dev build depends only on its
+    # commit, so pushes get a group each: a shared one would cancel all but
+    # the newest pending run and report them as failed.
     concurrency:
-      group: release-${{ github.event_name }}
+      group: release-${{ github.event_name == 'push' && github.sha || 'dispatch' }}
       cancel-in-progress: false
     uses: ./.github/workflows/python-publish.yml
     secrets:
