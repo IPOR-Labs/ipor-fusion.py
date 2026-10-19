@@ -136,12 +136,12 @@ class RamsesClaimFuse(Fuse):
 
 @dataclass(slots=True)
 class RamsesNewPositionEvent:
-    version: str
+    version: ChecksumAddress
     token_id: TokenId
     liquidity: Liquidity
     amount0: Amount
     amount1: Amount
-    sender: str
+    sender: ChecksumAddress
     recipient: ChecksumAddress
     fee: Fee
     tick_lower: Tick

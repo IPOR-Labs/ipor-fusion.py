@@ -65,7 +65,8 @@ its `unpriceable_priced_tokens` items' `market_id` as `MarketId`
 `fuse_markets` keys), `FeeData.fee_manager` / `ipor_dao_fee_recipient`, and
 `VaultValidation.vault` / `asset` are `ChecksumAddress`; `VaultData.balance_fuses`
 is `list[BalanceFuse]` and `token_prices_usd` is keyed by `HexAddress` (lowercase);
-the Uniswap V3 / Ramses V2 new-position events' `recipient` is `ChecksumAddress`;
+the Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` are
+`ChecksumAddress`;
 `VaultValidation.chain_id` is `ChainId`; `LendingMarketHealth.market_id` and
 `MiddlewarePricedToken.market_id` are `MarketId`; `Erc20Holding.address` is
 `HexAddress`, and `SubstrateInfo.address` is `HexAddress | None` (`None`, no longer
@@ -136,7 +137,12 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 - The MCP `vault_info` document reports the vault address checksummed (the CLI
   already did).
 - `SubstrateInfo.address` is `None` instead of `""` for a substrate without an
-  address (truthiness checks are unaffected; the JSON documents already omitted it).
+  address. Truthiness checks are unaffected and the SDK's JSON documents already
+  omit it, but `dataclasses.asdict(info)` now gives `"address": None` and
+  `info.address == ""` is false.
+- The Uniswap V3 / Ramses V2 position events (`extract_new_position_events`,
+  `extract_close_position_events`) return their addresses checksummed (they were the
+  lowercase ABI-decoded strings).
 - `fusion market meta-morpho --json` and the MCP `market_meta_morpho` tool report
   `null` instead of `""` for an absent curator, guardian or fee recipient; the MCP
   schema's `curator` is nullable.

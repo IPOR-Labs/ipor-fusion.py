@@ -14,5 +14,12 @@ def extract_events(
     for log in receipt["logs"]:
         if log["topics"][0] == sig_hash:
             decoded = decode(abi_types, log["data"])
-            events.append(dataclass_type(*decoded))
+            events.append(
+                dataclass_type(
+                    *(
+                        Web3.to_checksum_address(value) if abi == "address" else value
+                        for abi, value in zip(abi_types, decoded, strict=True)
+                    )
+                )
+            )
     return events

@@ -86,3 +86,37 @@ class TestParsers:
 
         with pytest.raises(ValueError):
             parse_hex_address(value)
+
+
+class TestPositionEventAddresses:
+    def test_decoded_addresses_are_checksummed(self):
+        from eth_abi import encode
+        from web3 import Web3
+
+        from ipor_fusion.fuses.uniswap_v3 import UniswapV3Events
+
+        lower = "0x" + "ab" * 20
+        signature = (
+            "UniswapV3NewPositionFuseEnter(address,uint256,uint128,uint256,uint256,"
+            "address,address,uint24,int24,int24)"
+        )
+        data = encode(
+            [
+                "address",
+                "uint256",
+                "uint128",
+                "uint256",
+                "uint256",
+                "address",
+                "address",
+                "uint24",
+                "int24",
+                "int24",
+            ],
+            [lower, 1, 2, 3, 4, lower, lower, 500, -10, 10],
+        )
+        receipt = {"logs": [{"topics": [Web3.keccak(text=signature)], "data": data}]}
+        (event,) = UniswapV3Events.extract_new_position_events(receipt)  # type: ignore[arg-type]
+        checksum = Web3.to_checksum_address(lower)
+        assert (event.version, event.sender, event.recipient) == (checksum,) * 3
+        assert event.token_id == 1

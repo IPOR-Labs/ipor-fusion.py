@@ -188,8 +188,9 @@ class TestFetchContractCreationTx:
         assert err is None
 
     @patch("ipor_fusion.explorer.urlopen")
-    def test_a_malformed_tx_hash_is_reported_not_raised(self, mock_urlopen_fn):
-        response = {"status": "1", "result": [{"txHash": "0xdeadbeef"}]}
+    @pytest.mark.parametrize("raw", ["0xdeadbeef", 123, ["bad"], {"bad": True}])
+    def test_a_malformed_tx_hash_is_reported_not_raised(self, mock_urlopen_fn, raw):
+        response = {"status": "1", "result": [{"txHash": raw}]}
         mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
         tx, err = _fetch_contract_creation_tx(1, "0xABC", api_key="key123")
         assert tx is None

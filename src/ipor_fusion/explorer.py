@@ -67,6 +67,17 @@ def get_deployment_tx(
     return _fetch_contract_creation_tx(chain_id, address, api_key)
 
 
+def _creation_tx_hash(raw: object) -> tuple[TxHash | None, str | None]:
+    if not raw:
+        return None, None
+    if not isinstance(raw, str):
+        return None, "malformed-tx-hash"
+    try:
+        return parse_tx_hash(raw), None
+    except ValueError:
+        return None, "malformed-tx-hash"
+
+
 def _fetch_contract_creation_tx(
     chain_id: ChainId, address: HexAddress, api_key: str | None = None
 ) -> tuple[TxHash | None, str | None]:
@@ -91,13 +102,7 @@ def _fetch_contract_creation_tx(
             with urlopen(url, timeout=10) as resp:  # noqa: S310
                 data = json.loads(resp.read().decode())
             if data.get("status") == "1" and data.get("result"):
-                tx_hash = data["result"][0].get("txHash")
-                if not tx_hash:
-                    return None, None
-                try:
-                    return parse_tx_hash(tx_hash), None
-                except ValueError:
-                    return None, "malformed-tx-hash"
+                return _creation_tx_hash(data["result"][0].get("txHash"))
             result_text = str(data.get("result", "")).lower()
             if "free api access is not supported" in result_text:
                 return None, "etherscan-paid-tier-required"
