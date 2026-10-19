@@ -336,7 +336,7 @@ class TestHandleReceipt:
         with pytest.raises(TransactionError) as exc_info:
             ctx._handle_receipt(tx_hash, receipt)
 
-        assert exc_info.value.tx_hash == tx_hash.hex()
+        assert exc_info.value.tx_hash == tx_hash.to_0x_hex()
         assert exc_info.value.revert_reason == 'Error("Insufficient balance")'
         mock_get_reason.assert_called_once_with(ctx.web3, tx_hash, receipt)
 

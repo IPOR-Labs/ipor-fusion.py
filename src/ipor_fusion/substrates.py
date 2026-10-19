@@ -25,7 +25,7 @@ from ipor_fusion.fuses.hypercore import (
     read_index_of,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import MarketId
+from ipor_fusion.types import HyperCoreAsset, MarketId
 
 
 @dataclass
@@ -338,7 +338,7 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
         reduce_flag = int(hex_str[32:34], 16)
         if reduce_flag > 1:
             return _hypercore_invalid(hex_str, label)
-        asset = int(hex_str[2:10], 16)
+        asset = HyperCoreAsset(int(hex_str[2:10], 16))
         extra = {
             "asset": str(asset),
             "max_notional_usd6": str(int(hex_str[10:32], 16)),

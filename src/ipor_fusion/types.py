@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import ClassVar, Literal, NewType, TypeAlias
 
-from eth_typing import ChecksumAddress
+from eth_typing import ChecksumAddress, HexStr
 
 Amount = NewType("Amount", int)
 Shares = NewType("Shares", int)
@@ -32,6 +32,24 @@ ReturnRequestId = NewType("ReturnRequestId", bytes)
 TransferId = NewType("TransferId", bytes)
 OperationId = NewType("OperationId", bytes)
 PositionSetHash = NewType("PositionSetHash", bytes)
+# HyperCore (market 55) identifiers, sized as in the fuses: a spot token's uint64
+# index; a uint32 action asset (native perp below 10_000, HIP-3 100_000 +
+# dex * 10_000 + index; Hyperliquid's spot pairs are 10_000 + the spot *pair*
+# index, which the Fusion order and cancel fuses reject); an order's uint64 oid
+# and uint128 cloid; a perp's uint32 margin table.
+HyperCoreTokenIndex = NewType("HyperCoreTokenIndex", int)
+HyperCoreAsset = NewType("HyperCoreAsset", int)
+HyperCoreOrderId = NewType("HyperCoreOrderId", int)
+HyperCoreClientOrderId = NewType("HyperCoreClientOrderId", int)
+MarginTableId = NewType("MarginTableId", int)
+# The pending action's uint24 CoreWriter opcode (HyperCoreLib.ACTION_*, 0 for an
+# EVM-side deposit): what kind of action, not which one (that is the nonce).
+HyperCoreActionId = NewType("HyperCoreActionId", int)
+PayloadHash = NewType("PayloadHash", bytes)
+# A transaction hash as 0x and 64 hex digits (a HexStr, so web3 takes it).
+TxHash = NewType("TxHash", HexStr)
+# ExternalStateExecutor's bytes32 balance proposal hash.
+ProposalHash = NewType("ProposalHash", bytes)
 
 MAX_UINT256 = (1 << 256) - 1
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"

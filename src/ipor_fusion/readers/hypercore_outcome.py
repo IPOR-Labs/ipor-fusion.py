@@ -17,12 +17,13 @@ from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.fuses.hypercore import USDC_TOKEN_INDEX
 from ipor_fusion.readers.hypercore import (
     HYPERCORE_PENDING_READERS,
     HyperCorePendingReader,
     HyperCoreReader,
 )
-from ipor_fusion.types import Amount, Shares
+from ipor_fusion.types import Amount, HyperCoreTokenIndex, Shares
 
 TransferDirection = Literal["evm_to_core", "core_to_evm"]
 
@@ -43,7 +44,7 @@ class HyperCoreTransferSnapshot:
 
     block_number: int
     vault: ChecksumAddress
-    token_index: int
+    token_index: HyperCoreTokenIndex
     evm_token: ChecksumAddress
     action_nonce: int
     pending: bool
@@ -111,7 +112,7 @@ def read_hypercore_transfer_snapshot(
     vault_address: ChecksumAddress,
     evm_token: ChecksumAddress,
     *,
-    token_index: int = 0,
+    token_index: HyperCoreTokenIndex = USDC_TOKEN_INDEX,
     pending_reader: ChecksumAddress | None = None,
 ) -> HyperCoreTransferSnapshot:
     """Pin one block and batch the observations needed before/after a transfer.

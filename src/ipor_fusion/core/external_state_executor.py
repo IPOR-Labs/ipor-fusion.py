@@ -32,7 +32,7 @@ from web3.types import BlockIdentifier, TxReceipt
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId, MarketId
+from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId, MarketId, ProposalHash
 
 if TYPE_CHECKING:
     from ipor_fusion.core.plasma_vault import PlasmaVault
@@ -79,12 +79,12 @@ class BalanceProposal:
     value: Amount
     nonce: int
     proposed_at: int
-    proposal_hash: bytes
+    proposal_hash: ProposalHash
 
 
 def _hash_of(
     proposal: BalanceProposal, *, executor: ChecksumAddress, chain_id: ChainId
-) -> bytes:
+) -> ProposalHash:
     """`proposal`'s canonical hash, as `confirmBalance` recomputes it.
 
     The sole mapping from a proposal's fields onto `proposal_hash` arguments,
@@ -132,7 +132,7 @@ class NavMark:
 
     proposed_at: int
     nonce: int
-    proposal_hash: bytes
+    proposal_hash: ProposalHash
     propose_receipt: TxReceipt
     confirm_receipt: TxReceipt
     refresh_receipt: TxReceipt | None
@@ -463,7 +463,7 @@ class ExternalStateExecutor(ContractWrapper):
                 value=Amount(value),
                 nonce=nonce,
                 proposed_at=proposed_at,
-                proposal_hash=b"",
+                proposal_hash=ProposalHash(b""),
             )
             return replace(
                 unstamped,
@@ -516,7 +516,7 @@ class ExternalStateExecutor(ContractWrapper):
         return self._write("proposeBalance(address,uint256)", balance_account, value)
 
     def confirm_balance(
-        self, balance_account: ChecksumAddress, proposal_hash: bytes
+        self, balance_account: ChecksumAddress, proposal_hash: ProposalHash
     ) -> Call[None]:
         """CUSTODIAN-only: confirm the pending proposal for `balance_account`.
         Must be sent by a custodian other than the proposer, and `proposal_hash`
@@ -561,7 +561,7 @@ class ExternalStateExecutor(ContractWrapper):
         proposer: ChecksumAddress,
         proposed_at: int,
         nonce: int,
-    ) -> bytes:
+    ) -> ProposalHash:
         """The confirm hash that `confirmBalance` verifies against:
         ``keccak(abi.encode(executor, chainId, balanceAccount, value, proposer,
         proposedAt, nonce))``.
@@ -571,26 +571,28 @@ class ExternalStateExecutor(ContractWrapper):
         event, never a fresh `nonce()` read -- see `nonce`. Pure -- no chain
         access -- so callers can pre-compute or verify a hash offline.
         """
-        return keccak(
-            encode(
-                [
-                    "address",
-                    "uint256",
-                    "address",
-                    "uint256",
-                    "address",
-                    "uint64",
-                    "uint256",
-                ],
-                [
-                    Web3.to_checksum_address(executor),
-                    int(chain_id),
-                    Web3.to_checksum_address(balance_account),
-                    int(value),
-                    Web3.to_checksum_address(proposer),
-                    int(proposed_at),
-                    int(nonce),
-                ],
+        return ProposalHash(
+            keccak(
+                encode(
+                    [
+                        "address",
+                        "uint256",
+                        "address",
+                        "uint256",
+                        "address",
+                        "uint64",
+                        "uint256",
+                    ],
+                    [
+                        Web3.to_checksum_address(executor),
+                        int(chain_id),
+                        Web3.to_checksum_address(balance_account),
+                        int(value),
+                        Web3.to_checksum_address(proposer),
+                        int(proposed_at),
+                        int(nonce),
+                    ],
+                )
             )
         )
 

@@ -11,6 +11,8 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
 
+from ipor_fusion.types import TxHash
+
 log = logging.getLogger(__name__)
 
 PANIC_CODES: dict[int, str] = {
@@ -237,7 +239,7 @@ class TransactionError(IporFusionError):
     def __init__(
         self,
         message: str,
-        tx_hash: str | None = None,
+        tx_hash: TxHash | None = None,
         revert_reason: str | None = None,
     ):
         self.tx_hash = tx_hash

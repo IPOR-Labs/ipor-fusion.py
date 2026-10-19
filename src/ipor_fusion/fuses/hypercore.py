@@ -56,14 +56,20 @@ from ipor_fusion.fuses.base import (
     _substrate_address_bytes,
     _validate_not_zero_address,
 )
-from ipor_fusion.types import Amount
+from ipor_fusion.types import (
+    Amount,
+    HyperCoreAsset,
+    HyperCoreClientOrderId,
+    HyperCoreOrderId,
+    HyperCoreTokenIndex,
+)
 
 #: ``HyperCoreLib.SPOT_DEX``: the spot account in ``sendAsset`` routes.
 SPOT_DEX = 0xFFFFFFFF
 #: ``HyperCoreLib.NATIVE_PERP_DEX``: Hyperliquid's own perp dex.
 NATIVE_PERP_DEX = 0
 #: Core token index of USDC.
-USDC_TOKEN_INDEX = 0
+USDC_TOKEN_INDEX = HyperCoreTokenIndex(0)
 #: Core -> EVM route for token 0: a spot -> spot ``sendAsset`` to this address
 #: credits the sender's EVM balance. Never the target of an ERC-20 transfer.
 USDC_SYSTEM_ADDRESS: ChecksumAddress = to_checksum_address(
@@ -107,7 +113,7 @@ class HyperCoreConfigKey(IntEnum):
     SPOT_SEND_BRIDGE_ENABLED = 6
 
 
-def hip3_action_asset(dex: int, index_in_dex: int) -> int:
+def hip3_action_asset(dex: int, index_in_dex: int) -> HyperCoreAsset:
     """The CoreWriter asset of market ``index_in_dex`` on perp dex ``dex``:
     the index itself on the native dex, ``100_000 + dex * 10_000 + index``
     on a HIP-3 dex. Rejects anything outside the two families the fuses
@@ -119,20 +125,20 @@ def hip3_action_asset(dex: int, index_in_dex: int) -> int:
             f"index_in_dex must be below {_HIP3_DEX_MULTIPLIER}, got {index_in_dex}"
         )
     if dex == NATIVE_PERP_DEX:
-        return index_in_dex
+        return HyperCoreAsset(index_in_dex)
     asset = _HIP3_ASSET_OFFSET + dex * _HIP3_DEX_MULTIPLIER + index_in_dex
     if asset >= _OUTCOME_FIRST_ASSET:
         raise ValueError(f"dex {dex} is outside the HIP-3 asset range")
-    return asset
+    return HyperCoreAsset(asset)
 
 
-def is_native_perp_asset(asset: int) -> bool:
+def is_native_perp_asset(asset: HyperCoreAsset) -> bool:
     """``HyperCoreLib.isNativePerpAsset``: an action asset below 10 000."""
     _validate_uint(asset, 32, "asset")
     return asset < _NATIVE_PERP_ASSET_LIMIT
 
 
-def is_hip3_asset(asset: int) -> bool:
+def is_hip3_asset(asset: HyperCoreAsset) -> bool:
     """``HyperCoreLib.isHip3Asset``: ``110_000 <= asset < 100_000_000``. Assets
     between the families (10 000 .. 109 999) and the outcome family above are
     neither, and the perp fuses reject them."""
@@ -147,7 +153,7 @@ def is_supported_perp_dex(dex: int) -> bool:
     return dex == NATIVE_PERP_DEX or dex in SUPPORTED_HIP3_DEXES
 
 
-def perp_dex_of(asset: int) -> int:
+def perp_dex_of(asset: HyperCoreAsset) -> int:
     """``HyperCoreLib.perpDexOf``: 0 for a native asset, the dex index for a
     HIP-3 asset; raises for any other value, as the fuses revert."""
     if is_native_perp_asset(asset):
@@ -157,7 +163,7 @@ def perp_dex_of(asset: int) -> int:
     raise ValueError(f"asset {asset} is neither a native nor a HIP-3 perp asset")
 
 
-def read_index_of(asset: int) -> int:
+def read_index_of(asset: HyperCoreAsset) -> int:
     """``HyperCoreLib.readIndexOf``: the index the read precompiles take --
     native assets unchanged, HIP-3 assets without the 100 000 offset; raises
     for any other value."""
@@ -179,7 +185,7 @@ def _validate_positive_uint(value: int, bits: int, name: str) -> None:
     _validate_uint(value, bits, name)
 
 
-def system_address(token_index: int) -> ChecksumAddress:
+def system_address(token_index: HyperCoreTokenIndex) -> ChecksumAddress:
     """``HyperCoreLib.systemAddress``: the Core -> EVM route of Core token
     ``token_index`` (``0x2000…0000 + tokenIndex``; :data:`USDC_SYSTEM_ADDRESS`
     for token 0). A spot -> spot ``sendAsset`` or ``spotSend`` to it credits the
@@ -192,7 +198,7 @@ class HyperCoreDepositFuse(Fuse):
     """EVM -> Core deposit of a granted spot token (CoreWriter-free: the
     token's verified route, the CoreDepositWallet for Circle USDC)."""
 
-    def enter(self, *, token_index: int, amount: Amount) -> FuseAction:
+    def enter(self, *, token_index: HyperCoreTokenIndex, amount: Amount) -> FuseAction:
         """Deposit up to ``amount`` (ERC-20 units) of Core token
         ``token_index``; the fuse caps it at the vault's balance. A fresh Core
         account pays an activation fee from its first deposit, so the Core
@@ -217,7 +223,11 @@ class HyperCoreSendFuse(Fuse):
     """``spotSend`` (action 6) and ``sendAsset`` (action 13)."""
 
     def spot_send(
-        self, *, destination: ChecksumAddress, token_index: int, amount_wei: int
+        self,
+        *,
+        destination: ChecksumAddress,
+        token_index: HyperCoreTokenIndex,
+        amount_wei: int,
     ) -> FuseAction:
         """Send ``amount_wei`` of ``token_index`` from spot to a granted
         destination; a token system address additionally needs
@@ -236,7 +246,7 @@ class HyperCoreSendFuse(Fuse):
         destination: ChecksumAddress,
         source_dex: int,
         destination_dex: int,
-        token_index: int,
+        token_index: HyperCoreTokenIndex,
         amount_wei: int,
     ) -> FuseAction:
         """Move ``amount_wei`` of ``token_index`` between ``source_dex`` and
@@ -264,12 +274,12 @@ class HyperCoreOrderFuse(Fuse):
     def enter(
         self,
         *,
-        asset: int,
+        asset: HyperCoreAsset,
         is_buy: bool,
         limit_px: int,
         sz: int,
         tif: TimeInForce,
-        cloid: int,
+        cloid: HyperCoreClientOrderId,
         reduce_only: bool = False,
     ) -> FuseAction:
         """Place ``sz`` (8 decimals) of ``asset`` at ``limit_px`` (8 decimals).
@@ -289,12 +299,16 @@ class HyperCoreOrderFuse(Fuse):
 class HyperCoreCancelFuse(Fuse):
     """Cancel by oid (action 10) or by cloid (action 11)."""
 
-    def cancel_by_oid(self, *, asset: int, oid: int) -> FuseAction:
+    def cancel_by_oid(
+        self, *, asset: HyperCoreAsset, oid: HyperCoreOrderId
+    ) -> FuseAction:
         _validate_uint(asset, 32, "asset")
         _validate_positive_uint(oid, 64, "oid")
         return self._action_raw("enterCancelByOid((uint32,uint64))", [[asset, oid]])
 
-    def cancel_by_cloid(self, *, asset: int, cloid: int) -> FuseAction:
+    def cancel_by_cloid(
+        self, *, asset: HyperCoreAsset, cloid: HyperCoreClientOrderId
+    ) -> FuseAction:
         _validate_uint(asset, 32, "asset")
         _validate_positive_uint(cloid, 128, "cloid")
         return self._action_raw(
@@ -342,7 +356,9 @@ class HyperCoreSubstrates:
     """
 
     @staticmethod
-    def spot_token(token_index: int, evm_asset: ChecksumAddress) -> bytes:
+    def spot_token(
+        token_index: HyperCoreTokenIndex, evm_asset: ChecksumAddress
+    ) -> bytes:
         """Core token ``token_index`` priced through its EVM ERC-20 (for
         Circle USDC the wallet's ``token()``, not the CoreDepositWallet)."""
         _validate_uint(token_index, 64, "token_index")
@@ -350,7 +366,10 @@ class HyperCoreSubstrates:
 
     @staticmethod
     def perp_market(
-        asset: int, max_notional_usd6: int, *, reduce_only_required: bool = False
+        asset: HyperCoreAsset,
+        max_notional_usd6: int,
+        *,
+        reduce_only_required: bool = False,
     ) -> bytes:
         """Action asset ``asset`` with a per-order notional cap in USD (6
         decimals); ``reduce_only_required`` admits only position-reducing orders."""
@@ -381,7 +400,7 @@ class HyperCoreSubstrates:
         return _word(5, (int(key) << 240) | value)
 
     @staticmethod
-    def send_cap(token_index: int, max_wei: int) -> bytes:
+    def send_cap(token_index: HyperCoreTokenIndex, max_wei: int) -> bytes:
         """Per-transfer cap for ``token_index`` in Core wei."""
         _validate_uint(token_index, 64, "token_index")
         _validate_uint(max_wei, 128, "max_wei")
