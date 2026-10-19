@@ -6,7 +6,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import click
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from eth_typing import ChecksumAddress
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from web3 import Web3
 
 from ipor_fusion.types import ChainId
 
@@ -22,9 +24,18 @@ CONFIG_VERSION = 1
 
 
 class VaultEntry(BaseModel):
-    address: str
+    address: ChecksumAddress
     label: str
     chain_id: ChainId
+
+    @field_validator("address", mode="before")
+    @classmethod
+    def _checksum(cls, value: object) -> object:
+        # Configs written before 4.0 may hold any spelling; a value that is not
+        # an address is left for the commands to report, not for every load to fail.
+        if isinstance(value, str) and Web3.is_address(value):
+            return Web3.to_checksum_address(value)
+        return value
 
 
 class FusionConfig(BaseModel):

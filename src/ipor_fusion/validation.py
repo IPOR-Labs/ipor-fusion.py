@@ -98,7 +98,7 @@ class VaultState(Protocol):
     @property
     def block_timestamp(self) -> int: ...
     @property
-    def asset(self) -> str: ...
+    def asset(self) -> ChecksumAddress: ...
     @property
     def asset_symbol(self) -> str: ...
     @property
@@ -219,11 +219,11 @@ class VaultValidation:
     found. Raw amounts are in the underlying ``asset``'s decimals.
     """
 
-    vault: str
+    vault: ChecksumAddress
     chain_id: ChainId
     block_number: int
     block_timestamp: int
-    asset: str
+    asset: ChecksumAddress
     asset_symbol: str
     asset_decimals: int
     asset_price_usd: float | None

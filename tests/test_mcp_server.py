@@ -331,10 +331,22 @@ class TestVaultAdd:
         return_value=_config_with_provider(),
     )
     def test_add_with_label_and_chain(self, mock_load, mock_save):
-        result = vault_add(address="0xDEF", label="New Vault", chain_id=1)
+        lowercase = "0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2"
+        result = vault_add(address=lowercase, label="New Vault", chain_id=1)
         assert "added" in result.message.lower()
         saved_cfg = mock_save.call_args[0][0]
-        assert any(v.address == "0xDEF" for v in saved_cfg.vaults)
+        assert any(
+            v.address == Web3.to_checksum_address(lowercase) for v in saved_cfg.vaults
+        )
+
+    @patch("ipor_fusion.mcp.server.save_config")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_provider(),
+    )
+    def test_add_rejects_a_non_address(self, mock_load, mock_save):
+        with pytest.raises(ValueError):
+            vault_add(address="0xDEF", label="New Vault", chain_id=1)
 
     @patch("ipor_fusion.mcp.server.save_config")
     @patch(

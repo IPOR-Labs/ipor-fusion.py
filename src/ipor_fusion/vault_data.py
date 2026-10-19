@@ -164,7 +164,7 @@ class VaultData:
     total_assets: int
     total_supply: int
     supply_cap: int
-    asset: str
+    asset: ChecksumAddress
     asset_symbol: str
     access_manager: str
     price_oracle_addr: str
