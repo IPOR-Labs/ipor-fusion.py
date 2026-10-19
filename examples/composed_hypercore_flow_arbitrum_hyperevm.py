@@ -87,6 +87,8 @@ from ipor_fusion import (
     decode_substrate,
     erc20_balance_slot,
     open_lane,
+    parse_fuse_address,
+    parse_plasma_vault_address,
     quote_ccip_native_fee,
     read_hypercore_evm_exit_ceiling,
     read_hypercore_vault_state,
@@ -148,13 +150,15 @@ HYPEREVM_USDC = Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba
 # The composed test deployment the live cycles drove (created by the IPOR SDK
 # team against the v3 CCIP crosschain factory pair). Not in the ipor-abi
 # registry; verify with ``discover_deployment`` on the hub vault.
-HUB_VAULT = Web3.to_checksum_address("0x8BeED16DB1f354B0BFa31eF7e747102e26eb8FbF")
+HUB_VAULT = parse_plasma_vault_address("0x8BeED16DB1f354B0BFa31eF7e747102e26eb8FbF")
 # The executor on Arbitrum and the dispatcher on HyperEVM: one CREATE3 address.
 EXECUTOR = Web3.to_checksum_address("0xcb83A78BD8e8c284d5704B62945EF2C454266dB0")
 # The remote vault: a HyperCore vault (market 55) on HyperEVM, and the Core
 # account the trade runs in.
-HYPERCORE_VAULT = Web3.to_checksum_address("0xB8De01Ca5ca57A14671E1c696337134a02B4A478")
-HYPERCORE_BALANCE_FUSE = Web3.to_checksum_address(
+HYPERCORE_VAULT = parse_plasma_vault_address(
+    "0xB8De01Ca5ca57A14671E1c696337134a02B4A478"
+)
+HYPERCORE_BALANCE_FUSE = parse_fuse_address(
     "0xaC7404Ec2Bc3F2d3c0853633e0c3edfA25DC50F9"
 )
 HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
@@ -398,13 +402,13 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     # 2. The fuses the vault registered for market 55, read from the vault.
     fuses = {Web3.to_checksum_address(f) for f in vault.get_fuses().call()}
     deposit_fuse = HyperCoreDepositFuse(
-        Web3.to_checksum_address("0xDbE31Da504ac89B618664bB02e1521c335a41E73")
+        parse_fuse_address("0xDbE31Da504ac89B618664bB02e1521c335a41E73")
     )
     send_fuse = HyperCoreSendFuse(
-        Web3.to_checksum_address("0x984D84183008C52d9A645C3ba4863F0A29b4785A")
+        parse_fuse_address("0x984D84183008C52d9A645C3ba4863F0A29b4785A")
     )
     order_fuse = HyperCoreOrderFuse(
-        Web3.to_checksum_address("0x8Dc849FC55D9195cc987CA4ddFF5eA022651c173")
+        parse_fuse_address("0x8Dc849FC55D9195cc987CA4ddFF5eA022651c173")
     )
     for fuse in (deposit_fuse, send_fuse, order_fuse):
         _check(

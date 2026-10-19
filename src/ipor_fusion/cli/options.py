@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import click
-from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.chains import CHAIN_NAME_TO_ID, ensure_supported_chain
@@ -12,7 +11,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.errors import (
     UnsupportedChainError,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, PlasmaVaultAddress
 
 
 class AddressType(click.ParamType):
@@ -48,6 +47,17 @@ class AddressType(click.ParamType):
 ADDRESS = AddressType()
 
 
+class VaultAddressType(AddressType):
+    """An address the command treats as a Plasma Vault; the command's probe
+    (`resolve_access_manager`) is what checks it on chain."""
+
+    def convert(self, value, param, ctx) -> PlasmaVaultAddress:  # type: ignore[override]
+        return PlasmaVaultAddress(super().convert(value, param, ctx))
+
+
+VAULT_ADDRESS = VaultAddressType()
+
+
 class ChainType(click.ParamType):
     """Accepts chain ID as int or chain name (ethereum, base, arbitrum, ...)."""
 
@@ -75,7 +85,7 @@ CHAIN = ChainType()
 
 
 def _resolve_chain_id(
-    cfg: FusionConfig, vault_address: ChecksumAddress, chain_id: ChainId | None
+    cfg: FusionConfig, vault_address: PlasmaVaultAddress, chain_id: ChainId | None
 ) -> ChainId:
     if chain_id is not None:
         return chain_id
@@ -100,7 +110,7 @@ def _resolve_provider(cfg: FusionConfig, chain_id: ChainId) -> str:
 
 def _build_ctx(
     cfg: FusionConfig,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     chain_id: ChainId | None,
     block_number: int | None,
 ) -> tuple[ChainId, Web3Context]:

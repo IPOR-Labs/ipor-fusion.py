@@ -40,7 +40,7 @@ from ipor_fusion.fuses.crosschain.base import (
     CrosschainSupplyFuse,
     SendParams,
 )
-from ipor_fusion.types import Amount, ChainId, PositionSetHash, ProposalId
+from ipor_fusion.types import Amount, ChainId, FuseAddress, PositionSetHash, ProposalId
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,9 +61,9 @@ class LaneObservation:
 class LaneFuses:
     """The three fuses a lane drives on the hub vault."""
 
-    supply: ChecksumAddress
-    command: ChecksumAddress
-    claim: ChecksumAddress
+    supply: FuseAddress
+    command: FuseAddress
+    claim: FuseAddress
 
 
 class CrosschainLane(ABC):

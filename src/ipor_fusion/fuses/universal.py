@@ -8,7 +8,7 @@ from ipor_fusion.fuses.base import (
     _encode_address_substrate,
     _encode_uint248_substrate,
 )
-from ipor_fusion.types import Amount
+from ipor_fusion.types import Amount, FuseAddress
 
 
 class UniversalTokenSwapperAbi(Enum):
@@ -58,7 +58,7 @@ class UniversalTokenSwapperFuse(Fuse):
 
     def __init__(
         self,
-        address: ChecksumAddress,
+        address: FuseAddress,
         abi: UniversalTokenSwapperAbi = UniversalTokenSwapperAbi.LEGACY,
     ):
         super().__init__(address)

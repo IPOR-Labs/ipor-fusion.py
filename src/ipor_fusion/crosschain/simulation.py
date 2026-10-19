@@ -41,7 +41,7 @@ from ipor_fusion.crosschain.transport import (
     CrosschainTransport,
     OutboundMessage,
 )
-from ipor_fusion.types import ZERO_ADDRESS, ChainId
+from ipor_fusion.types import ZERO_ADDRESS, ChainId, PlasmaVaultAddress
 
 #: What the synthetic token source holds: enough for any test amount.
 SYNTHETIC_BALANCE = 2**96
@@ -76,7 +76,7 @@ class CrosschainSimulator:
         web3: Web3,
         *,
         block: int,
-        vault: ChecksumAddress | None = None,
+        vault: PlasmaVaultAddress | None = None,
         alpha: ChecksumAddress | None = None,
     ) -> VaultSimulator:
         """Register a chain and return its simulator. ``vault`` and ``alpha``

@@ -59,6 +59,7 @@ from ipor_fusion import (
     VaultSimulator,
     Web3Context,
     is_simulate_v1_supported,
+    parse_fuse_address,
 )
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.contract import Call
@@ -92,24 +93,22 @@ BASE_FUSION_FACTORY = Web3.to_checksum_address(
 # The four Euler V2 *functional* fuses (registry names quoted). Each is a
 # stateless encoder for one EVC operation; the balance fuse below is what values
 # the resulting position for NAV.
-EULER_SUPPLY_FUSE = Web3.to_checksum_address(  # "SupplyFuseEulerV2"
+EULER_SUPPLY_FUSE = parse_fuse_address(  # "SupplyFuseEulerV2"
     "0x598326fcEDE2C1B8E9023a20C18FFf6Dea5306A4"
 )
-EULER_COLLATERAL_FUSE = Web3.to_checksum_address(  # "CollateralFuseEulerV2"
+EULER_COLLATERAL_FUSE = parse_fuse_address(  # "CollateralFuseEulerV2"
     "0x12c479f8aB53D4884fc76F803dD24eb8B6D17a94"
 )
-EULER_CONTROLLER_FUSE = Web3.to_checksum_address(  # "ControllerFuseEulerV2"
+EULER_CONTROLLER_FUSE = parse_fuse_address(  # "ControllerFuseEulerV2"
     "0x108c8cFB9e00681FfA1fa3b654937E8b3BCd2E64"
 )
-EULER_BORROW_FUSE = Web3.to_checksum_address(  # "BorrowFuseEulerV2"
+EULER_BORROW_FUSE = parse_fuse_address(  # "BorrowFuseEulerV2"
     "0x906496F0D4C733275F892b1a6fC92eD56639B379"
 )
 # The Euler V2 *balance* fuse (registry name "BalanceFuseEulerV2") -- distinct
 # from the functional fuses; this is what lets total_assets_in_market(EULER_MARKET)
 # value the collateral net of debt.
-EULER_BALANCE_FUSE = Web3.to_checksum_address(
-    "0xF8A6AA09bB55f2319113b0DA88883F392e66A5fa"
-)
+EULER_BALANCE_FUSE = parse_fuse_address("0xF8A6AA09bB55f2319113b0DA88883F392e66A5fa")
 
 # Euler V2 eVaults on Base: the collateral eVault (cbETH) and the debt eVault
 # (WETH). These are Euler protocol (EVK) deployments, NOT IPOR Fusion addresses,

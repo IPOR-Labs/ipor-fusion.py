@@ -31,7 +31,7 @@ from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.types import Period
+from ipor_fusion.types import AccessManagerAddress, Period, PlasmaVaultAddress
 
 
 @dataclass(slots=True, frozen=True)
@@ -61,9 +61,9 @@ class FusionInstance:
     underlying_token_symbol: str
     underlying_token_decimals: int
     initial_owner: ChecksumAddress
-    plasma_vault: ChecksumAddress
+    plasma_vault: PlasmaVaultAddress
     plasma_vault_base: ChecksumAddress
-    access_manager: ChecksumAddress
+    access_manager: AccessManagerAddress
     fee_manager: ChecksumAddress
     rewards_manager: ChecksumAddress
     withdraw_manager: ChecksumAddress
@@ -127,9 +127,9 @@ def _fusion_instance_decoder(values: tuple) -> FusionInstance:
         underlying_token_symbol=underlying_token_symbol,
         underlying_token_decimals=underlying_token_decimals,
         initial_owner=addr(initial_owner),
-        plasma_vault=addr(plasma_vault),
+        plasma_vault=PlasmaVaultAddress(addr(plasma_vault)),
         plasma_vault_base=addr(plasma_vault_base),
-        access_manager=addr(access_manager),
+        access_manager=AccessManagerAddress(addr(access_manager)),
         fee_manager=addr(fee_manager),
         rewards_manager=addr(rewards_manager),
         withdraw_manager=addr(withdraw_manager),
@@ -289,9 +289,10 @@ class FusionFactory(ContractWrapper):
             underlying_token_symbol=values[6],
             underlying_token_decimals=int(values[7]),
             initial_owner=Web3.to_checksum_address(values[8]),
-            plasma_vault=Web3.to_checksum_address(values[9]),
+            plasma_vault=PlasmaVaultAddress(Web3.to_checksum_address(values[9])),
             plasma_vault_base=Web3.to_checksum_address(values[10]),
             fee_manager=Web3.to_checksum_address(values[11]),
+            access_manager=AccessManagerAddress(components.pop("access_manager")),
             **components,
         )
 

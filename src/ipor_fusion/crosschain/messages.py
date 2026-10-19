@@ -18,7 +18,7 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.address import _validate_not_zero_address
-from ipor_fusion.types import Amount, CommandId, Shares
+from ipor_fusion.types import Amount, CommandId, PlasmaVaultAddress, Shares
 
 #: ``CrosschainConstants.CODEC_VERSION`` -- the Stargate/LayerZero envelope version.
 CODEC_VERSION = 3
@@ -178,8 +178,9 @@ class Command:
 
     @property
     def target_vault(self) -> ChecksumAddress | None:
-        """The remote PlasmaVault this command acts on, or ``None`` for an
-        action without a vault target."""
+        """The remote vault this command acts on: any allowlisted ERC4626 for a
+        deposit or redeem, a Plasma Vault for the async request path; ``None``
+        for an action without a vault target."""
         index = _ACTION_VAULT_INDEX.get(self.action)
         if index is None:
             return None
@@ -211,7 +212,10 @@ class Command:
 
     @classmethod
     def redeem(
-        cls, vault: ChecksumAddress, shares: Shares, min_assets: Amount = _ZERO_AMOUNT
+        cls,
+        vault: ChecksumAddress,
+        shares: Shares,
+        min_assets: Amount = _ZERO_AMOUNT,
     ) -> Command:
         """``encodeRedeemAction(vault, shares, minAssets)``: the dispatcher
         redeems ``shares`` of ``vault`` into its tracked idle."""
@@ -225,7 +229,7 @@ class Command:
     def request_shares(
         cls,
         withdraw_manager: ChecksumAddress,
-        plasma_vault: ChecksumAddress,
+        plasma_vault: PlasmaVaultAddress,
         shares: Shares,
     ) -> Command:
         """``encodeRequestSharesAction(withdrawManager, plasmaVault, shares)``:
@@ -243,7 +247,7 @@ class Command:
     def redeem_from_request(
         cls,
         withdraw_manager: ChecksumAddress,
-        plasma_vault: ChecksumAddress,
+        plasma_vault: PlasmaVaultAddress,
         shares: Shares,
         min_assets: Amount,
         receiver: ChecksumAddress,

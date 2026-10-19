@@ -32,7 +32,14 @@ from web3.types import BlockIdentifier, TxReceipt
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId, MarketId, ProposalHash
+from ipor_fusion.types import (
+    ZERO_ADDRESS,
+    Amount,
+    ChainId,
+    MarketId,
+    PlasmaVaultAddress,
+    ProposalHash,
+)
 
 if TYPE_CHECKING:
     from ipor_fusion.core.plasma_vault import PlasmaVault
@@ -213,7 +220,7 @@ def _snapshot_block(ctx: Web3Context) -> tuple[BlockIdentifier, int]:
 
 
 def read_external_state(
-    ctx: Web3Context, vault_address: ChecksumAddress
+    ctx: Web3Context, vault_address: PlasmaVaultAddress
 ) -> ExternalStateVaultState:
     """Read the external-state market's vault state as one coherent snapshot.
 
@@ -298,7 +305,7 @@ class ExternalStateExecutor(ContractWrapper):
 
     @classmethod
     def for_vault(
-        cls, ctx: Web3Context, vault_address: ChecksumAddress
+        cls, ctx: Web3Context, vault_address: PlasmaVaultAddress
     ) -> ExternalStateExecutor:
         """Resolve the per-vault executor from vault storage and wrap it.
 

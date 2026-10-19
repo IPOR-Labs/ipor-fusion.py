@@ -31,7 +31,7 @@ from ipor_fusion.dependency_graph import (
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import VaultLendingHealth
 from ipor_fusion.substrates import decode_substrate, format_market_label, market_name
-from ipor_fusion.types import ChainId, MarketId, Shares
+from ipor_fusion.types import ChainId, FuseAddress, MarketId, PlasmaVaultAddress, Shares
 from ipor_fusion.types import Check as Check
 from ipor_fusion.types import Severity as Severity
 from ipor_fusion.types import Verdict as Verdict
@@ -116,7 +116,7 @@ class VaultState(Protocol):
     @property
     def market_substrates(self) -> Mapping[MarketId, Sequence[bytes]] | None: ...
     @property
-    def fuse_markets(self) -> Mapping[ChecksumAddress, MarketId] | None: ...
+    def fuse_markets(self) -> Mapping[FuseAddress, MarketId] | None: ...
     @property
     def dependency_graph(self) -> Mapping[MarketId, Sequence[MarketId]] | None: ...
     @property
@@ -219,7 +219,7 @@ class VaultValidation:
     found. Raw amounts are in the underlying ``asset``'s decimals.
     """
 
-    vault: ChecksumAddress
+    vault: PlasmaVaultAddress
     chain_id: ChainId
     block_number: int
     block_timestamp: int
@@ -256,7 +256,7 @@ class VaultValidation:
 
 def validate_vault(
     ctx: Web3Context,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     block_number: int | None = None,
     *,
     resolve_symbol: Callable[[HexAddress], str] | None = None,
@@ -280,7 +280,7 @@ def validate_vault(
     )
     pinned.default_block = block_number
 
-    plasma_vault = PlasmaVault(pinned, Web3.to_checksum_address(vault_address))
+    plasma_vault = PlasmaVault(pinned, vault_address)
     state = fetch_vault_data(
         pinned, plasma_vault, block_number, chain_id=pinned.chain_id
     )

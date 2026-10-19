@@ -80,9 +80,12 @@ from ipor_fusion.readers.unpriceable import (
     fetch_unpriceable_priced_tokens,
 )
 from ipor_fusion.types import (
+    AccessManagerAddress,
     ChainId,
+    FuseAddress,
     MarketId,
     MorphoBlueMarketId,
+    PlasmaVaultAddress,
     parse_hex_address,
     parse_morpho_market_id,
 )
@@ -168,14 +171,14 @@ class VaultData:
     supply_cap: int
     asset: ChecksumAddress
     asset_symbol: str
-    access_manager: ChecksumAddress
+    access_manager: AccessManagerAddress
     price_oracle_addr: ChecksumAddress
     rewards_manager: ChecksumAddress | None
     withdraw_manager: ChecksumAddress | None
     asset_price_usd: float | None
-    fuses: list[ChecksumAddress]
+    fuses: list[FuseAddress]
     balance_fuses: list[BalanceFuse]
-    instant_fuses: list[ChecksumAddress]
+    instant_fuses: list[FuseAddress]
     # Underlying asset balance held directly on the vault (raw). Part of
     # totalAssets via ERC4626 base accounting; by design NOT tracked as an
     # ERC20_VAULT_BALANCE substrate, so it is read directly in
@@ -216,7 +219,7 @@ class VaultData:
     # are absent from the dict — used to detect orphan markets (action fuses
     # with no matching balance fuse, which silently drop positions from
     # totalAssets).
-    fuse_markets: dict[ChecksumAddress, MarketId] | None = None
+    fuse_markets: dict[FuseAddress, MarketId] | None = None
     # Substrates registered for each balance-fuse market. Allows the fuse
     # tables to report substrate counts per fuse without duplicating reads.
     market_substrates: dict[MarketId, list[bytes]] | None = None
@@ -883,7 +886,7 @@ class _LendingReads:
 def _fetch_lending_reads(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
-    vault_addr: ChecksumAddress,
+    vault_addr: PlasmaVaultAddress,
     chain_id: ChainId,
     markets: _MarketReads,
 ) -> _LendingReads:
@@ -938,7 +941,7 @@ def fetch_vault_data(
     # Fail fast with a client-mappable typed error instead of letting the
     # fetch die deep in the stack on chains the tooling is not validated on.
     ensure_supported_chain(chain_id or ctx.chain_id)
-    vault_addr = Web3.to_checksum_address(plasma_vault.address)
+    vault_addr = plasma_vault.address
     with ThreadPoolExecutor() as pool:
         # Independent pipelines, each a short chain of batched reads; none of
         # them waits on a pool future, so they cannot starve the pool.
@@ -1015,7 +1018,7 @@ def fetch_vault_data(
 
 def _fetch_hypercore_state(
     ctx: Web3Context,
-    vault_addr: ChecksumAddress,
+    vault_addr: PlasmaVaultAddress,
     chain_id: ChainId,
     markets: _MarketReads,
 ) -> HyperCoreVaultState | None:
@@ -1045,7 +1048,7 @@ def _fetch_hypercore_state(
 def fetch_deployment_info(
     ctx: Web3Context,
     chain_id: ChainId,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     api_key: str | None,
 ) -> tuple[int | None, int | None, str | None]:
     """Return ``(block, timestamp, error)`` for the vault deployment, using cache.

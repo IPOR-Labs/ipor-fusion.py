@@ -81,7 +81,13 @@ from ipor_fusion.core.oracle import (
     price_oracle_middleware,
 )
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.types import AssetSource, MappingStatus, NodeStatus, Price
+from ipor_fusion.types import (
+    AssetSource,
+    MappingStatus,
+    NodeStatus,
+    PlasmaVaultAddress,
+    Price,
+)
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -176,7 +182,7 @@ class OracleMapping:
     there.
     """
 
-    vault: ChecksumAddress
+    vault: PlasmaVaultAddress
     vault_name: str | None
     asset: OracleAsset
     price_oracle: ChecksumAddress
@@ -979,7 +985,7 @@ def _enumerate_assets(
 
 def build_oracle_mapping(
     ctx: Web3Context,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     effective_block: int,
     max_depth: int = 6,
 ) -> OracleMapping:

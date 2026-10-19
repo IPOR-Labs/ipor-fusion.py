@@ -8,7 +8,6 @@ executed.
 """
 
 from eth_typing import ChecksumAddress
-from web3 import Web3
 
 from ipor_fusion import (
     IporFusionMarkets,
@@ -21,6 +20,7 @@ from ipor_fusion import (
     market_name,
     parse_hex_address,
     parse_morpho_market_id,
+    parse_plasma_vault_address,
     parse_tx_hash,
     validate_vault,
 )
@@ -28,6 +28,7 @@ from ipor_fusion.chains import ensure_supported_chain
 from ipor_fusion.core.access import AccessManager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.core.rewards_manager import RewardsManager
 from ipor_fusion.crosschain.ccip.contracts import (
     CcipCrosschainDispatcher,
     CcipCrosschainExecutor,
@@ -38,7 +39,9 @@ from ipor_fusion.crosschain.contracts import (
     CrosschainExecutor,
     CrosschainFactory,
 )
+from ipor_fusion.crosschain.messages import Command
 from ipor_fusion.crosschain.stargate.contracts import (
+    StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
 )
@@ -48,6 +51,7 @@ from ipor_fusion.morpho_api import fetch_market, fetch_vault
 from ipor_fusion.readers.morpho import morpho_blue_address
 from ipor_fusion.readers.unpriceable import fetch_unpriceable_priced_tokens
 from ipor_fusion.types import (
+    Amount,
     AssetId,
     ChainId,
     CommandId,
@@ -59,7 +63,7 @@ from ipor_fusion.types import (
 from ipor_fusion.vault_data import resolve_token_symbol
 
 ETHEREUM = ChainId(1)
-VAULT = Web3.to_checksum_address("0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2")
+VAULT = parse_plasma_vault_address("0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2")
 
 
 def access(am: AccessManager, account: ChecksumAddress) -> None:
@@ -74,7 +78,7 @@ def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     ensure_supported_chain(ETHEREUM)
     data = fetch_vault_data(ctx, vault, chain_id=ETHEREUM)
     fetch_deployment_info(ctx, ETHEREUM, VAULT, None)
-    build_vault_info_json(ctx, vault, data, VAULT, ETHEREUM, "ethereum")
+    build_vault_info_json(ctx, vault, data, ETHEREUM, "ethereum")
     validate_vault(ctx, VAULT)
     resolve_token_symbol(ctx, VAULT)
     fetch_unpriceable_priced_tokens(ctx, VAULT, VAULT, [], {}, None)
@@ -120,3 +124,26 @@ def crosschain_reads_feed_writes(
     stargate_factory.cancel_pending_deployment(
         stargate.pending_request_by_chain(ETHEREUM).call()
     )
+
+
+def roles_flow_from_getters_into_writes(ctx: Web3Context) -> None:
+    vault = PlasmaVault(ctx, VAULT)
+    manager = AccessManager(ctx, vault.get_access_manager_address().call())
+    manager.has_role(Roles.ATOMIST_ROLE, vault.address)
+    fuses = vault.get_fuses().call()
+    vault.remove_fuses(fuses)
+    for balance_fuse in vault.get_balance_fuses():
+        vault.balance_fuse_value(balance_fuse.fuse)
+
+
+def reward_fuses_flow(manager: RewardsManager) -> None:
+    fuses = manager.get_rewards_fuses().call()
+    manager.add_reward_fuses(fuses)
+    manager.is_reward_fuse_supported(fuses[0])
+
+
+def remote_erc4626_destination(dispatcher: StargateCrosschainDispatcher) -> None:
+    # Allowlisted destinations are any ERC4626, not only Plasma Vaults.
+    target = dispatcher.get_allowed_vaults().call()[0]
+    Command.deposit(target, Amount(1))
+    dispatcher.is_allowed_vault(target)

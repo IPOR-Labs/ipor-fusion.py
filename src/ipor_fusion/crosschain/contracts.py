@@ -24,6 +24,7 @@ from ipor_fusion.types import (
     AssetId,
     ChainId,
     CommandId,
+    PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
 )
@@ -70,8 +71,13 @@ class CrosschainExecutor(ContractWrapper):
     approve and the claim (``claimAsset`` is manager-only: use
     ``CrosschainClaimFuse`` from the vault; the wrapper is for previews)."""
 
-    def manager(self) -> Call[ChecksumAddress]:
-        return self._view("MANAGER()", output_types=["address"], decoder=_address)
+    def manager(self) -> Call[PlasmaVaultAddress]:
+        """The hub Plasma Vault this executor serves."""
+        return self._view(
+            "MANAGER()",
+            output_types=["address"],
+            decoder=lambda value: PlasmaVaultAddress(_address(value)),
+        )
 
     def asset(self) -> Call[ChecksumAddress]:
         return self._view("ASSET()", output_types=["address"], decoder=_address)
@@ -211,7 +217,7 @@ class CrosschainDispatcher(ContractWrapper):
     def is_tracked_vault(self, vault: ChecksumAddress) -> Call[bool]:
         return self._view("isTrackedVault(address)", vault, output_types=["bool"])
 
-    def pending_request_shares(self, vault: ChecksumAddress) -> Call[int]:
+    def pending_request_shares(self, vault: PlasmaVaultAddress) -> Call[int]:
         return self._view(
             "pendingRequestShares(address)", vault, output_types=["uint256"]
         )
@@ -241,7 +247,7 @@ class CrosschainFactory(ContractWrapper):
             decoder=_address,
         )
 
-    def executors_of(self, manager: ChecksumAddress) -> Call[list[ChecksumAddress]]:
+    def executors_of(self, manager: PlasmaVaultAddress) -> Call[list[ChecksumAddress]]:
         """Every executor created with ``manager`` (a PlasmaVault) as its MANAGER."""
         return self._view(
             "executorsOf(address)",

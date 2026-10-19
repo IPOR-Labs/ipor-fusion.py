@@ -33,6 +33,7 @@ from ipor_fusion.types import (
     ChainId,
     MarketId,
     MorphoBlueMarketId,
+    PlasmaVaultAddress,
     parse_morpho_market_id,
 )
 
@@ -162,7 +163,7 @@ def _compute_morpho_market_health(
     ctx: Web3Context,
     reader: MorphoReader,
     morpho_market_id: MorphoBlueMarketId,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     ipor_market_id: MarketId,
     market_name: str,
 ) -> LendingMarketHealth | None:
@@ -251,7 +252,7 @@ def _compute_morpho_market_health(
 
 def _compute_aave_market_health(
     reader: AaveV3Reader,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     ipor_market_id: MarketId,
     market_name: str,
 ) -> LendingMarketHealth | None:
@@ -305,7 +306,7 @@ def _compute_aave_market_health(
 def _compute_aave_v4_market_health(
     ctx: Web3Context,
     spoke: ChecksumAddress,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     ipor_market_id: MarketId,
     market_name: str,
 ) -> LendingMarketHealth | None:
@@ -395,7 +396,7 @@ def _collect_lending_markets(
 
 def fetch_vault_lending_health(
     ctx: Web3Context,
-    vault_address: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
     chain_id: ChainId,
     balance_fuse_market_ids: list[MarketId],
     market_substrates: dict[MarketId, list[bytes]],

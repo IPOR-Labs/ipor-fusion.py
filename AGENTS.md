@@ -283,6 +283,14 @@ or examples.
   local node.
 - Amounts are raw on-chain integers; `types.py` `NewType`s (`Amount`, `Shares`,
   `MarketId`, ...) name the unit, and nothing scales by decimals.
+- Three address roles are nominal: `PlasmaVaultAddress`, `FuseAddress` and
+  `AccessManagerAddress` (NewTypes of `ChecksumAddress`). Their wrappers, getters and
+  records return them, so a vault, a fuse and an access manager cannot be passed for
+  each other; `parse_*_address` brands raw input. Generic plumbing (`ContractWrapper`,
+  `Call`, `Multicall3`, logs, storage, simulation overrides, ERC20 and account
+  inputs, event emitters) and recognition boundaries (`resolve_access_manager`'s
+  input) stay `ChecksumAddress`; external vaults (ERC4626, Euler, MetaMorpho) are not
+  `PlasmaVaultAddress`.
 - Ids and addresses are nominal in every signature: `ChainId`, `MarketId` (each
   `IporFusionMarkets` member is one), `RoleId | Roles`, `ChecksumAddress`;
   `HexAddress` only for the lowercase addresses decoded from substrates;

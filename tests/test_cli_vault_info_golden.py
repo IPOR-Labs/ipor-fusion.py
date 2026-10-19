@@ -378,7 +378,6 @@ def test_public_builder_renders_the_cli_json(scenario: str) -> None:
         ctx,
         PlasmaVault(ctx, VAULT),  # type: ignore[arg-type]
         data,
-        VAULT,
         1,
         "ethereum",
         resolve_name=lambda address: _NAMES_BY_ADDRESS.get(address.lower(), ""),

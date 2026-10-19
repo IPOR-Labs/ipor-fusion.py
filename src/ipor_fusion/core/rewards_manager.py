@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
@@ -6,7 +7,7 @@ from web3.types import Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.fuse_action import FuseAction
-from ipor_fusion.types import Amount
+from ipor_fusion.types import Amount, FuseAddress
 
 
 @dataclass(slots=True)
@@ -31,8 +32,8 @@ def _vesting_data_decoder(value: tuple) -> VestingData:
     )
 
 
-def _address_list_decoder(value: list) -> list[ChecksumAddress]:
-    return [Web3.to_checksum_address(item) for item in value]
+def _fuse_list_decoder(value: list) -> list[FuseAddress]:
+    return [FuseAddress(Web3.to_checksum_address(item)) for item in value]
 
 
 class RewardsManager(ContractWrapper):
@@ -53,17 +54,17 @@ class RewardsManager(ContractWrapper):
             decoder=_vesting_data_decoder,
         )
 
-    def get_rewards_fuses(self) -> Call[list[ChecksumAddress]]:
+    def get_rewards_fuses(self) -> Call[list[FuseAddress]]:
         return self._view(
             "getRewardsFuses()",
             output_types=["address[]"],
-            decoder=_address_list_decoder,
+            decoder=_fuse_list_decoder,
         )
 
-    def is_reward_fuse_supported(self, fuse: ChecksumAddress) -> Call[bool]:
+    def is_reward_fuse_supported(self, fuse: FuseAddress) -> Call[bool]:
         return self._view("isRewardFuseSupported(address)", fuse, output_types=["bool"])
 
-    def add_reward_fuses(self, fuses: list[ChecksumAddress]) -> Call[None]:
+    def add_reward_fuses(self, fuses: Sequence[FuseAddress]) -> Call[None]:
         """FUSE_MANAGER-only: register reward fuses executable via claimRewards."""
         return self._write("addRewardFuses(address[])", fuses)
 

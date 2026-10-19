@@ -48,6 +48,7 @@ from ipor_fusion import (
     VaultSimulator,
     Web3Context,
     is_simulate_v1_supported,
+    parse_fuse_address,
 )
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.fuses import AaveV3SupplyFuse
@@ -78,13 +79,13 @@ AAVE_MARKET = MarketId(IporFusionMarkets.AAVE_V3)
 
 # Aave V3 *supply* fuse (registry name SupplyFuseAaveV3) -- the functional fuse
 # that encodes supply/withdraw.
-BASE_AAVE_V3_SUPPLY_FUSE = Web3.to_checksum_address(
+BASE_AAVE_V3_SUPPLY_FUSE = parse_fuse_address(
     "0x26fD6EF391E98C78CfCA27e00c3d15be4D941625"
 )
 # Aave V3 *balance* fuse (registry name AaveV3WithPriceOracleMiddlewareBalanceFuse)
 # -- distinct from the supply fuse; this is what lets
 # total_assets_in_market(AAVE_MARKET) value the position.
-BASE_AAVE_V3_BALANCE_FUSE = Web3.to_checksum_address(
+BASE_AAVE_V3_BALANCE_FUSE = parse_fuse_address(
     "0x952573Ec1B6895a88a95CA523097083d4da4D8e5"
 )
 
