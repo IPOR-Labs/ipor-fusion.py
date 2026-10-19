@@ -89,12 +89,15 @@ def _config_with_keyed_provider():
     return FusionConfig(providers={"1": "https://rpc.example.com/v2/SECRETKEY"})
 
 
-def _config_with_vault():
+_SAVED_VAULT = "0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2"
+
+
+def _config_with_vault(address: str = _SAVED_VAULT):
     from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
 
     return FusionConfig(
         providers={"1": "https://rpc.example.com"},
-        vaults=[VaultEntry(address="0xABC", label="Test", chain_id=1)],
+        vaults=[VaultEntry(address=address, label="Test", chain_id=1)],
     )
 
 
@@ -264,7 +267,7 @@ class TestConfigShow:
     def test_config_with_vault(self, _):
         result = config_show()
         assert len(result.vaults) == 1
-        assert result.vaults[0].address == "0xABC"
+        assert result.vaults[0].address == Web3.to_checksum_address(_SAVED_VAULT)
 
     @patch(
         "ipor_fusion.mcp.server.load_config",
@@ -319,7 +322,7 @@ class TestVaultList:
     def test_with_vault(self, _):
         result = vault_list()
         assert len(result) == 1
-        assert result[0].address == "0xABC"
+        assert result[0].address == Web3.to_checksum_address(_SAVED_VAULT)
         assert result[0].label == "Test"
         assert result[0].chain_id == 1
 
@@ -351,10 +354,20 @@ class TestVaultAdd:
     @patch("ipor_fusion.mcp.server.save_config")
     @patch(
         "ipor_fusion.mcp.server.load_config",
+        return_value=_config_with_vault("0xABC"),
+    )
+    def test_a_malformed_saved_entry_is_not_updated(self, mock_load, mock_save):
+        with pytest.raises(ValueError):
+            vault_add(address="0xABC", label="Updated", chain_id=1)
+        mock_save.assert_not_called()
+
+    @patch("ipor_fusion.mcp.server.save_config")
+    @patch(
+        "ipor_fusion.mcp.server.load_config",
         return_value=_config_with_vault(),
     )
     def test_update_existing(self, mock_load, mock_save):
-        result = vault_add(address="0xABC", label="Updated", chain_id=1)
+        result = vault_add(address=_SAVED_VAULT, label="Updated", chain_id=1)
         assert "updated" in result.message.lower()
         saved_cfg = mock_save.call_args[0][0]
         assert len(saved_cfg.vaults) == 1
@@ -368,7 +381,7 @@ class TestVaultRemove:
         return_value=_config_with_vault(),
     )
     def test_remove_existing(self, mock_load, mock_save):
-        result = vault_remove(address="0xABC")
+        result = vault_remove(address=_SAVED_VAULT)
         assert "removed" in result.message.lower()
         saved_cfg = mock_save.call_args[0][0]
         assert len(saved_cfg.vaults) == 0
