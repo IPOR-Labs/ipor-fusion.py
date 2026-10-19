@@ -134,12 +134,13 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 - The Morpho API client checksums every address it returns (market, vault,
   allocation, adapter and cap records, and the `fusion market` / MCP market documents
   built from them), so string comparisons against the API's own spelling change.
-- It raises `MorphoApiError` when a market id or an address it parses (the market and
-  allocation ids, required vault/asset/owner/token/oracle/IRM/allocator addresses) is
-  malformed or missing. A nested allocation or flow-cap id that does not parse matches
-  nothing, and a V1 flow cap without an id is skipped, as before; a record missing a
-  whole nested object (e.g. `loanAsset`) still fails with `KeyError`. `--market`
-  rejects a malformed id.
+- It raises `MorphoApiError` for a market id or address it parses (market and V1
+  allocation ids, V1 flow-cap ids, vault/asset/owner/token/oracle/IRM/allocator
+  addresses) when the value is invalid, or absent where the field is optional in the
+  answer. A key the parser requires can instead raise `KeyError`, e.g. a `loanAsset`
+  without `address`. When matching a market's own allocation and flow cap, an id that
+  does not parse matches nothing, and a V1 flow cap without an id is skipped, as
+  before. `--market` rejects a malformed id.
 - `LendingMarketHealth.substrate_id` for a Morpho market is `0x`-prefixed (the JSON
   documents already were).
 - `TransactionError.tx_hash` is `0x`-prefixed.
