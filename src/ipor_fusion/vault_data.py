@@ -78,7 +78,12 @@ from ipor_fusion.readers.unpriceable import (
     MiddlewarePricedToken,
     fetch_unpriceable_priced_tokens,
 )
-from ipor_fusion.types import ChainId, MarketId, MorphoBlueMarketId
+from ipor_fusion.types import (
+    ChainId,
+    MarketId,
+    MorphoBlueMarketId,
+    parse_morpho_market_id,
+)
 
 T = TypeVar("T")
 
@@ -484,9 +489,7 @@ def _collect_morpho_substrates(
     for mid, subs in market_substrates.items():
         if mid not in MORPHO_MARKET_IDS:
             continue
-        morpho_ids = [
-            MorphoBlueMarketId(sub.hex()) for sub in subs if len(sub.hex()) == 64
-        ]
+        morpho_ids = [parse_morpho_market_id(sub) for sub in subs if len(sub) == 32]
         if morpho_ids:
             result[mid] = morpho_ids
     return result

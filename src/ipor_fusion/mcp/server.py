@@ -55,7 +55,7 @@ from ipor_fusion.morpho_api import (
 )
 from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
-from ipor_fusion.types import ChainId, MorphoBlueMarketId
+from ipor_fusion.types import ChainId, parse_morpho_market_id
 from ipor_fusion.validation import validate_vault
 from ipor_fusion.vault_data import (
     fetch_deployment_info,
@@ -580,16 +580,11 @@ def market_morpho_blue(
         block_number: Block number for on-chain reads (latest if 0).
         no_api: Skip Morpho API call (no vault discovery / PublicAllocator info).
     """
-    raw = market_id.strip().removeprefix("0x").removeprefix("0X").lower()
-    if len(raw) != 64 or not all(c in "0123456789abcdef" for c in raw):
-        raise ValueError(
-            f"invalid Morpho market ID (expected 32-byte hex): {market_id}"
-        )
+    mid = parse_morpho_market_id(market_id)
 
     cfg = load_config()
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
     reader = MorphoReader(ctx, morpho_blue_address(chain_id))
-    mid = MorphoBlueMarketId(raw)
     params, state = reader.require_market(mid)
     rates = reader.rates_from(state, params)
 
@@ -597,13 +592,13 @@ def market_morpho_blue(
     api_error: str | None = None
     if not no_api:
         try:
-            api_market = fetch_market(raw, chain_id)
+            api_market = fetch_market(mid, chain_id)
         except MorphoApiError as exc:
             api_error = str(exc)
 
     public_allocator = PUBLIC_ALLOCATOR_ADDRESSES.get(chain_id)
     payload = build_morpho_blue_market_json(
-        raw, chain_id, params, state, rates, api_market, api_error, public_allocator
+        mid, chain_id, params, state, rates, api_market, api_error, public_allocator
     )
     return MorphoBlueMarketResponse.model_validate(payload)
 

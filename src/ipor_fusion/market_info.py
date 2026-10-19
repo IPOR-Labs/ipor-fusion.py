@@ -17,11 +17,11 @@ from ipor_fusion.readers.morpho import (
     MorphoMarketParams,
     MorphoMarketRates,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, MorphoBlueMarketId
 
 
 def build_morpho_blue_market_json(
-    market_id: str,
+    market_id: MorphoBlueMarketId,
     chain_id: ChainId,
     params: MorphoMarketParams,
     state: MorphoMarket,
@@ -36,7 +36,7 @@ def build_morpho_blue_market_json(
     given, or ``api_error`` when that lookup failed. ``market_id`` is the
     64-hex-char id without ``0x``."""
     out: dict = {
-        "market_id": "0x" + market_id,
+        "market_id": market_id,
         "chain_id": chain_id,
         "public_allocator": public_allocator,
         "market_params": {
