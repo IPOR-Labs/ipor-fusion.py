@@ -165,3 +165,4 @@ packages = ["src/ipor_fusion"]
 # semantic-release before `build_command`, so each wheel carries its own entry.
 [tool.hatch.build.targets.wheel.force-include]
 "CHANGELOG.md" = "ipor_fusion/CHANGELOG.md"
+"MIGRATION_4.md" = "ipor_fusion/MIGRATION_4.md"

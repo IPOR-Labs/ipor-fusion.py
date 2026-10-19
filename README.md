@@ -69,6 +69,9 @@ alt="Release">
   </tr>
 </table>
 
+> **Upgrading from 3.x?** 4.0 types every id and address in the public API; see
+> [MIGRATION_4.md](MIGRATION_4.md). Untyped code keeps working.
+
 ## Quickstart
 
 ### Install
