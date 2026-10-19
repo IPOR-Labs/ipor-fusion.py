@@ -53,7 +53,7 @@ def _print_lending_health(  # noqa: C901
         for pb in positions:
             coll_sym = resolve_token_symbol(ctx, pb.collateral_token) or "?"
             loan_sym = resolve_token_symbol(ctx, pb.loan_token) or "?"
-            click.echo(f"    morpho market 0x{pb.market_id} ({coll_sym}/{loan_sym}):")
+            click.echo(f"    morpho market {pb.market_id} ({coll_sym}/{loan_sym}):")
             click.echo(
                 f"      Collateral:    {_format_token_amount(ctx, int(pb.collateral), pb.collateral_token, prices)}"
             )

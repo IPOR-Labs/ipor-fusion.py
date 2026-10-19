@@ -551,7 +551,7 @@ def _print_vault_v1(
         return
     rows: list[tuple[str, ...]] = []
     for alloc in allocations:
-        flow = vault.public_allocator_flow_caps.get(alloc.market_id.lower(), (0, 0))
+        flow = vault.public_allocator_flow_caps.get(alloc.market_id, (0, 0))
         flow_str = (
             f"in {_format_amount(flow[0], alloc.loan_decimals)}" if flow[0] else "—"
         )

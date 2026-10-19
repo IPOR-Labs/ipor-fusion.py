@@ -34,7 +34,7 @@ def build_morpho_blue_market_json(
     market's parameters, state and rates (from `MorphoReader`), plus the
     MetaMorpho vaults supplying it when ``api_market`` (`fetch_market`) is
     given, or ``api_error`` when that lookup failed. ``market_id`` is the
-    64-hex-char id without ``0x``."""
+    canonical id (`parse_morpho_market_id`) and is written as is."""
     out: dict = {
         "market_id": market_id,
         "chain_id": chain_id,

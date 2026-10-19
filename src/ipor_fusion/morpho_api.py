@@ -179,8 +179,9 @@ def fetch_market(
 
 def _parse_market(raw: dict) -> MorphoApiMarket:
     state = raw.get("state") or {}
+    market_id = _api_market_id(raw.get("marketId"))
     return MorphoApiMarket(
-        market_id=_api_market_id(raw.get("marketId")),
+        market_id=market_id,
         lltv=int(raw["lltv"]),
         loan_token=raw["loanAsset"]["address"],
         loan_symbol=raw["loanAsset"]["symbol"],
@@ -198,9 +199,7 @@ def _parse_market(raw: dict) -> MorphoApiMarket:
         borrow_apy=float(state.get("borrowApy") or 0.0),
         fee_wad=int(state.get("fee") or 0),
         timestamp=int(state.get("timestamp") or 0),
-        vaults=[
-            _parse_vault(v, raw["marketId"]) for v in raw.get("supplyingVaults") or []
-        ],
+        vaults=[_parse_vault(v, market_id) for v in raw.get("supplyingVaults") or []],
     )
 
 
@@ -370,7 +369,9 @@ class VaultV1Info:
     allocators: list[str]
     allocations: list[VaultV1MarketAllocation]
     public_allocator: VaultFlowCap | None  # vault-level (no flowCap filtering)
-    public_allocator_flow_caps: dict[str, tuple[int, int]]  # marketId -> (maxIn,maxOut)
+    public_allocator_flow_caps: dict[
+        MorphoBlueMarketId, tuple[int, int]
+    ]  # (maxIn, maxOut)
 
 
 def fetch_vault(
@@ -598,7 +599,7 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
 
     pac = raw.get("publicAllocatorConfig")
     flow_cap_summary: VaultFlowCap | None = None
-    flow_caps: dict[str, tuple[int, int]] = {}
+    flow_caps: dict[MorphoBlueMarketId, tuple[int, int]] = {}
     if pac:
         flow_cap_summary = VaultFlowCap(
             fee_wei=int(pac.get("fee") or 0),
@@ -607,9 +608,11 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
             admin=pac.get("admin"),
         )
         for fc in pac.get("flowCaps") or []:
-            mid = ((fc.get("market") or {}).get("marketId") or "").lower()
-            if mid:
-                flow_caps[mid] = (int(fc.get("maxIn") or 0), int(fc.get("maxOut") or 0))
+            if raw_mid := (fc.get("market") or {}).get("marketId"):
+                flow_caps[_api_market_id(raw_mid)] = (
+                    int(fc.get("maxIn") or 0),
+                    int(fc.get("maxOut") or 0),
+                )
 
     return VaultV1Info(
         address=raw["address"],
@@ -633,27 +636,28 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
     )
 
 
+def _is_market(entry: dict, market_id: MorphoBlueMarketId) -> bool:
+    """Whether an allocation or flow-cap ``entry`` names ``market_id``, in any
+    spelling the API returns."""
+    raw = (entry.get("market") or {}).get("marketId")
+    try:
+        return parse_morpho_market_id(str(raw or "")) == market_id
+    except ValueError:
+        return False
+
+
 def _parse_vault(raw: dict, market_id: MorphoBlueMarketId) -> VaultAllocation:
     asset = raw.get("asset") or {}
     state = raw.get("state") or {}
     allocation_for_market: dict = next(
-        (
-            a
-            for a in (state.get("allocation") or [])
-            if (a.get("market") or {}).get("marketId", "").lower() == market_id
-        ),
+        (a for a in (state.get("allocation") or []) if _is_market(a, market_id)),
         {},
     )
     pac = raw.get("publicAllocatorConfig")
     flow_cap: VaultFlowCap | None = None
     if pac:
         flow_for_market = next(
-            (
-                fc
-                for fc in (pac.get("flowCaps") or [])
-                if (fc.get("market") or {}).get("marketId", "").lower()
-                == market_id.lower()
-            ),
+            (fc for fc in (pac.get("flowCaps") or []) if _is_market(fc, market_id)),
             None,
         )
         if flow_for_market:

@@ -21,6 +21,7 @@ from ipor_fusion.morpho_api import (
     fetch_market,
     fetch_vault,
 )
+from ipor_fusion.types import parse_morpho_market_id
 
 MARKET_ID = "ad656d430bb3d8c1469bf45c8ad4ebae1b04be04757c69fa424eec78d7b3f4dc"
 LOAN_TOKEN = Web3.to_checksum_address("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
@@ -380,6 +381,60 @@ class TestMorphoApiClient:
         assert vault.flow_cap.fee_wei == 0
         assert vault.flow_cap.admin == ADMIN_ADDR
         assert vault.allocators == [PUBLIC_ALLOCATOR_ETH, ADMIN_ADDR]
+
+    def test_fetch_market_matches_allocations_in_any_spelling(self):
+        upper = "0x" + MARKET_ID.upper()
+        market = {"market": {"marketId": upper}}
+        body = {
+            "data": {
+                "marketById": {
+                    "marketId": upper,
+                    "lltv": "915000000000000000",
+                    "loanAsset": {
+                        "address": LOAN_TOKEN,
+                        "symbol": "USDC",
+                        "decimals": 6,
+                    },
+                    "collateralAsset": {
+                        "address": COLLATERAL_TOKEN,
+                        "symbol": "WOUSD",
+                        "decimals": 18,
+                    },
+                    "oracle": {"address": ORACLE},
+                    "irmAddress": IRM,
+                    "state": {},
+                    "supplyingVaults": [
+                        {
+                            "address": VAULT_ADDR,
+                            "symbol": "v",
+                            "name": "v",
+                            "asset": {"symbol": "USDC", "decimals": 6},
+                            "state": {
+                                "allocation": [
+                                    {**market, "supplyAssets": 123, "supplyCap": 456}
+                                ]
+                            },
+                            "publicAllocatorConfig": {
+                                "fee": 0,
+                                "flowCaps": [{**market, "maxIn": 7, "maxOut": 8}],
+                            },
+                        }
+                    ],
+                }
+            }
+        }
+        with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = json.dumps(body).encode()
+            mock_open.return_value.__enter__.return_value = mock_resp
+
+            result = fetch_market(parse_morpho_market_id(MARKET_ID), 1)
+
+        assert result.market_id == "0x" + MARKET_ID.lower()
+        vault = result.vaults[0]
+        assert (vault.supply_assets, vault.supply_cap) == (123, 456)
+        assert vault.flow_cap is not None
+        assert (vault.flow_cap.max_in, vault.flow_cap.max_out) == (7, 8)
 
     def test_fetch_market_handles_missing_market(self):
         with patch("ipor_fusion.morpho_api.urlopen") as mock_open:
