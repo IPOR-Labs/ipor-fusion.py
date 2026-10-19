@@ -395,7 +395,7 @@ def test_same_block_state_replaces_an_earlier_state_diff():
 
 
 def test_erc20_balance_slot_batches_every_candidate_in_one_request():
-    from ipor_fusion import erc20_balance_slot
+    from ipor_fusion import BalanceSlotNotFoundError, erc20_balance_slot
 
     web3 = MagicMock()
     web3.provider = FiatTokenProvider()
@@ -408,13 +408,13 @@ def test_erc20_balance_slot_batches_every_candidate_in_one_request():
     holders = [call["input"][-40:] for call in entry["calls"]]
     assert len(set(holders)) == 33
 
-    with pytest.raises(ValueError, match="no balances mapping slot"):
+    with pytest.raises(BalanceSlotNotFoundError, match="no balances mapping slot"):
         erc20_balance_slot(web3, TOKEN, block=100, max_slot=8)
     assert len(web3.provider.payloads) == 2
     (entry,) = web3.provider.payloads[1][0]["blockStateCalls"]
     assert len(entry["calls"]) == 9
 
-    with pytest.raises(ValueError, match="no balances mapping slot"):
+    with pytest.raises(ValueError, match="max_slot must be non-negative"):
         erc20_balance_slot(web3, TOKEN, block=100, max_slot=-1)
     assert len(web3.provider.payloads) == 2
 

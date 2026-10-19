@@ -35,8 +35,9 @@ _HEADERS = {"Accept": "application/json", "User-Agent": "ipor-fusion-sdk"}
 
 class VerifierResultUnavailable(IporFusionError, LookupError):
     """No indexer could serve a verifier result for the message (not verified
-    yet, or the indexers were unreachable); the message says which. Also a
-    LookupError: the result looked up is not there (yet)."""
+    yet, the indexers were unreachable, or they answered something unreadable);
+    the message says which, per indexer. Also a LookupError: the result looked
+    up is not there (yet)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +64,10 @@ def fetch_verifier_result(
     timeout: float = 15.0,
 ) -> VerifierResult:
     """``GET /v1/verifierresults/<messageId>`` from the first indexer that has
-    a result; raises :class:`VerifierResultUnavailable` otherwise."""
+    a readable result; raises :class:`VerifierResultUnavailable` otherwise. An
+    indexer whose answer cannot be read (not JSON, a missing or mistyped field,
+    invalid hex or address, a result for another message) is skipped like one
+    that is unreachable."""
     if len(message_id) != 32:
         raise ValueError("message_id must be 32 bytes")
     hex_id = "0x" + message_id.hex()
@@ -79,23 +83,53 @@ def fetch_verifier_result(
         if response.status_code != 200:
             reasons.append(f"{base}: HTTP {response.status_code}")
             continue
-        results = (response.json() or {}).get("results") or []
-        if not results:
+        try:
+            result = _parse_answer(response.json(), message_id, base)
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            reasons.append(f"{base}: malformed answer ({type(exc).__name__}: {exc})")
+            continue
+        if result is None:
             reasons.append(f"{base}: no result yet")
             continue
-        result = results[0]["verifierResult"]
-        return VerifierResult(
-            message_id=MessageId(bytes.fromhex(result["message_id"][2:])),
-            ccv_addresses=tuple(
-                Web3.to_checksum_address(a) for a in result["message_ccv_addresses"]
-            ),
-            ccv_data=bytes.fromhex(result["ccv_data"][2:]),
-            executor=Web3.to_checksum_address(result["message_executor_address"]),
-            message=result["message"],
-            indexer=base,
-        )
+        return result
     raise VerifierResultUnavailable(
         f"no verifier result for {hex_id}: " + "; ".join(reasons)
+    )
+
+
+def _hex_bytes(value: Any) -> bytes:
+    if not isinstance(value, str) or not value.startswith("0x"):
+        raise ValueError(f"not 0x-prefixed hex: {value!r}")
+    return bytes.fromhex(value[2:])
+
+
+def _parse_answer(
+    body: Any, message_id: MessageId, indexer: str
+) -> VerifierResult | None:
+    """The first result of an indexer's JSON answer; ``None`` when it has none.
+    Anything else it cannot read raises a builtin error, reported by the caller
+    as a malformed answer."""
+    if not isinstance(body, Mapping):
+        raise TypeError("answer is not a JSON object")
+    results = body.get("results")
+    if not results:
+        return None
+    result = results[0]["verifierResult"]
+    served_id = _hex_bytes(result["message_id"])
+    if served_id != message_id:
+        raise ValueError(f"result is for message 0x{served_id.hex()}")
+    message = result["message"]
+    if not isinstance(message, Mapping):
+        raise TypeError("message is not an object")
+    return VerifierResult(
+        message_id=MessageId(served_id),
+        ccv_addresses=tuple(
+            Web3.to_checksum_address(a) for a in result["message_ccv_addresses"]
+        ),
+        ccv_data=_hex_bytes(result["ccv_data"]),
+        executor=Web3.to_checksum_address(result["message_executor_address"]),
+        message=message,
+        indexer=indexer,
     )
 
 

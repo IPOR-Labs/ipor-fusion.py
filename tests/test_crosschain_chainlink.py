@@ -11,6 +11,7 @@ from eth_utils import function_signature_to_4byte_selector as selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
+from ipor_fusion import UnsupportedContractVersionError
 from ipor_fusion.crosschain import CcipTokenLane, ccip_token_lane
 from ipor_fusion.crosschain.ccip.chainlink import CcipRouter
 
@@ -120,7 +121,7 @@ def test_unsupported_on_ramp_version_stops_before_static_config(version):
         "ccip_token_lane supports OnRamp 2.0.0"
     )
 
-    with pytest.raises(ValueError, match=re.escape(message)):
+    with pytest.raises(UnsupportedContractVersionError, match=re.escape(message)):
         ccip_token_lane(ctx, ROUTER, USDC, HYPEREVM)
 
     assert ctx.call.call_count == 3

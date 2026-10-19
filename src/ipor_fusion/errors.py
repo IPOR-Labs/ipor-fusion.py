@@ -148,16 +148,17 @@ def get_revert_reason(web3: Web3, tx_hash: TxHash, receipt: TxReceipt) -> str | 
 class IporFusionError(Exception):
     """Base of every exception the SDK defines.
 
-    The rule the SDK follows (a few older readers do not yet; see
-    MIGRATION_4.md): a subclass when the chain, a provider or a remote API
-    answers something it cannot use. A caller's mistake (a bad argument, or an
-    operation the object was not built for, such as ``.call()`` on a write-only
-    ``Call``) raises a builtin ``ValueError`` instead, as the standard library
-    does for an operation on a closed file. A subclass that also describes bad
-    input (an address that is not a vault, a chain the tooling does not cover)
-    additionally derives from ``ValueError``; a few keep the builtin base they
-    had before 4.0 (``RuntimeError``, ``LookupError``) so existing handlers
-    still catch them.
+    The rule the SDK follows everywhere: a subclass when the chain, a provider
+    or a remote API answers something it cannot use. A caller's mistake (a bad
+    argument, or an operation the object was not built for, such as
+    ``.call()`` on a write-only ``Call``) raises a builtin ``ValueError``
+    instead, as the standard library does for an operation on a closed file;
+    an argument of the wrong type raises ``TypeError`` and an unknown name in a
+    mapping-style lookup ``KeyError``. A subclass that also describes bad input
+    (an address that is not a vault, a chain the tooling does not cover)
+    additionally derives from ``ValueError``; others keep the builtin base
+    their raise sites had before 4.0 (``ValueError``, ``RuntimeError``,
+    ``LookupError``) so existing handlers still catch them.
     """
 
 
@@ -188,6 +189,44 @@ class UnsupportedVaultVersionError(IporFusionError, ValueError):
 
     Also a ValueError: the vault the caller passed cannot be read by this
     tooling.
+    """
+
+
+class UnsupportedContractVersionError(IporFusionError, ValueError):
+    """A contract reports a version whose layout the SDK has not verified, so
+    reading it further could misread its storage or return data.
+
+    Also a ValueError, the type these failures had before 4.0.
+    """
+
+
+class HyperCoreValuationError(IporFusionError, ValueError):
+    """The HyperCore NAV cannot be valued: a precompile read failed, the
+    oracle prices no granted spot token or its price overflows, the vault
+    grants a perp dex bitmap the valuation does not support, or the NAV is
+    negative (where the balance fuse reverts).
+
+    Also a ValueError, the type these failures had before 4.0.
+    """
+
+
+class ExternalStateError(IporFusionError, ValueError):
+    """The external-state market's on-chain data is not usable: the vault's
+    storage holds no executor or a malformed word, an executor's
+    ``BalanceProposed`` log is malformed or carries a hash that is not the hash
+    of its own fields, or a propose receipt does not record the proposal that
+    was sent.
+
+    Also a ValueError, the type these failures had before 4.0.
+    """
+
+
+class BalanceSlotNotFoundError(IporFusionError, ValueError):
+    """No candidate storage slot of a token answers as its ``balances``
+    mapping: its balances are not a plain address-keyed mapping, or the
+    mapping lies beyond the slots searched.
+
+    Also a ValueError, the type this failure had before 4.0.
     """
 
 
@@ -252,7 +291,8 @@ class SimulationRunError(IporFusionError, RuntimeError):
 
 
 class SimulationError(IporFusionError):
-    """A simulated call reverted; raised by ``SimulationResult.raise_for_failure``."""
+    """A simulated call reverted; raised by ``SimulationResult.raise_for_failure``
+    and by ``quote_ccip_native_fee`` for a revert before the CCIP fee check."""
 
     def __init__(
         self,
