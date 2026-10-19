@@ -70,20 +70,8 @@ from ipor_fusion.types import (
 )
 from ipor_fusion.validation import Erc20Holdings
 from ipor_fusion.vault_data import (
-    FeeData,
     VaultData,
-    WithdrawManagerData,
-    _collect_aave_substrate_assets,
-    _collect_breakdown_token_addresses,
-    _collect_morpho_substrates,
-    _fetch_aave_pools,
-    _fetch_aave_positions,
-    _fetch_breakdown_token_prices,
-    _fetch_fee_data,
-    _fetch_morpho_positions,
     _fuse_market_id_call,
-    _read_batch,
-    _safe_call,
     resolve_token_symbol,
 )
 from ipor_fusion.vault_info import (
@@ -93,6 +81,17 @@ from ipor_fusion.vault_info import (
     _morpho_breakdown_json,
     _partition_balance_fuses,
 )
+from ipor_fusion.vault_managers import FeeData, WithdrawManagerData, _fetch_fee_data
+from ipor_fusion.vault_positions import (
+    _collect_aave_substrate_assets,
+    _collect_breakdown_token_addresses,
+    _collect_morpho_substrates,
+    _fetch_aave_pools,
+    _fetch_aave_positions,
+    _fetch_breakdown_token_prices,
+    _fetch_morpho_positions,
+)
+from ipor_fusion.vault_reads import _read_batch, _safe_call
 
 VALID_ADDR_LOWER = "0x" + "ab" * 20
 VALID_ADDR_UPPER = "0x" + "AB" * 20
@@ -1848,7 +1847,7 @@ class TestFetchAavePools:
 class TestFetchAavePositions:
     _ASSET_SUBSTRATE = bytes(12) + bytes.fromhex("22" * 20)
 
-    @patch("ipor_fusion.vault_data.AaveV3Reader")
+    @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_returns_none_when_no_pool_resolved(self, mock_reader_cls):
         with ThreadPoolExecutor() as pool:
             result = _fetch_aave_positions(
@@ -1857,7 +1856,7 @@ class TestFetchAavePositions:
         assert result is None
         mock_reader_cls.assert_not_called()
 
-    @patch("ipor_fusion.vault_data.AaveV3Reader")
+    @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_returns_none_when_no_aave_substrates(self, _mock_reader_cls):
         with ThreadPoolExecutor() as pool:
             result = _fetch_aave_positions(
@@ -1865,7 +1864,7 @@ class TestFetchAavePositions:
             )
         assert result is None
 
-    @patch("ipor_fusion.vault_data.AaveV3Reader")
+    @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_drops_empty_breakdowns(self, mock_reader_cls):
         mock_reader = MagicMock()
         mock_reader.position_breakdown.return_value = _aave_breakdown(
@@ -1883,7 +1882,7 @@ class TestFetchAavePositions:
             )
         assert result is None
 
-    @patch("ipor_fusion.vault_data.AaveV3Reader")
+    @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_returns_breakdowns_for_active_positions(self, mock_reader_cls):
         mock_reader = MagicMock()
         mock_reader.position_breakdown.return_value = _aave_breakdown(supply=42)
@@ -1899,7 +1898,7 @@ class TestFetchAavePositions:
             )
         assert result == {1: [_aave_breakdown(supply=42)]}
 
-    @patch("ipor_fusion.vault_data.AaveV3Reader")
+    @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_reads_each_market_from_its_own_pool(self, mock_reader_cls):
         """Markets granting the same assets still hold separate positions: each
         breakdown comes from that market's Pool, never another market's."""
@@ -1926,13 +1925,13 @@ class TestFetchAavePositions:
 
 
 class TestFetchMorphoPositions:
-    @patch("ipor_fusion.vault_data.MorphoReader")
+    @patch("ipor_fusion.vault_positions.MorphoReader")
     def test_returns_none_when_no_morpho_substrates(self, _mock_reader_cls):
         with ThreadPoolExecutor() as pool:
             result = _fetch_morpho_positions(MagicMock(), pool, _VAULT_ADDR, {})
         assert result is None
 
-    @patch("ipor_fusion.vault_data.MorphoReader")
+    @patch("ipor_fusion.vault_positions.MorphoReader")
     def test_returns_breakdowns_for_morpho_substrates(self, mock_reader_cls):
         mock_reader = MagicMock()
         mock_reader.position_breakdown.return_value = _morpho_breakdown()
@@ -2494,7 +2493,7 @@ class TestFetchFeeData:
             raise DecodingError("Tried to read 32 bytes, only got 0 bytes.")
 
         with (
-            patch("ipor_fusion.vault_data.FeeAccount") as account_cls,
+            patch("ipor_fusion.vault_managers.FeeAccount") as account_cls,
         ):
             account_cls.return_value.fee_manager.return_value.call = empty_return
             result = _fetch_fee_data(MagicMock(), vault)
@@ -2513,8 +2512,8 @@ class TestFetchFeeData:
             raise ContractLogicError("execution reverted")
 
         with (
-            patch("ipor_fusion.vault_data.FeeAccount") as account_cls,
-            patch("ipor_fusion.vault_data.FeeManager") as manager_cls,
+            patch("ipor_fusion.vault_managers.FeeAccount") as account_cls,
+            patch("ipor_fusion.vault_managers.FeeManager") as manager_cls,
         ):
             account_cls.return_value.fee_manager.return_value.call.return_value = ADDR_2
             manager = manager_cls.return_value

@@ -12,14 +12,11 @@ from ipor_fusion.cli.vault_info_view import (
 from ipor_fusion.core.withdraw_manager import AccountRequest
 from ipor_fusion.errors import LogScanError
 from ipor_fusion.mcp.models import WithdrawManagerDetails
-from ipor_fusion.vault_data import (
-    VaultData,
-    WithdrawManagerData,
-    _fetch_withdraw_manager,
-)
+from ipor_fusion.vault_data import VaultData
 from ipor_fusion.vault_info import (
     _build_withdraw_manager_json,
 )
+from ipor_fusion.vault_managers import WithdrawManagerData, _fetch_withdraw_manager
 
 WM = "0x6666666666666666666666666666666666666666"
 USER = "0x7777777777777777777777777777777777777777"
@@ -55,9 +52,9 @@ def _fetch(side_effect: BaseException | list[AccountRequest]):
     else:
         wm.get_pending_requests.return_value = side_effect
     with (
-        patch("ipor_fusion.vault_data.WithdrawManager", return_value=wm),
+        patch("ipor_fusion.vault_managers.WithdrawManager", return_value=wm),
         patch(
-            "ipor_fusion.vault_data._read_batch",
+            "ipor_fusion.vault_managers._read_batch",
             return_value=([], [3600, 0, 0, 0, 0]),
         ),
     ):

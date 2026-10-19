@@ -87,8 +87,8 @@ def _assert_fees_json(data: dict) -> None:
 def mock_fee_contracts():
     """Stub the FeeAccount -> FeeManager hop that `vault info` walks."""
     with (
-        patch("ipor_fusion.vault_data.FeeAccount") as fee_account_cls,
-        patch("ipor_fusion.vault_data.FeeManager") as fee_manager_cls,
+        patch("ipor_fusion.vault_managers.FeeAccount") as fee_account_cls,
+        patch("ipor_fusion.vault_managers.FeeManager") as fee_manager_cls,
     ):
         fee_account_cls.return_value.fee_manager.return_value.call.return_value = (
             ADDR_FEE_MANAGER
@@ -420,7 +420,7 @@ class TestVaultInfo:
         with patch("ipor_fusion.cli.vault_cmd.resolve_access_manager"):
             yield
 
-    @patch("ipor_fusion.vault_data.WithdrawManager")
+    @patch("ipor_fusion.vault_managers.WithdrawManager")
     @patch(
         "ipor_fusion.cli.vault_markets_view.get_contract_name", return_value="SomeFuse"
     )
@@ -924,7 +924,7 @@ class TestVaultInfoJson:
 
     @patch("ipor_fusion.vault_data._fetch_aave_positions", return_value=None)
     @patch("ipor_fusion.vault_data._fetch_morpho_positions", return_value=None)
-    @patch("ipor_fusion.vault_data.WithdrawManager")
+    @patch("ipor_fusion.vault_managers.WithdrawManager")
     @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_data.ERC20")

@@ -10,18 +10,14 @@ Token symbols, decimals and deployment blocks are cached on disk
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, TypeVar
 
-import requests
-from eth_abi.exceptions import DecodingError
 from eth_typing import HexAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import ChecksumAddress
 
 from ipor_fusion.cache import (
@@ -36,28 +32,16 @@ from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sor
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.fee_manager import (
-    FeeAccount,
-    FeeManager,
-    HighWaterMarkPerformanceFee,
-    RecipientFee,
-)
-from ipor_fusion.core.multicall import Multicall3
-from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
+from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
-from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
 from ipor_fusion.errors import (
     EmptyCallResultError,
-    LogScanError,
     UnsupportedVaultVersionError,
 )
 from ipor_fusion.explorer import get_deployment_tx
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import (
-    AaveV3FuseReader,
-    AaveV3PoolAddressesProvider,
     AaveV3PositionBreakdown,
-    AaveV3Reader,
 )
 from ipor_fusion.readers.hypercore import (
     HYPEREVM_CHAIN_ID,
@@ -65,15 +49,11 @@ from ipor_fusion.readers.hypercore import (
     read_hypercore_vault_state,
 )
 from ipor_fusion.readers.lending_health import (
-    AAVE_V3_MARKET_IDS,
-    MORPHO_MARKET_IDS,
     VaultLendingHealth,
     fetch_vault_lending_health,
 )
 from ipor_fusion.readers.morpho import (
     MorphoPositionBreakdown,
-    MorphoReader,
-    morpho_blue_address,
 )
 from ipor_fusion.readers.unpriceable import (
     MiddlewarePricedToken,
@@ -84,10 +64,30 @@ from ipor_fusion.types import (
     ChainId,
     FuseAddress,
     MarketId,
-    MorphoBlueMarketId,
     PlasmaVaultAddress,
-    parse_hex_address,
-    parse_morpho_market_id,
+)
+from ipor_fusion.vault_managers import (
+    FeeData as FeeData,
+)
+from ipor_fusion.vault_managers import (
+    WithdrawManagerData as WithdrawManagerData,
+)
+from ipor_fusion.vault_managers import (
+    _fetch_fee_data,
+    _fetch_withdraw_manager,
+)
+from ipor_fusion.vault_positions import (
+    _collect_breakdown_token_addresses,
+    _fetch_aave_pools,
+    _fetch_aave_positions,
+    _fetch_breakdown_token_prices,
+    _fetch_morpho_positions,
+)
+from ipor_fusion.vault_reads import (
+    _ROLE_SCAN_ERRORS,
+    _read_batch,
+    _safe_call,
+    _unless_unimplemented,
 )
 
 T = TypeVar("T")
@@ -102,55 +102,6 @@ _logger = logging.getLogger(__name__)
 
 _NO_CONTRACT = "no contract"
 _NO_CHAIN = ChainId(0)
-
-_ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-
-
-@dataclass
-class FeeData:
-    """Vault fee configuration: vault-level fee data plus FeeManager state.
-
-    Every field is optional because each degrades independently: a vault may
-    have no fee account configured (no FeeManager at all), and FeeManagers
-    predating the deposit fee / high-water mark revert on those getters.
-    Scales differ per source, so every field names its own: `*_bps` is basis
-    points (10000 = 100%), `*_wad` is WAD (1e18 = 100%). Pair each with the
-    matching converter — `_bps_to_percent` / `_wad_to_percent` — and a
-    mismatch reads wrong at the call site.
-
-    `*_vault_bps` and `*_manager_bps` are the SAME fee read from two places:
-    the vault charges the former, the FeeManager believes it configured the
-    latter. They agree in a healthy deployment; a difference means the two
-    configurations have drifted.
-    """
-
-    performance_fee_vault_bps: int | None = None
-    management_fee_vault_bps: int | None = None
-    management_fee_last_update: int | None = None
-    unrealized_management_fee: int | None = None
-    fee_manager: ChecksumAddress | None = None
-    ipor_dao_fee_recipient: ChecksumAddress | None = None
-    deposit_fee_wad: int | None = None
-    performance_fee_manager_bps: int | None = None
-    management_fee_manager_bps: int | None = None
-    performance_fee_recipients: list[RecipientFee] | None = None
-    management_fee_recipients: list[RecipientFee] | None = None
-    high_water_mark: HighWaterMarkPerformanceFee | None = None
-
-
-@dataclass
-class WithdrawManagerData:
-    """On-chain state snapshot from the WithdrawManager contract."""
-
-    withdraw_window: int
-    # None (not 0) when the getter failed: a zero fee and an unreadable fee
-    # are different facts, and the fees section reports both.
-    request_fee: int | None
-    withdraw_fee: int | None
-    shares_to_release: int
-    last_release_funds_timestamp: int
-    # None when the WithdrawRequestUpdated scan or its reads failed.
-    pending_requests: list[AccountRequest] | None
 
 
 @dataclass
@@ -234,36 +185,6 @@ class VaultData:
     unimplemented_getters: list[str] = field(default_factory=list)
 
 
-# Failure modes of the event scans behind optional data (role holders, pending
-# withdraw requests): a log scan the provider would not let complete
-# (LogScanError), plus JSON-RPC and transport errors from the reads that follow.
-_ROLE_SCAN_ERRORS = (
-    LogScanError,
-    ContractLogicError,
-    Web3RPCError,
-    TimeExhausted,
-    requests.RequestException,
-)
-
-
-def _scan_or_none(func: Callable[[], T]) -> T | None:
-    """An event scan behind optional data; None (never a partial result) when
-    it cannot complete."""
-    try:
-        return func()
-    except _ROLE_SCAN_ERRORS as exc:
-        _logger.debug("scan unavailable: %s: %s", type(exc).__name__, exc)
-        return None
-
-
-def _safe_call(func: Callable[[], T]) -> T | None:
-    try:
-        return func()
-    except (ContractLogicError, Web3RPCError, TimeExhausted) as exc:
-        _logger.debug("_safe_call suppressed %s: %s", type(exc).__name__, exc)
-        return None
-
-
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
 
 
@@ -285,18 +206,6 @@ def _fuse_market_id_call(ctx: Web3Context, fuse: ChecksumAddress) -> Call[int]:
 _UNCAPPED = 2**256 - 1
 
 
-def _unless_unimplemented(value: T | None, call: Call[T]) -> T | None:
-    """An optional batch read, re-run when it failed: ``None`` only when the
-    contract returned no data (it predates the getter); a revert or RPC error
-    raises exactly what `Call.call()` would, so real failures stay loud."""
-    if value is not None:
-        return value
-    try:
-        return call.call()
-    except EmptyCallResultError:
-        return None
-
-
 def _missing_required_getter(
     plasma_vault: PlasmaVault, exc: EmptyCallResultError
 ) -> UnsupportedVaultVersionError:
@@ -306,24 +215,6 @@ def _missing_required_getter(
         f"Plasma Vault {plasma_vault.address} predates a getter the vault "
         f"tooling requires: {exc}"
     )
-
-
-def _read_batch(
-    ctx: Web3Context,
-    required: Sequence[Call[Any]],
-    optional: Sequence[Call[Any]] = (),
-) -> tuple[list[Any], list[Any]]:
-    """Read `required` + `optional` in one Multicall3 round trip.
-
-    A failing optional read is ``None``. A failing required read is re-run on
-    its own, so it raises exactly what `Call.call()` would.
-    """
-    results = Multicall3(ctx).try_aggregate([*required, *optional])
-    head = [
-        value if value is not None else call.call()
-        for value, call in zip(results, required, strict=False)
-    ]
-    return head, results[len(required) :]
 
 
 def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
@@ -367,326 +258,6 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
         return None
     update_contract_cache(key, str(decimals))
     return decimals
-
-
-def _fetch_withdraw_manager(
-    ctx: Web3Context, plasma_vault: PlasmaVault
-) -> tuple[ChecksumAddress | None, WithdrawManagerData | None]:
-    """Resolve the vault's WithdrawManager and snapshot its state."""
-    address = plasma_vault.withdraw_manager_address()
-    if not address:
-        return None, None
-    wm = WithdrawManager(ctx, address)
-    _, (window, request_fee, withdraw_fee, shares, last_ts) = _read_batch(
-        ctx,
-        [],
-        [
-            wm.get_withdraw_window(),
-            wm.get_request_fee(),
-            wm.get_withdraw_fee(),
-            wm.get_shares_to_release(),
-            wm.get_last_release_funds_timestamp(),
-        ],
-    )
-    return address, WithdrawManagerData(
-        withdraw_window=window or 0,
-        request_fee=request_fee,
-        withdraw_fee=withdraw_fee,
-        shares_to_release=shares or 0,
-        last_release_funds_timestamp=last_ts or 0,
-        pending_requests=_scan_or_none(wm.get_pending_requests),
-    )
-
-
-def _fetch_fee_manager_address(
-    ctx: Web3Context, fee_account: ChecksumAddress
-) -> ChecksumAddress | None:
-    """Resolve FeeAccount.FEE_MANAGER(); None when it is not a FeeAccount.
-
-    The fee account reported by a vault is not guaranteed to be a FeeAccount
-    contract — older deployments can name a plain recipient address. An EOA
-    answers eth_call with empty data, which fails ABI decoding instead of
-    reverting, so `_safe_call` alone does not cover it.
-    """
-    try:
-        return _safe_call(FeeAccount(ctx, fee_account).fee_manager().call)
-    except DecodingError:
-        return None
-
-
-def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> FeeData:
-    """Fetch the vault's fee configuration, including the FeeManager hop.
-
-    Three dependent round trips: vault-level fee data, then
-    FeeAccount.FEE_MANAGER() to discover the FeeManager, then the FeeManager
-    getters. Nothing raises on a revert — every read degrades to ``None``, so
-    vaults without a fee account and FeeManagers predating the deposit fee or
-    high-water mark still produce a usable snapshot.
-    """
-    _, (perf, mgmt, unrealized) = _read_batch(
-        ctx,
-        [],
-        [
-            plasma_vault.get_performance_fee_data(),
-            plasma_vault.get_management_fee_data(),
-            plasma_vault.get_unrealized_management_fee(),
-        ],
-    )
-    result = FeeData(
-        performance_fee_vault_bps=perf.fee_in_percentage if perf else None,
-        management_fee_vault_bps=mgmt.fee_in_percentage if mgmt else None,
-        management_fee_last_update=mgmt.last_update_timestamp if mgmt else None,
-        unrealized_management_fee=unrealized,
-    )
-
-    # A FeeManager deploys two separate escrow accounts (performance and
-    # management) but is itself the FEE_MANAGER of both, so either hop
-    # resolves to the same address; take whichever is configured.
-    fee_account = next(
-        (
-            data.fee_account
-            for data in (perf, mgmt)
-            if data is not None and data.fee_account != _ZERO_ADDRESS
-        ),
-        None,
-    )
-    if fee_account is None:
-        return result
-
-    fee_manager_addr = _fetch_fee_manager_address(ctx, fee_account)
-    if not fee_manager_addr or fee_manager_addr == _ZERO_ADDRESS:
-        return result
-    result.fee_manager = fee_manager_addr
-
-    fee_manager = FeeManager(ctx, fee_manager_addr)
-    (
-        _,
-        (
-            result.deposit_fee_wad,
-            result.performance_fee_manager_bps,
-            result.management_fee_manager_bps,
-            result.performance_fee_recipients,
-            result.management_fee_recipients,
-            result.ipor_dao_fee_recipient,
-            result.high_water_mark,
-        ),
-    ) = _read_batch(
-        ctx,
-        [],
-        [
-            fee_manager.get_deposit_fee(),
-            fee_manager.get_total_performance_fee(),
-            fee_manager.get_total_management_fee(),
-            fee_manager.get_performance_fee_recipients(),
-            fee_manager.get_management_fee_recipients(),
-            fee_manager.get_ipor_dao_fee_recipient_address(),
-            fee_manager.get_plasma_vault_high_water_mark_performance_fee(),
-        ],
-    )
-    return result
-
-
-def _collect_morpho_substrates(
-    market_substrates: dict[MarketId, list[bytes]],
-) -> dict[MarketId, list[MorphoBlueMarketId]]:
-    """Filter + parse Morpho Blue market IDs from raw substrate bytes."""
-    result: dict[MarketId, list[MorphoBlueMarketId]] = {}
-    for mid, subs in market_substrates.items():
-        if mid not in MORPHO_MARKET_IDS:
-            continue
-        morpho_ids = [parse_morpho_market_id(sub) for sub in subs if len(sub) == 32]
-        if morpho_ids:
-            result[mid] = morpho_ids
-    return result
-
-
-def _fetch_morpho_positions(
-    ctx: Web3Context,
-    pool: ThreadPoolExecutor,
-    vault_addr: ChecksumAddress,
-    market_substrates: dict[MarketId, list[bytes]],
-) -> dict[MarketId, list[MorphoPositionBreakdown]] | None:
-    """Fetch collateral / borrow / supply breakdown for every Morpho substrate.
-
-    Each IPOR Morpho market (MORPHO_MARKET_IDS) can hold multiple morpho
-    market_id substrates; each substrate has an independent position. The
-    on-chain balance fuse reports a single netted number per IPOR market —
-    this helper exposes the three-way decomposition behind that number.
-    """
-    per_market_substrates = _collect_morpho_substrates(market_substrates)
-    if not per_market_substrates:
-        return None
-
-    reader = MorphoReader(ctx, morpho_blue_address(ctx.chain_id))
-    futures: dict[MarketId, list[Future]] = {
-        mid: [
-            pool.submit(
-                _safe_call,
-                lambda mid_hex=morpho_mid: reader.position_breakdown(
-                    mid_hex, vault_addr
-                ),
-            )
-            for morpho_mid in morpho_mids
-        ]
-        for mid, morpho_mids in per_market_substrates.items()
-    }
-
-    result: dict[MarketId, list[MorphoPositionBreakdown]] = {}
-    for mid, per_market in futures.items():
-        breakdowns = [bd for fut in per_market if (bd := fut.result()) is not None]
-        if breakdowns:
-            result[mid] = breakdowns
-    return result or None
-
-
-def _collect_aave_substrate_assets(
-    market_substrates: dict[MarketId, list[bytes]],
-) -> dict[MarketId, list[ChecksumAddress]]:
-    """Filter + parse asset addresses from Aave V3 substrate bytes.
-
-    Aave substrates are zero-padded plain addresses (12 zero bytes + 20 address
-    bytes). Returns a per-market list of checksummed asset addresses.
-    """
-    result: dict[MarketId, list[ChecksumAddress]] = {}
-    for mid, subs in market_substrates.items():
-        if mid not in AAVE_V3_MARKET_IDS:
-            continue
-        assets: list[ChecksumAddress] = []
-        for sub in subs:
-            hex_str = sub.hex()
-            if len(hex_str) != 64:
-                continue
-            assets.append(Web3.to_checksum_address("0x" + hex_str[24:]))
-        if assets:
-            result[mid] = assets
-    return result
-
-
-def _fetch_aave_pools(
-    ctx: Web3Context, balance_fuses: list[BalanceFuse]
-) -> dict[MarketId, ChecksumAddress]:
-    """Map every Aave V3 market to the Pool its balance fuse reads.
-
-    Aave V3 Core, Aave V3 Prime and SparkLend share the fuse contracts but not
-    the Pool, so the Pool is resolved per market rather than per chain: the
-    fuse's PoolAddressesProvider, then its Pool, one batch each. A balance
-    fuse that is not an Aave V3 fuse reverts or answers with empty data and is
-    left out.
-    """
-    fuses = {
-        bf.market_id: bf.fuse
-        for bf in balance_fuses
-        if bf.market_id in AAVE_V3_MARKET_IDS
-    }
-    if not fuses:
-        return {}
-    multicall = Multicall3(ctx)
-    providers = multicall.try_aggregate(
-        [
-            AaveV3FuseReader(ctx, fuse).pool_addresses_provider()
-            for fuse in fuses.values()
-        ]
-    )
-    resolved = {
-        mid: provider
-        for mid, provider in zip(fuses, providers, strict=True)
-        if provider is not None
-    }
-    pools = multicall.try_aggregate(
-        [AaveV3PoolAddressesProvider(ctx, p).get_pool() for p in resolved.values()]
-    )
-    return {
-        mid: pool for mid, pool in zip(resolved, pools, strict=True) if pool is not None
-    }
-
-
-def _fetch_aave_positions(
-    ctx: Web3Context,
-    pool: ThreadPoolExecutor,
-    vault_addr: ChecksumAddress,
-    aave_pools: dict[MarketId, ChecksumAddress],
-    market_substrates: dict[MarketId, list[bytes]],
-) -> dict[MarketId, list[AaveV3PositionBreakdown]] | None:
-    """Fetch supply / variable / stable debt per Aave V3 asset substrate.
-
-    The on-chain `getUserAccountData` aggregates all reserves into a single
-    base-currency total — this helper exposes the per-asset decomposition.
-    Each market is read from its own Pool (`aave_pools`); markets without one
-    are skipped. Empty positions (vault allows the asset but holds none of it)
-    are dropped.
-    """
-    per_market_assets = {
-        mid: assets
-        for mid, assets in _collect_aave_substrate_assets(market_substrates).items()
-        if mid in aave_pools
-    }
-    if not per_market_assets:
-        return None
-
-    readers = {mid: AaveV3Reader(ctx, aave_pools[mid]) for mid in per_market_assets}
-    futures: dict[MarketId, list[Future]] = {
-        mid: [
-            pool.submit(
-                _safe_call, partial(readers[mid].position_breakdown, asset, vault_addr)
-            )
-            for asset in assets
-        ]
-        for mid, assets in per_market_assets.items()
-    }
-
-    result: dict[MarketId, list[AaveV3PositionBreakdown]] = {}
-    for mid, per_market in futures.items():
-        breakdowns = [
-            bd
-            for fut in per_market
-            if (bd := fut.result()) is not None and not bd.is_empty
-        ]
-        if breakdowns:
-            result[mid] = breakdowns
-    return result or None
-
-
-def _collect_breakdown_token_addresses(
-    morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None,
-    aave_positions: dict[MarketId, list[AaveV3PositionBreakdown]] | None,
-) -> set[ChecksumAddress]:
-    """Return the set of unique token addresses appearing in any breakdown.
-
-    Used to batch-fetch USD prices via the price oracle in one parallel pass.
-    """
-    addrs: set[ChecksumAddress] = set()
-    for morpho_list in (morpho_positions or {}).values():
-        for pb in morpho_list:
-            addrs.add(pb.loan_token)
-            addrs.add(pb.collateral_token)
-    for aave_list in (aave_positions or {}).values():
-        for ab in aave_list:
-            addrs.add(ab.asset)
-    return addrs
-
-
-def _fetch_breakdown_token_prices(
-    ctx: Web3Context,
-    oracle: PriceOracleMiddleware,
-    addresses: set[ChecksumAddress],
-) -> dict[HexAddress, float] | None:
-    """Fetch USD prices for breakdown tokens in one batch via the vault's oracle.
-
-    Returns a dict keyed by lowercase token address. Tokens with no oracle
-    source configured are simply omitted (callers treat absence as "no price").
-    """
-    if not addresses:
-        return None
-    ordered = sorted(addresses)
-    prices = Multicall3(ctx).try_aggregate(
-        [oracle.get_asset_price(addr) for addr in ordered]
-    )
-    result = {
-        parse_hex_address(addr): price.readable()
-        for addr, price in zip(ordered, prices, strict=True)
-        if price is not None
-    }
-    return result or None
 
 
 def _fetch_block(ctx: Web3Context, block_number: int | None) -> tuple[int, int]:
