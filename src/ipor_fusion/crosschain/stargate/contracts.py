@@ -123,8 +123,10 @@ class StargateCrosschainExecutor(CrosschainExecutor):
     def proposal_count(self) -> Call[int]:
         return self._view("proposalCount()", output_types=["uint256"])
 
-    def eid_of(self, chain_id: ChainId) -> Call[int]:
-        return self._view("eidOf(uint256)", chain_id, output_types=["uint32"])
+    def eid_of(self, chain_id: ChainId) -> Call[LayerZeroEid]:
+        return self._view(
+            "eidOf(uint256)", chain_id, output_types=["uint32"], decoder=LayerZeroEid
+        )
 
     def chain_id_of(self, eid: LayerZeroEid) -> Call[ChainId]:
         return self._view(
@@ -335,8 +337,10 @@ class StargateCrosschainFactory(CrosschainFactory):
             decoder=_address,
         )
 
-    def eid_of(self, chain_id: ChainId) -> Call[int]:
-        return self._view("eidOf(uint256)", chain_id, output_types=["uint32"])
+    def eid_of(self, chain_id: ChainId) -> Call[LayerZeroEid]:
+        return self._view(
+            "eidOf(uint256)", chain_id, output_types=["uint32"], decoder=LayerZeroEid
+        )
 
     def chain_id_of(self, eid: LayerZeroEid) -> Call[ChainId]:
         return self._view(

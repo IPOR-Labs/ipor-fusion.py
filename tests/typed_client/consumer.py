@@ -147,3 +147,11 @@ def remote_erc4626_destination(dispatcher: StargateCrosschainDispatcher) -> None
     target = dispatcher.get_allowed_vaults().call()[0]
     Command.deposit(target, Amount(1))
     dispatcher.is_allowed_vault(target)
+
+
+def layerzero_ids_round_trip(
+    executor: StargateCrosschainExecutor, factory: StargateCrosschainFactory
+) -> None:
+    eid = executor.eid_of(ETHEREUM).call()
+    executor.chain_id_of(eid)
+    factory.chain_id_of(factory.eid_of(ETHEREUM).call())

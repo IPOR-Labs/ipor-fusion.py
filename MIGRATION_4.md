@@ -123,7 +123,7 @@ from_=...)` needs neither, so drop a zero-address placeholder. `execute()` witho
 `Call.build_transaction` return web3's `TxParams` (the same keys; `data` is `0x` hex,
 the fee fields are `Wei`). LayerZero endpoint ids are `LayerZeroEid`:
 `StargateChain.eid`, `Packet.src_eid` / `dst_eid`, `EnforcedOptionParam.eid`,
-`executor_eid()` return it and `chain_id_of`, `peers`, `lz_receive_calldata(src_eid=)`
+`executor_eid()` and `eid_of()` return it and `chain_id_of`, `peers`, `lz_receive_calldata(src_eid=)`
 and the Stargate fuse's `eid=` take it (`LayerZeroEid(30101)`).
 `encode_oft_compose_msg(*, nonce=, src_eid=, amount_ld=, compose_msg=)` takes
 keyword arguments only. `ZERO_ADDRESS` is a `ChecksumAddress` (same value).
