@@ -112,9 +112,35 @@ the lifecycle matrix follows that.
 
 - Commits: conventional (angular) subjects with a scope, as in `git log` —
   `feat(sdk):`, `fix(sdk):`, `refactor(sdk):`, `feat(cli):`, `feat(mcp):`,
-  `test(sdk):`, `ci:`, `build:`, `chore:`, `docs:`. `python-semantic-release`
-  derives the version from them. Never hand-bump `project.version`; the
-  release workflow stamps it and re-locks `uv.lock`.
+  `test(sdk):`, `ci:`, `build:`, `chore:`, `docs:`. Mandatory for every
+  commit that reaches `main`: `python-semantic-release` derives the version,
+  the release notes and the dev builds from them. A change that ships
+  behavior under `chore:` or `refactor:` gets no dev build and no release; a
+  breaking change with neither `!` nor a `BREAKING CHANGE:` footer gets a
+  minor or patch bump. A revert takes the type of what it undoes
+  (`fix(sdk): revert ...`); git's default `Revert "..."` subject is rejected
+  and invisible to versioning. With a squash merge
+  the PR title becomes the commit subject, so it follows the same format.
+  `commit-lint.yml` fails a PR whose commit subjects or title break it. Never
+  hand-bump `project.version`; the release workflow stamps it and re-locks
+  `uv.lock`.
+- This repository is public, and commit messages also ship in `CHANGELOG.md`
+  inside the wheel. No issue-tracker keys (`IL-` plus a number), internal hosts,
+  dashboard links or private repository names in commits, branch names, PR
+  text or code. `scripts/commit-check.sh` enforces both rules: as a
+  `commit-msg` hook plus a check of staged lines (`uvx pre-commit install`
+  installs both; a clone that ran it before must run it again) and in
+  `commit-lint.yml`. Its built-in patterns cover only issue keys; the rest are
+  read from the `LEAK_PATTERNS` secret in CI and from
+  `~/.config/ipor/leak-patterns` locally, one extended regex per line.
+- Releases: a stable release is cut by a manual run of `release.yml`. Every
+  push to `main` that carries a `fix`/`perf`/`feat`/breaking commit since the last
+  tag also publishes a dev build of the next version to PyPI (`release.yml`
+  on push): `<next>.dev<commits since the last tag>`, e.g. `3.17.0.dev4`,
+  with no commit, tag, changelog entry or GitHub release. uv skips it unless
+  it is pinned exactly (`ipor-fusion==3.17.0.dev4`); pip also takes it when
+  no stable release satisfies the specifier (`>=3.17` before 3.17.0). `fusion
+  changelog` has no section for a dev version.
 - Release notes render only the commit subject; body prose is dropped. Two
   footers survive: `BREAKING CHANGE: <what breaks, what to do instead>` is
   required whenever the subject carries `!` (the `!` bumps the version but

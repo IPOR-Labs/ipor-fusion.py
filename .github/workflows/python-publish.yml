@@ -63,6 +63,11 @@ on:
         type: boolean
         default: false
         required: false
+      dev-build:
+        description: "Publish a dev build of the next version instead of releasing it"
+        type: boolean
+        default: false
+        required: false
 
 jobs:
   python:
@@ -129,7 +134,7 @@ jobs:
         id: static-code-analyze
 
       - name: Version release (semantic)
-        if: inputs.publish-enabled && !inputs.skip-version-bump
+        if: inputs.publish-enabled && !inputs.skip-version-bump && !inputs.dev-build
         id: release
         # from tag: v10.5.3
         uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0
@@ -210,7 +215,7 @@ jobs:
           fi
 
       - name: Version release (from pyproject.toml)
-        if: inputs.publish-enabled && inputs.skip-version-bump
+        if: inputs.publish-enabled && inputs.skip-version-bump && !inputs.dev-build
         id: release-current
         run: |
           VERSION=$(uv version --short)
@@ -227,16 +232,46 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      # A PEP 440 dev build of the version the next release would cut: no
+      # commit, tag, changelog entry or GitHub release, and pip/uv install it
+      # only when pinned exactly. N counts commits since the last tag, so it
+      # grows with every push to main. `--print` changes nothing in the repo
+      # but writes its own outputs when it sees GITHUB_OUTPUT, hence `env -u`.
+      # Keep its version in step with the semantic-release action above.
+      - name: Version dev build
+        if: inputs.publish-enabled && inputs.dev-build
+        id: release-dev
+        run: |
+          # A stable release pushes the branch before its tag; the push run
+          # must not miss that tag and rebuild the released version as dev.
+          git fetch --quiet --force --tags origin
+          NEXT=$(env -u GITHUB_OUTPUT uvx --from "python-semantic-release==10.5.3" semantic-release version --print)
+          LAST=$(git describe --tags --abbrev=0 --match 'v*')
+          if [ "v${NEXT}" = "${LAST}" ]; then
+            echo "No releasable commit since ${LAST}: no dev build."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION="${NEXT}.dev$(git rev-list --count "${LAST}..HEAD")"
+
+          uv version "${VERSION}" --frozen
+          rm -rf dist
+          uv build
+
+          echo "released=true" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "ipor-fusion ${VERSION} built from ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish GitHub release
         # from tag: v10.5.3
         uses: python-semantic-release/publish-action@310a9983a0ae878b29f3aac778d7c77c1db27378
-        if: inputs.publish-enabled && (steps.release.outputs.released || steps.release-current.outputs.released)
+        if: inputs.publish-enabled && (steps.release.outputs.released == 'true' || steps.release-current.outputs.released == 'true')
         with:
           github_token: ${{ secrets.GH_TOKEN }}
           tag: ${{ steps.release.outputs.tag || steps.release-current.outputs.tag }}
 
       - name: Publish PyPI
-        if: inputs.publish-enabled && (steps.release.outputs.released || steps.release-current.outputs.released)
+        if: inputs.publish-enabled && (steps.release.outputs.released == 'true' || steps.release-current.outputs.released == 'true' || steps.release-dev.outputs.released == 'true')
         # from tag: v1.14.2 (twine 7 — knows Metadata-Version 2.5; the v1.14.0
         # twine rejected 2.5 wheels from hatchling >=1.32 and killed 3.6.0)
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
@@ -244,4 +279,6 @@ jobs:
           print-hash: true
           verify-metadata: true
           attestations: false
+          # A re-run of the same commit rebuilds the same dev version.
+          skip-existing: ${{ inputs.dev-build }}
         id: publish

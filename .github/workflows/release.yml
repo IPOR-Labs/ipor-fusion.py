@@ -1,6 +1,12 @@
 name: Release
 
+# A push to main publishes a dev build of the next version (see the dev-build
+# step in python-publish.yml); a manual run cuts a stable release. Both go
+# through this caller so PyPI Trusted Publishing sees the same workflow.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       force-semver-part:
@@ -28,6 +34,12 @@ jobs:
 
   release:
     needs: notify
+    # Stable releases run one at a time. A dev build depends only on its
+    # commit, so pushes get a group each: a shared one would cancel all but
+    # the newest pending run and report them as failed.
+    concurrency:
+      group: release-${{ github.event_name == 'push' && github.sha || 'dispatch' }}
+      cancel-in-progress: false
     uses: ./.github/workflows/python-publish.yml
     secrets:
       ETHEREUM_PROVIDER_URL: ${{ secrets.ETHEREUM_PROVIDER_URL }}
@@ -38,8 +50,9 @@ jobs:
       SSH_SIGN_KEY_PUBLIC: ${{ secrets.SSH_SIGN_KEY_PUBLIC }}
     with:
       publish-enabled: ${{ needs.notify.outputs.branch-name == 'main' }}
-      force-semver-part: ${{ inputs.force-semver-part }}
-      skip-version-bump: ${{ inputs.skip-version-bump }}
+      force-semver-part: ${{ inputs.force-semver-part || '' }}
+      skip-version-bump: ${{ inputs.skip-version-bump == true }}
+      dev-build: ${{ github.event_name == 'push' }}
 
   report:
     if: ${{ always() }}

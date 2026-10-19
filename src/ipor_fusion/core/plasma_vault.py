@@ -30,7 +30,7 @@ _BALANCE_FUSE_REMOVED_TOPIC = HexBytes(
 # ERC-7201 slots in PlasmaVaultStorageLib. BalanceFuses.fuseAddresses is the
 # struct's first member, so a market's fuse sits at keccak(marketId . slot).
 _BALANCE_FUSES_SLOT = 0x150144DD6AF711BAC4392499881EC6649090601BD196A5ECE5174C1400B1F700
-# WithdrawManager.manager at the slot corrected in the contracts' IL-6952, and
+# WithdrawManager.manager at the slot the contracts corrected later, and
 # the slot older vaults use. The legacy slot overlaps the callback-handler
 # storage, so its value counts only if that contract is a WithdrawManager bound
 # to this vault.
