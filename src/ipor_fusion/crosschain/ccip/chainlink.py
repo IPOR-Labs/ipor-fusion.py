@@ -16,7 +16,7 @@ from eth_typing import ChecksumAddress
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.contracts import _address
-from ipor_fusion.types import ZERO_ADDRESS
+from ipor_fusion.types import ZERO_ADDRESS, MessageId
 
 
 class CcipRouter(ContractWrapper):
@@ -191,7 +191,7 @@ class CcipOffRamp(ContractWrapper):
     def type_and_version(self) -> Call[str]:
         return self._view("typeAndVersion()", output_types=["string"])
 
-    def execution_state(self, message_id: bytes) -> Call[MessageExecutionState]:
+    def execution_state(self, message_id: MessageId) -> Call[MessageExecutionState]:
         return self._view(
             "getExecutionState(bytes32)",
             message_id,

@@ -40,7 +40,7 @@ from ipor_fusion.fuses.crosschain.base import (
     CrosschainSupplyFuse,
     SendParams,
 )
-from ipor_fusion.types import Amount, ChainId
+from ipor_fusion.types import Amount, ChainId, PositionSetHash, ProposalId
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +54,7 @@ class LaneObservation:
     accounted_balance: Amount
     state_version: int
     command_config_epoch: int
-    tracked_position_set_hash: bytes
+    tracked_position_set_hash: PositionSetHash
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,11 +241,11 @@ class CrosschainLane(ABC):
         last = self.last_approved_observed_at().call()
         return last == 0 or now - last > self.staleness_max().call() - margin
 
-    def approve_balance(self, proposal_id: int) -> Call[None]:
+    def approve_balance(self, proposal_id: ProposalId) -> Call[None]:
         """``BALANCE_APPROVER`` only."""
         return self.executor.approve_balance(proposal_id)
 
-    def proposal_id_from_logs(self, logs: Iterable[Mapping]) -> int:
+    def proposal_id_from_logs(self, logs: Iterable[Mapping]) -> ProposalId:
         """The id of the proposal this lane's executor emitted in ``logs``
         (a receipt's or a simulated call's), from its ``BalanceProposed``."""
         for log in logs:
@@ -254,10 +254,10 @@ class CrosschainLane(ABC):
                 and log_address(log) == self.executor_address
             ):
                 (proposal_id,) = decode(["uint256"], log_bytes(log["data"])[:32])
-                return int(proposal_id)
+                return ProposalId(int(proposal_id))
         raise ValueError("no BalanceProposed log from the executor")
 
-    def proposal_id_from_receipt(self, receipt: Mapping) -> int:
+    def proposal_id_from_receipt(self, receipt: Mapping) -> ProposalId:
         return self.proposal_id_from_logs(receipt["logs"])
 
     def _require_spoke(self, observation: BalanceObservation) -> None:

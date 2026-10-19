@@ -21,6 +21,7 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.ccip.chainlink import CcipOffRamp
+from ipor_fusion.types import MessageId
 
 #: Chainlink Labs' public mainnet indexers, tried in order.
 INDEXER_URLS: tuple[str, ...] = (
@@ -40,7 +41,7 @@ class VerifierResultUnavailable(LookupError):
 class VerifierResult:
     """One message's committee result as the indexer serves it."""
 
-    message_id: bytes
+    message_id: MessageId
     #: The CCVs the message names, in the order ``execute`` expects.
     ccv_addresses: tuple[ChecksumAddress, ...]
     #: The verifier result for the committee CCV: version tag, signature
@@ -54,7 +55,7 @@ class VerifierResult:
 
 
 def fetch_verifier_result(
-    message_id: bytes,
+    message_id: MessageId,
     *,
     indexers: Sequence[str] = INDEXER_URLS,
     timeout: float = 15.0,
@@ -82,7 +83,7 @@ def fetch_verifier_result(
             continue
         result = results[0]["verifierResult"]
         return VerifierResult(
-            message_id=bytes.fromhex(result["message_id"][2:]),
+            message_id=MessageId(bytes.fromhex(result["message_id"][2:])),
             ccv_addresses=tuple(
                 Web3.to_checksum_address(a) for a in result["message_ccv_addresses"]
             ),

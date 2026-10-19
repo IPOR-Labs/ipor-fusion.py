@@ -25,11 +25,24 @@ from ipor_fusion.chains import ensure_supported_chain
 from ipor_fusion.core.access import AccessManager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.crosschain.contracts import (
+    CrosschainDispatcher,
+    CrosschainExecutor,
+    CrosschainFactory,
+)
 from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.morpho_api import fetch_vault
 from ipor_fusion.readers.morpho import morpho_blue_address
 from ipor_fusion.readers.unpriceable import fetch_unpriceable_priced_tokens
-from ipor_fusion.types import ChainId, MarketId, Period, RoleId
+from ipor_fusion.types import (
+    AssetId,
+    ChainId,
+    CommandId,
+    MarketId,
+    Period,
+    ProposalId,
+    RoleId,
+)
 from ipor_fusion.vault_data import resolve_token_symbol
 
 ETHEREUM = ChainId(1)
@@ -61,3 +74,13 @@ def lookups() -> None:
     get_contract_name(ETHEREUM, VAULT)
     morpho_blue_address(ETHEREUM)
     fetch_vault(VAULT, ETHEREUM)
+
+
+def crosschain(
+    executor: CrosschainExecutor,
+    dispatcher: CrosschainDispatcher,
+    factory: CrosschainFactory,
+) -> None:
+    executor.approve_balance(ProposalId(1))
+    dispatcher.command_status(CommandId(bytes(32)))
+    factory.asset_frozen(AssetId(bytes(32)))

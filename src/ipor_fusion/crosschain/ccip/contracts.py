@@ -18,7 +18,16 @@ from ipor_fusion.crosschain.contracts import (
     _address,
 )
 from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
-from ipor_fusion.types import Amount, ChainId
+from ipor_fusion.types import (
+    Amount,
+    AssetId,
+    ChainId,
+    CommandId,
+    MessageId,
+    OperationId,
+    PositionSetHash,
+    ProposalId,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +39,7 @@ class CcipObservation:
     queued_token_amount: Amount
     state_version: int
     command_config_epoch: int
-    tracked_position_set_hash: bytes
+    tracked_position_set_hash: PositionSetHash
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,13 +170,13 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             "activeReturn(uint256)", chain_id, output_types=["bytes32"], decoder=bytes
         )
 
-    def active_command(self, chain_id: ChainId) -> Call[bytes]:
+    def active_command(self, chain_id: ChainId) -> Call[CommandId]:
         """The active command id for the chain, or 32 zero bytes."""
         return self._view(
             "activeCommand(uint256)",
             chain_id,
             output_types=["bytes32"],
-            decoder=bytes,
+            decoder=lambda value: CommandId(bytes(value)),
         )
 
     def next_command_sequence(self, chain_id: ChainId) -> Call[int]:
@@ -203,7 +212,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             decoder=Amount,
         )
 
-    def command_status(self, command_id: bytes) -> Call[CommandStatus]:
+    def command_status(self, command_id: CommandId) -> Call[CommandStatus]:
         return self._view(
             "commandStatus(bytes32)",
             command_id,
@@ -219,7 +228,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             "pendingTransferCount(uint256)", chain_id, output_types=["uint8"]
         )
 
-    def processed_ccip_message(self, message_id: bytes) -> Call[bool]:
+    def processed_ccip_message(self, message_id: MessageId) -> Call[bool]:
         return self._view(
             "processedCcipMessage(bytes32)", message_id, output_types=["bool"]
         )
@@ -236,7 +245,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             output_types=["uint256"],
         )
 
-    def reject_balance_and_block(self, proposal_id: int) -> Call[None]:
+    def reject_balance_and_block(self, proposal_id: ProposalId) -> Call[None]:
         """``BALANCE_APPROVER`` only: reject and fail the chain closed."""
         return self._write("rejectBalanceAndBlock(uint256)", proposal_id)
 
@@ -292,12 +301,12 @@ class CcipCrosschainDispatcher(CrosschainDispatcher):
             "queuedTokenAmount()", output_types=["uint256"], decoder=Amount
         )
 
-    def processed_operation(self, operation_id: bytes) -> Call[bool]:
+    def processed_operation(self, operation_id: OperationId) -> Call[bool]:
         return self._view(
             "processedOperation(bytes32)", operation_id, output_types=["bool"]
         )
 
-    def processed_ccip_message(self, message_id: bytes) -> Call[bool]:
+    def processed_ccip_message(self, message_id: MessageId) -> Call[bool]:
         return self._view(
             "processedCcipMessage(bytes32)", message_id, output_types=["bool"]
         )
@@ -316,7 +325,7 @@ def _ccip_observation_decoder(values: tuple) -> CcipObservation:
         queued_token_amount=Amount(queued),
         state_version=int(version),
         command_config_epoch=int(epoch),
-        tracked_position_set_hash=bytes(set_hash),
+        tracked_position_set_hash=PositionSetHash(bytes(set_hash)),
     )
 
 
@@ -327,7 +336,7 @@ class CcipCrosschainFactory(CrosschainFactory):
     def create_executor(
         self,
         user_salt: bytes,
-        asset_id: bytes,
+        asset_id: AssetId,
         manager: ChecksumAddress,
         safety: SafetyConfig,
     ) -> Call[ChecksumAddress]:
@@ -365,7 +374,9 @@ class CcipCrosschainFactory(CrosschainFactory):
             decoder=ChainId,
         )
 
-    def asset_config(self, asset_id: bytes) -> Call[tuple[ChecksumAddress, int, bool]]:
+    def asset_config(
+        self, asset_id: AssetId
+    ) -> Call[tuple[ChecksumAddress, int, bool]]:
         """``(token, sharedDecimals, enabled)`` for an asset id."""
         return self._view(
             "assetConfig(bytes32)",
@@ -444,7 +455,7 @@ class CcipCrosschainFactory(CrosschainFactory):
         )
 
     def schedule_asset(
-        self, asset_id: bytes, token: ChecksumAddress, shared_decimals: int
+        self, asset_id: AssetId, token: ChecksumAddress, shared_decimals: int
     ) -> Call[None]:
         """Owner-only; executable after ``config_delay`` with the same arguments."""
         return self._write(
@@ -452,7 +463,7 @@ class CcipCrosschainFactory(CrosschainFactory):
         )
 
     def execute_asset(
-        self, asset_id: bytes, token: ChecksumAddress, shared_decimals: int
+        self, asset_id: AssetId, token: ChecksumAddress, shared_decimals: int
     ) -> Call[None]:
         return self._write(
             "executeAsset(bytes32,address,uint8)", asset_id, token, shared_decimals

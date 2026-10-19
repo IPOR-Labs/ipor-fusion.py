@@ -19,7 +19,14 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.messages import CommandStatus
-from ipor_fusion.types import Amount, ChainId
+from ipor_fusion.types import (
+    Amount,
+    AssetId,
+    ChainId,
+    CommandId,
+    PositionSetHash,
+    ProposalId,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +43,7 @@ class BalanceObservation:
     remote_block: int
     remote_timestamp: int
     expiry: int
-    tracked_position_set_hash: bytes
+    tracked_position_set_hash: PositionSetHash
 
     def as_tuple(self) -> tuple:
         return (
@@ -150,7 +157,7 @@ class CrosschainExecutor(ContractWrapper):
             "lastApprovedObservedAt(uint256)", chain_id, output_types=["uint64"]
         )
 
-    def approve_balance(self, proposal_id: int) -> Call[None]:
+    def approve_balance(self, proposal_id: ProposalId) -> Call[None]:
         """``BALANCE_APPROVER`` only."""
         return self._write("approveBalance(uint256)", proposal_id)
 
@@ -205,7 +212,7 @@ class CrosschainDispatcher(ContractWrapper):
             "pendingRequestShares(address)", vault, output_types=["uint256"]
         )
 
-    def command_status(self, command_id: bytes) -> Call[CommandStatus]:
+    def command_status(self, command_id: CommandId) -> Call[CommandStatus]:
         return self._view(
             "commandStatus(bytes32)",
             command_id,
@@ -253,7 +260,7 @@ class CrosschainFactory(ContractWrapper):
     def is_allowed_creator(self, creator: ChecksumAddress) -> Call[bool]:
         return self._view("isAllowedCreator(address)", creator, output_types=["bool"])
 
-    def asset_frozen(self, asset_id: bytes) -> Call[bool]:
+    def asset_frozen(self, asset_id: AssetId) -> Call[bool]:
         return self._view("assetFrozen(bytes32)", asset_id, output_types=["bool"])
 
     def creation_codes_configured(self) -> Call[bool]:
