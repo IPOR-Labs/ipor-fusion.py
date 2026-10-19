@@ -47,6 +47,9 @@ from ipor_fusion.fuses.fluid_instadapp import (
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
 from ipor_fusion.fuses.hypercore import (
+    SPOT_DEX,
+    USDC_SYSTEM_ADDRESS,
+    USDC_TOKEN_INDEX,
     HyperCoreBuilderFeeFuse,
     HyperCoreCancelFuse,
     HyperCoreConfigKey,
@@ -57,6 +60,11 @@ from ipor_fusion.fuses.hypercore import (
     HyperCoreSubstrates,
     SettlementMode,
     TimeInForce,
+    hip3_action_asset,
+    is_hip3_asset,
+    is_native_perp_asset,
+    perp_dex_of,
+    read_index_of,
     system_address,
 )
 from ipor_fusion.fuses.hypercore_events import (
@@ -169,6 +177,14 @@ __all__ = [
     "SettlementMode",
     "TimeInForce",
     "system_address",
+    "SPOT_DEX",
+    "USDC_SYSTEM_ADDRESS",
+    "USDC_TOKEN_INDEX",
+    "hip3_action_asset",
+    "is_hip3_asset",
+    "is_native_perp_asset",
+    "perp_dex_of",
+    "read_index_of",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",

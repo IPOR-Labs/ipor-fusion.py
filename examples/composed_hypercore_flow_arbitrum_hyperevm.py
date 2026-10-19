@@ -72,14 +72,19 @@ from web3.types import BlockIdentifier, RPCEndpoint
 
 from ipor_fusion import (
     ERC20,
+    SPOT_DEX,
+    USDC_SYSTEM_ADDRESS,
+    USDC_TOKEN_INDEX,
     CcipChain,
     CcipCrosschainExecutor,
     CcipTransport,
     Command,
     CrosschainLane,
     CrosschainSimulator,
+    HyperCoreReader,
     PlasmaVault,
     SimulationResult,
+    TimeInForce,
     VaultSimulator,
     Web3Context,
     ccip_events,
@@ -92,6 +97,7 @@ from ipor_fusion import (
     quote_ccip_native_fee,
     read_hypercore_evm_exit_ceiling,
     read_hypercore_vault_state,
+    read_index_of,
     register_custom_errors,
 )
 from ipor_fusion.fuses import (
@@ -99,15 +105,7 @@ from ipor_fusion.fuses import (
     HyperCoreOrderFuse,
     HyperCoreSendFuse,
 )
-from ipor_fusion.fuses.hypercore import (
-    SPOT_DEX,
-    USDC_SYSTEM_ADDRESS,
-    USDC_TOKEN_INDEX,
-    TimeInForce,
-    read_index_of,
-)
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.readers.hypercore import HyperCoreReader
 from ipor_fusion.types import (
     Amount,
     ChainId,

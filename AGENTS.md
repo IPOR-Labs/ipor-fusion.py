@@ -153,9 +153,20 @@ the lifecycle matrix follows that.
 - English only, US spelling, in code, comments, docstrings and user-facing
   strings (`field_docs.py` ships as API documentation). Comments only for edge
   cases and non-obvious logic.
-- Public symbols are re-exported from `src/ipor_fusion/__init__.py` (import +
-  `__all__`); fuse classes also from `fuses/__init__.py`. The package is
-  `py.typed`, so public APIs stay fully annotated.
+- The public API is `ipor_fusion.__all__` (README, "Public API and stability").
+  Every public symbol is imported and listed there; a symbol of a public
+  subpackage (`core`, `config`, `fuses`, `fuses.crosschain`, `readers`,
+  `crosschain`, `crosschain.ccip`, `crosschain.stargate`) also goes in that
+  subpackage's `__all__`. `ipor_fusion.guide` keeps its own namespace. The
+  public modules (`about`, `chains`, `dependency_graph`, `errors`, `explorer`,
+  `field_docs`, `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`,
+  `validation`, `vault_data`, `vault_info`) stay importable for the names they
+  define; `cli`, `mcp` and every other module are internal. Examples, the guide
+  and the skill import from `ipor_fusion` or a public module, never an internal
+  path. Adding or removing a
+  name updates the snapshot in `tests/test_public_api.py`; a removal or rename
+  is a breaking change. The package is `py.typed`, so public APIs stay fully
+  annotated.
 
 ## Invariants that must change together
 
@@ -308,8 +319,9 @@ or examples.
   (`PlasmaVault.get_fuses()`) and its market granted substrates before an
   action can succeed.
 - Adding a protocol: new module in `fuses/`, re-export from `fuses/__init__.py`
-  and the top-level `__all__`, encoding test in `test_fuse_encoding.py`, and a
-  row in the README protocol table.
+  and the top-level `__all__` (and both snapshots in `test_public_api.py`),
+  encoding test in `test_fuse_encoding.py`, and a row in the README protocol
+  table.
 - Keeping `examples/` current: a change to public API, SDK behavior or
   defaults includes reading the examples for what it supersedes — hand-rolled
   code a new helper replaces, workarounds for a gap it closes, prose describing
