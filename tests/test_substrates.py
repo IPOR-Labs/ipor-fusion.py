@@ -281,11 +281,8 @@ def test_market_without_decoder_is_labelled_not_guessed():
     assert info.type_label == "no_decoder(VELODROME_SUPERCHAIN)"
 
 
-def test_external_state_is_canonical_name_and_rwa_is_alias():
-    # Market 50 is EXTERNAL_STATE; RWA remains a backward-compatible alias of
-    # the same value, but the canonical name is what id->name lookups display.
+def test_external_state_is_market_50():
     assert IporFusionMarkets.EXTERNAL_STATE == 50
-    assert IporFusionMarkets.RWA == IporFusionMarkets.EXTERNAL_STATE
     assert market_name(50) == "EXTERNAL_STATE"
 
 

@@ -50,6 +50,7 @@ from ipor_fusion.fuses.hypercore import (
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import (
+    ChainId,
     FuseAddress,
     HyperCoreActionId,
     HyperCoreAsset,
@@ -66,12 +67,12 @@ T = TypeVar("T")
 #: New HyperCore vaults use market 55; the abandoned pilot still keys 54.
 HYPERCORE_MARKET = MarketId(IporFusionMarkets.HYPERCORE)
 #: The only chain with the HyperCore precompiles.
-HYPEREVM_CHAIN_ID = 999
+HYPEREVM_CHAIN_ID = ChainId(999)
 #: Known ``HyperCorePendingReader`` deployments per chain. The reader is a
 #: stateless helper and any deployment serves any vault. The market-55 reader
 #: is pinned in ``tests/fixtures/hypercore_market55.json`` until ``ipor-abi``
 #: publishes it.
-HYPERCORE_PENDING_READERS: dict[int, ChecksumAddress] = {
+HYPERCORE_PENDING_READERS: dict[ChainId, ChecksumAddress] = {
     HYPEREVM_CHAIN_ID: Web3.to_checksum_address(
         "0x83F54bc9eA4Dd19cb579Daa70368562C7a7534C4"
     ),

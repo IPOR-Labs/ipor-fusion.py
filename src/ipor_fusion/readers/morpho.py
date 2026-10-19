@@ -29,19 +29,19 @@ _addr = Web3.to_checksum_address
 
 # Morpho Blue sits at its CREATE2 address (0xBBBB…EEFFCb) on Ethereum and Base
 # only; every other chain carries an independent deployment. Keyed by chain ID.
-MORPHO_BLUE_ADDRESSES: dict[int, ChecksumAddress] = {
-    1: _addr("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"),  # Ethereum
-    8453: _addr("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"),  # Base
-    42161: _addr("0x6c247b1F6182318877311737BaC0844bAa518F5e"),  # Arbitrum One
-    130: _addr("0x8f5ae9CddB9f68de460C77730b018Ae7E04a140A"),  # Unichain
-    143: _addr("0xD5D960E8C380B724a48AC59E2DfF1b2CB4a1eAee"),  # Monad
-    999: _addr("0x68e37dE8d93d3496ae143F2E900490f6280C57cD"),  # HyperEVM
-    4663: _addr("0x9D53d5E3bd5E8d4Cbfa6DB1ca238AEA02E651010"),  # Robinhood
-    747474: _addr("0xD50F2DffFd62f94Ee4AEd9ca05C61d0753268aBc"),  # Katana
+MORPHO_BLUE_ADDRESSES: dict[ChainId, ChecksumAddress] = {
+    ChainId(1): _addr("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"),  # Ethereum
+    ChainId(8453): _addr("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"),  # Base
+    ChainId(42161): _addr("0x6c247b1F6182318877311737BaC0844bAa518F5e"),  # Arbitrum One
+    ChainId(130): _addr("0x8f5ae9CddB9f68de460C77730b018Ae7E04a140A"),  # Unichain
+    ChainId(143): _addr("0xD5D960E8C380B724a48AC59E2DfF1b2CB4a1eAee"),  # Monad
+    ChainId(999): _addr("0x68e37dE8d93d3496ae143F2E900490f6280C57cD"),  # HyperEVM
+    ChainId(4663): _addr("0x9D53d5E3bd5E8d4Cbfa6DB1ca238AEA02E651010"),  # Robinhood
+    ChainId(747474): _addr("0xD50F2DffFd62f94Ee4AEd9ca05C61d0753268aBc"),  # Katana
 }
 
 
-def _chain_label(chain_id: int) -> str:
+def _chain_label(chain_id: ChainId) -> str:
     name = CHAIN_NAMES.get(chain_id)
     return f"{chain_id} ({name})" if name else str(chain_id)
 

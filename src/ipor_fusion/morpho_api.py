@@ -26,18 +26,40 @@ MORPHO_API_URL = "https://blue-api.morpho.org/graphql"
 # Morpho API (`publicAllocators` query). Anyone can call `reallocateTo` on
 # this contract — the vault must have granted it the ALLOCATOR_ROLE for
 # public reallocation to actually go through.
-PUBLIC_ALLOCATOR_ADDRESSES: dict[int, str] = {
-    1: "0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D",  # Ethereum
-    10: "0x0d68a97324E602E02799CD83B42D337207B40658",  # OP Mainnet
-    137: "0xfac15aff53ADd2ff80C2962127C434E8615Df0d3",  # Polygon
-    8453: "0xA090dD1a701408Df1d4d0B85b716c87565f90467",  # Base
-    42161: "0x769583Af5e9D03589F159EbEC31Cc2c23E8C355E",  # Arbitrum One
-    130: "0xB0c9a107fA17c779B3378210A7a593e88938C7C9",  # Unichain
-    480: "0xef9889B4e443DEd35FA0Bd060f2104Cca94e6A43",  # World Chain
-    143: "0xfd70575B732F9482F4197FE1075492e114E97302",  # Monad
-    999: "0x517505be22D9068687334e69ae7a02fC77edf4Fc",  # HyperEVM
-    988: "0xbCB063D4B6D479b209C186e462828CBACaC82DbE",  # Stable
-    747474: "0x39EB6Da5e88194C82B13491Df2e8B3E213eD2412",  # Katana
+PUBLIC_ALLOCATOR_ADDRESSES: dict[ChainId, ChecksumAddress] = {
+    ChainId(1): Web3.to_checksum_address(
+        "0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D"
+    ),  # Ethereum
+    ChainId(10): Web3.to_checksum_address(
+        "0x0d68a97324E602E02799CD83B42D337207B40658"
+    ),  # OP Mainnet
+    ChainId(137): Web3.to_checksum_address(
+        "0xfac15aff53ADd2ff80C2962127C434E8615Df0d3"
+    ),  # Polygon
+    ChainId(8453): Web3.to_checksum_address(
+        "0xA090dD1a701408Df1d4d0B85b716c87565f90467"
+    ),  # Base
+    ChainId(42161): Web3.to_checksum_address(
+        "0x769583Af5e9D03589F159EbEC31Cc2c23E8C355E"
+    ),  # Arbitrum One
+    ChainId(130): Web3.to_checksum_address(
+        "0xB0c9a107fA17c779B3378210A7a593e88938C7C9"
+    ),  # Unichain
+    ChainId(480): Web3.to_checksum_address(
+        "0xef9889B4e443DEd35FA0Bd060f2104Cca94e6A43"
+    ),  # World Chain
+    ChainId(143): Web3.to_checksum_address(
+        "0xfd70575B732F9482F4197FE1075492e114E97302"
+    ),  # Monad
+    ChainId(999): Web3.to_checksum_address(
+        "0x517505be22D9068687334e69ae7a02fC77edf4Fc"
+    ),  # HyperEVM
+    ChainId(988): Web3.to_checksum_address(
+        "0xbCB063D4B6D479b209C186e462828CBACaC82DbE"
+    ),  # Stable
+    ChainId(747474): Web3.to_checksum_address(
+        "0x39EB6Da5e88194C82B13491Df2e8B3E213eD2412"
+    ),  # Katana
 }
 
 _MARKET_QUERY = """
