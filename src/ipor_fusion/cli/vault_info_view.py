@@ -32,7 +32,7 @@ from ipor_fusion.readers.hypercore import HyperCorePendingState
 from ipor_fusion.substrates import (
     format_market_label,
 )
-from ipor_fusion.types import ZERO_ADDRESS, ChainId, PlasmaVaultAddress
+from ipor_fusion.types import ZERO_ADDRESS, ChainId, PlasmaVaultAddress, Shares
 from ipor_fusion.validation import (
     validate_vault_state,
 )
@@ -388,16 +388,16 @@ def _print_pending_requests(data: VaultData, plasma_vault: PlasmaVault) -> None:
         click.echo("  Pending requests: (none)")
         return
 
-    total_shares = sum((r.shares for r in requests), 0)
+    total_shares = Shares(sum(r.shares for r in requests))
     total_assets: int | None = _safe_call(
-        lambda ts=total_shares: plasma_vault.convert_to_assets(ts).call()  # type: ignore[misc]
+        lambda ts=total_shares: plasma_vault.convert_to_assets(ts).call()
     )
 
     click.echo(f"  Pending requests ({len(requests)}):")
     rows: list[tuple[str, ...]] = []
     for req in requests:
         assets: int | None = _safe_call(
-            lambda s=req.shares: plasma_vault.convert_to_assets(s).call()  # type: ignore[misc]
+            lambda s=req.shares: plasma_vault.convert_to_assets(s).call()
         )
         assets_str = (
             f"{_format_amount(assets, data.asset_decimals)} {data.asset_symbol}"

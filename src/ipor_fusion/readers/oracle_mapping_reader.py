@@ -33,8 +33,8 @@ ASSET_PRICE_SOURCE_UPDATED_TOPIC = (
 )
 
 
-def _addr(value: object) -> ChecksumAddress:
-    return Web3.to_checksum_address(value)  # type: ignore[arg-type]
+def _addr(value: str) -> ChecksumAddress:
+    return Web3.to_checksum_address(value)
 
 
 class _Erc4626Feed(ContractWrapper):

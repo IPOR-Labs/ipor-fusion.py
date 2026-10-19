@@ -119,6 +119,15 @@ from_=...)` needs neither, so drop a zero-address placeholder. `execute()` witho
 `dataclasses.asdict` form) with every field parsed; use it instead of
 `FusionInstance(**data)`, which passes raw strings into the role-typed fields.
 
+**Transactions, LayerZero and constants.** `Web3Context.build_transaction` and
+`Call.build_transaction` return web3's `TxParams` (the same keys; `data` is `0x` hex,
+the fee fields are `Wei`). LayerZero endpoint ids are `LayerZeroEid`:
+`StargateChain.eid`, `Packet.src_eid` / `dst_eid`, `EnforcedOptionParam.eid`,
+`executor_eid()` and `eid_of()` return it and `chain_id_of`, `peers`, `lz_receive_calldata(src_eid=)`
+and the Stargate fuse's `eid=` take it (`LayerZeroEid(30101)`).
+`encode_oft_compose_msg(*, nonce=, src_eid=, amount_ld=, compose_msg=)` takes
+keyword arguments only. `ZERO_ADDRESS` is a `ChecksumAddress` (same value).
+
 **Markets and substrates.** Every `IporFusionMarkets` member is a `MarketId`.
 `decode_substrate`, `market_name`, `format_market_label` take `MarketId`.
 

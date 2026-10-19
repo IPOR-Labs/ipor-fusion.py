@@ -6,9 +6,7 @@ from web3 import Web3
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.multicall import Multicall3
-from ipor_fusion.types import Amount
-
-_ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+from ipor_fusion.types import ZERO_ADDRESS, Amount
 
 # DataTypes.ReserveDataLegacy returned by Pool.getReserveData(address).
 # All fields are static, so the struct is encoded inline as a flat sequence.
@@ -163,7 +161,7 @@ class AaveV3Reader(ContractWrapper):
             tokens.variable_debt_token,
             tokens.stable_debt_token,
         )
-        listed = [token for token in reserve_tokens if token.lower() != _ZERO_ADDRESS]
+        listed = [token for token in reserve_tokens if token.lower() != ZERO_ADDRESS]
         balances = iter(
             Multicall3(self._ctx).aggregate(
                 [ERC20(self._ctx, token).balance_of(user) for token in listed]

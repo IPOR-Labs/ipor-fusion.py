@@ -14,15 +14,13 @@ from eth_typing import ChecksumAddress
 
 from ipor_fusion.readers.oracle_mapping_reader import OracleMappingReader
 from ipor_fusion.types import (
+    ZERO_ADDRESS,
     AssetSource,
     MappingStatus,
     NodeStatus,
     PlasmaVaultAddress,
     Price,
 )
-
-ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-
 
 # source_type values (also the human label in the path / output). Adding a
 # type? Follow the "Adding a feed type" checklist in readers/oracle_mapping.py.

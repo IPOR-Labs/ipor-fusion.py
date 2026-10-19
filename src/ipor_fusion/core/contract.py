@@ -8,7 +8,7 @@ from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.types import BlockIdentifier, TxReceipt
+from web3.types import BlockIdentifier, TxParams, TxReceipt
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.errors import EmptyCallResultError
@@ -105,7 +105,7 @@ class Call(Generic[T]):
 
     def build_transaction(
         self, ctx: Web3Context | None = None, *, block: BlockIdentifier = "latest"
-    ) -> dict:
+    ) -> TxParams:
         """Build the transaction dict for this Call without signing or sending —
         mirrors `.send()`, delegating to `Web3Context.build_transaction`. Returns
         the dict a signer would submit; needs a signer address, no key."""
@@ -165,7 +165,7 @@ class ContractWrapper:
         and so rejects input that is genuinely the caller's.
         """
         instance = cls.__new__(cls)
-        instance._ctx = None  # type: ignore[assignment]
+        instance._ctx = None
         instance._address = (
             Web3.to_checksum_address(address)
             if address is not None

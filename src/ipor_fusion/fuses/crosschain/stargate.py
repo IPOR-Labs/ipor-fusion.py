@@ -33,9 +33,10 @@ from ipor_fusion.fuses.crosschain.base import (
     CrosschainSupplyFuse,
     SendParams,
 )
-from ipor_fusion.types import Amount, ChainId, DeploymentRequestId
+from ipor_fusion.types import Amount, ChainId, DeploymentRequestId, LayerZeroEid
 
 _NO_CHAIN = ChainId(0)
+_NO_EID = LayerZeroEid(0)
 _NO_REQUEST = DeploymentRequestId(0)
 _ZERO_AMOUNT = Amount(0)
 
@@ -172,7 +173,7 @@ class StargateCrosschainCommandFuse(CrosschainCommandFuse):
         *,
         executor: ChecksumAddress,
         chain_id: ChainId = _NO_CHAIN,
-        eid: int = 0,
+        eid: LayerZeroEid = _NO_EID,
         enforced_options: bytes = b"",
         plasma_vaults: Sequence[ChecksumAddress] = (),
         request_id: DeploymentRequestId = _NO_REQUEST,
@@ -264,7 +265,7 @@ class StargateCrosschainCommandFuse(CrosschainCommandFuse):
         self,
         command_type: StargateCrosschainCommandType,
         chain_id: ChainId,
-        eid: int,
+        eid: LayerZeroEid,
         request_id: DeploymentRequestId,
         command: Command,
     ) -> None:

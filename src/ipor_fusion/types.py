@@ -25,6 +25,8 @@ MessageId = NewType("MessageId", bytes)
 # The executor's asset id; a Stargate pool's uint16 asset id is StargateAssetId.
 AssetId = NewType("AssetId", bytes)
 StargateAssetId = NewType("StargateAssetId", int)
+# A LayerZero V2 endpoint id (uint32), distinct from the EVM chain id.
+LayerZeroEid = NewType("LayerZeroEid", int)
 ProposalId = NewType("ProposalId", int)
 # A factory's uint256 dispatcher deployment request; a return (recall) request
 # is the bytes32 ReturnRequestId.
@@ -59,7 +61,7 @@ TxHash = NewType("TxHash", HexStr)
 ProposalHash = NewType("ProposalHash", bytes)
 
 MAX_UINT256 = (1 << 256) - 1
-ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+ZERO_ADDRESS = to_checksum_address("0x" + "00" * 20)
 
 # Oracle-mapping status vocabulary — semantics documented in the
 # readers/oracle_mapping.py module docstring. Lives here so the MCP models
