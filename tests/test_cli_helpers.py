@@ -63,7 +63,11 @@ from ipor_fusion.readers.lending_health import (
 )
 from ipor_fusion.readers.morpho import MORPHO_BLUE_ADDRESSES, MorphoPositionBreakdown
 from ipor_fusion.substrates import decode_substrate, market_name
-from ipor_fusion.types import Amount, MarketId, MorphoBlueMarketId
+from ipor_fusion.types import (
+    Amount,
+    MarketId,
+    parse_morpho_market_id,
+)
 from ipor_fusion.validation import Erc20Holdings
 from ipor_fusion.vault_data import (
     FeeData,
@@ -86,6 +90,7 @@ from ipor_fusion.vault_info import (
     _build_dependency_graph_json,
     _build_fees_json,
     _build_share_price_json,
+    _morpho_breakdown_json,
     _partition_balance_fuses,
 )
 
@@ -1509,7 +1514,7 @@ _TOKEN_WETH = Web3.to_checksum_address("0x" + "33" * 20)
 
 def _morpho_breakdown(market_id: str = "ab" * 32):
     return MorphoPositionBreakdown(
-        market_id=MorphoBlueMarketId(market_id),
+        market_id=parse_morpho_market_id(market_id),
         loan_token=_TOKEN_USDC,
         collateral_token=_TOKEN_WETH,
         collateral=Amount(10 * 10**18),
@@ -1704,6 +1709,30 @@ class TestFetcherCollectors:
         )
         assert 14 in out and 1 not in out
         assert len(out[14]) == 1
+
+    @patch("ipor_fusion.vault_info.resolve_token_decimals", return_value=18)
+    @patch("ipor_fusion.vault_info.resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=18)
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
+    def test_collected_morpho_id_renders_with_one_prefix(
+        self, _sym, _dec, _view_sym, _view_dec, capsys
+    ):
+        (market_id,) = _collect_morpho_substrates({14: [bytes.fromhex("ab" * 32)]})[14]
+        breakdown = MorphoPositionBreakdown(
+            market_id=market_id,
+            loan_token=_TOKEN_USDC,
+            collateral_token=_TOKEN_WETH,
+            collateral=Amount(0),
+            borrow_assets=Amount(0),
+            supply_assets=Amount(0),
+        )
+        data = _make_data(morpho_positions={14: [breakdown]})
+        (entry,) = _morpho_breakdown_json(MagicMock(), data, [breakdown])
+        assert entry["morpho_market_id"] == "0x" + "ab" * 32
+        _print_lending_health(MagicMock(), data)
+        out = capsys.readouterr().out
+        assert f"morpho market 0x{'ab' * 32} " in out
+        assert "0x0x" not in out
 
     def test_collect_morpho_substrates_skips_wrong_length(self):
         bad = bytes.fromhex("aa" * 16)  # wrong length

@@ -505,7 +505,7 @@ def _morpho_breakdown_json(
     prices = data.token_prices_usd
     return [
         {
-            "morpho_market_id": "0x" + str(pb.market_id),
+            "morpho_market_id": pb.market_id,
             "collateral_symbol": resolve_token_symbol(ctx, pb.collateral_token) or None,
             "loan_symbol": resolve_token_symbol(ctx, pb.loan_token) or None,
             "collateral": _build_breakdown_amount_json(
