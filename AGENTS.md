@@ -184,7 +184,10 @@ the lifecycle matrix follows that.
   balance-graph checks
 - `vault_data.py` — public vault read: `fetch_vault_data` → `VaultData` (with `FeeData`,
   `WithdrawManagerData`), `fetch_deployment_info`, cached `resolve_token_symbol` /
-  `resolve_token_decimals`; `vault_info.py` — `build_vault_info_json`, the
+  `resolve_token_decimals`; it composes `vault_reads.py` (the shared Multicall3 batch
+  and degrade-to-``None`` helpers), `vault_managers.py` (fee and WithdrawManager
+  snapshots) and `vault_positions.py` (Morpho/Aave position breakdowns and their token
+  prices); `vault_info.py` — `build_vault_info_json`, the
   `fusion vault info --json` document (contract names via an injected `resolve_name`),
   and `health_check_lists`; `explorer.py` Etherscan V2 (single endpoint, needs API key);
   `cache.py` the on-disk contract and deployment caches (`~/.cache/ipor-fusion/`).

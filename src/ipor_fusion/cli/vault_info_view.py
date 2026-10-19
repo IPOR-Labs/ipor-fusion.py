@@ -32,16 +32,11 @@ from ipor_fusion.readers.hypercore import HyperCorePendingState
 from ipor_fusion.substrates import (
     format_market_label,
 )
-from ipor_fusion.types import ChainId, PlasmaVaultAddress
+from ipor_fusion.types import ZERO_ADDRESS, ChainId, PlasmaVaultAddress
 from ipor_fusion.validation import (
     validate_vault_state,
 )
-from ipor_fusion.vault_data import (
-    _ZERO_ADDRESS,
-    VaultData,
-    _safe_call,
-    fetch_deployment_info,
-)
+from ipor_fusion.vault_data import VaultData, fetch_deployment_info
 from ipor_fusion.vault_info import (
     BLOCK_EXPLORER_URLS,
     IPOR_APP_URL,
@@ -53,6 +48,7 @@ from ipor_fusion.vault_info import (
     _wad_to_usd,
     build_vault_info_json,
 )
+from ipor_fusion.vault_reads import _safe_call
 
 
 def _print_role_accounts_table(role_accounts: list[dict[str, Any]]) -> None:
@@ -275,7 +271,7 @@ def _print_fees(data: VaultData) -> None:
     click.echo("Fees:")
     click.echo(f"  Fee Manager:      {fees.fee_manager or 'N/A'}")
     dao_payee = fees.ipor_dao_fee_recipient
-    if not dao_payee or dao_payee == _ZERO_ADDRESS:
+    if not dao_payee or dao_payee == ZERO_ADDRESS:
         dao_payee = "N/A"
     click.echo(f"  IPOR DAO payee:   {dao_payee}")
     onboarding_fee = _format_fee_percent(_wad_to_percent(fees.deposit_fee_wad))
