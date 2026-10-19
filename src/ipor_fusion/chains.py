@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ipor_fusion.errors import UnsupportedChainError
+from ipor_fusion.types import ChainId
 
 CHAIN_NAMES: dict[int, str] = {
     1: "ethereum",
@@ -49,7 +50,7 @@ GET_LOGS_RANGE_HINTS: dict[int, int] = {
 }
 
 
-def ensure_supported_chain(chain_id: int) -> None:
+def ensure_supported_chain(chain_id: ChainId) -> None:
     """Raise :class:`UnsupportedChainError` unless the vault tooling supports the chain."""
     if chain_id in SUPPORTED_CHAIN_IDS:
         return

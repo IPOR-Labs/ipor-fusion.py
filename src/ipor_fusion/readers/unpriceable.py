@@ -26,6 +26,7 @@ from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import AAVE_V3_MARKET_IDS
 from ipor_fusion.readers.morpho import MorphoPositionBreakdown
 from ipor_fusion.substrates import decode_substrate
+from ipor_fusion.types import MarketId
 
 _ZERO = Web3.to_checksum_address("0x" + "00" * 20)
 
@@ -61,7 +62,7 @@ class MiddlewarePricedToken:
     on flagged tokens only; ``None`` means none (or unreadable).
     """
 
-    market_id: int
+    market_id: MarketId
     token: ChecksumAddress
     via: str
     zero_balance_reverts: bool

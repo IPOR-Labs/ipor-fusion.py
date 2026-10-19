@@ -25,6 +25,7 @@ from web3.exceptions import Web3Exception
 from web3.types import BlockIdentifier, FilterParams, LogReceipt
 
 from ipor_fusion.errors import LogScanError
+from ipor_fusion.types import ChainId
 
 _logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ class LogSource(Protocol):
 
     def get_logs(
         self,
-        chain_id: int,
+        chain_id: ChainId,
         address: ChecksumAddress,
         topic0: list[str],
         from_block: int,
@@ -109,7 +110,7 @@ def get_logs_adaptive(
     from_block: BlockIdentifier | None = None,
     to_block: BlockIdentifier = "latest",
     *,
-    chain_id: int | None = None,
+    chain_id: ChainId | None = None,
     chunk_hint: int | None = None,
     timeout_s: float = DEFAULT_LOG_SCAN_TIMEOUT_S,
     max_workers: int = DEFAULT_LOG_SCAN_WORKERS,

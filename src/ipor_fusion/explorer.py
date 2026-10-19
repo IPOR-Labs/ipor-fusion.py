@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from ipor_fusion.cache import load_contract_cache, update_contract_cache
+from ipor_fusion.types import ChainId
 
 ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api"
 
@@ -37,7 +38,9 @@ class _RateLimiter:
 _etherscan_limiter = _RateLimiter(2.5)
 
 
-def get_contract_name(chain_id: int, address: str, api_key: str | None = None) -> str:
+def get_contract_name(
+    chain_id: ChainId, address: str, api_key: str | None = None
+) -> str:
     cache = load_contract_cache()
     cache_key = f"{chain_id}:{address}"
 
@@ -51,7 +54,7 @@ def get_contract_name(chain_id: int, address: str, api_key: str | None = None) -
 
 
 def get_deployment_tx(
-    chain_id: int, address: str, api_key: str | None = None
+    chain_id: ChainId, address: str, api_key: str | None = None
 ) -> tuple[str | None, str | None]:
     """Return ``(tx_hash, error)`` for a contract deployment.
 

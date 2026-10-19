@@ -77,7 +77,7 @@ from ipor_fusion.readers.unpriceable import (
     MiddlewarePricedToken,
     fetch_unpriceable_priced_tokens,
 )
-from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.types import ChainId, MorphoBlueMarketId
 
 T = TypeVar("T")
 
@@ -90,6 +90,7 @@ GET_PRICE_ORACLE_MIDDLEWARE = "getPriceOracleMiddleware()"
 _logger = logging.getLogger(__name__)
 
 _NO_CONTRACT = "no contract"
+_NO_CHAIN = ChainId(0)
 
 _ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -915,7 +916,7 @@ def fetch_vault_data(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     block_number: int | None = None,
-    chain_id: int = 0,
+    chain_id: ChainId = _NO_CHAIN,
 ) -> VaultData:
     """Read the vault's state at ``block_number`` (latest when ``None``).
 
@@ -1037,7 +1038,7 @@ def _fetch_hypercore_state(
 
 def fetch_deployment_info(
     ctx: Web3Context,
-    chain_id: int,
+    chain_id: ChainId,
     vault_address: str,
     api_key: str | None,
 ) -> tuple[int | None, int | None, str | None]:

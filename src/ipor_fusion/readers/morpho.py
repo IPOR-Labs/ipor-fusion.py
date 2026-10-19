@@ -13,7 +13,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.errors import MorphoMarketNotFoundError, UnsupportedChainError
-from ipor_fusion.types import Amount, Fee, MorphoBlueMarketId, Shares
+from ipor_fusion.types import Amount, ChainId, Fee, MorphoBlueMarketId, Shares
 
 WAD = 10**18
 SECONDS_PER_YEAR = 365 * 24 * 60 * 60  # matches Morpho IRM YEAR constant
@@ -40,7 +40,7 @@ def _chain_label(chain_id: int) -> str:
     return f"{chain_id} ({name})" if name else str(chain_id)
 
 
-def morpho_blue_address(chain_id: int) -> ChecksumAddress:
+def morpho_blue_address(chain_id: ChainId) -> ChecksumAddress:
     """Morpho Blue core contract address for ``chain_id``.
 
     Raises :class:`UnsupportedChainError` when no deployment is known —
