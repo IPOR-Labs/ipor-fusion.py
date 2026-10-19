@@ -64,23 +64,34 @@ class TestExtractEvents:
 
 
 class TestParsers:
-    def test_hex_address_is_lowercase_0x_from_any_spelling(self):
+    def test_hex_address_is_lowercase_0x_from_either_prefix_case(self):
         from ipor_fusion import parse_hex_address
 
         checksum = "0xAbCdEf0123456789aBcDeF0123456789AbCdEf01"
         lower = checksum.lower()
         assert parse_hex_address(checksum) == lower
-        assert parse_hex_address(lower[2:]) == lower
+        assert parse_hex_address("0X" + lower[2:]) == lower
         assert parse_hex_address(bytes.fromhex(lower[2:])) == lower
 
-    def test_tx_hash_is_lowercase_0x_from_any_spelling(self):
+    def test_tx_hash_is_lowercase_0x_from_either_prefix_case(self):
         from ipor_fusion import parse_tx_hash
 
         digest = "AB" * 32
-        assert parse_tx_hash(digest) == "0x" + digest.lower()
+        assert parse_tx_hash("0x" + digest) == "0x" + digest.lower()
         assert parse_tx_hash(bytes.fromhex(digest)) == "0x" + digest.lower()
 
-    @pytest.mark.parametrize("value", ["0x1234", "0x" + "zz" * 20, b"\x00" * 19])
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "0x1234",
+            "0x" + "zz" * 20,
+            b"\x00" * 19,
+            "ab" * 20,
+            " 0x" + "ab" * 20,
+            "0x" + "ab" * 20 + "\n",
+            "0x0X" + "ab" * 19,
+        ],
+    )
     def test_hex_address_rejects_anything_else(self, value):
         from ipor_fusion import parse_hex_address
 

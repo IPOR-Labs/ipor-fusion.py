@@ -145,22 +145,28 @@ def _hex_digits(value: str | bytes, size: int, what: str) -> str:
         if len(value) != size:
             raise ValueError(f"invalid {what} (expected {size} bytes): {value!r}")
         return value.hex()
-    digits = value.strip().removeprefix("0x").removeprefix("0X").lower()
-    if len(digits) != 2 * size or any(c not in "0123456789abcdef" for c in digits):
-        raise ValueError(f"invalid {what} (expected {size}-byte hex): {value}")
+    digits = value[2:].lower()
+    if (
+        value[:2] not in ("0x", "0X")
+        or len(digits) != 2 * size
+        or any(c not in "0123456789abcdef" for c in digits)
+    ):
+        raise ValueError(f"invalid {what} (expected 0x and {size}-byte hex): {value!r}")
     return digits
 
 
 def parse_hex_address(value: str | bytes) -> HexAddress:
-    """An address as ``0x`` and 40 lowercase hex digits, from 20 raw bytes or hex
-    in any spelling; raises ``ValueError`` on anything else. For a checksummed
+    """An address as ``0x`` and 40 lowercase hex digits, from 20 raw bytes or
+    ``0x``-prefixed hex in any case; raises ``ValueError`` on anything else,
+    surrounding whitespace included. For a checksummed
     address use ``Web3.to_checksum_address``."""
     return HexAddress(HexStr("0x" + _hex_digits(value, 20, "address")))
 
 
 def parse_tx_hash(value: str | bytes) -> TxHash:
     """A transaction hash as ``0x`` and 64 lowercase hex digits, from 32 raw bytes
-    or hex in any spelling; raises ``ValueError`` on anything else."""
+    or ``0x``-prefixed hex in any case; raises ``ValueError`` on anything else,
+    surrounding whitespace included."""
     return TxHash(HexStr("0x" + _hex_digits(value, 32, "transaction hash")))
 
 

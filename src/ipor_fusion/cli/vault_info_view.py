@@ -102,8 +102,8 @@ def _print_vault_info(
             ctx,
             plasma_vault,
             data,
-            chain_id,
-            chain_label,
+            chain_id=chain_id,
+            chain_label=chain_label,
             resolve_name=partial(get_contract_name, chain_id, api_key=api_key),
         )
         click.echo(json.dumps(result, indent=2))

@@ -196,7 +196,12 @@ def external_state_event_name(topic: bytes | str) -> str | None:
 def _hex(value: Any) -> TxHash | None:
     if value is None:
         return None
-    return parse_tx_hash(_as_bytes(value, "transactionHash"))
+    raw = _as_bytes(value, "transactionHash")
+    if len(raw) != 32:
+        raise ExternalStateEventDecodeError(
+            f"transactionHash: {len(raw)} bytes, expected 32"
+        )
+    return parse_tx_hash(raw)
 
 
 def decode_external_state_event(log: Mapping[str, Any]) -> ExternalStateEvent | None:

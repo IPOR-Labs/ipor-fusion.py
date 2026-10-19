@@ -29,14 +29,21 @@ widths or address spelling.
 | `RoleId` | a `Roles` member (accepted as is), or `RoleId(n)`; `Roles.resolve(name)` returns one |
 | `Decimals`, `Period`, `Amount`, ... | `Decimals(8)`, `Period(0)`, `Amount(n)` (unchanged) |
 | `ChecksumAddress` | `Web3.to_checksum_address(value)` |
-| `HexAddress` | any `ChecksumAddress`, or `parse_hex_address(value)` (20 bytes or hex in any spelling → lowercase `0x` form) |
+| `HexAddress` | any `ChecksumAddress`, or `parse_hex_address(value)` (20 bytes or `0x`/`0X`-prefixed hex in any case → lowercase `0x` form) |
 | `MorphoBlueMarketId` | `parse_morpho_market_id(value)`: 32 bytes or hex in any spelling, always `0x` + 64 lowercase digits |
-| `TxHash` | `parse_tx_hash(value)` (32 bytes or hex in any spelling) |
+| `TxHash` | `parse_tx_hash(value)` (32 bytes or `0x`/`0X`-prefixed hex in any case) |
 | `PlasmaVaultAddress`, `FuseAddress`, `AccessManagerAddress` | from the SDK (`PlasmaVault.address`, `get_fuses()`, `get_access_manager_address()`, `FusionInstance`, discovery), or `parse_plasma_vault_address` / `parse_fuse_address` / `parse_access_manager_address(value)` for a raw address; they label the role and check nothing on chain |
 | crosschain ids | `CommandId(b)`, `MessageId(b)`, `AssetId(b)`, `OperationId(b)`, `TransferId(b)`, `ReturnRequestId(b)`, `PositionSetHash(b)` (bytes32); `ProposalId(n)`, `DeploymentRequestId(n)`, `StargateAssetId(n)` (int) |
 | HyperCore ids | `HyperCoreTokenIndex(n)` (or `USDC_TOKEN_INDEX`), `HyperCoreAsset(n)` (or `hip3_action_asset(dex, index)`), `HyperCoreOrderId(n)`, `HyperCoreClientOrderId(n)`, `MarginTableId(n)`, `HyperCoreActionId(n)`, `PayloadHash(b)` |
 | external state | `ProposalHash(b)` |
 | `BlockIdentifier` | a block number, `"latest"` / `"pending"` / ..., or a block hash |
+
+The address and hash parsers (`parse_hex_address`, `parse_tx_hash`,
+`parse_plasma_vault_address`, `parse_fuse_address`, `parse_access_manager_address`)
+validate strictly: a string needs exactly one `0x`/`0X` prefix and the exact number of
+hex digits, with no surrounding whitespace; anything else raises `ValueError`. Strip
+user input yourself before parsing it. `parse_morpho_market_id` still accepts hex
+without `0x`.
 
 `MessageId` covers both a CCIP `messageId` and a LayerZero `guid`. `AssetId` is the
 crosschain executor's `bytes32` asset id; a Stargate pool's `uint16` asset id is
@@ -49,8 +56,9 @@ a `bytes32` return (recall) request is `ReturnRequestId`.
 `build_vault_info_json`, `ensure_supported_chain` and `fetch_vault_lending_health`
 take `ChainId`. The vault is a `PlasmaVaultAddress` (see *Address roles*) in
 `validate_vault` and `fetch_deployment_info`; `build_vault_info_json(ctx, plasma_vault,
-data, chain_id, chain_label)` takes no address and labels the document with
-`plasma_vault.address`. `fetch_unpriceable_priced_tokens` takes the oracle and
+data, *, chain_id, chain_label)` takes no address, takes the chain by keyword, and
+labels the document with `plasma_vault.address` (a test that mocks `PlasmaVault`
+sets `.address`). `fetch_unpriceable_priced_tokens` takes the oracle and
 underlying as `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,
 `get_contract_name` and `get_deployment_tx` take `HexAddress` (a checksum address
 fits), and the `resolve_name` / `resolve_symbol` callbacks receive one (a callback
