@@ -20,7 +20,7 @@ from ipor_fusion.substrates import (
     decode_substrate,
     format_market_label,
 )
-from ipor_fusion.types import ChainId, MarketId
+from ipor_fusion.types import ChainId, MarketId, parse_hex_address
 from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
     VaultData,
@@ -213,7 +213,7 @@ def _format_token_amount(
     ctx: Web3Context,
     raw: int,
     token_address: HexAddress,
-    prices_usd: dict[str, float] | None = None,
+    prices_usd: dict[HexAddress, float] | None = None,
 ) -> str:
     """Format a raw on-chain amount using cached ERC-20 symbol + decimals.
 
@@ -226,7 +226,9 @@ def _format_token_amount(
         return f"{raw} raw ({symbol})"
     base = f"{_format_amount(raw, decimals)} {symbol}"
     if prices_usd:
-        usd_suffix = _format_usd(raw, decimals, prices_usd.get(token_address.lower()))
+        usd_suffix = _format_usd(
+            raw, decimals, prices_usd.get(parse_hex_address(token_address))
+        )
         return f"{base}{usd_suffix}"
     return base
 
@@ -259,7 +261,7 @@ def _print_dependency_graph(data: VaultData) -> None:
 def _print_fuse_section(
     title: str,
     fuses: Sequence[ChecksumAddress],
-    fuse_markets: dict[str, MarketId] | None,
+    fuse_markets: dict[ChecksumAddress, MarketId] | None,
     market_substrates: dict[MarketId, list[bytes]] | None,
     chain_id: ChainId,
     api_key: str | None,

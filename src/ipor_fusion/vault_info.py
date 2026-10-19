@@ -26,7 +26,7 @@ from ipor_fusion.substrates import (
     format_market_label,
     market_name,
 )
-from ipor_fusion.types import ChainId, MarketId
+from ipor_fusion.types import ChainId, MarketId, parse_hex_address
 from ipor_fusion.validation import (
     Erc20Holdings,
     Reconciliation,
@@ -335,7 +335,7 @@ def _build_breakdown_amount_json(
     ctx: Web3Context,
     raw: int,
     token_address: HexAddress,
-    prices_usd: dict[str, float] | None,
+    prices_usd: dict[HexAddress, float] | None,
 ) -> dict[str, Any]:
     """Build the JSON entry for one breakdown amount (collateral/borrow/supply/debt).
 
@@ -350,7 +350,10 @@ def _build_breakdown_amount_json(
     if decimals is not None:
         entry["decimals"] = decimals
         entry["formatted"] = _format_amount(raw, decimals)
-        if prices_usd and (price := prices_usd.get(token_address.lower())) is not None:
+        if (
+            prices_usd
+            and (price := prices_usd.get(parse_hex_address(token_address))) is not None
+        ):
             entry["usd"] = round((raw / 10**decimals) * price, 2)
     return entry
 
@@ -489,7 +492,9 @@ def health_check_lists(
 
 
 def _fuse_entry(
-    addr: str, contract: str | None, fuse_markets: dict[str, MarketId]
+    addr: ChecksumAddress,
+    contract: str | None,
+    fuse_markets: dict[ChecksumAddress, MarketId],
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {"address": addr, "contract": contract or "?"}
     if (mid := fuse_markets.get(addr)) is not None:

@@ -10,10 +10,10 @@ import time
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from eth_typing import HexAddress, HexStr
+from eth_typing import HexAddress
 
 from ipor_fusion.cache import cache_key, load_contract_cache, update_contract_cache
-from ipor_fusion.types import ChainId, TxHash
+from ipor_fusion.types import ChainId, TxHash, parse_tx_hash
 
 ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api"
 
@@ -92,7 +92,12 @@ def _fetch_contract_creation_tx(
                 data = json.loads(resp.read().decode())
             if data.get("status") == "1" and data.get("result"):
                 tx_hash = data["result"][0].get("txHash")
-                return (TxHash(HexStr(tx_hash)) if tx_hash else None), None
+                if not tx_hash:
+                    return None, None
+                try:
+                    return parse_tx_hash(tx_hash), None
+                except ValueError:
+                    return None, "malformed-tx-hash"
             result_text = str(data.get("result", "")).lower()
             if "free api access is not supported" in result_text:
                 return None, "etherscan-paid-tier-required"

@@ -142,7 +142,7 @@ class RamsesNewPositionEvent:
     amount0: Amount
     amount1: Amount
     sender: str
-    recipient: str
+    recipient: ChecksumAddress
     fee: Fee
     tick_lower: Tick
     tick_upper: Tick

@@ -239,7 +239,7 @@ class TestCrosschainSubstrateLib:
         assert arb.extra == {"chain_id": "42161"}
         undefined = decode_substrate("0x00" + "00" * 31, market_id=54)
         assert undefined.type_label == "UNDEFINED"
-        assert undefined.address == ""
+        assert undefined.address is None
         unknown = decode_substrate("0x09" + "00" * 31, market_id=54)
         assert unknown.type_label == "type=9"
 
@@ -256,7 +256,7 @@ class TestCrosschainSubstrateLib:
         raw = CrosschainSubstrateLib.substrate_to_bytes32(substrate)
         info = decode_substrate(raw, market_id=IporFusionMarkets.CROSSCHAIN)
         assert info.raw_hex == "0x" + raw.hex()
-        assert info.address == ""
+        assert info.address is None
         assert info.type_label == substrate.substrate_type.name
         assert info.is_error is True
         assert info.extra == {"chain_id": str(substrate.chain_id)}

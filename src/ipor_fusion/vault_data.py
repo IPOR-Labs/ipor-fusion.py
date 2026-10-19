@@ -22,7 +22,7 @@ from eth_typing import HexAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
-from web3.types import ChecksumAddress, HexStr
+from web3.types import ChecksumAddress
 
 from ipor_fusion.cache import (
     cache_key,
@@ -83,6 +83,7 @@ from ipor_fusion.types import (
     ChainId,
     MarketId,
     MorphoBlueMarketId,
+    parse_hex_address,
     parse_morpho_market_id,
 )
 
@@ -124,8 +125,8 @@ class FeeData:
     management_fee_vault_bps: int | None = None
     management_fee_last_update: int | None = None
     unrealized_management_fee: int | None = None
-    fee_manager: str | None = None
-    ipor_dao_fee_recipient: str | None = None
+    fee_manager: ChecksumAddress | None = None
+    ipor_dao_fee_recipient: ChecksumAddress | None = None
     deposit_fee_wad: int | None = None
     performance_fee_manager_bps: int | None = None
     management_fee_manager_bps: int | None = None
@@ -167,14 +168,14 @@ class VaultData:
     supply_cap: int
     asset: ChecksumAddress
     asset_symbol: str
-    access_manager: str
-    price_oracle_addr: str
-    rewards_manager: str | None
-    withdraw_manager: str | None
+    access_manager: ChecksumAddress
+    price_oracle_addr: ChecksumAddress
+    rewards_manager: ChecksumAddress | None
+    withdraw_manager: ChecksumAddress | None
     asset_price_usd: float | None
-    fuses: list
-    balance_fuses: list
-    instant_fuses: list
+    fuses: list[ChecksumAddress]
+    balance_fuses: list[BalanceFuse]
+    instant_fuses: list[ChecksumAddress]
     # Underlying asset balance held directly on the vault (raw). Part of
     # totalAssets via ERC4626 base accounting; by design NOT tracked as an
     # ERC20_VAULT_BALANCE substrate, so it is read directly in
@@ -206,7 +207,7 @@ class VaultData:
     # breakdowns (Morpho loan/collateral, Aave reserve assets). Sourced from the
     # vault's PriceOracleMiddleware. Missing keys mean the oracle has no source
     # configured for that token.
-    token_prices_usd: dict[str, float] | None = None
+    token_prices_usd: dict[HexAddress, float] | None = None
     # Middleware-priced tokens of granted substrates the PriceOracleMiddleware
     # cannot price (see readers.unpriceable). None when the check did not run.
     unpriceable_priced_tokens: list[MiddlewarePricedToken] | None = None
@@ -215,7 +216,7 @@ class VaultData:
     # are absent from the dict — used to detect orphan markets (action fuses
     # with no matching balance fuse, which silently drop positions from
     # totalAssets).
-    fuse_markets: dict[str, MarketId] | None = None
+    fuse_markets: dict[ChecksumAddress, MarketId] | None = None
     # Substrates registered for each balance-fuse market. Allows the fuse
     # tables to report substrate counts per fuse without duplicating reads.
     market_substrates: dict[MarketId, list[bytes]] | None = None
@@ -665,7 +666,7 @@ def _fetch_breakdown_token_prices(
     ctx: Web3Context,
     oracle: PriceOracleMiddleware,
     addresses: set[ChecksumAddress],
-) -> dict[str, float] | None:
+) -> dict[HexAddress, float] | None:
     """Fetch USD prices for breakdown tokens in one batch via the vault's oracle.
 
     Returns a dict keyed by lowercase token address. Tokens with no oracle
@@ -678,7 +679,7 @@ def _fetch_breakdown_token_prices(
         [oracle.get_asset_price(addr) for addr in ordered]
     )
     result = {
-        addr.lower(): price.readable()
+        parse_hex_address(addr): price.readable()
         for addr, price in zip(ordered, prices, strict=True)
         if price is not None
     }
@@ -1064,7 +1065,7 @@ def fetch_deployment_info(
         return None, None, error
 
     try:
-        tx = ctx.web3.eth.get_transaction(HexStr(tx_hash))
+        tx = ctx.web3.eth.get_transaction(tx_hash)
         block_number: int = tx["blockNumber"]
         block_info = ctx.web3.eth.get_block(block_number)
         timestamp: int = block_info["timestamp"]

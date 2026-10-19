@@ -19,7 +19,9 @@ from ipor_fusion import (
     fetch_vault_data,
     format_market_label,
     market_name,
+    parse_hex_address,
     parse_morpho_market_id,
+    parse_tx_hash,
     validate_vault,
 )
 from ipor_fusion.chains import ensure_supported_chain
@@ -40,6 +42,7 @@ from ipor_fusion.crosschain.stargate.contracts import (
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
 )
+from ipor_fusion.errors import TransactionError
 from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.morpho_api import fetch_market, fetch_vault
 from ipor_fusion.readers.morpho import morpho_blue_address
@@ -82,6 +85,8 @@ def lookups() -> None:
     format_market_label(IporFusionMarkets.ERC20_VAULT_BALANCE)
     market_name(MarketId(100_001))
     get_contract_name(ETHEREUM, VAULT)
+    get_contract_name(ETHEREUM, parse_hex_address(VAULT.lower()))
+    TransactionError("reverted", tx_hash=parse_tx_hash("0x" + "ab" * 32))
     morpho_blue_address(ETHEREUM)
     fetch_vault(VAULT, ETHEREUM)
     fetch_market(parse_morpho_market_id("0x" + "ab" * 32), ETHEREUM)

@@ -4,7 +4,7 @@
 vault/oracle/token addresses and transaction hashes a nominal type
 (`typing.NewType`) across the public API, and checks the SDK, the examples and a
 typed client with pyright's `reportArgumentType`. Other fields keep their types
-(e.g. `VaultData.access_manager` is still `str`).
+(e.g. symbols, names and URLs stay `str`).
 
 The wrappers do not change values: `ChainId(1)` is `1` at runtime. The
 [behavior changes](#behavior-changes) below, however, apply to **every** caller,
@@ -15,7 +15,7 @@ type-checked or not. In particular, `fetch_market` and
 returns already carry their type and go back in unwrapped.
 
 All types are importable from `ipor_fusion` (and `ipor_fusion.types`);
-`ChecksumAddress`, `HexAddress` and `HexStr` come from `eth_typing`,
+`ChecksumAddress` and `HexAddress` come from `eth_typing`,
 `BlockIdentifier` from `web3.types`, and `USDC_TOKEN_INDEX` / `hip3_action_asset` from
 `ipor_fusion.fuses.hypercore`. The wrappers label values; they do not validate byte
 widths or address spelling.
@@ -29,9 +29,9 @@ widths or address spelling.
 | `RoleId` | a `Roles` member (accepted as is), or `RoleId(n)`; `Roles.resolve(name)` returns one |
 | `Decimals`, `Period`, `Amount`, ... | `Decimals(8)`, `Period(0)`, `Amount(n)` (unchanged) |
 | `ChecksumAddress` | `Web3.to_checksum_address(value)` |
-| `HexAddress` | any `ChecksumAddress`, or `HexAddress(HexStr("0x..."))` for a lowercase address |
+| `HexAddress` | any `ChecksumAddress`, or `parse_hex_address(value)` (20 bytes or hex in any spelling → lowercase `0x` form) |
 | `MorphoBlueMarketId` | `parse_morpho_market_id(value)`: 32 bytes or hex in any spelling, always `0x` + 64 lowercase digits |
-| `TxHash` | `TxHash(HexStr("0x..."))` |
+| `TxHash` | `parse_tx_hash(value)` (32 bytes or hex in any spelling) |
 | crosschain ids | `CommandId(b)`, `MessageId(b)`, `AssetId(b)`, `OperationId(b)`, `TransferId(b)`, `ReturnRequestId(b)`, `PositionSetHash(b)` (bytes32); `ProposalId(n)`, `DeploymentRequestId(n)`, `StargateAssetId(n)` (int) |
 | HyperCore ids | `HyperCoreTokenIndex(n)` (or `USDC_TOKEN_INDEX`), `HyperCoreAsset(n)` (or `hip3_action_asset(dex, index)`), `HyperCoreOrderId(n)`, `HyperCoreClientOrderId(n)`, `MarginTableId(n)`, `HyperCoreActionId(n)`, `PayloadHash(b)` |
 | external state | `ProposalHash(b)` |
@@ -59,11 +59,17 @@ and the `dependency_graph` helpers (`compute_update_reach`, `compute_update_grou
 `find_orphan_fuse_markets`, `find_markets_missing_erc20_dependency`).
 A custom `VaultState` implementation also annotates `asset` as `ChecksumAddress` and
 its `unpriceable_priced_tokens` items' `market_id` as `MarketId`
-(`UnpriceableToken`). `VaultData.asset`, `VaultValidation.vault` / `asset` are
-`ChecksumAddress`,
+(`UnpriceableToken`), and `price_oracle_addr` / `fuse_markets` keys as
+`ChecksumAddress`. `VaultData.asset`, `access_manager`, `price_oracle_addr`,
+`rewards_manager`, `withdraw_manager`, `fuses` and `instant_fuses` (and the
+`fuse_markets` keys), `FeeData.fee_manager` / `ipor_dao_fee_recipient`, and
+`VaultValidation.vault` / `asset` are `ChecksumAddress`; `VaultData.balance_fuses`
+is `list[BalanceFuse]` and `token_prices_usd` is keyed by `HexAddress` (lowercase);
+the Uniswap V3 / Ramses V2 new-position events' `recipient` is `ChecksumAddress`;
 `VaultValidation.chain_id` is `ChainId`; `LendingMarketHealth.market_id` and
-`MiddlewarePricedToken.market_id` are `MarketId`; `Erc20Holding.address` and
-`SubstrateInfo.address` are `HexAddress` (still `""` when a substrate has no address).
+`MiddlewarePricedToken.market_id` are `MarketId`; `Erc20Holding.address` is
+`HexAddress`, and `SubstrateInfo.address` is `HexAddress | None` (`None`, no longer
+`""`, when a substrate carries no address).
 `LegacyPriceOracleMiddleware` takes `base_currency_decimals: Decimals`.
 `get_logs_adaptive(chain_id=)` and `LogSource.get_logs` take `ChainId`;
 `quote_ccip_native_fee(block=)` and `OracleMappingReader.asset_source_events` take a
@@ -112,7 +118,8 @@ takes a `ProposalHash`; `BalanceProposal.proposal_hash` and `NavMark.proposal_ha
 are `ProposalHash`; `ExternalStateEvent.transaction_hash` is a `TxHash`.
 
 **Errors and explorer.** `TransactionError(tx_hash=)` takes a `TxHash`,
-`LogScanError(address=)` a `ChecksumAddress`; `get_deployment_tx` returns a `TxHash`.
+`LogScanError(address=)` a `ChecksumAddress`; `get_deployment_tx` returns a `TxHash`
+(a malformed hash from Etherscan is reported as the error `malformed-tx-hash`).
 
 **MCP response models** (Python constructors only; the JSON schemas are unchanged
 except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
@@ -128,6 +135,8 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 
 - The MCP `vault_info` document reports the vault address checksummed (the CLI
   already did).
+- `SubstrateInfo.address` is `None` instead of `""` for a substrate without an
+  address (truthiness checks are unaffected; the JSON documents already omitted it).
 - `fusion market meta-morpho --json` and the MCP `market_meta_morpho` tool report
   `null` instead of `""` for an absent curator, guardian or fee recipient; the MCP
   schema's `curator` is nullable.

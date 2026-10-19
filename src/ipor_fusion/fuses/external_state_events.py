@@ -28,11 +28,11 @@ from typing import Any
 
 from eth_abi import decode
 from eth_abi.exceptions import DecodingError
-from eth_typing import ChecksumAddress, HexStr
+from eth_typing import ChecksumAddress
 from web3 import Web3
 from web3.types import TxReceipt
 
-from ipor_fusion.types import TxHash
+from ipor_fusion.types import TxHash, parse_tx_hash
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,7 +196,7 @@ def external_state_event_name(topic: bytes | str) -> str | None:
 def _hex(value: Any) -> TxHash | None:
     if value is None:
         return None
-    return TxHash(HexStr("0x" + _as_bytes(value, "transactionHash").hex()))
+    return parse_tx_hash(_as_bytes(value, "transactionHash"))
 
 
 def decode_external_state_event(log: Mapping[str, Any]) -> ExternalStateEvent | None:
