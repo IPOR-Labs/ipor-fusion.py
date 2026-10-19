@@ -127,10 +127,9 @@ def _clone_receipt(*, component_index: int = 138):
 
 
 def _bare_factory() -> FusionFactory:
-    """Build a FusionFactory without a Web3Context. Delegates to the
-    public `encoder()` classmethod — `.calldata` only reads `Call.data`
-    so the placeholder ctx is fine."""
-    return FusionFactory.encoder(BASE_FUSION_FACTORY)
+    """Build a FusionFactory without a Web3Context: `.calldata` only reads
+    `Call.data`."""
+    return FusionFactory(None, BASE_FUSION_FACTORY)
 
 
 # --- pure encoding ----------------------------------------------------------
@@ -393,10 +392,10 @@ def test_decode_clone_calldata_rejects_short_calldata():
         FusionFactory.decode_clone_calldata(b"\x86\x97\xb1")
 
 
-def test_encoder_classmethod_builds_ctx_less_wrapper():
-    """`FusionFactory.encoder(addr)` returns a wrapper with no ctx but a
+def test_ctx_less_wrapper_builds_calldata():
+    """`FusionFactory(None, addr)` returns a wrapper with no ctx but a
     real address; `.calldata` works, but `.call()` / `.send()` raise."""
-    f = FusionFactory.encoder(BASE_FUSION_FACTORY)
+    f = FusionFactory(None, BASE_FUSION_FACTORY)
     assert f.address == BASE_FUSION_FACTORY
     call = f.clone(
         asset_name="a",
@@ -407,24 +406,9 @@ def test_encoder_classmethod_builds_ctx_less_wrapper():
     )
     # calldata works without ctx
     assert call.calldata[:4] == FusionFactory.CLONE_SELECTOR
-    # .call() requires a ctx — should refuse since encoder()'s placeholder is None
+    # .call() requires a ctx
     with pytest.raises(ValueError, match="Web3Context required"):
         call.call()
-
-
-def test_encoder_classmethod_defaults_to_zero_address():
-    """No address arg → placeholder zero address. Calldata still encodes
-    fine because `to` is irrelevant to ABI-encoded args."""
-    f = FusionFactory.encoder()
-    assert int(f.address, 16) == 0
-    data = f.clone(
-        asset_name="a",
-        asset_symbol="b",
-        underlying_token=BASE_USDC,
-        redemption_delay_seconds=0,
-        owner=SAMPLE_OWNER,
-    ).calldata
-    assert data[:4] == FusionFactory.CLONE_SELECTOR
 
 
 def test_clone_calldata_known_layout():

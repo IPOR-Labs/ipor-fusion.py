@@ -446,13 +446,13 @@ class ExternalStateExecutor(ContractWrapper):
         The hash is bound to a chain. `chain_id` defaults to this wrapper's
         context; pass it explicitly when the context that executes the call is
         not the one the wrapper was built with (`Call.call(other_ctx)`), or to
-        read through a ctx-less `encoder()` instance.
+        read through a wrapper built with `ctx=None`.
         """
         account = Web3.to_checksum_address(balance_account)
 
         def to_proposal(values: tuple[int, str, int, int]) -> BalanceProposal | None:
             # Both hash inputs first, before the empty-slot return. Resolved
-            # inside the decoder so a calldata-only `encoder()` wrapper keeps
+            # inside the decoder so a calldata-only (`ctx=None`) wrapper keeps
             # working like every sibling, but ahead of the sentinel so a
             # misconfigured poller fails on its first read rather than on the
             # first read that happens to find a proposal.
@@ -487,29 +487,28 @@ class ExternalStateExecutor(ContractWrapper):
         )
 
     def _require_address(self) -> ChecksumAddress:
-        """This executor's address, or a clear error on an address-less
-        `encoder()`.
+        """This executor's address, or a clear error for the zero address.
 
-        The other half of the hash's binding, and the placeholder zero address
-        is not a usable stand-in for it: it stamps a hash bound to no contract,
+        The other half of the hash's binding, and the zero address is not a
+        usable stand-in for it: it stamps a hash bound to no contract,
         and it matches only a log claiming to come from none."""
         if self._address == ZERO_ADDRESS:
             raise ValueError(
                 "executor address required: the proposal hash binds it and the "
                 "event readers match it against a log's emitter, so build this "
-                "wrapper with an address rather than a bare encoder()."
+                "wrapper with the executor's address, not the zero address."
             )
         return self._address
 
     def _require_chain_id(self, override: ChainId | None = None) -> ChainId:
         """`override` if the caller named one, else the wrapper's chain, else a
-        clear error on a ctx-less `encoder()`."""
+        clear error on a wrapper built with `ctx=None`."""
         if override is not None:
             return override
         if self._ctx is None:
             raise ValueError(
                 "Web3Context required: the proposal hash is bound to a chain id, "
-                "so build this wrapper with a ctx rather than via encoder(), "
+                "so build this wrapper with a ctx rather than ctx=None, "
                 "or pass chain_id= to this method."
             )
         return self._ctx.chain_id
@@ -657,7 +656,7 @@ class ExternalStateExecutor(ContractWrapper):
 
         The hash is bound to a chain. `chain_id` defaults to this wrapper's
         context; a caller with no context -- decoding indexer or `get_logs`
-        rows -- reaches this through `encoder(address)` and passes `chain_id`
+        rows -- builds it with `ExternalStateExecutor(None, address)` and passes `chain_id`
         explicitly. Either way the whole path is pure, with no RPC.
 
         `find_balance_proposed` applies the same emitter check while scanning.
@@ -739,7 +738,7 @@ class ExternalStateExecutor(ContractWrapper):
 
         The hash is bound to a chain. `chain_id` defaults to this wrapper's
         context; pass it explicitly to verify against a different chain, or to
-        scan through a ctx-less `encoder()` instance.
+        scan through a wrapper built with `ctx=None`.
 
         Over a `get_logs` range this still answers a different question than
         `pending_proposals`: a proposal may have been confirmed since, which

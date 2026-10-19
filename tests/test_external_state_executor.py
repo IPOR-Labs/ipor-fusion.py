@@ -331,7 +331,7 @@ class TestPendingProposals:
         # A genuinely empty slot.
         assert _observed(executor.pending_proposals(BALANCE_ACCOUNT), empty) is None
         # A decode that raised: no ctx, so the chain-bound hash cannot be built.
-        ctxless = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        ctxless = ExternalStateExecutor(None, EXECUTOR_ADDR)
         assert _observed(ctxless.pending_proposals(BALANCE_ACCOUNT), populated) is None
 
     def test_none_depends_only_on_the_proposer(self):
@@ -352,19 +352,19 @@ class TestPendingProposals:
         assert proposal is not None
         assert proposal.value == Amount(0)
 
-    def test_encoder_instance_still_builds_calldata(self):
-        # encoder() promises calldata from any builder; the chain-bound hash is
+    def test_ctxless_instance_still_builds_calldata(self):
+        # A ctx-less wrapper promises calldata from any builder; the chain-bound hash is
         # resolved lazily so this method keeps that promise like its siblings.
-        call = ExternalStateExecutor.encoder(EXECUTOR_ADDR).pending_proposals(
+        call = ExternalStateExecutor(None, EXECUTOR_ADDR).pending_proposals(
             BALANCE_ACCOUNT
         )
 
         assert call.calldata[:4] == Web3.keccak(text="pendingProposals(address)")[:4]
 
-    def test_encoder_instance_raises_only_on_decode(self):
+    def test_ctxless_instance_raises_only_on_decode(self):
         # ...and without a ctx or an explicit chain_id there is nothing to bind
         # the hash to, so executing it fails.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         with pytest.raises(ValueError, match="Web3Context required"):
             executor.pending_proposals(BALANCE_ACCOUNT).call(self._slot_ctx())
@@ -425,10 +425,10 @@ class TestPendingProposals:
         assert proposal.nonce == 2**256 - 1
         assert proposal.proposed_at == 2**64 - 1
 
-    def test_explicit_chain_id_frees_an_encoder_instance(self):
+    def test_explicit_chain_id_frees_a_ctxless_instance(self):
         # Given a chain id there is nothing left to need a ctx for, so a
         # calldata-only wrapper can read through any context.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         proposal = executor.pending_proposals(
             BALANCE_ACCOUNT, chain_id=self.CHAIN
@@ -437,11 +437,11 @@ class TestPendingProposals:
         assert proposal is not None
         assert proposal.nonce == self.NONCE
 
-    def test_an_addressless_encoder_refuses_to_stamp_a_hash(self):
-        # The placeholder is the zero address, so the hash would bind no
+    def test_a_zero_address_executor_refuses_to_stamp_a_hash(self):
+        # The zero address as executor would make the hash bind no
         # contract: a plausible 32 bytes that confirms nothing anywhere. The
         # chain id gets a raise for the same reason; so does this half.
-        executor = ExternalStateExecutor.encoder()
+        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
             executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN).call(
@@ -452,7 +452,7 @@ class TestPendingProposals:
         # Both hash inputs resolve before the empty-slot sentinel, so a
         # misconfigured poller fails on its first read rather than passing
         # every quiet one and dying on the first proposal that exists.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         with pytest.raises(ValueError, match="Web3Context required"):
             executor.pending_proposals(BALANCE_ACCOUNT).call(
@@ -745,8 +745,8 @@ class TestParseBalanceProposed:
 
     def test_needs_no_ctx(self):
         # Decoding indexer rows or a get_logs range must not require an RPC: a
-        # ctx-less encoder() wrapper plus an explicit chain id still verifies.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        # ctx-less wrapper plus an explicit chain id still verifies.
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         parsed = executor.parse_balance_proposed(
             _proposed_log(as_strings=True), chain_id=EVENT_CHAIN
@@ -754,21 +754,21 @@ class TestParseBalanceProposed:
 
         assert parsed.nonce == _EVENT_NONCE
 
-    def test_an_addressless_encoder_refuses_to_match_an_emitter(self):
-        # Against the zero placeholder the emitter check would accept a forged
+    def test_a_zero_address_executor_refuses_to_match_an_emitter(self):
+        # Against the zero address the emitter check would accept a forged
         # row claiming to come from no contract, then verify its hash under
         # executor 0. Refuse before either check runs.
-        executor = ExternalStateExecutor.encoder()
+        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
         log = _proposed_log(as_strings=False, address=ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
             executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
-    def test_a_ctxless_encoder_needs_an_explicit_chain_id(self):
+    def test_a_ctxless_wrapper_needs_an_explicit_chain_id(self):
         # Mirrors pending_proposals: the hash is chain-bound, so a wrapper with
         # neither a ctx nor a chain_id has nothing to verify against and must
         # say so rather than skipping the check.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         with pytest.raises(ValueError, match="Web3Context required"):
             executor.parse_balance_proposed(_proposed_log(as_strings=False))
@@ -777,7 +777,7 @@ class TestParseBalanceProposed:
         # Both conditions hold at once here. The emitter must win: a ctx-less
         # caller debugging a real emitter mismatch would otherwise be sent
         # chasing a missing chain id that is not the actual problem.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
         log = _proposed_log(as_strings=False, address=OTHER_EMITTER)
 
         with pytest.raises(ValueError, match="was not emitted by"):
@@ -1110,10 +1110,10 @@ class TestFindBalanceProposed:
         with pytest.raises(ValueError, match="malformed BalanceProposed data"):
             executor.find_balance_proposed([log])
 
-    def test_an_addressless_encoder_refuses_to_scan(self):
-        # Same guard as the single-log reader: a zero placeholder matches only
+    def test_a_zero_address_executor_refuses_to_scan(self):
+        # Same guard as the single-log reader: the zero address matches only
         # a row claiming no emitter, which is never a real one.
-        executor = ExternalStateExecutor.encoder()
+        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
             executor.find_balance_proposed([_proposed_log(as_strings=False)])
@@ -1149,18 +1149,18 @@ class TestFindBalanceProposed:
 
         assert found == _EXPECTED_PROPOSAL
 
-    def test_scans_through_a_ctxless_encoder_given_a_chain_id(self):
+    def test_scans_through_a_ctxless_wrapper_given_a_chain_id(self):
         # The hash check needs a chain; an explicit one frees a calldata-only
         # wrapper, exactly as it does for the other two readers.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
         logs = [_proposed_log(as_strings=True)]
 
         assert executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN) == (
             _EXPECTED_PROPOSAL
         )
 
-    def test_a_ctxless_encoder_needs_an_explicit_chain_id(self):
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+    def test_a_ctxless_wrapper_needs_an_explicit_chain_id(self):
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         with pytest.raises(ValueError, match="Web3Context required"):
             executor.find_balance_proposed([_proposed_log(as_strings=False)])

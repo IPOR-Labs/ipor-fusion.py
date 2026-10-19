@@ -218,12 +218,14 @@ the lifecycle matrix follows that.
   `simulation` (`VaultSimulator`, eth_simulateV1, `erc20_balance_slot` and ERC-20 balance
   overrides), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`, `fuse_action`
-  (`FuseAction`), `address` (`_validate_not_zero_address`). `core` imports neither
+  (`FuseAction`), `fuse` (the `Fuse` base, `StakeFuse`, the shared validators and
+  substrate packers), `address` (`_validate_not_zero_address`). `core` imports neither
   `fuses` nor `crosschain` (`tests/test_sdk_layering.py`)
 - `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, crosschain/,
   erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
-  uniswap_v3, universal, `events.py`); `base.py` holds `Fuse` and the
-  shared validators and re-exports `FuseAction` and `ZERO_ADDRESS` (from `types`)
+  uniswap_v3, universal, `events.py`); `base.py` re-exports the `core/fuse.py` base and validators,
+  `FuseAction` and `ZERO_ADDRESS` (from `types`). A fuse is a value: equality and
+  hash cover its class and every attribute it stores
 - `crosschain/` — crosschain Plasma Vaults (executor on the hub chain, dispatcher at
   the same address on each spoke chain), split like the contracts: shared `messages`
   (`Command`, `MsgType`, envelopes), `contracts` (wrapper bases), `transport`
@@ -276,7 +278,9 @@ or examples.
 - `Call[T]` (`core/contract.py`): every `ContractWrapper` method (one per
   Solidity function) returns a `Call` instead of executing. `.call()` runs
   `eth_call` and decodes to `T`; `.send()` signs and submits, returning a
-  `TxReceipt`; `.calldata` hands the bytes to an external signer;
+  `TxReceipt`; `.calldata` hands the bytes to an external signer (a wrapper
+  built with `ctx=None`, e.g. `PlasmaVault(None, address)`, builds calldata
+  offline; there is no separate encoder factory);
   `.build_transaction()` / `Web3Context.estimate_gas` preview without signing.
   A `Call` without `output_types` (a write) raises on `.call()`. The same
   `Call` feeds `VaultSimulator.observe`, so reads, sends and simulations share

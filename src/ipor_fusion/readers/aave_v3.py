@@ -118,8 +118,9 @@ class AaveV3FuseReader(ContractWrapper):
 
     def pool(self) -> ChecksumAddress:
         """Return the Aave V3 Pool this fuse operates on (two reads)."""
+        ctx = self._require_ctx()
         provider = self.pool_addresses_provider().call()
-        return AaveV3PoolAddressesProvider(self._ctx, provider).get_pool().call()
+        return AaveV3PoolAddressesProvider(ctx, provider).get_pool().call()
 
 
 class AaveV3Reader(ContractWrapper):
@@ -155,6 +156,7 @@ class AaveV3Reader(ContractWrapper):
         stable debt is zeroed on reserves that dropped it, and every token is
         zero when `asset` is not listed on this Pool.
         """
+        ctx = self._require_ctx()
         tokens = self.reserve_tokens(asset).call()
         reserve_tokens = (
             tokens.a_token,
@@ -163,8 +165,8 @@ class AaveV3Reader(ContractWrapper):
         )
         listed = [token for token in reserve_tokens if token.lower() != ZERO_ADDRESS]
         balances = iter(
-            Multicall3(self._ctx).aggregate(
-                [ERC20(self._ctx, token).balance_of(user) for token in listed]
+            Multicall3(ctx).aggregate(
+                [ERC20(ctx, token).balance_of(user) for token in listed]
             )
         )
         supply, variable_debt, stable_debt = (

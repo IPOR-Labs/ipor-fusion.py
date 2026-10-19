@@ -93,7 +93,7 @@ The Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` 
 `quote_ccip_native_fee(block=)` and `OracleMappingReader.asset_source_events` take a
 `BlockIdentifier`.
 
-**Address roles.** `PlasmaVault(ctx, address)`, `PlasmaVault.encoder(address)`,
+**Address roles.** `PlasmaVault(ctx, address)` (`ctx` may be `None`, see below),
 `validate_vault`, `fetch_deployment_info`, the HyperCore, lending-health and
 oracle-mapping readers, `read_external_state`, `VaultSimulator(vault=)`,
 `CrosschainSimulator`, crosschain discovery, the hub-manager inputs
@@ -194,6 +194,35 @@ are `ProposalHash`; `ExternalStateEvent.transaction_hash` is a `TxHash`.
 except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 `MarketId`. Calling an MCP tool function directly from Python takes `ChainId`.
 
+**Offline wrappers.** `ContractWrapper.encoder()` (and the `PlasmaVault` /
+`AccessManager` overrides) is gone. Every wrapper constructor takes
+`ctx: Web3Context | None`, so build an offline wrapper with the normal
+constructor and an address: `PlasmaVault(None, vault)`, `ERC20(None, token)`,
+`FusionFactory(None, factory)`, `LegacyPriceOracleMiddleware(None, oracle,
+Decimals(8))`. The address is required (there is no zero-address placeholder) and
+subclass parameters stay required, so the wrapper is fully initialized:
+`.encoder()` skipped the constructor, and a legacy oracle built that way failed to
+decode `get_asset_price`. `.calldata` still needs no context; `.call()`, `.send()`,
+`.build_transaction()` and `.estimate_gas()` raise `ValueError` until one is passed
+to them, and a method that reads the chain itself (log scans such as
+`get_balance_fuses` or `get_pending_requests`, `withdraw_manager_address`,
+`Multicall3.aggregate` / `try_aggregate`, the Aave V3 and Morpho position reads)
+raises `ValueError("Web3Context required: <wrapper> at <address> ...")` instead of
+an `AttributeError` on `None`. `ExternalStateExecutor` still refuses the zero
+address for its hash and event readers.
+
+| 3.x | 4.0 |
+|---|---|
+| `PlasmaVault.encoder(vault)` | `PlasmaVault(None, vault)` |
+| `ERC20.encoder()` (no address) | `ERC20(None, token)`: pass the real address |
+| `Cls.__new__(Cls)` + `_ctx` / `_address` | `Cls(None, address)` |
+
+**Fuse base.** `Fuse`, `StakeFuse` and the shared validators and substrate packers
+live in `ipor_fusion.core.fuse`; `ipor_fusion.fuses.base`, `ipor_fusion.fuses` and
+`ipor_fusion` re-export them, so existing imports keep working. Fuse equality and
+hash now cover every attribute a fuse stores, not only its class and address (see
+[Behavior changes](#behavior-changes)).
+
 **Moved, still importable.** `FuseAction` lives in `ipor_fusion.core.fuse_action` and
 `ZERO_ADDRESS` in `ipor_fusion.types`; both are re-exported from
 `ipor_fusion.fuses.base` and `FuseAction` from `ipor_fusion`. The CLI's internal
@@ -202,6 +231,12 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 
 ## Behavior changes
 
+- Two fuses are equal (and hash alike) only when they have the same class and the
+  same stored state. `StakeFuse` subclasses (`GearboxStakeFuse`,
+  `FluidInstadappStakingFuse`) with the same fuse address but different
+  `staking_address` were equal and collapsed in a set or dict key; they are now
+  distinct. A custom `Fuse` subclass is compared on its instance attributes, which
+  must be hashable; drop an `__eq__` / `__hash__` override that only added them.
 - The MCP `vault_info` document reports the vault address checksummed (the CLI
   already did).
 - `SubstrateInfo.address` is `None` instead of `""` for a substrate without an

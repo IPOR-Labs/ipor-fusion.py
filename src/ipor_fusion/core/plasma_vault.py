@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar
 
 from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
@@ -148,16 +148,12 @@ class PlasmaVault(ContractWrapper):
     service, multisig), grab the bytes directly: `vault.add_fuses(...).calldata`.
     """
 
-    def __init__(self, ctx: Web3Context, address: PlasmaVaultAddress):
+    def __init__(self, ctx: Web3Context | None, address: PlasmaVaultAddress):
         super().__init__(ctx, address)
 
     @property
     def address(self) -> PlasmaVaultAddress:
         return PlasmaVaultAddress(self._address)
-
-    @classmethod
-    def encoder(cls, address: PlasmaVaultAddress | None = None) -> Self:  # type: ignore[override]
-        return super().encoder(address)
 
     def execute(self, actions: list[FuseAction]) -> Call[None]:
         data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
@@ -573,7 +569,7 @@ class PlasmaVault(ContractWrapper):
         ]
 
     def _address_at(self, slot: int) -> ChecksumAddress:
-        return _address_in_word(self._ctx.get_storage_at(self._address, slot))
+        return _address_in_word(self._require_ctx().get_storage_at(self._address, slot))
 
     def _is_own_withdraw_manager(self, candidate: ChecksumAddress) -> bool:
         call = Call(
@@ -650,7 +646,7 @@ class PlasmaVault(ContractWrapper):
             Web3.keccak(text="WithdrawManagerChanged(address)")
         ).to_0x_hex()
         return list(
-            self._ctx.get_logs(
+            self._require_ctx().get_logs(
                 contract_address=self._address, topics=[event_signature_hash]
             )
         )
@@ -658,7 +654,7 @@ class PlasmaVault(ContractWrapper):
     def _get_balance_fuse_events(self) -> list[LogReceipt]:
         """BalanceFuseAdded and BalanceFuseRemoved logs, from one eth_getLogs."""
         return list(
-            self._ctx.get_logs(
+            self._require_ctx().get_logs(
                 contract_address=self._address,
                 topics=[
                     [

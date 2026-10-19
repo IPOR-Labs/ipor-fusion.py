@@ -120,7 +120,7 @@ class WithdrawManager(ContractWrapper):
 
         Replays `WithdrawRequestUpdated` from ``from_block``, or from the
         WithdrawManager's creation when None."""
-        current_timestamp = self._ctx.get_block()["timestamp"]
+        current_timestamp = self._require_ctx().get_block()["timestamp"]
         events = self._get_withdraw_request_updated_events(from_block=from_block)
 
         accounts: list[str] = []
@@ -137,7 +137,7 @@ class WithdrawManager(ContractWrapper):
 
         checksummed = [Web3.to_checksum_address(account) for account in accounts]
         calls = [self.request_info(account) for account in checksummed]
-        infos = Multicall3(self._ctx).try_aggregate(calls)
+        infos = Multicall3(self._require_ctx()).try_aggregate(calls)
         results: list[AccountRequest] = []
         for account, call, req in zip(checksummed, calls, infos, strict=True):
             if req is None:
@@ -164,7 +164,7 @@ class WithdrawManager(ContractWrapper):
         self,
         from_block: BlockNumber | None = None,
     ) -> PendingRequestsInfo:
-        current_timestamp = self._ctx.get_block()["timestamp"]
+        current_timestamp = self._require_ctx().get_block()["timestamp"]
         requests = self.get_pending_requests(from_block=from_block)
         total = sum(r.shares for r in requests)
         return PendingRequestsInfo(
@@ -180,7 +180,7 @@ class WithdrawManager(ContractWrapper):
             Web3.keccak(text="WithdrawRequestUpdated(address,uint256,uint32)")
         ).to_0x_hex()
         return list(
-            self._ctx.get_logs(
+            self._require_ctx().get_logs(
                 contract_address=self._address,
                 topics=[event_signature_hash],
                 from_block=from_block,

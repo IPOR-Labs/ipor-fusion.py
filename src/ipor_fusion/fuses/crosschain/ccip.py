@@ -22,15 +22,16 @@ from enum import IntEnum
 
 from eth_typing import ChecksumAddress
 
+from ipor_fusion.core.fuse import Fuse
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.crosschain.ccip.contracts import CcipRouteConfig
 from ipor_fusion.crosschain.messages import COMMAND_TUPLE_TYPE, EMPTY_COMMAND, Command
-from ipor_fusion.fuses.base import ZERO_ADDRESS, Fuse, FuseAction
 from ipor_fusion.fuses.crosschain.base import (
     CrosschainCommandFuse,
     CrosschainSupplyFuse,
     SendParams,
 )
-from ipor_fusion.types import Amount, ChainId
+from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId
 
 
 @dataclass(frozen=True, slots=True)
