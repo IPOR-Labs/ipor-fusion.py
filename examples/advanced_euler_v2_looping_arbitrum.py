@@ -37,6 +37,8 @@ from web3 import Web3
 from ipor_fusion import (
     ERC20,
     AccessManager,
+    Call,
+    FusionFactory,
     PlasmaVault,
     PriceOracleMiddlewareManager,
     Roles,
@@ -46,8 +48,6 @@ from ipor_fusion import (
     is_simulate_v1_supported,
     parse_fuse_address,
 )
-from ipor_fusion.core import FusionFactory
-from ipor_fusion.core.contract import Call
 from ipor_fusion.fuses import (
     EulerV2BorrowFuse,
     EulerV2CollateralFuse,

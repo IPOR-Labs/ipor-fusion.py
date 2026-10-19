@@ -14,11 +14,10 @@ type-checked or not. In particular, `fetch_market` and
 (pyright, mypy, Pylance) also wraps literals and raw values as below. Values the SDK
 returns already carry their type and go back in unwrapped.
 
-All types are importable from `ipor_fusion` (and `ipor_fusion.types`);
-`ChecksumAddress` and `HexAddress` come from `eth_typing`,
-`BlockIdentifier` from `web3.types`, and `USDC_TOKEN_INDEX` / `hip3_action_asset` from
-`ipor_fusion.fuses.hypercore`. The wrappers label values; they do not validate byte
-widths or address spelling.
+All types are importable from `ipor_fusion` (and `ipor_fusion.types`), as are
+`USDC_TOKEN_INDEX` and `hip3_action_asset`; `ChecksumAddress` and `HexAddress` come
+from `eth_typing` and `BlockIdentifier` from `web3.types`. The wrappers label values;
+they do not validate byte widths or address spelling.
 
 ## Building the types
 
@@ -51,6 +50,12 @@ crosschain executor's `bytes32` asset id; a Stargate pool's `uint16` asset id is
 a `bytes32` return (recall) request is `ReturnRequestId`.
 
 ## What changed, by area
+
+**Public API.** 4.0 declares it: `ipor_fusion.__all__`, which now also exports the
+names earlier reachable only by module path (`FusionFactory`, `FusionInstance`,
+`fetch_market`, `resolve_token_symbol`, the crosschain codecs, ...). Import from
+`ipor_fusion`: a module path outside the README's list (*Public API and stability*)
+still works but is internal.
 
 **Vault reads and validation.** `fetch_vault_data(chain_id=)`, `fetch_deployment_info`,
 `build_vault_info_json`, `ensure_supported_chain` and `fetch_vault_lending_health`

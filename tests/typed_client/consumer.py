@@ -1,5 +1,6 @@
-"""A typed client of the public SDK API, checked by pyright with
-``reportArgumentType`` on (``executionEnvironments`` in ``pyproject.toml``).
+"""A typed client of the public SDK API, imported from ``ipor_fusion`` only and
+checked by pyright with ``reportArgumentType`` on (``executionEnvironments`` in
+``pyproject.toml``).
 
 Public inputs take the nominal types: ``ChainId(...)``, ``MarketId`` (every
 ``IporFusionMarkets`` member is one), ``RoleId`` or a ``Roles`` member, and a
@@ -10,57 +11,50 @@ executed.
 from eth_typing import ChecksumAddress
 
 from ipor_fusion import (
+    AccessManager,
+    Amount,
+    AssetId,
+    CcipCrosschainDispatcher,
+    CcipCrosschainExecutor,
+    CcipCrosschainFactory,
+    ChainId,
+    Command,
+    CommandId,
+    CrosschainDispatcher,
+    CrosschainExecutor,
+    CrosschainFactory,
     IporFusionMarkets,
+    MarketId,
+    Period,
+    PlasmaVault,
+    ProposalId,
+    RewardsManager,
+    RoleId,
     Roles,
+    StargateCrosschainDispatcher,
+    StargateCrosschainExecutor,
+    StargateCrosschainFactory,
+    TransactionError,
+    Web3Context,
     build_vault_info_json,
     decode_substrate,
+    ensure_supported_chain,
     fetch_deployment_info,
+    fetch_market,
+    fetch_unpriceable_priced_tokens,
+    fetch_vault,
     fetch_vault_data,
     format_market_label,
+    get_contract_name,
     market_name,
+    morpho_blue_address,
     parse_hex_address,
     parse_morpho_market_id,
     parse_plasma_vault_address,
     parse_tx_hash,
+    resolve_token_symbol,
     validate_vault,
 )
-from ipor_fusion.chains import ensure_supported_chain
-from ipor_fusion.core.access import AccessManager
-from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.core.rewards_manager import RewardsManager
-from ipor_fusion.crosschain.ccip.contracts import (
-    CcipCrosschainDispatcher,
-    CcipCrosschainExecutor,
-    CcipCrosschainFactory,
-)
-from ipor_fusion.crosschain.contracts import (
-    CrosschainDispatcher,
-    CrosschainExecutor,
-    CrosschainFactory,
-)
-from ipor_fusion.crosschain.messages import Command
-from ipor_fusion.crosschain.stargate.contracts import (
-    StargateCrosschainDispatcher,
-    StargateCrosschainExecutor,
-    StargateCrosschainFactory,
-)
-from ipor_fusion.errors import TransactionError
-from ipor_fusion.explorer import get_contract_name
-from ipor_fusion.morpho_api import fetch_market, fetch_vault
-from ipor_fusion.readers.morpho import morpho_blue_address
-from ipor_fusion.readers.unpriceable import fetch_unpriceable_priced_tokens
-from ipor_fusion.types import (
-    Amount,
-    AssetId,
-    ChainId,
-    CommandId,
-    MarketId,
-    Period,
-    ProposalId,
-    RoleId,
-)
-from ipor_fusion.vault_data import resolve_token_symbol
 
 ETHEREUM = ChainId(1)
 VAULT = parse_plasma_vault_address("0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2")

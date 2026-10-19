@@ -82,6 +82,8 @@ from ipor_fusion import (
     ExternalStateExecutor,
     ExternalStateSubstrates,
     FuseAction,
+    FusionFactory,
+    FusionInstance,
     PlasmaVault,
     PriceOracleMiddlewareManager,
     Roles,
@@ -92,8 +94,6 @@ from ipor_fusion import (
     is_simulate_v1_supported,
     parse_fuse_address,
 )
-from ipor_fusion.core import FusionFactory
-from ipor_fusion.core.fusion_factory import FusionInstance
 from ipor_fusion.fuses import ExternalStateOperationFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import Amount, ChainId, MarketId, Period, ProposalHash, Shares

@@ -41,6 +41,7 @@ from ipor_fusion import (
     ERC20,
     AccessManager,
     FuseAction,
+    FusionFactory,
     PlasmaVault,
     PriceOracleMiddlewareManager,
     Roles,
@@ -50,7 +51,6 @@ from ipor_fusion import (
     is_simulate_v1_supported,
     parse_fuse_address,
 )
-from ipor_fusion.core import FusionFactory
 from ipor_fusion.fuses import AaveV3SupplyFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import Amount, ChainId, MarketId, Period
