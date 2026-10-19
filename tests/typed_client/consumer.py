@@ -26,10 +26,19 @@ from ipor_fusion.chains import ensure_supported_chain
 from ipor_fusion.core.access import AccessManager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.crosschain.ccip.contracts import (
+    CcipCrosschainDispatcher,
+    CcipCrosschainExecutor,
+    CcipCrosschainFactory,
+)
 from ipor_fusion.crosschain.contracts import (
     CrosschainDispatcher,
     CrosschainExecutor,
     CrosschainFactory,
+)
+from ipor_fusion.crosschain.stargate.contracts import (
+    StargateCrosschainExecutor,
+    StargateCrosschainFactory,
 )
 from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.morpho_api import fetch_market, fetch_vault
@@ -86,3 +95,23 @@ def crosschain(
     executor.approve_balance(ProposalId(1))
     dispatcher.command_status(CommandId(bytes(32)))
     factory.asset_frozen(AssetId(bytes(32)))
+
+
+def crosschain_reads_feed_writes(
+    ccip: CcipCrosschainExecutor,
+    ccip_dispatcher: CcipCrosschainDispatcher,
+    ccip_factory: CcipCrosschainFactory,
+    stargate: StargateCrosschainExecutor,
+    stargate_factory: StargateCrosschainFactory,
+) -> None:
+    # Ids read through the SDK go back in without re-wrapping.
+    ccip.approve_balance(ccip.active_proposal_id(ETHEREUM).call())
+    stargate.approve_balance(stargate.active_proposal_id(ETHEREUM).call())
+    ccip_factory.asset_frozen(ccip.asset_id().call())
+    ccip_factory.asset_config(ccip_dispatcher.asset_id().call())
+    stargate_factory.asset_config(stargate.asset_id().call())
+    ccip_dispatcher.processed_operation(ccip.active_return(ETHEREUM).call())
+    stargate.deployment_status(stargate.pending_request_by_chain(ETHEREUM).call())
+    stargate_factory.cancel_pending_deployment(
+        stargate.pending_request_by_chain(ETHEREUM).call()
+    )

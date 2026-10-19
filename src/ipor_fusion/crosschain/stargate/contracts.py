@@ -170,9 +170,12 @@ class StargateCrosschainExecutor(CrosschainExecutor):
             "pendingTransferCount(uint256)", chain_id, output_types=["uint256"]
         )
 
-    def pending_request_by_chain(self, chain_id: ChainId) -> Call[int]:
+    def pending_request_by_chain(self, chain_id: ChainId) -> Call[DeploymentRequestId]:
         return self._view(
-            "pendingRequestByChain(uint256)", chain_id, output_types=["uint256"]
+            "pendingRequestByChain(uint256)",
+            chain_id,
+            output_types=["uint256"],
+            decoder=DeploymentRequestId,
         )
 
     def active_command(self, chain_id: ChainId) -> Call[ActiveCommand]:
@@ -191,9 +194,12 @@ class StargateCrosschainExecutor(CrosschainExecutor):
             decoder=_active_command_decoder,
         )
 
-    def active_proposal_id(self, chain_id: ChainId) -> Call[int]:
+    def active_proposal_id(self, chain_id: ChainId) -> Call[ProposalId]:
         return self._view(
-            "activeProposalId(uint256)", chain_id, output_types=["uint256"]
+            "activeProposalId(uint256)",
+            chain_id,
+            output_types=["uint256"],
+            decoder=ProposalId,
         )
 
     def last_approval_at(self, chain_id: ChainId) -> Call[int]:

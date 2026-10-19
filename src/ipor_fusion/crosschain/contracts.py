@@ -76,8 +76,10 @@ class CrosschainExecutor(ContractWrapper):
     def asset(self) -> Call[ChecksumAddress]:
         return self._view("ASSET()", output_types=["address"], decoder=_address)
 
-    def asset_id(self) -> Call[bytes]:
-        return self._view("ASSET_ID()", output_types=["bytes32"], decoder=bytes)
+    def asset_id(self) -> Call[AssetId]:
+        return self._view(
+            "ASSET_ID()", output_types=["bytes32"], decoder=lambda v: AssetId(bytes(v))
+        )
 
     def factory(self) -> Call[ChecksumAddress]:
         return self._view("FACTORY()", output_types=["address"], decoder=_address)
@@ -172,8 +174,10 @@ class CrosschainDispatcher(ContractWrapper):
     def asset(self) -> Call[ChecksumAddress]:
         return self._view("ASSET()", output_types=["address"], decoder=_address)
 
-    def asset_id(self) -> Call[bytes]:
-        return self._view("ASSET_ID()", output_types=["bytes32"], decoder=bytes)
+    def asset_id(self) -> Call[AssetId]:
+        return self._view(
+            "ASSET_ID()", output_types=["bytes32"], decoder=lambda v: AssetId(bytes(v))
+        )
 
     def factory(self) -> Call[ChecksumAddress]:
         return self._view("FACTORY()", output_types=["address"], decoder=_address)

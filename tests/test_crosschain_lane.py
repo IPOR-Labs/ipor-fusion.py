@@ -803,3 +803,17 @@ class TestDeploymentDiscovery:
         ccip = next(lane for lane in lanes if isinstance(lane, CcipLane))
         assert ccip.route == ROUTE and ccip.fuses == CCIP_FUSES
         assert ccip.decimal_conversion_rate == DECIMAL_CONVERSION_RATE
+
+
+def test_id_getters_decode_into_the_types_their_writes_take():
+    ccip = CcipCrosschainExecutor(MagicMock(), EXECUTOR)
+    stargate = StargateCrosschainExecutor(MagicMock(), EXECUTOR)
+    word = encode(["bytes32"], [b"\x01" * 32])
+    number = encode(["uint256"], [7])
+    chain = ChainId(1)
+    assert ccip.active_return(chain).decode(word) == b"\x01" * 32
+    assert ccip.asset_id().decode(word) == b"\x01" * 32
+    assert ccip.active_proposal_id(chain).decode(number) == 7
+    assert stargate.active_proposal_id(chain).decode(number) == 7
+    assert stargate.pending_request_by_chain(chain).decode(number) == 7
+    assert type(ccip.asset_id().decode(word)) is bytes
