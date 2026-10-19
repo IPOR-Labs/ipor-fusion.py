@@ -69,6 +69,10 @@ alt="Release">
   </tr>
 </table>
 
+> **Upgrading from 3.x?** 4.0 types the public API's ids and addresses and changes
+> a few behaviors (Morpho market ids, nullable optional addresses); see
+> [MIGRATION_4.md](MIGRATION_4.md).
+
 ## Quickstart
 
 ### Install
