@@ -51,7 +51,7 @@ def _mock_manager(accounts: list[RoleAccount]) -> MagicMock:
 
 
 @patch("ipor_fusion.cli.vault_cmd.resolve_access_manager")
-@patch("ipor_fusion.cli.vault_cmd.Web3Context")
+@patch("ipor_fusion.cli.options.Web3Context")
 class TestRoleAccounts:
     def test_table_output(self, _ctx, mock_resolve, tmp_config):
         mock_resolve.return_value = _mock_manager(

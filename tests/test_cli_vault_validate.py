@@ -68,7 +68,7 @@ PASSED = Finding("total_assets_reconciliation", "ok", "balanced")
 
 def _invoke(validation: VaultValidation, *args: str):
     with (
-        patch("ipor_fusion.cli.vault_cmd.Web3Context") as ctx_cls,
+        patch("ipor_fusion.cli.options.Web3Context") as ctx_cls,
         patch("ipor_fusion.cli.vault_cmd.resolve_access_manager"),
         patch(
             "ipor_fusion.cli.vault_cmd.validate_vault", return_value=validation
@@ -138,7 +138,7 @@ def test_json_output():
 
 def test_not_a_plasma_vault_is_a_usage_error():
     with (
-        patch("ipor_fusion.cli.vault_cmd.Web3Context"),
+        patch("ipor_fusion.cli.options.Web3Context"),
         patch(
             "ipor_fusion.cli.vault_cmd.resolve_access_manager",
             side_effect=NotPlasmaVaultError("not a Plasma Vault"),
@@ -154,7 +154,7 @@ def test_not_a_plasma_vault_is_a_usage_error():
 
 def test_unsupported_vault_version_is_reported():
     with (
-        patch("ipor_fusion.cli.vault_cmd.Web3Context"),
+        patch("ipor_fusion.cli.options.Web3Context"),
         patch("ipor_fusion.cli.vault_cmd.resolve_access_manager"),
         patch(
             "ipor_fusion.cli.vault_cmd.validate_vault",

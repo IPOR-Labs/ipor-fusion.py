@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import requests
 from click.testing import CliRunner
 
-from ipor_fusion.cli.vault_cmd import (
+from ipor_fusion.cli.vault_info_view import (
     _print_pending_requests,
 )
 from ipor_fusion.core.withdraw_manager import AccountRequest

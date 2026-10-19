@@ -13,14 +13,9 @@ import json as json_lib
 
 import click
 
+from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.cli.config_store import load_config
-from ipor_fusion.cli.vault_cmd import (
-    ADDRESS,
-    BLOCK_EXPLORER_URLS,
-    CHAIN,
-    CHAIN_NAMES,
-    _resolve_provider,
-)
+from ipor_fusion.cli.options import ADDRESS, CHAIN, _resolve_provider
 from ipor_fusion.cli.vault_rendering import _format_amount, _print_table
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.market_info import (
@@ -47,6 +42,7 @@ from ipor_fusion.readers.morpho import (
     morpho_blue_address,
 )
 from ipor_fusion.types import ChainId, MorphoBlueMarketId
+from ipor_fusion.vault_info import BLOCK_EXPLORER_URLS
 
 
 class MarketIdType(click.ParamType):

@@ -23,7 +23,9 @@ from ipor_fusion import UnsupportedVaultVersionError
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
-from ipor_fusion.cli.vault_cmd import _print_market_substrates
+from ipor_fusion.cli.vault_markets_view import (
+    _print_market_substrates,
+)
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.types import MarketId
 from ipor_fusion.vault_data import (
@@ -290,7 +292,7 @@ class TestVaultInfoCommand:
 
     @patch("ipor_fusion.cli.vault_cmd._auto_save_vault")
     @patch("ipor_fusion.cli.vault_cmd.resolve_access_manager")
-    @patch("ipor_fusion.cli.vault_cmd.Web3Context")
+    @patch("ipor_fusion.cli.options.Web3Context")
     @patch("ipor_fusion.cli.vault_cmd.fetch_vault_data")
     def test_unsupported_vault_version_is_a_clean_error(
         self, mock_fetch, _ctx_cls, _probe, _save

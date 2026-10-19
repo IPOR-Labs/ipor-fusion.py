@@ -27,7 +27,9 @@ from ipor_fusion import cache
 from ipor_fusion.cache import save_contract_cache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig
-from ipor_fusion.cli.vault_cmd import _print_vault_info
+from ipor_fusion.cli.vault_info_view import (
+    _print_vault_info,
+)
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -335,7 +337,7 @@ def _render(scenario: str, json_output: bool) -> str:
     runner = CliRunner()
     with (
         patch(
-            "ipor_fusion.cli.vault_cmd.fetch_deployment_info",
+            "ipor_fusion.cli.vault_info_view.fetch_deployment_info",
             return_value=(None, None, None),
         ),
         runner.isolation(color=True) as (out, _err, _in),
