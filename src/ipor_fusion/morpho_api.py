@@ -146,7 +146,14 @@ def _response_shape() -> Iterator[None]:
         yield
     except MorphoApiError:
         raise
-    except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
+    except (
+        KeyError,
+        IndexError,
+        TypeError,
+        ValueError,
+        AttributeError,
+        OverflowError,  # int() of a JSON number beyond float range (inf)
+    ) as exc:
         raise MorphoApiError(
             f"Morpho API returned an unexpected response: {type(exc).__name__}: {exc}"
         ) from exc

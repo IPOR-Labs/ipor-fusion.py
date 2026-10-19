@@ -847,10 +847,21 @@ class TestMorphoApiResponseShape:
             {"loanAsset": {"symbol": "U", "decimals": 6}},
             {"loanAsset": None},
             {"lltv": "not a number"},
+            # 1e309 in the JSON text loads as inf, which int() cannot convert
+            {"lltv": float("inf")},
+            {"state": {"supplyAssets": float("inf")}},
             {"supplyingVaults": [{"name": "no address"}]},
             {"state": ["not an object"]},
         ],
-        ids=["missing-key", "null-object", "bad-int", "vault-missing-key", "list"],
+        ids=[
+            "missing-key",
+            "null-object",
+            "bad-int",
+            "overflow",
+            "state-overflow",
+            "vault-missing-key",
+            "list",
+        ],
     )
     def test_malformed_market_is_an_api_error(self, monkeypatch, overrides):
         _answer(monkeypatch, self._market(**overrides))
@@ -869,9 +880,14 @@ class TestMorphoApiResponseShape:
         with pytest.raises(MorphoApiError):
             fetch_vault(VAULT_ADDR, ChainId(1))
 
-    def test_malformed_vault_is_an_api_error(self, monkeypatch):
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("adapters", ["not an object"]), ("totalAssets", float("inf"))],
+        ids=["list", "overflow"],
+    )
+    def test_malformed_vault_is_an_api_error(self, monkeypatch, field, value):
         body = _v2_response()
-        body["data"]["vaultV2ByAddress"]["adapters"] = ["not an object"]
+        body["data"]["vaultV2ByAddress"][field] = value
         _answer(monkeypatch, json.dumps(body).encode())
         with pytest.raises(MorphoApiError, match="unexpected response"):
             fetch_vault(VAULT_ADDR, ChainId(1))

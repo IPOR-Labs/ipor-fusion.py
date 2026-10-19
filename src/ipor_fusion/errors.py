@@ -148,7 +148,8 @@ def get_revert_reason(web3: Web3, tx_hash: TxHash, receipt: TxReceipt) -> str | 
 class IporFusionError(Exception):
     """Base of every exception the SDK defines.
 
-    The SDK raises its own subclasses when the chain, a provider or a remote API
+    The rule the SDK follows (a few older readers do not yet; see
+    MIGRATION_4.md): a subclass when the chain, a provider or a remote API
     answers something it cannot use. A caller's mistake (a bad argument, or an
     operation the object was not built for, such as ``.call()`` on a write-only
     ``Call``) raises a builtin ``ValueError`` instead, as the standard library

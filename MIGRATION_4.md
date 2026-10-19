@@ -222,11 +222,16 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 
 ## Errors
 
-One rule now holds across the SDK: a caller's mistake (a bad argument, or an
-operation the object was not built for) raises `ValueError`; a chain, provider or
-remote API answering something the SDK cannot use raises a subclass of
-`IporFusionError`. Every exception the SDK defines derives from `IporFusionError`
-and is importable from `ipor_fusion`; the builtin bases they had are kept.
+Every exception class the SDK defines now derives from `IporFusionError` and is
+importable from `ipor_fusion`; the builtin bases they had are kept. The rule the
+changes below apply is: a caller's mistake (a bad argument, or an operation the
+object was not built for) raises a plain `ValueError`; a chain, provider or remote
+API answering something the SDK cannot use raises an `IporFusionError` subclass.
+4.0 applies it to the paths listed here, not yet everywhere: the HyperCore NAV
+reader (`read_hypercore_nav`) still raises `ValueError` for a failed precompile read,
+a missing oracle price or an unsupported dex configuration,
+`fetch_verifier_result` can still raise `KeyError` or `ValueError` on a malformed
+indexer answer, and `erc20_balance_slot` raises `ValueError` when no slot answers.
 
 - `MorphoApiError` (still a `RuntimeError`), `ExternalStateEventDecodeError` (still a
   `ValueError`) and `VerifierResultUnavailable` (still a `LookupError`) now derive
