@@ -4,20 +4,28 @@ fetched `VaultData` (with its validation) as one JSON-serializable dict."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
-from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.field_docs import DOCS
+from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.hypercore import HyperCorePendingState, HyperCorePerpLeg
 from ipor_fusion.readers.lending_health import VaultLendingHealth
-from ipor_fusion.substrates import decode_substrate, format_market_label, market_name
+from ipor_fusion.readers.morpho import MorphoPositionBreakdown
+from ipor_fusion.substrates import (
+    SubstrateInfo,
+    decode_substrate,
+    format_market_label,
+    market_name,
+)
 from ipor_fusion.validation import (
+    Erc20Holdings,
     Reconciliation,
     VaultValidation,
     _format_amount,
@@ -477,7 +485,243 @@ def health_check_lists(
     return ok, warnings, criticals
 
 
-def build_vault_info_json(  # noqa: C901, PLR0912, PLR0915
+def _fuse_entry(
+    addr: str, contract: str | None, fuse_markets: dict[str, int]
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {"address": addr, "contract": contract or "?"}
+    if (mid := fuse_markets.get(addr)) is not None:
+        entry["market_id"] = mid
+        label = market_name(mid)
+        entry["market"] = label if label != "UNKNOWN" else str(mid)
+    return entry
+
+
+def _morpho_breakdown_json(
+    ctx: Web3Context, data: VaultData, positions: list[MorphoPositionBreakdown]
+) -> list[dict[str, Any]]:
+    prices = data.token_prices_usd
+    return [
+        {
+            "morpho_market_id": "0x" + str(pb.market_id),
+            "collateral_symbol": resolve_token_symbol(ctx, pb.collateral_token) or None,
+            "loan_symbol": resolve_token_symbol(ctx, pb.loan_token) or None,
+            "collateral": _build_breakdown_amount_json(
+                ctx, int(pb.collateral), pb.collateral_token, prices
+            ),
+            "borrow": _build_breakdown_amount_json(
+                ctx, int(pb.borrow_assets), pb.loan_token, prices
+            ),
+            "supply": _build_breakdown_amount_json(
+                ctx, int(pb.supply_assets), pb.loan_token, prices
+            ),
+        }
+        for pb in positions
+    ]
+
+
+def _aave_breakdown_json(
+    ctx: Web3Context, data: VaultData, positions: list[AaveV3PositionBreakdown]
+) -> list[dict[str, Any]]:
+    prices = data.token_prices_usd
+    return [
+        {
+            "asset": pb.asset,
+            "asset_symbol": resolve_token_symbol(ctx, pb.asset) or None,
+            "supply": _build_breakdown_amount_json(
+                ctx, int(pb.supply), pb.asset, prices
+            ),
+            "variable_debt": _build_breakdown_amount_json(
+                ctx, int(pb.variable_debt), pb.asset, prices
+            ),
+            "stable_debt": _build_breakdown_amount_json(
+                ctx, int(pb.stable_debt), pb.asset, prices
+            ),
+        }
+        for pb in positions
+    ]
+
+
+def _balance_fuse_entry(
+    ctx: Web3Context,
+    data: VaultData,
+    bf: BalanceFuse,
+    assets_in_market: int,
+    contract_name: str,
+) -> dict[str, Any]:
+    market_label = market_name(bf.market_id)
+    entry: dict[str, Any] = {
+        "market": market_label if market_label != "UNKNOWN" else str(bf.market_id),
+        "market_id": bf.market_id,
+        "balance": {
+            "raw": assets_in_market,
+            "formatted": _format_amount(assets_in_market, data.asset_decimals),
+        },
+        "fuse": bf.fuse,
+        "contract": contract_name,
+    }
+    if data.total_assets > 0:
+        entry["pct_of_total"] = round(assets_in_market / data.total_assets * 100, 2)
+    if data.dependency_graph and bf.market_id in data.dependency_graph:
+        deps = data.dependency_graph[bf.market_id]
+        entry["depends_on"] = [format_market_label(d) for d in deps]
+    if data.morpho_positions and bf.market_id in data.morpho_positions:
+        entry["position_breakdown"] = _morpho_breakdown_json(
+            ctx, data, data.morpho_positions[bf.market_id]
+        )
+    if data.aave_positions and bf.market_id in data.aave_positions:
+        entry["position_breakdown"] = _aave_breakdown_json(
+            ctx, data, data.aave_positions[bf.market_id]
+        )
+    return entry
+
+
+def _substrate_entry(
+    sub_info: SubstrateInfo,
+    symbol_futs: dict[str, Future[str]],
+    contract_futs: dict[str, Future[str]],
+) -> dict[str, Any]:
+    entry: dict[str, Any]
+    if sub_info.address:
+        entry = {"address": sub_info.address}
+        if symbol := symbol_futs[sub_info.address].result():
+            entry["symbol"] = symbol
+        if contract := contract_futs[sub_info.address].result():
+            entry["contract"] = contract
+    else:
+        entry = {"raw": sub_info.raw_hex}
+        if sub_info.is_error:
+            entry["error"] = True
+    if sub_info.type_label:
+        entry["substrate_type"] = sub_info.type_label
+    if sub_info.extra:
+        entry.update(sub_info.extra)
+    return entry
+
+
+def _substrates_json(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    data: VaultData,
+    resolve_name: Callable[[str], str],
+) -> dict[str, list[dict[str, Any]]]:
+    """Decoded substrates per balance-fuse market, with symbols and contract
+    names resolved concurrently for every substrate address."""
+    market_substrates = data.market_substrates or {}
+    decoded: list[tuple[str, list[SubstrateInfo]]] = []
+    addresses: set[str] = set()
+    for bf in data.balance_fuses:
+        if subs := market_substrates.get(bf.market_id):
+            infos = [decode_substrate(sub, market_id=bf.market_id) for sub in subs]
+            decoded.append((format_market_label(bf.market_id), infos))
+            addresses.update(info.address for info in infos if info.address)
+
+    symbol_futs = {
+        addr: pool.submit(resolve_token_symbol, ctx, addr) for addr in addresses
+    }
+    contract_futs = {addr: pool.submit(resolve_name, addr) for addr in addresses}
+    return {
+        market_str: [
+            _substrate_entry(info, symbol_futs, contract_futs) for info in infos
+        ]
+        for market_str, infos in decoded
+    }
+
+
+def _links_json(chain_id: int, chain_label: str, vault_address: str) -> dict[str, str]:
+    links = {"ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}"}
+    if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
+        links["etherscan"] = f"{explorer_base}/address/{vault_address}"
+    return links
+
+
+def _total_assets_json(data: VaultData) -> dict[str, Any]:
+    usd: float | None = None
+    if data.asset_price_usd is not None:
+        usd = (data.total_assets / 10**data.asset_decimals) * data.asset_price_usd
+    return {
+        "raw": data.total_assets,
+        "formatted": _format_amount(data.total_assets, data.asset_decimals),
+        "usd": usd,
+    }
+
+
+def _supply_cap_json(data: VaultData) -> dict[str, Any]:
+    return {
+        "raw": data.supply_cap,
+        "formatted": (
+            "unlimited"
+            if data.supply_cap == UINT256_MAX
+            else _format_amount(data.supply_cap, data.asset_decimals)
+        ),
+    }
+
+
+def _managers_json(data: VaultData) -> dict[str, Any]:
+    return {
+        "access": data.access_manager,
+        "price_oracle": data.price_oracle_addr,
+        "rewards": data.rewards_manager,
+        "withdraw": data.withdraw_manager,
+        "fee": data.fee_data.fee_manager if data.fee_data else None,
+    }
+
+
+def _markets_json(
+    ctx: Web3Context,
+    plasma_vault: PlasmaVault,
+    data: VaultData,
+    resolve_name: Callable[[str], str],
+) -> tuple[dict[str, Any], Erc20Holdings]:
+    """The fuse, balance-fuse and substrate blocks, in document order, plus the
+    vault's ERC20 holdings, read concurrently with the name lookups."""
+    with ThreadPoolExecutor() as pool:
+        # Runs its own fan-out; submitted first so it overlaps the name lookups.
+        erc20_fut = pool.submit(
+            read_erc20_holdings,
+            ctx,
+            plasma_vault,
+            data,
+            partial(resolve_token_symbol, ctx),
+        )
+        fuse_name_futs = {addr: pool.submit(resolve_name, addr) for addr in data.fuses}
+        instant_name_futs = {
+            addr: pool.submit(resolve_name, addr) for addr in data.instant_fuses
+        }
+        bf_contract_futs = [
+            pool.submit(resolve_name, bf.fuse) for bf in data.balance_fuses
+        ]
+        bf_balance_futs = [
+            pool.submit(plasma_vault.total_assets_in_market(bf.market_id).call)
+            for bf in data.balance_fuses
+        ]
+        fuse_markets = data.fuse_markets or {}
+        balance_fuses, zero_balance_fuses = _partition_balance_fuses(
+            [
+                _balance_fuse_entry(
+                    ctx, data, bf, balance_fut.result(), contract_fut.result() or "?"
+                )
+                for bf, balance_fut, contract_fut in zip(
+                    data.balance_fuses, bf_balance_futs, bf_contract_futs, strict=True
+                )
+            ]
+        )
+        markets = {
+            "fuses": [
+                _fuse_entry(addr, fuse_name_futs[addr].result(), fuse_markets)
+                for addr in data.fuses
+            ],
+            "balance_fuses": balance_fuses,
+            "zero_balance_fuses": zero_balance_fuses,
+            "instant_withdrawal_fuses": [
+                _fuse_entry(addr, instant_name_futs[addr].result(), fuse_markets)
+                for addr in data.instant_fuses
+            ],
+            "substrates": _substrates_json(ctx, pool, data, resolve_name),
+        }
+    return markets, erc20_fut.result()
+
+
+def build_vault_info_json(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: VaultData,
@@ -500,205 +744,19 @@ def build_vault_info_json(  # noqa: C901, PLR0912, PLR0915
     """
     if resolve_name is None:
         resolve_name = partial(get_contract_name, chain_id)
-    total_assets_usd: float | None = None
-    if data.asset_price_usd is not None:
-        total_assets_usd = (
-            data.total_assets / 10**data.asset_decimals
-        ) * data.asset_price_usd
 
-    with ThreadPoolExecutor() as pool:
-        # Runs its own fan-out; submitted first so it overlaps the name lookups.
-        erc20_fut = pool.submit(
-            read_erc20_holdings,
-            ctx,
-            plasma_vault,
-            data,
-            partial(resolve_token_symbol, ctx),
-        )
-        fuse_name_futs = {addr: pool.submit(resolve_name, addr) for addr in data.fuses}
-        instant_name_futs = {
-            addr: pool.submit(resolve_name, addr) for addr in data.instant_fuses
-        }
-        bf_contract_futs = [
-            pool.submit(resolve_name, bf.fuse) for bf in data.balance_fuses
-        ]
-        bf_balance_futs = [
-            pool.submit(plasma_vault.total_assets_in_market(bf.market_id).call)
-            for bf in data.balance_fuses
-        ]
-        market_substrates = data.market_substrates or {}
-
-        fuse_markets = data.fuse_markets or {}
-
-        def _fuse_entry(addr: str, contract: str | None) -> dict:
-            entry: dict = {"address": addr, "contract": contract or "?"}
-            if (mid := fuse_markets.get(addr)) is not None:
-                entry["market_id"] = mid
-                label = market_name(mid)
-                entry["market"] = label if label != "UNKNOWN" else str(mid)
-            return entry
-
-        fuses_json = [
-            _fuse_entry(addr, fuse_name_futs[addr].result()) for addr in data.fuses
-        ]
-        instant_json = [
-            _fuse_entry(addr, instant_name_futs[addr].result())
-            for addr in data.instant_fuses
-        ]
-
-        balance_fuses_json = []
-        for i, bf in enumerate(data.balance_fuses):
-            market_label = market_name(bf.market_id)
-            market_str = (
-                market_label if market_label != "UNKNOWN" else str(bf.market_id)
-            )
-            assets_in_market = bf_balance_futs[i].result()
-            contract_name = bf_contract_futs[i].result() or "?"
-            bf_entry: dict = {
-                "market": market_str,
-                "market_id": bf.market_id,
-                "balance": {
-                    "raw": assets_in_market,
-                    "formatted": _format_amount(assets_in_market, data.asset_decimals),
-                },
-                "fuse": bf.fuse,
-                "contract": contract_name,
-            }
-            if data.total_assets > 0:
-                bf_entry["pct_of_total"] = round(
-                    assets_in_market / data.total_assets * 100, 2
-                )
-            if data.dependency_graph and bf.market_id in data.dependency_graph:
-                deps = data.dependency_graph[bf.market_id]
-                bf_entry["depends_on"] = [format_market_label(d) for d in deps]
-            if data.morpho_positions and bf.market_id in data.morpho_positions:
-                bf_entry["position_breakdown"] = [
-                    {
-                        "morpho_market_id": "0x" + str(pb.market_id),
-                        "collateral_symbol": resolve_token_symbol(
-                            ctx, pb.collateral_token
-                        )
-                        or None,
-                        "loan_symbol": resolve_token_symbol(ctx, pb.loan_token) or None,
-                        "collateral": _build_breakdown_amount_json(
-                            ctx,
-                            int(pb.collateral),
-                            pb.collateral_token,
-                            data.token_prices_usd,
-                        ),
-                        "borrow": _build_breakdown_amount_json(
-                            ctx,
-                            int(pb.borrow_assets),
-                            pb.loan_token,
-                            data.token_prices_usd,
-                        ),
-                        "supply": _build_breakdown_amount_json(
-                            ctx,
-                            int(pb.supply_assets),
-                            pb.loan_token,
-                            data.token_prices_usd,
-                        ),
-                    }
-                    for pb in data.morpho_positions[bf.market_id]
-                ]
-            if data.aave_positions and bf.market_id in data.aave_positions:
-                bf_entry["position_breakdown"] = [
-                    {
-                        "asset": pb.asset,
-                        "asset_symbol": resolve_token_symbol(ctx, pb.asset) or None,
-                        "supply": _build_breakdown_amount_json(
-                            ctx, int(pb.supply), pb.asset, data.token_prices_usd
-                        ),
-                        "variable_debt": _build_breakdown_amount_json(
-                            ctx,
-                            int(pb.variable_debt),
-                            pb.asset,
-                            data.token_prices_usd,
-                        ),
-                        "stable_debt": _build_breakdown_amount_json(
-                            ctx,
-                            int(pb.stable_debt),
-                            pb.asset,
-                            data.token_prices_usd,
-                        ),
-                    }
-                    for pb in data.aave_positions[bf.market_id]
-                ]
-            balance_fuses_json.append(bf_entry)
-
-        balance_fuses_json, zero_balance_fuses_json = _partition_balance_fuses(
-            balance_fuses_json
-        )
-
-        # Substrates - also resolve symbols/contracts for addresses
-        all_sub_addresses: set[str] = set()
-        market_subs_raw: list[tuple[str, int, list]] = []
-        for bf in data.balance_fuses:
-            market_str = format_market_label(bf.market_id)
-            if subs := market_substrates.get(bf.market_id):
-                market_subs_raw.append((market_str, bf.market_id, subs))
-                for sub in subs:
-                    sub_info = decode_substrate(sub, market_id=bf.market_id)
-                    if sub_info.address:
-                        all_sub_addresses.add(sub_info.address)
-
-        sym_futs = {
-            addr: pool.submit(resolve_token_symbol, ctx, addr)
-            for addr in all_sub_addresses
-        }
-        contract_futs = {
-            addr: pool.submit(resolve_name, addr) for addr in all_sub_addresses
-        }
-
-        substrates_json: dict[str, list] = {}
-        for market_str, mid, subs in market_subs_raw:
-            entries = []
-            for sub in subs:
-                sub_info = decode_substrate(sub, market_id=mid)
-                if sub_info.address:
-                    entry: dict = {"address": sub_info.address}
-                    symbol = sym_futs[sub_info.address].result()
-                    contract = contract_futs[sub_info.address].result()
-                    if symbol:
-                        entry["symbol"] = symbol
-                    if contract:
-                        entry["contract"] = contract
-                    if sub_info.type_label:
-                        entry["substrate_type"] = sub_info.type_label
-                    if sub_info.extra:
-                        entry.update(sub_info.extra)
-                    entries.append(entry)
-                else:
-                    raw_entry: dict = {"raw": sub_info.raw_hex}
-                    if sub_info.is_error:
-                        raw_entry["error"] = True
-                    if sub_info.type_label:
-                        raw_entry["substrate_type"] = sub_info.type_label
-                    if sub_info.extra:
-                        raw_entry.update(sub_info.extra)
-                    entries.append(raw_entry)
-            substrates_json[market_str] = entries
-
+    markets, erc20 = _markets_json(ctx, plasma_vault, data, resolve_name)
     # Venues only, once per market: zero-balance fuses never hold assets.
     market_balances: dict[int, int] = {}
-    for bfj in balance_fuses_json:
+    for bfj in markets["balance_fuses"]:
         market_balances.setdefault(bfj["market_id"], bfj["balance"]["raw"])
-    validation = validate_vault_state(
-        ctx, plasma_vault, data, market_balances, erc20_fut.result()
-    )
+    validation = validate_vault_state(ctx, plasma_vault, data, market_balances, erc20)
     ok, warnings, criticals = health_check_lists(validation)
-
-    explorer_base = BLOCK_EXPLORER_URLS.get(chain_id)
-    links: dict[str, str] = {
-        "ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}",
-    }
-    if explorer_base:
-        links["etherscan"] = f"{explorer_base}/address/{vault_address}"
 
     return {
         "vault": vault_address,
         "name": data.vault_name or None,
-        "links": links,
+        "links": _links_json(chain_id, chain_label, vault_address),
         "chain": chain_label,
         "chain_id": chain_id,
         "block": data.block_number,
@@ -713,39 +771,18 @@ def build_vault_info_json(  # noqa: C901, PLR0912, PLR0915
             "price_usd": data.asset_price_usd,
         },
         "share_decimals": data.share_decimals,
-        "total_assets": {
-            "raw": data.total_assets,
-            "formatted": _format_amount(data.total_assets, data.asset_decimals),
-            "usd": total_assets_usd,
-        },
+        "total_assets": _total_assets_json(data),
         "total_supply": {
             "raw": data.total_supply,
             "formatted": _format_amount(data.total_supply, data.share_decimals),
         },
         "share_price": _build_share_price_json(data),
-        "supply_cap": {
-            "raw": data.supply_cap,
-            "formatted": (
-                "unlimited"
-                if data.supply_cap == UINT256_MAX
-                else _format_amount(data.supply_cap, data.asset_decimals)
-            ),
-        },
-        "managers": {
-            "access": data.access_manager,
-            "price_oracle": data.price_oracle_addr,
-            "rewards": data.rewards_manager,
-            "withdraw": data.withdraw_manager,
-            "fee": data.fee_data.fee_manager if data.fee_data else None,
-        },
+        "supply_cap": _supply_cap_json(data),
+        "managers": _managers_json(data),
         "role_accounts": _role_accounts_json(data),
         "fees": _build_fees_json(data),
         "withdraw_manager_details": _build_withdraw_manager_json(data, plasma_vault),
-        "fuses": fuses_json,
-        "balance_fuses": balance_fuses_json,
-        "zero_balance_fuses": zero_balance_fuses_json,
-        "instant_withdrawal_fuses": instant_json,
-        "substrates": substrates_json,
+        **markets,
         "dependency_graph": _build_dependency_graph_json(data),
         "erc20_balances": _erc20_balances_json(validation),
         "reconciliation": _reconciliation_json(

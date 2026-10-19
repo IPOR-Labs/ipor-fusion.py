@@ -864,80 +864,9 @@ def _print_vault_info(
         click.echo(json.dumps(result, indent=2))
         return
 
-    total_assets_usd = _format_usd(
-        data.total_assets, data.asset_decimals, data.asset_price_usd
-    )
-
-    name_suffix = f" ({data.vault_name})" if data.vault_name else ""
-    click.echo(f"Vault:            {vault_address}{name_suffix}")
-    if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
-        click.echo(f"Etherscan:        {explorer_base}/address/{vault_address}")
-    click.echo(f"IPOR app:         {IPOR_APP_URL}/{chain_label}/{vault_address}")
-    click.echo(f"Chain:            {chain_label} (chain-id={chain_id})")
-    block_suffix = " (latest)" if data.is_latest else ""
-    click.echo(f"Block:            {data.block_number}{block_suffix}")
-    block_iso = _unix_to_iso(data.block_timestamp)
-    click.echo(f"Block time:       {data.block_timestamp} ({block_iso})")
-    if data.deployment_block is not None and data.deployment_timestamp is not None:
-        deploy_iso = _unix_to_iso(data.deployment_timestamp)
-        age = _format_age(data.deployment_timestamp)
-        click.echo(
-            f"Deployed at:      block {data.deployment_block} ({deploy_iso}, {age})"
-        )
-    elif data.deployment_error:
-        click.echo(f"Deployed at:      N/A ({data.deployment_error})")
-    else:
-        click.echo("Deployed at:      N/A")
-    click.echo(f"Asset:            {data.asset} ({data.asset_symbol})")
-    click.echo(f"Asset decimals:   {data.asset_decimals}")
-    click.echo(f"Share decimals:   {data.share_decimals}")
-    if data.asset_price_usd is not None:
-        click.echo(f"Asset price:      ${data.asset_price_usd:,.2f}")
-    else:
-        click.echo("Asset price:      N/A")
-    click.echo(
-        f"Total Assets:     "
-        f"{_format_amount(data.total_assets, data.asset_decimals)} "
-        f"{data.asset_symbol}{total_assets_usd}"
-    )
-    click.echo(
-        f"Total Supply:     "
-        f"{_format_amount(data.total_supply, data.share_decimals)} shares"
-    )
-    if data.total_supply > 0:
-        share_price = (data.total_assets / 10**data.asset_decimals) / (
-            data.total_supply / 10**data.share_decimals
-        )
-        share_price_usd = (
-            f" (${share_price * data.asset_price_usd:,.6f})"
-            if data.asset_price_usd is not None
-            else ""
-        )
-        click.echo(
-            f"Share Price:      {share_price:,.6f} {data.asset_symbol}{share_price_usd}"
-        )
-    if data.supply_cap == UINT256_MAX:
-        click.echo("Supply Cap:       unlimited")
-    else:
-        click.echo(
-            f"Supply Cap:       "
-            f"{_format_amount(data.supply_cap, data.asset_decimals)} {data.asset_symbol}"
-        )
-    click.echo(f"Access Manager:   {data.access_manager}")
-    click.echo(f"Price Oracle:     {data.price_oracle_addr}")
-    click.echo(f"Rewards Manager:  {data.rewards_manager or 'N/A'}")
-    click.echo(f"Withdraw Manager: {data.withdraw_manager or 'N/A'}")
-    if data.withdraw_manager_data:
-        wmd = data.withdraw_manager_data
-        window_h = wmd.withdraw_window / 3600
-        click.echo(f"  Window:         {wmd.withdraw_window}s ({window_h:.1f}h)")
-        click.echo('  Fees:           see the "Fees" section below')
-        release_fmt = _format_amount(wmd.shares_to_release, data.share_decimals)
-        click.echo(f"  Shares to release: {release_fmt}")
-        if wmd.last_release_funds_timestamp > 0:
-            last_iso = _unix_to_iso(wmd.last_release_funds_timestamp)
-            click.echo(f"  Last release:   {last_iso}")
-        _print_pending_requests(data, plasma_vault)
+    _print_identity(data, vault_address, chain_id, chain_label)
+    _print_supply(data)
+    _print_managers(data, plasma_vault)
     click.echo()
 
     _print_fees(data)
@@ -945,6 +874,38 @@ def _print_vault_info(
 
     _print_role_accounts(_role_accounts_json(data))
 
+    market_balances = _print_markets(ctx, plasma_vault, data, chain_id, api_key)
+
+    validation = validate_vault_state(
+        ctx,
+        plasma_vault,
+        data,
+        market_balances,
+        _read_erc20_holdings(ctx, plasma_vault, data),
+    )
+    click.echo("ERC20 Balances (vault holdings):")
+    _print_erc20_balances(data, validation.erc20)
+    click.echo()
+
+    _print_reconciliation(data, validation)
+    click.echo()
+
+    _print_lending_health(ctx, data)
+    click.echo()
+    _print_hypercore(data)
+
+    _print_health_check(validation)
+
+
+def _print_markets(
+    ctx: Web3Context,
+    plasma_vault: PlasmaVault,
+    data: VaultData,
+    chain_id: int,
+    api_key: str | None,
+) -> dict[int, int]:
+    """Fuses, balance fuses, dependency graph and substrates; returns the
+    per-market balances read for the balance-fuse table."""
     _print_fuse_section(
         "Fuses",
         data.fuses,
@@ -981,26 +942,91 @@ def _print_vault_info(
     click.echo("Substrates per Market:")
     _print_market_substrates(ctx, data, chain_id, api_key)
     click.echo()
+    return market_balances
 
-    validation = validate_vault_state(
-        ctx,
-        plasma_vault,
-        data,
-        market_balances,
-        _read_erc20_holdings(ctx, plasma_vault, data),
+
+def _print_identity(
+    data: VaultData, vault_address: str, chain_id: int, chain_label: str
+) -> None:
+    name_suffix = f" ({data.vault_name})" if data.vault_name else ""
+    click.echo(f"Vault:            {vault_address}{name_suffix}")
+    if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
+        click.echo(f"Etherscan:        {explorer_base}/address/{vault_address}")
+    click.echo(f"IPOR app:         {IPOR_APP_URL}/{chain_label}/{vault_address}")
+    click.echo(f"Chain:            {chain_label} (chain-id={chain_id})")
+    block_suffix = " (latest)" if data.is_latest else ""
+    click.echo(f"Block:            {data.block_number}{block_suffix}")
+    block_iso = _unix_to_iso(data.block_timestamp)
+    click.echo(f"Block time:       {data.block_timestamp} ({block_iso})")
+    if data.deployment_block is not None and data.deployment_timestamp is not None:
+        deploy_iso = _unix_to_iso(data.deployment_timestamp)
+        age = _format_age(data.deployment_timestamp)
+        click.echo(
+            f"Deployed at:      block {data.deployment_block} ({deploy_iso}, {age})"
+        )
+    elif data.deployment_error:
+        click.echo(f"Deployed at:      N/A ({data.deployment_error})")
+    else:
+        click.echo("Deployed at:      N/A")
+
+
+def _print_supply(data: VaultData) -> None:
+    total_assets_usd = _format_usd(
+        data.total_assets, data.asset_decimals, data.asset_price_usd
     )
-    click.echo("ERC20 Balances (vault holdings):")
-    _print_erc20_balances(data, validation.erc20)
-    click.echo()
+    click.echo(f"Asset:            {data.asset} ({data.asset_symbol})")
+    click.echo(f"Asset decimals:   {data.asset_decimals}")
+    click.echo(f"Share decimals:   {data.share_decimals}")
+    if data.asset_price_usd is not None:
+        click.echo(f"Asset price:      ${data.asset_price_usd:,.2f}")
+    else:
+        click.echo("Asset price:      N/A")
+    click.echo(
+        f"Total Assets:     "
+        f"{_format_amount(data.total_assets, data.asset_decimals)} "
+        f"{data.asset_symbol}{total_assets_usd}"
+    )
+    click.echo(
+        f"Total Supply:     "
+        f"{_format_amount(data.total_supply, data.share_decimals)} shares"
+    )
+    if data.total_supply > 0:
+        share_price = (data.total_assets / 10**data.asset_decimals) / (
+            data.total_supply / 10**data.share_decimals
+        )
+        share_price_usd = (
+            f" (${share_price * data.asset_price_usd:,.6f})"
+            if data.asset_price_usd is not None
+            else ""
+        )
+        click.echo(
+            f"Share Price:      {share_price:,.6f} {data.asset_symbol}{share_price_usd}"
+        )
+    if data.supply_cap == UINT256_MAX:
+        click.echo("Supply Cap:       unlimited")
+    else:
+        click.echo(
+            f"Supply Cap:       "
+            f"{_format_amount(data.supply_cap, data.asset_decimals)} {data.asset_symbol}"
+        )
 
-    _print_reconciliation(data, validation)
-    click.echo()
 
-    _print_lending_health(ctx, data)
-    click.echo()
-    _print_hypercore(data)
-
-    _print_health_check(validation)
+def _print_managers(data: VaultData, plasma_vault: PlasmaVault) -> None:
+    click.echo(f"Access Manager:   {data.access_manager}")
+    click.echo(f"Price Oracle:     {data.price_oracle_addr}")
+    click.echo(f"Rewards Manager:  {data.rewards_manager or 'N/A'}")
+    click.echo(f"Withdraw Manager: {data.withdraw_manager or 'N/A'}")
+    if data.withdraw_manager_data:
+        wmd = data.withdraw_manager_data
+        window_h = wmd.withdraw_window / 3600
+        click.echo(f"  Window:         {wmd.withdraw_window}s ({window_h:.1f}h)")
+        click.echo('  Fees:           see the "Fees" section below')
+        release_fmt = _format_amount(wmd.shares_to_release, data.share_decimals)
+        click.echo(f"  Shares to release: {release_fmt}")
+        if wmd.last_release_funds_timestamp > 0:
+            last_iso = _unix_to_iso(wmd.last_release_funds_timestamp)
+            click.echo(f"  Last release:   {last_iso}")
+        _print_pending_requests(data, plasma_vault)
 
 
 def _format_fee_percent(value: float | None) -> str:
