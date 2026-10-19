@@ -33,13 +33,17 @@ TransferId = NewType("TransferId", bytes)
 OperationId = NewType("OperationId", bytes)
 PositionSetHash = NewType("PositionSetHash", bytes)
 # HyperCore (market 55) identifiers, sized as in the fuses: a spot token's uint64
-# index, an order book's uint32 asset (perp, HIP-3 or 10000 + spot index), the
-# uint64 oid / uint128 cloid of an order, a perp's uint32 margin table.
+# index; a uint32 action asset (native perp below 10_000, HIP-3 100_000 +
+# dex * 10_000 + index; Hyperliquid's spot pairs are 10_000 + the spot *pair*
+# index, which the Fusion order and cancel fuses reject); an order's uint64 oid
+# and uint128 cloid; a perp's uint32 margin table.
 HyperCoreTokenIndex = NewType("HyperCoreTokenIndex", int)
 HyperCoreAsset = NewType("HyperCoreAsset", int)
 HyperCoreOrderId = NewType("HyperCoreOrderId", int)
 HyperCoreClientOrderId = NewType("HyperCoreClientOrderId", int)
 MarginTableId = NewType("MarginTableId", int)
+# The pending action's uint24 CoreWriter opcode (HyperCoreLib.ACTION_*, 0 for an
+# EVM-side deposit): what kind of action, not which one (that is the nonce).
 HyperCoreActionId = NewType("HyperCoreActionId", int)
 PayloadHash = NewType("PayloadHash", bytes)
 # A transaction hash as 0x and 64 hex digits (a HexStr, so web3 takes it).
