@@ -44,8 +44,9 @@ Adding a feed type:
 
 1. Wrapper class (``ContractWrapper``) exposing its getters.
 2. Revert-safe reader probes on :class:`OracleMappingReader` (``None`` on
-   failure).
-3. ``TYPE_*`` constant + ``_resolve_*`` function; recurse only into
+   failure); both live in ``oracle_mapping_reader``.
+3. ``TYPE_*`` constant (``oracle_mapping_nodes``) + ``_resolve_*`` function
+   (``oracle_mapping_nodes`` for a leaf, here when it recurses); recurse only into
    middleware assets — component *feeds* belong in ``source_detail``.
 4. Dispatch entry in ``_classify_and_resolve``, ordered by specificity,
    above the generic Chainlink-tier fallback. Gate on the type-defining
@@ -61,518 +62,65 @@ Adding a feed type:
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
-from functools import cached_property
-from typing import Any
-
-from eth_abi import decode
 from eth_typing import ChecksumAddress
-from web3 import Web3
-from web3.types import BlockIdentifier
 
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.oracle import (
-    PriceOracleMiddleware,
-    PriceOracleMiddlewareManager,
-    price_oracle_middleware,
-)
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.readers.oracle_mapping_nodes import (
+    TYPE_CHAINLINK,
+    TYPE_CHAINLINK_STYLE,
+    TYPE_DUAL_XREF,
+    TYPE_ERC4626,
+    TYPE_MIDDLEWARE_FALLBACK,
+    TYPE_MORPHO,
+    TYPE_UNKNOWN,
+    WAD_DECIMALS,
+    ZERO_ADDRESS,
+    OracleAsset,
+    OracleMapping,
+    OracleNode,
+    OraclePrice,
+    _apply_dependency_status,
+    _collect_unresolved,
+    _mapping_status,
+    _partial,
+    _price_block,
+    _resolve_chainlink,
+    _resolve_dual_xref,
+    collapse_sources,
+    normalize_wad,
+)
+from ipor_fusion.readers.oracle_mapping_reader import (
+    ASSET_PRICE_SOURCE_UPDATED_TOPIC,
+    OracleMappingReader,
+)
 from ipor_fusion.types import (
     AssetSource,
-    MappingStatus,
-    NodeStatus,
     PlasmaVaultAddress,
     Price,
 )
 
-ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-
-# keccak256("AssetPriceSourceUpdated(address,address)") — both args are in the
-# log data (neither is indexed), so only topic0 is used to filter.
-# Base-middleware event only; managers emit AssetPriceSourceAdded/Removed
-# instead, but expose getConfiguredAssets(), so the replay never runs on one.
-ASSET_PRICE_SOURCE_UPDATED_TOPIC = (
-    "0xe6c35d0425da27d8f991ada353619254c33e5094fc7e19154e02feb391937390"
-)
-
-# source_type values (also the human label in the path / output). Adding a
-# type? Follow the "Adding a feed type" checklist in the module docstring.
-TYPE_CHAINLINK = "ChainlinkAggregator"
-TYPE_CHAINLINK_STYLE = "chainlink_style"
-TYPE_ERC4626 = "ERC4626PriceFeed"
-TYPE_MORPHO = "CollateralTokenOnMorphoMarketPriceFeed"
-TYPE_DUAL_XREF = "DualCrossReferencePriceFeed"
-TYPE_MIDDLEWARE_FALLBACK = "middleware_fallback"
-TYPE_UNKNOWN = "custom_unknown"
-
-# The 18-decimal fixed-point scale normalized prices are rescaled to.
-WAD_DECIMALS = 18
-
-
-# ---------------------------------------------------------------------------
-# Result dataclasses (field names are the JSON keys of the CLI --json / MCP
-# output — renaming a field is a client-visible schema change)
-# ---------------------------------------------------------------------------
-
-
-@dataclass(slots=True)
-class OraclePrice:
-    """Price block: raw oracle answer plus its 18-decimal rescale.
-
-    Non-null on a node only when the oracle's ``getAssetPrice()`` read
-    succeeded.
-    """
-
-    raw: str
-    decimals: int
-    normalized_wad: str
-
-
-@dataclass(slots=True)
-class OracleNode:
-    """One asset's resolved price feed (recursive for derived feeds).
-
-    ``status``: ``resolved`` — own feed explained and every dependency
-    resolved; ``partially_resolved`` — own feed explained, but some descendant
-    is not resolved; ``partial`` — this node's own resolution is incomplete
-    (``reason`` says why).
-    """
-
-    asset: ChecksumAddress
-    symbol: str | None
-    decimals: int | None
-    source: ChecksumAddress | None
-    price: OraclePrice | None
-    source_type: str = TYPE_UNKNOWN
-    path: list[str] = field(default_factory=list)
-    status: NodeStatus = "partial"
-    reason: str | None = None
-    # Deliberately untyped: the payload differs per source_type. Universal
-    # fixed blocks (price) get dataclasses; this is the one dynamic section.
-    source_detail: dict[str, Any] | None = None
-    dependencies: list[OracleNode] = field(default_factory=list)
-
-    def to_dict(self) -> dict[str, Any]:
-        """JSON-ready shape; every key always present (null/empty when unused)."""
-        return asdict(self)
-
-
-@dataclass(slots=True)
-class OracleAsset:
-    """The vault's underlying ERC-20 asset."""
-
-    address: ChecksumAddress
-    symbol: str | None
-    decimals: int | None
-
-
-@dataclass(slots=True)
-class OracleMapping:
-    """Full oracle mapping for a vault at a pinned block.
-
-    ``status`` rolls up the configured-asset roots: ``resolved`` — every root
-    resolved (vacuously so with zero assets); ``unresolved`` — every root
-    ``partial`` (total failure); ``partially_resolved`` — anything in
-    between. The ``unresolved`` list mirrors ``partial`` nodes only — parents
-    demoted to ``partially_resolved`` self-describe and are not repeated
-    there.
-    """
-
-    vault: PlasmaVaultAddress
-    vault_name: str | None
-    asset: OracleAsset
-    price_oracle: ChecksumAddress
-    block_number: int
-    asset_source: AssetSource
-    status: MappingStatus
-    configured_assets: list[OracleNode]
-    unresolved: list[OracleNode]
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-# ---------------------------------------------------------------------------
-# Local contract reads (the few the SDK wrappers do not expose)
-# ---------------------------------------------------------------------------
-
-
-def _addr(value: object) -> ChecksumAddress:
-    return Web3.to_checksum_address(value)  # type: ignore[arg-type]
-
-
-class _Erc4626Feed(ContractWrapper):
-    def vault(self) -> Call[ChecksumAddress]:
-        return self._view("vault()", output_types=["address"], decoder=_addr)
-
-
-class _MorphoFeed(ContractWrapper):
-    def morpho_oracle(self) -> Call[ChecksumAddress]:
-        return self._view("morphoOracle()", output_types=["address"], decoder=_addr)
-
-    def collateral_token(self) -> Call[ChecksumAddress]:
-        return self._view("collateralToken()", output_types=["address"], decoder=_addr)
-
-    def loan_token(self) -> Call[ChecksumAddress]:
-        return self._view("loanToken()", output_types=["address"], decoder=_addr)
-
-
-class _MorphoOracle(ContractWrapper):
-    def price(self) -> Call[int]:
-        return self._view("price()", output_types=["uint256"], decoder=int)
-
-
-class _DualXrefFeed(ContractWrapper):
-    def asset_x(self) -> Call[ChecksumAddress]:
-        return self._view("ASSET_X()", output_types=["address"], decoder=_addr)
-
-    def asset_x_asset_y_feed(self) -> Call[ChecksumAddress]:
-        return self._view(
-            "ASSET_X_ASSET_Y_ORACLE_FEED()", output_types=["address"], decoder=_addr
-        )
-
-    def asset_y_usd_feed(self) -> Call[ChecksumAddress]:
-        return self._view(
-            "ASSET_Y_USD_ORACLE_FEED()", output_types=["address"], decoder=_addr
-        )
-
-
-class _Aggregator(ContractWrapper):
-    def decimals(self) -> Call[int]:
-        return self._view("decimals()", output_types=["uint8"], decoder=int)
-
-    def description(self) -> Call[str]:
-        return self._view("description()", output_types=["string"])
-
-    def latest_round_data(self) -> Call[tuple[int, int, int, int, int]]:
-        return self._view(
-            "latestRoundData()",
-            output_types=["uint80", "int256", "uint256", "uint256", "uint80"],
-        )
-
-    def version(self) -> Call[int]:
-        return self._view("version()", output_types=["uint256"], decoder=int)
-
-    def aggregator(self) -> Call[ChecksumAddress]:
-        return self._view("aggregator()", output_types=["address"], decoder=_addr)
-
-    def phase_id(self) -> Call[int]:
-        return self._view("phaseId()", output_types=["uint16"], decoder=int)
-
-
-class _Erc4626Vault(ContractWrapper):
-    def asset(self) -> Call[ChecksumAddress]:
-        return self._view("asset()", output_types=["address"], decoder=_addr)
-
-    def decimals(self) -> Call[int]:
-        return self._view("decimals()", output_types=["uint8"], decoder=int)
-
-    def convert_to_assets(self, shares: int) -> Call[int]:
-        return self._view(
-            "convertToAssets(uint256)",
-            shares,
-            output_types=["uint256"],
-            decoder=int,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Reader — the single network seam (every read is revert-safe → None)
-# ---------------------------------------------------------------------------
-
-
-class OracleMappingReader:
-    """Revert-safe on-chain reads against a fixed ``Web3Context`` (and block)."""
-
-    def __init__(self, ctx: Web3Context, oracle: ChecksumAddress):
-        self._ctx = ctx
-        self._oracle_addr = oracle
-        self._oracle = PriceOracleMiddleware(ctx, oracle)
-        self._manager = PriceOracleMiddlewareManager(ctx, oracle)
-
-    @cached_property
-    def _pricing_oracle(self) -> PriceOracleMiddleware:
-        """The oracle wrapper matching its ``getAssetPrice`` ABI; probed on
-        first use, since most readers in a mapping never read a price."""
-        return price_oracle_middleware(self._ctx, self._oracle_addr)
-
-    @staticmethod
-    def _safe(call: Call[Any]) -> Any:
-        try:
-            return call.call()
-        except Exception:
-            return None
-
-    # -- enumeration -------------------------------------------------------
-    def configured_assets(self) -> list[ChecksumAddress] | None:
-        return self._safe(self._manager.get_configured_assets())
-
-    def asset_source_events(
-        self, to_block: BlockIdentifier
-    ) -> list[tuple[int, ChecksumAddress, ChecksumAddress]]:
-        """Replay ``AssetPriceSourceUpdated`` logs as ``(block, asset, source)``."""
-        logs = self._ctx.get_logs(
-            contract_address=self._oracle_addr,
-            topics=[ASSET_PRICE_SOURCE_UPDATED_TOPIC],
-            to_block=to_block,
-        )
-        out: list[tuple[int, ChecksumAddress, ChecksumAddress]] = []
-        for log in logs:
-            asset, source = decode(["address", "address"], bytes(log["data"]))
-            out.append((int(log["blockNumber"]), _addr(asset), _addr(source)))
-        return out
-
-    # -- oracle reads (reuse SDK wrappers) ----------------------------------
-    def source_of(self, asset: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(self._oracle.get_source_of_asset_price(asset))
-
-    def asset_price(self, asset: ChecksumAddress) -> Price | None:
-        try:
-            return self._pricing_oracle.get_asset_price(asset).call()
-        except Exception:
-            return None
-
-    # -- oracle variant probes ---------------------------------------------
-    def underlying_middleware(self) -> ChecksumAddress | None:
-        """Manager variant: the global middleware zero-source assets delegate to."""
-        return self._safe(self._manager.get_price_oracle_middleware())
-
-    def chainlink_feed_registry(self) -> ChecksumAddress | None:
-        return self._safe(self._oracle.chainlink_feed_registry())
-
-    def delegate(self, oracle: ChecksumAddress) -> OracleMappingReader:
-        """Sibling reader bound to another oracle on the same context/block."""
-        return OracleMappingReader(self._ctx, oracle)
-
-    # -- token metadata ----------------------------------------------------
-    def symbol(self, token: ChecksumAddress) -> str | None:
-        return self._safe(ERC20(self._ctx, token).symbol())
-
-    def token_decimals(self, token: ChecksumAddress) -> int | None:
-        return self._safe(ERC20(self._ctx, token).decimals())
-
-    # -- feed probes -------------------------------------------------------
-    def feed_decimals(self, source: ChecksumAddress) -> int | None:
-        return self._safe(_Aggregator(self._ctx, source).decimals())
-
-    def feed_description(self, source: ChecksumAddress) -> str | None:
-        return self._safe(_Aggregator(self._ctx, source).description())
-
-    def feed_latest_round_data(
-        self, source: ChecksumAddress
-    ) -> tuple[int, int, int, int, int] | None:
-        return self._safe(_Aggregator(self._ctx, source).latest_round_data())
-
-    def feed_version(self, source: ChecksumAddress) -> int | None:
-        return self._safe(_Aggregator(self._ctx, source).version())
-
-    def feed_aggregator(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_Aggregator(self._ctx, source).aggregator())
-
-    def feed_phase_id(self, source: ChecksumAddress) -> int | None:
-        return self._safe(_Aggregator(self._ctx, source).phase_id())
-
-    def feed_vault(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_Erc4626Feed(self._ctx, source).vault())
-
-    def feed_morpho_oracle(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_MorphoFeed(self._ctx, source).morpho_oracle())
-
-    def feed_collateral_token(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_MorphoFeed(self._ctx, source).collateral_token())
-
-    def feed_loan_token(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_MorphoFeed(self._ctx, source).loan_token())
-
-    def morpho_oracle_price(self, morpho_oracle: ChecksumAddress) -> int | None:
-        return self._safe(_MorphoOracle(self._ctx, morpho_oracle).price())
-
-    def feed_asset_x(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_DualXrefFeed(self._ctx, source).asset_x())
-
-    def feed_asset_x_asset_y_feed(
-        self, source: ChecksumAddress
-    ) -> ChecksumAddress | None:
-        return self._safe(_DualXrefFeed(self._ctx, source).asset_x_asset_y_feed())
-
-    def feed_asset_y_usd_feed(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_DualXrefFeed(self._ctx, source).asset_y_usd_feed())
-
-    # -- ERC4626 vault reads ----------------------------------------------
-    def vault_asset(self, vault: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_Erc4626Vault(self._ctx, vault).asset())
-
-    def vault_decimals(self, vault: ChecksumAddress) -> int | None:
-        return self._safe(_Erc4626Vault(self._ctx, vault).decimals())
-
-    def vault_convert_to_assets(
-        self, vault: ChecksumAddress, shares: int
-    ) -> int | None:
-        return self._safe(_Erc4626Vault(self._ctx, vault).convert_to_assets(shares))
-
-
-# ---------------------------------------------------------------------------
-# Pure helpers
-# ---------------------------------------------------------------------------
-
-
-def collapse_sources(
-    events: Iterable[tuple[int, ChecksumAddress, ChecksumAddress]],
-) -> dict[ChecksumAddress, ChecksumAddress]:
-    """Collapse the event history into the current ``asset -> source`` map.
-
-    Mirrors on-chain storage semantics: the latest block wins per asset, and
-    on a same-block tie the later log wins (log order within a block is
-    execution order); a source set to the zero address removes the asset.
-    """
-    latest: dict[ChecksumAddress, tuple[int, ChecksumAddress]] = {}
-    for block, asset, source in events:
-        current = latest.get(asset)
-        if current is None or block >= current[0]:
-            latest[asset] = (block, source)
-    return {
-        asset: source
-        for asset, (_, source) in latest.items()
-        if source.lower() != ZERO_ADDRESS
-    }
-
-
-def normalize_wad(amount: int, decimals: int) -> str:
-    """Rescale ``amount`` (with ``decimals`` decimals) to an 18-decimal integer."""
-    if decimals <= WAD_DECIMALS:
-        return str(amount * 10 ** (WAD_DECIMALS - decimals))
-    return str(amount // 10 ** (decimals - WAD_DECIMALS))
-
-
-def _price_block(price: Price | None) -> OraclePrice | None:
-    """Format a Price into an :class:`OraclePrice` block; an unread price stays None."""
-    if price is None:
-        return None
-    return OraclePrice(
-        raw=str(price.amount),
-        decimals=int(price.decimals),
-        normalized_wad=normalize_wad(price.amount, int(price.decimals)),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Recursive resolution
-# ---------------------------------------------------------------------------
-
-
-def _partial(
-    asset: ChecksumAddress,
-    symbol: str | None,
-    decimals: int | None,
-    source: ChecksumAddress | None,
-    source_type: str,
-    reason: str,
-    path: list[str],
-    price: Price | None = None,
-) -> OracleNode:
-    """Build a partial node — uniform shape, ``status: partial`` + a reason."""
-    return OracleNode(
-        asset=asset,
-        symbol=symbol,
-        decimals=decimals,
-        source=source,
-        price=_price_block(price),
-        source_type=source_type,
-        path=path,
-        status="partial",
-        reason=reason,
-    )
-
-
-def _utc_twin(epoch: int | None) -> str | None:
-    """ISO-8601 UTC rendering of a round timestamp.
-
-    Null for a missing round (``None`` in) and for epoch 0: wrapper/composed
-    feeds return synthetic zero timestamps, and rendering 1970-01-01 would
-    manufacture a staleness illusion — the raw int keeps full fidelity.
-    """
-    if not epoch:
-        return None
-    return datetime.fromtimestamp(epoch, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _aggregator_detail(
-    description: str | None,
-    rnd: tuple[int, int, int, int, int] | None,
-    feed_decimals: int | None,
-) -> dict[str, Any]:
-    """Uniform metadata block for one aggregator-compatible feed read.
-
-    Raw values only — timestamps are echoed as-is with no staleness judgment
-    (wrapper/composed feeds legitimately return synthetic zeros; their
-    ``*_utc`` twins are null then), and ``description`` is null when the feed
-    does not implement ``description()``.
-    """
-    # Round ids are uint80 and exceed 2^53 on proxy feeds (phaseId << 64 | id),
-    # so they travel as strings. started_at/updated_at stay ints deliberately:
-    # realistic epochs sit far below 2^53, matching the int block_timestamp
-    # elsewhere in the output.
-    started_at = int(rnd[2]) if rnd else None
-    updated_at = int(rnd[3]) if rnd else None
-    return {
-        "description": description,
-        "round_id": str(rnd[0]) if rnd else None,
-        "answer": str(rnd[1]) if rnd else None,
-        "decimals": feed_decimals,
-        "started_at": started_at,
-        "started_at_utc": _utc_twin(started_at),
-        "updated_at": updated_at,
-        "updated_at_utc": _utc_twin(updated_at),
-        "answered_in_round": str(rnd[4]) if rnd else None,
-    }
-
-
-def _resolve_chainlink(
-    reader: OracleMappingReader,
-    node: OracleNode,
-    label: str,
-    source: ChecksumAddress,
-    rnd: tuple[int, int, int, int, int],
-    *,
-    has_foreign_getter: bool,
-) -> OracleNode:
-    """Resolve an aggregator-compatible leaf, grading the identity evidence.
-
-    ``ChainlinkAggregator`` is claimed only when the full AggregatorV3Interface
-    answers (``latestRoundData`` + ``decimals`` + ``description`` +
-    ``version``) and nothing contradicts it: no foreign getter answered, the
-    round is not degenerate (zero ``roundId``/``updatedAt`` are synthetic
-    values real aggregators never return), and ``description`` is non-empty.
-    Anything weaker is ``chainlink_style`` — still ``resolved`` (the structure
-    is explained), but the label tells consumers to verify the feed's identity
-    themselves if it matters.
-    """
-    description = reader.feed_description(source)
-    feed_decimals = reader.feed_decimals(source)
-    confirmed = (
-        not has_foreign_getter
-        and feed_decimals is not None
-        and bool(description)  # unimplemented and empty both demote
-        and rnd[0] != 0  # degenerate roundId
-        and rnd[3] != 0  # degenerate updatedAt
-        # gate evidence only, never part of the metadata block; probed last so
-        # the extra read is skipped once anything else already demoted
-        and reader.feed_version(source) is not None
-    )
-    node.source_type = TYPE_CHAINLINK if confirmed else TYPE_CHAINLINK_STYLE
-    node.path = [label, "Chainlink feed" if confirmed else "Chainlink-style feed"]
-    node.source_detail = {
-        **_aggregator_detail(description, rnd, feed_decimals),
-        # proxy-deployment evidence — uniform keys, null when unanswered
-        "aggregator": reader.feed_aggregator(source),
-        "phase_id": reader.feed_phase_id(source),
-    }
-    node.status = "resolved"
-    return node
+__all__ = [
+    "ASSET_PRICE_SOURCE_UPDATED_TOPIC",
+    "TYPE_CHAINLINK",
+    "TYPE_CHAINLINK_STYLE",
+    "TYPE_DUAL_XREF",
+    "TYPE_ERC4626",
+    "TYPE_MIDDLEWARE_FALLBACK",
+    "TYPE_MORPHO",
+    "TYPE_UNKNOWN",
+    "WAD_DECIMALS",
+    "ZERO_ADDRESS",
+    "OracleAsset",
+    "OracleMapping",
+    "OracleMappingReader",
+    "OracleNode",
+    "OraclePrice",
+    "build_oracle_mapping",
+    "collapse_sources",
+    "normalize_wad",
+    "resolve_asset",
+]
 
 
 def _resolve_erc4626(
@@ -636,64 +184,6 @@ def _resolve_morpho(
     dep = _resolve(reader, loan, depth + 1, visited, max_depth)
     node.dependencies = [dep]
     node.path = [label, "Morpho collateral/loan oracle", *dep.path]
-    node.status = "resolved"
-    return node
-
-
-def _resolve_dual_xref(
-    reader: OracleMappingReader,
-    node: OracleNode,
-    label: str,
-    asset_x: ChecksumAddress,
-    xy_feed: ChecksumAddress,
-    y_usd_feed: ChecksumAddress,
-) -> OracleNode:
-    """Resolve a dual cross-reference feed: X/USD = (X/Y feed) × (Y/USD feed)."""
-    xy_round = reader.feed_latest_round_data(xy_feed)
-    xy_decimals = reader.feed_decimals(xy_feed)
-    y_usd_round = reader.feed_latest_round_data(y_usd_feed)
-    y_usd_decimals = reader.feed_decimals(y_usd_feed)
-
-    derived: str | None = None
-    if (
-        xy_round
-        and y_usd_round
-        and xy_decimals is not None
-        and y_usd_decimals is not None
-    ):
-        derived = str(
-            int(normalize_wad(xy_round[1], xy_decimals))
-            * int(normalize_wad(y_usd_round[1], y_usd_decimals))
-            // 10**WAD_DECIMALS
-        )
-
-    node.source_type = TYPE_DUAL_XREF
-    node.source_detail = {
-        "asset_x": asset_x,
-        "asset_x_asset_y_feed": {
-            "address": xy_feed,
-            **_aggregator_detail(
-                reader.feed_description(xy_feed), xy_round, xy_decimals
-            ),
-        },
-        "asset_y_usd_feed": {
-            "address": y_usd_feed,
-            **_aggregator_detail(
-                reader.feed_description(y_usd_feed), y_usd_round, y_usd_decimals
-            ),
-        },
-        "derived_price_wad": derived,
-    }
-    node.path = [
-        label,
-        "DualCrossReferencePriceFeed",
-        "ASSET_X/ASSET_Y feed",
-        "ASSET_Y/USD feed",
-    ]
-    if derived is None:
-        node.status = "partial"
-        node.reason = "dual_xref_component_unreadable"
-        return node
     node.status = "resolved"
     return node
 
@@ -917,59 +407,11 @@ def _resolve(
         visited.discard(key)
 
 
-def _apply_dependency_status(node: OracleNode) -> OracleNode:
-    """Demote a ``resolved`` parent over any non-``resolved`` direct child.
-
-    Children are already final (post-order recursion), so direct children
-    suffice; an own ``partial`` outranks the dependency-driven demotion.
-    """
-    if node.status == "resolved" and any(
-        dep.status != "resolved" for dep in node.dependencies
-    ):
-        node.status = "partially_resolved"
-    return node
-
-
 def resolve_asset(
     reader: OracleMappingReader, asset: ChecksumAddress, max_depth: int
 ) -> OracleNode:
     """Public entry: resolve a single asset into a node tree."""
     return _resolve(reader, asset, 0, set(), max_depth)
-
-
-def _collect_unresolved(nodes: Iterable[OracleNode]) -> list[OracleNode]:
-    """Flatten the tree to every ``partial`` node (own resolution incomplete).
-
-    ``partially_resolved`` parents are deliberately excluded — they
-    self-describe, and listing them would bury the actual failures.
-    """
-    out: list[OracleNode] = []
-    stack = list(nodes)
-    while stack:
-        node = stack.pop()
-        if node.status == "partial":
-            out.append(node)
-        stack.extend(node.dependencies)
-    return out
-
-
-def _mapping_status(roots: list[OracleNode]) -> MappingStatus:
-    """Roll the root statuses up; empty ``roots`` is vacuously ``resolved``.
-
-    ``unresolved`` is reserved for total failure (every root ``partial``) — a
-    ``partially_resolved`` root still explains its own feed, so it keeps the
-    mapping at ``partially_resolved``.
-    """
-    if all(node.status == "resolved" for node in roots):
-        return "resolved"
-    if all(node.status == "partial" for node in roots):
-        return "unresolved"
-    return "partially_resolved"
-
-
-# ---------------------------------------------------------------------------
-# Top-level builder
-# ---------------------------------------------------------------------------
 
 
 def _enumerate_assets(
