@@ -9,8 +9,11 @@ to inspect a vault's roles, caps, and allocations. Supports both MetaMorpho V1
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from urllib.error import URLError
+from http.client import HTTPException
+from typing import Any
 from urllib.request import Request, urlopen
 
 from eth_abi import decode, encode
@@ -18,6 +21,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from web3 import Web3
 
+from ipor_fusion.errors import MorphoApiError
 from ipor_fusion.types import ChainId, MorphoBlueMarketId, parse_morpho_market_id
 
 MORPHO_API_URL = "https://blue-api.morpho.org/graphql"
@@ -135,8 +139,56 @@ class MorphoApiMarket:
     vaults: list[VaultAllocation]
 
 
-class MorphoApiError(RuntimeError):
-    """Raised when the Morpho API returns an error or is unreachable."""
+@contextmanager
+def _response_shape() -> Iterator[None]:
+    """Report any failure to read the answer's shape as `MorphoApiError`."""
+    try:
+        yield
+    except MorphoApiError:
+        raise
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
+        raise MorphoApiError(
+            f"Morpho API returned an unexpected response: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+def _post_query(
+    query: str,
+    variables: dict[str, Any],
+    timeout: float,
+    *,
+    tolerate_not_found: bool = True,
+) -> dict[str, Any]:
+    """POST a GraphQL query and return the decoded JSON object. GraphQL errors
+    raise, except NOT_FOUND ones when ``tolerate_not_found``: those come back
+    with ``data: null`` and the caller decides."""
+    payload = json.dumps({"query": query, "variables": variables}).encode()
+    req = Request(  # noqa: S310  # fixed https endpoint, not user input
+        MORPHO_API_URL,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed URL
+            raw = resp.read()
+    except (OSError, HTTPException) as exc:
+        raise MorphoApiError(f"Morpho API unreachable: {exc}") from exc
+    try:
+        body = json.loads(raw)
+    except ValueError as exc:
+        raise MorphoApiError(f"Morpho API returned invalid JSON: {exc}") from exc
+    if not isinstance(body, dict):
+        raise MorphoApiError(
+            f"Morpho API returned {type(body).__name__}, not a JSON object"
+        )
+    with _response_shape():
+        if errors := body.get("errors"):
+            if not tolerate_not_found or {e.get("status") for e in errors} - {
+                "NOT_FOUND"
+            }:
+                raise MorphoApiError(f"Morpho API error: {errors}")
+    return body
 
 
 def fetch_market(
@@ -146,36 +198,21 @@ def fetch_market(
 
     `market_id` is the 0x-prefixed market unique key. `chain_id` is the EVM chain
     ID (1 = mainnet, 8453 = base, ...). Raises `MorphoApiError` on network failure
-    or if the market is not indexed.
+    or if the market is not indexed, and on a response it cannot parse.
     """
-    payload = json.dumps(
-        {
-            "query": _MARKET_QUERY,
-            "variables": {"marketId": market_id, "chainId": chain_id},
-        }
-    ).encode()
-    req = Request(  # noqa: S310  # fixed https endpoint, not user input
-        MORPHO_API_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+    body = _post_query(
+        _MARKET_QUERY,
+        {"marketId": market_id, "chainId": chain_id},
+        timeout,
+        tolerate_not_found=False,
     )
-    try:
-        with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed URL
-            body = json.loads(resp.read())
-    except (URLError, TimeoutError) as exc:
-        raise MorphoApiError(f"Morpho API unreachable: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise MorphoApiError(f"Morpho API returned invalid JSON: {exc}") from exc
-
-    if errors := body.get("errors"):
-        raise MorphoApiError(f"Morpho API error: {errors}")
-    market = (body.get("data") or {}).get("marketById")
-    if not market:
-        raise MorphoApiError(
-            f"Market {market_id} not found on chain {chain_id} in Morpho index."
-        )
-    return _parse_market(market)
+    with _response_shape():
+        market = (body.get("data") or {}).get("marketById")
+        if not market:
+            raise MorphoApiError(
+                f"Market {market_id} not found on chain {chain_id} in Morpho index."
+            )
+        return _parse_market(market)
 
 
 def _parse_market(raw: dict) -> MorphoApiMarket:
@@ -382,49 +419,27 @@ def fetch_vault(
 ) -> VaultV2Info | VaultV1Info:
     """Fetch a Morpho vault by address. Tries V2 first, falls back to V1.
 
-    Raises `MorphoApiError` if the address is not a Morpho vault on this chain.
+    Raises `MorphoApiError` if the address is not a Morpho vault on this chain,
+    and on a response it cannot parse.
     """
     address = Web3.to_checksum_address(address)
     v2_body = _post_query(
         _VAULT_V2_QUERY, {"address": address, "chainId": chain_id}, timeout
     )
-    v2 = (v2_body.get("data") or {}).get("vaultV2ByAddress") if v2_body else None
-    if v2:
-        return _parse_vault_v2(v2)
+    with _response_shape():
+        v2 = (v2_body.get("data") or {}).get("vaultV2ByAddress")
+        if v2:
+            return _parse_vault_v2(v2)
     v1_body = _post_query(
         _VAULT_V1_QUERY, {"address": address, "chainId": chain_id}, timeout
     )
-    v1 = (v1_body.get("data") or {}).get("vaultByAddress") if v1_body else None
-    if v1:
-        return _parse_vault_v1(v1)
+    with _response_shape():
+        v1 = (v1_body.get("data") or {}).get("vaultByAddress")
+        if v1:
+            return _parse_vault_v1(v1)
     raise MorphoApiError(
         f"Vault {address} not found on chain {chain_id} (neither V1 nor V2)."
     )
-
-
-def _post_query(query: str, variables: dict, timeout: float) -> dict:
-    """POST a GraphQL query and return the parsed body. Tolerates NOT_FOUND."""
-    payload = json.dumps({"query": query, "variables": variables}).encode()
-    req = Request(  # noqa: S310  # fixed https endpoint, not user input
-        MORPHO_API_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed URL
-            body = json.loads(resp.read())
-    except (URLError, TimeoutError) as exc:
-        raise MorphoApiError(f"Morpho API unreachable: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise MorphoApiError(f"Morpho API returned invalid JSON: {exc}") from exc
-    # NOT_FOUND errors come back with errors[].status == "NOT_FOUND" and data: null.
-    # We swallow those (caller decides) and re-raise other GraphQL errors.
-    if errors := body.get("errors"):
-        statuses = {e.get("status") for e in errors}
-        if statuses - {"NOT_FOUND"}:
-            raise MorphoApiError(f"Morpho API error: {errors}")
-    return body
 
 
 def _parse_vault_v2(raw: dict) -> VaultV2Info:

@@ -23,7 +23,7 @@ MULTICALL3_ADDRESS: ChecksumAddress = Web3.to_checksum_address(
 DEFAULT_BATCH_SIZE = 100
 
 # A sub-call that reverts, returns nothing or returns undecodable data.
-_CALL_FAILURES = (ContractLogicError, DecodingError)
+_CALL_FAILURES = (ContractLogicError, EmptyCallResultError, DecodingError)
 
 
 class Multicall3(ContractWrapper):

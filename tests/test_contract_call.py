@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from eth_abi import encode
-from eth_abi.exceptions import InsufficientDataBytes
+from eth_abi.exceptions import DecodingError, InsufficientDataBytes
 from hexbytes import HexBytes
 from web3 import Web3
 
@@ -75,8 +75,26 @@ def test_empty_return_raises_typed_error_naming_target_chain_and_selector():
     assert "0x12345678" in message
 
 
-def test_empty_return_error_is_still_a_decode_error():
-    """Callers that already tolerate `InsufficientDataBytes` (optional
-    functions probed on older contracts) keep working unchanged."""
-    assert issubclass(EmptyCallResultError, InsufficientDataBytes)
+def test_empty_return_error_is_an_sdk_error_not_a_decode_error():
+    """An empty answer is a fact about the chain, not malformed data: catch
+    `EmptyCallResultError`, not eth_abi's decoding errors."""
     assert issubclass(EmptyCallResultError, IporFusionError)
+    assert not issubclass(EmptyCallResultError, DecodingError)
+
+
+def test_short_return_data_still_raises_the_decoder_error():
+    call: Call[int] = Call(
+        to=TARGET, data=SELECTOR, output_types=["uint256"], ctx=_ctx(b"\x01")
+    )
+
+    with pytest.raises(InsufficientDataBytes):
+        call.call()
+
+
+def test_write_only_call_cannot_be_read():
+    call: Call[None] = Call(to=TARGET, data=SELECTOR, ctx=_ctx(b""))
+
+    with pytest.raises(ValueError, match="write-only Call"):
+        call.call()
+    with pytest.raises(ValueError, match="write-only Call"):
+        call.decode(b"")

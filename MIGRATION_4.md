@@ -205,8 +205,10 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 - It raises `MorphoApiError` for a market id or address it parses (market and V1
   allocation ids, V1 flow-cap ids, vault/asset/owner/token/oracle/IRM/allocator
   addresses) when the value is invalid, or absent where the field is optional in the
-  answer. A key the parser requires can instead raise `KeyError`, e.g. a `loanAsset`
-  without `address`. When matching a market's own allocation and flow cap, an id that
+  answer. Any other answer it cannot read (a missing key such as a `loanAsset`
+  without `address`, a value of the wrong type, a body that is not a JSON object) and
+  any transport failure also raise `MorphoApiError`, never `KeyError`, `TypeError` or
+  `ValueError` (see [Errors](#errors)). When matching a market's own allocation and flow cap, an id that
   does not parse matches nothing, and a V1 flow cap without an id is skipped, as
   before. `--market` rejects a malformed id.
 - `LendingMarketHealth.substrate_id` for a Morpho market is `0x`-prefixed (the JSON
@@ -217,3 +219,38 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 - The on-disk caches (`~/.cache/ipor-fusion/`) key addresses lowercased; older entries
   are rekeyed on load, so a contract name cached for one spelling now also resolves
   for the other.
+
+## Errors
+
+One rule now holds across the SDK: a caller's mistake (a bad argument, or an
+operation the object was not built for) raises `ValueError`; a chain, provider or
+remote API answering something the SDK cannot use raises a subclass of
+`IporFusionError`. Every exception the SDK defines derives from `IporFusionError`
+and is importable from `ipor_fusion`; the builtin bases they had are kept.
+
+- `MorphoApiError` (still a `RuntimeError`), `ExternalStateEventDecodeError` (still a
+  `ValueError`) and `VerifierResultUnavailable` (still a `LookupError`) now derive
+  from `IporFusionError`, so an `except IporFusionError` placed before their own
+  handlers catches them first. `MorphoApiError` lives in `ipor_fusion.errors` and is
+  exported from `ipor_fusion`; `ipor_fusion.morpho_api.MorphoApiError` still works.
+- `EmptyCallResultError` is no longer an eth_abi `InsufficientDataBytes` (nor a
+  `DecodingError`). Code that caught either around `.call()` to tolerate a missing
+  contract or getter must catch `EmptyCallResultError`; return data that is present
+  but too short still raises eth_abi's error.
+- Crosschain discovery (`discover_deployment`, `discover_lane_fuses`,
+  `detect_transport`, `open_lane`, `CrosschainDeployment.executor`) raises the new
+  `CrosschainDiscoveryError` instead of `ValueError` for on-chain configuration it
+  cannot use: a malformed or unknown market substrate, an executor managed by another
+  vault or of no known transport, a missing or duplicate lane fuse, or not exactly one
+  executor of a transport. An executor reporting `transportKind()` `UNDEFINED` is now
+  rejected by `detect_transport` instead of being returned. A transport kind passed in
+  that has no lane is still a `ValueError`.
+- `Call.call()` and `Call.decode()` on a write-only `Call` raise `ValueError`, not
+  `RuntimeError`. `CrosschainSimulator.relay` raises `ValueError`, not
+  `RuntimeError`, for a message to a chain that was not added.
+- `VaultSimulator.run` (provider error from `eth_simulateV1`, or a result count that
+  does not match the queued calls) and `CrosschainSimulator.relay` (not settled within
+  `max_rounds`) raise the new `SimulationRunError`, still a `RuntimeError`.
+- The Morpho API client raises `MorphoApiError` for every response it cannot read and
+  for any `OSError` or `http.client.HTTPException` while fetching (it caught only
+  `URLError` and `TimeoutError` before).

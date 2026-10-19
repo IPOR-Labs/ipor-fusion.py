@@ -21,6 +21,7 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.ccip.chainlink import CcipOffRamp
+from ipor_fusion.errors import IporFusionError
 from ipor_fusion.types import MessageId
 
 #: Chainlink Labs' public mainnet indexers, tried in order.
@@ -32,9 +33,10 @@ INDEXER_URLS: tuple[str, ...] = (
 _HEADERS = {"Accept": "application/json", "User-Agent": "ipor-fusion-sdk"}
 
 
-class VerifierResultUnavailable(LookupError):
+class VerifierResultUnavailable(IporFusionError, LookupError):
     """No indexer could serve a verifier result for the message (not verified
-    yet, or the indexers were unreachable); the message says which."""
+    yet, or the indexers were unreachable); the message says which. Also a
+    LookupError: the result looked up is not there (yet)."""
 
 
 @dataclass(frozen=True, slots=True)

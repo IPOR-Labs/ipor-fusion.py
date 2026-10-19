@@ -42,6 +42,7 @@ from ipor_fusion import (
     CrosschainTransport,
     DeliveryCall,
     OutboundMessage,
+    SimulationRunError,
     StargateChain,
     StargateTransport,
 )
@@ -711,7 +712,7 @@ class TestCrosschainSimulator:
 
         if not settles:
             with pytest.raises(
-                RuntimeError, match=f"did not settle within {max_rounds} rounds"
+                SimulationRunError, match=f"did not settle within {max_rounds} rounds"
             ):
                 sim.relay(max_rounds=max_rounds)
             return
@@ -762,7 +763,7 @@ class TestCrosschainSimulator:
             Call(to=RECEIVER, data=b""), from_=SENDER
         )
         sim.add_chain(CHAIN_B, web3_b, block=200)
-        with pytest.raises(RuntimeError, match="did not settle within 3 rounds"):
+        with pytest.raises(SimulationRunError, match="did not settle within 3 rounds"):
             sim.relay(max_rounds=3)
 
     def test_message_to_missing_chain_is_an_error(self):
@@ -771,7 +772,7 @@ class TestCrosschainSimulator:
         sim.add_chain(CHAIN_A, web3_a, block=100).add_call(
             Call(to=RECEIVER, data=b""), from_=SENDER
         )
-        with pytest.raises(RuntimeError, match="was not added to the simulator"):
+        with pytest.raises(ValueError, match="was not added to the simulator"):
             sim.relay()
 
     def test_add_chain_validation_and_empty_relay(self):
@@ -786,7 +787,7 @@ class TestCrosschainSimulator:
         assert sim.chain(CHAIN_A).has_calls is False
         assert sim.relay(max_rounds=0) == {}
         sim.chain(CHAIN_A).add_call(Call(to=RECEIVER, data=b""), from_=SENDER)
-        with pytest.raises(RuntimeError, match="did not settle within 0 rounds"):
+        with pytest.raises(SimulationRunError, match="did not settle within 0 rounds"):
             sim.relay(max_rounds=0)
 
 

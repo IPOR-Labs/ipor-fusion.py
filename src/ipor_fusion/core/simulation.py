@@ -15,7 +15,11 @@ from web3.utils.address import get_create_address
 
 from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.core.fuse_action import FuseAction
-from ipor_fusion.errors import SimulationError, decode_custom_error
+from ipor_fusion.errors import (
+    SimulationError,
+    SimulationRunError,
+    decode_custom_error,
+)
 from ipor_fusion.types import PlasmaVaultAddress
 
 #: ``n`` (the sent block's index in the run) -> account overrides for it.
@@ -570,7 +574,7 @@ class VaultSimulator:
         )
         if "error" in response:
             err = response["error"]
-            raise RuntimeError(f"eth_simulateV1 failed: {err}")
+            raise SimulationRunError(f"eth_simulateV1 failed: {err}")
 
         return self._parse_response(response["result"])
 
@@ -597,7 +601,7 @@ class VaultSimulator:
         for block_result in result:
             raw_calls.extend(block_result.get("calls", []))
         if len(raw_calls) != len(sources):
-            raise RuntimeError(
+            raise SimulationRunError(
                 "eth_simulateV1 returned "
                 f"{len(raw_calls)} call results for {len(sources)} queued calls"
             )

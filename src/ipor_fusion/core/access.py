@@ -15,7 +15,11 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.errors import ContractNotFoundError, NotPlasmaVaultError
+from ipor_fusion.errors import (
+    ContractNotFoundError,
+    EmptyCallResultError,
+    NotPlasmaVaultError,
+)
 from ipor_fusion.types import AccessManagerAddress, Period, PlasmaVaultAddress, RoleId
 
 
@@ -189,8 +193,9 @@ def resolve_access_manager(
 
     Raises ContractNotFoundError when no code is deployed at the address (as
     of ctx.default_block), and NotPlasmaVaultError when the contract does not
-    expose getAccessManagerAddress() — either an empty eth_call return
-    (InsufficientDataBytes on decode) or a revert (ContractLogicError).
+    expose getAccessManagerAddress(): an empty eth_call return
+    (EmptyCallResultError), return data too short to decode
+    (InsufficientDataBytes) or a revert (ContractLogicError).
     Provider/transport errors propagate unchanged.
     """
     checksum = Web3.to_checksum_address(vault_address)
@@ -210,7 +215,7 @@ def resolve_access_manager(
             .get_access_manager_address()
             .call()
         )
-    except (InsufficientDataBytes, ContractLogicError) as exc:
+    except (EmptyCallResultError, InsufficientDataBytes, ContractLogicError) as exc:
         raise NotPlasmaVaultError(
             f"Address {checksum} on chain {ctx.chain_id} does not appear "
             f"to be a Plasma Vault."

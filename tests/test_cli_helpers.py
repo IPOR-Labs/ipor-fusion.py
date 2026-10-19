@@ -55,6 +55,7 @@ from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientF
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse
+from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.lending_health import (
@@ -2478,11 +2479,18 @@ class TestFetchFeeData:
         assert result.deposit_fee_wad is None
         assert result.unrealized_management_fee == 7
 
-    def test_non_fee_account_address_does_not_crash(self):
+    @pytest.mark.parametrize(
+        "error",
+        [
+            EmptyCallResultError("eth_call returned no data"),
+            DecodingError("Tried to read 32 bytes, only got 1 bytes."),
+        ],
+    )
+    def test_non_fee_account_address_does_not_crash(self, error):
         # A fee account that is an EOA (or any contract without
-        # FEE_MANAGER()) answers eth_call with empty data, which fails ABI
-        # decoding rather than reverting — _safe_call alone would not catch
-        # it and `vault info` would die instead of degrading.
+        # FEE_MANAGER()) answers eth_call with empty data rather than
+        # reverting — _safe_call alone would not catch it and `vault info`
+        # would die instead of degrading. Data too short to decode is the same.
         perf = MagicMock(fee_account=ADDR_1, fee_in_percentage=1000)
         vault = MagicMock()
         vault.get_performance_fee_data.return_value.call.return_value = perf
@@ -2490,7 +2498,7 @@ class TestFetchFeeData:
         vault.get_unrealized_management_fee.return_value.call.return_value = 0
 
         def empty_return():
-            raise DecodingError("Tried to read 32 bytes, only got 0 bytes.")
+            raise error
 
         with (
             patch("ipor_fusion.vault_managers.FeeAccount") as account_cls,

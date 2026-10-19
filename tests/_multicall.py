@@ -24,6 +24,7 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.core.multicall import MULTICALL3_ADDRESS
+from ipor_fusion.errors import EmptyCallResultError
 
 AGGREGATE3_SELECTOR = function_signature_to_4byte_selector(
     "aggregate3((address,bool,bytes)[])"
@@ -89,6 +90,6 @@ class SequentialMulticall:
         for call in calls:
             try:
                 results.append(call.call())
-            except (ContractLogicError, DecodingError):
+            except (ContractLogicError, EmptyCallResultError, DecodingError):
                 results.append(None)
         return results

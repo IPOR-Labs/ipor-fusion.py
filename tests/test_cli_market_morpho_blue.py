@@ -13,7 +13,7 @@ from ipor_fusion import cache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
-from ipor_fusion.errors import MorphoMarketNotFoundError
+from ipor_fusion.errors import IporFusionError, MorphoMarketNotFoundError
 from ipor_fusion.morpho_api import (
     MorphoApiError,
     MorphoApiMarket,
@@ -23,7 +23,7 @@ from ipor_fusion.morpho_api import (
     fetch_market,
     fetch_vault,
 )
-from ipor_fusion.types import parse_morpho_market_id
+from ipor_fusion.types import ChainId, parse_morpho_market_id
 
 MARKET_ID = "ad656d430bb3d8c1469bf45c8ad4ebae1b04be04757c69fa424eec78d7b3f4dc"
 LOAN_TOKEN = Web3.to_checksum_address("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
@@ -816,3 +816,75 @@ class TestMorphoApiAddresses:
     def test_a_malformed_address_is_an_api_error(self):
         with pytest.raises(MorphoApiError):
             _parse_market(self._raw("invalid oracle"))
+
+
+def _answer(monkeypatch: pytest.MonkeyPatch, body: bytes) -> None:
+    """Make every Morpho API request answer ``body``."""
+    resp = MagicMock()
+    resp.read.return_value = body
+    opened = MagicMock()
+    opened.__enter__.return_value = resp
+    monkeypatch.setattr(
+        "ipor_fusion.morpho_api.urlopen", MagicMock(return_value=opened)
+    )
+
+
+class TestMorphoApiResponseShape:
+    """Every way an answer can fail to match the query surfaces from
+    `fetch_market` / `fetch_vault` as `MorphoApiError`, never as the parser's
+    KeyError, TypeError or ValueError."""
+
+    MARKET = parse_morpho_market_id(MARKET_ID)
+
+    @staticmethod
+    def _market(**overrides) -> bytes:
+        raw = TestMorphoApiAddresses()._raw(ORACLE) | overrides
+        return json.dumps({"data": {"marketById": raw}}).encode()
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"loanAsset": {"symbol": "U", "decimals": 6}},
+            {"loanAsset": None},
+            {"lltv": "not a number"},
+            {"supplyingVaults": [{"name": "no address"}]},
+            {"state": ["not an object"]},
+        ],
+        ids=["missing-key", "null-object", "bad-int", "vault-missing-key", "list"],
+    )
+    def test_malformed_market_is_an_api_error(self, monkeypatch, overrides):
+        _answer(monkeypatch, self._market(**overrides))
+        with pytest.raises(MorphoApiError, match="unexpected response"):
+            fetch_market(self.MARKET, ChainId(1))
+
+    @pytest.mark.parametrize(
+        "body",
+        [b"[1, 2]", b"\xff\xfe\x00", b"{not json", b'{"errors": ["boom"]}'],
+        ids=["not-an-object", "not-utf8", "invalid-json", "error-not-an-object"],
+    )
+    def test_malformed_body_is_an_api_error(self, monkeypatch, body):
+        _answer(monkeypatch, body)
+        with pytest.raises(MorphoApiError):
+            fetch_market(self.MARKET, ChainId(1))
+        with pytest.raises(MorphoApiError):
+            fetch_vault(VAULT_ADDR, ChainId(1))
+
+    def test_malformed_vault_is_an_api_error(self, monkeypatch):
+        body = _v2_response()
+        body["data"]["vaultV2ByAddress"]["adapters"] = ["not an object"]
+        _answer(monkeypatch, json.dumps(body).encode())
+        with pytest.raises(MorphoApiError, match="unexpected response"):
+            fetch_vault(VAULT_ADDR, ChainId(1))
+
+    def test_a_dropped_connection_is_an_api_error(self, monkeypatch):
+        monkeypatch.setattr(
+            "ipor_fusion.morpho_api.urlopen",
+            MagicMock(side_effect=ConnectionResetError("reset by peer")),
+        )
+        with pytest.raises(MorphoApiError, match="unreachable"):
+            fetch_market(self.MARKET, ChainId(1))
+
+    def test_api_error_is_an_sdk_error_and_still_a_runtime_error(self):
+        assert issubclass(MorphoApiError, IporFusionError)
+        assert issubclass(MorphoApiError, RuntimeError)
+        assert not issubclass(MorphoApiError, ValueError)

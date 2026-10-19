@@ -17,6 +17,7 @@ from ipor_fusion.core.fee_manager import (
 )
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
+from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.types import ZERO_ADDRESS
 from ipor_fusion.vault_reads import _read_batch, _safe_call, _scan_or_none
 
@@ -104,12 +105,13 @@ def _fetch_fee_manager_address(
 
     The fee account reported by a vault is not guaranteed to be a FeeAccount
     contract — older deployments can name a plain recipient address. An EOA
-    answers eth_call with empty data, which fails ABI decoding instead of
-    reverting, so `_safe_call` alone does not cover it.
+    answers eth_call with empty data (`EmptyCallResultError`) instead of
+    reverting, so `_safe_call` alone does not cover it; data too short to
+    decode is treated the same.
     """
     try:
         return _safe_call(FeeAccount(ctx, fee_account).fee_manager().call)
-    except DecodingError:
+    except (EmptyCallResultError, DecodingError):
         return None
 
 

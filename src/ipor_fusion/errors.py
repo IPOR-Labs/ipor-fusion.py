@@ -5,7 +5,6 @@ import re
 from collections.abc import Iterable
 
 from eth_abi import decode as abi_decode
-from eth_abi.exceptions import InsufficientDataBytes
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -147,35 +146,47 @@ def get_revert_reason(web3: Web3, tx_hash: TxHash, receipt: TxReceipt) -> str | 
 
 
 class IporFusionError(Exception):
-    """Base exception for all IPOR Fusion SDK errors."""
+    """Base of every exception the SDK defines.
+
+    The SDK raises its own subclasses when the chain, a provider or a remote API
+    answers something it cannot use. A caller's mistake (a bad argument, or an
+    operation the object was not built for, such as ``.call()`` on a write-only
+    ``Call``) raises a builtin ``ValueError`` instead, as the standard library
+    does for an operation on a closed file. A subclass that also describes bad
+    input (an address that is not a vault, a chain the tooling does not cover)
+    additionally derives from ``ValueError``; a few keep the builtin base they
+    had before 4.0 (``RuntimeError``, ``LookupError``) so existing handlers
+    still catch them.
+    """
 
 
 class ContractNotFoundError(IporFusionError, ValueError):
     """No contract deployed at the given address.
 
-    Also a ValueError so MCP adapters can let it propagate unmapped.
+    Also a ValueError: the address the caller passed holds nothing to read.
     """
 
 
 class NotPlasmaVaultError(IporFusionError, ValueError):
     """Contract exists but does not implement the Plasma Vault interface.
 
-    Also a ValueError so MCP adapters can let it propagate unmapped.
+    Also a ValueError: the address the caller passed is not a vault.
     """
 
 
 class UnsupportedChainError(IporFusionError, ValueError):
     """Chain is not (yet) supported by the on-chain vault tooling.
 
-    Also a ValueError so MCP adapters can let it propagate unmapped.
+    Also a ValueError: the chain the caller passed is outside what the tooling
+    covers.
     """
 
 
 class UnsupportedVaultVersionError(IporFusionError, ValueError):
     """A Plasma Vault predates a getter the on-chain vault tooling requires.
 
-    Also a ValueError, so callers that report ValueError as a user error
-    surface it as one.
+    Also a ValueError: the vault the caller passed cannot be read by this
+    tooling.
     """
 
 
@@ -202,21 +213,40 @@ class LogSourceUnavailable(IporFusionError):
     falls back to its own `eth_getLogs` scan."""
 
 
-class EmptyCallResultError(IporFusionError, InsufficientDataBytes):
+class EmptyCallResultError(IporFusionError):
     """`eth_call` returned no data for a call that declares return values.
 
     Almost always there is no contract at the target address on the connected
     chain (or at the requested block); a contract whose catch-all fallback
-    returns nothing looks the same. Subclasses eth_abi's InsufficientDataBytes
-    — the error the ABI decoder used to raise — so existing handlers still
-    catch it.
+    returns nothing looks the same. Return data that is present but too short
+    still raises eth_abi's own decoding error.
     """
 
 
 class MorphoMarketNotFoundError(IporFusionError, ValueError):
     """Morpho Blue market ID was never created on the connected chain.
 
-    Also a ValueError so MCP adapters can let it propagate unmapped.
+    Also a ValueError: the market id the caller passed names no market.
+    """
+
+
+class MorphoApiError(IporFusionError, RuntimeError):
+    """The Morpho API is unreachable, returned an error, or answered with a
+    response the client cannot parse (missing keys, wrong types, invalid
+    addresses or market ids). Also a RuntimeError, its base before 4.0."""
+
+
+class CrosschainDiscoveryError(IporFusionError):
+    """A crosschain vault's on-chain configuration is not one discovery can
+    use: a malformed or unexpected market grant, an executor managed by another
+    vault or of no known transport, or a missing or duplicate lane fuse."""
+
+
+class SimulationRunError(IporFusionError, RuntimeError):
+    """A simulation could not run to completion: the provider rejected
+    ``eth_simulateV1`` or answered with a different number of call results than
+    were queued, or a crosschain relay was still producing messages after its
+    last round. Distinct from a simulated call that reverts (``SimulationError``).
     """
 
 
