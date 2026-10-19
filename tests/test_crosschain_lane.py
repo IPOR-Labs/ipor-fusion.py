@@ -15,8 +15,10 @@ from web3.exceptions import ContractLogicError
 from ipor_fusion import (
     LANES,
     CcipLane,
+    CrosschainDiscoveryError,
     CrosschainExecutorInfo,
     CrosschainLane,
+    IporFusionError,
     LaneFuses,
     LaneObservation,
     PlasmaVault,
@@ -386,10 +388,23 @@ class TestDiscovery:
         zero_pool = _ctx_answering(
             {selector("STARGATE_POOL()"): encode(["address"], [ZERO_ADDRESS])}
         )
-        with pytest.raises(ValueError, match="not a crosschain executor"):
+        with pytest.raises(CrosschainDiscoveryError, match="not a crosschain executor"):
             detect_transport(zero_pool, EXECUTOR)
-        with pytest.raises(ValueError, match="not a crosschain executor"):
+        with pytest.raises(CrosschainDiscoveryError, match="not a crosschain executor"):
             detect_transport(_ctx_answering({}), EXECUTOR)
+
+    @pytest.mark.parametrize(
+        ("kind", "message"),
+        [(0, "UNDEFINED, which has no lane"), (7, "not a crosschain executor")],
+    )
+    def test_detect_transport_rejects_a_kind_without_a_lane(self, kind, message):
+        ctx = _ctx_answering({selector("transportKind()"): encode(["uint8"], [kind])})
+        with pytest.raises(CrosschainDiscoveryError, match=message):
+            detect_transport(ctx, EXECUTOR)
+
+    def test_discovery_error_is_not_a_bad_argument(self):
+        assert issubclass(CrosschainDiscoveryError, IporFusionError)
+        assert not issubclass(CrosschainDiscoveryError, ValueError)
 
     def test_discover_lane_fuses_by_market_and_selector(self):
         market = 54
@@ -416,13 +431,17 @@ class TestDiscovery:
             market,
         )
         assert found == FUSES
-        with pytest.raises(ValueError, match="no supply, command, claim fuse"):
+        with pytest.raises(
+            CrosschainDiscoveryError, match="no supply, command, claim fuse"
+        ):
             discover_lane_fuses(
                 ctx, [REMOTE_VAULT], CrosschainTransportKind.STARGATE_LAYERZERO, market
             )
         codes[REMOTE_VAULT] = selector("enter((address,uint256))")
         markets[REMOTE_VAULT] = market
-        with pytest.raises(ValueError, match="two claim fuses") as exc_info:
+        with pytest.raises(
+            CrosschainDiscoveryError, match="two claim fuses"
+        ) as exc_info:
             discover_lane_fuses(
                 ctx, list(codes), CrosschainTransportKind.STARGATE_LAYERZERO, market
             )
@@ -728,7 +747,7 @@ class TestDeploymentDiscovery:
         assert ccip.fuses == CCIP_FUSES
         assert ccip.factory == CCIP_FACTORY
         assert ccip.spoke_chain_ids == (SPOKE,)
-        with pytest.raises(ValueError, match="0 UNDEFINED executors"):
+        with pytest.raises(CrosschainDiscoveryError, match="0 UNDEFINED executors"):
             deployment.executor(CrosschainTransportKind.UNDEFINED)
 
     def test_discover_deployment_rejects_a_foreign_executor(self):
@@ -742,7 +761,7 @@ class TestDeploymentDiscovery:
             return inner(to, data, block)
 
         ctx.call.side_effect = call
-        with pytest.raises(ValueError, match="managed by"):
+        with pytest.raises(CrosschainDiscoveryError, match="managed by"):
             discover_deployment(ctx, VAULT, MARKET)
 
     @pytest.mark.parametrize(
@@ -773,9 +792,23 @@ class TestDeploymentDiscovery:
             raise AssertionError("unexpected executor probe")
 
         ctx.call.side_effect = call
-        with pytest.raises(ValueError, match=message):
+        with pytest.raises(CrosschainDiscoveryError, match=message):
             discover_deployment(ctx, VAULT, MARKET)
         assert ctx.call.call_count == 1
+
+    def test_discover_deployment_rejects_an_unknown_substrate_type(self):
+        ctx = _deployment_ctx()
+        unknown = bytes([0xFF]) + bytes(11) + bytes.fromhex(EXECUTOR[2:])
+        market_substrates_selector = selector("getMarketSubstrates(uint256)")
+
+        def call(to, data, block=None):
+            if to == VAULT and bytes(data)[:4] == market_substrates_selector:
+                return encode(["bytes32[]"], [[unknown]])
+            raise AssertionError("unexpected executor probe")
+
+        ctx.call.side_effect = call
+        with pytest.raises(CrosschainDiscoveryError, match="does not decode"):
+            discover_deployment(ctx, VAULT, MARKET)
 
     def test_open_lanes_one_per_executor_and_served_spoke(self):
         hub_ctx = _deployment_ctx()

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from web3 import Web3
 
-from ipor_fusion import VaultSimulator
+from ipor_fusion import SimulationRunError, VaultSimulator
 from ipor_fusion.core.contract import Call
 
 VAULT = Web3.to_checksum_address("0x" + "11" * 20)
@@ -52,8 +52,18 @@ def test_run_rejects_missing_call_result():
     provider.make_request = MagicMock(return_value={"result": [{"calls": []}]})
 
     with pytest.raises(
-        RuntimeError, match="eth_simulateV1 returned 0 call results for 1 queued calls"
+        SimulationRunError,
+        match="eth_simulateV1 returned 0 call results for 1 queued calls",
     ):
+        sim.run()
+
+
+def test_run_reports_a_provider_error_as_a_run_error():
+    sim, provider = _simulator()
+    sim.observe("read", _read())
+    provider.make_request = MagicMock(return_value={"error": {"code": -32601}})
+
+    with pytest.raises(SimulationRunError, match="eth_simulateV1 failed"):
         sim.run()
 
 

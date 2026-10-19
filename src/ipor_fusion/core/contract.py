@@ -73,7 +73,7 @@ class Call(Generic[T]):
         """Execute as `eth_call`; decode and convert per `output_types`/`decoder`."""
         actual = self._resolve_ctx(ctx)
         if not self.output_types:
-            raise RuntimeError(
+            raise ValueError(
                 "Call.call() on a write-only Call — use .send() instead "
                 "(no output_types declared)."
             )
@@ -91,7 +91,7 @@ class Call(Generic[T]):
         """Decode raw return data per `output_types`/`decoder` — the second half
         of `.call()`, for return data fetched elsewhere (e.g. `Multicall3`)."""
         if not self.output_types:
-            raise RuntimeError("Call.decode() on a write-only Call.")
+            raise ValueError("Call.decode() on a write-only Call.")
         values = tuple(decode(self.output_types, bytes(raw)))
         single: Any = values[0] if len(values) == 1 else values
         if self.decoder is not None:

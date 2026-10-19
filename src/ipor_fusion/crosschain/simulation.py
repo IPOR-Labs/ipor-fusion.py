@@ -40,6 +40,7 @@ from ipor_fusion.crosschain.transport import (
     CrosschainTransport,
     OutboundMessage,
 )
+from ipor_fusion.errors import SimulationRunError
 from ipor_fusion.types import ChainId, PlasmaVaultAddress
 
 #: What the synthetic token source holds: enough for any test amount.
@@ -117,8 +118,9 @@ class CrosschainSimulator:
     def relay(self, max_rounds: int = 8) -> dict[ChainId, SimulationResult]:
         """Run every chain and deliver messages until nothing is in flight.
 
-        Runs at most ``max_rounds`` rounds and raises ``RuntimeError`` if
-        messages are still being produced afterward. A delivery that reverts
+        Runs at most ``max_rounds`` rounds and raises ``SimulationRunError`` if
+        messages are still being produced afterward, and ``ValueError`` if a
+        message targets a chain that was not added. A delivery that reverts
         stays in the destination call list and surfaces through that chain's
         ``SimulationResult``.
         """
@@ -128,7 +130,7 @@ class CrosschainSimulator:
                 break
             pending = self._run_round(pending)
         if pending:
-            raise RuntimeError(f"relay did not settle within {max_rounds} rounds")
+            raise SimulationRunError(f"relay did not settle within {max_rounds} rounds")
         return dict(self._results)
 
     def _run_round(self, chain_ids: set[ChainId]) -> set[ChainId]:
@@ -147,7 +149,7 @@ class CrosschainSimulator:
     def _deliver(self, message: OutboundMessage) -> None:
         destination = self._chains.get(message.dst_chain_id)
         if destination is None:
-            raise RuntimeError(
+            raise ValueError(
                 f"message {message.message_id.hex()} targets chain "
                 f"{message.dst_chain_id}, which was not added to the simulator"
             )

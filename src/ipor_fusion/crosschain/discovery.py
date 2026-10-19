@@ -9,6 +9,9 @@ whose ``hasDispatcher`` is true), every
 turns that into one ``CrosschainLane`` per executor and spoke; ``open_lane``
 does it for one executor address. ``LANES`` is the only place that knows the
 concrete lane classes: a new transport is a new subpackage plus one entry.
+
+On-chain configuration that discovery cannot use raises ``CrosschainDiscoveryError``;
+``ValueError`` is kept for a bad argument (a transport kind with no lane).
 """
 
 from __future__ import annotations
@@ -31,7 +34,7 @@ from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
 from ipor_fusion.crosschain.stargate.contracts import StargateCrosschainExecutor
 from ipor_fusion.crosschain.stargate.lane import StargateLane
-from ipor_fusion.errors import EmptyCallResultError
+from ipor_fusion.errors import CrosschainDiscoveryError, EmptyCallResultError
 from ipor_fusion.fuses.crosschain.base import (
     CrosschainSubstrateLib,
     CrosschainSubstrateType,
@@ -75,11 +78,18 @@ def detect_transport(
     non-zero ``STARGATE_POOL()`` and no ``transportKind()``."""
     transport_kind = _probe(CcipCrosschainExecutor(ctx, executor).transport_kind())
     if transport_kind is not None:
-        return CrosschainTransportKind(transport_kind)
+        if transport_kind not in LANES:
+            raise CrosschainDiscoveryError(
+                f"{executor} reports transportKind {transport_kind.name}, "
+                "which has no lane"
+            )
+        return transport_kind
     pool = _probe(StargateCrosschainExecutor(ctx, executor).stargate_pool())
     if pool is not None and pool != ZERO_ADDRESS:
         return CrosschainTransportKind.STARGATE_LAYERZERO
-    raise ValueError(f"{executor} is not a crosschain executor of a known transport")
+    raise CrosschainDiscoveryError(
+        f"{executor} is not a crosschain executor of a known transport"
+    )
 
 
 def discover_lane_fuses(
@@ -108,14 +118,16 @@ def discover_lane_fuses(
         for role, selector in selectors.items():
             if selector in code:
                 if role in found:
-                    raise ValueError(
+                    raise CrosschainDiscoveryError(
                         f"two {role} fuses on market {market_id}: "
                         f"{found[role]} and {fuse}"
                     )
                 found[role] = fuse
     missing = [role for role in selectors if role not in found]
     if missing:
-        raise ValueError(f"no {', '.join(missing)} fuse on market {market_id}")
+        raise CrosschainDiscoveryError(
+            f"no {', '.join(missing)} fuse on market {market_id}"
+        )
     return LaneFuses(found["supply"], found["command"], found["claim"])
 
 
@@ -163,7 +175,7 @@ class CrosschainDeployment:
         or more than one."""
         found = [e for e in self.executors if e.transport_kind == transport_kind]
         if len(found) != 1:
-            raise ValueError(
+            raise CrosschainDiscoveryError(
                 f"{len(found)} {transport_kind.name} executors on market "
                 f"{self.market_id} of {self.vault}"
             )
@@ -180,17 +192,23 @@ def discover_deployment(
     remote_vaults: dict[ChainId, list[ChecksumAddress]] = {}
     for raw in plasma_vault.get_market_substrates(market_id).call():
         raw_bytes = bytes(raw)
-        substrate = CrosschainSubstrateLib.bytes32_to_substrate(raw_bytes)
+        try:
+            substrate = CrosschainSubstrateLib.bytes32_to_substrate(raw_bytes)
+        except ValueError as exc:
+            raise CrosschainDiscoveryError(
+                f"substrate {raw_bytes.hex()} on market {market_id} does not "
+                f"decode: {exc}"
+            ) from exc
         if substrate.substrate_type == CrosschainSubstrateType.EXECUTOR:
             if substrate.chain_id != 0:
-                raise ValueError(
+                raise CrosschainDiscoveryError(
                     f"executor substrate {raw_bytes.hex()} on market {market_id} "
                     f"has nonzero chain id {substrate.chain_id}"
                 )
             executors.append(substrate.substrate_address)
         elif substrate.substrate_type == CrosschainSubstrateType.REMOTE_VAULT:
             if substrate.chain_id == 0:
-                raise ValueError(
+                raise CrosschainDiscoveryError(
                     f"remote vault substrate {raw_bytes.hex()} on market "
                     f"{market_id} has zero chain id"
                 )
@@ -198,7 +216,7 @@ def discover_deployment(
                 substrate.substrate_address
             )
         else:
-            raise ValueError(
+            raise CrosschainDiscoveryError(
                 f"substrate {raw_bytes.hex()} on market {market_id} has type "
                 f"{substrate.substrate_type.name}"
             )
@@ -208,7 +226,9 @@ def discover_deployment(
         wrapper = CrosschainExecutor(hub_ctx, address)
         manager = wrapper.manager().call()
         if manager != vault:
-            raise ValueError(f"executor {address} is managed by {manager}, not {vault}")
+            raise CrosschainDiscoveryError(
+                f"executor {address} is managed by {manager}, not {vault}"
+            )
         transport_kind = detect_transport(hub_ctx, address)
         infos.append(
             CrosschainExecutorInfo(
