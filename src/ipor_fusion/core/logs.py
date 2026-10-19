@@ -19,7 +19,9 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
 import requests
-from eth_typing import ChecksumAddress
+from eth_typing import ChecksumAddress, HexStr
+from eth_utils import encode_hex
+from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import Web3Exception
 from web3.types import BlockIdentifier, FilterParams, LogReceipt
@@ -158,6 +160,14 @@ class _Rejected(Exception):
         self.size = size
 
 
+def _topic_filter(topic: str | list[str]) -> HexStr | list[HexStr]:
+    """A topic (or an OR-list of them) as the canonical hex `eth_getLogs`
+    filters by; raises on text that is not hex."""
+    if isinstance(topic, str):
+        return encode_hex(HexBytes(topic))
+    return [encode_hex(HexBytes(alternative)) for alternative in topic]
+
+
 class _Scan:
     def __init__(
         self,
@@ -169,7 +179,7 @@ class _Scan:
     ):
         self._web3 = web3
         self._address = address
-        self._topics = topics
+        self._topics = [_topic_filter(topic) for topic in topics]
         self._timeout_s = timeout_s
         self._deadline = time.monotonic() + timeout_s
         self._stopped = threading.Event()
@@ -219,7 +229,7 @@ class _Scan:
             self._check(low, high)
             params: FilterParams = {
                 "address": self._address,
-                "topics": self._topics,  # type: ignore[typeddict-item]
+                "topics": self._topics,
                 "fromBlock": low,
                 "toBlock": high,
             }

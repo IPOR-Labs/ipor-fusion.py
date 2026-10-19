@@ -9,7 +9,7 @@ from eth_abi.exceptions import InsufficientDataBytes
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.types import TxReceipt
+from web3.types import TxParams, TxReceipt
 
 from ipor_fusion.types import TxHash
 
@@ -119,7 +119,7 @@ def get_revert_reason(web3: Web3, tx_hash: TxHash, receipt: TxReceipt) -> str | 
     """Replay a failed tx as eth_call to capture revert data."""
     try:
         tx = web3.eth.get_transaction(tx_hash)
-        call_params = {
+        call_params: TxParams = {
             "from": tx["from"],
             "to": tx["to"],
             "data": tx["input"],
@@ -129,7 +129,7 @@ def get_revert_reason(web3: Web3, tx_hash: TxHash, receipt: TxReceipt) -> str | 
             call_params["gas"] = tx["gas"]
 
         block_number = receipt["blockNumber"]
-        web3.eth.call(call_params, block_identifier=block_number)  # type: ignore[arg-type]
+        web3.eth.call(call_params, block_identifier=block_number)
         return None  # replay succeeded — can't determine reason
     except Exception as exc:
         exc_data = getattr(exc, "data", None)

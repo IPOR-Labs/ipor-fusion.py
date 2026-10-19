@@ -42,7 +42,11 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
             raise ValueError(f"{name} must not be negative, got {value}")
 
     def __eq__(self, other: object) -> bool:
-        return type(self) is type(other) and self._address == other._address  # type: ignore[attr-defined]
+        return (
+            isinstance(other, Fuse)
+            and type(self) is type(other)
+            and self._address == other._address
+        )
 
     def __hash__(self) -> int:
         return hash((type(self), self._address))

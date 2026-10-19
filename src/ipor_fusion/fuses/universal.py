@@ -65,7 +65,11 @@ class UniversalTokenSwapperFuse(Fuse):
         self._abi = abi
 
     def __eq__(self, other: object) -> bool:
-        return super().__eq__(other) and self._abi is other._abi  # type: ignore[attr-defined]
+        return (
+            isinstance(other, UniversalTokenSwapperFuse)
+            and super().__eq__(other)
+            and self._abi is other._abi
+        )
 
     def __hash__(self) -> int:
         return hash((type(self), self._address, self._abi))

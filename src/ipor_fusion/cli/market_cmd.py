@@ -51,7 +51,7 @@ class MarketIdType(click.ParamType):
 
     name = "marketId"
 
-    def convert(self, value, param, ctx):  # type: ignore[override]
+    def convert(self, value, param, ctx):
         if not isinstance(value, str):
             self.fail(f"expected string, got {type(value).__name__}", param, ctx)
         try:

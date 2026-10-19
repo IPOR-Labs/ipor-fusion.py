@@ -42,7 +42,7 @@ class CcipSendParams(SendParams):
 
     max_fee: int
     gas_limit: int
-    fee_token: ChecksumAddress = ZERO_ADDRESS  # type: ignore[assignment]
+    fee_token: ChecksumAddress = ZERO_ADDRESS
 
     @classmethod
     def from_route(cls, route: CcipRouteConfig, *, token: bool) -> CcipSendParams:
@@ -148,8 +148,8 @@ class CcipCommandType(IntEnum):
 
 _EMPTY_ROUTE = CcipRouteConfig(
     chain_selector=0,
-    peer=ZERO_ADDRESS,  # type: ignore[arg-type]
-    fee_token=ZERO_ADDRESS,  # type: ignore[arg-type]
+    peer=ZERO_ADDRESS,
+    fee_token=ZERO_ADDRESS,
     message_gas_limit=0,
     token_gas_limit=0,
     max_fee=0,
@@ -255,7 +255,7 @@ class CcipCrosschainCommandFuse(CrosschainCommandFuse):
         command: Command = EMPTY_COMMAND,
         max_fee: int = 0,
         gas_limit: int = 0,
-        fee_token: ChecksumAddress = ZERO_ADDRESS,  # type: ignore[assignment]
+        fee_token: ChecksumAddress = ZERO_ADDRESS,
     ) -> FuseAction:
         """Forward one operation to the executor (or its factory):
 
