@@ -464,7 +464,11 @@ def vault_add(
             save_config(cfg)
             return ActionResult(message=f"Vault {label} ({address}) updated.")
 
-    cfg.vaults.append(VaultEntry(address=address, label=label, chain_id=chain_id))
+    cfg.vaults.append(
+        VaultEntry(
+            address=Web3.to_checksum_address(address), label=label, chain_id=chain_id
+        )
+    )
     save_config(cfg)
     return ActionResult(message=f"Vault {label} ({address}) added.")
 

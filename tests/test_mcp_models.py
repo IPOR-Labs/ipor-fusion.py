@@ -666,6 +666,25 @@ class TestSimpleResponseContracts:
         assert result.version == "v2"
         assert result.fee_wad is None  # v1-only stays unset
 
+    def test_meta_morpho_without_a_curator_validates(self):
+        d = {
+            "version": "v1",
+            "chain_id": 1,
+            "address": "0xVAULT",
+            "name": "v",
+            "symbol": "v",
+            "asset": {"address": "0xL", "symbol": "USDC", "decimals": 6},
+            "total_assets": "1000",
+            "owner": "0xOWNER",
+            "curator": None,
+            "guardian": None,
+            "fee_recipient": None,
+            "allocators": [],
+        }
+        result = MetaMorphoVaultResponse.model_validate(d)
+        assert result.curator is None
+        assert result.guardian is None
+
     def test_meta_morpho_v1_validates(self):
         d = {
             "version": "v1",

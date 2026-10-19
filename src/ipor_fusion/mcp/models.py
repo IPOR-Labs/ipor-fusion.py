@@ -944,7 +944,7 @@ class MetaMorphoVaultResponse(_Base):
     allocations: list[dict[str, Any]] | None = None
     # shared
     owner: str
-    curator: str
+    curator: str | None = None
     allocators: list[str]
 
 

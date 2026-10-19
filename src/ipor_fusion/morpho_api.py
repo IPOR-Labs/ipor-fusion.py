@@ -14,6 +14,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from eth_abi import decode, encode
+from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from web3 import Web3
 
@@ -97,7 +98,7 @@ class VaultFlowCap:
 class VaultAllocation:
     """A MetaMorpho vault's exposure to a single Morpho Blue market."""
 
-    vault_address: str
+    vault_address: ChecksumAddress
     vault_name: str
     vault_symbol: str
     asset_symbol: str
@@ -115,10 +116,10 @@ class MorphoApiMarket:
 
     market_id: MorphoBlueMarketId
     lltv: int
-    loan_token: str
+    loan_token: ChecksumAddress
     loan_symbol: str
     loan_decimals: int
-    collateral_token: str
+    collateral_token: ChecksumAddress
     collateral_symbol: str
     collateral_decimals: int
     oracle: str
@@ -182,10 +183,10 @@ def _parse_market(raw: dict) -> MorphoApiMarket:
     return MorphoApiMarket(
         market_id=_api_market_id(raw.get("marketId")),
         lltv=int(raw["lltv"]),
-        loan_token=raw["loanAsset"]["address"],
+        loan_token=_api_address(raw["loanAsset"]["address"]),
         loan_symbol=raw["loanAsset"]["symbol"],
         loan_decimals=int(raw["loanAsset"]["decimals"]),
-        collateral_token=raw["collateralAsset"]["address"],
+        collateral_token=_api_address(raw["collateralAsset"]["address"]),
         collateral_symbol=raw["collateralAsset"]["symbol"],
         collateral_decimals=int(raw["collateralAsset"]["decimals"]),
         oracle=raw["oracle"]["address"],
@@ -281,8 +282,8 @@ class VaultV2Cap:
     relative_cap_wad: int
     allocation: int
     market_id: MorphoBlueMarketId | None
-    loan_token: str | None
-    collateral_token: str | None
+    loan_token: ChecksumAddress | None
+    collateral_token: ChecksumAddress | None
     oracle: str | None
     irm: str | None
     lltv: int | None
@@ -297,20 +298,22 @@ class VaultV2Cap:
 class VaultV2Adapter:
     """An adapter contract attached to a Vault V2 (e.g. Morpho adapter)."""
 
-    address: str
+    address: ChecksumAddress
     adapter_type: str
     assets: int
-    inner_vault: str | None  # for MorphoVaultV2Adapter: the underlying market vault
+    inner_vault: (
+        ChecksumAddress | None
+    )  # for MorphoVaultV2Adapter: the underlying market vault
 
 
 @dataclass(slots=True)
 class VaultV2Info:
     """Snapshot of a Morpho Vault V2."""
 
-    address: str
+    address: ChecksumAddress
     name: str
     symbol: str
-    asset_address: str
+    asset_address: ChecksumAddress
     asset_symbol: str
     asset_decimals: int
     total_assets: int
@@ -319,13 +322,13 @@ class VaultV2Info:
     share_price: float
     max_apy: float
     performance_fee: float
-    performance_fee_recipient: str
+    performance_fee_recipient: ChecksumAddress | None
     management_fee: float
-    management_fee_recipient: str
-    owner: str
-    curator: str
-    allocators: list[str]
-    sentinels: list[str]
+    management_fee_recipient: ChecksumAddress | None
+    owner: ChecksumAddress
+    curator: ChecksumAddress | None
+    allocators: list[ChecksumAddress]
+    sentinels: list[ChecksumAddress]
     liquidity_adapter: VaultV2Adapter | None
     adapters: list[VaultV2Adapter]
     caps: list[VaultV2Cap] = field(default_factory=list)
@@ -355,19 +358,19 @@ class VaultV1MarketAllocation:
 class VaultV1Info:
     """Snapshot of a MetaMorpho V1 vault."""
 
-    address: str
+    address: ChecksumAddress
     name: str
     symbol: str
-    asset_address: str
+    asset_address: ChecksumAddress
     asset_symbol: str
     asset_decimals: int
     total_assets: int
     fee_wad: int
-    owner: str
-    curator: str
-    guardian: str
-    fee_recipient: str
-    allocators: list[str]
+    owner: ChecksumAddress
+    curator: ChecksumAddress | None
+    guardian: ChecksumAddress | None
+    fee_recipient: ChecksumAddress | None
+    allocators: list[ChecksumAddress]
     allocations: list[VaultV1MarketAllocation]
     public_allocator: VaultFlowCap | None  # vault-level (no flowCap filtering)
     public_allocator_flow_caps: dict[str, tuple[int, int]]  # marketId -> (maxIn,maxOut)
@@ -431,10 +434,10 @@ def _parse_vault_v2(raw: dict) -> VaultV2Info:
     ]
     caps = [_parse_v2_cap(c) for c in (raw.get("caps") or {}).get("items", []) if c]
     return VaultV2Info(
-        address=raw["address"],
+        address=_api_address(raw.get("address")),
         name=raw.get("name") or "",
         symbol=raw.get("symbol") or "",
-        asset_address=asset.get("address") or "",
+        asset_address=_api_address(asset.get("address")),
         asset_symbol=asset.get("symbol") or "",
         asset_decimals=int(asset.get("decimals") or 0),
         total_assets=int(raw.get("totalAssets") or 0),
@@ -443,18 +446,22 @@ def _parse_vault_v2(raw: dict) -> VaultV2Info:
         share_price=float(raw.get("sharePrice") or 0.0),
         max_apy=float(raw.get("maxApy") or 0.0),
         performance_fee=float(raw.get("performanceFee") or 0.0),
-        performance_fee_recipient=raw.get("performanceFeeRecipient") or "",
+        performance_fee_recipient=_api_optional_address(
+            raw.get("performanceFeeRecipient")
+        ),
         management_fee=float(raw.get("managementFee") or 0.0),
-        management_fee_recipient=raw.get("managementFeeRecipient") or "",
-        owner=(raw.get("owner") or {}).get("address") or "",
-        curator=(raw.get("curator") or {}).get("address") or "",
+        management_fee_recipient=_api_optional_address(
+            raw.get("managementFeeRecipient")
+        ),
+        owner=_api_address((raw.get("owner") or {}).get("address")),
+        curator=_api_optional_address((raw.get("curator") or {}).get("address")),
         allocators=[
-            a["allocator"]["address"]
+            _api_address(a["allocator"]["address"])
             for a in raw.get("allocators") or []
             if (a.get("allocator") or {}).get("address")
         ],
         sentinels=[
-            s["sentinel"]["address"]
+            _api_address(s["sentinel"]["address"])
             for s in raw.get("sentinels") or []
             if (s.get("sentinel") or {}).get("address")
         ],
@@ -466,10 +473,10 @@ def _parse_vault_v2(raw: dict) -> VaultV2Info:
 
 def _parse_v2_adapter(raw: dict) -> VaultV2Adapter:
     return VaultV2Adapter(
-        address=raw.get("address") or "",
+        address=_api_address(raw.get("address")),
         adapter_type=raw.get("type") or raw.get("__typename") or "",
         assets=int(raw.get("assets") or 0),
-        inner_vault=(raw.get("metaMorpho") or {}).get("address"),
+        inner_vault=_api_optional_address((raw.get("metaMorpho") or {}).get("address")),
     )
 
 
@@ -500,7 +507,10 @@ def _parse_v2_cap(raw: dict) -> VaultV2Cap:
 
 def _decode_market_v1_id_data(
     id_data: str,
-) -> tuple[str, str, str, str, int] | None:
+) -> (
+    tuple[ChecksumAddress, ChecksumAddress, ChecksumAddress, ChecksumAddress, int]
+    | None
+):
     """Decode a Vault V2 `MarketV1`-type cap idData into MarketParams.
 
     Vault V2 encodes the cap idData as `abi.encode(string idType, address adapter,
@@ -546,6 +556,16 @@ def _decode_market_v1_id_data(
         Web3.to_checksum_address(irm),
         int(lltv),
     )
+
+
+def _api_address(value: object) -> ChecksumAddress:
+    if not isinstance(value, str) or not Web3.is_address(value):
+        raise MorphoApiError(f"Morpho API returned an invalid address: {value!r}")
+    return Web3.to_checksum_address(value)
+
+
+def _api_optional_address(value: object) -> ChecksumAddress | None:
+    return None if value is None or value == "" else _api_address(value)
 
 
 def _api_market_id(value: object) -> MorphoBlueMarketId:
@@ -612,20 +632,22 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
                 flow_caps[mid] = (int(fc.get("maxIn") or 0), int(fc.get("maxOut") or 0))
 
     return VaultV1Info(
-        address=raw["address"],
+        address=_api_address(raw.get("address")),
         name=raw.get("name") or "",
         symbol=raw.get("symbol") or "",
-        asset_address=asset.get("address") or "",
+        asset_address=_api_address(asset.get("address")),
         asset_symbol=asset.get("symbol") or "",
         asset_decimals=int(asset.get("decimals") or 0),
         total_assets=int(state.get("totalAssets") or 0),
         fee_wad=int(state.get("fee") or 0),
-        owner=state.get("owner") or "",
-        curator=state.get("curator") or "",
-        guardian=state.get("guardian") or "",
-        fee_recipient=state.get("feeRecipient") or "",
+        owner=_api_address(state.get("owner")),
+        curator=_api_optional_address(state.get("curator")),
+        guardian=_api_optional_address(state.get("guardian")),
+        fee_recipient=_api_optional_address(state.get("feeRecipient")),
         allocators=[
-            a["address"] for a in raw.get("allocators") or [] if a.get("address")
+            _api_address(a["address"])
+            for a in raw.get("allocators") or []
+            if a.get("address")
         ],
         allocations=allocations,
         public_allocator=flow_cap_summary,
@@ -667,7 +689,7 @@ def _parse_vault(raw: dict, market_id: MorphoBlueMarketId) -> VaultAllocation:
         a["address"] for a in (raw.get("allocators") or []) if a.get("address")
     ]
     return VaultAllocation(
-        vault_address=raw["address"],
+        vault_address=_api_address(raw["address"]),
         vault_name=raw.get("name") or "",
         vault_symbol=raw.get("symbol") or "",
         asset_symbol=asset.get("symbol") or "",

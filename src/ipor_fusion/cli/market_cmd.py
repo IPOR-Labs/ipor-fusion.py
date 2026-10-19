@@ -389,12 +389,12 @@ def _print_vault_v2(
     click.echo("")
     click.echo("Roles:")
     click.echo(f"  Owner:            {vault.owner}")
-    click.echo(f"  Curator:          {vault.curator}")
+    click.echo(f"  Curator:          {vault.curator or ''}")
     click.echo(
-        f"  Performance fee:  {vault.performance_fee * 100:.2f}% → {vault.performance_fee_recipient}"
+        f"  Performance fee:  {vault.performance_fee * 100:.2f}% → {vault.performance_fee_recipient or ''}"
     )
     click.echo(
-        f"  Management fee:   {vault.management_fee * 100:.2f}% → {vault.management_fee_recipient}"
+        f"  Management fee:   {vault.management_fee * 100:.2f}% → {vault.management_fee_recipient or ''}"
     )
     click.echo(f"  Allocators ({len(vault.allocators)}):")
     for addr in vault.allocators or ["(none)"]:
@@ -515,13 +515,13 @@ def _print_vault_v1(
         f"({_format_amount(vault.total_assets, vault.asset_decimals)} total)"
     )
     click.echo(
-        f"  Performance fee:  {vault.fee_wad / WAD * 100:.2f}% → {vault.fee_recipient}"
+        f"  Performance fee:  {vault.fee_wad / WAD * 100:.2f}% → {vault.fee_recipient or ''}"
     )
     click.echo("")
     click.echo("Roles:")
     click.echo(f"  Owner:            {vault.owner}")
-    click.echo(f"  Curator:          {vault.curator}")
-    click.echo(f"  Guardian:         {vault.guardian}")
+    click.echo(f"  Curator:          {vault.curator or ''}")
+    click.echo(f"  Guardian:         {vault.guardian or ''}")
     click.echo(f"  Allocators ({len(vault.allocators)}):")
     for addr in vault.allocators or ["(none)"]:
         tag = (

@@ -95,7 +95,7 @@ def vault() -> None:
     default=None,
     help="Chain ID or name (auto-detected when only one provider is configured).",
 )
-def add(address: str, label: str | None, chain_id: ChainId | None) -> None:
+def add(address: ChecksumAddress, label: str | None, chain_id: ChainId | None) -> None:
     """Save a vault to the config."""
     cfg = load_config()
 
