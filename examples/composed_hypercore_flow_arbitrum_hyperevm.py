@@ -100,12 +100,21 @@ from ipor_fusion.fuses import (
 from ipor_fusion.fuses.hypercore import (
     SPOT_DEX,
     USDC_SYSTEM_ADDRESS,
+    USDC_TOKEN_INDEX,
     TimeInForce,
     read_index_of,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.hypercore import HyperCoreReader
-from ipor_fusion.types import Amount, ChainId, MarketId, Period, Shares
+from ipor_fusion.types import (
+    Amount,
+    ChainId,
+    HyperCoreAsset,
+    HyperCoreClientOrderId,
+    MarketId,
+    Period,
+    Shares,
+)
 
 log = logging.getLogger("composed_hypercore_flow_arbitrum_hyperevm")
 
@@ -181,7 +190,7 @@ BRIDGE_LATENCY = Period(2 * 60)
 # ── The trade the live cycle ran ─────────────────────────────────────────────
 # xyz is HIP-3 perp dex 1; xyz:NVDA is action asset 100_000 + 1 * 10_000 + 2.
 XYZ_DEX = 1
-XYZ_NVDA_ASSET = 110_002
+XYZ_NVDA_ASSET = HyperCoreAsset(110_002)
 # Core amounts are Core wei: 8 decimals for USDC; sizes carry 8 implied
 # decimals too (0.05 NVDA = 5_000_000), prices 8 implied decimals.
 CORE_WEI = 10**8
@@ -410,9 +419,9 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     state = read_hypercore_vault_state(ctx, HYPERCORE_VAULT, HYPERCORE_BALANCE_FUSE)
     reader = HyperCoreReader(ctx)
     pending = bool(state.pending and state.pending.pending)
-    spot = reader.spot_balance(HYPERCORE_VAULT, 0).call()
+    spot = reader.spot_balance(HYPERCORE_VAULT, USDC_TOKEN_INDEX).call()
     spot_available = _available_spot_wei(spot.total, spot.hold)
-    usdc_info = reader.token_info(0).call()
+    usdc_info = reader.token_info(USDC_TOKEN_INDEX).call()
     evm_step = 10 ** max(int(usdc_info.wei_decimals) - 6, 0)
     xyz_equity_usd6 = int(
         reader.account_margin_summary(XYZ_DEX, HYPERCORE_VAULT).call().account_value
@@ -454,7 +463,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
             web3_hype,
             vault,
             "bridge_to_core",
-            deposit_fuse.enter(token_index=0, amount=BRIDGE_AMOUNT_USDC),
+            deposit_fuse.enter(token_index=USDC_TOKEN_INDEX, amount=BRIDGE_AMOUNT_USDC),
             override=override,
             note="14 USDC EVM -> Core spot through the CoreDepositWallet; vault USDC balance overridden for the preview",
         )
@@ -472,7 +481,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                     destination=HYPERCORE_VAULT,
                     source_dex=SPOT_DEX,
                     destination_dex=XYZ_DEX,
-                    token_index=0,
+                    token_index=USDC_TOKEN_INDEX,
                     amount_wei=to_dex,
                 ),
                 override=None,
@@ -511,7 +520,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                 limit_px=limit_buy,
                 sz=ORDER_SIZE,
                 tif=TimeInForce.IOC,
-                cloid=1,
+                cloid=HyperCoreClientOrderId(1),
             ),
             override=None,
             note=f"buy 0.05 xyz:NVDA, limit {limit_buy} (mark +1 %), notional {notional_usd6} USD6 under the cap {max_notional_usd6}",
@@ -528,7 +537,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                 limit_px=limit_sell,
                 sz=ORDER_SIZE,
                 tif=TimeInForce.IOC,
-                cloid=2,
+                cloid=HyperCoreClientOrderId(2),
                 reduce_only=True,
             ),
             override=None,
@@ -551,7 +560,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                     destination=HYPERCORE_VAULT,
                     source_dex=XYZ_DEX,
                     destination_dex=SPOT_DEX,
-                    token_index=0,
+                    token_index=USDC_TOKEN_INDEX,
                     amount_wei=from_dex,
                 ),
                 override=None,
@@ -586,7 +595,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
                     destination=Web3.to_checksum_address(USDC_SYSTEM_ADDRESS),
                     source_dex=SPOT_DEX,
                     destination_dex=SPOT_DEX,
-                    token_index=0,
+                    token_index=USDC_TOKEN_INDEX,
                     amount_wei=to_evm,
                 ),
                 override=None,

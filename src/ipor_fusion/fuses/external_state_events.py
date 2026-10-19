@@ -28,9 +28,11 @@ from typing import Any
 
 from eth_abi import decode
 from eth_abi.exceptions import DecodingError
-from eth_typing import ChecksumAddress
+from eth_typing import ChecksumAddress, HexStr
 from web3 import Web3
 from web3.types import TxReceipt
+
+from ipor_fusion.types import TxHash
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +136,7 @@ class ExternalStateEvent:
     emitter: ChecksumAddress
     args: dict[str, Any]
     block_number: int | None = None
-    transaction_hash: str | None = None
+    transaction_hash: TxHash | None = None
     log_index: int | None = None
 
 
@@ -191,10 +193,10 @@ def external_state_event_name(topic: bytes | str) -> str | None:
     return spec.name if spec else None
 
 
-def _hex(value: Any) -> str | None:
+def _hex(value: Any) -> TxHash | None:
     if value is None:
         return None
-    return "0x" + _as_bytes(value, "transactionHash").hex()
+    return TxHash(HexStr("0x" + _as_bytes(value, "transactionHash").hex()))
 
 
 def decode_external_state_event(log: Mapping[str, Any]) -> ExternalStateEvent | None:

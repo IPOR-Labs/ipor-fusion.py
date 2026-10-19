@@ -10,10 +10,10 @@ import time
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from eth_typing import HexAddress
+from eth_typing import HexAddress, HexStr
 
 from ipor_fusion.cache import load_contract_cache, update_contract_cache
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, TxHash
 
 ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api"
 
@@ -57,7 +57,7 @@ def get_contract_name(
 
 def get_deployment_tx(
     chain_id: ChainId, address: HexAddress, api_key: str | None = None
-) -> tuple[str | None, str | None]:
+) -> tuple[TxHash | None, str | None]:
     """Return ``(tx_hash, error)`` for a contract deployment.
 
     ``error`` is a short machine-readable code when ``tx_hash`` is None and the
@@ -69,7 +69,7 @@ def get_deployment_tx(
 
 def _fetch_contract_creation_tx(
     chain_id: ChainId, address: HexAddress, api_key: str | None = None
-) -> tuple[str | None, str | None]:
+) -> tuple[TxHash | None, str | None]:
     if chain_id not in SUPPORTED_CHAINS:
         return None, "chain-not-supported"
     if not api_key:
@@ -91,7 +91,8 @@ def _fetch_contract_creation_tx(
             with urlopen(url, timeout=10) as resp:  # noqa: S310
                 data = json.loads(resp.read().decode())
             if data.get("status") == "1" and data.get("result"):
-                return data["result"][0].get("txHash"), None  # type: ignore[no-any-return]
+                tx_hash = data["result"][0].get("txHash")
+                return (TxHash(HexStr(tx_hash)) if tx_hash else None), None
             result_text = str(data.get("result", "")).lower()
             if "free api access is not supported" in result_text:
                 return None, "etherscan-paid-tier-required"

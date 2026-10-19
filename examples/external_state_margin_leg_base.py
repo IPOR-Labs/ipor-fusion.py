@@ -95,7 +95,7 @@ from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.fusion_factory import FusionInstance
 from ipor_fusion.fuses import ExternalStateOperationFuse
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, ChainId, MarketId, Period, Shares
+from ipor_fusion.types import Amount, ChainId, MarketId, Period, ProposalHash, Shares
 
 log = logging.getLogger("external_state_margin_leg_base")
 
@@ -288,7 +288,7 @@ RELEASE_OFFSET = REQUEST_OFFSET + RELEASE_DELAY
 DEMO_OFFSET = RELEASE_OFFSET + DEMO_DELAY
 
 # A hash that is deliberately not the pending proposal's, for the rejection demo.
-WRONG_PROPOSAL_HASH = b"\xde\xad" + b"\x00" * 30
+WRONG_PROPOSAL_HASH = ProposalHash(b"\xde\xad" + b"\x00" * 30)
 
 # ── Derived from deployed signatures (NOT tunable) ───────────────────────────
 # Each of these is keccak over a signature the deployed contracts declare.

@@ -49,7 +49,15 @@ from ipor_fusion.fuses.hypercore import (
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
-from ipor_fusion.types import MarketId, Price
+from ipor_fusion.types import (
+    HyperCoreActionId,
+    HyperCoreAsset,
+    HyperCoreTokenIndex,
+    MarginTableId,
+    MarketId,
+    PayloadHash,
+    Price,
+)
 
 T = TypeVar("T")
 
@@ -137,7 +145,7 @@ class HyperCorePerpAssetInfo:
     """``perpAssetInfo`` precompile result."""
 
     coin: str
-    margin_table_id: int
+    margin_table_id: MarginTableId
     sz_decimals: int
     max_leverage: int
     only_isolated: bool
@@ -222,7 +230,7 @@ class HyperCoreReader:
         )
 
     def spot_balance(
-        self, user: ChecksumAddress, token_index: int
+        self, user: ChecksumAddress, token_index: HyperCoreTokenIndex
     ) -> Call[HyperCoreSpotBalance]:
         _validate_uint(token_index, 64, "token_index")
         return self._read(
@@ -247,7 +255,7 @@ class HyperCoreReader:
             _margin_summary,
         )
 
-    def token_info(self, token_index: int) -> Call[HyperCoreTokenInfo]:
+    def token_info(self, token_index: HyperCoreTokenIndex) -> Call[HyperCoreTokenInfo]:
         _validate_uint(token_index, 64, "token_index")
         return self._read(
             TOKEN_INFO_PRECOMPILE,
@@ -328,8 +336,8 @@ class HyperCorePendingState:
     settlement_mode: SettlementMode | None
     reported_result: HyperCoreReportedResult
     result_l1_block: int
-    action_id: int
-    payload_hash: bytes
+    action_id: HyperCoreActionId
+    payload_hash: PayloadHash
     refreshing: bool
     cached_value_wad: int
     action_nonce: int
@@ -370,8 +378,8 @@ def _decode_pending_state(values: tuple) -> HyperCorePendingState:
         settlement_mode=SettlementMode(settlement_mode) if settlement_mode else None,
         reported_result=HyperCoreReportedResult(reported_result),
         result_l1_block=result_l1_block,
-        action_id=action_id,
-        payload_hash=bytes(payload_hash),
+        action_id=HyperCoreActionId(action_id),
+        payload_hash=PayloadHash(bytes(payload_hash)),
         refreshing=bool(refreshing or state_refreshing),
         cached_value_wad=cached_value_wad,
         action_nonce=action_nonce,
@@ -430,7 +438,7 @@ class HyperCoreSpotLeg:
     """One granted spot token in the NAV: ``total`` Core wei priced through
     the substrate's EVM asset; ``value_wad`` is 0 when ``total`` is."""
 
-    token_index: int
+    token_index: HyperCoreTokenIndex
     evm_asset: ChecksumAddress
     total: int
     hold: int
@@ -482,17 +490,17 @@ def _supported_hip3_mask() -> int:
 
 def _market_layout(
     substrates: Sequence[bytes],
-) -> tuple[list[tuple[int, ChecksumAddress]], int]:
+) -> tuple[list[tuple[HyperCoreTokenIndex, ChecksumAddress]], int]:
     """The spot tokens (first grant per token index wins, as in
     ``getSpotTokens``) and the validated ``PerpDexIds`` bitmap. Always the
     HyperCore layout, whatever id the vault keys the market under."""
-    tokens: list[tuple[int, ChecksumAddress]] = []
+    tokens: list[tuple[HyperCoreTokenIndex, ChecksumAddress]] = []
     seen: set[int] = set()
     bitmap = 0
     for raw in substrates:
         info = decode_substrate(raw, HYPERCORE_MARKET)
         if info.type_label == "SPOT_TOKEN" and not info.is_error:
-            index = int(info.extra["token_index"])
+            index = HyperCoreTokenIndex(int(info.extra["token_index"]))
             if index in seen:
                 continue
             seen.add(index)
@@ -505,7 +513,7 @@ def _market_layout(
 
 
 def _spot_leg(
-    token_index: int,
+    token_index: HyperCoreTokenIndex,
     evm_asset: ChecksumAddress,
     balance: HyperCoreSpotBalance | None,
     token: HyperCoreTokenInfo | None,
@@ -619,7 +627,7 @@ class HyperCorePerpMarket:
     coin name the ``perpAssetInfo`` precompile reports (``None`` when the read
     failed, e.g. a delisted market)."""
 
-    asset: int
+    asset: HyperCoreAsset
     dex: int
     read_index: int
     coin: str | None
@@ -647,15 +655,17 @@ class HyperCoreVaultState:
         return self.nav.value_wad == self.balance_fuse_value_wad
 
 
-def _granted_perp_markets(substrates: Sequence[bytes]) -> list[tuple[int, int, bool]]:
-    markets: list[tuple[int, int, bool]] = []
+def _granted_perp_markets(
+    substrates: Sequence[bytes],
+) -> list[tuple[HyperCoreAsset, int, bool]]:
+    markets: list[tuple[HyperCoreAsset, int, bool]] = []
     for raw in substrates:
         info = decode_substrate(raw, HYPERCORE_MARKET)
         if info.type_label != "PERP_MARKET" or info.is_error:
             continue
         markets.append(
             (
-                int(info.extra["asset"]),
+                HyperCoreAsset(int(info.extra["asset"])),
                 int(info.extra["max_notional_usd6"]),
                 info.extra["reduce_only_required"] == "true",
             )
