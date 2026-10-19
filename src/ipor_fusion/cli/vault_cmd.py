@@ -62,6 +62,7 @@ from ipor_fusion.substrates import (
     decode_substrate,
     format_market_label,
 )
+from ipor_fusion.types import ChainId
 from ipor_fusion.validation import (
     VaultValidation,
     validate_vault,
@@ -133,31 +134,30 @@ class ChainType(click.ParamType):
 
     name = "chain"
 
-    def convert(self, value, param, ctx):  # type: ignore[override]
+    def convert(self, value, param, ctx) -> ChainId:  # type: ignore[override]
         if isinstance(value, int):
-            return value
+            return ChainId(value)
         try:
-            return int(value)
+            return ChainId(int(value))
         except ValueError:
             pass
         lower = value.lower().strip()
         if lower in CHAIN_NAME_TO_ID:
-            return CHAIN_NAME_TO_ID[lower]
+            return ChainId(CHAIN_NAME_TO_ID[lower])
         self.fail(
             f"Unknown chain: {value}. Use a numeric ID or one of: "
             f"{', '.join(sorted(CHAIN_NAME_TO_ID))}",
             param,
             ctx,
         )
-        return None  # unreachable, keeps mypy happy
 
 
 CHAIN = ChainType()
 
 
 def _resolve_chain_id(
-    cfg: FusionConfig, vault_address: str, chain_id: int | None
-) -> int:
+    cfg: FusionConfig, vault_address: str, chain_id: ChainId | None
+) -> ChainId:
     if chain_id is not None:
         return chain_id
     if entry := next(
@@ -170,7 +170,7 @@ def _resolve_chain_id(
     )
 
 
-def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
+def _resolve_provider(cfg: FusionConfig, chain_id: ChainId) -> str:
     if provider_url := cfg.providers.get(str(chain_id)):
         return provider_url
     raise click.UsageError(
@@ -182,9 +182,9 @@ def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
 def _build_ctx(
     cfg: FusionConfig,
     vault_address: str,
-    chain_id: int | None,
+    chain_id: ChainId | None,
     block_number: int | None,
-) -> tuple[int, Web3Context]:
+) -> tuple[ChainId, Web3Context]:
     """Shared command preamble: resolve chain + provider, build the context."""
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
     # Every _build_ctx command does heavy on-chain reads (vault fetch,
@@ -198,7 +198,7 @@ def _build_ctx(
     return chain_id, ctx
 
 
-def _require_supported_chain(chain_id: int) -> None:
+def _require_supported_chain(chain_id: ChainId) -> None:
     """UnsupportedChainError → UsageError, so the CLI prints a clean message
     instead of a traceback before any heavy on-chain work starts."""
     try:
@@ -208,7 +208,7 @@ def _require_supported_chain(chain_id: int) -> None:
 
 
 def _auto_save_vault(
-    cfg: FusionConfig, vault_address: str, chain_id: int, plasma_vault: PlasmaVault
+    cfg: FusionConfig, vault_address: str, chain_id: ChainId, plasma_vault: PlasmaVault
 ) -> None:
     """Save vault to config if not already present and it looks like a Plasma Vault."""
     if any(v.address.lower() == vault_address.lower() for v in cfg.vaults):
@@ -238,13 +238,13 @@ def vault() -> None:
     default=None,
     help="Chain ID or name (auto-detected when only one provider is configured).",
 )
-def add(address: str, label: str | None, chain_id: int | None) -> None:
+def add(address: str, label: str | None, chain_id: ChainId | None) -> None:
     """Save a vault to the config."""
     cfg = load_config()
 
     if chain_id is None:
         if len(cfg.providers) == 1:
-            chain_id = int(next(iter(cfg.providers)))
+            chain_id = ChainId(int(next(iter(cfg.providers))))
         else:
             raise click.UsageError(
                 "Cannot auto-detect chain ID — multiple providers configured. "
@@ -338,7 +338,7 @@ vault.add_command(list_vaults, "ls")
 )
 def info(
     vault_address: str,
-    chain_id: int | None,
+    chain_id: ChainId | None,
     block_number: int | None,
     json_output: bool,
 ) -> None:
@@ -388,7 +388,7 @@ def info(
 )
 def validate(
     vault_address: str,
-    chain_id: int | None,
+    chain_id: ChainId | None,
     block_number: int | None,
     json_output: bool,
 ) -> None:
@@ -481,7 +481,7 @@ def _validation_json(validation: VaultValidation, chain_label: str) -> dict[str,
 def role_accounts(
     vault_address: str,
     role: str,
-    chain_id: int | None,
+    chain_id: ChainId | None,
     block_number: int | None,
     json_output: bool,
 ) -> None:
@@ -550,7 +550,7 @@ def role_accounts(
 )
 def oracle_mapping(
     vault_address: str,
-    chain_id: int | None,
+    chain_id: ChainId | None,
     block_number: int | None,
     max_depth: int,
     json_output: bool,
@@ -839,7 +839,7 @@ def _print_vault_info(
     cfg: FusionConfig,
     data: VaultData,
     vault_address: str,
-    chain_id: int,
+    chain_id: ChainId,
     json_output: bool = False,
 ) -> None:
     api_key = cfg.etherscan_api_key
@@ -901,7 +901,7 @@ def _print_markets(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: VaultData,
-    chain_id: int,
+    chain_id: ChainId,
     api_key: str | None,
 ) -> dict[int, int]:
     """Fuses, balance fuses, dependency graph and substrates; returns the
@@ -946,7 +946,7 @@ def _print_markets(
 
 
 def _print_identity(
-    data: VaultData, vault_address: str, chain_id: int, chain_label: str
+    data: VaultData, vault_address: str, chain_id: ChainId, chain_label: str
 ) -> None:
     name_suffix = f" ({data.vault_name})" if data.vault_name else ""
     click.echo(f"Vault:            {vault_address}{name_suffix}")
@@ -1288,7 +1288,7 @@ def _print_fuse_section(
     fuses: Sequence[str],
     fuse_markets: dict[str, int] | None,
     market_substrates: dict[int, list[bytes]] | None,
-    chain_id: int,
+    chain_id: ChainId,
     api_key: str | None,
 ) -> None:
     """Render a fuse section (regular or instant-withdrawal) with a unified
@@ -1344,7 +1344,7 @@ def _print_balance_fuses_table(
     decimals: int,
     asset_symbol: str,
     asset_price_usd: float | None,
-    chain_id: int,
+    chain_id: ChainId,
     api_key: str | None,
 ) -> dict[int, int]:
     """Print the table; return each market's cached balance, once per market
@@ -1396,7 +1396,7 @@ def _print_balance_fuses_table(
 
 
 def _print_market_substrates(
-    ctx: Web3Context, data: VaultData, chain_id: int, api_key: str | None
+    ctx: Web3Context, data: VaultData, chain_id: ChainId, api_key: str | None
 ) -> set[str]:
     if GET_MARKET_SUBSTRATES in data.unimplemented_getters:
         click.secho(
@@ -1413,7 +1413,7 @@ def _print_substrates(  # noqa: C901
     ctx: Web3Context,
     substrates_by_market: dict[int, list[bytes]],
     balance_fuses: list,
-    chain_id: int,
+    chain_id: ChainId,
     api_key: str | None,
 ) -> set[str]:
     # Phase 1: collect each balance fuse's substrates and the addresses to resolve

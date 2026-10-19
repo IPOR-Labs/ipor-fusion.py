@@ -26,6 +26,7 @@ from eth_typing import ChecksumAddress
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.crosschain.contracts import (
     BalanceObservation,
     CrosschainDispatcher,
@@ -33,7 +34,6 @@ from ipor_fusion.crosschain.contracts import (
 )
 from ipor_fusion.crosschain.logs import log_address, log_bytes, log_topic0
 from ipor_fusion.crosschain.messages import Command, CrosschainTransportKind
-from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.fuses.crosschain.base import (
     CrosschainClaimFuse,
     CrosschainCommandFuse,

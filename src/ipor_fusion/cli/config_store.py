@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 import click
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from ipor_fusion.types import ChainId
+
 
 def _xdg_config_home() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
@@ -22,7 +24,7 @@ CONFIG_VERSION = 1
 class VaultEntry(BaseModel):
     address: str
     label: str
-    chain_id: int
+    chain_id: ChainId
 
 
 class FusionConfig(BaseModel):

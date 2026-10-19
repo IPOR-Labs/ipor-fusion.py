@@ -7,9 +7,9 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.core.contract import _parse_param_types
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
 from ipor_fusion.fuses.async_action import AsyncActionFuse, AsyncActionSubstrates
-from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
 from ipor_fusion.fuses.euler_v2 import (
@@ -82,7 +82,7 @@ from ipor_fusion.fuses.universal import (
     UniversalTokenSwapperSubstrates,
 )
 from ipor_fusion.substrates import decode_substrate
-from ipor_fusion.types import MAX_UINT256
+from ipor_fusion.types import MAX_UINT256, ZERO_ADDRESS
 
 # Deterministic test addresses
 FUSE_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")

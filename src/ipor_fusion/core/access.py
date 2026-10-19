@@ -64,13 +64,13 @@ class AccessManager(ContractWrapper):
     """Manages role-based access control for PlasmaVault operations."""
 
     def grant_role(
-        self, role_id: int, account: ChecksumAddress, execution_delay: Period
+        self, role_id: RoleId, account: ChecksumAddress, execution_delay: Period
     ) -> Call[None]:
         return self._write(
             "grantRole(uint64,address,uint32)", role_id, account, execution_delay
         )
 
-    def revoke_role(self, role_id: int, account: ChecksumAddress) -> Call[None]:
+    def revoke_role(self, role_id: RoleId, account: ChecksumAddress) -> Call[None]:
         return self._write("revokeRole(uint64,address)", role_id, account)
 
     def get_target_function_role(
@@ -85,7 +85,7 @@ class AccessManager(ContractWrapper):
             decoder=RoleId,
         )
 
-    def has_role(self, role_id: int, account: ChecksumAddress) -> Call[RoleStatus]:
+    def has_role(self, role_id: RoleId, account: ChecksumAddress) -> Call[RoleStatus]:
         return self._view(
             "hasRole(uint64,address)",
             role_id,
@@ -113,7 +113,7 @@ class AccessManager(ContractWrapper):
             for role_account in self.get_accounts_with_role(Roles.ATOMIST_ROLE)
         ]
 
-    def get_accounts_with_role(self, role_id: int) -> list[RoleAccount]:
+    def get_accounts_with_role(self, role_id: RoleId) -> list[RoleAccount]:
         return self._resolve_role_accounts(
             self._get_grant_role_events(),
             predicate=lambda rid, _: rid == role_id,

@@ -43,7 +43,6 @@ from ipor_fusion.crosschain.stargate.layerzero import (
     address_to_bytes32,
     bytes32_to_address,
 )
-from ipor_fusion.fuses.base import ZERO_ADDRESS
 from ipor_fusion.fuses.crosschain import (
     CcipCommandType,
     CcipCrosschainCommandFuse,
@@ -63,6 +62,7 @@ from ipor_fusion.fuses.crosschain import (
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
+from ipor_fusion.types import ZERO_ADDRESS
 
 FUSE = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 EXECUTOR = Web3.to_checksum_address("0x1d5c9d44f8d556ec7f557ae992401cc770937e6e")

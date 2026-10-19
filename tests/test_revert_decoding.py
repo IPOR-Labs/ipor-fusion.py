@@ -6,12 +6,12 @@ from eth_abi import encode as abi_encode
 from web3 import Web3
 
 from ipor_fusion import VaultSimulator
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.errors import (
     TransactionError,
     _decode_revert_reason,
     get_revert_reason,
 )
-from ipor_fusion.fuses.base import FuseAction
 
 ERROR_SELECTOR = bytes.fromhex("08c379a0")
 PANIC_SELECTOR = bytes.fromhex("4e487b71")

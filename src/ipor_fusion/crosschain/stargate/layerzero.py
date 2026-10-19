@@ -27,9 +27,10 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from web3 import Web3
 
+from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.logs import log_bytes
-from ipor_fusion.fuses.base import ZERO_ADDRESS, _validate_not_zero_address
+from ipor_fusion.types import ZERO_ADDRESS
 
 _TYPE_3 = b"\x00\x03"
 _EXECUTOR_WORKER_ID = 1

@@ -32,12 +32,11 @@ from ipor_fusion.crosschain.messages import CrosschainTransportKind
 from ipor_fusion.crosschain.stargate.contracts import StargateCrosschainExecutor
 from ipor_fusion.crosschain.stargate.lane import StargateLane
 from ipor_fusion.errors import EmptyCallResultError
-from ipor_fusion.fuses.base import ZERO_ADDRESS
 from ipor_fusion.fuses.crosschain.base import (
     CrosschainSubstrateLib,
     CrosschainSubstrateType,
 )
-from ipor_fusion.types import ChainId, MarketId
+from ipor_fusion.types import ZERO_ADDRESS, ChainId, MarketId
 
 T = TypeVar("T")
 

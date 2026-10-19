@@ -14,8 +14,9 @@ from web3.types import BlockIdentifier, RPCEndpoint
 from web3.utils.address import get_create_address
 
 from ipor_fusion.core.contract import Call, _encode_calldata
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.errors import SimulationError, decode_custom_error
-from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
+from ipor_fusion.types import ZERO_ADDRESS
 
 #: ``n`` (the sent block's index in the run) -> account overrides for it.
 StateOverrideProvider = Callable[[int], Mapping[str, Mapping[str, Any]]]

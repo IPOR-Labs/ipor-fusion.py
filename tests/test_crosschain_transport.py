@@ -58,8 +58,7 @@ from ipor_fusion.crosschain.stargate.layerzero import (
     PACKET_SENT_TOPIC,
     address_to_bytes32,
 )
-from ipor_fusion.fuses.base import ZERO_ADDRESS
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ZERO_ADDRESS, ChainId
 
 TRANSFER_SELECTOR = function_signature_to_4byte_selector("transfer(address,uint256)")
 GUID = b"\xab" * 32

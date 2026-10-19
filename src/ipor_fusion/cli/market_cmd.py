@@ -46,7 +46,7 @@ from ipor_fusion.readers.morpho import (
     MorphoReader,
     morpho_blue_address,
 )
-from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.types import ChainId, MorphoBlueMarketId
 
 
 class MarketIdType(click.ParamType):
@@ -110,7 +110,7 @@ def market() -> None:
 )
 def morpho_blue(
     market_id: str,
-    chain_id: int,
+    chain_id: ChainId,
     block: int | None,
     no_api: bool,
     vault_filter: str | None,
@@ -175,7 +175,7 @@ def morpho_blue(
 
 def _print_market(
     market_id: str,
-    chain_id: int,
+    chain_id: ChainId,
     params: MorphoMarketParams,
     state: MorphoMarket,
     rates: MorphoMarketRates,
@@ -348,7 +348,7 @@ def _print_reallocate_hint(params: MorphoMarketParams) -> None:
 )
 def meta_morpho(
     vault_address: str,
-    chain_id: int,
+    chain_id: ChainId,
     market_filter: str | None,
     json_output: bool,
 ) -> None:
@@ -379,7 +379,7 @@ def meta_morpho(
 
 
 def _print_vault_v2(
-    vault: VaultV2Info, chain_id: int, market_filter: str | None
+    vault: VaultV2Info, chain_id: ChainId, market_filter: str | None
 ) -> None:
     chain_name = CHAIN_NAMES.get(chain_id, str(chain_id))
     click.secho(f"Morpho Vault V2 — {vault.name} ({vault.symbol})", bold=True)
@@ -511,7 +511,7 @@ def _print_other_caps(
 
 
 def _print_vault_v1(
-    vault: VaultV1Info, chain_id: int, market_filter: str | None
+    vault: VaultV1Info, chain_id: ChainId, market_filter: str | None
 ) -> None:
     chain_name = CHAIN_NAMES.get(chain_id, str(chain_id))
     public_allocator = PUBLIC_ALLOCATOR_ADDRESSES.get(chain_id)

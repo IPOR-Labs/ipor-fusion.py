@@ -7,7 +7,9 @@ modules, so the namespaces the encoders import through must never reach back
 into the encoders, or the graph re-enters a half-initialized module and every
 import in the package would have to go lazy again. These tests pin the rule
 statically: no import inside a function, class or ``if`` block anywhere in
-the two packages, and the leaf namespace stays fuse-free.
+the two packages, and the leaf namespace imports nothing from
+``ipor_fusion.fuses``: even ``fuses.base`` runs the ``fuses`` package
+``__init__``, which loads the encoders.
 """
 
 from __future__ import annotations
@@ -96,7 +98,7 @@ def test_leaf_namespace_stays_fuse_free(name: str):
     offenders = [
         imported
         for imported in _imported(_module_path(name))
-        if imported.startswith("ipor_fusion.fuses.crosschain")
+        if imported.startswith("ipor_fusion.fuses")
         or (imported.startswith("ipor_fusion.crosschain") and imported not in LEAF)
     ]
     assert not offenders, f"{name} imports {offenders}"

@@ -34,9 +34,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.types import (
     AssetSource,
+    ChainId,
     Check,
     MappingStatus,
     NodeStatus,
+    RoleId,
     Severity,
     Verdict,
 )
@@ -388,7 +390,7 @@ class VaultListEntry(_Base):
     address: str
     label: str
     chain: str
-    chain_id: int
+    chain_id: ChainId
 
 
 class ConfigShowResponse(_Base):
@@ -412,7 +414,7 @@ class RoleAccountEntry(_Base):
     """One confirmed role membership on a vault's AccessManager."""
 
     account: str
-    role_id: int
+    role_id: RoleId
     role_name: str = Field(
         description="Canonical enum name; UNKNOWN_ROLE_<id> when unmapped."
     )
@@ -427,7 +429,7 @@ class RoleAccountsResponse(_Base):
 
     vault: str
     access_manager: str
-    chain_id: int
+    chain_id: ChainId
     role_filter: str | None = Field(
         default=None,
         description="Canonical role name when filtered; null = all roles.",
@@ -441,7 +443,7 @@ class RoleAccountsResponse(_Base):
         *,
         vault: str,
         access_manager: str,
-        chain_id: int,
+        chain_id: ChainId,
         role_filter: str | None,
     ) -> RoleAccountsResponse:
         """Build the response from SDK dataclasses (sorted for stable output)."""
@@ -779,7 +781,7 @@ class VaultValidationResponse(_Base):
 
     vault: str
     chain: str
-    chain_id: int
+    chain_id: ChainId
     block: int
     block_timestamp_utc: str
     asset: AssetInfo
@@ -898,7 +900,7 @@ class MorphoBlueMarketResponse(_Base):
     """Morpho Blue market parameters, state, APYs, and supplying vaults."""
 
     market_id: str
-    chain_id: int
+    chain_id: ChainId
     public_allocator: str | None = None
     market_params: MorphoMarketParamsModel
     state: MorphoMarketStateModel
@@ -914,7 +916,7 @@ class MetaMorphoVaultResponse(_Base):
     — kept loosely typed to avoid duplicating the Morpho API surface."""
 
     version: str
-    chain_id: int
+    chain_id: ChainId
     address: str
     name: str
     symbol: str
@@ -1064,7 +1066,7 @@ class VaultInfoResponse(_Base):
         description="External URLs (ipor_app, etherscan if known)."
     )
     chain: str
-    chain_id: int
+    chain_id: ChainId
     block: int
     is_latest: bool = Field(
         default=False,

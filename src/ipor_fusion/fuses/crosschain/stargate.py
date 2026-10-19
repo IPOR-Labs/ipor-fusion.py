@@ -262,7 +262,7 @@ class StargateCrosschainCommandFuse(CrosschainCommandFuse):
     def _validate_command(
         self,
         command_type: StargateCrosschainCommandType,
-        chain_id: int,
+        chain_id: ChainId,
         eid: int,
         request_id: int,
         command: Command,

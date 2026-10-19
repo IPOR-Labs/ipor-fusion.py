@@ -14,9 +14,9 @@ from web3.exceptions import ContractLogicError
 from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.errors import EmptyCallResultError, UnsupportedVaultVersionError
-from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
-from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
+from ipor_fusion.types import ZERO_ADDRESS, Amount, Decimals, Fee, MarketId, Shares
 
 T = TypeVar("T")
 

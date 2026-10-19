@@ -878,7 +878,7 @@ def _fetch_lending_reads(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
     vault_addr: ChecksumAddress,
-    chain_id: int,
+    chain_id: ChainId,
     markets: _MarketReads,
 ) -> _LendingReads:
     """Lending health (Morpho, Aave V3) plus the per-position breakdowns.
@@ -1010,7 +1010,7 @@ def fetch_vault_data(
 def _fetch_hypercore_state(
     ctx: Web3Context,
     vault_addr: ChecksumAddress,
-    chain_id: int,
+    chain_id: ChainId,
     markets: _MarketReads,
 ) -> HyperCoreVaultState | None:
     """The HyperCore market's state, on HyperEVM only (the Core precompiles

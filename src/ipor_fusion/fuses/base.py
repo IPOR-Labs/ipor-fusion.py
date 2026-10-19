@@ -1,54 +1,14 @@
 from abc import ABC
-from dataclasses import dataclass
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 
+from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.core.contract import _parse_param_types
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.types import MAX_UINT256, Amount
-
-ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-
-
-def _validate_not_zero_address(value: str, name: str) -> None:
-    """Reject an empty or zero address; ``name`` labels it in the error.
-
-    Compares the parsed bytes rather than the text, so every spelling of the
-    zero address is caught -- ``0x``-prefixed or bare. Input that is not hex at
-    all falls through to the encoder, which reports the malformed address.
-    """
-    if not value:
-        raise ValueError(f"{name} is required and must not be zero address")
-    try:
-        payload = bytes.fromhex(value.removeprefix("0x"))
-    except ValueError:
-        return
-    if payload == bytes(20):
-        raise ValueError(f"{name} must not be zero address")
-
-
-@dataclass(frozen=True, slots=True)
-class FuseAction:
-    """Immutable calldata payload targeting a specific fuse contract."""
-
-    fuse: ChecksumAddress
-    data: bytes
-
-    def encode(self) -> bytes:
-        return encode(["address", "bytes"], [self.fuse, self.data])
-
-    def __str__(self) -> str:
-        return f"FuseAction(fuse={self.fuse}, data=0x{self.data.hex()[:16]}...)"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    @staticmethod
-    def encode_execute_payload(actions: list["FuseAction"], signature: str) -> bytes:
-        bytes_data = [[action.fuse, action.data] for action in actions]
-        encoded = encode(["(address,bytes)[]"], [bytes_data])
-        return function_signature_to_4byte_selector(signature) + encoded
+from ipor_fusion.types import ZERO_ADDRESS as ZERO_ADDRESS
 
 
 class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method

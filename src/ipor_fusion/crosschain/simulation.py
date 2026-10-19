@@ -41,8 +41,7 @@ from ipor_fusion.crosschain.transport import (
     CrosschainTransport,
     OutboundMessage,
 )
-from ipor_fusion.fuses.base import ZERO_ADDRESS
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ZERO_ADDRESS, ChainId
 
 #: What the synthetic token source holds: enough for any test amount.
 SYNTHETIC_BALANCE = 2**96

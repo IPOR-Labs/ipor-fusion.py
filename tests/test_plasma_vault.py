@@ -9,14 +9,14 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 from web3.types import Timestamp
 
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.core.plasma_vault import (
     ManagementFeeData,
     PerformanceFeeData,
     PlasmaVault,
 )
 from ipor_fusion.errors import UnsupportedVaultVersionError
-from ipor_fusion.fuses.base import ZERO_ADDRESS, FuseAction
-from ipor_fusion.types import Amount, Decimals, Fee, MarketId, Shares
+from ipor_fusion.types import ZERO_ADDRESS, Amount, Decimals, Fee, MarketId, Shares
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 USER_ADDR = Web3.to_checksum_address("0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa")

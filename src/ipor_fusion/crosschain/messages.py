@@ -17,7 +17,7 @@ from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
-from ipor_fusion.fuses.base import _validate_not_zero_address
+from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.types import Amount, Shares
 
 #: ``CrosschainConstants.CODEC_VERSION`` -- the Stargate/LayerZero envelope version.
