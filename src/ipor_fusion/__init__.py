@@ -336,6 +336,7 @@ from ipor_fusion.types import (
     Tick,
     TokenId,
     TransferId,
+    parse_morpho_market_id,
 )
 from ipor_fusion.validation import (
     Erc20Holding,
@@ -605,6 +606,7 @@ __all__ = [
     "RoleId",
     "ChainId",
     "MorphoBlueMarketId",
+    "parse_morpho_market_id",
     "AssetId",
     "CommandId",
     "DeploymentRequestId",

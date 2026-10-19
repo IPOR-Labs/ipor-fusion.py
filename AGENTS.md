@@ -285,7 +285,9 @@ or examples.
   `MarketId`, ...) name the unit, and nothing scales by decimals.
 - Ids and addresses are nominal in every signature: `ChainId`, `MarketId` (each
   `IporFusionMarkets` member is one), `RoleId | Roles`, `ChecksumAddress`;
-  `HexAddress` only for the lowercase addresses decoded from substrates. Raw input
+  `HexAddress` only for the lowercase addresses decoded from substrates;
+  `MorphoBlueMarketId` is always `0x` + 64 lowercase hex, built by
+  `parse_morpho_market_id`. Raw input
   is parsed once at the boundary (click param types, MCP tools, the user config).
   `src/`, `examples/` and `tests/typed_client/` are checked with
   `reportArgumentType` on, so a bare `int`/`str` passed for one fails pyright; the

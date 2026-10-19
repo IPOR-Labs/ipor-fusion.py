@@ -29,7 +29,12 @@ from ipor_fusion.readers.morpho import (
     morpho_blue_address,
 )
 from ipor_fusion.substrates import decode_substrate, market_name
-from ipor_fusion.types import ChainId, MarketId, MorphoBlueMarketId
+from ipor_fusion.types import (
+    ChainId,
+    MarketId,
+    MorphoBlueMarketId,
+    parse_morpho_market_id,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -374,9 +379,8 @@ def _collect_lending_markets(
         if mid in MORPHO_MARKET_IDS:
             substrates = market_substrates.get(mid, [])
             for sub in substrates:
-                hex_str = sub.hex()
-                if len(hex_str) == 64:
-                    markets.morpho.append((mid, name, MorphoBlueMarketId(hex_str)))
+                if len(sub) == 32:
+                    markets.morpho.append((mid, name, parse_morpho_market_id(sub)))
         elif mid in AAVE_V3_MARKET_IDS:
             if aave_pool := aave_pools.get(mid):
                 markets.aave_v3.append((mid, name, aave_pool))

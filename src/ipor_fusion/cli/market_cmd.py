@@ -42,7 +42,7 @@ from ipor_fusion.readers.morpho import (
     MorphoReader,
     morpho_blue_address,
 )
-from ipor_fusion.types import ChainId, MorphoBlueMarketId
+from ipor_fusion.types import ChainId, MorphoBlueMarketId, parse_morpho_market_id
 from ipor_fusion.vault_info import BLOCK_EXPLORER_URLS
 
 
@@ -54,12 +54,10 @@ class MarketIdType(click.ParamType):
     def convert(self, value, param, ctx):  # type: ignore[override]
         if not isinstance(value, str):
             self.fail(f"expected string, got {type(value).__name__}", param, ctx)
-        raw = value.strip().removeprefix("0x").removeprefix("0X")
-        if len(raw) != 64 or not all(c in "0123456789abcdefABCDEF" for c in raw):
-            self.fail(
-                f"invalid Morpho market ID (expected 32-byte hex): {value}", param, ctx
-            )
-        return raw.lower()
+        try:
+            return parse_morpho_market_id(value)
+        except ValueError as exc:
+            self.fail(str(exc), param, ctx)
 
 
 MARKET_ID = MarketIdType()
@@ -106,7 +104,7 @@ def market() -> None:
     help="Emit machine-readable JSON instead of a table.",
 )
 def morpho_blue(
-    market_id: str,
+    market_id: MorphoBlueMarketId,
     chain_id: ChainId,
     block: int | None,
     no_api: bool,
@@ -127,7 +125,7 @@ def morpho_blue(
     if block is not None:
         ctx.default_block = block
     reader = MorphoReader(ctx, morpho_blue_address(chain_id))
-    mid = MorphoBlueMarketId(market_id)
+    mid = market_id
     params, state = reader.require_market(mid)
     rates = reader.rates_from(state, params)
 
@@ -171,7 +169,7 @@ def morpho_blue(
 
 
 def _print_market(
-    market_id: str,
+    market_id: MorphoBlueMarketId,
     chain_id: ChainId,
     params: MorphoMarketParams,
     state: MorphoMarket,
@@ -181,11 +179,11 @@ def _print_market(
     chain_name = CHAIN_NAMES.get(chain_id, str(chain_id))
     explorer = BLOCK_EXPLORER_URLS.get(chain_id, "")
     liquidity = state.total_supply_assets - state.total_borrow_assets
-    click.secho(f"Morpho Blue market 0x{market_id}", bold=True)
+    click.secho(f"Morpho Blue market {market_id}", bold=True)
     click.echo(f"  Chain:           {chain_name} (id {chain_id})")
     if explorer:
         click.echo(
-            f"  App:             https://app.morpho.org/{chain_name}/market/0x{market_id}"
+            f"  App:             https://app.morpho.org/{chain_name}/market/{market_id}"
         )
     click.echo(f"  Loan token:      {params.loan_token}")
     click.echo(f"  Collateral:      {params.collateral_token}")
@@ -332,7 +330,7 @@ def _print_reallocate_hint(params: MorphoMarketParams) -> None:
 @click.option(
     "--market",
     "market_filter",
-    type=str,
+    type=MARKET_ID,
     default=None,
     help="Filter caps/allocations to a single Morpho Blue market ID.",
 )
@@ -346,7 +344,7 @@ def _print_reallocate_hint(params: MorphoMarketParams) -> None:
 def meta_morpho(
     vault_address: ChecksumAddress,
     chain_id: ChainId,
-    market_filter: str | None,
+    market_filter: MorphoBlueMarketId | None,
     json_output: bool,
 ) -> None:
     """Inspect a MetaMorpho V1 or Morpho Vault V2 by address.
@@ -361,22 +359,18 @@ def meta_morpho(
     except MorphoApiError as exc:
         raise click.UsageError(str(exc)) from exc
 
-    market_filter_norm = (
-        ("0x" + market_filter.removeprefix("0x").lower()) if market_filter else None
-    )
-
     if json_output:
         click.echo(json_lib.dumps(build_meta_morpho_json(info, chain_id), indent=2))
         return
 
     if isinstance(info, VaultV2Info):
-        _print_vault_v2(info, chain_id, market_filter_norm)
+        _print_vault_v2(info, chain_id, market_filter)
     else:
-        _print_vault_v1(info, chain_id, market_filter_norm)
+        _print_vault_v1(info, chain_id, market_filter)
 
 
 def _print_vault_v2(
-    vault: VaultV2Info, chain_id: ChainId, market_filter: str | None
+    vault: VaultV2Info, chain_id: ChainId, market_filter: MorphoBlueMarketId | None
 ) -> None:
     chain_name = CHAIN_NAMES.get(chain_id, str(chain_id))
     click.secho(f"Morpho Vault V2 — {vault.name} ({vault.symbol})", bold=True)
@@ -433,9 +427,7 @@ def _print_vault_v2(
     market_caps = [c for c in vault.caps if c.cap_type == "MarketV1"]
     other_caps = [c for c in vault.caps if c.cap_type != "MarketV1"]
     if market_filter:
-        market_caps = [
-            c for c in market_caps if (c.market_id or "").lower() == market_filter
-        ]
+        market_caps = [c for c in market_caps if c.market_id == market_filter]
 
     click.secho(f"Morpho Blue market caps ({len(market_caps)}):", bold=True)
     _print_market_caps(market_caps, vault.asset_symbol, vault.asset_decimals)
@@ -508,7 +500,7 @@ def _print_other_caps(
 
 
 def _print_vault_v1(
-    vault: VaultV1Info, chain_id: ChainId, market_filter: str | None
+    vault: VaultV1Info, chain_id: ChainId, market_filter: MorphoBlueMarketId | None
 ) -> None:
     chain_name = CHAIN_NAMES.get(chain_id, str(chain_id))
     public_allocator = PUBLIC_ALLOCATOR_ADDRESSES.get(chain_id)
@@ -552,7 +544,7 @@ def _print_vault_v1(
 
     allocations = vault.allocations
     if market_filter:
-        allocations = [a for a in allocations if a.market_id.lower() == market_filter]
+        allocations = [a for a in allocations if a.market_id == market_filter]
     click.secho(f"Allocations ({len(allocations)}):", bold=True)
     if not allocations:
         click.echo("  (none)")

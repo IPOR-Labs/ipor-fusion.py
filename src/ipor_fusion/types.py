@@ -13,7 +13,9 @@ Tick = NewType("Tick", int)
 Liquidity = NewType("Liquidity", int)
 RoleId = NewType("RoleId", int)
 ChainId = NewType("ChainId", int)
-# Hex string without 0x prefix (e.g. "abc123..." not "0xabc123...")
+# A Morpho Blue market id (bytes32) in its canonical spelling: "0x" and 64
+# lowercase hex digits, as the Morpho API reports it. Build one with
+# parse_morpho_market_id.
 MorphoBlueMarketId = NewType("MorphoBlueMarketId", str)
 # Crosschain identifiers (bytes32 unless noted), named after the contracts' fields.
 CommandId = NewType("CommandId", bytes)
@@ -98,3 +100,16 @@ Period.MINUTE = Period(60 * Period.SECOND)
 Period.HOUR = Period(60 * Period.MINUTE)
 Period.DAY = Period(24 * Period.HOUR)
 Period.WEEK = Period(7 * Period.DAY)
+
+
+def parse_morpho_market_id(value: str | bytes) -> MorphoBlueMarketId:
+    """A Morpho Blue market id from 32 raw bytes or from hex with or without
+    ``0x``, in any case; raises ``ValueError`` on anything else."""
+    if isinstance(value, bytes):
+        if len(value) != 32:
+            raise ValueError(f"invalid Morpho market ID (expected 32 bytes): {value!r}")
+        return MorphoBlueMarketId("0x" + value.hex())
+    digits = value.strip().removeprefix("0x").removeprefix("0X").lower()
+    if len(digits) != 64 or any(c not in "0123456789abcdef" for c in digits):
+        raise ValueError(f"invalid Morpho market ID (expected 32-byte hex): {value}")
+    return MorphoBlueMarketId("0x" + digits)

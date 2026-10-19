@@ -17,7 +17,7 @@ from eth_abi import decode, encode
 from eth_utils import keccak
 from web3 import Web3
 
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, MorphoBlueMarketId, parse_morpho_market_id
 
 MORPHO_API_URL = "https://blue-api.morpho.org/graphql"
 
@@ -113,7 +113,7 @@ class VaultAllocation:
 class MorphoApiMarket:
     """Snapshot of a Morpho Blue market plus the vaults supplying to it."""
 
-    market_id: str
+    market_id: MorphoBlueMarketId
     lltv: int
     loan_token: str
     loan_symbol: str
@@ -139,7 +139,7 @@ class MorphoApiError(RuntimeError):
 
 
 def fetch_market(
-    market_id: str, chain_id: ChainId, *, timeout: float = 10.0
+    market_id: MorphoBlueMarketId, chain_id: ChainId, *, timeout: float = 10.0
 ) -> MorphoApiMarket:
     """Fetch a Morpho Blue market with its supplying vaults from the public API.
 
@@ -147,8 +147,6 @@ def fetch_market(
     ID (1 = mainnet, 8453 = base, ...). Raises `MorphoApiError` on network failure
     or if the market is not indexed.
     """
-    if not market_id.startswith("0x"):
-        market_id = "0x" + market_id
     payload = json.dumps(
         {
             "query": _MARKET_QUERY,
@@ -182,7 +180,7 @@ def fetch_market(
 def _parse_market(raw: dict) -> MorphoApiMarket:
     state = raw.get("state") or {}
     return MorphoApiMarket(
-        market_id=raw["marketId"],
+        market_id=_api_market_id(raw.get("marketId")),
         lltv=int(raw["lltv"]),
         loan_token=raw["loanAsset"]["address"],
         loan_symbol=raw["loanAsset"]["symbol"],
@@ -282,7 +280,7 @@ class VaultV2Cap:
     absolute_cap: int
     relative_cap_wad: int
     allocation: int
-    market_id: str | None
+    market_id: MorphoBlueMarketId | None
     loan_token: str | None
     collateral_token: str | None
     oracle: str | None
@@ -337,7 +335,7 @@ class VaultV2Info:
 class VaultV1MarketAllocation:
     """A MetaMorpho V1 allocation entry."""
 
-    market_id: str
+    market_id: MorphoBlueMarketId
     lltv: int
     loan_symbol: str
     loan_decimals: int
@@ -550,9 +548,18 @@ def _decode_market_v1_id_data(
     )
 
 
+def _api_market_id(value: object) -> MorphoBlueMarketId:
+    try:
+        return parse_morpho_market_id(str(value or ""))
+    except ValueError as exc:
+        raise MorphoApiError(
+            f"Morpho API returned an invalid market id: {value!r}"
+        ) from exc
+
+
 def _morpho_blue_market_id(
     loan: str, collateral: str, oracle: str, irm: str, lltv: int
-) -> str:
+) -> MorphoBlueMarketId:
     """Compute a Morpho Blue market unique key from MarketParams.
 
     `marketId = keccak256(abi.encode(loanToken, collateralToken, oracle, irm, lltv))`
@@ -562,7 +569,7 @@ def _morpho_blue_market_id(
         ["address", "address", "address", "address", "uint256"],
         [loan, collateral, oracle, irm, lltv],
     )
-    return "0x" + keccak(encoded).hex()
+    return parse_morpho_market_id(keccak(encoded))
 
 
 def _parse_vault_v1(raw: dict) -> VaultV1Info:
@@ -576,7 +583,7 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
         collat_asset = market.get("collateralAsset") or {}
         allocations.append(
             VaultV1MarketAllocation(
-                market_id=market.get("marketId") or "",
+                market_id=_api_market_id(market.get("marketId")),
                 lltv=int(market.get("lltv") or 0),
                 loan_symbol=loan_asset.get("symbol") or "",
                 loan_decimals=int(loan_asset.get("decimals") or 0),
@@ -626,14 +633,14 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
     )
 
 
-def _parse_vault(raw: dict, market_id: str) -> VaultAllocation:
+def _parse_vault(raw: dict, market_id: MorphoBlueMarketId) -> VaultAllocation:
     asset = raw.get("asset") or {}
     state = raw.get("state") or {}
     allocation_for_market: dict = next(
         (
             a
             for a in (state.get("allocation") or [])
-            if (a.get("market") or {}).get("marketId", "").lower() == market_id.lower()
+            if (a.get("market") or {}).get("marketId", "").lower() == market_id
         ),
         {},
     )

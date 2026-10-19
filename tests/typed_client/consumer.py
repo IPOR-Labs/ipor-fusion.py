@@ -19,6 +19,7 @@ from ipor_fusion import (
     fetch_vault_data,
     format_market_label,
     market_name,
+    parse_morpho_market_id,
     validate_vault,
 )
 from ipor_fusion.chains import ensure_supported_chain
@@ -31,7 +32,7 @@ from ipor_fusion.crosschain.contracts import (
     CrosschainFactory,
 )
 from ipor_fusion.explorer import get_contract_name
-from ipor_fusion.morpho_api import fetch_vault
+from ipor_fusion.morpho_api import fetch_market, fetch_vault
 from ipor_fusion.readers.morpho import morpho_blue_address
 from ipor_fusion.readers.unpriceable import fetch_unpriceable_priced_tokens
 from ipor_fusion.types import (
@@ -74,6 +75,7 @@ def lookups() -> None:
     get_contract_name(ETHEREUM, VAULT)
     morpho_blue_address(ETHEREUM)
     fetch_vault(VAULT, ETHEREUM)
+    fetch_market(parse_morpho_market_id("0x" + "ab" * 32), ETHEREUM)
 
 
 def crosschain(

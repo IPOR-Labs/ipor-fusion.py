@@ -196,7 +196,9 @@ class TestMorphoBlueCommand:
 
         assert result.exit_code != 0
         assert isinstance(result.exception, MorphoMarketNotFoundError)
-        assert f"market {MARKET_ID} does not exist on chain 1" in str(result.exception)
+        assert f"market 0x{MARKET_ID} does not exist on chain 1" in str(
+            result.exception
+        )
         mock_fetch.assert_not_called()
 
     def test_no_api_skips_vault_section(
