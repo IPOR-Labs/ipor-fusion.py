@@ -18,13 +18,11 @@ from web3.types import BlockIdentifier
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.simulation import VaultSimulator
-from ipor_fusion.types import parse_plasma_vault_address
 
 #: Selector of ``CcipInsufficientNativeFeeBalance(uint256 balance, uint256 required)``.
 INSUFFICIENT_NATIVE_FEE_SELECTOR: bytes = keccak(
     text="CcipInsufficientNativeFeeBalance(uint256,uint256)"
 )[:4]
-_NO_VAULT = parse_plasma_vault_address(bytes(20))
 
 
 def quote_ccip_native_fee(
@@ -45,7 +43,7 @@ def quote_ccip_native_fee(
     valid at ``block`` up to the fee check; a revert before it, or a call that
     sends no message, raises ``ValueError``.
     """
-    simulator = VaultSimulator(web3, vault=_NO_VAULT, alpha=from_, block=block)
+    simulator = VaultSimulator(web3, alpha=from_, block=block)
     simulator.with_state_override(payer, balance=hex(0))
     simulator.add_call(call, from_=from_, label="quote", gas=gas)
     (result,) = simulator.run().calls

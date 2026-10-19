@@ -16,7 +16,7 @@ from web3.utils.address import get_create_address
 from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.errors import SimulationError, decode_custom_error
-from ipor_fusion.types import ZERO_ADDRESS, PlasmaVaultAddress
+from ipor_fusion.types import PlasmaVaultAddress
 
 #: ``n`` (the sent block's index in the run) -> account overrides for it.
 StateOverrideProvider = Callable[[int], Mapping[str, Mapping[str, Any]]]
@@ -190,15 +190,16 @@ class VaultSimulator:
     def __init__(
         self,
         web3: Web3,
-        vault: PlasmaVaultAddress,
-        alpha: ChecksumAddress,
+        *,
+        vault: PlasmaVaultAddress | None = None,
+        alpha: ChecksumAddress | None = None,
         block: BlockIdentifier = "latest",
         validation: bool = False,
         trace_transfers: bool = False,
     ):
         self._web3 = web3
-        self._vault = Web3.to_checksum_address(vault)
-        self._alpha = Web3.to_checksum_address(alpha)
+        self._vault = vault
+        self._alpha = alpha
         self._block: BlockIdentifier = block
         self._validation = validation
         self._trace_transfers = trace_transfers
@@ -341,6 +342,8 @@ class VaultSimulator:
 
     def execute(self, actions: list[FuseAction]) -> VaultSimulator:
         """Queue a default `execute((address,bytes)[])` batch on the vault, from alpha."""
+        if self._vault is None or self._alpha is None:
+            raise ValueError("execute needs a simulator built with vault= and alpha=")
         data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
         return self._queue_execute(self._vault, data, self._alpha)
 
@@ -351,11 +354,12 @@ class VaultSimulator:
         e.g. `RewardsManager.claim_rewards(...)` where the wrapper differs from
         `PlasmaVault.execute`. `from_` defaults to alpha.
         """
-        return self._queue_execute(
-            call.to,
-            call.data,
-            Web3.to_checksum_address(from_) if from_ else self._alpha,
-        )
+        sender = from_ or self._alpha
+        if sender is None:
+            raise ValueError(
+                "execute_call needs from_ or a simulator built with alpha="
+            )
+        return self._queue_execute(call.to, call.data, sender)
 
     def _queue_execute(
         self, to: ChecksumAddress, data: bytes, from_: ChecksumAddress
@@ -751,8 +755,7 @@ def erc20_balance_slot(
     if max_slot < 0:
         raise ValueError(no_slot)
 
-    zero: Any = ZERO_ADDRESS
-    sim = VaultSimulator(web3, vault=zero, alpha=zero, block=block)
+    sim = VaultSimulator(web3, block=block)
     for slot in range(max_slot + 1):
         holder = Web3.to_checksum_address(
             "0x" + keccak(encode(["uint256"], [slot]))[-20:].hex()

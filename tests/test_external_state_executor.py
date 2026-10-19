@@ -64,7 +64,7 @@ def _observed(call, return_data: bytes):
     Feeds a synthetic `eth_simulateV1` response to `_parse_response`, so the
     result is whatever `observe` would actually report -- including its handling
     of a decoder that raises."""
-    sim = VaultSimulator(MagicMock(), EXECUTOR_ADDR, EXECUTOR_ADDR)
+    sim = VaultSimulator(MagicMock())
     sim.observe("slot", call)
     result = sim._parse_response(
         simulate_response(

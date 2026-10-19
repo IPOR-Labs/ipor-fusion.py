@@ -25,7 +25,6 @@ Example -- bridge from a source vault and let the dispatcher settle::
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
@@ -41,7 +40,7 @@ from ipor_fusion.crosschain.transport import (
     CrosschainTransport,
     OutboundMessage,
 )
-from ipor_fusion.types import ZERO_ADDRESS, ChainId, PlasmaVaultAddress
+from ipor_fusion.types import ChainId, PlasmaVaultAddress
 
 #: What the synthetic token source holds: enough for any test amount.
 SYNTHETIC_BALANCE = 2**96
@@ -89,10 +88,7 @@ class CrosschainSimulator:
             raise ValueError(f"chain {chain_id} is not configured on the transport")
         if chain_id in self._chains:
             raise ValueError(f"chain {chain_id} already added")
-        zero: Any = ZERO_ADDRESS
-        sim = VaultSimulator(
-            web3, vault=vault or zero, alpha=alpha or zero, block=block
-        )
+        sim = VaultSimulator(web3, vault=vault, alpha=alpha, block=block)
         # A chain without a real token holder to impersonate gets a synthetic
         # one, funded once by a storage override; deliveries transfer from it.
         for token in self._transport.synthetic_credit_tokens(chain_id):

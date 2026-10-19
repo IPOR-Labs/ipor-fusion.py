@@ -343,7 +343,6 @@ def test_simulate_contract_creation(web3_arb):
     init_code = bytes.fromhex("600a600c600039600a6000f3") + runtime
     simulator = VaultSimulator(
         web3_arb,
-        vault=ZERO_ADDRESS,
         alpha=SIMULATED_DEPLOYER,
         block=ARBITRUM_BLOCK,
     )
@@ -374,7 +373,6 @@ def test_compile_and_deploy_crosschain_fuses(web3_arb):
     )
     simulator = VaultSimulator(
         web3_arb,
-        vault=ZERO_ADDRESS,
         alpha=SIMULATED_DEPLOYER,
         block=ARBITRUM_BLOCK,
     )
@@ -804,7 +802,7 @@ def test_simulate_clone_htest_vault(
         OWNER,
     )
     preview = clone.call()
-    simulator = VaultSimulator(web3, vault=ZERO_ADDRESS, alpha=OWNER, block=block)
+    simulator = VaultSimulator(web3, alpha=OWNER, block=block)
     simulator.with_block_override(gasLimit=30_000_000)
     simulator.add_call(clone, from_=OWNER, label="clone_vault")
     vault = PlasmaVault(ctx, preview.plasma_vault)
