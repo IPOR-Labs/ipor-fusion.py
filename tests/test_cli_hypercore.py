@@ -49,23 +49,24 @@ def _markets(*fuses: BalanceFuse) -> MagicMock:
 
 @patch("ipor_fusion.vault_data.read_hypercore_vault_state")
 def test_fetch_only_on_hyperevm_with_a_hypercore_balance_fuse(read_state):
-    ctx = MagicMock()
+    ctx = MagicMock(chain_id=999)
     hypercore = BalanceFuse(MarketId(55), FUSE)
-    assert _fetch_hypercore_state(ctx, VAULT, 1, _markets(hypercore)) is None
     assert (
-        _fetch_hypercore_state(
-            ctx, VAULT, 999, _markets(BalanceFuse(MarketId(14), FUSE))
-        )
+        _fetch_hypercore_state(MagicMock(chain_id=1), VAULT, _markets(hypercore))
+        is None
+    )
+    assert (
+        _fetch_hypercore_state(ctx, VAULT, _markets(BalanceFuse(MarketId(14), FUSE)))
         is None
     )
     read_state.assert_not_called()
 
     read_state.return_value = _state(pending=None)
     assert (
-        _fetch_hypercore_state(ctx, VAULT, 999, _markets(hypercore))
+        _fetch_hypercore_state(ctx, VAULT, _markets(hypercore))
         is read_state.return_value
     )
     read_state.assert_called_once_with(ctx, VAULT, FUSE)
 
     read_state.side_effect = ValueError("unsupported HIP-3 perp dex bitmap 0x4")
-    assert _fetch_hypercore_state(ctx, VAULT, 999, _markets(hypercore)) is None
+    assert _fetch_hypercore_state(ctx, VAULT, _markets(hypercore)) is None

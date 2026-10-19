@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sys
-from functools import partial
 from typing import Any
 
 import click
@@ -50,7 +49,6 @@ from ipor_fusion.validation import (
 from ipor_fusion.vault_data import (
     _ROLE_SCAN_ERRORS,
     fetch_vault_data,
-    resolve_token_symbol,
 )
 from ipor_fusion.vault_info import (
     _erc20_balances_json,
@@ -207,7 +205,6 @@ def info(
     """
     cfg = load_config()
     chain_id, ctx = _build_ctx(cfg, vault_address, chain_id, block_number)
-    checksum_address = vault_address
 
     # Cheap single-call probe: friendly errors for "nothing deployed here" and
     # "not a Plasma Vault" (revert and empty-return flavors alike) before the
@@ -217,17 +214,13 @@ def info(
     except (ContractNotFoundError, NotPlasmaVaultError) as exc:
         raise click.UsageError(str(exc)) from exc
 
-    plasma_vault = PlasmaVault(ctx, checksum_address)
-
-    _auto_save_vault(cfg, vault_address, chain_id, plasma_vault)
+    _auto_save_vault(cfg, vault_address, chain_id, PlasmaVault(ctx, vault_address))
 
     try:
-        data = fetch_vault_data(ctx, plasma_vault, block_number, chain_id=chain_id)
+        data = fetch_vault_data(ctx, vault_address, block=block_number)
     except UnsupportedVaultVersionError as exc:
         raise click.ClickException(str(exc)) from exc
-    _print_vault_info(
-        ctx, plasma_vault, cfg, data, vault_address, chain_id, json_output
-    )
+    _print_vault_info(ctx, cfg, data, json_output)
 
 
 @vault.command("validate")
@@ -264,12 +257,7 @@ def validate(
         raise click.UsageError(str(exc)) from exc
 
     try:
-        validation = validate_vault(
-            ctx,
-            vault_address,
-            block_number,
-            resolve_symbol=partial(resolve_token_symbol, ctx),
-        )
+        validation = validate_vault(ctx, vault_address, block=block_number)
     except UnsupportedVaultVersionError as exc:
         raise click.ClickException(str(exc)) from exc
 

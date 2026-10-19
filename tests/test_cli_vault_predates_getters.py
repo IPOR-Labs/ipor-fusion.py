@@ -27,7 +27,7 @@ from ipor_fusion.cli.vault_markets_view import (
     _print_market_substrates,
 )
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
-from ipor_fusion.types import MarketId
+from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
     GET_PRICE_ORACLE_MIDDLEWARE,
@@ -58,6 +58,7 @@ def _uint(value: int) -> bytes:
 
 # What every vault generation answers.
 _COMMON: dict[str, Response] = {
+    "totalAssetsInMarket(uint256)": _uint(0),
     "decimals()": _uint(6),
     "totalAssets()": _uint(1_000),
     "totalSupply()": _uint(900),
@@ -233,6 +234,8 @@ class TestVaultReads:
 
 def _vault_data(unimplemented: list[str]) -> VaultData:
     return VaultData(
+        vault=VAULT,
+        chain_id=ChainId(1),
         block_number=1,
         is_latest=True,
         block_timestamp=0,
@@ -272,9 +275,7 @@ class TestReporting:
         assert not [w for w in health.warnings if "vault predates" in w]
 
     def test_substrates_section_says_unavailable(self, capsys):
-        addrs = _print_market_substrates(
-            MagicMock(), _vault_data([GET_MARKET_SUBSTRATES]), 42161, None
-        )
+        addrs = _print_market_substrates(_vault_data([GET_MARKET_SUBSTRATES]), None)
 
         assert addrs == set()
         assert f"unavailable: the vault predates {GET_MARKET_SUBSTRATES}" in (

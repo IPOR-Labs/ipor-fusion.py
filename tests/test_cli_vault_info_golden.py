@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,7 +26,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import cache
+from ipor_fusion import cache, vault_data, vault_erc20
 from ipor_fusion.cache import save_contract_cache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig
@@ -35,7 +38,7 @@ from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import LendingMarketHealth, VaultLendingHealth
 from ipor_fusion.readers.unpriceable import MiddlewarePricedToken
-from ipor_fusion.types import ChainId, MarketId
+from ipor_fusion.types import ChainId, MarketId, Shares
 from ipor_fusion.vault_data import (
     GET_TOTAL_SUPPLY_CAP,
     VaultData,
@@ -177,6 +180,8 @@ def _rich_vault() -> tuple[VaultData, _Chain]:
         ]
     )
     data = VaultData(
+        vault=VAULT,
+        chain_id=ChainId(1),
         block_number=21_000_000,
         is_latest=False,
         block_timestamp=1_730_000_000,
@@ -269,6 +274,8 @@ def _rich_vault() -> tuple[VaultData, _Chain]:
 
 def _clean_vault() -> tuple[VaultData, _Chain]:
     data = VaultData(
+        vault=VAULT,
+        chain_id=ChainId(1),
         block_number=100,
         is_latest=True,
         block_timestamp=1_700_000_000,
@@ -329,11 +336,51 @@ def isolated_cache(tmp_path, monkeypatch):
     )
 
 
-def _render(scenario: str, json_output: bool) -> str:
+def _snapshot(scenario: str) -> tuple[Web3Context, VaultData]:
+    """The scenario's `VaultData` completed from its fake chain by the readers
+    `fetch_vault_data` uses: market balances, ERC20 holdings, withdrawal
+    assets and token metadata."""
     data, chain = SCENARIOS[scenario]()
     ctx = Web3Context(web3=MagicMock(), chain_id=ChainId(1))
     ctx.call = multicall_aware(chain.handle)  # type: ignore[method-assign]
-    plasma_vault = PlasmaVault(ctx, VAULT)  # type: ignore[arg-type]
+    vault = PlasmaVault(ctx, VAULT)  # type: ignore[arg-type]
+    data.market_balances = {
+        bf.market_id: vault.total_assets_in_market(bf.market_id).call()
+        for bf in data.balance_fuses
+    }
+    data.erc20 = vault_erc20._read_erc20_holdings(
+        ctx,
+        data.vault,
+        balance_fuses=data.balance_fuses,
+        market_substrates=data.market_substrates or {},
+        market_balances=data.market_balances,
+        price_oracle=data.price_oracle_addr,
+        asset=vault_erc20._Asset(data.asset, data.asset_decimals, data.asset_price_usd),
+        resolve_symbol=partial(vault_data.resolve_token_symbol, ctx),
+    )
+    if (wmd := data.withdraw_manager_data) is not None:
+        wmd.shares_to_release_assets = vault.convert_to_assets(
+            Shares(wmd.shares_to_release)
+        ).call()
+        wmd.pending_request_assets = {
+            req.account: vault.convert_to_assets(req.shares).call()
+            for req in wmd.pending_requests or []
+        }
+    with ThreadPoolExecutor() as pool:
+        data.token_symbols, data.token_decimals = vault_data._token_metadata(
+            ctx,
+            pool,
+            SimpleNamespace(market_substrates=data.market_substrates or {}),  # type: ignore[arg-type]
+            SimpleNamespace(  # type: ignore[arg-type]
+                morpho_positions=data.morpho_positions,
+                aave_positions=data.aave_positions,
+            ),
+        )
+    return ctx, data
+
+
+def _render(scenario: str, json_output: bool) -> str:
+    ctx, data = _snapshot(scenario)
     runner = CliRunner()
     with (
         patch(
@@ -342,9 +389,7 @@ def _render(scenario: str, json_output: bool) -> str:
         ),
         runner.isolation(color=True) as (out, _err, _in),
     ):
-        _print_vault_info(
-            ctx, plasma_vault, FusionConfig(), data, VAULT, 1, json_output
-        )
+        _print_vault_info(ctx, FusionConfig(), data, json_output)
     return out.getvalue().decode()
 
 
@@ -371,16 +416,9 @@ _NAMES_BY_ADDRESS = {address.lower(): name for address, name in NAMES.items()}
 def test_public_builder_renders_the_cli_json(scenario: str) -> None:
     """`build_vault_info_json` with an injected name resolver produces the
     exact document `fusion vault info --json` prints."""
-    data, chain = SCENARIOS[scenario]()
-    ctx = Web3Context(web3=MagicMock(), chain_id=ChainId(1))
-    ctx.call = multicall_aware(chain.handle)  # type: ignore[method-assign]
+    _, data = _snapshot(scenario)
     result = build_vault_info_json(
-        ctx,
-        PlasmaVault(ctx, VAULT),  # type: ignore[arg-type]
-        data,
-        chain_id=1,
-        chain_label="ethereum",
-        resolve_name=lambda address: _NAMES_BY_ADDRESS.get(address.lower(), ""),
+        data, resolve_name=lambda address: _NAMES_BY_ADDRESS.get(address.lower(), "")
     )
     expected = (FIXTURES / f"{scenario}.json").read_text(encoding="utf-8")
     assert json.dumps(result, indent=2) + "\n" == expected

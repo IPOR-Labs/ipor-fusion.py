@@ -188,8 +188,9 @@ the lifecycle matrix follows that.
 - `substrates.py` — public per-market bytes32 substrate decoding (`decode_substrate`,
   `SubstrateInfo`, `format_market_label`, `market_name`; re-exported from `ipor_fusion`),
   used by the CLI, MCP and `readers/lending_health`
-- `validation.py` — public vault validation (`validate_vault`; `read_erc20_holdings` +
-  `validate_vault_state` for an already-fetched state typed by the `VaultState` protocol):
+- `validation.py` — public vault validation (`validate_vault` fetches and validates;
+  `validate_vault_state` is a pure function of a snapshot typed by the `VaultState`
+  protocol):
   `VaultValidation` with ordered `Finding`s, an ok/warning/critical verdict, the
   `Reconciliation`, `Erc20Holdings` and lending health; `dependency_graph.py` holds the
   balance-graph checks
@@ -197,9 +198,11 @@ the lifecycle matrix follows that.
   `WithdrawManagerData`), `fetch_deployment_info`, cached `resolve_token_symbol` /
   `resolve_token_decimals`; it composes `vault_reads.py` (the shared Multicall3 batch
   and degrade-to-``None`` helpers), `vault_managers.py` (fee and WithdrawManager
-  snapshots) and `vault_positions.py` (Morpho/Aave position breakdowns and their token
-  prices); `vault_info.py` — `build_vault_info_json`, the
-  `fusion vault info --json` document (contract names via an injected `resolve_name`),
+  snapshots), `vault_positions.py` (Morpho/Aave position breakdowns and their token
+  prices) and `vault_erc20.py` (the ERC20_VAULT_BALANCE holdings);
+  `vault_info.py` — `build_vault_info_json(data)`, the `fusion vault info --json`
+  document rendered from the snapshot alone (contract names via an injected
+  `resolve_name`),
   and `health_check_lists`; `explorer.py` Etherscan V2 (single endpoint, needs API key);
   `cache.py` the on-disk contract and deployment caches (`~/.cache/ipor-fusion/`).
   `morpho_api.py` the Morpho public GraphQL API client (`fetch_market`, `fetch_vault`,
@@ -291,6 +294,9 @@ or examples.
   via `self._action_raw(solidity_signature, values)`; the shared `_validate_*`
   helpers raise before encoding. `PlasmaVault.execute([actions])` runs the
   batch atomically.
+- Pin reads, never mutate a shared context: `ctx.at_block(n)` is a copy whose
+  reads (and `get_logs` upper bound) default to block ``n``; `Call.call(block=n)`
+  pins one read.
 - Simulate before sending: `VaultSimulator(web3, vault=, alpha=)` batches
   `execute` and `observe` calls into one `eth_simulateV1` round trip, across
   blocks via `next_block`. Integration tests and examples use it instead of a
@@ -379,9 +385,14 @@ are not validated.
 
 ## Domain rules (verified against the contracts)
 
-- `fetch_vault_data(..., chain_id=0)` (the default) skips lending_health,
-  Morpho/Aave position breakdowns and token prices, all guarded by `if chain_id:`.
-  Pass a real chain_id or those come back null/empty, silently.
+- `fetch_vault_data(ctx, vault, *, block=, lending=, metadata=)` is the snapshot:
+  it resolves one block (``block``, else a numeric `ctx.default_block`, else latest),
+  runs every read on `ctx.at_block(block)` (log scans end there too) and returns
+  everything validation and the ``vault info`` document need, so neither reads the
+  chain. The chain is `ctx.chain_id`; ``lending=False`` skips lending health, the
+  position breakdowns, their prices and the unpriceable check; ``metadata=False``
+  skips token symbols/decimals. Add a new chain-state input to the snapshot, never a
+  read inside a renderer or validator.
 - PlasmaVault serves governance/view functions via `fallback()` delegatecall to
   PlasmaVaultBase, so Etherscan's ABI for the vault address omits callable
   view functions such as `getDependencyBalanceGraph`. An empty dependency graph

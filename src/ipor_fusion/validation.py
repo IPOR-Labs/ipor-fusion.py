@@ -1,28 +1,21 @@
 """Plasma Vault validation at one block: health findings, the totalAssets
 reconciliation, ERC20 holdings and lending health, with an overall verdict.
 
-`validate_vault` reads everything it needs. A caller that already holds the
-vault state (the ``fusion vault info`` command) validates it without a second
-fetch: `read_erc20_holdings`, then `validate_vault_state`.
+`validate_vault` fetches the snapshot and validates it. A caller that already
+holds one (the ``fusion vault info`` command) passes it to
+`validate_vault_state`, which reads nothing.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol, TypeVar
 
-from eth_typing import ChecksumAddress, HexAddress
-from web3 import Web3
-from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
+from eth_typing import ChecksumAddress
 
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.contract import Call
-from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.multicall import Multicall3
-from ipor_fusion.core.oracle import price_oracle_middleware
-from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
+from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.dependency_graph import (
     erc20_balance_tracks_non_underlying,
     find_markets_missing_erc20_dependency,
@@ -30,8 +23,8 @@ from ipor_fusion.dependency_graph import (
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import VaultLendingHealth
-from ipor_fusion.substrates import decode_substrate, format_market_label, market_name
-from ipor_fusion.types import ChainId, FuseAddress, MarketId, PlasmaVaultAddress, Shares
+from ipor_fusion.substrates import decode_substrate, format_market_label
+from ipor_fusion.types import ChainId, FuseAddress, MarketId, PlasmaVaultAddress
 from ipor_fusion.types import Check as Check
 from ipor_fusion.types import Severity as Severity
 from ipor_fusion.types import Verdict as Verdict
@@ -41,6 +34,8 @@ from ipor_fusion.vault_data import (
     GET_TOTAL_SUPPLY_CAP,
     fetch_vault_data,
 )
+from ipor_fusion.vault_erc20 import Erc20Holding as Erc20Holding
+from ipor_fusion.vault_erc20 import Erc20Holdings as Erc20Holdings
 
 T = TypeVar("T")
 
@@ -63,6 +58,8 @@ class WithdrawQueue(Protocol):
 
     @property
     def shares_to_release(self) -> int: ...
+    @property
+    def shares_to_release_assets(self) -> int | None: ...
 
 
 class UnpriceableToken(Protocol):
@@ -93,6 +90,10 @@ class VaultState(Protocol):
     vault that predates the getter).
     """
 
+    @property
+    def vault(self) -> PlasmaVaultAddress: ...
+    @property
+    def chain_id(self) -> ChainId: ...
     @property
     def block_number(self) -> int: ...
     @property
@@ -127,6 +128,10 @@ class VaultState(Protocol):
     def unpriceable_priced_tokens(self) -> Sequence[UnpriceableToken] | None: ...
     @property
     def unimplemented_getters(self) -> Sequence[str]: ...
+    @property
+    def market_balances(self) -> Mapping[MarketId, int]: ...
+    @property
+    def erc20(self) -> Erc20Holdings: ...
 
 
 @dataclass(frozen=True)
@@ -137,40 +142,6 @@ class Finding:
     check: Check
     severity: Severity
     message: str
-
-
-@dataclass(frozen=True)
-class Erc20Holding:
-    """A token of the ERC20_VAULT_BALANCE market as held by the vault.
-
-    ``decimals`` and ``balance`` are ``None`` when the token could not be read;
-    ``note`` says how the holding relates to the market's cached value.
-    """
-
-    address: HexAddress
-    symbol: str
-    decimals: int | None
-    balance: int | None
-    price_usd: float | None
-    usd_value: float | None
-    note: str
-
-
-@dataclass(frozen=True)
-class Erc20Holdings:
-    """The vault's ERC20_VAULT_BALANCE tokens read directly.
-
-    ``value_in_asset`` and ``value_usd`` sum the priced tokens, underlying
-    included; ``market_cached_value`` is the market's cached
-    ``totalAssetsInMarket``. ``unpriced_tokens`` lists ``"<address> (<symbol>)"``
-    for held tokens that could not be valued.
-    """
-
-    tokens: tuple[Erc20Holding, ...] = ()
-    value_in_asset: int = 0
-    value_usd: float = 0.0
-    market_cached_value: int = 0
-    unpriced_tokens: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -257,61 +228,20 @@ class VaultValidation:
 def validate_vault(
     ctx: Web3Context,
     vault_address: PlasmaVaultAddress,
-    block_number: int | None = None,
     *,
-    resolve_symbol: Callable[[HexAddress], str] | None = None,
+    block: int | None = None,
 ) -> VaultValidation:
-    """Read a Plasma Vault and validate it, every read pinned to one block.
-
-    ``block_number`` defaults to ``ctx.default_block`` when that is a number,
-    else the latest block; ``ctx`` itself is not modified. ``resolve_symbol``
-    names ERC20 tokens in findings (default: their on-chain ``symbol()``).
-    """
-    if block_number is None:
-        default = ctx.default_block
-        block_number = default if isinstance(default, int) else None
-    if block_number is None:
-        block_number = ctx.web3.eth.block_number
-    pinned = Web3Context(
-        ctx.web3,
-        ctx.chain_id,
-        log_scan_timeout_s=ctx.log_scan_timeout_s,
-        log_scan_max_requests=ctx.log_scan_max_requests,
-    )
-    pinned.default_block = block_number
-
-    plasma_vault = PlasmaVault(pinned, vault_address)
-    state = fetch_vault_data(
-        pinned, plasma_vault, block_number, chain_id=pinned.chain_id
-    )
-    markets = list(dict.fromkeys(bf.market_id for bf in state.balance_fuses))
-    balances = Multicall3(pinned).aggregate(
-        [plasma_vault.total_assets_in_market(market) for market in markets]
-    )
+    """Fetch the vault's snapshot at one block (`fetch_vault_data`: ``block``,
+    else the context's numeric default block, else the latest) and validate
+    it; ``ctx`` itself is not modified."""
     return validate_vault_state(
-        pinned,
-        plasma_vault,
-        state,
-        dict(zip(markets, balances, strict=True)),
-        read_erc20_holdings(pinned, plasma_vault, state, resolve_symbol),
+        fetch_vault_data(ctx, vault_address, block=block, metadata=False)
     )
 
 
-def validate_vault_state(
-    ctx: Web3Context,
-    plasma_vault: PlasmaVault,
-    state: VaultState,
-    market_balances: Mapping[MarketId, int],
-    erc20: Erc20Holdings,
-) -> VaultValidation:
-    """Validate an already-fetched vault.
-
-    ``market_balances`` maps each balance-fuse market to its cached
-    ``totalAssetsInMarket``, once per market; its order is the order the USD
-    total is summed in. ``erc20`` comes from `read_erc20_holdings`. The only
-    read is ``convertToAssets`` of the WithdrawManager's shares to release.
-    """
-    reconciliation = _reconcile(ctx, plasma_vault, state, market_balances, erc20)
+def validate_vault_state(state: VaultState) -> VaultValidation:
+    """Validate an already-fetched snapshot; reads nothing."""
+    reconciliation = _reconcile(state)
     findings = [
         *_unimplemented_getter_findings(state),
         *_orphan_fuse_findings(state),
@@ -319,11 +249,11 @@ def validate_vault_state(
         *_unpriceable_token_findings(state),
         *_lending_health_findings(state),
         *_reconciliation_findings(state, reconciliation),
-        *_erc20_findings(state, erc20),
+        *_erc20_findings(state, state.erc20),
     ]
     return VaultValidation(
-        vault=plasma_vault.address,
-        chain_id=ctx.chain_id,
+        vault=state.vault,
+        chain_id=state.chain_id,
         block_number=state.block_number,
         block_timestamp=state.block_timestamp,
         asset=state.asset,
@@ -332,166 +262,14 @@ def validate_vault_state(
         asset_price_usd=state.asset_price_usd,
         findings=tuple(findings),
         reconciliation=reconciliation,
-        erc20=erc20,
+        erc20=state.erc20,
         lending_health=state.lending_health,
     )
 
 
-def read_erc20_holdings(
-    ctx: Web3Context,
-    plasma_vault: PlasmaVault,
-    state: VaultState,
-    resolve_symbol: Callable[[HexAddress], str] | None = None,
-) -> Erc20Holdings:
-    """Read every ERC20_VAULT_BALANCE token the vault is granted: balance,
-    decimals and middleware price, valued in the underlying asset.
-
-    Empty when the vault has no ERC20_VAULT_BALANCE market.
-    ``resolve_symbol`` maps a token address to its symbol, ``""`` when unknown
-    (default: the on-chain ``symbol()``).
-    """
-    erc20_market = next(
-        (
-            bf.market_id
-            for bf in state.balance_fuses
-            if market_name(bf.market_id) == "ERC20_VAULT_BALANCE"
-        ),
-        None,
-    )
-    if erc20_market is None:
-        return Erc20Holdings()
-    cached_value = plasma_vault.total_assets_in_market(erc20_market).call()
-    addresses = [
-        sub_info.address
-        for sub in (state.market_substrates or {}).get(erc20_market, [])
-        if (sub_info := decode_substrate(sub, market_id=erc20_market)).address
-    ]
-    if not addresses:
-        return Erc20Holdings(market_cached_value=cached_value)
-    reads = _read_tokens(ctx, plasma_vault, state, addresses, resolve_symbol)
-    return _value_tokens(state, reads, cached_value)
-
-
-@dataclass(frozen=True)
-class _TokenRead:
-    address: HexAddress
-    symbol: str
-    decimals: int | None
-    balance: int | None
-    price_usd: float | None
-
-
-def _read_tokens(
-    ctx: Web3Context,
-    plasma_vault: PlasmaVault,
-    state: VaultState,
-    addresses: list[HexAddress],
-    resolve_symbol: Callable[[HexAddress], str] | None,
-) -> list[_TokenRead]:
-    resolve = resolve_symbol or (lambda address: _onchain_symbol(ctx, address))
-    vault = Web3.to_checksum_address(plasma_vault.address)
-    oracle = price_oracle_middleware(
-        ctx, Web3.to_checksum_address(state.price_oracle_addr)
-    )
-    with ThreadPoolExecutor() as pool:
-        futures: list[tuple[HexAddress, Future, Future, Future, Future]] = []
-        for address in addresses:
-            checksum = Web3.to_checksum_address(address)
-            token = ERC20(ctx, checksum)
-            futures.append(
-                (
-                    address,
-                    pool.submit(resolve, address),
-                    pool.submit(_call_or_none, token.decimals()),
-                    pool.submit(_call_or_none, token.balance_of(vault)),
-                    pool.submit(_call_or_none, oracle.get_asset_price(checksum)),
-                )
-            )
-        reads: list[_TokenRead] = []
-        for address, symbol, decimals, balance, price in futures:
-            price_value = price.result()
-            reads.append(
-                _TokenRead(
-                    address=address,
-                    symbol=symbol.result() or "?",
-                    decimals=decimals.result(),
-                    balance=balance.result(),
-                    price_usd=price_value.readable() if price_value else None,
-                )
-            )
-        return reads
-
-
-def _value_tokens(
-    state: VaultState, reads: list[_TokenRead], cached_value: int
-) -> Erc20Holdings:
-    decimals = state.asset_decimals
-    asset_price = state.asset_price_usd
-    value_in_asset = 0
-    value_usd = 0.0
-    unpriced: list[str] = []
-    for read in reads:
-        if read.decimals is None or read.balance is None:
-            continue
-        if read.price_usd is not None and asset_price:
-            token_usd = (read.balance / 10**read.decimals) * read.price_usd
-            value_usd += token_usd
-            value_in_asset += int(token_usd / asset_price * 10**decimals)
-        elif read.balance > 0:
-            unpriced.append(f"{read.address} ({read.symbol})")
-
-    cached_usd = (cached_value / 10**decimals) * asset_price if asset_price else None
-    return Erc20Holdings(
-        tokens=tuple(_holding(state, read, cached_usd) for read in reads),
-        value_in_asset=value_in_asset,
-        value_usd=value_usd,
-        market_cached_value=cached_value,
-        unpriced_tokens=tuple(unpriced),
-    )
-
-
-def _holding(
-    state: VaultState, read: _TokenRead, cached_usd: float | None
-) -> Erc20Holding:
-    if read.decimals is None or read.balance is None:
-        return Erc20Holding(
-            read.address, read.symbol, read.decimals, read.balance, None, None, ""
-        )
-    amount = read.balance / 10**read.decimals
-    usd_value = amount * read.price_usd if read.price_usd else None
-    if read.address.lower() == state.asset.lower():
-        note = "underlying asset"
-    elif read.balance == 0:
-        note = "in ERC20_VAULT_BALANCE, balance=0"
-    elif (
-        read.price_usd
-        and cached_usd is not None
-        and amount * read.price_usd > cached_usd
-    ):
-        note = (
-            f"${amount * read.price_usd:,.2f} not reflected in totalAssets "
-            f"(stale cache)"
-        )
-    else:
-        note = "in ERC20_VAULT_BALANCE"
-    return Erc20Holding(
-        read.address,
-        read.symbol,
-        read.decimals,
-        read.balance,
-        read.price_usd,
-        usd_value,
-        note,
-    )
-
-
-def _reconcile(
-    ctx: Web3Context,
-    plasma_vault: PlasmaVault,
-    state: VaultState,
-    market_balances: Mapping[MarketId, int],
-    erc20: Erc20Holdings,
-) -> Reconciliation:
+def _reconcile(state: VaultState) -> Reconciliation:
+    market_balances = state.market_balances
+    erc20 = state.erc20
     decimals = state.asset_decimals
     price = state.asset_price_usd
 
@@ -521,8 +299,7 @@ def _reconcile(
     pending_usd = 0.0
     queue = state.withdraw_manager_data
     if queue and queue.shares_to_release > 0:
-        shares = Shares(queue.shares_to_release)
-        assets = _call_or_none(plasma_vault.convert_to_assets(shares))
+        assets = queue.shares_to_release_assets
         if assets is not None:
             pending = assets
             if price:
@@ -836,20 +613,6 @@ def _uncovered_erc20_lines(state: VaultState, erc20: Erc20Holdings) -> list[str]
                 f"{row} — {usd.strip()} not reflected in totalAssets (stale cache)"
             )
     return lines
-
-
-def _onchain_symbol(ctx: Web3Context, address: str) -> str:
-    symbol = _call_or_none(ERC20(ctx, Web3.to_checksum_address(address)).symbol())
-    return symbol or ""
-
-
-def _call_or_none(call: Call[T]) -> T | None:
-    """A read that reverts or fails at the RPC is ``None``; anything else
-    (an empty result, a decoding error) still raises."""
-    try:
-        return call.call()
-    except (ContractLogicError, Web3RPCError, TimeExhausted):
-        return None
 
 
 def _format_amount(raw: int, decimals: int) -> str:

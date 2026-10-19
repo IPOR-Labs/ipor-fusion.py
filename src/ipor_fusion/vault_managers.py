@@ -3,7 +3,7 @@ WithdrawManager snapshot."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from eth_abi.exceptions import DecodingError
 from web3.types import ChecksumAddress
@@ -18,7 +18,7 @@ from ipor_fusion.core.fee_manager import (
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
 from ipor_fusion.errors import EmptyCallResultError
-from ipor_fusion.types import ZERO_ADDRESS
+from ipor_fusion.types import ZERO_ADDRESS, Shares
 from ipor_fusion.vault_reads import _read_batch, _safe_call, _scan_or_none
 
 
@@ -67,6 +67,14 @@ class WithdrawManagerData:
     last_release_funds_timestamp: int
     # None when the WithdrawRequestUpdated scan or its reads failed.
     pending_requests: list[AccountRequest] | None
+    # convertToAssets of shares_to_release at the snapshot block; None when
+    # the read failed (or there is nothing to release: 0).
+    shares_to_release_assets: int | None = None
+    # convertToAssets of each pending request's shares, by account; a failed
+    # read is None.
+    pending_request_assets: dict[ChecksumAddress, int | None] = field(
+        default_factory=dict
+    )
 
 
 def _fetch_withdraw_manager(
@@ -88,13 +96,28 @@ def _fetch_withdraw_manager(
             wm.get_last_release_funds_timestamp(),
         ],
     )
+    pending = _scan_or_none(wm.get_pending_requests)
+    to_release = Shares(shares or 0)
+    _, (release_assets, *request_assets) = _read_batch(
+        ctx,
+        [],
+        [
+            plasma_vault.convert_to_assets(to_release),
+            *(plasma_vault.convert_to_assets(req.shares) for req in pending or []),
+        ],
+    )
     return address, WithdrawManagerData(
         withdraw_window=window or 0,
         request_fee=request_fee,
         withdraw_fee=withdraw_fee,
-        shares_to_release=shares or 0,
+        shares_to_release=to_release,
         last_release_funds_timestamp=last_ts or 0,
-        pending_requests=_scan_or_none(wm.get_pending_requests),
+        pending_requests=pending,
+        shares_to_release_assets=release_assets,
+        pending_request_assets={
+            req.account: assets
+            for req, assets in zip(pending or [], request_assets, strict=True)
+        },
     )
 
 

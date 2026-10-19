@@ -21,7 +21,6 @@ from ipor_fusion.validation import (
     Reconciliation,
     VaultValidation,
 )
-from ipor_fusion.vault_data import resolve_token_symbol
 
 VAULT = "0x31744E44d6aF88225C1dBEFbe5Df8308fAeA641B"
 
@@ -231,17 +230,13 @@ class TestTool:
 
     def test_latest_passes_no_block(self):
         response, validate = self._run()
-        assert validate.call_args.args[1:] == (VAULT, None)
+        assert validate.call_args.args[1:] == (VAULT,)
+        assert validate.call_args.kwargs == {"block": None}
         assert response.chain == "base"
 
     def test_a_block_is_passed_through(self):
         _, validate = self._run(block_number=52500581)
-        assert validate.call_args.args[1:] == (VAULT, 52500581)
-
-    def test_symbols_resolve_through_the_cached_resolver(self):
-        _, validate = self._run()
-        resolve_symbol = validate.call_args.kwargs["resolve_symbol"]
-        assert resolve_symbol.func is resolve_token_symbol
+        assert validate.call_args.kwargs == {"block": 52500581}
 
     def test_an_unsupported_vault_version_reaches_the_caller(self):
         validate = MagicMock(

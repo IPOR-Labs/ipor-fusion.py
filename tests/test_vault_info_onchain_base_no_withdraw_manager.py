@@ -49,7 +49,7 @@ def test_vault_without_withdraw_manager_fetches_on_real_base_vault():
     ctx, pv = _connect(url)
 
     withdraw_manager = pv.withdraw_manager_address()
-    data = fetch_vault_data(ctx, pv, BLOCK, chain_id=CHAIN_ID)
+    data = fetch_vault_data(ctx, pv.address, block=BLOCK)
 
     # Sanity: confirm we are reading the expected vault at this block.
     assert data.vault_name == "IPOR USDC Lending Optimizer Base"

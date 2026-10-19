@@ -55,7 +55,14 @@ def _fetch(side_effect: BaseException | list[AccountRequest]):
         patch("ipor_fusion.vault_managers.WithdrawManager", return_value=wm),
         patch(
             "ipor_fusion.vault_managers._read_batch",
-            return_value=([], [3600, 0, 0, 0, 0]),
+            side_effect=[
+                ([], [3600, 0, 0, 0, 0]),
+                (
+                    [],
+                    [0]
+                    * (1 + len(side_effect if isinstance(side_effect, list) else [])),
+                ),
+            ],
         ),
     ):
         return _fetch_withdraw_manager(MagicMock(), vault)
@@ -92,7 +99,7 @@ def test_completed_scan_keeps_requests():
 
 
 def test_json_reports_null_and_validates():
-    result = _build_withdraw_manager_json(_vault_data(None), MagicMock())
+    result = _build_withdraw_manager_json(_vault_data(None))
 
     assert result is not None
     assert result["pending_requests"] is None
@@ -101,7 +108,7 @@ def test_json_reports_null_and_validates():
 
 
 def test_json_keeps_an_empty_queue_distinct():
-    result = _build_withdraw_manager_json(_vault_data([]), MagicMock())
+    result = _build_withdraw_manager_json(_vault_data([]))
 
     assert result is not None
     assert result["pending_requests"] == []
@@ -111,6 +118,6 @@ def test_json_keeps_an_empty_queue_distinct():
 def test_text_output_says_unavailable():
     runner = CliRunner()
     with runner.isolation() as (out, _err, _in):
-        _print_pending_requests(_vault_data(None), MagicMock())
+        _print_pending_requests(_vault_data(None))
 
     assert "unavailable" in out.getvalue().decode()

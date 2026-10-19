@@ -13,8 +13,6 @@ from ipor_fusion.cli.vault_rendering import (
     _print_table,
     _substrate_details,
 )
-from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.substrates import (
     decode_substrate,
@@ -24,17 +22,13 @@ from ipor_fusion.types import ChainId, FuseAddress, MarketId, parse_hex_address
 from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
     VaultData,
-    resolve_token_decimals,
-    resolve_token_symbol,
 )
 from ipor_fusion.vault_info import (
     _CAPABILITY_BALANCE_FUSES,
 )
 
 
-def _print_lending_health(  # noqa: C901
-    ctx: Web3Context, data: VaultData
-) -> None:
+def _print_lending_health(data: VaultData) -> None:  # noqa: C901
     lh = data.lending_health
     has_health = lh is not None and lh.has_lending_positions
     has_breakdown = bool(data.morpho_positions) or bool(data.aave_positions)
@@ -46,22 +40,21 @@ def _print_lending_health(  # noqa: C901
     morpho_health, aave_health = _index_lending_health(lh)
     consumed_morpho_subs: set[str] = set()
     consumed_aave_mids: set[int | str] = set()
-    prices = data.token_prices_usd or {}
 
     for ipor_mid, positions in (data.morpho_positions or {}).items():
         click.echo(f"  {format_market_label(ipor_mid)}:")
         for pb in positions:
-            coll_sym = resolve_token_symbol(ctx, pb.collateral_token) or "?"
-            loan_sym = resolve_token_symbol(ctx, pb.loan_token) or "?"
+            coll_sym = _token_symbol(data, pb.collateral_token)
+            loan_sym = _token_symbol(data, pb.loan_token)
             click.echo(f"    morpho market {pb.market_id} ({coll_sym}/{loan_sym}):")
             click.echo(
-                f"      Collateral:    {_format_token_amount(ctx, int(pb.collateral), pb.collateral_token, prices)}"
+                f"      Collateral:    {_format_token_amount(data, int(pb.collateral), pb.collateral_token)}"
             )
             click.echo(
-                f"      Borrow:        {_format_token_amount(ctx, int(pb.borrow_assets), pb.loan_token, prices)}"
+                f"      Borrow:        {_format_token_amount(data, int(pb.borrow_assets), pb.loan_token)}"
             )
             click.echo(
-                f"      Supply:        {_format_token_amount(ctx, int(pb.supply_assets), pb.loan_token, prices)}"
+                f"      Supply:        {_format_token_amount(data, int(pb.supply_assets), pb.loan_token)}"
             )
             sid = str(pb.market_id).lower().removeprefix("0x")
             consumed_morpho_subs.add(sid)
@@ -71,17 +64,17 @@ def _print_lending_health(  # noqa: C901
     for ipor_mid, aave_positions in (data.aave_positions or {}).items():
         click.echo(f"  {format_market_label(ipor_mid)}:")
         for ab in aave_positions:
-            asset_symbol = resolve_token_symbol(ctx, ab.asset) or "?"
+            asset_symbol = _token_symbol(data, ab.asset)
             click.echo(f"    asset {ab.asset} ({asset_symbol}):")
             click.echo(
-                f"      Supply:        {_format_token_amount(ctx, int(ab.supply), ab.asset, prices)}"
+                f"      Supply:        {_format_token_amount(data, int(ab.supply), ab.asset)}"
             )
             click.echo(
-                f"      Variable Debt: {_format_token_amount(ctx, int(ab.variable_debt), ab.asset, prices)}"
+                f"      Variable Debt: {_format_token_amount(data, int(ab.variable_debt), ab.asset)}"
             )
             if ab.stable_debt > 0:
                 click.echo(
-                    f"      Stable Debt:   {_format_token_amount(ctx, int(ab.stable_debt), ab.asset, prices)}"
+                    f"      Stable Debt:   {_format_token_amount(data, int(ab.stable_debt), ab.asset)}"
                 )
         consumed_aave_mids.add(ipor_mid)
         if m := aave_health.get(ipor_mid):
@@ -161,15 +154,9 @@ def _print_health_lines(market: Any, indent: str) -> None:
     click.secho(f"{indent}Status:        {status}", fg=color, bold=bold)
 
 
-def _print_markets(
-    ctx: Web3Context,
-    plasma_vault: PlasmaVault,
-    data: VaultData,
-    chain_id: ChainId,
-    api_key: str | None,
-) -> dict[MarketId, int]:
-    """Fuses, balance fuses, dependency graph and substrates; returns the
-    per-market balances read for the balance-fuse table."""
+def _print_markets(data: VaultData, api_key: str | None) -> None:
+    """Fuses, balance fuses, dependency graph and substrates."""
+    chain_id = data.chain_id
     _print_fuse_section(
         "Fuses",
         data.fuses,
@@ -190,46 +177,31 @@ def _print_markets(
     )
     click.echo()
 
-    market_balances = _print_balance_fuses_table(
-        plasma_vault,
-        data.balance_fuses,
-        data.asset_decimals,
-        data.asset_symbol,
-        data.asset_price_usd,
-        chain_id,
-        api_key,
-    )
+    _print_balance_fuses_table(data, api_key)
     click.echo()
 
     _print_dependency_graph(data)
 
     click.echo("Substrates per Market:")
-    _print_market_substrates(ctx, data, chain_id, api_key)
+    _print_market_substrates(data, api_key)
     click.echo()
-    return market_balances
 
 
-def _format_token_amount(
-    ctx: Web3Context,
-    raw: int,
-    token_address: HexAddress,
-    prices_usd: dict[HexAddress, float] | None = None,
-) -> str:
-    """Format a raw on-chain amount using cached ERC-20 symbol + decimals.
+def _token_symbol(data: VaultData, token_address: HexAddress) -> str:
+    return data.token_symbols.get(parse_hex_address(token_address)) or "?"
 
-    When `prices_usd` (lowercase address → USD price) contains the token, the
-    output is suffixed with ` ($X.XX)` via `_format_usd`.
-    """
-    symbol = resolve_token_symbol(ctx, token_address) or "?"
-    decimals = resolve_token_decimals(ctx, token_address)
+
+def _format_token_amount(data: VaultData, raw: int, token_address: HexAddress) -> str:
+    """Format a raw amount with the snapshot's symbol and decimals, suffixed
+    with ` ($X.XX)` when the snapshot has the token's USD price."""
+    key = parse_hex_address(token_address)
+    symbol = data.token_symbols.get(key) or "?"
+    decimals = data.token_decimals.get(key)
     if decimals is None:
         return f"{raw} raw ({symbol})"
     base = f"{_format_amount(raw, decimals)} {symbol}"
-    if prices_usd:
-        usd_suffix = _format_usd(
-            raw, decimals, prices_usd.get(parse_hex_address(token_address))
-        )
-        return f"{base}{usd_suffix}"
+    if prices_usd := data.token_prices_usd:
+        return f"{base}{_format_usd(raw, decimals, prices_usd.get(key))}"
     return base
 
 
@@ -313,37 +285,24 @@ def _print_fuse_section(
     _print_table(("#", "Address", "Contract", "Market", "Substrates"), rows)
 
 
-def _print_balance_fuses_table(
-    plasma_vault: PlasmaVault,
-    balance_fuses: Sequence[BalanceFuse],
-    decimals: int,
-    asset_symbol: str,
-    asset_price_usd: float | None,
-    chain_id: ChainId,
-    api_key: str | None,
-) -> dict[MarketId, int]:
-    """Print the table; return each market's cached balance, once per market
-    (several balance fuses can share a market's single storage slot)."""
-    market_balances: dict[MarketId, int] = {}
+def _print_balance_fuses_table(data: VaultData, api_key: str | None) -> None:
+    balance_fuses = data.balance_fuses
+    decimals = data.asset_decimals
+    asset_symbol = data.asset_symbol
+    asset_price_usd = data.asset_price_usd
     with ThreadPoolExecutor() as pool:
-        futures: list[tuple[int, MarketId, str, Future, Future]] = []
+        futures: list[tuple[int, MarketId, str, Future]] = []
         for idx, balance_fuse in enumerate(balance_fuses, 1):
             market_id_str = format_market_label(balance_fuse.market_id)
-            f_balance = pool.submit(
-                plasma_vault.total_assets_in_market(balance_fuse.market_id).call
-            )
             f_contract = pool.submit(
-                get_contract_name, chain_id, balance_fuse.fuse, api_key
+                get_contract_name, data.chain_id, balance_fuse.fuse, api_key
             )
-            futures.append(
-                (idx, balance_fuse.market_id, market_id_str, f_balance, f_contract)
-            )
+            futures.append((idx, balance_fuse.market_id, market_id_str, f_contract))
 
         venue_rows: list[tuple[str, ...]] = []
         zero_rows: list[tuple[str, ...]] = []
-        for idx, market_id, market_id_str, f_balance, f_contract in futures:
-            assets_in_market = f_balance.result()
-            market_balances.setdefault(market_id, assets_in_market)
+        for idx, market_id, market_id_str, f_contract in futures:
+            assets_in_market = data.market_balances[market_id]
             contract_name = f_contract.result() or "?"
             balance_str = (
                 f"{_format_amount(assets_in_market, decimals)} {asset_symbol}"
@@ -367,30 +326,23 @@ def _print_balance_fuses_table(
         click.echo()
         click.echo(f"Zero-Balance Fuses ({len(zero_rows)}):")
         _print_table(header, [(str(i), *row) for i, row in enumerate(zero_rows, 1)])
-    return market_balances
 
 
-def _print_market_substrates(
-    ctx: Web3Context, data: VaultData, chain_id: ChainId, api_key: str | None
-) -> set[str]:
+def _print_market_substrates(data: VaultData, api_key: str | None) -> set[str]:
     if GET_MARKET_SUBSTRATES in data.unimplemented_getters:
         click.secho(
             f"  (unavailable: the vault predates {GET_MARKET_SUBSTRATES})",
             fg="yellow",
         )
         return set()
-    return _print_substrates(
-        ctx, data.market_substrates or {}, data.balance_fuses, chain_id, api_key
-    )
+    return _print_substrates(data, api_key)
 
 
 def _print_substrates(  # noqa: C901
-    ctx: Web3Context,
-    substrates_by_market: dict[MarketId, list[bytes]],
-    balance_fuses: Sequence[BalanceFuse],
-    chain_id: ChainId,
-    api_key: str | None,
+    data: VaultData, api_key: str | None
 ) -> set[str]:
+    substrates_by_market = data.market_substrates or {}
+    balance_fuses = data.balance_fuses
     # Phase 1: collect each balance fuse's substrates and the addresses to resolve
     market_substrates: list[tuple[str, MarketId, list[bytes]]] = []
     all_addresses: set[HexAddress] = set()
@@ -408,17 +360,13 @@ def _print_substrates(  # noqa: C901
         click.echo("  (none)")
         return {a.lower() for a in all_addresses}
 
-    # Phase 2: resolve all symbols + contract names in parallel
+    # Phase 2: resolve contract names in parallel; symbols are in the snapshot
+    resolved_symbols = data.token_symbols
     with ThreadPoolExecutor() as pool:
-        symbol_futs = {
-            addr: pool.submit(resolve_token_symbol, ctx, addr) for addr in all_addresses
-        }
         contract_futs = {
-            addr: pool.submit(get_contract_name, chain_id, addr, api_key)
+            addr: pool.submit(get_contract_name, data.chain_id, addr, api_key)
             for addr in all_addresses
         }
-
-        resolved_symbols = {addr: fut.result() for addr, fut in symbol_futs.items()}
         resolved_contracts = {addr: fut.result() for addr, fut in contract_futs.items()}
 
     # Phase 3: print

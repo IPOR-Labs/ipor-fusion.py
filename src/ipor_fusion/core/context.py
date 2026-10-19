@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 
 from eth_account import Account
@@ -73,6 +74,7 @@ class Web3Context:
         self,
         web3: Web3,
         chain_id: ChainId,
+        *,
         signer: ChecksumAddress | None = None,
         private_key: str | None = None,
         gas_multiplier: float = 1.25,
@@ -115,6 +117,14 @@ class Web3Context:
     def default_block(self, value: BlockIdentifier) -> None:
         self._default_block = value
 
+    def at_block(self, block: BlockIdentifier) -> Web3Context:
+        """A copy of this context whose reads default to ``block``: same
+        connection, signer, log source and scan bounds. Pinning a copy leaves
+        this context (and anything sharing it across threads) untouched."""
+        pinned = copy.copy(self)
+        pinned._default_block = block
+        return pinned
+
     @property
     def signer(self) -> ChecksumAddress | None:
         return self._signer
@@ -123,6 +133,7 @@ class Web3Context:
     def from_url(
         cls,
         url: str,
+        *,
         private_key: str | None = None,
         gas_multiplier: float = 1.25,
         request_timeout_s: float = DEFAULT_RPC_TIMEOUT_S,
@@ -271,17 +282,18 @@ class Web3Context:
         # Per position: one topic, or a list of alternatives (OR).
         topics: list[str | list[str]],
         from_block: BlockIdentifier | None = None,
-        to_block: BlockIdentifier = "latest",
+        to_block: BlockIdentifier | None = None,
     ) -> list[LogReceipt]:
         """Every matching log in the range, paged within the provider's
         `eth_getLogs` caps (`core.logs.get_logs_adaptive`); raises
         `LogScanError` rather than return a partial result. ``from_block=None``
-        scans from the contract's creation.
+        scans from the contract's creation; ``to_block=None`` ends at the
+        context's default block, so a pinned context never sees later logs.
 
         With a `log_source` set, a filter on the event signature alone is
         asked there first; when it raises `LogSourceUnavailable` the RPC
         scan runs as without one."""
-        end = block_number(self.web3, to_block)
+        end = block_number(self.web3, self._resolve_block(to_block))
         if self.log_source is not None and len(topics) == 1:
             topic0 = [topics[0]] if isinstance(topics[0], str) else list(topics[0])
             start = 0 if from_block is None else block_number(self.web3, from_block)

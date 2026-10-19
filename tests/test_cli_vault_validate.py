@@ -16,6 +16,7 @@ from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
 from ipor_fusion.errors import NotPlasmaVaultError, UnsupportedVaultVersionError
+from ipor_fusion.types import ChainId
 from ipor_fusion.validation import Erc20Holdings
 from ipor_fusion.vault_data import VaultData
 
@@ -34,6 +35,8 @@ def tmp_config(tmp_path, monkeypatch):
 
 def _data() -> VaultData:
     return VaultData(
+        vault=VAULT,
+        chain_id=ChainId(1),
         block_number=21_000_000,
         is_latest=False,
         block_timestamp=1_700_000_000,
@@ -100,8 +103,8 @@ def test_warning_verdict_exits_zero():
     assert "Verdict: WARNING" in result.output
     assert "Criticals" not in result.output
     args, kwargs = validate_vault.call_args
-    assert args[1:] == (VAULT, 123)
-    assert callable(kwargs["resolve_symbol"])
+    assert args[1:] == (VAULT,)
+    assert kwargs == {"block": 123}
 
 
 def test_ok_verdict_prints_the_block():
