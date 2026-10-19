@@ -121,11 +121,12 @@ def _parse_answer(
     message = result["message"]
     if not isinstance(message, Mapping):
         raise TypeError("message is not an object")
+    ccvs = result["message_ccv_addresses"]
+    if not isinstance(ccvs, list) or not ccvs:
+        raise ValueError("message_ccv_addresses is not a non-empty array")
     return VerifierResult(
         message_id=MessageId(served_id),
-        ccv_addresses=tuple(
-            Web3.to_checksum_address(a) for a in result["message_ccv_addresses"]
-        ),
+        ccv_addresses=tuple(Web3.to_checksum_address(a) for a in ccvs),
         ccv_data=_hex_bytes(result["ccv_data"]),
         executor=Web3.to_checksum_address(result["message_executor_address"]),
         message=message,

@@ -244,9 +244,10 @@ was not built for) raises a plain `ValueError` (`TypeError` for an argument of t
 wrong type, `KeyError` for an unknown name in a mapping-style lookup such as
 `ipor_fusion.guide.guide_text`); a chain, provider or remote API answering something the
 SDK cannot use raises an `IporFusionError` subclass. Except for
-`CrosschainDiscoveryError`, every subclass that replaces a `ValueError` raise also
-derives from `ValueError`, so `except ValueError` keeps catching it; catch the
-subclass to tell a chain fact from a bad argument. Receipts,
+`CrosschainDiscoveryError` (discovery) and `SimulationError` (`quote_ccip_native_fee`),
+every subclass that replaces a `ValueError` raise also derives from `ValueError`, so
+`except ValueError` keeps catching it; catch the subclass to tell a chain fact from a
+bad argument. Receipts,
 logs and transports passed in that do not contain what the call needs (a clone
 receipt without its events, logs without the lane's `BalanceProposed`, a CCIP
 message to a chain the transport does not configure) stay `ValueError`: the input
@@ -290,7 +291,8 @@ is the wrong one.
   `ValueError`) on a chain with no known `HyperCorePendingReader` when none is passed.
 - `fetch_verifier_result` no longer leaks `KeyError`, `TypeError` or `ValueError` from
   an indexer answer it cannot read (not JSON, a missing or mistyped field, invalid hex
-  or address, or a result for a different message id, which is now checked): that
+  or address, an empty or non-array CCV list, or a result for a different message id,
+  both now checked): that
   indexer is skipped like an unreachable one, and when none serves a readable result
   it raises `VerifierResultUnavailable` naming each indexer's reason. A `message_id`
   that is not 32 bytes is still a `ValueError`.
