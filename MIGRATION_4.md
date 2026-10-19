@@ -110,6 +110,15 @@ Every fuse constructor, `FuseAction.fuse`, `BalanceFuse.fuse`,
 `FusionInstance.access_manager` return one. `resolve_access_manager` still takes any
 `ChecksumAddress`: it is what checks that the address is a vault.
 
+**Simulation and factory records.** `VaultSimulator(web3, *, vault=None, alpha=None,
+block=...)` takes every argument after `web3` by keyword, and `vault` and `alpha` are
+optional: a simulator that only observes, deploys or sends `execute_call(call,
+from_=...)` needs neither, so drop a zero-address placeholder. `execute()` without
+`vault` and `alpha` raises `ValueError`, as does `execute_call` without `from_` or
+`alpha`. `FusionInstance.from_dict(data)` rebuilds a stored instance (the
+`dataclasses.asdict` form) with every field parsed; use it instead of
+`FusionInstance(**data)`, which passes raw strings into the role-typed fields.
+
 **Markets and substrates.** Every `IporFusionMarkets` member is a `MarketId`.
 `decode_substrate`, `market_name`, `format_market_label` take `MarketId`.
 

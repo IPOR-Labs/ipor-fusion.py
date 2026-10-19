@@ -22,7 +22,9 @@ For external-signer flows, grab the bytes directly:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from eth_abi import decode as abi_decode
 from eth_typing import ChecksumAddress
@@ -31,7 +33,13 @@ from web3 import Web3
 from web3.types import TxReceipt
 
 from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.types import AccessManagerAddress, Period, PlasmaVaultAddress
+from ipor_fusion.types import (
+    AccessManagerAddress,
+    Period,
+    PlasmaVaultAddress,
+    parse_access_manager_address,
+    parse_plasma_vault_address,
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -69,6 +77,61 @@ class FusionInstance:
     withdraw_manager: ChecksumAddress
     context_manager: ChecksumAddress
     price_manager: ChecksumAddress
+
+    @classmethod
+    def from_dict(
+        cls, data: Mapping[str, Any]
+    ) -> FusionInstance:  # proctor: ignore[primitives-untyped-dict]
+        """Rebuild an instance from its JSON form (``dataclasses.asdict``),
+        parsing every field: role addresses through their parsers, the rest
+        checksummed, integers and strings type-checked. Raises ``ValueError``
+        on a missing, extra or malformed field."""
+        missing = _INSTANCE_FIELDS.keys() - data.keys()
+        extra = data.keys() - _INSTANCE_FIELDS.keys()
+        if missing or extra:
+            raise ValueError(
+                f"FusionInstance fields: missing {sorted(missing)}, extra {sorted(extra)}"
+            )
+        return cls(
+            **{name: parse(data[name]) for name, parse in _INSTANCE_FIELDS.items()}
+        )
+
+
+def _integer(value: Any) -> int:
+    if type(value) is not int:
+        raise ValueError(f"expected an integer: {value!r}")
+    return value
+
+
+def _text(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"expected a string: {value!r}")
+    return value
+
+
+def _address(value: Any) -> ChecksumAddress:
+    return Web3.to_checksum_address(_text(value))
+
+
+_INSTANCE_FIELDS: dict[str, Callable[[Any], Any]] = {
+    "index": _integer,
+    "version": _integer,
+    "asset_name": _text,
+    "asset_symbol": _text,
+    "asset_decimals": _integer,
+    "underlying_token": _address,
+    "underlying_token_symbol": _text,
+    "underlying_token_decimals": _integer,
+    "initial_owner": _address,
+    "plasma_vault": lambda value: parse_plasma_vault_address(_text(value)),
+    "plasma_vault_base": _address,
+    "access_manager": lambda value: parse_access_manager_address(_text(value)),
+    "fee_manager": _address,
+    "rewards_manager": _address,
+    "withdraw_manager": _address,
+    "context_manager": _address,
+    "price_manager": _address,
+}
 
 
 _FUSION_INSTANCE_OUTPUT_TYPES: list[str] = [
