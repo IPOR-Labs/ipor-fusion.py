@@ -30,9 +30,9 @@ from ipor_fusion.dependency_graph import (
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import VaultLendingHealth
 from ipor_fusion.substrates import decode_substrate, format_market_label, market_name
+from ipor_fusion.types import ChainId, Shares
 from ipor_fusion.types import Check as Check
 from ipor_fusion.types import Severity as Severity
-from ipor_fusion.types import Shares
 from ipor_fusion.types import Verdict as Verdict
 from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
@@ -219,7 +219,7 @@ class VaultValidation:
     """
 
     vault: str
-    chain_id: int
+    chain_id: ChainId
     block_number: int
     block_timestamp: int
     asset: str

@@ -17,11 +17,12 @@ from ipor_fusion.readers.morpho import (
     MorphoMarketParams,
     MorphoMarketRates,
 )
+from ipor_fusion.types import ChainId
 
 
 def build_morpho_blue_market_json(
     market_id: str,
-    chain_id: int,
+    chain_id: ChainId,
     params: MorphoMarketParams,
     state: MorphoMarket,
     rates: MorphoMarketRates,
@@ -104,7 +105,7 @@ def _vault_to_json(vault: VaultAllocation) -> dict:
 
 
 def build_meta_morpho_json(
-    info: VaultV1Info | VaultV2Info, chain_id: int
+    info: VaultV1Info | VaultV2Info, chain_id: ChainId
 ) -> dict[str, Any]:
     """The ``fusion market meta-morpho --json`` document for a MetaMorpho V1
     or Morpho Vault V2 (`fetch_vault`)."""

@@ -17,6 +17,8 @@ from eth_abi import decode, encode
 from eth_utils import keccak
 from web3 import Web3
 
+from ipor_fusion.types import ChainId
+
 MORPHO_API_URL = "https://blue-api.morpho.org/graphql"
 
 # Singleton PublicAllocator deployments per chain. Updated 2026-04 from the
@@ -137,7 +139,7 @@ class MorphoApiError(RuntimeError):
 
 
 def fetch_market(
-    market_id: str, chain_id: int, *, timeout: float = 10.0
+    market_id: str, chain_id: ChainId, *, timeout: float = 10.0
 ) -> MorphoApiMarket:
     """Fetch a Morpho Blue market with its supplying vaults from the public API.
 
@@ -374,7 +376,7 @@ class VaultV1Info:
 
 
 def fetch_vault(
-    address: str, chain_id: int, *, timeout: float = 10.0
+    address: str, chain_id: ChainId, *, timeout: float = 10.0
 ) -> VaultV2Info | VaultV1Info:
     """Fetch a Morpho vault by address. Tries V2 first, falls back to V1.
 

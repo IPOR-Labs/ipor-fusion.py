@@ -17,6 +17,7 @@ from ipor_fusion.field_docs import DOCS
 from ipor_fusion.readers.hypercore import HyperCorePendingState, HyperCorePerpLeg
 from ipor_fusion.readers.lending_health import VaultLendingHealth
 from ipor_fusion.substrates import decode_substrate, format_market_label, market_name
+from ipor_fusion.types import ChainId
 from ipor_fusion.validation import (
     Reconciliation,
     VaultValidation,
@@ -482,7 +483,7 @@ def build_vault_info_json(  # noqa: C901, PLR0912, PLR0915
     plasma_vault: PlasmaVault,
     data: VaultData,
     vault_address: str,
-    chain_id: int,
+    chain_id: ChainId,
     chain_label: str,
     *,
     resolve_name: Callable[[str], str] | None = None,
