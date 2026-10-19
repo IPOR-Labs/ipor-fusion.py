@@ -12,6 +12,9 @@ from ipor_fusion.errors import (
     _decode_revert_reason,
     get_revert_reason,
 )
+from ipor_fusion.types import parse_tx_hash
+
+_TX_HASH = parse_tx_hash(bytes(32))
 
 ERROR_SELECTOR = bytes.fromhex("08c379a0")
 PANIC_SELECTOR = bytes.fromhex("4e487b71")
@@ -160,7 +163,7 @@ def test_get_revert_reason_replay_succeeds():
     """When eth_call replays without error, return None."""
     web3 = _make_web3()
     web3.eth.call.return_value = b""
-    assert get_revert_reason(web3, b"\x00" * 32, _receipt()) is None
+    assert get_revert_reason(web3, _TX_HASH, _receipt()) is None
 
 
 def test_get_revert_reason_exception_with_hex_data():
@@ -171,7 +174,7 @@ def test_get_revert_reason_exception_with_hex_data():
     exc.data = hex_data  # type: ignore[attr-defined]
 
     web3 = _make_web3(call_side_effect=exc)
-    result = get_revert_reason(web3, b"\x00" * 32, _receipt())
+    result = get_revert_reason(web3, _TX_HASH, _receipt())
     assert result == 'Error("not enough")'
 
 
@@ -179,7 +182,7 @@ def test_get_revert_reason_message_contains_revert():
     """Exception message containing 'revert' is returned as-is."""
     exc = Exception("execution reverted: some reason")
     web3 = _make_web3(call_side_effect=exc)
-    result = get_revert_reason(web3, b"\x00" * 32, _receipt())
+    result = get_revert_reason(web3, _TX_HASH, _receipt())
     assert "execution reverted" in result
 
 
@@ -187,7 +190,7 @@ def test_get_revert_reason_message_contains_revert_case_insensitive():
     """Case-insensitive match on 'Revert'."""
     exc = Exception("Revert happened")
     web3 = _make_web3(call_side_effect=exc)
-    result = get_revert_reason(web3, b"\x00" * 32, _receipt())
+    result = get_revert_reason(web3, _TX_HASH, _receipt())
     assert "Revert" in result
 
 
@@ -195,14 +198,14 @@ def test_get_revert_reason_unrecognised_exception():
     """Unrelated exception returns None."""
     exc = Exception("network timeout")
     web3 = _make_web3(call_side_effect=exc)
-    assert get_revert_reason(web3, b"\x00" * 32, _receipt()) is None
+    assert get_revert_reason(web3, _TX_HASH, _receipt()) is None
 
 
 def test_get_revert_reason_tx_without_gas():
     """Transaction without 'gas' field still works."""
     web3 = _make_web3(tx_has_gas=False)
     web3.eth.call.return_value = b""
-    assert get_revert_reason(web3, b"\x00" * 32, _receipt()) is None
+    assert get_revert_reason(web3, _TX_HASH, _receipt()) is None
 
 
 def test_get_revert_reason_data_not_hex_prefix():
@@ -211,7 +214,7 @@ def test_get_revert_reason_data_not_hex_prefix():
     exc.data = "not-hex"  # type: ignore[attr-defined]
     web3 = _make_web3(call_side_effect=exc)
     # Message doesn't contain "revert", data doesn't start with "0x"
-    assert get_revert_reason(web3, b"\x00" * 32, _receipt()) is None
+    assert get_revert_reason(web3, _TX_HASH, _receipt()) is None
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +328,6 @@ def test_get_revert_reason_uses_the_registry():
     exc = Exception("execution reverted")
     exc.data = "0x" + _custom("SdkTestGated(uint256)", 7).hex()  # type: ignore[attr-defined]
     web3.eth.call.side_effect = exc
-    assert get_revert_reason(web3, b"\x00" * 32, {"blockNumber": 1}) == (  # type: ignore[arg-type]
+    assert get_revert_reason(web3, _TX_HASH, {"blockNumber": 1}) == (  # type: ignore[arg-type]
         "SdkTestGated(7)"
     )
