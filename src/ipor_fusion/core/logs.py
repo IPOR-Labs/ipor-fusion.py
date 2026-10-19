@@ -306,7 +306,7 @@ class _Scan:
 
 
 def _creation_block_or_zero(
-    web3: Web3, address: ChecksumAddress, block: int, chain_id: int | None
+    web3: Web3, address: ChecksumAddress, block: int, chain_id: ChainId | None
 ) -> int:
     if chain_id is None:
         return _search_creation_block(web3, address, block)

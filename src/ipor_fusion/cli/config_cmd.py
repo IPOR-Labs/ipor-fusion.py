@@ -8,6 +8,7 @@ from ipor_fusion.cli.config_store import (
     mask_provider_url,
     save_config,
 )
+from ipor_fusion.types import ChainId
 
 
 @click.group()
@@ -23,13 +24,13 @@ def config() -> None:
     default=None,
     help="Chain ID (auto-detected from URL if omitted).",
 )
-def set_provider(url: str, chain_id: int | None) -> None:
+def set_provider(url: str, chain_id: ChainId | None) -> None:
     """Set RPC provider URL for a chain (chain ID auto-detected via eth_chainId)."""
     from web3 import Web3
 
     if chain_id is None:
         web3 = Web3(Web3.HTTPProvider(url))
-        chain_id = web3.eth.chain_id
+        chain_id = ChainId(web3.eth.chain_id)
         click.echo(f"Detected chain ID: {chain_id}")
 
     cfg = load_config()

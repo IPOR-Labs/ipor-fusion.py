@@ -35,7 +35,7 @@ MORPHO_BLUE_ADDRESSES: dict[int, ChecksumAddress] = {
 }
 
 
-def _chain_label(chain_id: int) -> str:
+def _chain_label(chain_id: ChainId) -> str:
     name = CHAIN_NAMES.get(chain_id)
     return f"{chain_id} ({name})" if name else str(chain_id)
 

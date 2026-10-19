@@ -66,7 +66,7 @@ def get_deployment_tx(
 
 
 def _fetch_contract_creation_tx(
-    chain_id: int, address: str, api_key: str | None = None
+    chain_id: ChainId, address: str, api_key: str | None = None
 ) -> tuple[str | None, str | None]:
     if chain_id not in SUPPORTED_CHAINS:
         return None, "chain-not-supported"
@@ -106,7 +106,7 @@ def _fetch_contract_creation_tx(
 
 
 def _fetch_getsourcecode(
-    chain_id: int, address: str, api_key: str | None = None
+    chain_id: ChainId, address: str, api_key: str | None = None
 ) -> dict[str, str] | None:
     if chain_id not in SUPPORTED_CHAINS:
         return None
@@ -139,7 +139,7 @@ def _fetch_getsourcecode(
 
 
 def _fetch_contract_name(
-    chain_id: int, address: str, api_key: str | None = None
+    chain_id: ChainId, address: str, api_key: str | None = None
 ) -> str | None:
     result = _fetch_getsourcecode(chain_id, address, api_key)
     if result is None:

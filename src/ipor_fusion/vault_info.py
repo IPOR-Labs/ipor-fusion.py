@@ -628,7 +628,9 @@ def _substrates_json(
     }
 
 
-def _links_json(chain_id: int, chain_label: str, vault_address: str) -> dict[str, str]:
+def _links_json(
+    chain_id: ChainId, chain_label: str, vault_address: str
+) -> dict[str, str]:
     links = {"ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}"}
     if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
         links["etherscan"] = f"{explorer_base}/address/{vault_address}"

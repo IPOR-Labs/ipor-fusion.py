@@ -232,7 +232,7 @@ class CrosschainCommandFuse(Fuse, ABC):
         """Replace the dispatcher's deposit allowlist with exactly ``plasma_vaults``."""
 
 
-def _validate_chain_id(chain_id: int) -> None:
+def _validate_chain_id(chain_id: ChainId) -> None:
     if chain_id <= 0:
         raise ValueError(f"chain id must be positive, got {chain_id}")
 

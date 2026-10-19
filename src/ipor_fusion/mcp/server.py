@@ -55,7 +55,7 @@ from ipor_fusion.morpho_api import (
 )
 from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
-from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.types import ChainId, MorphoBlueMarketId
 from ipor_fusion.validation import validate_vault
 from ipor_fusion.vault_data import (
     fetch_deployment_info,
@@ -85,7 +85,7 @@ register_guide(mcp)
 # ---------------------------------------------------------------------------
 
 
-def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
+def _resolve_provider(cfg: FusionConfig, chain_id: ChainId) -> str:
     if provider_url := cfg.providers.get(str(chain_id)):
         return provider_url
     raise ValueError(
@@ -93,7 +93,9 @@ def _resolve_provider(cfg: FusionConfig, chain_id: int) -> str:
     )
 
 
-def _resolve_chain_id(cfg: FusionConfig, vault_address: str, chain_id: int) -> int:
+def _resolve_chain_id(
+    cfg: FusionConfig, vault_address: str, chain_id: ChainId
+) -> ChainId:
     if chain_id:
         return chain_id
     entry = next(
@@ -103,14 +105,14 @@ def _resolve_chain_id(cfg: FusionConfig, vault_address: str, chain_id: int) -> i
     if entry:
         return entry.chain_id
     if len(cfg.providers) == 1:
-        return int(next(iter(cfg.providers)))
+        return ChainId(int(next(iter(cfg.providers))))
     raise ValueError(
         "Cannot auto-detect chain ID. Use chain_id parameter or save the vault first."
     )
 
 
 def _build_ctx(
-    cfg: FusionConfig, chain_id: int, block_number: int = 0
+    cfg: FusionConfig, chain_id: ChainId, block_number: int = 0
 ) -> tuple[Web3Context, int | None]:
     provider_url = _resolve_provider(cfg, chain_id)
     ctx = Web3Context.from_url(provider_url)
@@ -162,7 +164,7 @@ def server_info(
 @mcp.tool()
 def vault_info(
     vault_address: str,
-    chain_id: int = 0,
+    chain_id: ChainId = 0,
     block_number: int = 0,
 ) -> VaultInfoResponse:
     """Get full on-chain state of a Plasma Vault — the comprehensive summary.
@@ -218,7 +220,9 @@ def vault_info(
 @mcp.tool()
 def vault_validate(
     vault_address: Annotated[str, Field(description="Plasma Vault address.")],
-    chain_id: Annotated[int, Field(description="Chain ID (auto-detected if 0).")] = 0,
+    chain_id: Annotated[
+        ChainId, Field(description="Chain ID (auto-detected if 0).")
+    ] = 0,
     block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
 ) -> VaultValidationResponse:
     """Check a Plasma Vault's health and return an ok / warning / critical verdict.
@@ -289,7 +293,9 @@ def vault_role_accounts(
         RoleName | None,
         Field(description="Role to filter by; omit to list all roles."),
     ] = None,
-    chain_id: Annotated[int, Field(description="Chain ID (auto-detected if 0).")] = 0,
+    chain_id: Annotated[
+        ChainId, Field(description="Chain ID (auto-detected if 0).")
+    ] = 0,
     block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
 ) -> RoleAccountsResponse:
     """List confirmed role holders on a Plasma Vault's AccessManager.
@@ -326,7 +332,9 @@ def vault_role_accounts(
 @mcp.tool()
 def vault_oracle_mapping(
     vault_address: Annotated[str, Field(description="Plasma Vault address.")],
-    chain_id: Annotated[int, Field(description="Chain ID (auto-detected if 0).")] = 0,
+    chain_id: Annotated[
+        ChainId, Field(description="Chain ID (auto-detected if 0).")
+    ] = 0,
     block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
 ) -> OracleMappingResponse:
     """Map how a Plasma Vault prices every configured asset at a block.
@@ -417,7 +425,7 @@ def vault_list() -> list[VaultListEntry]:
 def vault_add(
     address: str,
     label: str = "",
-    chain_id: int = 0,
+    chain_id: ChainId = 0,
 ) -> ActionResult:
     """Save a Plasma Vault to the local config.
 
@@ -430,7 +438,7 @@ def vault_add(
 
     if not chain_id:
         if len(cfg.providers) == 1:
-            chain_id = int(next(iter(cfg.providers)))
+            chain_id = ChainId(int(next(iter(cfg.providers))))
         else:
             raise ValueError(
                 "Cannot auto-detect chain ID — multiple providers configured. "
@@ -505,7 +513,7 @@ def config_show() -> ConfigShowResponse:
 
 
 @mcp.tool()
-def config_set_provider(url: str, chain_id: int = 0) -> ActionResult:
+def config_set_provider(url: str, chain_id: ChainId = 0) -> ActionResult:
     """Set RPC provider URL for a chain.
 
     Args:
@@ -514,7 +522,7 @@ def config_set_provider(url: str, chain_id: int = 0) -> ActionResult:
     """
     if not chain_id:
         web3 = Web3(Web3.HTTPProvider(url))
-        chain_id = web3.eth.chain_id
+        chain_id = ChainId(web3.eth.chain_id)
 
     cfg = load_config()
     cfg.providers[str(chain_id)] = url
@@ -543,7 +551,7 @@ def config_set_etherscan_key(api_key: str) -> ActionResult:
 @mcp.tool()
 def market_morpho_blue(
     market_id: str,
-    chain_id: int,
+    chain_id: ChainId,
     block_number: int = 0,
     no_api: bool = False,
 ) -> MorphoBlueMarketResponse:
@@ -600,7 +608,7 @@ def market_morpho_blue(
 @mcp.tool()
 def market_meta_morpho(
     vault_address: str,
-    chain_id: int,
+    chain_id: ChainId,
 ) -> MetaMorphoVaultResponse:
     """Inspect a MetaMorpho V1 or Morpho Vault V2 by address (Morpho API).
 
