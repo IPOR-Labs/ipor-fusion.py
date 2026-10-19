@@ -50,7 +50,7 @@ from ipor_fusion.morpho_api import (
     VaultV2Cap,
     VaultV2Info,
 )
-from ipor_fusion.readers import oracle_mapping
+from ipor_fusion.readers import oracle_mapping, oracle_mapping_nodes
 from ipor_fusion.readers.morpho import (
     MorphoMarket,
     MorphoMarketParams,
@@ -642,12 +642,14 @@ class TestVaultOracleMapping:
         # Tripwire for the "Adding a feed type" checklist: every TYPE_* value
         # must appear verbatim in the model's source_type description and the
         # tool docstring — the two LLM-facing doc surfaces.
-        values = [
-            value
-            for name, value in vars(oracle_mapping).items()
+        types = {
+            name: value
+            for name, value in vars(oracle_mapping_nodes).items()
             if name.startswith("TYPE_")
-        ]
+        }
+        values = list(types.values())
         assert len(values) >= 7  # sanity: the type set as of this writing
+        assert set(types) <= set(oracle_mapping.__all__)
 
         field_description = OracleNodeModel.model_fields["source_type"].description
         assert field_description is not None
