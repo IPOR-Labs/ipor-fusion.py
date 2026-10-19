@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from eth_typing import HexAddress, HexStr
+from eth_typing import HexAddress
 from eth_utils import keccak
 
 from ipor_fusion.fuses.hypercore import (
@@ -25,12 +25,12 @@ from ipor_fusion.fuses.hypercore import (
     read_index_of,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import HyperCoreAsset, MarketId
+from ipor_fusion.types import HyperCoreAsset, MarketId, parse_hex_address
 
 
 @dataclass
 class SubstrateInfo:
-    address: HexAddress = HexAddress(HexStr(""))
+    address: HexAddress | None = None
     raw_hex: str = ""
     type_label: str = ""
     is_error: bool = False
@@ -47,14 +47,10 @@ class SubstrateInfo:
 #   Slippage variant: [2 type chars][62 value chars]
 
 
-def _hex_address(hex_digits: str) -> HexAddress:
-    return HexAddress(HexStr(f"0x{hex_digits}"))
-
-
 def _decode_type_lshift160(hex_str: str, types: dict[int, str]) -> SubstrateInfo:
     """Decode type<<160 | address (Ebisu, Midas, Balancer, Velodrome)."""
     type_byte = int(hex_str[22:24], 16)
-    addr = _hex_address(hex_str[24:])
+    addr = parse_hex_address(hex_str[24:])
     label = types.get(type_byte, f"type={type_byte}")
     return SubstrateInfo(address=addr, type_label=label)
 
@@ -67,13 +63,13 @@ def _decode_type_lshift248(hex_str: str, types: dict[int, str]) -> SubstrateInfo
         return SubstrateInfo(
             raw_hex=f"0x{hex_str}", type_label=label, extra={"slippage": str(value)}
         )
-    addr = _hex_address(hex_str[24:])
+    addr = parse_hex_address(hex_str[24:])
     return SubstrateInfo(address=addr, type_label=label)
 
 
 def _decode_plain_address(hex_str: str) -> SubstrateInfo:
     """Decode zero-padded address: 12 zero bytes + 20 address bytes."""
-    return SubstrateInfo(address=_hex_address(hex_str[24:]))
+    return SubstrateInfo(address=parse_hex_address(hex_str[24:]))
 
 
 def _decode_morpho(hex_str: str) -> SubstrateInfo:
@@ -88,14 +84,14 @@ def _decode_uniswap_v4(hex_str: str) -> SubstrateInfo:
     substrate-as-asset (12 zero bytes + address)."""
     if hex_str[:24] == "0" * 24:
         return SubstrateInfo(
-            address=_hex_address(hex_str[24:]), type_label="uniswap_v4_token"
+            address=parse_hex_address(hex_str[24:]), type_label="uniswap_v4_token"
         )
     return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="uniswap_v4_pool_id")
 
 
 def _decode_enso(hex_str: str) -> SubstrateInfo:
     """Decode address<<96 | selector<<64 (Enso)."""
-    addr = _hex_address(hex_str[0:40])
+    addr = parse_hex_address(hex_str[0:40])
     selector = f"0x{hex_str[40:48]}"
     return SubstrateInfo(
         address=addr, type_label="ENSO_TARGET", extra={"selector": selector}
@@ -104,7 +100,7 @@ def _decode_enso(hex_str: str) -> SubstrateInfo:
 
 def _decode_dolomite(hex_str: str) -> SubstrateInfo:
     """Decode asset<<96 | subAccountId<<88 | canBorrow<<80 (Dolomite)."""
-    addr = _hex_address(hex_str[0:40])
+    addr = parse_hex_address(hex_str[0:40])
     sub_account_id = int(hex_str[40:42], 16)
     can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
     return SubstrateInfo(
@@ -131,7 +127,7 @@ def _decode_aave_v4(hex_str: str) -> SubstrateInfo:
         return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label)
     flags = int(hex_str[50:52], 16)
     return SubstrateInfo(
-        address=_hex_address(hex_str[2:42]),
+        address=parse_hex_address(hex_str[2:42]),
         type_label="AAVE_V4_RESERVE",
         extra={
             "reserve_id": str(int(hex_str[42:50], 16)),
@@ -149,7 +145,7 @@ def _decode_euler_v2(hex_str: str) -> SubstrateInfo:
     plain-address path silently produces a malformed address (last 20 bytes are
     flag bytes + zero padding).
     """
-    addr = _hex_address(hex_str[0:40])
+    addr = parse_hex_address(hex_str[0:40])
     is_collateral = (int(hex_str[40:42], 16) & 0x01) == 1
     can_borrow = (int(hex_str[42:44], 16) & 0x01) == 1
     sub_account = f"0x{hex_str[44:46]}"
@@ -178,13 +174,13 @@ def _decode_async_action(hex_str: str) -> SubstrateInfo:
     type_byte = int(hex_str[0:2], 16)
     if type_byte == 0:
         return SubstrateInfo(
-            address=_hex_address(hex_str[2:42]),
+            address=parse_hex_address(hex_str[2:42]),
             type_label="ALLOWED_AMOUNT_TO_OUTSIDE",
             extra={"amount": str(int(hex_str[42:64], 16))},
         )
     if type_byte == 1:
         return SubstrateInfo(
-            address=_hex_address(hex_str[16:56]),
+            address=parse_hex_address(hex_str[16:56]),
             type_label="ALLOWED_TARGETS",
             extra={"selector": f"0x{hex_str[56:64]}"},
         )
@@ -229,10 +225,10 @@ def _decode_external_state(hex_str: str) -> SubstrateInfo:
     if type_byte == 0:
         return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="UNDEFINED")
     if label := _EXTERNAL_STATE_ADDRESS_TYPES.get(type_byte):
-        return SubstrateInfo(address=_hex_address(hex_str[24:]), type_label=label)
+        return SubstrateInfo(address=parse_hex_address(hex_str[24:]), type_label=label)
     if type_byte == 2:
         return SubstrateInfo(
-            address=_hex_address(hex_str[24:]),
+            address=parse_hex_address(hex_str[24:]),
             type_label="TARGET",
             extra={"selector": f"0x{hex_str[16:24]}"},
         )
@@ -270,7 +266,7 @@ def _decode_crosschain(hex_str: str) -> SubstrateInfo:
             is_error=True,
             extra={"chain_id": str(chain_id)},
         )
-    info = SubstrateInfo(address=_hex_address(hex_str[24:]), type_label=label)
+    info = SubstrateInfo(address=parse_hex_address(hex_str[24:]), type_label=label)
     if type_byte == 2:
         info.extra = {"chain_id": str(chain_id)}
     return info
@@ -330,7 +326,7 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
         return _hypercore_invalid(hex_str, label)
     if type_byte == 1:
         return SubstrateInfo(
-            address=_hex_address(hex_str[24:]),
+            address=parse_hex_address(hex_str[24:]),
             type_label=label,
             extra={"token_index": str(int(hex_str[8:24], 16))},
         )
@@ -351,10 +347,10 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
             extra["read_index"] = str(read_index_of(asset))
         return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
     if type_byte == 3:
-        return SubstrateInfo(address=_hex_address(hex_str[24:]), type_label=label)
+        return SubstrateInfo(address=parse_hex_address(hex_str[24:]), type_label=label)
     if type_byte == 4:
         return SubstrateInfo(
-            address=_hex_address(hex_str[24:]),
+            address=parse_hex_address(hex_str[24:]),
             type_label=label,
             extra={"max_fee_rate_decibps": str(int(hex_str[8:24], 16))},
         )

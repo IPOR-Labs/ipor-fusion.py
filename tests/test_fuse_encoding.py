@@ -1837,7 +1837,7 @@ class TestAsyncActionSubstrates:
         # round-trip through the real decoder (offset-sensitive layout)
         info = decode_substrate(encoded, market_id=40)
         assert info.type_label == "ALLOWED_AMOUNT_TO_OUTSIDE"
-        assert info.address.lower() == TOKEN_A_LOW
+        assert info.address == TOKEN_A_LOW
         assert info.extra["amount"] == "1000000"
 
     def test_target_layout(self):
@@ -1849,7 +1849,7 @@ class TestAsyncActionSubstrates:
         ) | int.from_bytes(selector, "big")
         info = decode_substrate(encoded, market_id=40)
         assert info.type_label == "ALLOWED_TARGETS"
-        assert info.address.lower() == TOKEN_B_LOW
+        assert info.address == TOKEN_B_LOW
         assert info.extra["selector"] == "0x" + selector.hex()
 
     def test_exit_slippage_layout(self):
@@ -1933,7 +1933,7 @@ class TestExternalStateSubstrates:
         assert int.from_bytes(encoded, "big") == (tag << 248) | int(TOKEN_A, 16)
         info = decode_substrate(encoded, market_id=50)
         assert info.type_label == label
-        assert info.address.lower() == TOKEN_A_LOW
+        assert info.address == TOKEN_A_LOW
 
     def test_target_layout(self):
         selector = _selector("transfer(address,uint256)")
@@ -1945,7 +1945,7 @@ class TestExternalStateSubstrates:
         ) | int(TOKEN_B, 16)
         info = decode_substrate(encoded, market_id=50)
         assert info.type_label == "TARGET"
-        assert info.address.lower() == TOKEN_B_LOW
+        assert info.address == TOKEN_B_LOW
         assert info.extra["selector"] == "0x" + selector.hex()
 
     # Each guard decodes under its own unit key, not a shared "value".

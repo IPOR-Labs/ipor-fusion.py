@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from eth_account import Account
-from eth_typing import ChecksumAddress, HexStr
+from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from requests import ConnectionError as RequestsConnectionError
 from requests import HTTPError, Timeout
@@ -25,7 +25,7 @@ from ipor_fusion.core.logs import (
     get_logs_adaptive,
 )
 from ipor_fusion.errors import LogSourceUnavailable, TransactionError, get_revert_reason
-from ipor_fusion.types import ChainId, TxHash
+from ipor_fusion.types import ChainId, parse_tx_hash
 
 # web3 retries every allowlisted method on any HTTP error, a 400 included;
 # a too-wide eth_getLogs answered with HTTP 400/413 or a query timeout would be
@@ -229,7 +229,7 @@ class Web3Context:
             reason = get_revert_reason(self.web3, tx_hash, receipt)
             raise TransactionError(
                 "Transaction failed",
-                tx_hash=TxHash(HexStr(tx_hash.to_0x_hex())),
+                tx_hash=parse_tx_hash(bytes(tx_hash)),
                 revert_reason=reason,
             )
         return receipt

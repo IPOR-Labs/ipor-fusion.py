@@ -353,7 +353,7 @@ def _aave_v4_spokes(substrates: list[bytes]) -> list[ChecksumAddress]:
     spokes: dict[ChecksumAddress, None] = {}
     for sub in substrates:
         info = decode_substrate(sub, market_id=IporFusionMarkets.AAVE_V4)
-        if info.type_label == "AAVE_V4_RESERVE":
+        if info.type_label == "AAVE_V4_RESERVE" and info.address:
             spokes[Web3.to_checksum_address(info.address)] = None
     return list(spokes)
 

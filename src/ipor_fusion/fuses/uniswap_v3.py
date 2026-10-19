@@ -140,13 +140,13 @@ class UniswapV3CollectFuse(Fuse):
 
 @dataclass(slots=True)
 class UniswapV3NewPositionEvent:
-    version: str
+    version: ChecksumAddress
     token_id: TokenId
     liquidity: Liquidity
     amount0: Amount
     amount1: Amount
-    sender: str
-    recipient: str
+    sender: ChecksumAddress
+    recipient: ChecksumAddress
     fee: Fee
     tick_lower: Tick
     tick_upper: Tick
@@ -154,7 +154,7 @@ class UniswapV3NewPositionEvent:
 
 @dataclass(slots=True)
 class UniswapV3ClosePositionEvent:
-    version: str
+    version: ChecksumAddress
     token_id: TokenId
 
 

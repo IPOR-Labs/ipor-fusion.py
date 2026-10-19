@@ -499,7 +499,7 @@ def _market_layout(
     bitmap = 0
     for raw in substrates:
         info = decode_substrate(raw, HYPERCORE_MARKET)
-        if info.type_label == "SPOT_TOKEN" and not info.is_error:
+        if info.type_label == "SPOT_TOKEN" and not info.is_error and info.address:
             index = HyperCoreTokenIndex(int(info.extra["token_index"]))
             if index in seen:
                 continue

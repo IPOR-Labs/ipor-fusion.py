@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence, Set
 
+from eth_typing import ChecksumAddress
+
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import MarketId
 
@@ -38,7 +40,7 @@ _ERC20_DEP_NOT_REQUIRED: frozenset[MarketId] = frozenset(
 
 
 def find_orphan_fuse_markets(
-    fuse_markets: Mapping[str, MarketId],
+    fuse_markets: Mapping[ChecksumAddress, MarketId],
     balance_fuse_market_ids: Set[MarketId],
 ) -> dict[MarketId, list[str]]:
     """Return markets claimed by action fuses but lacking a balance fuse.

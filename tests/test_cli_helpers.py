@@ -233,7 +233,7 @@ class TestFormatSubstrate:
         raw = bytes.fromhex("ff" * 32)
         info = decode_substrate(raw)
         assert info.raw_hex == "0x" + "ff" * 32
-        assert info.address == ""
+        assert info.address is None
 
     def test_wrong_length(self):
         raw = bytes.fromhex("aabb")
@@ -320,7 +320,7 @@ class TestFormatSubstratePerMarket:
         raw = bytes.fromhex("02" + "00" * 27 + "000003e8")
         info = decode_substrate(raw, market_id=42)
         assert info.type_label == "Slippage"
-        assert info.address == ""
+        assert info.address is None
         assert info.extra["slippage"] == "1000"
 
     # Morpho (raw bytes32)
@@ -331,7 +331,7 @@ class TestFormatSubstratePerMarket:
         info = decode_substrate(raw, market_id=14)
         assert info.raw_hex.startswith("0x32e253")
         assert info.type_label == "morpho_market_id"
-        assert info.address == ""
+        assert info.address is None
 
     # Enso (address<<96 | selector<<64)
     def test_enso(self):
@@ -384,7 +384,7 @@ class TestFormatSubstratePerMarket:
         raw = bytes.fromhex("ff" * 32)
         info = decode_substrate(raw)
         assert info.raw_hex == "0x" + "ff" * 32
-        assert info.address == ""
+        assert info.address is None
 
 
 class TestMarketName:

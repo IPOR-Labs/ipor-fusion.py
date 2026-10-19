@@ -180,12 +180,21 @@ class TestFetchContractCreationTx:
     def test_success_returns_tx_hash(self, mock_urlopen_fn):
         response = {
             "status": "1",
-            "result": [{"txHash": "0xdeadbeef"}],
+            "result": [{"txHash": "0x" + "de" * 32}],
         }
         mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
         tx, err = _fetch_contract_creation_tx(1, "0xABC", api_key="key123")
-        assert tx == "0xdeadbeef"
+        assert tx == "0x" + "de" * 32
         assert err is None
+
+    @patch("ipor_fusion.explorer.urlopen")
+    @pytest.mark.parametrize("raw", ["0xdeadbeef", 123, ["bad"], {"bad": True}])
+    def test_a_malformed_tx_hash_is_reported_not_raised(self, mock_urlopen_fn, raw):
+        response = {"status": "1", "result": [{"txHash": raw}]}
+        mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
+        tx, err = _fetch_contract_creation_tx(1, "0xABC", api_key="key123")
+        assert tx is None
+        assert err == "malformed-tx-hash"
 
     @patch("ipor_fusion.explorer.urlopen")
     def test_network_error(self, mock_urlopen_fn):

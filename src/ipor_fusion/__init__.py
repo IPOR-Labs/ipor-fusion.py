@@ -345,7 +345,9 @@ from ipor_fusion.types import (
     TokenId,
     TransferId,
     TxHash,
+    parse_hex_address,
     parse_morpho_market_id,
+    parse_tx_hash,
 )
 from ipor_fusion.validation import (
     Erc20Holding,
@@ -624,7 +626,9 @@ __all__ = [
     "PayloadHash",
     "ProposalHash",
     "TxHash",
+    "parse_hex_address",
     "parse_morpho_market_id",
+    "parse_tx_hash",
     "AssetId",
     "CommandId",
     "DeploymentRequestId",

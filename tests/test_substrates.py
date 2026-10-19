@@ -59,7 +59,7 @@ def test_async_action_allowed_targets():
 def test_async_action_allowed_exit_slippage():
     info = decode_substrate(ASYNC_EXIT_SLIPPAGE, market_id=40)
     assert info.type_label == "ALLOWED_EXIT_SLIPPAGE"
-    assert info.address == ""
+    assert info.address is None
     assert info.extra == {"slippage": str(10**15)}  # 0.1% WAD
 
 
@@ -68,7 +68,7 @@ def test_async_action_unknown_type_byte_falls_back_to_raw():
     info = decode_substrate(raw, market_id=40)
     assert info.type_label == "type=7"
     assert info.raw_hex == raw
-    assert info.address == ""
+    assert info.address is None
 
 
 def test_async_action_not_decoded_as_plain_address():
@@ -106,12 +106,12 @@ def test_aave_v4_non_reserve_types_stay_raw():
     undefined = "0x" + "00" * 32
     info = decode_substrate(undefined, market_id=49)
     assert info.type_label == "Undefined"
-    assert info.address == ""
+    assert info.address is None
 
     unknown = "0x05" + "00" * 31
     info = decode_substrate(unknown, market_id=49)
     assert info.type_label == "type=5"
-    assert info.address == ""
+    assert info.address is None
 
 
 def test_aave_v4_not_decoded_from_the_low_bytes():
@@ -155,7 +155,7 @@ def test_external_state_scalar_guards():
         raw = f"0x0{type_byte}" + f"{3600:062x}"
         info = decode_substrate(raw, market_id=50)
         assert info.type_label == label
-        assert info.address == ""
+        assert info.address is None
         assert info.extra == {unit: "3600"}
 
 
@@ -164,7 +164,7 @@ def test_external_state_unknown_type_byte_falls_back_to_raw():
     info = decode_substrate(raw, market_id=50)
     assert info.type_label == "type=9"
     assert info.raw_hex == raw
-    assert info.address == ""
+    assert info.address is None
 
 
 def test_external_state_undefined_type_is_named():
@@ -173,7 +173,7 @@ def test_external_state_undefined_type_is_named():
     info = decode_substrate(raw, market_id=50)
     assert info.type_label == "UNDEFINED"
     assert info.raw_hex == raw
-    assert info.address == ""
+    assert info.address is None
 
 
 def test_external_state_and_async_action_target_layouts_are_mirrored():
@@ -255,7 +255,7 @@ def test_uniswap_v4_pool_id_is_labelled_raw():
     info = decode_substrate(UNISWAP_V4_BOLD_USDC, market_id=53)
     assert info.type_label == "uniswap_v4_pool_id"
     assert info.raw_hex == UNISWAP_V4_BOLD_USDC
-    assert info.address == ""
+    assert info.address is None
 
 
 def test_uniswap_v4_pool_currency_is_a_plain_address():
@@ -271,13 +271,13 @@ def test_market_ids_52_and_53_follow_ipor_fusion_markets_sol():
     assert market_name(53) == "UNISWAP_V4"
     # no substrate library mirrored for Term Finance yet: loud, never guessed
     info = decode_substrate("0x" + "11" * 32, market_id=52)
-    assert info.address == ""
+    assert info.address is None
     assert info.type_label == "no_decoder(TERM_FINANCE)"
 
 
 def test_market_without_decoder_is_labelled_not_guessed():
     info = decode_substrate("0x" + "11" * 32, market_id=31)
-    assert info.address == ""
+    assert info.address is None
     assert info.type_label == "no_decoder(VELODROME_SUPERCHAIN)"
 
 
@@ -295,7 +295,7 @@ def test_spol_unstake_follows_ipor_fusion_markets_sol():
     # SPOLUnstakeFuse is not in the public contracts repo, so its substrate
     # grant check cannot be verified: loud, never guessed
     info = decode_substrate("0x" + "11" * 32, market_id=424_243)
-    assert info.address == ""
+    assert info.address is None
     assert info.type_label == "no_decoder(SPOL_UNSTAKE)"
 
 
@@ -429,6 +429,6 @@ def test_hypercore_words_the_library_rejects_are_errors(word, label):
     info = decode_substrate(word, market_id=IporFusionMarkets.HYPERCORE)
     assert info.is_error
     assert info.type_label == label
-    assert info.address == ""
+    assert info.address is None
     assert info.raw_hex == word
     assert info.extra == {"error": "invalid HyperCore substrate"}
