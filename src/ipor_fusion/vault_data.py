@@ -18,6 +18,7 @@ from typing import Any, TypeVar
 
 import requests
 from eth_abi.exceptions import DecodingError
+from eth_typing import HexAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
@@ -315,7 +316,7 @@ def _read_batch(
     return head, results[len(required) :]
 
 
-def resolve_token_symbol(ctx: Web3Context, address: str) -> str:
+def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
     """ERC-20 symbol, cached; ``"no contract"`` when nothing is deployed at
     ``address`` and ``""`` when the symbol cannot be read."""
     cache = load_contract_cache()
@@ -338,7 +339,7 @@ def resolve_token_symbol(ctx: Web3Context, address: str) -> str:
     return symbol
 
 
-def resolve_token_decimals(ctx: Web3Context, address: str) -> int | None:
+def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
     """Resolve ERC-20 decimals, cached. Returns None if address is not a contract."""
     cache = load_contract_cache()
     cache_key = f"decimals:{address}"
@@ -1039,7 +1040,7 @@ def _fetch_hypercore_state(
 def fetch_deployment_info(
     ctx: Web3Context,
     chain_id: ChainId,
-    vault_address: str,
+    vault_address: HexAddress,
     api_key: str | None,
 ) -> tuple[int | None, int | None, str | None]:
     """Return ``(block, timestamp, error)`` for the vault deployment, using cache.

@@ -10,6 +10,8 @@ import time
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+from eth_typing import HexAddress
+
 from ipor_fusion.cache import load_contract_cache, update_contract_cache
 from ipor_fusion.types import ChainId
 
@@ -39,7 +41,7 @@ _etherscan_limiter = _RateLimiter(2.5)
 
 
 def get_contract_name(
-    chain_id: ChainId, address: str, api_key: str | None = None
+    chain_id: ChainId, address: HexAddress, api_key: str | None = None
 ) -> str:
     cache = load_contract_cache()
     cache_key = f"{chain_id}:{address}"
@@ -54,7 +56,7 @@ def get_contract_name(
 
 
 def get_deployment_tx(
-    chain_id: ChainId, address: str, api_key: str | None = None
+    chain_id: ChainId, address: HexAddress, api_key: str | None = None
 ) -> tuple[str | None, str | None]:
     """Return ``(tx_hash, error)`` for a contract deployment.
 
@@ -66,7 +68,7 @@ def get_deployment_tx(
 
 
 def _fetch_contract_creation_tx(
-    chain_id: ChainId, address: str, api_key: str | None = None
+    chain_id: ChainId, address: HexAddress, api_key: str | None = None
 ) -> tuple[str | None, str | None]:
     if chain_id not in SUPPORTED_CHAINS:
         return None, "chain-not-supported"
@@ -106,7 +108,7 @@ def _fetch_contract_creation_tx(
 
 
 def _fetch_getsourcecode(
-    chain_id: ChainId, address: str, api_key: str | None = None
+    chain_id: ChainId, address: HexAddress, api_key: str | None = None
 ) -> dict[str, str] | None:
     if chain_id not in SUPPORTED_CHAINS:
         return None
@@ -139,7 +141,7 @@ def _fetch_getsourcecode(
 
 
 def _fetch_contract_name(
-    chain_id: ChainId, address: str, api_key: str | None = None
+    chain_id: ChainId, address: HexAddress, api_key: str | None = None
 ) -> str | None:
     result = _fetch_getsourcecode(chain_id, address, api_key)
     if result is None:

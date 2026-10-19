@@ -6,6 +6,7 @@ from collections.abc import Iterable
 
 from eth_abi import decode as abi_decode
 from eth_abi.exceptions import InsufficientDataBytes
+from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxReceipt
@@ -185,7 +186,9 @@ class LogScanError(IporFusionError):
     name the unscanned range.
     """
 
-    def __init__(self, message: str, *, address: str, from_block: int, to_block: int):
+    def __init__(
+        self, message: str, *, address: ChecksumAddress, from_block: int, to_block: int
+    ):
         self.address = address
         self.from_block = from_block
         self.to_block = to_block

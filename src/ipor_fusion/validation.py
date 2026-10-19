@@ -13,6 +13,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Protocol, TypeVar
 
+from eth_typing import HexAddress
 from web3 import Web3
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 
@@ -146,7 +147,7 @@ class Erc20Holding:
     ``note`` says how the holding relates to the market's cached value.
     """
 
-    address: str
+    address: HexAddress
     symbol: str
     decimals: int | None
     balance: int | None
@@ -255,10 +256,10 @@ class VaultValidation:
 
 def validate_vault(
     ctx: Web3Context,
-    vault_address: str,
+    vault_address: HexAddress,
     block_number: int | None = None,
     *,
-    resolve_symbol: Callable[[str], str] | None = None,
+    resolve_symbol: Callable[[HexAddress], str] | None = None,
 ) -> VaultValidation:
     """Read a Plasma Vault and validate it, every read pinned to one block.
 
@@ -340,7 +341,7 @@ def read_erc20_holdings(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     state: VaultState,
-    resolve_symbol: Callable[[str], str] | None = None,
+    resolve_symbol: Callable[[HexAddress], str] | None = None,
 ) -> Erc20Holdings:
     """Read every ERC20_VAULT_BALANCE token the vault is granted: balance,
     decimals and middleware price, valued in the underlying asset.
@@ -373,7 +374,7 @@ def read_erc20_holdings(
 
 @dataclass(frozen=True)
 class _TokenRead:
-    address: str
+    address: HexAddress
     symbol: str
     decimals: int | None
     balance: int | None
@@ -384,8 +385,8 @@ def _read_tokens(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     state: VaultState,
-    addresses: list[str],
-    resolve_symbol: Callable[[str], str] | None,
+    addresses: list[HexAddress],
+    resolve_symbol: Callable[[HexAddress], str] | None,
 ) -> list[_TokenRead]:
     resolve = resolve_symbol or (lambda address: _onchain_symbol(ctx, address))
     vault = Web3.to_checksum_address(plasma_vault.address)
