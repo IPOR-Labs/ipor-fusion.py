@@ -66,7 +66,6 @@ line-length = 88
 target-version = "py311"
 
 [tool.ruff.lint]
-# Kept identical to ipor-fusion-dev.py — shared tool config
 # E,F,W,I,B,UP = base; S = flake8-bandit security; C901 + PLR0911/0912/0913/0915 = design limits.
 select = ["E", "F", "W", "I", "B", "UP", "S", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 ignore = ["E501"]
@@ -93,7 +92,7 @@ typeCheckingMode = "basic"
 # matches `uv run pyright`/CI without per-developer interpreter config.
 venvPath = "."
 venv = ".venv"
-# Shared eth_*/web3 stub frictions (same as ipor-fusion-dev.py):
+# eth_*/web3 stub frictions:
 #   reportPrivateImportUsage      — eth_utils.keccak / eth_abi.decode are public API
 #                                   but missing from the stubs' __all__.
 #   reportTypedDictNotRequiredAccess — web3 TxData["input"] is always present at
@@ -101,7 +100,7 @@ venv = ".venv"
 reportPrivateImportUsage = false
 reportTypedDictNotRequiredAccess = false
 # Tests pass raw ints/literals where domain NewTypes (Amount, MarketId, Period, …) are
-# declared — harmless (NewType is identity at runtime). Disabled to match ipor-fusion-dev.py.
+# declared — harmless (NewType is identity at runtime).
 reportArgumentType = false
 
 [tool.coverage.run]

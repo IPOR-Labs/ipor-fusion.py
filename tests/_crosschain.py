@@ -391,9 +391,8 @@ POC = Deployment(
     ),
 )
 
-# The USDC canary of 2026-10-02 (``ipor-fusion-monitoring``'s
-# ``docs/crosschain-canary/state-usdc.json``): both chains pinned right after
-# its last transaction, the claim at Arbitrum 510934861 (five seconds after the
+# The USDC canary of 2026-10-02: both chains pinned right after its last
+# transaction, the claim at Arbitrum 510934861 (five seconds after the
 # HyperEVM pin, so the hub is last); Stargate has no HyperEVM route, so the
 # spoke stays CCIP-only.
 CANARY_ARBITRUM = replace(CHAINS["arbitrum"], block=510_934_861)
