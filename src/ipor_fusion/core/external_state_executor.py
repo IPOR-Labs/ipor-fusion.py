@@ -31,9 +31,8 @@ from web3.types import BlockIdentifier, TxReceipt
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.fuses.base import ZERO_ADDRESS
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, ChainId, MarketId
+from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId, MarketId
 
 if TYPE_CHECKING:
     from ipor_fusion.core.plasma_vault import PlasmaVault

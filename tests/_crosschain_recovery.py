@@ -17,13 +17,13 @@ from _crosschain_lifecycle import (
 from web3 import Web3
 
 from ipor_fusion import AccessManager, CcipCommandType, CcipLane, Command, Roles
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.crosschain.messages import (
     EMPTY_COMMAND,
     CcipMsgType,
     CommandStatus,
     decode_ccip_envelope,
 )
-from ipor_fusion.fuses.base import FuseAction
 
 UNPRIVILEGED_FLUSHER = Web3.to_checksum_address(
     "0x000000000000000000000000000000000000F105"

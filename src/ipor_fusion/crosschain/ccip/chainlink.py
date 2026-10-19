@@ -16,7 +16,7 @@ from eth_typing import ChecksumAddress
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.contracts import _address
-from ipor_fusion.fuses.base import ZERO_ADDRESS
+from ipor_fusion.types import ZERO_ADDRESS
 
 
 class CcipRouter(ContractWrapper):

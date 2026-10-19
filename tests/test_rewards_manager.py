@@ -6,8 +6,8 @@ from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.core.rewards_manager import RewardsManager
-from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.types import Amount
 
 CONTRACT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")

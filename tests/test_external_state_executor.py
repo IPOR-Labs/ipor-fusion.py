@@ -18,9 +18,8 @@ from ipor_fusion.core.external_state_executor import (
     NavMark,
 )
 from ipor_fusion.core.simulation import VaultSimulator
-from ipor_fusion.fuses.base import ZERO_ADDRESS
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, ChainId, MarketId
+from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId, MarketId
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 EXECUTOR_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")

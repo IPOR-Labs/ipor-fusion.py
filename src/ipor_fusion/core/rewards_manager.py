@@ -5,7 +5,7 @@ from web3 import Web3
 from web3.types import Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.fuses.base import FuseAction
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.types import Amount
 
 

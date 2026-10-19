@@ -39,7 +39,6 @@ from ipor_fusion.crosschain import (
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
 )
-from ipor_fusion.fuses.base import ZERO_ADDRESS
 from ipor_fusion.fuses.crosschain import (
     CcipCrosschainCommandFuse,
     CcipCrosschainSupplyFuse,
@@ -52,7 +51,7 @@ from ipor_fusion.fuses.crosschain import (
     StargateCrosschainSupplyFuse,
     StargateSendParams,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ZERO_ADDRESS, ChainId
 
 EXECUTOR = Web3.to_checksum_address("0x1d5c9d44f8d556ec7f557ae992401cc770937e6e")
 VAULT = Web3.to_checksum_address("0x0Aa75BfD30Ae2d4061FF8261453b933Ab5959991")

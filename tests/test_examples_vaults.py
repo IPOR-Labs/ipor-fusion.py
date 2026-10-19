@@ -19,9 +19,9 @@ from hexbytes import HexBytes
 from web3 import Web3
 
 from ipor_fusion.core import FusionFactory
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
 from ipor_fusion.fuses import ExternalStateSubstrates
-from ipor_fusion.fuses.base import FuseAction
 from ipor_fusion.types import MAX_UINT256, Amount
 
 Loader = Callable[[str], ModuleType]
