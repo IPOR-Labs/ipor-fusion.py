@@ -119,7 +119,8 @@ takes a `ProposalHash`; `BalanceProposal.proposal_hash` and `NavMark.proposal_ha
 are `ProposalHash`; `ExternalStateEvent.transaction_hash` is a `TxHash`.
 
 **Errors and explorer.** `TransactionError(tx_hash=)` takes a `TxHash`,
-`LogScanError(address=)` a `ChecksumAddress`; `get_deployment_tx` returns a `TxHash`
+`LogScanError(address=)` a `ChecksumAddress`; `get_revert_reason` takes a `TxHash`;
+`get_deployment_tx` returns a `TxHash`
 (a malformed hash from Etherscan is reported as the error `malformed-tx-hash`).
 
 **MCP response models** (Python constructors only; the JSON schemas are unchanged

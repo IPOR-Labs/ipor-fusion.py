@@ -338,7 +338,7 @@ class TestHandleReceipt:
 
         assert exc_info.value.tx_hash == tx_hash.to_0x_hex()
         assert exc_info.value.revert_reason == 'Error("Insufficient balance")'
-        mock_get_reason.assert_called_once_with(ctx.web3, tx_hash, receipt)
+        mock_get_reason.assert_called_once_with(ctx.web3, tx_hash.to_0x_hex(), receipt)
 
     @patch("ipor_fusion.core.context.get_revert_reason")
     def test_failed_receipt_with_no_revert_reason(self, mock_get_reason):

@@ -224,13 +224,13 @@ class Web3Context:
             "data": data_hex,
         }
 
-    def _handle_receipt(self, tx_hash, receipt) -> TxReceipt:
+    def _handle_receipt(self, tx_hash: bytes, receipt: TxReceipt) -> TxReceipt:
         if receipt["status"] != 1:
-            reason = get_revert_reason(self.web3, tx_hash, receipt)
+            parsed = parse_tx_hash(tx_hash)
             raise TransactionError(
                 "Transaction failed",
-                tx_hash=parse_tx_hash(bytes(tx_hash)),
-                revert_reason=reason,
+                tx_hash=parsed,
+                revert_reason=get_revert_reason(self.web3, parsed, receipt),
             )
         return receipt
 
