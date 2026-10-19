@@ -67,8 +67,12 @@ from ipor_fusion.types import (
     PlasmaVaultAddress,
 )
 from ipor_fusion.vault_managers import (
-    FeeData,
-    WithdrawManagerData,
+    FeeData as FeeData,
+)
+from ipor_fusion.vault_managers import (
+    WithdrawManagerData as WithdrawManagerData,
+)
+from ipor_fusion.vault_managers import (
     _fetch_fee_data,
     _fetch_withdraw_manager,
 )
