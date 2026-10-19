@@ -320,8 +320,9 @@ class Web3Context:
             max_requests=self.log_scan_max_requests,
         )
 
-    def get_block(self, block: BlockIdentifier = "latest"):
-        return self.web3.eth.get_block(block)
+    def get_block(self, block: BlockIdentifier | None = None):
+        """The block at ``block``, the context's default block when ``None``."""
+        return self.web3.eth.get_block(self._resolve_block(block))
 
     def get_storage_at(
         self,

@@ -81,7 +81,8 @@ chain is always the context's:
 - `Web3Context(web3, chain_id, *, ...)` and `Web3Context.from_url(url, *, ...)` take
   their options by keyword. New: `Web3Context.at_block(block)` (a pinned copy) and
   `Call.call(ctx=None, *, block=None)`. `Web3Context.get_logs(to_block=None)` ends at
-  the context's default block instead of ``"latest"``.
+  the context's default block and `Web3Context.get_block(block=None)` returns it,
+  both instead of ``"latest"``.
 
 `ensure_supported_chain` takes `ChainId`. `fetch_unpriceable_priced_tokens` takes the oracle and
 underlying as `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,

@@ -196,7 +196,8 @@ class VaultData:
     erc20: Erc20Holdings = field(default_factory=Erc20Holdings)
     # Symbols (lowercase address keys) of the substrate and breakdown tokens,
     # and decimals of the breakdown tokens; empty when fetched with
-    # metadata=False. "" / None: not a token, or unreadable.
+    # metadata=False. "" / None: not a token, or unreadable. Token metadata
+    # is cached on disk per address, so a cached value may postdate the block.
     token_symbols: dict[HexAddress, str] = field(default_factory=dict)
     token_decimals: dict[HexAddress, int | None] = field(default_factory=dict)
 
@@ -242,7 +243,7 @@ def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
         return cached
 
     checksum = Web3.to_checksum_address(address)
-    code = ctx.web3.eth.get_code(checksum)
+    code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
     if not code or code == b"":
         update_contract_cache(key, _NO_CONTRACT)
         return _NO_CONTRACT
@@ -264,7 +265,7 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
         return int(cached)
 
     checksum = Web3.to_checksum_address(address)
-    code = ctx.web3.eth.get_code(checksum)
+    code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
     if not code or code == b"":
         return None
 
