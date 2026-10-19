@@ -283,7 +283,7 @@ def _build_withdraw_manager_json(
     requests_json = []
     for req in pending or []:
         assets: int | None = _safe_call(
-            lambda s=req.shares: plasma_vault.convert_to_assets(s).call()  # type: ignore[misc]
+            lambda s=req.shares: plasma_vault.convert_to_assets(s).call()
         )
         entry: dict = {
             "account": req.account,

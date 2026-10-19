@@ -880,7 +880,9 @@ class TestLayerZeroPacketCodecs:
         assert bare.compose_from is None and bare.compose_payload == b""
         with pytest.raises(ValueError, match="taxi"):
             TaxiMessage.decode(b"\x02" + message[1:])
-        compose = encode_oft_compose_msg(9, 30101, 999_414, taxi.compose_msg)
+        compose = encode_oft_compose_msg(
+            nonce=9, src_eid=30101, amount_ld=999_414, compose_msg=taxi.compose_msg
+        )
         assert compose[:8] == (9).to_bytes(8, "big")
         assert compose[8:12] == (30101).to_bytes(4, "big")
         assert int.from_bytes(compose[12:44], "big") == 999_414

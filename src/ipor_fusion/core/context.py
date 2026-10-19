@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 
 from eth_account import Account
-from eth_typing import ChecksumAddress
+from eth_typing import ChecksumAddress, HexStr
+from eth_utils import encode_hex
 from hexbytes import HexBytes
 from requests import ConnectionError as RequestsConnectionError
 from requests import HTTPError, Timeout
@@ -14,7 +15,7 @@ from web3.providers.rpc.utils import (
     REQUEST_RETRY_ALLOWLIST,
     ExceptionRetryConfiguration,
 )
-from web3.types import BlockIdentifier, LogReceipt, TxReceipt
+from web3.types import BlockIdentifier, LogReceipt, TxParams, TxReceipt, Wei
 
 from ipor_fusion.chains import GET_LOGS_RANGE_HINTS
 from ipor_fusion.core.logs import (
@@ -182,7 +183,7 @@ class Web3Context:
         data: bytes,
         *,
         block: BlockIdentifier = "latest",
-    ) -> dict:
+    ) -> TxParams:
         """Build the transaction dict for ``data`` against ``to`` without signing
         or broadcasting — the same dict `send` would submit, ready to hand to an
         external signer or to inspect for a gas/cost preview (`gas` and
@@ -211,7 +212,7 @@ class Web3Context:
         max_fee_per_gas = self._calculate_max_fee_per_gas(
             gas_price, base_fee, max_priority_fee_per_gas
         )
-        data_hex = self._data_hex(data)
+        data_hex = encode_hex(data)
         estimated_gas = self._estimate_gas(to, data_hex, signer, block)
         return {
             "chainId": self.chain_id,
@@ -262,7 +263,7 @@ class Web3Context:
         `build_transaction`.
         """
         signer = self._require_signer("estimate gas")
-        return self._estimate_gas(to, self._data_hex(data), signer, block)
+        return self._estimate_gas(to, encode_hex(data), signer, block)
 
     def get_logs(
         self,
@@ -323,12 +324,12 @@ class Web3Context:
     def _estimate_gas(
         self,
         to: ChecksumAddress,
-        data: str,
-        from_address: str,
+        data: HexStr,
+        from_address: ChecksumAddress,
         block: BlockIdentifier = "latest",
     ) -> int:
         estimated = self.web3.eth.estimate_gas(
-            {"to": to, "from": from_address, "data": data},  # type: ignore[typeddict-item]
+            {"to": to, "from": from_address, "data": data},
             block_identifier=block,
         )
         # State can shift between estimate and execution, so pad the limit; it is
@@ -337,24 +338,22 @@ class Web3Context:
 
     def _calculate_max_fee_per_gas(
         self, gas_price: int, base_fee: int | None, max_priority_fee_per_gas: int
-    ) -> int:
+    ) -> Wei:
         # Prefer a base-fee-relative ceiling on EIP-1559 chains; fall back to a
         # gas-price margin where the block carries no base fee.
         if base_fee is None:
-            return gas_price + self._percent_of(gas_price, self.GAS_PRICE_MARGIN)
-        return base_fee * self.BASE_FEE_HEADROOM_MULTIPLIER + max_priority_fee_per_gas
+            return Wei(gas_price + self._percent_of(gas_price, self.GAS_PRICE_MARGIN))
+        return Wei(
+            base_fee * self.BASE_FEE_HEADROOM_MULTIPLIER + max_priority_fee_per_gas
+        )
 
-    def _get_max_priority_fee(self, gas_price: int) -> int:
-        return min(self.DEFAULT_TRANSACTION_MAX_PRIORITY_FEE, gas_price // 10)
+    def _get_max_priority_fee(self, gas_price: int) -> Wei:
+        return Wei(min(self.DEFAULT_TRANSACTION_MAX_PRIORITY_FEE, gas_price // 10))
 
     def _require_signer(self, action: str) -> ChecksumAddress:
         if self.signer is None:
             raise ValueError(f"Signer required to {action}")
         return self.signer
-
-    @staticmethod
-    def _data_hex(data: bytes) -> str:
-        return f"0x{data.hex()}"
 
     @staticmethod
     def _percent_of(value: int, percentage: int) -> int:

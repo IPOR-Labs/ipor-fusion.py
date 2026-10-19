@@ -141,7 +141,7 @@ def _fetch_getsourcecode(
             with urlopen(url, timeout=10) as resp:  # noqa: S310
                 data = json.loads(resp.read().decode())
             if data.get("status") == "1" and data.get("result"):
-                return data["result"][0]  # type: ignore[no-any-return]
+                return data["result"][0]
             if "rate limit" in str(data.get("result", "")).lower():
                 time.sleep(_RETRY_DELAY * (attempt + 1))
                 continue

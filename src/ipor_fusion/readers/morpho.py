@@ -13,12 +13,18 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.errors import MorphoMarketNotFoundError, UnsupportedChainError
-from ipor_fusion.types import Amount, ChainId, Fee, MorphoBlueMarketId, Shares
+from ipor_fusion.types import (
+    ZERO_ADDRESS,
+    Amount,
+    ChainId,
+    Fee,
+    MorphoBlueMarketId,
+    Shares,
+)
 
 WAD = 10**18
 SECONDS_PER_YEAR = 365 * 24 * 60 * 60  # matches Morpho IRM YEAR constant
 
-_ZERO_ADDRESS = Web3.to_checksum_address("0x" + "00" * 20)
 _addr = Web3.to_checksum_address
 
 # Morpho Blue sits at its CREATE2 address (0xBBBB…EEFFCb) on Ethereum and Base
@@ -257,7 +263,7 @@ class MorphoReader(ContractWrapper):
         Use this when the caller has already read `market()` and `market_params()`
         to avoid two redundant RPC roundtrips.
         """
-        if params.irm == _ZERO_ADDRESS:
+        if params.irm == ZERO_ADDRESS:
             # Morpho skips the IRM when irm == address(0) (MetaMorpho "idle"
             # markets): no interest accrues, so every rate is zero.
             rate_wad = 0

@@ -312,7 +312,7 @@ class TestMaxFeePerGas:
         priority = gas_price // 10  # below the 2 gwei cap at this gas price
         assert old_ceiling < bumped_base_fee  # would have been rejected
         assert tx["maxFeePerGas"] == gas_price * 2 + priority  # exact new ceiling
-        assert tx["maxFeePerGas"] >= bumped_base_fee  # now clears it
+        assert int(tx["maxFeePerGas"]) >= bumped_base_fee  # now clears it
 
 
 # ── _handle_receipt ─────────────────────────────────────────────────────

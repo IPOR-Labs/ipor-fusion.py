@@ -23,6 +23,7 @@ from ipor_fusion.types import (
     ChainId,
     CommandId,
     DeploymentRequestId,
+    LayerZeroEid,
     PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
@@ -125,7 +126,7 @@ class StargateCrosschainExecutor(CrosschainExecutor):
     def eid_of(self, chain_id: ChainId) -> Call[int]:
         return self._view("eidOf(uint256)", chain_id, output_types=["uint32"])
 
-    def chain_id_of(self, eid: int) -> Call[ChainId]:
+    def chain_id_of(self, eid: LayerZeroEid) -> Call[ChainId]:
         return self._view(
             "chainIdOf(uint32)", eid, output_types=["uint256"], decoder=ChainId
         )
@@ -252,8 +253,10 @@ class StargateCrosschainDispatcher(CrosschainDispatcher):
     def stargate_pool(self) -> Call[ChecksumAddress]:
         return self._view("STARGATE_POOL()", output_types=["address"], decoder=_address)
 
-    def executor_eid(self) -> Call[int]:
-        return self._view("EXECUTOR_EID()", output_types=["uint32"])
+    def executor_eid(self) -> Call[LayerZeroEid]:
+        return self._view(
+            "EXECUTOR_EID()", output_types=["uint32"], decoder=LayerZeroEid
+        )
 
     def observation(self) -> Call[Observation]:
         """``trackedIdle`` in local decimals plus ``convertToAssets`` of every
@@ -299,7 +302,7 @@ class StargateTokenMessaging(ContractWrapper):
     """Stargate V2 ``TokenMessaging``, the OApp that carries taxi packets:
     ``peers`` tells whether a route to an endpoint id exists."""
 
-    def peers(self, eid: int) -> Call[bytes]:
+    def peers(self, eid: LayerZeroEid) -> Call[bytes]:
         """The peer OApp on ``eid`` as bytes32; zero when no route exists."""
         return self._view("peers(uint32)", eid, output_types=["bytes32"])
 
@@ -335,7 +338,7 @@ class StargateCrosschainFactory(CrosschainFactory):
     def eid_of(self, chain_id: ChainId) -> Call[int]:
         return self._view("eidOf(uint256)", chain_id, output_types=["uint32"])
 
-    def chain_id_of(self, eid: int) -> Call[ChainId]:
+    def chain_id_of(self, eid: LayerZeroEid) -> Call[ChainId]:
         return self._view(
             "chainIdOf(uint32)", eid, output_types=["uint256"], decoder=ChainId
         )

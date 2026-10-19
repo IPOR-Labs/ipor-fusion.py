@@ -51,7 +51,7 @@ class VaultAddressType(AddressType):
     """An address the command treats as a Plasma Vault; the command's probe
     (`resolve_access_manager`) is what checks it on chain."""
 
-    def convert(self, value, param, ctx) -> PlasmaVaultAddress:  # type: ignore[override]
+    def convert(self, value, param, ctx) -> PlasmaVaultAddress:
         return PlasmaVaultAddress(super().convert(value, param, ctx))
 
 
@@ -63,7 +63,7 @@ class ChainType(click.ParamType):
 
     name = "chain"
 
-    def convert(self, value, param, ctx) -> ChainId:  # type: ignore[override]
+    def convert(self, value, param, ctx) -> ChainId:
         if isinstance(value, int):
             return ChainId(value)
         try:

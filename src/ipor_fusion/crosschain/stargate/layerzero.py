@@ -30,7 +30,7 @@ from web3 import Web3
 from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.logs import log_bytes
-from ipor_fusion.types import ZERO_ADDRESS, MessageId, StargateAssetId
+from ipor_fusion.types import ZERO_ADDRESS, LayerZeroEid, MessageId, StargateAssetId
 
 _TYPE_3 = b"\x00\x03"
 _EXECUTOR_WORKER_ID = 1
@@ -129,7 +129,7 @@ class EnforcedOptionParam:
     ``msg_type`` 1 and must carry a non-zero ``lzReceive`` gas; the compose
     (asset) lane is 2."""
 
-    eid: int
+    eid: LayerZeroEid
     msg_type: int
     options: bytes | OptionsBuilder
 
@@ -149,9 +149,9 @@ class Packet:
     """One ``PacketV1Codec`` packet: the payload of a ``PacketSent`` event."""
 
     nonce: int
-    src_eid: int
+    src_eid: LayerZeroEid
     sender: ChecksumAddress
-    dst_eid: int
+    dst_eid: LayerZeroEid
     receiver: ChecksumAddress
     guid: MessageId
     message: bytes
@@ -162,9 +162,9 @@ class Packet:
             raise ValueError("not a version-1 LayerZero packet")
         return cls(
             nonce=int.from_bytes(encoded[1:9], "big"),
-            src_eid=int.from_bytes(encoded[9:13], "big"),
+            src_eid=LayerZeroEid(int.from_bytes(encoded[9:13], "big")),
             sender=bytes32_to_address(encoded[13:45]),
-            dst_eid=int.from_bytes(encoded[45:49], "big"),
+            dst_eid=LayerZeroEid(int.from_bytes(encoded[45:49], "big")),
             receiver=bytes32_to_address(encoded[49:81]),
             guid=MessageId(encoded[81:113]),
             message=encoded[113:],
@@ -213,7 +213,7 @@ class TaxiMessage:
 
 
 def encode_oft_compose_msg(
-    nonce: int, src_eid: int, amount_ld: int, compose_msg: bytes
+    *, nonce: int, src_eid: LayerZeroEid, amount_ld: int, compose_msg: bytes
 ) -> bytes:
     """``OFTComposeMsgCodec.encode(nonce, srcEid, amountLD, composeMsg)``: the
     message the endpoint passes to ``lzCompose`` after a Stargate delivery.
@@ -228,12 +228,12 @@ def encode_oft_compose_msg(
 
 def lz_receive_calldata(
     *,
-    src_eid: int,
+    src_eid: LayerZeroEid,
     sender: ChecksumAddress,
     nonce: int,
     guid: MessageId,
     message: bytes,
-    executor: ChecksumAddress = ZERO_ADDRESS,  # type: ignore[assignment]
+    executor: ChecksumAddress = ZERO_ADDRESS,
     extra_data: bytes = b"",
 ) -> bytes:
     """``lzReceive(Origin, guid, message, executor, extraData)`` as the endpoint calls it."""
@@ -252,7 +252,7 @@ def lz_compose_calldata(
     from_: ChecksumAddress,
     guid: MessageId,
     message: bytes,
-    executor: ChecksumAddress = ZERO_ADDRESS,  # type: ignore[assignment]
+    executor: ChecksumAddress = ZERO_ADDRESS,
     extra_data: bytes = b"",
 ) -> bytes:
     """``lzCompose(from, guid, message, executor, extraData)`` as the endpoint calls it."""

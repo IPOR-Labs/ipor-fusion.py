@@ -29,7 +29,7 @@ from ipor_fusion.crosschain.transport import (
     OutboundMessage,
     transfer_call,
 )
-from ipor_fusion.types import ChainId, StargateAssetId
+from ipor_fusion.types import ChainId, LayerZeroEid, StargateAssetId
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +45,7 @@ class StargateChain:
     """
 
     chain_id: ChainId
-    eid: int
+    eid: LayerZeroEid
     endpoint: ChecksumAddress
     token_messaging: ChecksumAddress
     stargate_pool: ChecksumAddress
@@ -87,7 +87,7 @@ class StargateTransport(CrosschainTransport):
 
     def __init__(self, chains: Iterable[StargateChain]) -> None:
         self._chains: dict[ChainId, StargateChain] = {}
-        self._by_eid: dict[int, StargateChain] = {}
+        self._by_eid: dict[LayerZeroEid, StargateChain] = {}
         for chain in chains:
             if chain.chain_id in self._chains:
                 raise ValueError(f"duplicate Stargate chain_id {chain.chain_id}")
@@ -194,7 +194,10 @@ class StargateTransport(CrosschainTransport):
             ]
         taxi: TaxiMessage = message.raw[1]
         compose = encode_oft_compose_msg(
-            packet.nonce, packet.src_eid, message.token_amount, taxi.compose_msg
+            nonce=packet.nonce,
+            src_eid=packet.src_eid,
+            amount_ld=message.token_amount,
+            compose_msg=taxi.compose_msg,
         )
         return [
             transfer_call(
