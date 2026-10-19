@@ -48,15 +48,15 @@ from ipor_fusion.vault_data import (
     resolve_token_symbol,
 )
 
-BLOCK_EXPLORER_URLS: dict[int, str] = {
-    1: "https://etherscan.io",
-    42161: "https://arbiscan.io",
-    8453: "https://basescan.org",
-    10: "https://optimistic.etherscan.io",
-    137: "https://polygonscan.com",
-    56: "https://bscscan.com",
-    43114: "https://snowtrace.io",
-    250: "https://ftmscan.com",
+BLOCK_EXPLORER_URLS: dict[ChainId, str] = {
+    ChainId(1): "https://etherscan.io",
+    ChainId(42161): "https://arbiscan.io",
+    ChainId(8453): "https://basescan.org",
+    ChainId(10): "https://optimistic.etherscan.io",
+    ChainId(137): "https://polygonscan.com",
+    ChainId(56): "https://bscscan.com",
+    ChainId(43114): "https://snowtrace.io",
+    ChainId(250): "https://ftmscan.com",
 }
 
 IPOR_APP_URL = "https://app.ipor.io/fusion"

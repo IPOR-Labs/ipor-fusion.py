@@ -24,7 +24,6 @@ from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.aave_v4 import AaveV4OracleReader, AaveV4SpokeReader
 from ipor_fusion.readers.morpho import (
-    MORPHO_BLUE_ADDRESSES,
     MorphoReader,
     morpho_blue_address,
 )
@@ -43,25 +42,21 @@ WAD = 10**18
 RAY = 10**27
 ORACLE_PRICE_SCALE = 10**36
 
-# Deprecated: only valid on Ethereum and Base — use `morpho_blue_address(chain_id)`.
-# Kept so existing imports keep resolving.
-MORPHO_BLUE_ADDRESS: ChecksumAddress = MORPHO_BLUE_ADDRESSES[1]
-
 # Aave V3 Core Pool per chain — the Pool of market AAVE_V3 only. Aave V3 Prime
 # and SparkLend run on their own Pools, so a market's Pool is read from its
 # balance fuse (`AaveV3FuseReader.pool`); this map is only the fallback of
 # `fetch_vault_lending_health` for callers that pass no `aave_pools`.
-AAVE_V3_POOL: dict[int, ChecksumAddress] = {
-    1: Web3.to_checksum_address(
+AAVE_V3_POOL: dict[ChainId, ChecksumAddress] = {
+    ChainId(1): Web3.to_checksum_address(
         "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"
     ),  # Ethereum
-    42161: Web3.to_checksum_address(
+    ChainId(42161): Web3.to_checksum_address(
         "0x794a61358D6845594F94dc1DB02A252b5b4814aD"
     ),  # Arbitrum
-    8453: Web3.to_checksum_address(
+    ChainId(8453): Web3.to_checksum_address(
         "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5"
     ),  # Base
-    10: Web3.to_checksum_address(
+    ChainId(10): Web3.to_checksum_address(
         "0x794a61358D6845594F94dc1DB02A252b5b4814aD"
     ),  # Optimism
 }

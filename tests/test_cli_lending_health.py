@@ -15,7 +15,6 @@ from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
     AAVE_V3_POOL,
     AAVE_V4_MARKET_IDS,
-    MORPHO_BLUE_ADDRESS,
     MORPHO_MARKET_IDS,
     ORACLE_PRICE_SCALE,
     LendingMarketHealth,
@@ -26,8 +25,8 @@ from ipor_fusion.readers.lending_health import (
     _shares_to_assets_up,
     fetch_vault_lending_health,
 )
-from ipor_fusion.readers.morpho import MorphoReader
-from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
+from ipor_fusion.types import ChainId, MorphoBlueMarketId
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 ORACLE_ADDR = Web3.to_checksum_address("0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd")
@@ -84,7 +83,7 @@ def _aave_v4_substrate(spoke: str, reserve_id: int, flags: int) -> bytes:
 
 def _make_morpho_reader():
     ctx = MagicMock()
-    return MorphoReader(ctx, MORPHO_BLUE_ADDRESS), ctx
+    return MorphoReader(ctx, morpho_blue_address(ChainId(1))), ctx
 
 
 def _make_aave_reader():

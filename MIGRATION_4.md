@@ -119,6 +119,15 @@ from_=...)` needs neither, so drop a zero-address placeholder. `execute()` witho
 `dataclasses.asdict` form) with every field parsed; use it instead of
 `FusionInstance(**data)`, which passes raw strings into the role-typed fields.
 
+**Chain registry and removed aliases.** `CHAIN_NAMES`, `CHAIN_NAME_TO_ID`,
+`SUPPORTED_CHAIN_IDS`, `GET_LOGS_RANGE_HINTS`, `BLOCK_EXPLORER_URLS`,
+`MORPHO_BLUE_ADDRESSES`, `AAVE_V3_POOL`, `PUBLIC_ALLOCATOR_ADDRESSES` and
+`HYPERCORE_PENDING_READERS` are keyed by `ChainId` (`HYPEREVM_CHAIN_ID` is one), so
+`ensure_supported_chain(CHAIN_NAME_TO_ID["ethereum"])` type-checks;
+`PUBLIC_ALLOCATOR_ADDRESSES` values are `ChecksumAddress`. `IporFusionMarkets.RWA`
+is gone: market 50 is `IporFusionMarkets.EXTERNAL_STATE`. `MORPHO_BLUE_ADDRESS` is
+gone: use `morpho_blue_address(chain_id)`.
+
 **Markets and substrates.** Every `IporFusionMarkets` member is a `MarketId`.
 `decode_substrate`, `market_name`, `format_market_label` take `MarketId`.
 

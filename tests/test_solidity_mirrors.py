@@ -246,12 +246,10 @@ def test_no_argument_calldata_matches_the_contract(path, function, calldata):
 
 def test_market_ids_mirror_ipor_fusion_markets_sol():
     solidity = _solidity_constants("IporFusionMarkets.sol")
-    aliases = IporFusionMarkets._DEPRECATED_ALIASES
     python = {
         name: value
         for name in dir(IporFusionMarkets)
         if not name.startswith("_")
-        and name not in aliases
         and isinstance(value := getattr(IporFusionMarkets, name), int)
     }
     for name, value in _AHEAD_OF_UPSTREAM.items():

@@ -511,7 +511,7 @@ _register_markets([11], _decode_euler_v2)
 # Async Action (typed: amount-to-outside / target+selector / exit slippage)
 _register_markets([40], _decode_async_action)
 # External State (typed: asset / target+selector / custodian / balance account
-# / four uint248 guards). RWA (50) is the deprecated alias of EXTERNAL_STATE.
+# / four uint248 guards).
 _register_markets([50], _decode_external_state)
 # Uniswap V4 (id 53 per IporFusionMarkets.sol): PoolId or pool currency.
 # TERM_FINANCE (52) stays unregistered on purpose — its substrate library is
@@ -539,10 +539,9 @@ _register_markets([55], _decode_hypercore)
 
 
 def _build_market_lookup() -> dict[int, str]:
-    aliases = IporFusionMarkets._DEPRECATED_ALIASES
     lookup: dict[int, str] = {}
     for name in dir(IporFusionMarkets):
-        if name.startswith("_") or name in aliases:
+        if name.startswith("_"):
             continue
         val = getattr(IporFusionMarkets, name)
         if isinstance(val, int):

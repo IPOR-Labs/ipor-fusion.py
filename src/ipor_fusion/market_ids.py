@@ -87,13 +87,6 @@ class IporFusionMarkets:
     # 4 BALANCE_ACCOUNT, 5 STALENESS_MAX, 6 BIG_CHANGE_BPS, 7 DUST_THRESHOLD,
     # 8 MIN_UPDATE_INTERVAL).
     EXTERNAL_STATE = MarketId(50)
-    # Deprecated alias of EXTERNAL_STATE, kept for backward compatibility.
-    # Reverse id->name lookups skip aliases (see _DEPRECATED_ALIASES) so the
-    # canonical name is the one displayed.
-    RWA = MarketId(50)
-    # Deprecated member names that alias a canonical member of the same value;
-    # reverse id->name lookups skip these so the canonical name wins.
-    _DEPRECATED_ALIASES = frozenset({"RWA"})
     # substrate type: AguaSubstrateLib (VAULT or ASSET)
     AGUA_GLOBAL_CARRY = MarketId(51)
     # dependence graph: balance of ERC20_VAULT_BALANCE (purchase tokens return
