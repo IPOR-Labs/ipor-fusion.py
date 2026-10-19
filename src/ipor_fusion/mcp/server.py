@@ -437,6 +437,7 @@ def vault_add(
         label: Human-readable label (fetched from on-chain name() if empty).
         chain_id: Chain ID (auto-detected when only one provider configured).
     """
+    checksum = Web3.to_checksum_address(address)
     cfg = load_config()
 
     if not chain_id:
@@ -451,26 +452,21 @@ def vault_add(
     if not label:
         provider_url = _resolve_provider(cfg, chain_id)
         ctx = Web3Context.from_url(provider_url)
-        checksum = Web3.to_checksum_address(address)
         try:
             label = PlasmaVault(ctx, checksum).name().call()
         except Exception:
             label = checksum
 
     for vault_entry in cfg.vaults:
-        if vault_entry.address.lower() == address.lower():
+        if vault_entry.address.lower() == checksum.lower():
             vault_entry.label = label
             vault_entry.chain_id = chain_id
             save_config(cfg)
-            return ActionResult(message=f"Vault {label} ({address}) updated.")
+            return ActionResult(message=f"Vault {label} ({checksum}) updated.")
 
-    cfg.vaults.append(
-        VaultEntry(
-            address=Web3.to_checksum_address(address), label=label, chain_id=chain_id
-        )
-    )
+    cfg.vaults.append(VaultEntry(address=checksum, label=label, chain_id=chain_id))
     save_config(cfg)
-    return ActionResult(message=f"Vault {label} ({address}) added.")
+    return ActionResult(message=f"Vault {label} ({checksum}) added.")
 
 
 @mcp.tool()
@@ -635,7 +631,7 @@ def market_meta_morpho(
         chain_id: EVM chain ID.
     """
     try:
-        info = fetch_vault(vault_address, chain_id)
+        info = fetch_vault(Web3.to_checksum_address(vault_address), chain_id)
     except MorphoApiError as exc:
         raise ValueError(str(exc)) from exc
     payload = build_meta_morpho_json(info, chain_id)

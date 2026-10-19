@@ -91,7 +91,7 @@ class VaultFlowCap:
     fee_wei: int
     max_in: int
     max_out: int
-    admin: str | None  # the address that can configure these flow caps
+    admin: ChecksumAddress | None  # the address that can configure these flow caps
 
 
 @dataclass(slots=True)
@@ -106,7 +106,7 @@ class VaultAllocation:
     total_assets: int
     supply_assets: int  # currently allocated to *this* market
     supply_cap: int  # cap configured by curator for *this* market
-    allocators: list[str]  # addresses with ALLOCATOR_ROLE on the vault
+    allocators: list[ChecksumAddress]  # addresses with ALLOCATOR_ROLE on the vault
     flow_cap: VaultFlowCap | None  # None if PublicAllocator not configured
 
 
@@ -122,8 +122,8 @@ class MorphoApiMarket:
     collateral_token: ChecksumAddress
     collateral_symbol: str
     collateral_decimals: int
-    oracle: str
-    irm: str
+    oracle: ChecksumAddress
+    irm: ChecksumAddress
     supply_assets: int
     borrow_assets: int
     liquidity_assets: int
@@ -190,8 +190,8 @@ def _parse_market(raw: dict) -> MorphoApiMarket:
         collateral_token=_api_address(raw["collateralAsset"]["address"]),
         collateral_symbol=raw["collateralAsset"]["symbol"],
         collateral_decimals=int(raw["collateralAsset"]["decimals"]),
-        oracle=raw["oracle"]["address"],
-        irm=raw["irmAddress"],
+        oracle=_api_address(raw["oracle"]["address"]),
+        irm=_api_address(raw["irmAddress"]),
         supply_assets=int(state.get("supplyAssets") or 0),
         borrow_assets=int(state.get("borrowAssets") or 0),
         liquidity_assets=int(state.get("liquidityAssets") or 0),
@@ -283,8 +283,8 @@ class VaultV2Cap:
     market_id: MorphoBlueMarketId | None
     loan_token: ChecksumAddress | None
     collateral_token: ChecksumAddress | None
-    oracle: str | None
-    irm: str | None
+    oracle: ChecksumAddress | None
+    irm: ChecksumAddress | None
     lltv: int | None
 
     @property
@@ -378,7 +378,7 @@ class VaultV1Info:
 
 
 def fetch_vault(
-    address: str, chain_id: ChainId, *, timeout: float = 10.0
+    address: ChecksumAddress, chain_id: ChainId, *, timeout: float = 10.0
 ) -> VaultV2Info | VaultV1Info:
     """Fetch a Morpho vault by address. Tries V2 first, falls back to V1.
 
@@ -625,7 +625,7 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
             fee_wei=int(pac.get("fee") or 0),
             max_in=0,
             max_out=0,
-            admin=pac.get("admin"),
+            admin=_api_optional_address(pac.get("admin")),
         )
         for fc in pac.get("flowCaps") or []:
             if raw_mid := (fc.get("market") or {}).get("marketId"):
@@ -687,10 +687,12 @@ def _parse_vault(raw: dict, market_id: MorphoBlueMarketId) -> VaultAllocation:
                 fee_wei=int(pac.get("fee") or 0),
                 max_in=int(flow_for_market.get("maxIn") or 0),
                 max_out=int(flow_for_market.get("maxOut") or 0),
-                admin=pac.get("admin"),
+                admin=_api_optional_address(pac.get("admin")),
             )
     allocators = [
-        a["address"] for a in (raw.get("allocators") or []) if a.get("address")
+        _api_address(a["address"])
+        for a in (raw.get("allocators") or [])
+        if a.get("address")
     ]
     return VaultAllocation(
         vault_address=_api_address(raw["address"]),

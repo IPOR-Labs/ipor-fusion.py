@@ -4,6 +4,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 from eth_abi import encode
 from web3 import Web3
@@ -18,6 +19,7 @@ from ipor_fusion.morpho_api import (
     MorphoApiMarket,
     VaultAllocation,
     VaultFlowCap,
+    _parse_market,
     fetch_market,
     fetch_vault,
 )
@@ -786,3 +788,31 @@ class TestMetaMorphoCommand:
         assert len(market_caps) == 1
         assert market_caps[0]["loan_token"] == LOAN_TOKEN
         assert market_caps[0]["lltv"] == str(915 * 10**15)
+
+
+class TestMorphoApiAddresses:
+    def _raw(self, oracle: str) -> dict:
+        return {
+            "marketId": "0x" + MARKET_ID,
+            "lltv": "915000000000000000",
+            "loanAsset": {"address": LOAN_TOKEN.lower(), "symbol": "U", "decimals": 6},
+            "collateralAsset": {
+                "address": COLLATERAL_TOKEN,
+                "symbol": "C",
+                "decimals": 18,
+            },
+            "oracle": {"address": oracle},
+            "irmAddress": IRM.lower(),
+            "state": {},
+            "supplyingVaults": [],
+        }
+
+    def test_addresses_are_checksummed(self):
+        market = _parse_market(self._raw(ORACLE.lower()))
+        assert market.loan_token == LOAN_TOKEN
+        assert market.oracle == ORACLE
+        assert market.irm == IRM
+
+    def test_a_malformed_address_is_an_api_error(self):
+        with pytest.raises(MorphoApiError):
+            _parse_market(self._raw("invalid oracle"))

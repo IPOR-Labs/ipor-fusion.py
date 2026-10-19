@@ -131,7 +131,7 @@ def add(address: ChecksumAddress, label: str | None, chain_id: ChainId | None) -
 
 @vault.command("remove")
 @click.argument("address", type=ADDRESS)
-def remove(address: str) -> None:
+def remove(address: ChecksumAddress) -> None:
     """Remove a saved vault."""
     cfg = load_config()
     before = len(cfg.vaults)
