@@ -30,7 +30,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.contracts import CrosschainDispatcher, CrosschainExecutor
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, MessageId
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +44,7 @@ class OutboundMessage:
     """
 
     transport_kind: CrosschainTransportKind
-    message_id: bytes
+    message_id: MessageId
     src_chain_id: ChainId
     dst_chain_id: ChainId
     sender: ChecksumAddress

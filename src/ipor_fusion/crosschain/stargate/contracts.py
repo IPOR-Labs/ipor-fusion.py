@@ -17,7 +17,18 @@ from ipor_fusion.crosschain.contracts import (
     _address_list,
 )
 from ipor_fusion.crosschain.messages import CommandStatus, DeploymentStatus
-from ipor_fusion.types import Amount, ChainId
+from ipor_fusion.types import (
+    Amount,
+    AssetId,
+    ChainId,
+    CommandId,
+    DeploymentRequestId,
+    PositionSetHash,
+    ProposalId,
+    ReturnRequestId,
+    StargateAssetId,
+    TransferId,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +39,7 @@ class ActiveCommand:
     is_config_update: bool
     awaiting_cancel: bool
     status: CommandStatus
-    command_id: bytes
+    command_id: CommandId
     sequence: int
     new_config_epoch: int
 
@@ -43,7 +54,7 @@ class Observation:
     vault_asset_values: list[Amount]
     state_version: int
     command_config_epoch: int
-    tracked_position_set_hash: bytes
+    tracked_position_set_hash: PositionSetHash
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +62,7 @@ class ExecutorInitParams:
     """``ICrosschainFactory.ExecutorInitParams``: the immutable configuration
     ``StargateCrosschainFactory.createExecutor`` bakes into an executor."""
 
-    asset_id: bytes
+    asset_id: AssetId
     manager: ChecksumAddress
     admin: ChecksumAddress
     rescue_guardian: ChecksumAddress
@@ -188,7 +199,9 @@ class StargateCrosschainExecutor(CrosschainExecutor):
     def last_approval_at(self, chain_id: ChainId) -> Call[int]:
         return self._view("lastApprovalAt(uint256)", chain_id, output_types=["uint64"])
 
-    def deployment_status(self, request_id: int) -> Call[DeploymentStatus]:
+    def deployment_status(
+        self, request_id: DeploymentRequestId
+    ) -> Call[DeploymentStatus]:
         return self._view(
             "deploymentStatus(uint256)",
             request_id,
@@ -202,7 +215,7 @@ class StargateCrosschainExecutor(CrosschainExecutor):
             f"proposeBalance({_BALANCE_OBSERVATION_TUPLE})", observation.as_tuple()
         )
 
-    def reject_and_block_proposal(self, proposal_id: int) -> Call[None]:
+    def reject_and_block_proposal(self, proposal_id: ProposalId) -> Call[None]:
         """``BALANCE_APPROVER`` only: reject and fail the chain closed."""
         return self._write("rejectAndBlockProposal(uint256)", proposal_id)
 
@@ -219,7 +232,7 @@ def _active_command_decoder(values: tuple) -> ActiveCommand:
         is_config_update=bool(is_config),
         awaiting_cancel=bool(awaiting_cancel),
         status=CommandStatus(status),
-        command_id=bytes(command_id),
+        command_id=CommandId(bytes(command_id)),
         sequence=int(sequence),
         new_config_epoch=int(epoch),
     )
@@ -254,10 +267,10 @@ class StargateCrosschainDispatcher(CrosschainDispatcher):
             "getTrackedVaults()", output_types=["address[]"], decoder=_address_list
         )
 
-    def recall_consumed(self, request_id: bytes) -> Call[bool]:
+    def recall_consumed(self, request_id: ReturnRequestId) -> Call[bool]:
         return self._view("recallConsumed(bytes32)", request_id, output_types=["bool"])
 
-    def transfer_settled(self, transfer_id: bytes) -> Call[bool]:
+    def transfer_settled(self, transfer_id: TransferId) -> Call[bool]:
         return self._view(
             "transferSettled(bytes32)", transfer_id, output_types=["bool"]
         )
@@ -271,7 +284,7 @@ def _observation_decoder(values: tuple) -> Observation:
         vault_asset_values=[Amount(v) for v in asset_values],
         state_version=int(version),
         command_config_epoch=int(epoch),
-        tracked_position_set_hash=bytes(set_hash),
+        tracked_position_set_hash=PositionSetHash(bytes(set_hash)),
     )
 
 
@@ -283,7 +296,7 @@ class StargateTokenMessaging(ContractWrapper):
         """The peer OApp on ``eid`` as bytes32; zero when no route exists."""
         return self._view("peers(uint32)", eid, output_types=["bytes32"])
 
-    def stargate_impls(self, asset_id: int) -> Call[ChecksumAddress]:
+    def stargate_impls(self, asset_id: StargateAssetId) -> Call[ChecksumAddress]:
         """The local pool of ``asset_id``."""
         return self._view(
             "stargateImpls(uint16)",
@@ -321,7 +334,7 @@ class StargateCrosschainFactory(CrosschainFactory):
         )
 
     def asset_config(
-        self, asset_id: bytes
+        self, asset_id: AssetId
     ) -> Call[tuple[ChecksumAddress, ChecksumAddress, bool]]:
         """``(localToken, localStargatePool, enabled)`` for an asset id."""
         return self._view(
@@ -343,6 +356,6 @@ class StargateCrosschainFactory(CrosschainFactory):
     def request_count(self) -> Call[int]:
         return self._view("requestCount()", output_types=["uint256"])
 
-    def cancel_pending_deployment(self, request_id: int) -> Call[None]:
+    def cancel_pending_deployment(self, request_id: DeploymentRequestId) -> Call[None]:
         """Permissionless after the executor's ``DEPLOYMENT_TTL``."""
         return self._write("cancelPendingDeployment(uint256)", request_id)

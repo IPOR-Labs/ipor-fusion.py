@@ -21,6 +21,7 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.logs import log_bytes
+from ipor_fusion.types import MessageId
 
 #: topic0 of ``OnRamp 2.0.0``'s ``CCIPMessageSent``; ``destChainSelector``,
 #: ``sender`` and ``messageId`` are indexed.
@@ -176,7 +177,7 @@ def evm_address(raw: bytes) -> ChecksumAddress:
 class CcipMessageSent:
     """One ``CCIPMessageSent`` log: the Router-assigned id plus the decoded message."""
 
-    message_id: bytes
+    message_id: MessageId
     dest_chain_selector: int
     sender: ChecksumAddress
     message: MessageV1
@@ -193,7 +194,7 @@ class CcipMessageSent:
             _EVENT_DATA_TYPES, log_bytes(log["data"])
         )
         return cls(
-            message_id=topics[3],
+            message_id=MessageId(bytes(topics[3])),
             dest_chain_selector=int.from_bytes(topics[1], "big"),
             sender=Web3.to_checksum_address(topics[2][12:]),
             message=MessageV1.decode(bytes(encoded)),
@@ -215,7 +216,7 @@ class Any2EVMMessage:
     ``sender`` is the source address; it is ABI-encoded into the wire field,
     which is how the receivers decode it."""
 
-    message_id: bytes
+    message_id: MessageId
     source_chain_selector: int
     sender: ChecksumAddress
     data: bytes

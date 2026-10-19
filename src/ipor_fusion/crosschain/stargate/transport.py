@@ -29,7 +29,7 @@ from ipor_fusion.crosschain.transport import (
     OutboundMessage,
     transfer_call,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, StargateAssetId
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +50,7 @@ class StargateChain:
     token_messaging: ChecksumAddress
     stargate_pool: ChecksumAddress
     token: ChecksumAddress
-    asset_id: int
+    asset_id: StargateAssetId
     local_decimals: int
     shared_decimals: int
     token_source: ChecksumAddress | None = None

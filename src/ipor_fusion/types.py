@@ -15,6 +15,21 @@ RoleId = NewType("RoleId", int)
 ChainId = NewType("ChainId", int)
 # Hex string without 0x prefix (e.g. "abc123..." not "0xabc123...")
 MorphoBlueMarketId = NewType("MorphoBlueMarketId", str)
+# Crosschain identifiers (bytes32 unless noted), named after the contracts' fields.
+CommandId = NewType("CommandId", bytes)
+# A transport's message id: the CCIP messageId or the LayerZero guid.
+MessageId = NewType("MessageId", bytes)
+# The executor's asset id; a Stargate pool's uint16 asset id is StargateAssetId.
+AssetId = NewType("AssetId", bytes)
+StargateAssetId = NewType("StargateAssetId", int)
+ProposalId = NewType("ProposalId", int)
+# A factory's uint256 dispatcher deployment request; a return (recall) request
+# is the bytes32 ReturnRequestId.
+DeploymentRequestId = NewType("DeploymentRequestId", int)
+ReturnRequestId = NewType("ReturnRequestId", bytes)
+TransferId = NewType("TransferId", bytes)
+OperationId = NewType("OperationId", bytes)
+PositionSetHash = NewType("PositionSetHash", bytes)
 
 MAX_UINT256 = (1 << 256) - 1
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"

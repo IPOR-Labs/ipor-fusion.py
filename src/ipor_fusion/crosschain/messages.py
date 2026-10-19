@@ -18,7 +18,7 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.address import _validate_not_zero_address
-from ipor_fusion.types import Amount, Shares
+from ipor_fusion.types import Amount, CommandId, Shares
 
 #: ``CrosschainConstants.CODEC_VERSION`` -- the Stargate/LayerZero envelope version.
 CODEC_VERSION = 3
@@ -128,6 +128,10 @@ _ZERO_SHARES = Shares(0)
 COMMAND_TUPLE_TYPE = "(bytes32,uint64,uint64,uint8,bytes)"
 
 
+# The zero command id: no command, or one not yet assigned by the executor.
+NO_COMMAND_ID = CommandId(bytes(32))
+
+
 @dataclass(frozen=True, slots=True)
 class Command:
     """``CrosschainMessages.Command``: one business command for a dispatcher.
@@ -143,7 +147,7 @@ class Command:
 
     action: BusinessAction
     action_data: bytes
-    command_id: bytes = bytes(32)
+    command_id: CommandId = NO_COMMAND_ID
     sequence: int = 0
     command_config_epoch: int = 0
 
@@ -167,7 +171,7 @@ class Command:
         return cls(
             action=BusinessAction(action),
             action_data=bytes(action_data),
-            command_id=bytes(command_id),
+            command_id=CommandId(bytes(command_id)),
             sequence=int(sequence),
             command_config_epoch=int(config_epoch),
         )

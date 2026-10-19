@@ -30,7 +30,7 @@ from web3 import Web3
 from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.logs import log_bytes
-from ipor_fusion.types import ZERO_ADDRESS
+from ipor_fusion.types import ZERO_ADDRESS, MessageId, StargateAssetId
 
 _TYPE_3 = b"\x00\x03"
 _EXECUTOR_WORKER_ID = 1
@@ -153,7 +153,7 @@ class Packet:
     sender: ChecksumAddress
     dst_eid: int
     receiver: ChecksumAddress
-    guid: bytes
+    guid: MessageId
     message: bytes
 
     @classmethod
@@ -166,7 +166,7 @@ class Packet:
             sender=bytes32_to_address(encoded[13:45]),
             dst_eid=int.from_bytes(encoded[45:49], "big"),
             receiver=bytes32_to_address(encoded[49:81]),
-            guid=encoded[81:113],
+            guid=MessageId(encoded[81:113]),
             message=encoded[113:],
         )
 
@@ -185,7 +185,7 @@ class TaxiMessage:
     ``TokenMessaging`` packet. ``compose_msg`` is the raw compose payload
     ``composeFrom (bytes32) || message`` or empty."""
 
-    asset_id: int
+    asset_id: StargateAssetId
     receiver: ChecksumAddress
     amount_sd: int
     compose_msg: bytes
@@ -195,7 +195,7 @@ class TaxiMessage:
         if len(message) < 43 or message[0] != _MSG_TYPE_TAXI:
             raise ValueError("not a Stargate taxi message")
         return cls(
-            asset_id=int.from_bytes(message[1:3], "big"),
+            asset_id=StargateAssetId(int.from_bytes(message[1:3], "big")),
             receiver=bytes32_to_address(message[3:35]),
             amount_sd=int.from_bytes(message[35:43], "big"),
             compose_msg=message[43:],
@@ -231,7 +231,7 @@ def lz_receive_calldata(
     src_eid: int,
     sender: ChecksumAddress,
     nonce: int,
-    guid: bytes,
+    guid: MessageId,
     message: bytes,
     executor: ChecksumAddress = ZERO_ADDRESS,  # type: ignore[assignment]
     extra_data: bytes = b"",
@@ -250,7 +250,7 @@ def lz_receive_calldata(
 def lz_compose_calldata(
     *,
     from_: ChecksumAddress,
-    guid: bytes,
+    guid: MessageId,
     message: bytes,
     executor: ChecksumAddress = ZERO_ADDRESS,  # type: ignore[assignment]
     extra_data: bytes = b"",
