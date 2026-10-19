@@ -24,6 +24,7 @@ from ipor_fusion.fuses.hypercore import (
     read_index_of,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
+from ipor_fusion.types import MarketId
 
 
 @dataclass
@@ -544,14 +545,14 @@ def _build_market_lookup() -> dict[int, str]:
 _MARKET_LOOKUP: dict[int, str] = _build_market_lookup()
 
 
-def market_name(market_id: int) -> str:
+def market_name(market_id: MarketId) -> str:
     return _MARKET_LOOKUP.get(market_id, "UNKNOWN")
 
 
 _UINT256_MAX = 2**256 - 1
 
 
-def format_market_label(market_id: int) -> str:
+def format_market_label(market_id: MarketId) -> str:
     """Render a market id as ``NAME (id)`` for display.
 
     Special-cases the ``uint256.max`` sentinel used by burn-fee fuses
@@ -564,7 +565,9 @@ def format_market_label(market_id: int) -> str:
     return f"{label} ({market_id})" if label != "UNKNOWN" else str(market_id)
 
 
-def decode_substrate(raw: bytes | str, market_id: int | None = None) -> SubstrateInfo:
+def decode_substrate(
+    raw: bytes | str, market_id: MarketId | None = None
+) -> SubstrateInfo:
     """Decode one bytes32 substrate in the context of ``market_id``.
 
     ``raw`` is the 32-byte value either as ``bytes`` or as a hex string

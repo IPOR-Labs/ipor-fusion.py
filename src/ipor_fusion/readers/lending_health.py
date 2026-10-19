@@ -29,7 +29,7 @@ from ipor_fusion.readers.morpho import (
     morpho_blue_address,
 )
 from ipor_fusion.substrates import decode_substrate, market_name
-from ipor_fusion.types import MorphoBlueMarketId
+from ipor_fusion.types import ChainId, MarketId, MorphoBlueMarketId
 
 _logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class LendingMarketHealth:
     """
 
     protocol: str
-    market_id: int
+    market_id: MarketId
     market_name: str
     current_ltv: float | None
     max_ltv: float
@@ -392,7 +392,7 @@ def _collect_lending_markets(
 def fetch_vault_lending_health(
     ctx: Web3Context,
     vault_address: ChecksumAddress,
-    chain_id: int,
+    chain_id: ChainId,
     balance_fuse_market_ids: list[int],
     market_substrates: dict[int, list[bytes]],
     aave_pools: dict[int, ChecksumAddress] | None = None,

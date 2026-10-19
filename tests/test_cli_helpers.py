@@ -1431,7 +1431,7 @@ class TestPrintLendingHealth:
     def test_orphan_aave_health_renders_without_breakdown(self, capsys):
         m = _make_lending_market(health_factor=1.4, ltv_usage_percent=70.0)
         m.protocol = "aave_v3"
-        m.market_id = 1
+        m.market_id = MarketId(1)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
         _print_lending_health(MagicMock(), data)
         out = capsys.readouterr().out
@@ -1441,7 +1441,7 @@ class TestPrintLendingHealth:
     def test_orphan_health_critical_status_colored(self, capsys):
         m = _make_lending_market(health_factor=1.03)
         m.protocol = "aave_v3"
-        m.market_id = 1
+        m.market_id = MarketId(1)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
         _print_lending_health(MagicMock(), data)
         assert "CRITICAL" in capsys.readouterr().out
@@ -1453,7 +1453,7 @@ class TestPrintLendingHealth:
             ltv_usage_percent=None,
         )
         m.protocol = "aave_v3"
-        m.market_id = 1
+        m.market_id = MarketId(1)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
         _print_lending_health(MagicMock(), data)
         assert "N/A" in capsys.readouterr().out
@@ -1576,7 +1576,7 @@ class TestInlineHealth:
         morpho_m.protocol = "morpho"
         aave_m = _make_lending_market()
         aave_m.protocol = "aave_v3"
-        aave_m.market_id = 1
+        aave_m.market_id = MarketId(1)
         lh = VaultLendingHealth(markets=[morpho_m, aave_m])
 
         morpho_index, aave_index = _index_lending_health(lh)
@@ -1669,7 +1669,7 @@ class TestInlineHealth:
     ):
         market = _make_lending_market(ltv_usage_percent=70.0, health_factor=1.4)
         market.protocol = "aave_v3"
-        market.market_id = 1
+        market.market_id = MarketId(1)
         data = _make_data(
             lending_health=VaultLendingHealth(markets=[market]),
             aave_positions={1: [_aave_breakdown(supply=100, variable_debt=50)]},

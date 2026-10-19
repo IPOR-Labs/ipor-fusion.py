@@ -24,6 +24,7 @@ from ipor_fusion.substrates import (
     format_market_label,
     market_name,
 )
+from ipor_fusion.types import ChainId
 from ipor_fusion.validation import (
     Erc20Holdings,
     Reconciliation,
@@ -726,7 +727,7 @@ def build_vault_info_json(
     plasma_vault: PlasmaVault,
     data: VaultData,
     vault_address: str,
-    chain_id: int,
+    chain_id: ChainId,
     chain_label: str,
     *,
     resolve_name: Callable[[str], str] | None = None,
