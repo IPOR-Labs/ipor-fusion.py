@@ -25,6 +25,7 @@ from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.types import ChecksumAddress, HexStr
 
 from ipor_fusion.cache import (
+    cache_key,
     load_contract_cache,
     load_deployment_cache,
     update_contract_cache,
@@ -325,14 +326,14 @@ def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
     """ERC-20 symbol, cached; ``"no contract"`` when nothing is deployed at
     ``address`` and ``""`` when the symbol cannot be read."""
     cache = load_contract_cache()
-    cache_key = f"symbol:{address}"
-    if cached := cache.get(cache_key):
+    key = cache_key("symbol", address)
+    if cached := cache.get(key):
         return cached
 
     checksum = Web3.to_checksum_address(address)
     code = ctx.web3.eth.get_code(checksum)
     if not code or code == b"":
-        update_contract_cache(cache_key, _NO_CONTRACT)
+        update_contract_cache(key, _NO_CONTRACT)
         return _NO_CONTRACT
 
     try:
@@ -340,15 +341,15 @@ def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
     except Exception:
         symbol = ""
     if symbol:
-        update_contract_cache(cache_key, symbol)
+        update_contract_cache(key, symbol)
     return symbol
 
 
 def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
     """Resolve ERC-20 decimals, cached. Returns None if address is not a contract."""
     cache = load_contract_cache()
-    cache_key = f"decimals:{address}"
-    if cached := cache.get(cache_key):
+    key = cache_key("decimals", address)
+    if cached := cache.get(key):
         return int(cached)
 
     checksum = Web3.to_checksum_address(address)
@@ -360,7 +361,7 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
         decimals = ERC20(ctx, checksum).decimals().call()
     except Exception:
         return None
-    update_contract_cache(cache_key, str(decimals))
+    update_contract_cache(key, str(decimals))
     return decimals
 
 
@@ -1053,9 +1054,9 @@ def fetch_deployment_info(
     Base/Optimism on the free Etherscan tier). ``None`` means either success or
     a benign empty response.
     """
-    cache_key = f"{chain_id}:{vault_address}"
+    key = cache_key(chain_id, vault_address)
     cache = load_deployment_cache()
-    if entry := cache.get(cache_key):
+    if entry := cache.get(key):
         return entry["block"], entry["timestamp"], None
 
     tx_hash, error = get_deployment_tx(chain_id, vault_address, api_key)
@@ -1067,7 +1068,7 @@ def fetch_deployment_info(
         block_number: int = tx["blockNumber"]
         block_info = ctx.web3.eth.get_block(block_number)
         timestamp: int = block_info["timestamp"]
-        update_deployment_cache(cache_key, block_number, timestamp)
+        update_deployment_cache(key, block_number, timestamp)
         return block_number, timestamp, None
     except Exception:
         return None, None, "rpc-fetch-failed"

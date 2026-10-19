@@ -59,7 +59,7 @@ class TestGetContractName:
         cache_file = tmp_path / ".cache" / "contract_cache.json"
         assert cache_file.exists()
         cached = json.loads(cache_file.read_text(encoding="utf-8"))
-        assert cached["1:0xDEF"] == "PlasmaVault"
+        assert cached["1:0xdef"] == "PlasmaVault"
 
     def test_returns_empty_for_unsupported_chain(self):
         result = get_contract_name(99999, "0xABC", api_key="key123")

@@ -53,17 +53,17 @@ Dependency Balance Graph:
 
 Substrates per Market:
   AAVE_V3 (1):
-    0x00000000000000000000000000000000000000a1 (symbol=USDC)
+    0x00000000000000000000000000000000000000a1 (symbol=USDC, contract=FiatTokenProxy)
   MORPHO (14):
     0xabababababababababababababababababababababababababababababababab (morpho_market_id)[0m
   ERC20_VAULT_BALANCE (7):
-    0x00000000000000000000000000000000000000a1 (symbol=USDC)
+    0x00000000000000000000000000000000000000a1 (symbol=USDC, contract=FiatTokenProxy)
     0x00000000000000000000000000000000000000b1 (symbol=STALE)
     0x00000000000000000000000000000000000000b2 (symbol=NOPRICE)
     0x00000000000000000000000000000000000000b3 (symbol=EMPTY)
     0x00000000000000000000000000000000000000b4 (symbol=BROKEN)
   AAVE_V3 (1):
-    0x00000000000000000000000000000000000000a1 (symbol=USDC)
+    0x00000000000000000000000000000000000000a1 (symbol=USDC, contract=FiatTokenProxy)
 
 ERC20 Balances (vault holdings):
   Token                                       Symbol   Balance        Price  Note                                             
