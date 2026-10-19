@@ -1112,6 +1112,7 @@ version = "3.16.0"
 source = { editable = "." }
 dependencies = [
     { name = "eth-abi" },
+    { name = "eth-account" },
     { name = "eth-typing" },
     { name = "eth-utils" },
     { name = "hexbytes" },
@@ -1146,6 +1147,7 @@ requires-dist = [
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.0,<9" },
     { name = "click", marker = "extra == 'mcp'", specifier = ">=8.0,<9" },
     { name = "eth-abi", specifier = ">=5.1.0,<6" },
+    { name = "eth-account", specifier = ">=0.13.7,<0.14" },
     { name = "eth-typing", specifier = ">=6.0.0,<7" },
     { name = "eth-utils", specifier = ">=6.0.0,<7" },
     { name = "hexbytes", specifier = ">=1.2.0,<2" },

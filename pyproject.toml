@@ -36,6 +36,7 @@ dependencies = [
     "eth-utils>=6.0.0,<7",
     "hexbytes>=1.2.0,<2",
     "web3>=7.7.0,<8",
+    "eth-account>=0.13.7,<0.14",
 ]
 
 [project.optional-dependencies]
