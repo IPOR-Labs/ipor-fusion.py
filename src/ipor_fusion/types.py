@@ -175,9 +175,10 @@ def _checksum(value: str | bytes) -> ChecksumAddress:
 
 
 def parse_plasma_vault_address(value: str | bytes) -> PlasmaVaultAddress:
-    """A Plasma Vault's address, checksummed from 20 raw bytes or hex in any
-    spelling; raises ``ValueError`` on anything else. It labels the role and
-    checks nothing on chain."""
+    """A Plasma Vault's address, checksummed from 20 raw bytes or ``0x``/``0X``
+    and 40 hex digits in any case; raises ``ValueError`` on anything else,
+    surrounding whitespace included. It labels the role and checks nothing on
+    chain."""
     return PlasmaVaultAddress(_checksum(value))
 
 
