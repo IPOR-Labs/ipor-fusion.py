@@ -17,7 +17,9 @@ from ipor_fusion.types import ChainId, TxHash, parse_tx_hash
 
 ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api"
 
-SUPPORTED_CHAINS = {1, 42161, 8453, 10, 137, 56, 43114, 250}
+SUPPORTED_CHAINS: frozenset[ChainId] = frozenset(
+    ChainId(cid) for cid in (1, 42161, 8453, 10, 137, 56, 43114, 250)
+)
 
 _MAX_RETRIES = 3
 _RETRY_DELAY = 1.0
