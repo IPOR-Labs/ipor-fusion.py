@@ -2,6 +2,8 @@ import difflib
 import re
 from enum import IntEnum
 
+from ipor_fusion.types import RoleId
+
 
 class Roles(IntEnum):
     """Predefined roles used in the IPOR Fusion protocol.
@@ -44,7 +46,7 @@ class Roles(IntEnum):
             return f"UNKNOWN_ROLE_{value}"
 
     @classmethod
-    def resolve(cls, name: str) -> int:
+    def resolve(cls, name: str) -> RoleId:
         """Resolve a human-entered role name to its id (fail-closed).
 
         Case-insensitive; spaces/hyphens map to underscores and the `_ROLE`
@@ -55,7 +57,7 @@ class Roles(IntEnum):
         if not key.endswith("_ROLE"):
             key += "_ROLE"
         try:
-            return cls[key].value
+            return RoleId(cls[key].value)
         except KeyError:
             names = [role.name for role in cls]
             near = difflib.get_close_matches(key, names, n=1)

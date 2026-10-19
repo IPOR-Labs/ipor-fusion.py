@@ -1,3 +1,6 @@
+from ipor_fusion.types import MarketId
+
+
 class IporFusionMarkets:
     """Predefined markets used in the IPOR Fusion protocol.
 
@@ -5,101 +8,101 @@ class IporFusionMarkets:
     during runtime, they should be added and described here as well.
     """
 
-    AAVE_V3 = 1
-    COMPOUND_V3_USDC = 2
-    GEARBOX_POOL_V3 = 3
+    AAVE_V3 = MarketId(1)
+    COMPOUND_V3_USDC = MarketId(2)
+    GEARBOX_POOL_V3 = MarketId(3)
     # dependence graph: balance of GEARBOX_POOL_V3
-    GEARBOX_FARM_DTOKEN_V3 = 4
-    FLUID_INSTADAPP_POOL = 5
-    FLUID_INSTADAPP_STAKING = 6
-    ERC20_VAULT_BALANCE = 7
+    GEARBOX_FARM_DTOKEN_V3 = MarketId(4)
+    FLUID_INSTADAPP_POOL = MarketId(5)
+    FLUID_INSTADAPP_STAKING = MarketId(6)
+    ERC20_VAULT_BALANCE = MarketId(7)
     # dependence graph: balance of ERC20_VAULT_BALANCE
-    UNISWAP_SWAP_V3_POSITIONS = 8
+    UNISWAP_SWAP_V3_POSITIONS = MarketId(8)
     # dependence graph: balance of ERC20_VAULT_BALANCE
-    UNISWAP_SWAP_V2 = 9
+    UNISWAP_SWAP_V2 = MarketId(9)
     # dependence graph: balance of ERC20_VAULT_BALANCE
-    UNISWAP_SWAP_V3 = 10
-    EULER_V2 = 11
+    UNISWAP_SWAP_V3 = MarketId(10)
+    EULER_V2 = MarketId(11)
     # dependence graph: balance of ERC20_VAULT_BALANCE
-    UNIVERSAL_TOKEN_SWAPPER = 12
+    UNIVERSAL_TOKEN_SWAPPER = MarketId(12)
     # dependence graph: balance of ERC20_VAULT_BALANCE
     # substrate type: UniversalTokenSwapperSubstrateType (Token, Target or Slippage)
-    UNIVERSAL_TOKEN_SWAPPER_V2 = 12_02
-    COMPOUND_V3_USDT = 13
-    MORPHO = 14
-    SPARK = 15
-    CURVE_POOL = 16
-    CURVE_LP_GAUGE = 17
-    RAMSES_V2_POSITIONS = 18
+    UNIVERSAL_TOKEN_SWAPPER_V2 = MarketId(12_02)
+    COMPOUND_V3_USDT = MarketId(13)
+    MORPHO = MarketId(14)
+    SPARK = MarketId(15)
+    CURVE_POOL = MarketId(16)
+    CURVE_LP_GAUGE = MarketId(17)
+    RAMSES_V2_POSITIONS = MarketId(18)
     # dependence graph: balance of ERC20_VAULT_BALANCE
-    MORPHO_FLASH_LOAN = 19
-    AAVE_V3_LIDO = 20
-    MOONWELL = 21
-    MORPHO_REWARDS = 22
-    PENDLE = 23
-    FLUID_REWARDS = 24
-    CURVE_GAUGE_ERC4626 = 25
-    COMPOUND_V3_WETH = 26
-    HARVEST_HARD_WORK = 27
-    TAC_STAKING = 28
-    LIQUITY_V2 = 29
-    AERODROME = 30
-    VELODROME_SUPERCHAIN = 31
+    MORPHO_FLASH_LOAN = MarketId(19)
+    AAVE_V3_LIDO = MarketId(20)
+    MOONWELL = MarketId(21)
+    MORPHO_REWARDS = MarketId(22)
+    PENDLE = MarketId(23)
+    FLUID_REWARDS = MarketId(24)
+    CURVE_GAUGE_ERC4626 = MarketId(25)
+    COMPOUND_V3_WETH = MarketId(26)
+    HARVEST_HARD_WORK = MarketId(27)
+    TAC_STAKING = MarketId(28)
+    LIQUITY_V2 = MarketId(29)
+    AERODROME = MarketId(30)
+    VELODROME_SUPERCHAIN = MarketId(31)
     # substrate type: VelodromeSuperchainSlipstreamSubstrate
-    VELODROME_SUPERCHAIN_SLIPSTREAM = 32
+    VELODROME_SUPERCHAIN_SLIPSTREAM = MarketId(32)
     # substrate type: AerodromeSlipstreamSubstrate
-    AREODROME_SLIPSTREAM = 33
+    AREODROME_SLIPSTREAM = MarketId(33)
     # substrate type: address (Stake DAO Reward Vault contract)
-    STAKE_DAO_V2 = 34
+    STAKE_DAO_V2 = MarketId(34)
     # substrate type: address (Silo Config contract)
-    SILO_V2 = 35
+    SILO_V2 = MarketId(35)
     # substrate type: BalancerSubstrate (pool or gauge addresses)
-    BALANCER = 36
+    BALANCER = MarketId(36)
     # substrate type: address (Yield Basis LT token addresses)
-    YIELD_BASIS_LT = 37
+    YIELD_BASIS_LT = MarketId(37)
     # substrate type: EnsoSubstrate (target address + function selector)
-    ENSO = 38
+    ENSO = MarketId(38)
     # substrate type: EbisuZapperSubstrate
-    EBISU = 39
+    EBISU = MarketId(39)
     # substrate type: AsyncActionFuseSubstrate
-    ASYNC_ACTION = 40
-    MORPHO_LIQUIDITY_IN_MARKETS = 41
+    ASYNC_ACTION = MarketId(40)
+    MORPHO_LIQUIDITY_IN_MARKETS = MarketId(41)
     # substrate type: OdosSubstrateType (Token or Slippage)
-    ODOS_SWAPPER = 42
+    ODOS_SWAPPER = MarketId(42)
     # substrate type: VeloraSubstrateType (Token or Slippage)
-    VELORA_SWAPPER = 43
+    VELORA_SWAPPER = MarketId(43)
     # SparkLend via Aave V3 fuses; substrates: underlying asset addresses
-    SPARK_LEND = 44
+    SPARK_LEND = MarketId(44)
     # substrate type: MidasSubstrateType
-    MIDAS = 45
-    NAPIER = 46
+    MIDAS = MarketId(45)
+    NAPIER = MarketId(46)
     # substrate type: DolomiteSubstrate (asset, subAccountId, canBorrow)
-    DOLOMITE = 47
-    LITE_PSM = 48
+    DOLOMITE = MarketId(47)
+    LITE_PSM = MarketId(48)
     # substrate type: AaveV4Substrate Reserve (spoke, reserveId, isCollateral, canBorrow)
-    AAVE_V4 = 49
+    AAVE_V4 = MarketId(49)
     # External-state market (id 50): off-vault capital via the external-state
     # operation fuse (e.g. Hyperliquid / Boros margin legs). On-chain substrate
     # types: ExternalStateSubstrateLib (1 ASSET, 2 TARGET, 3 CUSTODIAN,
     # 4 BALANCE_ACCOUNT, 5 STALENESS_MAX, 6 BIG_CHANGE_BPS, 7 DUST_THRESHOLD,
     # 8 MIN_UPDATE_INTERVAL).
-    EXTERNAL_STATE = 50
+    EXTERNAL_STATE = MarketId(50)
     # Deprecated alias of EXTERNAL_STATE, kept for backward compatibility.
     # Reverse id->name lookups skip aliases (see _DEPRECATED_ALIASES) so the
     # canonical name is the one displayed.
-    RWA = 50
+    RWA = MarketId(50)
     # Deprecated member names that alias a canonical member of the same value;
     # reverse id->name lookups skip these so the canonical name wins.
     _DEPRECATED_ALIASES = frozenset({"RWA"})
     # substrate type: AguaSubstrateLib (VAULT or ASSET)
-    AGUA_GLOBAL_CARRY = 51
+    AGUA_GLOBAL_CARRY = MarketId(51)
     # dependence graph: balance of ERC20_VAULT_BALANCE (purchase tokens return
     # to the vault on every position exit)
-    TERM_FINANCE = 52
+    TERM_FINANCE = MarketId(52)
     # substrate type: UniswapV4SubstrateLib — PoolId (raw bytes32,
     # keccak256(abi.encode(PoolKey))) plus both pool currencies as
     # substrate-as-asset; native-currency pools are not supported
-    UNISWAP_V4 = 53
+    UNISWAP_V4 = MarketId(53)
     # Crosschain market: a hub PlasmaVault deploys capital into PlasmaVaults
     # on other chains through an executor (Stargate/LayerZero or Chainlink
     # CCIP). Substrate type: CrosschainSubstrateLib (1 EXECUTOR, 2 REMOTE_VAULT
@@ -110,7 +113,7 @@ class IporFusionMarkets:
     # A legacy HyperEVM HyperCore test vault also uses 54 until it is
     # redeployed on HyperCore's assigned market 55; do not interpret that
     # vault's market-54 substrates as crosschain configuration.
-    CROSSCHAIN = 54
+    CROSSCHAIN = MarketId(54)
     # HyperCore market (id 55): a HyperEVM PlasmaVault trading on Hyperliquid
     # Core through delegatecalled fuses (CoreWriter actions, precompile reads).
     # Substrate type: HyperCoreSubstrateLib (1 SpotToken, 2 PerpMarket,
@@ -119,46 +122,46 @@ class IporFusionMarkets:
     # The first HyperEVM test deployment ran on id 54 before the contracts
     # team assigned 54 to crosschain and moved HyperCore to 55; that vault's
     # market 54 is pre-renumbering HyperCore wiring, not a crosschain market.
-    HYPERCORE = 55
+    HYPERCORE = MarketId(55)
     # POL unstaking via sPOLController. The out-of-band id is baked into the
     # deployed fuses as an immutable (424243 = 0x67933), so it must match the
     # deployments. Substrates per IporFusionMarkets.sol: the sPOLController
     # (this market) and sPOL under ERC20_VAULT_BALANCE, with a dependency edge
     # to it (enter burns wallet sPOL and creates the pending claim atomically).
-    SPOL_UNSTAKE = 424_243
-    ERC4626_0001 = 100_001
-    ERC4626_0002 = 100_002
-    ERC4626_0003 = 100_003
-    ERC4626_0004 = 100_004
-    ERC4626_0005 = 100_005
-    ERC4626_0006 = 100_006
-    ERC4626_0007 = 100_007
-    ERC4626_0008 = 100_008
-    ERC4626_0009 = 100_009
-    ERC4626_0010 = 100_010
-    ERC4626_0011 = 100_011
-    ERC4626_0012 = 100_012
-    ERC4626_0013 = 100_013
-    ERC4626_0014 = 100_014
-    ERC4626_0015 = 100_015
-    ERC4626_0016 = 100_016
-    ERC4626_0017 = 100_017
-    ERC4626_0018 = 100_018
-    ERC4626_0019 = 100_019
-    ERC4626_0020 = 100_020
-    META_MORPHO_0001 = 200_001
-    META_MORPHO_0002 = 200_002
-    META_MORPHO_0003 = 200_003
-    META_MORPHO_0004 = 200_004
-    META_MORPHO_0005 = 200_005
-    META_MORPHO_0006 = 200_006
-    META_MORPHO_0007 = 200_007
-    META_MORPHO_0008 = 200_008
-    META_MORPHO_0009 = 200_009
-    META_MORPHO_0010 = 200_010
+    SPOL_UNSTAKE = MarketId(424_243)
+    ERC4626_0001 = MarketId(100_001)
+    ERC4626_0002 = MarketId(100_002)
+    ERC4626_0003 = MarketId(100_003)
+    ERC4626_0004 = MarketId(100_004)
+    ERC4626_0005 = MarketId(100_005)
+    ERC4626_0006 = MarketId(100_006)
+    ERC4626_0007 = MarketId(100_007)
+    ERC4626_0008 = MarketId(100_008)
+    ERC4626_0009 = MarketId(100_009)
+    ERC4626_0010 = MarketId(100_010)
+    ERC4626_0011 = MarketId(100_011)
+    ERC4626_0012 = MarketId(100_012)
+    ERC4626_0013 = MarketId(100_013)
+    ERC4626_0014 = MarketId(100_014)
+    ERC4626_0015 = MarketId(100_015)
+    ERC4626_0016 = MarketId(100_016)
+    ERC4626_0017 = MarketId(100_017)
+    ERC4626_0018 = MarketId(100_018)
+    ERC4626_0019 = MarketId(100_019)
+    ERC4626_0020 = MarketId(100_020)
+    META_MORPHO_0001 = MarketId(200_001)
+    META_MORPHO_0002 = MarketId(200_002)
+    META_MORPHO_0003 = MarketId(200_003)
+    META_MORPHO_0004 = MarketId(200_004)
+    META_MORPHO_0005 = MarketId(200_005)
+    META_MORPHO_0006 = MarketId(200_006)
+    META_MORPHO_0007 = MarketId(200_007)
+    META_MORPHO_0008 = MarketId(200_008)
+    META_MORPHO_0009 = MarketId(200_009)
+    META_MORPHO_0010 = MarketId(200_010)
     # substrates: reward token addresses MerklClaimWrapperFuse may forward
     # (type(uint256).max - 3 in Solidity; max == 2**256 - 1, hence the shift)
-    MERKL = 2**256 - 4
-    EXCHANGE_RATE_VALIDATOR = 2**256 - 3
-    ASSETS_BALANCE_VALIDATION = 2**256 - 2
-    ZERO_BALANCE_MARKET = 2**256 - 1
+    MERKL = MarketId(2**256 - 4)
+    EXCHANGE_RATE_VALIDATOR = MarketId(2**256 - 3)
+    ASSETS_BALANCE_VALIDATION = MarketId(2**256 - 2)
+    ZERO_BALANCE_MARKET = MarketId(2**256 - 1)

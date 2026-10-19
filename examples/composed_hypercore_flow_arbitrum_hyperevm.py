@@ -68,6 +68,7 @@ from typing import Any, NamedTuple
 from eth_abi.abi import encode as abi_encode
 from eth_utils import keccak
 from web3 import Web3
+from web3.types import BlockIdentifier, RPCEndpoint
 
 from ipor_fusion import (
     ERC20,
@@ -147,7 +148,7 @@ HYPERCORE_VAULT = Web3.to_checksum_address("0xB8De01Ca5ca57A14671E1c696337134a02
 HYPERCORE_BALANCE_FUSE = Web3.to_checksum_address(
     "0xaC7404Ec2Bc3F2d3c0853633e0c3edfA25DC50F9"
 )
-HYPERCORE_MARKET = 55
+HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
 CROSSCHAIN_MARKET = MarketId(int(IporFusionMarkets.CROSSCHAIN))
 
 # ── Actors ───────────────────────────────────────────────────────────────────
@@ -208,7 +209,7 @@ def _connected_web3(env_var: str, chain_id: ChainId) -> Web3:
 
 
 def _usdc_balance_override(
-    web3: Web3, holder: str, amount: int, *, block: int | str = "latest"
+    web3: Web3, holder: str, amount: int, *, block: BlockIdentifier = "latest"
 ) -> dict[str, Any]:
     """An ``eth_call`` state override that credits ``holder`` with ``amount``
     USDC on HyperEVM: the balance slot is found by probing, never assumed."""
@@ -316,7 +317,7 @@ def _preview(
     ]
     if override is not None:
         params.append(override)
-    response = web3.provider.make_request("eth_estimateGas", params)
+    response = web3.provider.make_request(RPCEndpoint("eth_estimateGas"), params)
     if "result" in response:
         return Preview(step, calldata, int(response["result"], 16), None, note)
     error = response.get("error") or {}
@@ -753,7 +754,9 @@ def redeem_command_preview(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
         "CommandSent" in events and "CcipMessageSent" in events,
         f"expected CommandSent + CcipMessageSent, got {sorted(events)}",
     )
-    fee_paid = int(events["CcipMessageSent"]["fee"])
+    fee_paid = events["CcipMessageSent"]["fee"]
+    if not isinstance(fee_paid, int):
+        raise TypeError(f"CcipMessageSent fee is not an integer: {fee_paid!r}")
     _check(
         fee_paid == quote, f"the simulated send paid {fee_paid}, the quote said {quote}"
     )

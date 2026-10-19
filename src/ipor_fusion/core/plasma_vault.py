@@ -573,7 +573,7 @@ class PlasmaVault(ContractWrapper):
             key=lambda event: (event["blockNumber"], event["logIndex"]),
         )
 
-        state: dict[int, BalanceFuse] = {}
+        state: dict[MarketId, BalanceFuse] = {}
         for event in events:
             (market_id, fuse) = decode(["uint256", "address"], event["data"])
             checksum = Web3.to_checksum_address(fuse)

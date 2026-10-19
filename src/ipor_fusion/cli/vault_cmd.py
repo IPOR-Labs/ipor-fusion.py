@@ -6,6 +6,7 @@ from functools import partial
 from typing import Any
 
 import click
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.chains import CHAIN_NAMES
@@ -61,7 +62,10 @@ from ipor_fusion.vault_info import (
 
 
 def _auto_save_vault(
-    cfg: FusionConfig, vault_address: str, chain_id: ChainId, plasma_vault: PlasmaVault
+    cfg: FusionConfig,
+    vault_address: ChecksumAddress,
+    chain_id: ChainId,
+    plasma_vault: PlasmaVault,
 ) -> None:
     """Save vault to config if not already present and it looks like a Plasma Vault."""
     if any(v.address.lower() == vault_address.lower() for v in cfg.vaults):
@@ -190,7 +194,7 @@ vault.add_command(list_vaults, "ls")
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def info(
-    vault_address: str,
+    vault_address: ChecksumAddress,
     chain_id: ChainId | None,
     block_number: int | None,
     json_output: bool,
@@ -240,7 +244,7 @@ def info(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def validate(
-    vault_address: str,
+    vault_address: ChecksumAddress,
     chain_id: ChainId | None,
     block_number: int | None,
     json_output: bool,
@@ -332,7 +336,7 @@ def _validation_json(validation: VaultValidation, chain_label: str) -> dict[str,
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def role_accounts(
-    vault_address: str,
+    vault_address: ChecksumAddress,
     role: str,
     chain_id: ChainId | None,
     block_number: int | None,
@@ -402,7 +406,7 @@ def role_accounts(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
 )
 def oracle_mapping(
-    vault_address: str,
+    vault_address: ChecksumAddress,
     chain_id: ChainId | None,
     block_number: int | None,
     max_depth: int,

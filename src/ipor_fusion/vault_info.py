@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
-from eth_typing import HexAddress
+from eth_typing import ChecksumAddress, HexAddress
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
@@ -26,7 +26,7 @@ from ipor_fusion.substrates import (
     format_market_label,
     market_name,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.validation import (
     Erc20Holdings,
     Reconciliation,
@@ -489,7 +489,7 @@ def health_check_lists(
 
 
 def _fuse_entry(
-    addr: str, contract: str | None, fuse_markets: dict[str, int]
+    addr: str, contract: str | None, fuse_markets: dict[str, MarketId]
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {"address": addr, "contract": contract or "?"}
     if (mid := fuse_markets.get(addr)) is not None:
@@ -580,8 +580,8 @@ def _balance_fuse_entry(
 
 def _substrate_entry(
     sub_info: SubstrateInfo,
-    symbol_futs: dict[str, Future[str]],
-    contract_futs: dict[str, Future[str]],
+    symbol_futs: dict[HexAddress, Future[str]],
+    contract_futs: dict[HexAddress, Future[str]],
 ) -> dict[str, Any]:
     entry: dict[str, Any]
     if sub_info.address:
@@ -611,7 +611,7 @@ def _substrates_json(
     names resolved concurrently for every substrate address."""
     market_substrates = data.market_substrates or {}
     decoded: list[tuple[str, list[SubstrateInfo]]] = []
-    addresses: set[str] = set()
+    addresses: set[HexAddress] = set()
     for bf in data.balance_fuses:
         if subs := market_substrates.get(bf.market_id):
             infos = [decode_substrate(sub, market_id=bf.market_id) for sub in subs]
@@ -631,7 +631,7 @@ def _substrates_json(
 
 
 def _links_json(
-    chain_id: ChainId, chain_label: str, vault_address: HexAddress
+    chain_id: ChainId, chain_label: str, vault_address: ChecksumAddress
 ) -> dict[str, str]:
     links = {"ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}"}
     if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
@@ -730,7 +730,7 @@ def build_vault_info_json(
     ctx: Web3Context,
     plasma_vault: PlasmaVault,
     data: VaultData,
-    vault_address: HexAddress,
+    vault_address: ChecksumAddress,
     chain_id: ChainId,
     chain_label: str,
     *,
@@ -752,7 +752,7 @@ def build_vault_info_json(
 
     markets, erc20 = _markets_json(ctx, plasma_vault, data, resolve_name)
     # Venues only, once per market: zero-balance fuses never hold assets.
-    market_balances: dict[int, int] = {}
+    market_balances: dict[MarketId, int] = {}
     for bfj in markets["balance_fuses"]:
         market_balances.setdefault(bfj["market_id"], bfj["balance"]["raw"])
     validation = validate_vault_state(ctx, plasma_vault, data, market_balances, erc20)

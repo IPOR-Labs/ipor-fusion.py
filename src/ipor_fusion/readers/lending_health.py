@@ -158,7 +158,7 @@ def _compute_morpho_market_health(
     reader: MorphoReader,
     morpho_market_id: MorphoBlueMarketId,
     vault_address: ChecksumAddress,
-    ipor_market_id: int,
+    ipor_market_id: MarketId,
     market_name: str,
 ) -> LendingMarketHealth | None:
     """Compute LTV health for a single Morpho Blue market position."""
@@ -247,7 +247,7 @@ def _compute_morpho_market_health(
 def _compute_aave_market_health(
     reader: AaveV3Reader,
     vault_address: ChecksumAddress,
-    ipor_market_id: int,
+    ipor_market_id: MarketId,
     market_name: str,
 ) -> LendingMarketHealth | None:
     """Compute LTV health for the vault's Aave V3 position."""
@@ -301,7 +301,7 @@ def _compute_aave_v4_market_health(
     ctx: Web3Context,
     spoke: ChecksumAddress,
     vault_address: ChecksumAddress,
-    ipor_market_id: int,
+    ipor_market_id: MarketId,
     market_name: str,
 ) -> LendingMarketHealth | None:
     """Compute LTV health for the vault's account on one Aave V4 Spoke."""
@@ -355,15 +355,15 @@ def _aave_v4_spokes(substrates: list[bytes]) -> list[ChecksumAddress]:
 
 @dataclass(slots=True)
 class _LendingMarkets:
-    morpho: list[tuple[int, str, MorphoBlueMarketId]]
-    aave_v3: list[tuple[int, str, ChecksumAddress]]
-    aave_v4: list[tuple[int, str, ChecksumAddress]]
+    morpho: list[tuple[MarketId, str, MorphoBlueMarketId]]
+    aave_v3: list[tuple[MarketId, str, ChecksumAddress]]
+    aave_v4: list[tuple[MarketId, str, ChecksumAddress]]
 
 
 def _collect_lending_markets(
-    balance_fuse_market_ids: list[int],
-    market_substrates: dict[int, list[bytes]],
-    aave_pools: dict[int, ChecksumAddress],
+    balance_fuse_market_ids: list[MarketId],
+    market_substrates: dict[MarketId, list[bytes]],
+    aave_pools: dict[MarketId, ChecksumAddress],
 ) -> _LendingMarkets:
     """Pick the positions to read: Morpho substrates, Aave V3 markets with a Pool,
     and the Spokes of Aave V4 markets."""
@@ -393,9 +393,9 @@ def fetch_vault_lending_health(
     ctx: Web3Context,
     vault_address: ChecksumAddress,
     chain_id: ChainId,
-    balance_fuse_market_ids: list[int],
-    market_substrates: dict[int, list[bytes]],
-    aave_pools: dict[int, ChecksumAddress] | None = None,
+    balance_fuse_market_ids: list[MarketId],
+    market_substrates: dict[MarketId, list[bytes]],
+    aave_pools: dict[MarketId, ChecksumAddress] | None = None,
 ) -> VaultLendingHealth:
     """Fetch lending health for all lending markets in a vault.
 

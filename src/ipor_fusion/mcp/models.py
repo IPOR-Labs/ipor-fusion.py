@@ -37,6 +37,7 @@ from ipor_fusion.types import (
     ChainId,
     Check,
     MappingStatus,
+    MarketId,
     NodeStatus,
     RoleId,
     Severity,
@@ -295,7 +296,7 @@ class FuseEntry(_Base):
     contract: str = Field(
         description="Contract name resolved via Etherscan; '?' if unknown."
     )
-    market_id: int | None = Field(
+    market_id: MarketId | None = Field(
         default=None,
         description="Market this fuse serves; absent when the fuse exposes none.",
     )
@@ -314,7 +315,7 @@ class BalanceFuseEntry(_Base):
     """
 
     market: str
-    market_id: int
+    market_id: MarketId
     balance: Amount
     fuse: str
     contract: str
@@ -686,7 +687,7 @@ class ReconciliationModel(_Base):
 
 class LendingMarketModel(_Base):
     protocol: str
-    market_id: int
+    market_id: MarketId
     market_name: str
     substrate_id: str | None = Field(
         description="0x-prefixed Morpho market id or Aave V4 Spoke; null for "
@@ -1015,7 +1016,7 @@ class HyperCoreSection(_Base):
     the balance fuse's own figure, the granted perp markets and the pending
     action. The `*_note` fields carry the DOCS text the CLI payload ships."""
 
-    market_id: int
+    market_id: MarketId
     market: str
     balance_fuse: str
     core_user_exists: bool = Field(description=_HYPERCORE_DOCS["core_user_exists"])

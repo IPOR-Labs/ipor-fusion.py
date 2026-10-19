@@ -102,6 +102,13 @@ reportTypedDictNotRequiredAccess = false
 # Tests pass raw ints/literals where domain NewTypes (Amount, MarketId, Period, …) are
 # declared — harmless (NewType is identity at runtime).
 reportArgumentType = false
+# Library code, examples and the typed-client check are held to the nominal
+# types; the remaining tests pass raw literals.
+executionEnvironments = [
+  { root = "src", reportArgumentType = "error" },
+  { root = "examples", reportArgumentType = "error" },
+  { root = "tests/typed_client", reportArgumentType = "error" },
+]
 
 [tool.coverage.run]
 source = ["src/ipor_fusion"]

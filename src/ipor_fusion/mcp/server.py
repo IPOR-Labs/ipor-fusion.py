@@ -64,6 +64,9 @@ from ipor_fusion.vault_data import (
 )
 from ipor_fusion.vault_info import build_vault_info_json
 
+# chain_id default: detect the chain from the saved vault or the single provider.
+_AUTO_CHAIN = ChainId(0)
+
 mcp = FastMCP(
     "ipor-fusion",
     instructions=(
@@ -164,7 +167,7 @@ def server_info(
 @mcp.tool()
 def vault_info(
     vault_address: str,
-    chain_id: ChainId = 0,
+    chain_id: ChainId = _AUTO_CHAIN,
     block_number: int = 0,
 ) -> VaultInfoResponse:
     """Get full on-chain state of a Plasma Vault — the comprehensive summary.
@@ -203,13 +206,13 @@ def vault_info(
         data.deployment_block,
         data.deployment_timestamp,
         data.deployment_error,
-    ) = fetch_deployment_info(ctx, chain_id, vault_address, api_key)
+    ) = fetch_deployment_info(ctx, chain_id, checksum, api_key)
 
     result = build_vault_info_json(
         ctx,
         plasma_vault,
         data,
-        vault_address,
+        checksum,
         chain_id,
         chain_label,
         resolve_name=partial(get_contract_name, chain_id, api_key=api_key),
@@ -222,7 +225,7 @@ def vault_validate(
     vault_address: Annotated[str, Field(description="Plasma Vault address.")],
     chain_id: Annotated[
         ChainId, Field(description="Chain ID (auto-detected if 0).")
-    ] = 0,
+    ] = _AUTO_CHAIN,
     block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
 ) -> VaultValidationResponse:
     """Check a Plasma Vault's health and return an ok / warning / critical verdict.
@@ -295,7 +298,7 @@ def vault_role_accounts(
     ] = None,
     chain_id: Annotated[
         ChainId, Field(description="Chain ID (auto-detected if 0).")
-    ] = 0,
+    ] = _AUTO_CHAIN,
     block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
 ) -> RoleAccountsResponse:
     """List confirmed role holders on a Plasma Vault's AccessManager.
@@ -334,7 +337,7 @@ def vault_oracle_mapping(
     vault_address: Annotated[str, Field(description="Plasma Vault address.")],
     chain_id: Annotated[
         ChainId, Field(description="Chain ID (auto-detected if 0).")
-    ] = 0,
+    ] = _AUTO_CHAIN,
     block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
 ) -> OracleMappingResponse:
     """Map how a Plasma Vault prices every configured asset at a block.
@@ -425,7 +428,7 @@ def vault_list() -> list[VaultListEntry]:
 def vault_add(
     address: str,
     label: str = "",
-    chain_id: ChainId = 0,
+    chain_id: ChainId = _AUTO_CHAIN,
 ) -> ActionResult:
     """Save a Plasma Vault to the local config.
 
@@ -513,7 +516,7 @@ def config_show() -> ConfigShowResponse:
 
 
 @mcp.tool()
-def config_set_provider(url: str, chain_id: ChainId = 0) -> ActionResult:
+def config_set_provider(url: str, chain_id: ChainId = _AUTO_CHAIN) -> ActionResult:
     """Set RPC provider URL for a chain.
 
     Args:

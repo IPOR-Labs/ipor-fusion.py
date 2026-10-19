@@ -5,6 +5,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
 
 import click
+from eth_typing import ChecksumAddress, HexAddress
 
 from ipor_fusion.cli.vault_rendering import (
     _format_amount,
@@ -13,13 +14,13 @@ from ipor_fusion.cli.vault_rendering import (
     _substrate_details,
 )
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.substrates import (
     decode_substrate,
     format_market_label,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
     VaultData,
@@ -166,7 +167,7 @@ def _print_markets(
     data: VaultData,
     chain_id: ChainId,
     api_key: str | None,
-) -> dict[int, int]:
+) -> dict[MarketId, int]:
     """Fuses, balance fuses, dependency graph and substrates; returns the
     per-market balances read for the balance-fuse table."""
     _print_fuse_section(
@@ -211,7 +212,7 @@ def _print_markets(
 def _format_token_amount(
     ctx: Web3Context,
     raw: int,
-    token_address: str,
+    token_address: HexAddress,
     prices_usd: dict[str, float] | None = None,
 ) -> str:
     """Format a raw on-chain amount using cached ERC-20 symbol + decimals.
@@ -257,9 +258,9 @@ def _print_dependency_graph(data: VaultData) -> None:
 
 def _print_fuse_section(
     title: str,
-    fuses: Sequence[str],
-    fuse_markets: dict[str, int] | None,
-    market_substrates: dict[int, list[bytes]] | None,
+    fuses: Sequence[ChecksumAddress],
+    fuse_markets: dict[str, MarketId] | None,
+    market_substrates: dict[MarketId, list[bytes]] | None,
     chain_id: ChainId,
     api_key: str | None,
 ) -> None:
@@ -273,7 +274,7 @@ def _print_fuse_section(
     whenever the same address appears multiple times (typical for
     instant-withdrawal fuses).
     """
-    counts: dict[str, int] = {}
+    counts: dict[ChecksumAddress, int] = {}
     for addr in fuses:
         counts[addr] = counts.get(addr, 0) + 1
 
@@ -312,18 +313,18 @@ def _print_fuse_section(
 
 def _print_balance_fuses_table(
     plasma_vault: PlasmaVault,
-    balance_fuses: list,
+    balance_fuses: Sequence[BalanceFuse],
     decimals: int,
     asset_symbol: str,
     asset_price_usd: float | None,
     chain_id: ChainId,
     api_key: str | None,
-) -> dict[int, int]:
+) -> dict[MarketId, int]:
     """Print the table; return each market's cached balance, once per market
     (several balance fuses can share a market's single storage slot)."""
-    market_balances: dict[int, int] = {}
+    market_balances: dict[MarketId, int] = {}
     with ThreadPoolExecutor() as pool:
-        futures: list[tuple[int, int, str, Future, Future]] = []
+        futures: list[tuple[int, MarketId, str, Future, Future]] = []
         for idx, balance_fuse in enumerate(balance_fuses, 1):
             market_id_str = format_market_label(balance_fuse.market_id)
             f_balance = pool.submit(
@@ -383,14 +384,14 @@ def _print_market_substrates(
 
 def _print_substrates(  # noqa: C901
     ctx: Web3Context,
-    substrates_by_market: dict[int, list[bytes]],
-    balance_fuses: list,
+    substrates_by_market: dict[MarketId, list[bytes]],
+    balance_fuses: Sequence[BalanceFuse],
     chain_id: ChainId,
     api_key: str | None,
 ) -> set[str]:
     # Phase 1: collect each balance fuse's substrates and the addresses to resolve
-    market_substrates: list[tuple[str, int, list]] = []
-    all_addresses: set[str] = set()
+    market_substrates: list[tuple[str, MarketId, list[bytes]]] = []
+    all_addresses: set[HexAddress] = set()
     for balance_fuse in balance_fuses:
         mid = balance_fuse.market_id
         if not (substrates := substrates_by_market.get(mid)):

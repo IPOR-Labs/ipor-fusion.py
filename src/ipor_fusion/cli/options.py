@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import click
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.chains import CHAIN_NAME_TO_ID, ensure_supported_chain
@@ -74,7 +75,7 @@ CHAIN = ChainType()
 
 
 def _resolve_chain_id(
-    cfg: FusionConfig, vault_address: str, chain_id: ChainId | None
+    cfg: FusionConfig, vault_address: ChecksumAddress, chain_id: ChainId | None
 ) -> ChainId:
     if chain_id is not None:
         return chain_id
@@ -99,7 +100,7 @@ def _resolve_provider(cfg: FusionConfig, chain_id: ChainId) -> str:
 
 def _build_ctx(
     cfg: FusionConfig,
-    vault_address: str,
+    vault_address: ChecksumAddress,
     chain_id: ChainId | None,
     block_number: int | None,
 ) -> tuple[ChainId, Web3Context]:

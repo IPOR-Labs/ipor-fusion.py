@@ -12,6 +12,7 @@ from __future__ import annotations
 import json as json_lib
 
 import click
+from eth_typing import ChecksumAddress
 
 from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.cli.config_store import load_config
@@ -343,7 +344,7 @@ def _print_reallocate_hint(params: MorphoMarketParams) -> None:
     help="Emit machine-readable JSON instead of a table.",
 )
 def meta_morpho(
-    vault_address: str,
+    vault_address: ChecksumAddress,
     chain_id: ChainId,
     market_filter: str | None,
     json_output: bool,
