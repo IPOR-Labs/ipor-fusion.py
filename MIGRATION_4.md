@@ -1,15 +1,24 @@
 # Migrating to ipor-fusion 4.0
 
-4.0 makes every id and address in the public API a nominal type (`typing.NewType`)
-and checks the SDK, the examples and a typed client with pyright's
-`reportArgumentType`. A `NewType` is the identity at runtime, so **code that is not
-type-checked keeps working**; the runtime changes are listed in
-[Behavior changes](#behavior-changes). Type-checked code (pyright, mypy, Pylance)
-wraps literals and raw values as below. Values the SDK returns already carry their
-type and go back in unwrapped.
+4.0 gives chain, market and role ids, the crosschain, HyperCore and Morpho ids,
+vault/oracle/token addresses and transaction hashes a nominal type
+(`typing.NewType`) across the public API, and checks the SDK, the examples and a
+typed client with pyright's `reportArgumentType`. Other fields keep their types
+(e.g. `VaultData.access_manager` is still `str`).
+
+The wrappers do not change values: `ChainId(1)` is `1` at runtime. The
+[behavior changes](#behavior-changes) below, however, apply to **every** caller,
+type-checked or not. In particular, `fetch_market` and
+`build_morpho_blue_market_json` no longer add a `0x` prefix themselves: pass
+`parse_morpho_market_id(raw_id)`, never a bare 64-hex string. Type-checked code
+(pyright, mypy, Pylance) also wraps literals and raw values as below. Values the SDK
+returns already carry their type and go back in unwrapped.
 
 All types are importable from `ipor_fusion` (and `ipor_fusion.types`);
-`ChecksumAddress`, `HexAddress` and `HexStr` come from `eth_typing`.
+`ChecksumAddress`, `HexAddress` and `HexStr` come from `eth_typing`,
+`BlockIdentifier` from `web3.types`, and `USDC_TOKEN_INDEX` / `hip3_action_asset` from
+`ipor_fusion.fuses.hypercore`. The wrappers label values; they do not validate byte
+widths or address spelling.
 
 ## Building the types
 
@@ -26,6 +35,7 @@ All types are importable from `ipor_fusion` (and `ipor_fusion.types`);
 | crosschain ids | `CommandId(b)`, `MessageId(b)`, `AssetId(b)`, `OperationId(b)`, `TransferId(b)`, `ReturnRequestId(b)`, `PositionSetHash(b)` (bytes32); `ProposalId(n)`, `DeploymentRequestId(n)`, `StargateAssetId(n)` (int) |
 | HyperCore ids | `HyperCoreTokenIndex(n)` (or `USDC_TOKEN_INDEX`), `HyperCoreAsset(n)` (or `hip3_action_asset(dex, index)`), `HyperCoreOrderId(n)`, `HyperCoreClientOrderId(n)`, `MarginTableId(n)`, `HyperCoreActionId(n)`, `PayloadHash(b)` |
 | external state | `ProposalHash(b)` |
+| `BlockIdentifier` | a block number, `"latest"` / `"pending"` / ..., or a block hash |
 
 `MessageId` covers both a CCIP `messageId` and a LayerZero `guid`. `AssetId` is the
 crosschain executor's `bytes32` asset id; a Stargate pool's `uint16` asset id is
@@ -35,8 +45,8 @@ a `bytes32` return (recall) request is `ReturnRequestId`.
 ## What changed, by area
 
 **Vault reads and validation.** `fetch_vault_data(chain_id=)`, `fetch_deployment_info`,
-`build_vault_info_json`, `validate_vault`, `ensure_supported_chain`,
-`fetch_vault_lending_health` take `ChainId`; vault and oracle addresses
+`build_vault_info_json`, `ensure_supported_chain`, `fetch_vault_lending_health` take
+`ChainId`; vault and oracle addresses
 (`validate_vault`, `fetch_deployment_info`, `build_vault_info_json`,
 `fetch_unpriceable_priced_tokens`) take `ChecksumAddress`; `resolve_token_symbol`,
 `resolve_token_decimals`, `get_contract_name`, `get_deployment_tx` take `HexAddress`
@@ -47,7 +57,10 @@ a `bytes32` return (recall) request is `ReturnRequestId`.
 (`market_balances`), `fetch_vault_lending_health`, `fetch_unpriceable_priced_tokens`
 and the `dependency_graph` helpers (`compute_update_reach`, `compute_update_groups`,
 `find_orphan_fuse_markets`, `find_markets_missing_erc20_dependency`).
-`VaultData.asset`, `VaultValidation.vault` / `asset` are `ChecksumAddress`,
+A custom `VaultState` implementation also annotates `asset` as `ChecksumAddress` and
+its `unpriceable_priced_tokens` items' `market_id` as `MarketId`
+(`UnpriceableToken`). `VaultData.asset`, `VaultValidation.vault` / `asset` are
+`ChecksumAddress`,
 `VaultValidation.chain_id` is `ChainId`; `LendingMarketHealth.market_id` and
 `MiddlewarePricedToken.market_id` are `MarketId`; `Erc20Holding.address` and
 `SubstrateInfo.address` are `HexAddress` (still `""` when a substrate has no address).
@@ -82,7 +95,9 @@ on CCIP, `active_return` → `OperationId`, `asset_id`, `tracked_position_set_ha
 `proposal_id_from_receipt`). Records carry them too: `Command`, `ActiveCommand`,
 `ExecutorInitParams`, `BalanceObservation`, `LaneObservation`, `Observation`,
 `CcipObservation`, `OutboundMessage`, `CcipMessageSent`, `Any2EVMMessage`,
-`VerifierResult`, `Packet.guid`, `TaxiMessage`, `StargateChain`. Decoded event values
+`VerifierResult`, `Packet.guid`, `TaxiMessage`, `StargateChain`; and the helpers
+`fetch_verifier_result(message_id=)`, `lz_receive_calldata(guid=)` and
+`lz_compose_calldata(guid=)` take a `MessageId`. Decoded event values
 (`ccip_events` → `CcipEvent.values`) stay a generic mapping: convert a value
 before passing it on.
 
@@ -116,8 +131,15 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 - `fusion market meta-morpho --json` and the MCP `market_meta_morpho` tool report
   `null` instead of `""` for an absent curator, guardian or fee recipient; the MCP
   schema's `curator` is nullable.
-- The Morpho API client raises `MorphoApiError` for a malformed or missing market id
-  or required address in an API answer; `--market` rejects a malformed id.
+- The Morpho API client checksums every address it returns (market, vault,
+  allocation, adapter and cap records, and the `fusion market` / MCP market documents
+  built from them), so string comparisons against the API's own spelling change.
+- It raises `MorphoApiError` when a market id or an address it parses (the market and
+  allocation ids, required vault/asset/owner/token/oracle/IRM/allocator addresses) is
+  malformed or missing. A nested allocation or flow-cap id that does not parse matches
+  nothing, and a V1 flow cap without an id is skipped, as before; a record missing a
+  whole nested object (e.g. `loanAsset`) still fails with `KeyError`. `--market`
+  rejects a malformed id.
 - `LendingMarketHealth.substrate_id` for a Morpho market is `0x`-prefixed (the JSON
   documents already were).
 - `TransactionError.tx_hash` is `0x`-prefixed.
