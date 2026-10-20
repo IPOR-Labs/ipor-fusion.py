@@ -383,7 +383,8 @@ class ExternalStateExecutor(ContractWrapper):
         return self._view("bigChangeBps()", output_types=["uint256"])
 
     def dust_threshold(self) -> Call[int]:
-        """Underlying units below which a leftover is dust, not a balance."""
+        """Dust threshold as a percent of one underlying token (100 = one whole
+        token); a leftover below it is dust, not a balance."""
         return self._view("dustThreshold()", output_types=["uint256"])
 
     def min_update_interval(self) -> Call[Period]:

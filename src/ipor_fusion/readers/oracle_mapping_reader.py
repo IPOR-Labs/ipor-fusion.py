@@ -21,6 +21,7 @@ from ipor_fusion.core.oracle import (
     price_oracle_middleware,
 )
 from ipor_fusion.types import (
+    Amount,
     Decimals,
     Price,
 )
@@ -104,12 +105,12 @@ class _Erc4626Vault(ContractWrapper):
     def decimals(self) -> Call[Decimals]:
         return self._view("decimals()", output_types=["uint8"], decoder=Decimals)
 
-    def convert_to_assets(self, shares: int) -> Call[int]:
+    def convert_to_assets(self, shares: int) -> Call[Amount]:
         return self._view(
             "convertToAssets(uint256)",
             shares,
             output_types=["uint256"],
-            decoder=int,
+            decoder=Amount,
         )
 
 
@@ -238,5 +239,5 @@ class OracleMappingReader:
 
     def vault_convert_to_assets(
         self, vault: ChecksumAddress, shares: int
-    ) -> int | None:
+    ) -> Amount | None:
         return self._safe(_Erc4626Vault(vault).convert_to_assets(shares))

@@ -579,7 +579,8 @@ Decimals`, and `PriceOracleMiddleware.base_currency_decimals()` returns
 `LogSource.get_logs` a `ChainId`; `quote_ccip_native_fee(block=)` and
 `OracleMappingReader.asset_source_events` take a `BlockIdentifier`.
 `OracleMappingReader.token_decimals`, `feed_decimals` and `vault_decimals` return
-`Decimals | None`, and `OraclePrice.decimals`, `OracleNode.decimals` and
+`Decimals | None` and `vault_convert_to_assets` an `Amount | None`;
+`AaveV4OracleReader.decimals()` returns `Call[Decimals]`; and `OraclePrice.decimals`, `OracleNode.decimals` and
 `OracleAsset.decimals` are `Decimals` (`| None` on the nodes).
 
 **Address roles.** `PlasmaVault(address)`,
