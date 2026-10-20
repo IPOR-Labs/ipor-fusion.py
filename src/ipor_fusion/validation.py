@@ -120,7 +120,7 @@ class VaultState(Protocol):
     @property
     def underlying_balance_on_vault(self) -> Amount: ...
     @property
-    def price_oracle_addr(self) -> ChecksumAddress: ...
+    def price_oracle(self) -> ChecksumAddress: ...
     @property
     def balance_fuses(self) -> Sequence[BalanceFuse]: ...
     @property
@@ -202,10 +202,10 @@ class VaultValidation:
     vault: PlasmaVaultAddress
     chain_id: ChainId
     block_number: int
-    block_timestamp: int
+    block_timestamp: Timestamp
     asset: ChecksumAddress
     asset_symbol: str
-    asset_decimals: int
+    asset_decimals: Decimals
     asset_price_usd: float | None
     findings: tuple[Finding, ...]
     reconciliation: Reconciliation
@@ -236,15 +236,20 @@ class VaultValidation:
 
 def validate_vault(
     ctx: Web3Context,
-    vault_address: PlasmaVaultAddress,
+    vault: PlasmaVaultAddress,
     *,
     block: int | None = None,
+    metadata: bool = False,
 ) -> VaultValidation:
     """Fetch the vault's snapshot at one block (`fetch_vault_data`: ``block``,
     else the context's numeric default block, else the latest) and validate
-    it; ``ctx`` itself is not modified."""
+    it; ``ctx`` itself is not modified.
+
+    The checks need no token metadata, so none is read by default and the
+    ERC20 holdings are named ``"?"``; ``metadata=True`` adds one batched,
+    cached symbol read that names them in the holdings and findings."""
     return validate_vault_state(
-        fetch_vault_data(ctx, vault_address, block=block, metadata=False)
+        fetch_vault_data(ctx, vault, block=block, metadata=metadata)
     )
 
 

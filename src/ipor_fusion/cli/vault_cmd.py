@@ -257,7 +257,9 @@ def validate(
         raise click.UsageError(str(exc)) from exc
 
     try:
-        validation = validate_vault(ctx, vault_address, block=block_number)
+        validation = validate_vault(
+            ctx, vault_address, block=block_number, metadata=True
+        )
     except UnsupportedVaultVersionError as exc:
         raise click.ClickException(str(exc)) from exc
 

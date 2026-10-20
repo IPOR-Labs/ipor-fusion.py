@@ -726,20 +726,28 @@ def _snapshot(**fields: Any) -> Any:
 
 
 def _read_erc20_holdings(ctx, pv, data: VaultData) -> Erc20Holdings:
-    """The snapshot's ERC20 read, with market balances answered by ``pv``."""
-    return vault_erc20._read_erc20_holdings(
+    """The snapshot's ERC20 read, with market balances answered by ``pv`` and
+    the substrate tokens named by `resolve_token_symbol`."""
+    substrates = data.market_substrates or {}
+    symbols = {
+        info.address: vault_data.resolve_token_symbol(ctx, info.address)
+        for market_id, subs in substrates.items()
+        for sub in subs
+        if (info := decode_substrate(sub, market_id=market_id)).address
+    }
+    market = vault_erc20._read_erc20_market(
         ctx,
         pv.address,
         balance_fuses=data.balance_fuses,
-        market_substrates=data.market_substrates or {},
+        market_substrates=substrates,
         market_balances={
             bf.market_id: pv.total_assets_in_market(bf.market_id).call(ctx)
             for bf in data.balance_fuses
         },
-        oracle=oracle.price_oracle_middleware(ctx, data.price_oracle_addr),
-        asset=vault_erc20._Asset(data.asset, data.asset_decimals, data.asset_price_usd),
-        resolve_symbol=lambda address: vault_data.resolve_token_symbol(ctx, address),
+        oracle=oracle.price_oracle_middleware(ctx, data.price_oracle),
     )
+    asset = vault_erc20._Asset(data.asset, data.asset_decimals, data.asset_price_usd)
+    return vault_erc20._erc20_holdings(asset, market, symbols)
 
 
 ADDR_2 = "0x2222222222222222222222222222222222222222"
@@ -779,7 +787,7 @@ class TestPrintErc20Balances:
             asset=ADDR_2,
             asset_symbol="X",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_ORACLE,
+            price_oracle=ADDR_ORACLE,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=None,
@@ -828,7 +836,7 @@ class TestPrintErc20Balances:
             asset=ADDR_2,
             asset_symbol="X",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_ORACLE,
+            price_oracle=ADDR_ORACLE,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=None,
@@ -880,7 +888,7 @@ class TestPrintErc20Balances:
             asset=ADDR_2,
             asset_symbol="X",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_ORACLE,
+            price_oracle=ADDR_ORACLE,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=None,
@@ -917,7 +925,7 @@ class TestPrintErc20Balances:
             asset=ADDR_2,
             asset_symbol="X",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_ORACLE,
+            price_oracle=ADDR_ORACLE,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=None,
@@ -971,7 +979,7 @@ class TestUnderlyingOnVault:
             asset=ADDR_2,  # the underlying (USDC stand-in)
             asset_symbol="USDC",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_ORACLE,
+            price_oracle=ADDR_ORACLE,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=1.0,
@@ -1172,7 +1180,7 @@ class TestPrintReconciliation:
             asset=ADDR_2,
             asset_symbol="WETH",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_1,
+            price_oracle=ADDR_1,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=2000.0,
@@ -1209,7 +1217,7 @@ class TestPrintReconciliation:
             asset=ADDR_2,
             asset_symbol="WETH",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_1,
+            price_oracle=ADDR_1,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=2000.0,
@@ -1275,7 +1283,7 @@ class TestErc20BalancesNotes:
             asset=ADDR_2,
             asset_symbol="X",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_1,
+            price_oracle=ADDR_1,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=1.0,
@@ -1336,7 +1344,7 @@ class TestErc20BalancesNotes:
             asset=ADDR_2,
             asset_symbol="WETH",
             access_manager=ADDR_1,
-            price_oracle_addr=ADDR_1,
+            price_oracle=ADDR_1,
             rewards_manager=None,
             withdraw_manager=None,
             asset_price_usd=2000.0,
@@ -1378,7 +1386,7 @@ def _make_data(**overrides):
         "vault_name": "Test Vault",
         "asset_symbol": "WETH",
         "access_manager": ADDR_1,
-        "price_oracle_addr": ADDR_1,
+        "price_oracle": ADDR_1,
         "rewards_manager": None,
         "withdraw_manager": None,
         "asset_price_usd": 2000.0,
@@ -2260,7 +2268,7 @@ def _fee_vault_data(**overrides) -> VaultData:
         "asset": ADDR_2,
         "asset_symbol": "USDC",
         "access_manager": ADDR_1,
-        "price_oracle_addr": ADDR_ORACLE,
+        "price_oracle": ADDR_ORACLE,
         "rewards_manager": None,
         "withdraw_manager": None,
         "asset_price_usd": None,

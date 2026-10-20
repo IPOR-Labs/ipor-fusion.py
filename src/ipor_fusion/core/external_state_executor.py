@@ -234,7 +234,7 @@ def _snapshot_block(ctx: Web3Context) -> tuple[BlockIdentifier, int]:
 
 
 def read_external_state(
-    ctx: Web3Context, vault_address: PlasmaVaultAddress
+    ctx: Web3Context, vault: PlasmaVaultAddress
 ) -> ExternalStateVaultState:
     """Read the external-state market's vault state as one coherent snapshot.
 
@@ -249,19 +249,19 @@ def read_external_state(
     executor word is ``None`` (no executor deployed), which is a state, while
     an RPC or decoding failure raises.
     """
-    vault = Web3.to_checksum_address(vault_address)
+    checksum = Web3.to_checksum_address(vault)
     read_at, block = _snapshot_block(ctx)
     base = ExternalStateExecutor._EXECUTOR_STORAGE_SLOT
     words = [
-        _storage_word(ctx.get_storage_at(vault, base + i, read_at)) for i in range(4)
+        _storage_word(ctx.get_storage_at(checksum, base + i, read_at)) for i in range(4)
     ]
     if words[0] >> 160:
         raise ExternalStateError(
-            f"malformed executor word in the external-state storage of {vault}"
+            f"malformed executor word in the external-state storage of {checksum}"
         )
     if words[3] not in (0, 1):
         raise ExternalStateError(
-            f"malformed pause flag in the external-state storage of {vault}"
+            f"malformed pause flag in the external-state storage of {checksum}"
         )
     return ExternalStateVaultState(
         executor=Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None,
@@ -321,7 +321,7 @@ class ExternalStateExecutor(ContractWrapper):
 
     @classmethod
     def for_vault(
-        cls, ctx: Web3Context, vault_address: PlasmaVaultAddress
+        cls, ctx: Web3Context, vault: PlasmaVaultAddress
     ) -> ExternalStateExecutor:
         """Resolve the per-vault executor from vault storage (at
         ``ctx.default_block``) and wrap it. An eager resolver: the wrapper it
@@ -334,17 +334,16 @@ class ExternalStateExecutor(ContractWrapper):
         """
         word = _storage_word(
             ctx.get_storage_at(
-                Web3.to_checksum_address(vault_address), cls._EXECUTOR_STORAGE_SLOT
+                Web3.to_checksum_address(vault), cls._EXECUTOR_STORAGE_SLOT
             )
         )
         if word >> 160:
             raise ExternalStateError(
-                f"malformed executor word in the external-state storage of "
-                f"{vault_address}"
+                f"malformed executor word in the external-state storage of {vault}"
             )
         if word == 0:
             raise ExternalStateError(
-                f"no ExternalStateExecutor deployed for vault {vault_address}"
+                f"no ExternalStateExecutor deployed for vault {vault}"
             )
         return cls(Web3.to_checksum_address(f"0x{word:040x}"))
 
