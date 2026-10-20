@@ -102,7 +102,7 @@ class IporFusionMarkets:
     # bound to a chain id). Ahead of the public contracts repo: defined on the
     # crosschain feature branch; the mirror test allowlists it until it lands.
     # The mainnet POC fuses were built with a keccak-derived id instead (see
-    # ipor_fusion.fuses.crosschain.crosschain_market_id).
+    # ipor_fusion.crosschain.fuses.crosschain_market_id).
     # A legacy HyperEVM HyperCore test vault also uses 54 until it is
     # redeployed on HyperCore's assigned market 55; do not interpret that
     # vault's market-54 substrates as crosschain configuration.

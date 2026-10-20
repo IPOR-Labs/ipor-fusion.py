@@ -25,12 +25,12 @@ from eth_typing import ChecksumAddress
 from ipor_fusion.core.fuse import Fuse
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.crosschain.ccip.contracts import CcipRouteConfig
-from ipor_fusion.crosschain.messages import COMMAND_TUPLE_TYPE, EMPTY_COMMAND, Command
-from ipor_fusion.fuses.crosschain.base import (
+from ipor_fusion.crosschain.fuses.base import (
     CrosschainCommandFuse,
     CrosschainSupplyFuse,
     SendParams,
 )
+from ipor_fusion.crosschain.messages import COMMAND_TUPLE_TYPE, EMPTY_COMMAND, Command
 from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId
 
 

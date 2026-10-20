@@ -155,8 +155,8 @@ the lifecycle matrix follows that.
   cases and non-obvious logic.
 - The public API is `ipor_fusion.__all__` (README, "Public API and stability").
   Every public symbol is imported and listed there; a symbol of a public
-  subpackage (`core`, `config`, `fuses`, `fuses.crosschain`, `readers`,
-  `crosschain`, `crosschain.ccip`, `crosschain.stargate`) also goes in that
+  subpackage (`core`, `config`, `fuses`, `readers`, `crosschain`,
+  `crosschain.fuses`, `crosschain.ccip`, `crosschain.stargate`) also goes in that
   subpackage's `__all__`. `ipor_fusion.guide` keeps its own namespace. The
   public modules (`about`, `chains`, `dependency_graph`, `errors`, `explorer`,
   `field_docs`, `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`,
@@ -224,7 +224,7 @@ the lifecycle matrix follows that.
   (`FuseAction`), `fuse` (the `Fuse` base, `StakeFuse`, the shared validators and
   substrate packers), `address` (`_validate_not_zero_address`). `core` imports neither
   `fuses` nor `crosschain` (`tests/test_sdk_layering.py`)
-- `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, crosschain/,
+- `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3,
   erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
   uniswap_v3, universal, `events.py`); `base.py` re-exports the `core/fuse.py` base and validators,
   `FuseAction` and `ZERO_ADDRESS` (from `types`). A fuse is a value: equality and
@@ -251,15 +251,20 @@ the lifecycle matrix follows that.
   (`CcipOffRamp.execute` is the permissionless delivery) and `ccip/indexer` fetches a
   message's verifier result from Chainlink's public indexers and builds that
   `manual_execution` call.
-  `fuses/crosschain/` mirrors it (`base`, `stargate`, `ccip`). Names mirror
-  the Solidity contracts and libraries. Adding a transport: a new subpackage plus one
-  `LANES` entry. Layering: the fuse encoders import the wire codecs and wrappers; lanes,
-  discovery, transports and the simulator import the encoders. A package `__init__`
-  runs before its modules, so `ipor_fusion.crosschain`, `.stargate` and `.ccip`
-  export only the fuse-free half; the rest is exported from `ipor_fusion` and
-  imported by module path. `tests/test_crosschain_layering.py` pins this (no
-  function-level or `TYPE_CHECKING` imports in either package); never work around
-  a cycle with a lazy import, move the module instead.
+  The market fuse encoders live in `crosschain/fuses/` (`base`, `stargate`, `ccip`),
+  mirroring `contracts/fuses/crosschain/`; they build on `core/fuse.py`, so the
+  dependency direction is `core` <- `crosschain` and `fuses/` holds no crosschain code
+  (neither package imports the other). Names mirror the Solidity contracts and
+  libraries. Adding a transport: a new subpackage, its encoders in `crosschain/fuses/`
+  and one `LANES` entry. Layering: the encoders import the wire codecs and wrappers;
+  lanes, discovery, transports and the simulator import the encoders.
+  `ipor_fusion.crosschain` exports the whole surface (encoders, lanes, discovery,
+  transports, simulator). A package `__init__` runs before its modules and the
+  encoders import `ccip.contracts` / `stargate.layerzero`, so `.ccip` and `.stargate`
+  export only their codecs and wrappers. `tests/test_crosschain_layering.py` pins this:
+  the SDK's module-level import graph, with the implicit package-`__init__` edges, is
+  acyclic, and the crosschain package has no function-level or `TYPE_CHECKING`
+  imports; never work around a cycle with a lazy import, move the module instead.
 - `readers/` — read side: lending_health, oracle_mapping, position_manager, aave_v3,
   compound_v3, morpho, ramses_v2, uniswap_v3, unpriceable (middleware-priced tokens of
   granted substrates the oracle cannot price)

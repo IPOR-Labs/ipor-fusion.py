@@ -1,14 +1,11 @@
 """Crosschain Plasma Vault support, split like the contracts: shared
-``messages`` and ``contracts`` (wrapper bases), plus one subpackage per
-transport (``stargate``, ``ccip``) with its wire codecs and wrappers.
-
-This namespace exports only the fuse-free half of the package. The fuse
-encoders in :mod:`ipor_fusion.fuses.crosschain` import it, and Python runs a
-package's ``__init__`` before any of its modules, so anything here that
-imported the encoders back would re-enter a half-initialized module. The
-modules that need the encoders, ``lane``, ``discovery``, ``transport``,
-``simulation`` and the per-transport ``lane``/``transport``, are exported from
-:mod:`ipor_fusion` and importable by module path.
+``messages`` and ``contracts`` (wrapper bases), the market fuse encoders in
+``fuses`` (mirroring ``contracts/fuses/crosschain``), the transport-agnostic
+``transport``, ``lane``, ``discovery`` and ``simulation``, and one subpackage
+per transport (``stargate``, ``ccip``) with its wire codecs, wrappers,
+transport and lane. This namespace exports all of it; the transport
+subpackages export only their codecs and wrappers, because the encoders import
+those and a package's ``__init__`` runs before any of its modules.
 
 Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
@@ -59,16 +56,51 @@ from ipor_fusion.crosschain.ccip.indexer import (
     fetch_verifier_result,
     manual_execution,
 )
+from ipor_fusion.crosschain.ccip.lane import CcipLane
 from ipor_fusion.crosschain.ccip.quote import (
     INSUFFICIENT_NATIVE_FEE_SELECTOR,
     quote_ccip_native_fee,
 )
+from ipor_fusion.crosschain.ccip.transport import CcipChain, CcipTransport
 from ipor_fusion.crosschain.contracts import (
     CrosschainDispatcher,
     CrosschainExecutor,
     CrosschainFactory,
 )
+from ipor_fusion.crosschain.discovery import (
+    LANES,
+    CrosschainDeployment,
+    CrosschainExecutorInfo,
+    detect_transport,
+    discover_deployment,
+    discover_lane_fuses,
+    open_lane,
+    open_lanes,
+)
 from ipor_fusion.crosschain.errors import CROSSCHAIN_ERROR_SIGNATURES
+from ipor_fusion.crosschain.fuses.base import (
+    CrosschainClaimFuse,
+    CrosschainCommandFuse,
+    CrosschainSubstrate,
+    CrosschainSubstrateLib,
+    CrosschainSubstrateType,
+    CrosschainSupplyFuse,
+    SendParams,
+    crosschain_market_id,
+)
+from ipor_fusion.crosschain.fuses.ccip import (
+    CcipCommandType,
+    CcipCrosschainCommandFuse,
+    CcipCrosschainSupplyFuse,
+    CcipSendParams,
+)
+from ipor_fusion.crosschain.fuses.stargate import (
+    StargateCrosschainCommandFuse,
+    StargateCrosschainCommandType,
+    StargateCrosschainSupplyFuse,
+    StargateSendParams,
+)
+from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
 from ipor_fusion.crosschain.messages import (
     CCIP_VERSION,
     CODEC_VERSION,
@@ -84,6 +116,7 @@ from ipor_fusion.crosschain.messages import (
     decode_command,
     decode_envelope,
 )
+from ipor_fusion.crosschain.simulation import CrosschainSimulator
 from ipor_fusion.crosschain.stargate.contracts import (
     ActiveCommand,
     BalanceObservation,
@@ -94,6 +127,7 @@ from ipor_fusion.crosschain.stargate.contracts import (
     StargateCrosschainFactory,
     StargateTokenMessaging,
 )
+from ipor_fusion.crosschain.stargate.lane import StargateLane
 from ipor_fusion.crosschain.stargate.layerzero import (
     PACKET_SENT_TOPIC,
     EnforcedOptionParam,
@@ -105,8 +139,53 @@ from ipor_fusion.crosschain.stargate.layerzero import (
     lz_compose_calldata,
     lz_receive_calldata,
 )
+from ipor_fusion.crosschain.stargate.transport import StargateChain, StargateTransport
+from ipor_fusion.crosschain.transport import (
+    SYNTHETIC_TOKEN_SOURCE,
+    CrosschainTransport,
+    DeliveryCall,
+    OutboundMessage,
+)
 
 __all__ = [
+    "CrosschainClaimFuse",
+    "CrosschainCommandFuse",
+    "CrosschainSubstrate",
+    "CrosschainSubstrateLib",
+    "CrosschainSubstrateType",
+    "CrosschainSupplyFuse",
+    "SendParams",
+    "crosschain_market_id",
+    "CcipCommandType",
+    "CcipCrosschainCommandFuse",
+    "CcipCrosschainSupplyFuse",
+    "CcipSendParams",
+    "StargateCrosschainCommandFuse",
+    "StargateCrosschainCommandType",
+    "StargateCrosschainSupplyFuse",
+    "StargateSendParams",
+    "LANES",
+    "CrosschainDeployment",
+    "CrosschainExecutorInfo",
+    "detect_transport",
+    "discover_deployment",
+    "discover_lane_fuses",
+    "open_lane",
+    "open_lanes",
+    "CrosschainLane",
+    "LaneFuses",
+    "LaneObservation",
+    "CrosschainSimulator",
+    "SYNTHETIC_TOKEN_SOURCE",
+    "CrosschainTransport",
+    "DeliveryCall",
+    "OutboundMessage",
+    "CcipLane",
+    "CcipChain",
+    "CcipTransport",
+    "StargateLane",
+    "StargateChain",
+    "StargateTransport",
     "ActiveCommand",
     "Any2EVMMessage",
     "BalanceObservation",

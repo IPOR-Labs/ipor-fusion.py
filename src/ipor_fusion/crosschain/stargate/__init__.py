@@ -1,7 +1,8 @@
-"""Stargate V2 / LayerZero V2: wire codecs and contract wrappers. The
-transport and lane (``stargate.transport``, ``stargate.lane``) import the fuse
-encoders and are exported from :mod:`ipor_fusion` instead, see
-:mod:`ipor_fusion.crosschain`.
+"""Stargate V2 / LayerZero V2: wire codecs and contract wrappers. The Stargate
+fuse encoders (:mod:`ipor_fusion.crosschain.fuses.stargate`) import them, so
+this namespace must not import the encoders back: the transport and lane
+(``stargate.transport``, ``stargate.lane``) are exported from
+:mod:`ipor_fusion.crosschain` instead.
 
 Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """

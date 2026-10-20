@@ -40,14 +40,14 @@ from ipor_fusion.crosschain.contracts import (
     CrosschainDispatcher,
     CrosschainExecutor,
 )
-from ipor_fusion.crosschain.logs import log_address, log_bytes, log_topic0
-from ipor_fusion.crosschain.messages import Command, CrosschainTransportKind
-from ipor_fusion.fuses.crosschain.base import (
+from ipor_fusion.crosschain.fuses.base import (
     CrosschainClaimFuse,
     CrosschainCommandFuse,
     CrosschainSupplyFuse,
     SendParams,
 )
+from ipor_fusion.crosschain.logs import log_address, log_bytes, log_topic0
+from ipor_fusion.crosschain.messages import Command, CrosschainTransportKind
 from ipor_fusion.types import Amount, ChainId, FuseAddress, PositionSetHash, ProposalId
 
 

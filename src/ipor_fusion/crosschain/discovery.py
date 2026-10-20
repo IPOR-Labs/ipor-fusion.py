@@ -30,15 +30,15 @@ from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.crosschain.ccip.contracts import CcipCrosschainExecutor
 from ipor_fusion.crosschain.ccip.lane import CcipLane
 from ipor_fusion.crosschain.contracts import CrosschainExecutor
+from ipor_fusion.crosschain.fuses.base import (
+    CrosschainSubstrateLib,
+    CrosschainSubstrateType,
+)
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
 from ipor_fusion.crosschain.stargate.contracts import StargateCrosschainExecutor
 from ipor_fusion.crosschain.stargate.lane import StargateLane
 from ipor_fusion.errors import CrosschainDiscoveryError, EmptyCallResultError
-from ipor_fusion.fuses.crosschain.base import (
-    CrosschainSubstrateLib,
-    CrosschainSubstrateType,
-)
 from ipor_fusion.types import (
     ZERO_ADDRESS,
     ChainId,

@@ -39,11 +39,7 @@ from ipor_fusion.crosschain import (
     lz_receive_calldata,
 )
 from ipor_fusion.crosschain.ccip.codec import CCIP_MESSAGE_SENT_TOPIC
-from ipor_fusion.crosschain.stargate.layerzero import (
-    address_to_bytes32,
-    bytes32_to_address,
-)
-from ipor_fusion.fuses.crosschain import (
+from ipor_fusion.crosschain.fuses import (
     CcipCommandType,
     CcipCrosschainCommandFuse,
     CcipCrosschainSupplyFuse,
@@ -59,6 +55,10 @@ from ipor_fusion.fuses.crosschain import (
     StargateCrosschainSupplyFuse,
     StargateSendParams,
     crosschain_market_id,
+)
+from ipor_fusion.crosschain.stargate.layerzero import (
+    address_to_bytes32,
+    bytes32_to_address,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
