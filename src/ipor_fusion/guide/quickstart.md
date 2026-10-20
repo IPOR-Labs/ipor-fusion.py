@@ -34,11 +34,15 @@ from web3 import Web3
 from ipor_fusion import (
     ERC20,
     AccessManager,
+    Amount,
+    ChainId,
     FusionFactory,
     IporFusionMarkets,
+    Period,
     PlasmaVault,
     Roles,
     Web3Context,
+    parse_fuse_address,
 )
 from ipor_fusion.fuses import AaveV3SupplyFuse
 
@@ -46,12 +50,13 @@ from ipor_fusion.fuses import AaveV3SupplyFuse
 w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
 OWNER_PRIVATE_KEY = os.environ["OWNER_PRIVATE_KEY"]  # .send(ctx) signs locally; .call(ctx) previews need no key
 owner = Account.from_key(OWNER_PRIVATE_KEY).address  # owns, configures and operates the vault
-ctx = Web3Context(w3, chain_id=8453, signer=owner, private_key=OWNER_PRIVATE_KEY)
+ctx = Web3Context(w3, chain_id=ChainId(8453), signer=owner, private_key=OWNER_PRIVATE_KEY)
 
-FACTORY_PROXY = "0x1455717668fA96534f675856347A973fA907e922"  # IporFusionFactoryProxy, Base
-USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-SUPPLY_FUSE = "0x26fD6EF391E98C78CfCA27e00c3d15be4D941625"  # SupplyFuseAaveV3, Base
-BALANCE_FUSE = "0xf53f3EaFfDf67539256365cA7299540A98b60BA9"  # BalanceFuseAaveV3, Base
+# Generic addresses are ChecksumAddress; fuse addresses carry their role (FuseAddress).
+FACTORY_PROXY = Web3.to_checksum_address("0x1455717668fA96534f675856347A973fA907e922")  # IporFusionFactoryProxy, Base
+USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+SUPPLY_FUSE = parse_fuse_address("0x26fD6EF391E98C78CfCA27e00c3d15be4D941625")  # SupplyFuseAaveV3, Base
+BALANCE_FUSE = parse_fuse_address("0xf53f3EaFfDf67539256365cA7299540A98b60BA9")  # BalanceFuseAaveV3, Base
 
 # 1. Deploy, then read the addresses actually created from the mined receipt.
 #    Do not use a prior .call(ctx) preview: another clone can consume those CREATE
@@ -61,7 +66,7 @@ clone = factory.clone(
     asset_name="My Vault",
     asset_symbol="MV",
     underlying_token=USDC,
-    redemption_delay_seconds=0,
+    redemption_delay_seconds=Period(0),
     owner=owner,
 )
 receipt = clone.send(ctx)
@@ -71,9 +76,9 @@ access_manager_address = instance.access_manager
 
 # 2. Roles. The clone grants `owner` only OWNER_ROLE. ATOMIST first: it administers the rest.
 am = AccessManager(access_manager_address)
-am.grant_role(Roles.ATOMIST_ROLE, owner, 0).send(ctx)
-am.grant_role(Roles.FUSE_MANAGER_ROLE, owner, 0).send(ctx)
-am.grant_role(Roles.ALPHA_ROLE, owner, 0).send(ctx)
+am.grant_role(Roles.ATOMIST_ROLE, owner, Period(0)).send(ctx)
+am.grant_role(Roles.FUSE_MANAGER_ROLE, owner, Period(0)).send(ctx)
+am.grant_role(Roles.ALPHA_ROLE, owner, Period(0)).send(ctx)
 
 # 3. Market, in this order: fuses -> substrates -> balance fuse.
 vault = PlasmaVault(vault_address)
@@ -83,11 +88,11 @@ vault.grant_market_substrates(IporFusionMarkets.AAVE_V3, [usdc_substrate]).send(
 vault.add_balance_fuse(IporFusionMarkets.AAVE_V3, BALANCE_FUSE).send(ctx)
 
 # 4. Access posture. A fresh clone is private and deposit() reverts until one of these.
-am.grant_role(Roles.WHITELIST_ROLE, owner, 0).send(ctx)  # (a) own bot: whitelist the depositor
+am.grant_role(Roles.WHITELIST_ROLE, owner, Period(0)).send(ctx)  # (a) own bot: whitelist the depositor
 # vault.convert_to_public_vault().send(ctx)              # (b) outside money: ATOMIST-only, one-way
 
 # 5. Fund and run the first strategy step. The depositor must already hold the USDC.
-amount = 1_000 * 10**6
+amount = Amount(1_000 * 10**6)  # raw units: 1,000 USDC at 6 decimals
 ERC20(USDC).approve(vault_address, amount).send(ctx)
 vault.deposit(amount, owner).send(ctx)
 vault.execute([AaveV3SupplyFuse(SUPPLY_FUSE).supply(asset=USDC, amount=amount)]).send(ctx)

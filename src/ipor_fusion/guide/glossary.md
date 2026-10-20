@@ -42,9 +42,9 @@ It is a separate product from IPOR's interest-rate derivatives: "Fusion vault",
 - **Atomist** — the vault administrator that holds `ATOMIST_ROLE`.
 - **Price Oracle Middleware** — the vault's price source. Maps each asset to an
   oracle feed so balance fuses and the share price agree on one valuation.
-- **Withdraw Manager** — optional contract that schedules withdrawals
-  (request, delay, release) for vaults whose positions cannot be exited
-  instantly.
+- **Withdraw Manager** — contract that schedules withdrawals (request, delay,
+  release) for positions that cannot be exited instantly. Every factory clone
+  has one; vaults deployed otherwise may not.
 - **Rewards Claim Manager** — optional contract that holds claimed protocol
   rewards outside the vault's total assets and vests them in over time.
 - **Fee Manager** — mints management and performance fees as vault shares to

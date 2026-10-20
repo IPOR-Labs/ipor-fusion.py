@@ -41,9 +41,12 @@ strategy bot. `FUSE_MANAGER_ROLE` configures markets. A fresh vault is
 private: `deposit` and `mint` require `WHITELIST_ROLE` until an Atomist calls
 `convert_to_public_vault()`, which is one-way.
 
-Optional managers plug into the vault: a Withdraw Manager for scheduled
-withdrawals, a Rewards Claim Manager for vesting claimed rewards, a Fee
-Manager for management and performance fees.
+Managers plug into the vault: a Withdraw Manager for scheduled withdrawals, a
+Rewards Claim Manager for vesting claimed rewards, a Fee Manager for
+management and performance fees. A factory clone deploys all three with the
+vault (see Deployment), so every cloned vault has a Withdraw Manager. Vaults
+deployed otherwise, such as some legacy ones, may have none; the SDK then
+reports it as absent (`VaultData.withdraw_manager` is `None`).
 
 ## Deployment
 
