@@ -957,7 +957,10 @@ class TestContextOwnership:
         assert hub.call.call_count == 1
         spoke.call.assert_not_called()
 
-    def test_read_hub_state_pins_an_unpinned_hub_once(self):
+    @pytest.mark.parametrize(
+        ("tag", "number"), [("latest", 100), ("safe", 90), ("finalized", 80)]
+    )
+    def test_read_hub_state_pins_an_unpinned_hub_once(self, tag, number):
         probe = _stargate_lane()
         answers = {
             _sel(probe.settled_remote_balance()): encode(["uint256"], [5]),
@@ -981,13 +984,18 @@ class TestContextOwnership:
             b"" if to == MULTICALL3_ADDRESS else answers[bytes(data[:4])]
         )
         hub = self._wrong_chain(1)
-        hub.default_block = "latest"
-        hub.web3.eth.block_number = 100
+        hub.default_block = tag
+        hub.web3.eth.get_block.side_effect = lambda block: {
+            "latest": {"number": 100},
+            "safe": {"number": 90},
+            "finalized": {"number": 80},
+        }[block]
         hub.at_block.return_value = pinned
 
         state = _stargate_lane(hub_ctx=hub).read_hub_state()
 
-        hub.at_block.assert_called_once_with(100)
+        hub.web3.eth.get_block.assert_called_once_with(tag)
+        hub.at_block.assert_called_once_with(number)
         hub.call.assert_not_called()
         assert pinned.call.call_count == 1 + len(answers)
         assert state.settled_remote_balance == 5

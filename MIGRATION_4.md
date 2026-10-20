@@ -353,8 +353,9 @@ placeholder wrapper.
   the context yourself: `lane.get_balance().call(lane.hub_ctx)`,
   `lane.observation().call(lane.spoke_ctx)`, or let the lane pick:
   `lane.read_hub_state()` reads every executor bucket and counter
-  (`LaneHubState`) on `hub_ctx` through `Multicall3`, at one block (the context's
-  pinned block, else the head resolved once, so a per-call fallback stays on it);
+  (`LaneHubState`) on `hub_ctx` through `Multicall3`, at one block (a `latest`, `safe` or
+  `finalized` default block resolved to its number once, so a per-call fallback
+  stays on it; a number or hash as is);
   `lane.read_observation()` runs the observation on `spoke_ctx`. Keep
   `transfer_in_flight()` / `command_in_flight()` for those decisions: the counters
   do not see a CCIP recall or tell a parked command from a pending one. `CrosschainTransport.executor(address)`

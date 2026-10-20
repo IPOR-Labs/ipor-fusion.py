@@ -69,8 +69,10 @@ class LaneObservation:
     tracked_position_set_hash: PositionSetHash
 
 
-# Block tags whose block changes between two reads.
-_MOVING_BLOCK_TAGS = frozenset({"latest", "pending", "safe", "finalized"})
+# Block tags that name a block number which moves between two reads; a read
+# set pinned to the number the tag resolves to once keeps the tag's meaning.
+# "pending" names no mined block and is left as is.
+_MOVING_BLOCK_TAGS = frozenset({"latest", "safe", "finalized"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,12 +242,13 @@ class CrosschainLane(ABC):
 
     def read_hub_state(self) -> LaneHubState:
         """Every executor read of :class:`LaneHubState` on ``hub_ctx``, batched
-        through `Multicall3` and pinned to one block (``hub_ctx``'s own when it
-        is pinned, else the head resolved once), so the fields share a block
-        even where Multicall3 falls back to one call per read."""
+        through `Multicall3` at one block, so the fields share it even where
+        Multicall3 falls back to one call per read: a ``latest``, ``safe`` or
+        ``finalized`` default block is resolved to its number once; a number or
+        hash is used as is (and ``pending`` too, which names no block)."""
         hub = self.hub_ctx
         if hub.default_block in _MOVING_BLOCK_TAGS:
-            hub = hub.at_block(hub.web3.eth.block_number)
+            hub = hub.at_block(hub.web3.eth.get_block(hub.default_block)["number"])
         values = Multicall3(hub).aggregate(
             cast(
                 list[Call[Any]],
