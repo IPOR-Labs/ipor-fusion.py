@@ -25,8 +25,8 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import cache, vault_data, vault_erc20
-from ipor_fusion.cache import save_contract_cache
+from ipor_fusion import vault_data, vault_erc20
+from ipor_fusion.cache import cache_key, default_contract_cache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig
 from ipor_fusion.cli.vault_info_view import (
@@ -317,11 +317,7 @@ def isolated_cache(tmp_path, monkeypatch):
     cache_dir = tmp_path / ".cache"
     monkeypatch.setattr(config_store, "CONFIG_DIR", tmp_path / ".fusion")
     monkeypatch.setattr(config_store, "CONFIG_FILE", tmp_path / ".fusion" / "c.json")
-    monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
-    monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
-    monkeypatch.setattr(
-        cache, "DEPLOYMENT_CACHE_FILE", cache_dir / "deployment_cache.json"
-    )
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
     symbols = {
         ASSET: "USDC",
         TOKEN_STALE: "STALE",
@@ -329,10 +325,10 @@ def isolated_cache(tmp_path, monkeypatch):
         TOKEN_EMPTY: "EMPTY",
         TOKEN_BROKEN: "BROKEN",
     }
-    save_contract_cache(
-        {f"1:{a}": n for a, n in NAMES.items()}
-        | {f"symbol:{a}": s for a, s in symbols.items()}
-        | {f"symbol:{a.lower()}": s for a, s in symbols.items()}
+    chain = ChainId(1)
+    default_contract_cache().put(
+        {cache_key(chain, a, "name"): n for a, n in NAMES.items()}
+        | {cache_key(chain, a, "symbol"): s for a, s in symbols.items()}
     )
 
 

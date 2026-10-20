@@ -8,7 +8,10 @@ Public inputs take the nominal types: ``ChainId(...)``, ``MarketId`` (every
 executed.
 """
 
+from pathlib import Path
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 
 from ipor_fusion import (
     ERC20,
@@ -29,10 +32,12 @@ from ipor_fusion import (
     CrosschainLane,
     Decimals,
     ExternalStateExecutor,
+    FileContractCache,
     IporFusionMarkets,
     LegacyPriceOracleMiddleware,
     MarketId,
     Multicall3,
+    NullCache,
     Period,
     PlasmaVault,
     Price,
@@ -91,12 +96,19 @@ def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     fetch_unpriceable_priced_tokens(ctx, VAULT, VAULT, [], {}, None)
 
 
+def caches(web3: Web3) -> None:
+    Web3Context(web3, ETHEREUM, cache=NullCache())
+    ctx = Web3Context(web3, ETHEREUM, cache=FileContractCache(Path("cache.json")))
+    get_contract_name(ETHEREUM, VAULT, cache=ctx.cache)
+
+
 def lookups() -> None:
     decode_substrate(b"", IporFusionMarkets.AAVE_V3)
     format_market_label(IporFusionMarkets.ERC20_VAULT_BALANCE)
     market_name(MarketId(100_001))
     get_contract_name(ETHEREUM, VAULT)
     get_contract_name(ETHEREUM, parse_hex_address(VAULT.lower()))
+    get_contract_name(ETHEREUM, VAULT, cache=NullCache())
     TransactionError("reverted", tx_hash=parse_tx_hash("0x" + "ab" * 32))
     morpho_blue_address(ETHEREUM)
     fetch_vault(VAULT, ETHEREUM)

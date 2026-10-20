@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ipor_fusion import cache
+from ipor_fusion.cache import NullCache
 from ipor_fusion.explorer import (
     _fetch_contract_creation_tx,
     _fetch_contract_name,
@@ -12,12 +12,13 @@ from ipor_fusion.explorer import (
     get_deployment_tx,
 )
 
+ABC = "0x" + "aB" * 20
+DEF = "0x" + "dE" * 20
+
 
 @pytest.fixture(autouse=True)
-def _patch_paths(tmp_path, monkeypatch):
-    cache_dir = tmp_path / ".cache"
-    monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
-    monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
+def _cache_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
 
 
 def _mock_urlopen(response_data: bytes):
@@ -30,15 +31,13 @@ def _mock_urlopen(response_data: bytes):
 
 class TestGetContractName:
     def test_returns_cached_value(self, tmp_path):
-        cache_dir = tmp_path / ".cache"
-        cache_dir.mkdir()
-        cache = {"1:0xABC": "MyToken"}
-        (cache_dir / "contract_cache.json").write_text(
-            json.dumps(cache), encoding="utf-8"
-        )
+        path = tmp_path / ".cache" / "ipor-fusion" / "contract_cache.json"
+        path.parent.mkdir(parents=True)
+        # A 3.x name entry (chain:address in the caller's spelling) still hits.
+        path.write_text(json.dumps({f"1:{ABC}": "MyToken"}), encoding="utf-8")
 
         with patch("ipor_fusion.explorer.urlopen") as mock_url:
-            result = get_contract_name(1, "0xABC", api_key="key123")
+            result = get_contract_name(1, ABC, api_key="key123")
 
         assert result == "MyToken"
         mock_url.assert_not_called()
@@ -51,22 +50,43 @@ class TestGetContractName:
         }
         mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
 
-        result = get_contract_name(1, "0xDEF", api_key="key123")
+        result = get_contract_name(1, DEF, api_key="key123")
 
         assert result == "PlasmaVault"
         mock_urlopen_fn.assert_called_once()
 
-        cache_file = tmp_path / ".cache" / "contract_cache.json"
-        assert cache_file.exists()
+        cache_file = tmp_path / ".cache" / "ipor-fusion" / "contract_cache.json"
         cached = json.loads(cache_file.read_text(encoding="utf-8"))
-        assert cached["1:0xdef"] == "PlasmaVault"
+        assert cached == {f"1:{DEF.lower()}:name": "PlasmaVault"}
+
+    @patch("ipor_fusion.explorer.urlopen")
+    def test_an_injected_cache_replaces_the_file(self, mock_urlopen_fn, tmp_path):
+        response = {"status": "1", "result": [{"ContractName": "PlasmaVault"}]}
+        mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
+
+        assert get_contract_name(1, DEF, "key123", cache=NullCache()) == "PlasmaVault"
+        assert get_contract_name(1, DEF, "key123", cache=NullCache()) == "PlasmaVault"
+
+        assert mock_urlopen_fn.call_count == 2
+        assert not (tmp_path / ".cache").exists()
+
+    @patch("ipor_fusion.explorer.urlopen")
+    def test_a_failing_cache_does_not_fail_the_lookup(self, mock_urlopen_fn):
+        response = {"status": "1", "result": [{"ContractName": "PlasmaVault"}]}
+        mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
+        broken = MagicMock()
+        broken.get.side_effect = OSError("read-only file system")
+        broken.put.side_effect = OSError("read-only file system")
+
+        assert get_contract_name(1, DEF, "key123", cache=broken) == "PlasmaVault"
+        broken.put.assert_called_once()
 
     def test_returns_empty_for_unsupported_chain(self):
-        result = get_contract_name(99999, "0xABC", api_key="key123")
+        result = get_contract_name(99999, ABC, api_key="key123")
         assert result == ""
 
     def test_returns_empty_when_no_api_key(self):
-        result = get_contract_name(1, "0xABC", api_key=None)
+        result = get_contract_name(1, ABC, api_key=None)
         assert result == ""
 
 

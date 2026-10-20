@@ -15,8 +15,8 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import cache, vault_data, vault_erc20
-from ipor_fusion.cache import save_contract_cache
+from ipor_fusion import vault_data, vault_erc20
+from ipor_fusion.cache import FileContractCache, NullCache, cache_key
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
 from ipor_fusion.cli.options import (
@@ -667,31 +667,25 @@ class TestResolveTokenSymbol:
     @pytest.fixture(autouse=True)
     def _tmp_config(self, tmp_path, monkeypatch):
         config_dir = tmp_path / ".fusion"
-        cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
-        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
-        monkeypatch.setattr(
-            cache,
-            "DEPLOYMENT_CACHE_FILE",
-            cache_dir / "deployment_cache.json",
-        )
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
 
-    def test_returns_cached_symbol(self):
-        save_contract_cache({"symbol:0xabc": "USDC"})
-        ctx = MagicMock()
-        assert resolve_token_symbol(ctx, "0xabc") == "USDC"
+    def test_returns_cached_symbol(self, tmp_path):
+        ctx = MagicMock(chain_id=ChainId(1), cache=FileContractCache(tmp_path / "c"))
+        ctx.cache.put({cache_key(ChainId(1), "0x" + "ab" * 20, "symbol"): "USDC"})
+        assert resolve_token_symbol(ctx, "0x" + "AB" * 20) == "USDC"
+        ctx.web3.eth.get_code.assert_not_called()
 
     def test_returns_no_contract_for_eoa(self):
-        ctx = MagicMock()
+        ctx = MagicMock(chain_id=ChainId(1), cache=NullCache())
         ctx.web3.eth.get_code.return_value = b""
         result = resolve_token_symbol(ctx, "0x" + "ab" * 20)
         assert result == "no contract"
 
     @patch("ipor_fusion.vault_data.ERC20")
     def test_fetches_symbol_from_chain(self, mock_erc20_cls):
-        ctx = MagicMock()
+        ctx = MagicMock(chain_id=ChainId(1), cache=NullCache())
         ctx.web3.eth.get_code.return_value = b"\x01"
         mock_erc20_cls.return_value.symbol.return_value.call.return_value = "WETH"
         result = resolve_token_symbol(ctx, "0x" + "ab" * 20)
@@ -699,7 +693,7 @@ class TestResolveTokenSymbol:
 
     @patch("ipor_fusion.vault_data.ERC20")
     def test_returns_empty_on_symbol_error(self, mock_erc20_cls):
-        ctx = MagicMock()
+        ctx = MagicMock(chain_id=ChainId(1), cache=NullCache())
         ctx.web3.eth.get_code.return_value = b"\x01"
         mock_erc20_cls.return_value.symbol.side_effect = RuntimeError("revert")
         result = resolve_token_symbol(ctx, "0x" + "ab" * 20)
@@ -761,13 +755,7 @@ class TestPrintErc20Balances:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
-        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
-        monkeypatch.setattr(
-            cache,
-            "DEPLOYMENT_CACHE_FILE",
-            cache_dir / "deployment_cache.json",
-        )
+        monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
 
     def test_no_erc20_market(self, capsys):
         ctx = MagicMock()
@@ -961,13 +949,7 @@ class TestUnderlyingOnVault:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
-        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
-        monkeypatch.setattr(
-            cache,
-            "DEPLOYMENT_CACHE_FILE",
-            cache_dir / "deployment_cache.json",
-        )
+        monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
 
     def _make_data(self, balance_fuses, underlying_balance_on_vault=0):
         return VaultData(
@@ -1063,13 +1045,7 @@ class TestPrintSubstrates:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
-        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
-        monkeypatch.setattr(
-            cache,
-            "DEPLOYMENT_CACHE_FILE",
-            cache_dir / "deployment_cache.json",
-        )
+        monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
 
     def test_no_substrates(self, capsys):
         _print_substrates(
@@ -1261,13 +1237,7 @@ class TestErc20BalancesNotes:
         cache_dir = tmp_path / ".cache"
         monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
         monkeypatch.setattr(config_store, "CONFIG_FILE", config_dir / "config.json")
-        monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
-        monkeypatch.setattr(cache, "CACHE_FILE", cache_dir / "contract_cache.json")
-        monkeypatch.setattr(
-            cache,
-            "DEPLOYMENT_CACHE_FILE",
-            cache_dir / "deployment_cache.json",
-        )
+        monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
 
     @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="TKN")
     @patch("ipor_fusion.core.oracle.price_oracle_middleware")

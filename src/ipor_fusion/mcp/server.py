@@ -210,7 +210,10 @@ def vault_info(
     ) = fetch_deployment_info(ctx, checksum, api_key=api_key)
 
     result = build_vault_info_json(
-        data, resolve_name=partial(get_contract_name, chain_id, api_key=api_key)
+        data,
+        resolve_name=partial(
+            get_contract_name, chain_id, api_key=api_key, cache=ctx.cache
+        ),
     )
     return VaultInfoResponse.model_validate(result)
 

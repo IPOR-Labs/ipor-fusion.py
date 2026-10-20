@@ -18,6 +18,7 @@ from web3.providers.rpc.utils import (
 )
 from web3.types import BlockIdentifier, LogReceipt, TxParams, TxReceipt, Wei
 
+from ipor_fusion.cache import ContractCache, default_contract_cache
 from ipor_fusion.chains import GET_LOGS_RANGE_HINTS
 from ipor_fusion.core.logs import (
     DEFAULT_LOG_SCAN_MAX_REQUESTS,
@@ -81,6 +82,7 @@ class Web3Context:
         log_scan_timeout_s: float = DEFAULT_LOG_SCAN_TIMEOUT_S,
         log_scan_max_requests: int | None = DEFAULT_LOG_SCAN_MAX_REQUESTS,
         log_source: LogSource | None = None,
+        cache: ContractCache | None = None,
     ):
         self._web3 = web3
         self._chain_id = chain_id
@@ -90,6 +92,8 @@ class Web3Context:
         self.log_scan_max_requests = log_scan_max_requests
         # Asked first by `get_logs`; None scans the RPC only.
         self.log_source = log_source
+        # None: the process-wide file cache (`cache.default_contract_cache`).
+        self._cache = cache
         self._private_key = private_key
         self._gas_multiplier = gas_multiplier
         self._default_block: BlockIdentifier = "latest"
@@ -110,6 +114,14 @@ class Web3Context:
         return self._chain_id
 
     @property
+    def cache(self) -> ContractCache:
+        """Where the SDK keeps immutable contract facts read through this
+        context (token symbols and decimals, contract names, deployment
+        blocks): the ``cache=`` passed in, else the file cache under
+        ``$XDG_CACHE_HOME/ipor-fusion/``. Pass `NullCache()` to keep nothing."""
+        return self._cache if self._cache is not None else default_contract_cache()
+
+    @property
     def default_block(self) -> BlockIdentifier:
         return self._default_block
 
@@ -119,7 +131,7 @@ class Web3Context:
 
     def at_block(self, block: BlockIdentifier) -> Web3Context:
         """A copy of this context whose reads default to ``block``: same
-        connection, signer, log source and scan bounds. Pinning a copy leaves
+        connection, signer, log source, cache and scan bounds. Pinning a copy leaves
         this context (and anything sharing it across threads) untouched."""
         pinned = copy.copy(self)
         pinned._default_block = block
@@ -140,6 +152,7 @@ class Web3Context:
         log_scan_timeout_s: float = DEFAULT_LOG_SCAN_TIMEOUT_S,
         log_scan_max_requests: int | None = DEFAULT_LOG_SCAN_MAX_REQUESTS,
         log_source: LogSource | None = None,
+        cache: ContractCache | None = None,
     ) -> Web3Context:
         web3 = Web3(
             Web3.HTTPProvider(
@@ -168,6 +181,7 @@ class Web3Context:
             log_scan_timeout_s=log_scan_timeout_s,
             log_scan_max_requests=log_scan_max_requests,
             log_source=log_source,
+            cache=cache,
         )
 
     def call(

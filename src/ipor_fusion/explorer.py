@@ -1,6 +1,6 @@
-"""Etherscan V2 client: contract names (cached on disk) and contract creation
-transactions. Every lookup needs an API key; without one, names come from the
-cache only."""
+"""Etherscan V2 client: contract names (cached in a `ContractCache`) and
+contract creation transactions. Every lookup needs an API key; without one,
+names come from the cache only."""
 
 from __future__ import annotations
 
@@ -12,7 +12,13 @@ from urllib.request import urlopen
 
 from eth_typing import HexAddress
 
-from ipor_fusion.cache import cache_key, load_contract_cache, update_contract_cache
+from ipor_fusion.cache import (
+    ContractCache,
+    cache_get,
+    cache_key,
+    cache_put,
+    default_contract_cache,
+)
 from ipor_fusion.types import ChainId, TxHash, parse_tx_hash
 
 ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api"
@@ -43,16 +49,22 @@ _etherscan_limiter = _RateLimiter(2.5)
 
 
 def get_contract_name(
-    chain_id: ChainId, address: HexAddress, api_key: str | None = None
+    chain_id: ChainId,
+    address: HexAddress,
+    api_key: str | None = None,
+    *,
+    cache: ContractCache | None = None,
 ) -> str:
-    cache = load_contract_cache()
-    key = cache_key(chain_id, address)
-
-    if cached := cache.get(key):
+    """The verified contract name at ``address``, ``""`` when unknown. Read from
+    ``cache`` first (default: the file cache, `default_contract_cache`; pass a
+    context's ``ctx.cache`` to share its policy), else from Etherscan when
+    ``api_key`` is set; a name found there is cached, its absence is not."""
+    store = default_contract_cache() if cache is None else cache
+    key = cache_key(chain_id, address, "name")
+    if cached := cache_get(store, [key]).get(key):
         return cached
-
     if name := _fetch_contract_name(chain_id, address, api_key):
-        update_contract_cache(key, name)
+        cache_put(store, {key: name})
         return name
     return ""
 

@@ -32,7 +32,6 @@ from ipor_fusion import (
     HyperCoreSendFuse,
     PlasmaVault,
     TimeInForce,
-    cache,
     read_hypercore_evm_exit_ceiling,
     read_hypercore_nav,
     read_hypercore_transfer_snapshot,
@@ -169,10 +168,7 @@ def test_full_cli_and_mcp_vault_info_on_hyperevm(
     monkeypatch.setattr(vault_cmd, "load_config", lambda: cfg)
     monkeypatch.setattr(vault_cmd, "save_config", lambda _cfg: None)
     monkeypatch.setattr(server, "load_config", lambda: cfg)
-    monkeypatch.setattr(cache, "CACHE_FILE", tmp_path / "contract_cache.json")
-    monkeypatch.setattr(
-        cache, "DEPLOYMENT_CACHE_FILE", tmp_path / "deployment_cache.json"
-    )
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     block = int(ctx.default_block)
     result = CliRunner().invoke(
         cli,

@@ -87,7 +87,10 @@ def _print_vault_info(
 
     if json_output:
         result = build_vault_info_json(
-            data, resolve_name=partial(get_contract_name, chain_id, api_key=api_key)
+            data,
+            resolve_name=partial(
+                get_contract_name, chain_id, api_key=api_key, cache=ctx.cache
+            ),
         )
         click.echo(json.dumps(result, indent=2))
         return
