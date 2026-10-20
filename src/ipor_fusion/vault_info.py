@@ -6,7 +6,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
-from functools import partial
 from typing import Any
 
 from eth_typing import HexAddress
@@ -14,7 +13,6 @@ from eth_typing import HexAddress
 from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.core.plasma_vault import BalanceFuse
-from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.hypercore import HyperCorePendingState, HyperCorePerpLeg
@@ -705,6 +703,10 @@ def _markets_json(
     return markets
 
 
+def _no_name(_address: HexAddress) -> str:
+    return ""
+
+
 def build_vault_info_json(
     data: VaultData,
     *,
@@ -716,14 +718,14 @@ def build_vault_info_json(
     ``data`` comes from `fetch_vault_data` (with ``metadata=True`` for token
     symbols); set its ``deployment_*`` fields first (`fetch_deployment_info`)
     for the ``deployment`` block. ``resolve_name`` names the fuses and
-    substrate contracts (address to contract name, ``""`` when unknown); the
-    default reads `ipor_fusion.explorer.get_contract_name` without an API key,
-    so only names already in the on-disk cache.
+    substrate contracts (address to contract name, ``""`` when unknown), for
+    example `ipor_fusion.explorer.get_contract_name` bound to the chain, an
+    API key and ``ctx.cache``; without it no contract is named.
     """
     chain_id = data.chain_id
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
     if resolve_name is None:
-        resolve_name = partial(get_contract_name, chain_id)
+        resolve_name = _no_name
 
     markets = _markets_json(data, resolve_name)
     validation = validate_vault_state(data)

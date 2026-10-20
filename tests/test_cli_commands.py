@@ -418,9 +418,7 @@ class TestVaultInfo:
             yield
 
     @patch("ipor_fusion.vault_managers.WithdrawManager")
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name", return_value="SomeFuse"
-    )
+    @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_data.ERC20")
     @patch("ipor_fusion.vault_data.PlasmaVault")
@@ -546,9 +544,7 @@ class TestVaultInfo:
         assert f"      {ADDR_FEE_RECIPIENT}  8.0000%" in result.output
         assert "accrued, uncollected: 5" in result.output
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name", return_value="SomeFuse"
-    )
+    @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_data.ERC20")
     @patch("ipor_fusion.vault_data.PlasmaVault")
@@ -624,9 +620,7 @@ class TestVaultInfo:
         assert "99999" in result.output
         assert mock_ctx.default_block == 99999
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name", return_value="SomeFuse"
-    )
+    @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_data.ERC20")
     @patch("ipor_fusion.vault_data.PlasmaVault")
@@ -690,9 +684,7 @@ class TestVaultInfo:
         assert result.exit_code == 0, result.output
         assert "Supply Cap:       unlimited" in result.output
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name", return_value="SomeFuse"
-    )
+    @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_data.ERC20")
     @patch("ipor_fusion.vault_data.PlasmaVault")
@@ -766,9 +758,7 @@ class TestVaultInfo:
         "ipor_fusion.vault_data.get_deployment_tx",
         return_value=("0xdeadbeef", None),
     )
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name", return_value="SomeFuse"
-    )
+    @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_data.ERC20")
     @patch("ipor_fusion.vault_data.PlasmaVault")
@@ -836,9 +826,7 @@ class TestVaultInfo:
         assert "Deployed at:      block 18500000" in result.output
         assert "2023-11-14" in result.output
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name", return_value="SomeFuse"
-    )
+    @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_data.ERC20")
     @patch("ipor_fusion.vault_data.PlasmaVault")

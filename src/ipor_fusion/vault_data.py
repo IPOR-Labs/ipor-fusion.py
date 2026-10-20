@@ -252,9 +252,16 @@ def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
     return symbol
 
 
-def _cached_decimals(cached: dict[CacheKey, str], key: CacheKey) -> int | None:
-    value = cached.get(key)
-    return int(value) if value is not None and value.isdigit() else None
+def _cached_int(cached: dict[CacheKey, str], key: CacheKey) -> int | None:
+    """A cached non-negative integer; anything else (a corrupt or foreign
+    entry) is a miss."""
+    value = cached.get(key, "")
+    if not (value.isascii() and value.isdigit()):
+        return None
+    try:
+        return int(value)
+    except ValueError:  # beyond the int-string conversion limit
+        return None
 
 
 def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
@@ -262,7 +269,7 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
     (not cached) when ``address`` has no code at the context's block or does
     not answer."""
     key = cache_key(ctx.chain_id, address, "decimals")
-    if (cached := _cached_decimals(cache_get(ctx.cache, [key]), key)) is not None:
+    if (cached := _cached_int(cache_get(ctx.cache, [key]), key)) is not None:
         return cached
 
     checksum = Web3.to_checksum_address(address)
@@ -696,7 +703,7 @@ def _token_metadata(
     decimals: dict[HexAddress, int | None] = {
         a: value
         for a, k in decimals_keys.items()
-        if (value := _cached_decimals(cached, k)) is not None
+        if (value := _cached_int(cached, k)) is not None
     }
     missing_symbols = sorted((breakdown | substrate_addresses) - symbols.keys())
     missing_decimals = sorted(breakdown - decimals.keys())
@@ -771,10 +778,10 @@ def fetch_deployment_info(
     block_key = cache_key(chain_id, vault_address, "deployment_block")
     time_key = cache_key(chain_id, vault_address, "deployment_timestamp")
     cached = cache_get(ctx.cache, [block_key, time_key])
-    if (block := cached.get(block_key, "")).isdigit() and (
-        stamp := cached.get(time_key, "")
-    ).isdigit():
-        return int(block), int(stamp), None
+    block = _cached_int(cached, block_key)
+    stamp = _cached_int(cached, time_key)
+    if block is not None and stamp is not None:
+        return block, stamp, None
 
     tx_hash, error = get_deployment_tx(chain_id, vault_address, api_key)
     if not tx_hash:

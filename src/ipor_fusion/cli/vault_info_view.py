@@ -85,13 +85,11 @@ def _print_vault_info(
         data.deployment_error,
     ) = fetch_deployment_info(ctx, data.vault, api_key=api_key)
 
+    resolve_name = partial(
+        get_contract_name, chain_id, api_key=api_key, cache=ctx.cache
+    )
     if json_output:
-        result = build_vault_info_json(
-            data,
-            resolve_name=partial(
-                get_contract_name, chain_id, api_key=api_key, cache=ctx.cache
-            ),
-        )
+        result = build_vault_info_json(data, resolve_name=resolve_name)
         click.echo(json.dumps(result, indent=2))
         return
 
@@ -105,7 +103,7 @@ def _print_vault_info(
 
     _print_role_accounts(_role_accounts_json(data))
 
-    _print_markets(data, api_key)
+    _print_markets(data, resolve_name)
 
     validation = validate_vault_state(data)
     click.echo("ERC20 Balances (vault holdings):")

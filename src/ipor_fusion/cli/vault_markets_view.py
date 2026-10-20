@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
 
@@ -13,12 +13,11 @@ from ipor_fusion.cli.vault_rendering import (
     _print_table,
     _substrate_details,
 )
-from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.substrates import (
     decode_substrate,
     format_market_label,
 )
-from ipor_fusion.types import ChainId, FuseAddress, MarketId, parse_hex_address
+from ipor_fusion.types import FuseAddress, MarketId, parse_hex_address
 from ipor_fusion.vault_data import (
     GET_MARKET_SUBSTRATES,
     VaultData,
@@ -26,6 +25,10 @@ from ipor_fusion.vault_data import (
 from ipor_fusion.vault_info import (
     _CAPABILITY_BALANCE_FUSES,
 )
+
+# Address to contract name, "" when unknown (`get_contract_name` bound to the
+# chain, API key and the context's cache).
+NameResolver = Callable[[HexAddress], str]
 
 
 def _print_lending_health(data: VaultData) -> None:  # noqa: C901
@@ -154,16 +157,14 @@ def _print_health_lines(market: Any, indent: str) -> None:
     click.secho(f"{indent}Status:        {status}", fg=color, bold=bold)
 
 
-def _print_markets(data: VaultData, api_key: str | None) -> None:
+def _print_markets(data: VaultData, resolve_name: NameResolver) -> None:
     """Fuses, balance fuses, dependency graph and substrates."""
-    chain_id = data.chain_id
     _print_fuse_section(
         "Fuses",
         data.fuses,
         data.fuse_markets,
         data.market_substrates,
-        chain_id,
-        api_key,
+        resolve_name,
     )
     click.echo()
 
@@ -172,18 +173,17 @@ def _print_markets(data: VaultData, api_key: str | None) -> None:
         data.instant_fuses,
         data.fuse_markets,
         data.market_substrates,
-        chain_id,
-        api_key,
+        resolve_name,
     )
     click.echo()
 
-    _print_balance_fuses_table(data, api_key)
+    _print_balance_fuses_table(data, resolve_name)
     click.echo()
 
     _print_dependency_graph(data)
 
     click.echo("Substrates per Market:")
-    _print_market_substrates(data, api_key)
+    _print_market_substrates(data, resolve_name)
     click.echo()
 
 
@@ -235,8 +235,7 @@ def _print_fuse_section(
     fuses: Sequence[FuseAddress],
     fuse_markets: dict[FuseAddress, MarketId] | None,
     market_substrates: dict[MarketId, list[bytes]] | None,
-    chain_id: ChainId,
-    api_key: str | None,
+    resolve_name: NameResolver,
 ) -> None:
     """Render a fuse section (regular or instant-withdrawal) with a unified
     layout.
@@ -262,10 +261,7 @@ def _print_fuse_section(
         return
 
     with ThreadPoolExecutor() as pool:
-        name_futs = {
-            addr: pool.submit(get_contract_name, chain_id, addr, api_key)
-            for addr in counts
-        }
+        name_futs = {addr: pool.submit(resolve_name, addr) for addr in counts}
         rows: list[tuple[str, ...]] = []
         for idx, addr in enumerate(counts, 1):
             market_label = "?"
@@ -285,7 +281,7 @@ def _print_fuse_section(
     _print_table(("#", "Address", "Contract", "Market", "Substrates"), rows)
 
 
-def _print_balance_fuses_table(data: VaultData, api_key: str | None) -> None:
+def _print_balance_fuses_table(data: VaultData, resolve_name: NameResolver) -> None:
     balance_fuses = data.balance_fuses
     decimals = data.asset_decimals
     asset_symbol = data.asset_symbol
@@ -294,9 +290,7 @@ def _print_balance_fuses_table(data: VaultData, api_key: str | None) -> None:
         futures: list[tuple[int, MarketId, str, Future]] = []
         for idx, balance_fuse in enumerate(balance_fuses, 1):
             market_id_str = format_market_label(balance_fuse.market_id)
-            f_contract = pool.submit(
-                get_contract_name, data.chain_id, balance_fuse.fuse, api_key
-            )
+            f_contract = pool.submit(resolve_name, balance_fuse.fuse)
             futures.append((idx, balance_fuse.market_id, market_id_str, f_contract))
 
         venue_rows: list[tuple[str, ...]] = []
@@ -328,18 +322,18 @@ def _print_balance_fuses_table(data: VaultData, api_key: str | None) -> None:
         _print_table(header, [(str(i), *row) for i, row in enumerate(zero_rows, 1)])
 
 
-def _print_market_substrates(data: VaultData, api_key: str | None) -> set[str]:
+def _print_market_substrates(data: VaultData, resolve_name: NameResolver) -> set[str]:
     if GET_MARKET_SUBSTRATES in data.unimplemented_getters:
         click.secho(
             f"  (unavailable: the vault predates {GET_MARKET_SUBSTRATES})",
             fg="yellow",
         )
         return set()
-    return _print_substrates(data, api_key)
+    return _print_substrates(data, resolve_name)
 
 
 def _print_substrates(  # noqa: C901
-    data: VaultData, api_key: str | None
+    data: VaultData, resolve_name: NameResolver
 ) -> set[str]:
     substrates_by_market = data.market_substrates or {}
     balance_fuses = data.balance_fuses
@@ -364,8 +358,7 @@ def _print_substrates(  # noqa: C901
     resolved_symbols = data.token_symbols
     with ThreadPoolExecutor() as pool:
         contract_futs = {
-            addr: pool.submit(get_contract_name, data.chain_id, addr, api_key)
-            for addr in all_addresses
+            addr: pool.submit(resolve_name, addr) for addr in all_addresses
         }
         resolved_contracts = {addr: fut.result() for addr, fut in contract_futs.items()}
 
