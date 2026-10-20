@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, TypeVar
 
 from eth_typing import ChecksumAddress
+from web3.types import Timestamp
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import BalanceFuse
@@ -24,7 +25,15 @@ from ipor_fusion.dependency_graph import (
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import VaultLendingHealth
 from ipor_fusion.substrates import decode_substrate, format_market_label
-from ipor_fusion.types import ChainId, FuseAddress, MarketId, PlasmaVaultAddress
+from ipor_fusion.types import (
+    Amount,
+    ChainId,
+    Decimals,
+    FuseAddress,
+    MarketId,
+    PlasmaVaultAddress,
+    Shares,
+)
 from ipor_fusion.types import Check as Check
 from ipor_fusion.types import Severity as Severity
 from ipor_fusion.types import Verdict as Verdict
@@ -57,9 +66,9 @@ class WithdrawQueue(Protocol):
     """The WithdrawManager state the reconciliation needs."""
 
     @property
-    def shares_to_release(self) -> int: ...
+    def shares_to_release(self) -> Shares: ...
     @property
-    def shares_to_release_assets(self) -> int | None: ...
+    def shares_to_release_assets(self) -> Amount | None: ...
 
 
 class UnpriceableToken(Protocol):
@@ -97,19 +106,19 @@ class VaultState(Protocol):
     @property
     def block_number(self) -> int: ...
     @property
-    def block_timestamp(self) -> int: ...
+    def block_timestamp(self) -> Timestamp: ...
     @property
     def asset(self) -> ChecksumAddress: ...
     @property
     def asset_symbol(self) -> str: ...
     @property
-    def asset_decimals(self) -> int: ...
+    def asset_decimals(self) -> Decimals: ...
     @property
     def asset_price_usd(self) -> float | None: ...
     @property
-    def total_assets(self) -> int: ...
+    def total_assets(self) -> Amount: ...
     @property
-    def underlying_balance_on_vault(self) -> int: ...
+    def underlying_balance_on_vault(self) -> Amount: ...
     @property
     def price_oracle_addr(self) -> ChecksumAddress: ...
     @property
@@ -129,7 +138,7 @@ class VaultState(Protocol):
     @property
     def unimplemented_getters(self) -> Sequence[str]: ...
     @property
-    def market_balances(self) -> Mapping[MarketId, int]: ...
+    def market_balances(self) -> Mapping[MarketId, Amount]: ...
     @property
     def erc20(self) -> Erc20Holdings: ...
 
