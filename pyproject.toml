@@ -109,7 +109,9 @@ reportArgumentType = false
 executionEnvironments = [
   { root = "src", reportArgumentType = "error" },
   { root = "examples", reportArgumentType = "error" },
-  { root = "tests/typed_client", reportArgumentType = "error" },
+  # A negative case is a line that must fail to type-check, marked with
+  # `# pyright: ignore[rule]`; an ignore that suppresses nothing is an error.
+  { root = "tests/typed_client", reportArgumentType = "error", reportUnnecessaryTypeIgnoreComment = "error" },
 ]
 
 [tool.coverage.run]
