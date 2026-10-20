@@ -255,8 +255,11 @@ before passing it on.
 `HyperCorePendingState` and `HyperCoreTransferSnapshot` carry them.
 
 **External state.** `ExternalStateExecutor.proposal_hash` returns and `confirm_balance`
-takes a `ProposalHash`; `BalanceProposal.proposal_hash` and `NavMark.proposal_hash`
-are `ProposalHash`; `ExternalStateEvent.transaction_hash` is a `TxHash`.
+takes a `ProposalHash`; `BalanceProposal.proposal_hash` is a `ProposalHash`;
+`ExternalStateEvent.transaction_hash` is a `TxHash`.
+`ExternalStateExecutor.mark_nav` and `NavMark` are gone: send `propose_balance` and
+`confirm_balance` from separate custodians, then
+`PlasmaVault.update_markets_balances([IporFusionMarkets.EXTERNAL_STATE])`.
 
 **Errors and explorer.** `TransactionError(tx_hash=)` takes a `TxHash`,
 `LogScanError(address=)` a `ChecksumAddress`; `get_revert_reason` takes a `TxHash`;
@@ -349,7 +352,7 @@ placeholder wrapper.
   and `VaultSimulator.observe` stamp the same hash for the same bytes, whatever
   context executes them. Pass `ctx.chain_id` for the chain you read from.
   `pending_proposals` now refuses an executor at the zero address when the Call is
-  built, not when it is decoded. `mark_nav` takes the chain from its contexts.
+  built, not when it is decoded.
 
 | 3.x | 4.0 |
 |---|---|
@@ -560,10 +563,8 @@ is the wrong one.
   `parse_balance_proposed` / `find_balance_proposed` for one of the executor's own
   `BalanceProposed` logs whose data is missing or malformed (including data that is
   not hex at all, which raised `TypeError`) or whose hash is not the hash of its own
-  fields; and `mark_nav` when the propose receipt it fetched has no such log or
-  records another value or proposer. A log that is not the event or not from the
-  executor, and `find_balance_proposed` over logs that hold no match, are still
-  `ValueError`.
+  fields. A log that is not the event or not from the executor, and
+  `find_balance_proposed` over logs that hold no match, are still `ValueError`.
 - `ccip_token_lane` raises the new `UnsupportedContractVersionError` (still a
   `ValueError`) for an OnRamp version whose layout is not verified.
 - `quote_ccip_native_fee` raises `SimulationError` (label `"quote"`, with

@@ -252,7 +252,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "MorphoSupplyFuse",
             "MsgType",
             "Multicall3",
-            "NavMark",
             "NodeStatus",
             "NotPlasmaVaultError",
             "NullCache",

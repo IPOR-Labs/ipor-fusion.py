@@ -894,13 +894,6 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # driven from this one process. In a real deployment they live in separate
     # systems -- if one process can send both, a single compromise moves the
     # vault's NAV and the two-party design has bought nothing.
-    #
-    # ExternalStateExecutor.mark_nav runs the propose, the confirm and -- when
-    # handed a vault -- the refresh in one call. It cannot be used here for a
-    # mechanical reason: it .send(ctx)s each leg, and nothing is broadcast under
-    # eth_simulateV1. It is also not what a production deployment wants, for the
-    # reason above: one process holding both custodian keys is one key wearing
-    # two hats.
     sim.next_block().with_block_time_shift(PROPOSE_OFFSET)
     sim.add_call(
         call=executor.propose_balance(VENUE_BALANCE_ACCOUNT, MARGIN_AMOUNT),

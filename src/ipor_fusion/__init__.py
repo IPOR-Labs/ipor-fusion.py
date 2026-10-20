@@ -39,7 +39,6 @@ from ipor_fusion.core.external_state_executor import (
     BalanceProposal,
     ExternalStateExecutor,
     ExternalStateVaultState,
-    NavMark,
     RawLog,
     read_external_state,
 )
@@ -553,7 +552,6 @@ __all__ = [
     "BalanceFuseSnapshot",
     "ExternalStateVaultState",
     "read_external_state",
-    "NavMark",
     "CrosschainExecutor",
     "StargateCrosschainExecutor",
     "StargateCrosschainDispatcher",

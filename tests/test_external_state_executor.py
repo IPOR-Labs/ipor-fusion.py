@@ -17,13 +17,11 @@ from web3 import Web3
 from ipor_fusion.core.external_state_executor import (
     BalanceProposal,
     ExternalStateExecutor,
-    NavMark,
 )
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.simulation import VaultSimulator
 from ipor_fusion.errors import ExternalStateError
-from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId, MarketId
+from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 EXECUTOR_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
@@ -33,7 +31,6 @@ BALANCE_ACCOUNT = Web3.to_checksum_address("0x3333333333333333333333333333333333
 OTHER_ACCOUNT = Web3.to_checksum_address("0x8888888888888888888888888888888888888888")
 OTHER_EMITTER = Web3.to_checksum_address("0x7777777777777777777777777777777777777777")
 PROPOSER = Web3.to_checksum_address("0x4444444444444444444444444444444444444444")
-CONFIRMER = Web3.to_checksum_address("0x6666666666666666666666666666666666666666")
 # Hex letters, so its checksummed form differs from its lowercase one. The
 # all-digit addresses above are identical in both cases and therefore cannot
 # exercise address normalization at all.
@@ -677,7 +674,6 @@ def _proposed_log(
     balance_account=None,
     proposal_hash=None,
     value=None,
-    proposer=None,
     nonce=None,
 ):
     """A BalanceProposed log in either wire shape.
@@ -689,13 +685,12 @@ def _proposed_log(
     explicitly only to build a log the executor could not have emitted.
     """
     account = BALANCE_ACCOUNT if balance_account is None else balance_account
-    proposer = PROPOSER if proposer is None else proposer
     value = _EVENT_VALUE if value is None else value
     nonce = _EVENT_NONCE if nonce is None else nonce
     if proposal_hash is None:
         proposal_hash = _consistent_hash(
             EVENT_CHAIN,
-            proposer=proposer,
+            proposer=PROPOSER,
             value=value,
             balance_account=account,
             nonce=nonce,
@@ -704,7 +699,7 @@ def _proposed_log(
         ["address", "address", "uint256", "uint256", "uint64", "bytes32"],
         [
             account,
-            proposer,
+            PROPOSER,
             value,
             nonce,
             _EVENT_PROPOSED_AT,
@@ -1028,11 +1023,12 @@ class TestFindBalanceProposed:
 
     def test_raises_when_the_wanted_account_is_absent(self):
         executor, _ = _make_executor()
-        absent = Web3.to_checksum_address("0x9999999999999999999999999999999999999999")
+        # Lowercase, so the message must name the checksummed form.
+        absent = cast(ChecksumAddress, MIXED_CASE.lower())
 
         # The message names the account, so "emitted nothing" and "emitted only
         # for others" are distinguishable when triaging.
-        with pytest.raises(ValueError, match=f"for account {absent}"):
+        with pytest.raises(ValueError, match=f"for account {MIXED_CASE}"):
             executor.find_balance_proposed(
                 [_proposed_log(as_strings=False)], absent, chain_id=EVENT_CHAIN
             )
@@ -1172,358 +1168,6 @@ class TestFindBalanceProposed:
         assert executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN) == (
             _EXPECTED_PROPOSAL
         )
-
-
-class TestMarkNav:
-    # The event layout lives in `_proposed_log` alone; these alias its payload.
-    # VALUE must match what the receipt records, since mark_nav refuses to
-    # confirm a proposal that differs from the one it sent.
-    PROPOSED_AT = _EVENT_PROPOSED_AT
-    NONCE = _EVENT_NONCE
-    VALUE = _EVENT_VALUE
-    BLOCK = 111
-    CHAIN = EVENT_CHAIN
-    # mark_nav checks the hash binds the value and proposer, so the fixture log
-    # carries the hash the executor itself would compute, not a placeholder.
-    PROPOSAL_HASH = _consistent_hash(CHAIN)
-
-    def _propose_receipt(self, *, address=EXECUTOR_ADDR, proposal_hash=None):
-        # A propose receipt carrying the executor's BalanceProposed log, from
-        # which mark_nav reads nonce / proposedAt / proposalHash.
-        return {
-            "blockNumber": self.BLOCK,
-            "logs": [
-                _proposed_log(
-                    as_strings=False,
-                    address=address,
-                    proposal_hash=self.PROPOSAL_HASH
-                    if proposal_hash is None
-                    else proposal_hash,
-                )
-            ],
-        }
-
-    def _setup(self, *, proposal_hash=None):
-        executor = ExternalStateExecutor(EXECUTOR_ADDR)
-
-        proposer_ctx = MagicMock()
-        proposer_ctx.signer = PROPOSER
-        proposer_ctx.chain_id = self.CHAIN
-        proposer_ctx.send.return_value = self._propose_receipt(
-            proposal_hash=proposal_hash
-        )
-
-        confirmer_ctx = MagicMock()
-        confirmer_ctx.signer = CONFIRMER
-        confirmer_ctx.chain_id = self.CHAIN
-        confirmer_ctx.send.return_value = {"status": 1}
-        return executor, proposer_ctx, confirmer_ctx
-
-    def test_runs_propose_confirm_and_returns_navmark(self):
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-
-        result = executor.mark_nav(
-            value=Amount(self.VALUE),
-            balance_account=BALANCE_ACCOUNT,
-            proposer_ctx=proposer_ctx,
-            confirmer_ctx=confirmer_ctx,
-        )
-
-        # Propose signed by the proposer context, with the forwarded args.
-        prop_to, prop_data = proposer_ctx.send.call_args.args
-        assert prop_to == EXECUTOR_ADDR
-        assert prop_data[:4] == _PROPOSE_SELECTOR
-        prop_ba, prop_value = decode(["address", "uint256"], prop_data[4:])
-        assert Web3.to_checksum_address(prop_ba) == BALANCE_ACCOUNT
-        assert prop_value == self.VALUE
-
-        # Confirm signed by the confirmer context, carrying the hash the event
-        # recorded; the recomputation only checks it, it is never substituted.
-        conf_to, conf_data = confirmer_ctx.send.call_args.args
-        assert conf_to == EXECUTOR_ADDR
-        assert conf_data[:4] == _CONFIRM_SELECTOR
-        conf_ba, got_hash = decode(["address", "bytes32"], conf_data[4:])
-        assert Web3.to_checksum_address(conf_ba) == BALANCE_ACCOUNT
-        assert got_hash == self.PROPOSAL_HASH
-
-        assert result == NavMark(
-            proposed_at=self.PROPOSED_AT,
-            nonce=self.NONCE,
-            proposal_hash=self.PROPOSAL_HASH,
-            propose_receipt=proposer_ctx.send.return_value,
-            confirm_receipt=confirmer_ctx.send.return_value,
-            refresh_receipt=None,
-        )
-
-    def test_propose_precedes_confirm(self):
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        manager = MagicMock()
-        manager.attach_mock(proposer_ctx.send, "propose_send")
-        manager.attach_mock(confirmer_ctx.send, "confirm_send")
-        proposer_ctx.send.return_value = self._propose_receipt()
-        confirmer_ctx.send.return_value = {"status": 1}
-
-        executor.mark_nav(
-            value=Amount(self.VALUE),
-            balance_account=BALANCE_ACCOUNT,
-            proposer_ctx=proposer_ctx,
-            confirmer_ctx=confirmer_ctx,
-        )
-
-        names = [name for name, _, _ in manager.mock_calls]
-        assert names.index("propose_send") < names.index("confirm_send")
-
-    def test_refreshes_when_vault_given(self):
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        vault = MagicMock()
-        refresh_call = MagicMock()
-        vault.update_markets_balances.return_value = refresh_call
-        refresh_call.send.return_value = {"status": 1, "refresh": True}
-
-        result = executor.mark_nav(
-            value=Amount(self.VALUE),
-            balance_account=BALANCE_ACCOUNT,
-            proposer_ctx=proposer_ctx,
-            confirmer_ctx=confirmer_ctx,
-            vault=vault,
-        )
-
-        vault.update_markets_balances.assert_called_once_with(
-            [MarketId(IporFusionMarkets.EXTERNAL_STATE)]
-        )
-        refresh_call.send.assert_called_once_with(confirmer_ctx)
-        assert result.refresh_receipt == {"status": 1, "refresh": True}
-
-    def test_picks_the_log_for_the_proposed_account(self):
-        # The receipt may carry proposals for several accounts; mark_nav must
-        # confirm the hash belonging to the one it proposed for.
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        proposer_ctx.send.return_value = {
-            "blockNumber": self.BLOCK,
-            "logs": [
-                # A DISTINCT hash, so confirming the wrong log fails the
-                # assertion instead of passing by coincidence.
-                _proposed_log(
-                    as_strings=False,
-                    balance_account=OTHER_ACCOUNT,
-                    proposal_hash=b"\xcc" * 32,
-                ),
-                _proposed_log(as_strings=False, proposal_hash=self.PROPOSAL_HASH),
-            ],
-        }
-
-        result = executor.mark_nav(
-            value=Amount(self.VALUE),
-            balance_account=BALANCE_ACCOUNT,
-            proposer_ctx=proposer_ctx,
-            confirmer_ctx=confirmer_ctx,
-        )
-
-        assert result.proposal_hash == self.PROPOSAL_HASH
-        _, sent_hash = decode(
-            ["address", "bytes32"], confirmer_ctx.send.call_args.args[1][4:]
-        )
-        assert sent_hash == self.PROPOSAL_HASH
-
-    def test_refuses_to_confirm_a_different_value(self):
-        # The receipt is node data. A log recording a value we did not send
-        # must not be signed off, or the confirm attests a figure this call
-        # never chose.
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        proposer_ctx.send.return_value = {
-            "blockNumber": self.BLOCK,
-            "logs": [_proposed_log(as_strings=False, value=self.VALUE + 1)],
-        }
-
-        with pytest.raises(ExternalStateError, match="refusing to confirm"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        confirmer_ctx.send.assert_not_called()
-
-    def test_refuses_to_confirm_another_proposers_log(self):
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        proposer_ctx.send.return_value = {
-            "blockNumber": self.BLOCK,
-            "logs": [_proposed_log(as_strings=False, proposer=CONFIRMER)],
-        }
-
-        with pytest.raises(ExternalStateError, match="refusing to confirm"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        confirmer_ctx.send.assert_not_called()
-
-    def test_refuses_a_hash_lifted_from_another_proposal(self):
-        # Our value and proposer, another proposal's hash: the value and
-        # proposer guards pass, and confirming would attest that other
-        # proposal's figure. Only the hash check stops it.
-        lifted = _consistent_hash(self.CHAIN, value=999_000_000_000)
-        executor, proposer_ctx, confirmer_ctx = self._setup(proposal_hash=lifted)
-
-        with pytest.raises(ExternalStateError, match="another proposal's hash"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        confirmer_ctx.send.assert_not_called()
-
-    def test_rejects_custodians_on_different_chains(self):
-        # The confirm hash is bound to one chain, so a mismatch could only fail
-        # after the propose landed -- and would report the hash as another
-        # proposal's, which it is not. Caught before anything is sent.
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        confirmer_ctx.chain_id = ChainId(1)
-
-        with pytest.raises(ValueError, match="must sign on the same chain"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        proposer_ctx.send.assert_not_called()
-
-    def test_verifies_against_the_confirmers_chain_not_the_wrappers(self):
-        # Both custodians sign on CHAIN, but the wrapper was built from a third
-        # context on another chain -- a read-only RPC, say. The hash must bind
-        # the chain the confirm will be checked on, so this must still succeed.
-        _, proposer_ctx, confirmer_ctx = self._setup()
-        wrapper_ctx = MagicMock()
-        wrapper_ctx.chain_id = ChainId(1)
-        executor = ExternalStateExecutor(EXECUTOR_ADDR)
-
-        result = executor.mark_nav(
-            value=Amount(self.VALUE),
-            balance_account=BALANCE_ACCOUNT,
-            proposer_ctx=proposer_ctx,
-            confirmer_ctx=confirmer_ctx,
-        )
-
-        assert result.proposal_hash == self.PROPOSAL_HASH
-
-    def test_accepts_a_lowercase_proposer_signer(self):
-        # `Web3Context` stores an explicitly-passed signer verbatim, so one read
-        # from config can be lowercase. mark_nav checksums it before comparing
-        # against the event's proposer; without that the confirm is refused
-        # AFTER the propose tx has already landed, stranding a pending proposal.
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        proposer_ctx.signer = cast(ChecksumAddress, MIXED_CASE.lower())
-        proposer_ctx.send.return_value = {
-            "blockNumber": self.BLOCK,
-            "logs": [
-                _proposed_log(
-                    as_strings=False,
-                    proposer=MIXED_CASE,
-                    proposal_hash=_consistent_hash(self.CHAIN, proposer=MIXED_CASE),
-                )
-            ],
-        }
-
-        executor.mark_nav(
-            value=Amount(self.VALUE),
-            balance_account=BALANCE_ACCOUNT,
-            proposer_ctx=proposer_ctx,
-            confirmer_ctx=confirmer_ctx,
-        )
-
-        confirmer_ctx.send.assert_called_once()
-
-    def test_aborts_before_confirming_on_a_foreign_emitter(self):
-        # A BalanceProposed log from another contract is not ours: no confirm
-        # may be sent on the strength of it.
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        proposer_ctx.send.return_value = self._propose_receipt(address=OTHER_EMITTER)
-
-        with pytest.raises(ExternalStateError, match="no BalanceProposed log"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        confirmer_ctx.send.assert_not_called()
-
-    def test_raises_when_propose_receipt_has_no_event(self):
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        proposer_ctx.send.return_value = {"blockNumber": self.BLOCK, "logs": []}
-
-        with pytest.raises(ExternalStateError, match="no BalanceProposed log"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        confirmer_ctx.send.assert_not_called()
-
-    def test_rejects_same_custodian(self):
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        confirmer_ctx.signer = PROPOSER
-
-        with pytest.raises(ValueError, match="different custodians"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        proposer_ctx.send.assert_not_called()
-        confirmer_ctx.send.assert_not_called()
-
-    def test_rejects_same_custodian_case_insensitive(self):
-        # A signer stored un-checksummed (built via `signer=`) must not slip the
-        # guard just because its casing differs.
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        same = Web3.to_checksum_address("0xabcdef0123456789abcdef0123456789abcdef01")
-        proposer_ctx.signer = same
-        confirmer_ctx.signer = same.lower()
-
-        with pytest.raises(ValueError, match="different custodians"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        proposer_ctx.send.assert_not_called()
-        confirmer_ctx.send.assert_not_called()
-
-    def test_rejects_missing_proposer_signer(self):
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        proposer_ctx.signer = None
-
-        with pytest.raises(ValueError, match="proposer_ctx must have a signer"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        proposer_ctx.send.assert_not_called()
-        confirmer_ctx.send.assert_not_called()
-
-    def test_rejects_missing_confirmer_signer(self):
-        executor, proposer_ctx, confirmer_ctx = self._setup()
-        confirmer_ctx.signer = None
-
-        with pytest.raises(ValueError, match="confirmer_ctx must have a signer"):
-            executor.mark_nav(
-                value=Amount(self.VALUE),
-                balance_account=BALANCE_ACCOUNT,
-                proposer_ctx=proposer_ctx,
-                confirmer_ctx=confirmer_ctx,
-            )
-        proposer_ctx.send.assert_not_called()
-        confirmer_ctx.send.assert_not_called()
 
 
 class TestReadExternalState:
