@@ -191,7 +191,7 @@ def _print_supply(data: VaultData) -> None:
 
 def _print_managers(data: VaultData) -> None:
     click.echo(f"Access Manager:   {data.access_manager}")
-    click.echo(f"Price Oracle:     {data.price_oracle_addr}")
+    click.echo(f"Price Oracle:     {data.price_oracle}")
     click.echo(f"Rewards Manager:  {data.rewards_manager or 'N/A'}")
     click.echo(f"Withdraw Manager: {data.withdraw_manager or 'N/A'}")
     if data.withdraw_manager_data:

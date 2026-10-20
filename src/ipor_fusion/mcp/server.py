@@ -245,7 +245,7 @@ def vault_validate(
     # Same cheap probe as vault_info: "not a vault" fails before the fetch.
     resolve_access_manager(ctx, checksum)
 
-    validation = validate_vault(ctx, checksum, block=effective_block)
+    validation = validate_vault(ctx, checksum, block=effective_block, metadata=True)
     return VaultValidationResponse.from_validation(
         validation, CHAIN_NAMES.get(chain_id, str(chain_id))
     )

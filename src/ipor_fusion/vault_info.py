@@ -653,7 +653,7 @@ def _supply_cap_json(data: VaultData) -> dict[str, Any]:
 def _managers_json(data: VaultData) -> dict[str, Any]:
     return {
         "access": data.access_manager,
-        "price_oracle": data.price_oracle_addr,
+        "price_oracle": data.price_oracle,
         "rewards": data.rewards_manager,
         "withdraw": data.withdraw_manager,
         "fee": data.fee_data.fee_manager if data.fee_data else None,

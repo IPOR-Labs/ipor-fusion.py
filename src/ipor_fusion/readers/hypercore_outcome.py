@@ -108,7 +108,7 @@ def _pinned_context(ctx: Web3Context) -> tuple[Web3Context, int]:
 
 def read_hypercore_transfer_snapshot(
     ctx: Web3Context,
-    vault_address: PlasmaVaultAddress,
+    vault: PlasmaVaultAddress,
     evm_token: ChecksumAddress,
     *,
     token_index: HyperCoreTokenIndex = USDC_TOKEN_INDEX,
@@ -130,16 +130,16 @@ def read_hypercore_transfer_snapshot(
     calls = cast(
         list[Call[Any]],
         [
-            reader.core_user_exists(vault_address),
-            reader.spot_balance(vault_address, token_index),
-            ERC20(evm_token).balance_of(vault_address),
-            HyperCorePendingReader(vault_address, pending_reader).pending_state(),
+            reader.core_user_exists(vault),
+            reader.spot_balance(vault, token_index),
+            ERC20(evm_token).balance_of(vault),
+            HyperCorePendingReader(vault, pending_reader).pending_state(),
         ],
     )
     exists, spot, evm_balance, pending = Multicall3(pinned).aggregate(calls)
     return HyperCoreTransferSnapshot(
         block_number=block,
-        vault=vault_address,
+        vault=vault,
         token_index=token_index,
         evm_token=evm_token,
         action_nonce=pending.action_nonce,
@@ -255,26 +255,26 @@ def read_hypercore_transfer_outcome(
 
 
 def read_hypercore_evm_exit_ceiling(
-    ctx: Web3Context, vault_address: PlasmaVaultAddress, holder: ChecksumAddress
+    ctx: Web3Context, vault: PlasmaVaultAddress, holder: ChecksumAddress
 ) -> HyperCoreEvmExitCeiling:
     """Read the holder's upper bound for an immediate EVM underlying exit.
 
     This uses idle ERC-20 only and is a ceiling, not an executable quote.
     """
     pinned, _ = _pinned_context(ctx)
-    vault = PlasmaVault(vault_address)
+    pv = PlasmaVault(vault)
     shares, asset = Multicall3(pinned).aggregate(
         cast(
             list[Call[Any]],
-            [vault.balance_of(holder), vault.underlying_asset_address()],
+            [pv.balance_of(holder), pv.underlying_asset_address()],
         )
     )
     share_assets, idle = Multicall3(pinned).aggregate(
         cast(
             list[Call[Any]],
             [
-                vault.convert_to_assets(shares),
-                ERC20(asset).balance_of(vault_address),
+                pv.convert_to_assets(shares),
+                ERC20(asset).balance_of(vault),
             ],
         )
     )

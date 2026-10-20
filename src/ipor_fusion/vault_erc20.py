@@ -4,7 +4,7 @@ middleware price per token, valued in the underlying asset. Part of the
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,7 +19,7 @@ from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
-from ipor_fusion.types import MarketId, PlasmaVaultAddress
+from ipor_fusion.types import Amount, Decimals, MarketId, PlasmaVaultAddress
 
 
 @dataclass(frozen=True)
@@ -27,13 +27,15 @@ class Erc20Holding:
     """A token of the ERC20_VAULT_BALANCE market as held by the vault.
 
     ``decimals`` and ``balance`` are ``None`` when the token could not be read;
-    ``note`` says how the holding relates to the market's cached value.
+    ``symbol`` is ``"?"`` when it is unknown (unreadable, or the snapshot was
+    fetched with ``metadata=False``); ``note`` says how the holding relates to
+    the market's cached value.
     """
 
     address: HexAddress
     symbol: str
-    decimals: int | None
-    balance: int | None
+    decimals: Decimals | None
+    balance: Amount | None
     price_usd: float | None
     usd_value: float | None
     note: str
@@ -50,40 +52,46 @@ class Erc20Holdings:
     """
 
     tokens: tuple[Erc20Holding, ...] = ()
-    value_in_asset: int = 0
+    value_in_asset: Amount = Amount(0)
     value_usd: float = 0.0
-    market_cached_value: int = 0
+    market_cached_value: Amount = Amount(0)
     unpriced_tokens: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class _Asset:
     address: ChecksumAddress
-    decimals: int
+    decimals: Decimals
     price_usd: float | None
 
 
 @dataclass(frozen=True)
 class _TokenRead:
     address: HexAddress
-    symbol: str
-    decimals: int | None
-    balance: int | None
+    decimals: Decimals | None
+    balance: Amount | None
     price_usd: float | None
 
 
-def _read_erc20_holdings(
+@dataclass(frozen=True)
+class _Erc20Market:
+    """The ERC20_VAULT_BALANCE market's cached value and its tokens' reads."""
+
+    cached_value: Amount
+    reads: tuple[_TokenRead, ...] = ()
+
+
+def _read_erc20_market(
     ctx: Web3Context,
     vault: PlasmaVaultAddress,
     *,
     balance_fuses: Sequence[BalanceFuse],
     market_substrates: Mapping[MarketId, Sequence[bytes]],
-    market_balances: Mapping[MarketId, int],
+    market_balances: Mapping[MarketId, Amount],
     oracle: PriceOracleMiddleware,
-    asset: _Asset,
-    resolve_symbol: Callable[[HexAddress], str],
-) -> Erc20Holdings:
-    """Empty when the vault has no ERC20_VAULT_BALANCE market."""
+) -> _Erc20Market | None:
+    """``None`` when the vault has no ERC20_VAULT_BALANCE market. Reads no
+    token symbols: they come from the snapshot's metadata."""
     erc20_market = next(
         (
             bf.market_id
@@ -93,7 +101,7 @@ def _read_erc20_holdings(
         None,
     )
     if erc20_market is None:
-        return Erc20Holdings()
+        return None
     cached_value = market_balances[erc20_market]
     addresses = [
         sub_info.address
@@ -101,9 +109,18 @@ def _read_erc20_holdings(
         if (sub_info := decode_substrate(sub, market_id=erc20_market)).address
     ]
     if not addresses:
-        return Erc20Holdings(market_cached_value=cached_value)
-    reads = _read_tokens(ctx, vault, oracle, addresses, resolve_symbol)
-    return _value_tokens(asset, reads, cached_value)
+        return _Erc20Market(cached_value)
+    return _Erc20Market(cached_value, _read_tokens(ctx, vault, oracle, addresses))
+
+
+def _erc20_holdings(
+    asset: _Asset, market: _Erc20Market | None, symbols: Mapping[HexAddress, str]
+) -> Erc20Holdings:
+    """The market's tokens valued in ``asset``, named by ``symbols`` (lowercase
+    address keys; a missing or empty symbol is ``"?"``)."""
+    if market is None:
+        return Erc20Holdings()
+    return _value_tokens(asset, market.reads, market.cached_value, symbols)
 
 
 def _read_tokens(
@@ -111,11 +128,9 @@ def _read_tokens(
     vault: PlasmaVaultAddress,
     oracle: PriceOracleMiddleware,
     addresses: list[HexAddress],
-    resolve_symbol: Callable[[HexAddress], str],
-) -> list[_TokenRead]:
+) -> tuple[_TokenRead, ...]:
     """Every token's decimals, the vault's balance and the middleware price in
-    one Multicall3 batch (a read that fails is ``None``); symbols through
-    ``resolve_symbol``."""
+    one Multicall3 batch (a read that fails is ``None``)."""
     calls: list[Call[Any]] = []
     for address in addresses:
         checksum = Web3.to_checksum_address(address)
@@ -132,17 +147,19 @@ def _read_tokens(
         reads.append(
             _TokenRead(
                 address=address,
-                symbol=resolve_symbol(address) or "?",
                 decimals=decimals,
                 balance=balance,
                 price_usd=price.readable() if price else None,
             )
         )
-    return reads
+    return tuple(reads)
 
 
 def _value_tokens(
-    asset: _Asset, reads: list[_TokenRead], cached_value: int
+    asset: _Asset,
+    reads: Sequence[_TokenRead],
+    cached_value: Amount,
+    symbols: Mapping[HexAddress, str],
 ) -> Erc20Holdings:
     value_in_asset = 0
     value_usd = 0.0
@@ -155,7 +172,7 @@ def _value_tokens(
             value_usd += token_usd
             value_in_asset += int(token_usd / asset.price_usd * 10**asset.decimals)
         elif read.balance > 0:
-            unpriced.append(f"{read.address} ({read.symbol})")
+            unpriced.append(f"{read.address} ({_symbol(symbols, read)})")
 
     cached_usd = (
         (cached_value / 10**asset.decimals) * asset.price_usd
@@ -163,18 +180,26 @@ def _value_tokens(
         else None
     )
     return Erc20Holdings(
-        tokens=tuple(_holding(asset, read, cached_usd) for read in reads),
-        value_in_asset=value_in_asset,
+        tokens=tuple(
+            _holding(asset, read, _symbol(symbols, read), cached_usd) for read in reads
+        ),
+        value_in_asset=Amount(value_in_asset),
         value_usd=value_usd,
         market_cached_value=cached_value,
         unpriced_tokens=tuple(unpriced),
     )
 
 
-def _holding(asset: _Asset, read: _TokenRead, cached_usd: float | None) -> Erc20Holding:
+def _symbol(symbols: Mapping[HexAddress, str], read: _TokenRead) -> str:
+    return symbols.get(read.address) or "?"
+
+
+def _holding(
+    asset: _Asset, read: _TokenRead, symbol: str, cached_usd: float | None
+) -> Erc20Holding:
     if read.decimals is None or read.balance is None:
         return Erc20Holding(
-            read.address, read.symbol, read.decimals, read.balance, None, None, ""
+            read.address, symbol, read.decimals, read.balance, None, None, ""
         )
     amount = read.balance / 10**read.decimals
     usd_value = amount * read.price_usd if read.price_usd else None
@@ -195,7 +220,7 @@ def _holding(asset: _Asset, read: _TokenRead, cached_usd: float | None) -> Erc20
         note = "in ERC20_VAULT_BALANCE"
     return Erc20Holding(
         read.address,
-        read.symbol,
+        symbol,
         read.decimals,
         read.balance,
         read.price_usd,

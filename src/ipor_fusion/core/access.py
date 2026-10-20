@@ -190,9 +190,7 @@ class AccessManager(ContractWrapper):
         )
 
 
-def resolve_access_manager(
-    ctx: Web3Context, vault_address: ChecksumAddress
-) -> AccessManager:
+def resolve_access_manager(ctx: Web3Context, vault: ChecksumAddress) -> AccessManager:
     """Resolve a vault address to its AccessManager, with typed guards. An
     eager resolver: it reads on ``ctx`` and returns a context-free wrapper.
 
@@ -203,7 +201,7 @@ def resolve_access_manager(
     (InsufficientDataBytes) or a revert (ContractLogicError).
     Provider/transport errors propagate unchanged.
     """
-    checksum = Web3.to_checksum_address(vault_address)
+    checksum = Web3.to_checksum_address(vault)
     # Same block as the eth_call below, or a pre-deployment pin would pass
     # this guard and get misdiagnosed as "not a vault".
     code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
