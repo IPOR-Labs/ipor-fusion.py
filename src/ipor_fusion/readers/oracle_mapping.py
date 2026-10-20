@@ -433,8 +433,8 @@ def build_oracle_mapping(
 ) -> OracleMapping:
     """Build the full oracle mapping for ``vault``.
 
-    ``ctx`` must already be pinned to ``effective_block`` (the caller sets
-    ``ctx.default_block``); the block is echoed in the output. Raises
+    ``ctx`` must already be pinned to ``effective_block`` (pass
+    ``ctx.at_block(effective_block)``); the block is echoed in the output. Raises
     `UnsupportedVaultVersionError` for a vault that exposes no price-oracle
     getter.
     """
