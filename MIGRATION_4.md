@@ -57,20 +57,40 @@ names earlier reachable only by module path (`FusionFactory`, `FusionInstance`,
 `ipor_fusion`: a module path outside the README's list (*Public API and stability*)
 still works but is internal.
 
-**Vault reads and validation.** `fetch_vault_data(chain_id=)`, `fetch_deployment_info`,
-`build_vault_info_json`, `ensure_supported_chain` and `fetch_vault_lending_health`
-take `ChainId`. The vault is a `PlasmaVaultAddress` (see *Address roles*) in
-`validate_vault` and `fetch_deployment_info`; `build_vault_info_json(ctx, plasma_vault,
-data, *, chain_id, chain_label)` takes no address, takes the chain by keyword, and
-labels the document with `plasma_vault.address` (a test that mocks `PlasmaVault`
-sets `.address`). `fetch_unpriceable_priced_tokens` takes the oracle and
+**Vault reads and validation.** The vault read is one pinned snapshot, and the
+chain is always the context's:
+
+- `fetch_vault_data(ctx, vault, *, block=None, lending=True, metadata=True)` takes
+  the vault address (not a `PlasmaVault`) and no `chain_id`. It resolves one block
+  (``block``, else a numeric `ctx.default_block`, else the latest) and runs every
+  read, log scans included, on `ctx.at_block(block)`; `ctx` is not modified. The old
+  ``chain_id=0`` switch is ``lending=False``; ``metadata=False`` skips token symbols
+  and decimals. `VaultData` gains `vault`, `chain_id`, `market_balances`, `erc20`,
+  `token_symbols` and `token_decimals`; `WithdrawManagerData` gains
+  `shares_to_release_assets` and `pending_request_assets`.
+- `validate_vault(ctx, vault, *, block=None)` fetches with ``metadata=False`` and
+  validates; it no longer takes ``resolve_symbol``. `validate_vault_state(state)` is
+  pure: a custom `VaultState` also provides `vault`, `chain_id`, `market_balances`,
+  `erc20` and the queue's `shares_to_release_assets`. `read_erc20_holdings` is gone:
+  the holdings are `VaultData.erc20`.
+- `build_vault_info_json(data, *, resolve_name=None)` renders from the snapshot and
+  reads nothing; the chain and its label come from `data.chain_id`.
+- `fetch_deployment_info(ctx, vault, *, api_key=None)` and
+  `fetch_vault_lending_health(ctx, vault, *, balance_fuse_market_ids,
+  market_substrates, aave_pools=None)` take the chain from `ctx`.
+- `Web3Context(web3, chain_id, *, ...)` and `Web3Context.from_url(url, *, ...)` take
+  their options by keyword. New: `Web3Context.at_block(block)` (a pinned copy) and
+  `Call.call(ctx=None, *, block=None)`. `Web3Context.get_logs(to_block=None)` ends at
+  the context's default block and `Web3Context.get_block(block=None)` returns it,
+  both instead of ``"latest"``.
+
+`ensure_supported_chain` takes `ChainId`. `fetch_unpriceable_priced_tokens` takes the oracle and
 underlying as `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,
 `get_contract_name` and `get_deployment_tx` take `HexAddress` (a checksum address
 fits), and the `resolve_name` / `resolve_symbol` callbacks receive one (a callback
 typed for `str` still fits). Market-keyed data is keyed by `MarketId`:
 `VaultData.market_substrates`, `dependency_graph`, `morpho_positions`,
-`aave_positions`; the `VaultState` protocol, `validate_vault_state`
-(`market_balances`), `fetch_vault_lending_health`, `fetch_unpriceable_priced_tokens`
+`aave_positions`, `market_balances`; the `VaultState` protocol, `fetch_vault_lending_health`, `fetch_unpriceable_priced_tokens`
 and the `dependency_graph` helpers (`compute_update_reach`, `compute_update_groups`,
 `find_orphan_fuse_markets`, `find_markets_missing_erc20_dependency`).
 

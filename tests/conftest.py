@@ -48,6 +48,7 @@ def sequential_multicall():
     with (
         patch("ipor_fusion.vault_reads.Multicall3", SequentialMulticall),
         patch("ipor_fusion.vault_positions.Multicall3", SequentialMulticall),
+        patch("ipor_fusion.vault_data.Multicall3", SequentialMulticall),
     ):
         yield
 

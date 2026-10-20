@@ -1,6 +1,6 @@
 """Unit tests for WithdrawManager — mocked context, no blockchain needed."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from _multicall import decode_aggregate3, multicall_aware
@@ -9,8 +9,9 @@ from eth_typing import BlockNumber, ChecksumAddress
 from web3 import Web3
 from web3.exceptions import ContractLogicError, ContractPanicError
 
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.withdraw_manager import WithdrawManager, WithdrawRequestInfo
-from ipor_fusion.types import Amount, Fee, Period, Shares
+from ipor_fusion.types import Amount, ChainId, Fee, Period, Shares
 
 FAKE_ADDRESS: ChecksumAddress = Web3.to_checksum_address(
     "0x0000000000000000000000000000000000000001"
@@ -297,3 +298,24 @@ def test_pending_requests_non_panic_revert_propagates(wm, ctx):
 
     with pytest.raises(ContractLogicError, match="boom"):
         wm.get_pending_requests()
+
+
+def test_pending_requests_filter_by_the_pinned_block_time():
+    """A request open at the pinned block but expired now is still pending in
+    that historical read: the filter uses the pinned block's time."""
+    web3 = MagicMock()
+    web3.eth.get_block.side_effect = lambda block: {
+        "timestamp": 100 if block == 123 else 200
+    }
+    pinned = Web3Context(web3, ChainId(1)).at_block(123)
+    answer = encode(["uint256", "uint256", "bool", "uint256"], [7, 150, False, 3600])
+    with (
+        patch.object(
+            Web3Context, "get_logs", return_value=[_event(FAKE_ACCOUNT, 7, 150)]
+        ),
+        patch.object(Web3Context, "call", side_effect=_answer(answer)),
+    ):
+        requests = WithdrawManager(
+            ctx=pinned, address=FAKE_ADDRESS
+        ).get_pending_requests()
+    assert [r.account for r in requests] == [FAKE_ACCOUNT]

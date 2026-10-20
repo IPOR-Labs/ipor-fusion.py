@@ -64,7 +64,6 @@ from ipor_fusion.validation import validate_vault
 from ipor_fusion.vault_data import (
     fetch_deployment_info,
     fetch_vault_data,
-    resolve_token_symbol,
 )
 from ipor_fusion.vault_info import build_vault_info_json
 
@@ -201,24 +200,17 @@ def vault_info(
     # vault and must stay loud.
     resolve_access_manager(ctx, checksum)
 
-    plasma_vault = PlasmaVault(ctx, checksum)
-    data = fetch_vault_data(ctx, plasma_vault, effective_block, chain_id=chain_id)
+    data = fetch_vault_data(ctx, checksum, block=effective_block)
 
     api_key = cfg.etherscan_api_key
-    chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
     (
         data.deployment_block,
         data.deployment_timestamp,
         data.deployment_error,
-    ) = fetch_deployment_info(ctx, chain_id, checksum, api_key)
+    ) = fetch_deployment_info(ctx, checksum, api_key=api_key)
 
     result = build_vault_info_json(
-        ctx,
-        plasma_vault,
-        data,
-        chain_id=chain_id,
-        chain_label=chain_label,
-        resolve_name=partial(get_contract_name, chain_id, api_key=api_key),
+        data, resolve_name=partial(get_contract_name, chain_id, api_key=api_key)
     )
     return VaultInfoResponse.model_validate(result)
 
@@ -250,12 +242,7 @@ def vault_validate(
     # Same cheap probe as vault_info: "not a vault" fails before the fetch.
     resolve_access_manager(ctx, checksum)
 
-    validation = validate_vault(
-        ctx,
-        checksum,
-        effective_block,
-        resolve_symbol=partial(resolve_token_symbol, ctx),
-    )
+    validation = validate_vault(ctx, checksum, block=effective_block)
     return VaultValidationResponse.from_validation(
         validation, CHAIN_NAMES.get(chain_id, str(chain_id))
     )

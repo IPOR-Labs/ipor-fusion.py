@@ -583,7 +583,6 @@ class TestFetchVaultLendingHealth:
         result = fetch_vault_lending_health(
             ctx,
             VAULT_ADDR,
-            1,
             balance_fuse_market_ids=[
                 7,
                 12,
@@ -626,7 +625,6 @@ class TestFetchVaultLendingHealth:
         result = fetch_vault_lending_health(
             ctx,
             VAULT_ADDR,
-            1,
             balance_fuse_market_ids=list(pools),
             market_substrates={},
             aave_pools=pools,
@@ -645,13 +643,12 @@ class TestFetchVaultLendingHealth:
         """Without `aave_pools` only AAVE_V3 has a known Pool (the chain's Core
         pool); Prime and SparkLend are skipped rather than shown with Core's
         figures."""
-        ctx = MagicMock()
+        ctx = MagicMock(chain_id=ChainId(1))
         ctx.call.return_value = _aave_account_data(1_700_000_000_000_000_000)
 
         result = fetch_vault_lending_health(
             ctx,
             VAULT_ADDR,
-            1,
             balance_fuse_market_ids=[
                 IporFusionMarkets.AAVE_V3,
                 IporFusionMarkets.AAVE_V3_LIDO,
@@ -688,7 +685,6 @@ class TestFetchVaultLendingHealth:
         result = fetch_vault_lending_health(
             ctx,
             VAULT_ADDR,
-            chain_id=1,
             balance_fuse_market_ids=[morpho_mid],
             market_substrates={morpho_mid: [substrate]},
         )
@@ -716,7 +712,6 @@ class TestFetchVaultLendingHealth:
         result = fetch_vault_lending_health(
             ctx,
             VAULT_ADDR,
-            8453,
             balance_fuse_market_ids=[mid],
             market_substrates={mid: substrates},
         )
@@ -734,7 +729,6 @@ class TestFetchVaultLendingHealth:
         result = fetch_vault_lending_health(
             ctx,
             VAULT_ADDR,
-            999999,
             balance_fuse_market_ids=[1],  # AAVE_V3
             market_substrates={},
         )
@@ -766,6 +760,8 @@ class TestHealthCheckLendingWarnings:
         )
 
         data = VaultData(
+            vault=VAULT_ADDR,
+            chain_id=ChainId(1),
             block_number=123,
             is_latest=True,
             block_timestamp=1700000000,
@@ -815,6 +811,8 @@ class TestHealthCheckLendingWarnings:
         )
 
         data = VaultData(
+            vault=VAULT_ADDR,
+            chain_id=ChainId(1),
             block_number=123,
             is_latest=True,
             block_timestamp=1700000000,
@@ -848,6 +846,8 @@ class TestHealthCheckLendingWarnings:
         addr = Web3.to_checksum_address("0x" + "11" * 20)
 
         data = VaultData(
+            vault=VAULT_ADDR,
+            chain_id=ChainId(1),
             block_number=123,
             is_latest=True,
             block_timestamp=1700000000,
@@ -892,6 +892,8 @@ class TestOrphanFuseMarketsHealthCheck:
 
         addr = Web3.to_checksum_address("0x" + "11" * 20)
         return VaultData(
+            vault=VAULT_ADDR,
+            chain_id=ChainId(1),
             block_number=123,
             is_latest=True,
             block_timestamp=1700000000,

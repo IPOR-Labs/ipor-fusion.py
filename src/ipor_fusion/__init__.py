@@ -445,7 +445,6 @@ from ipor_fusion.validation import (
     VaultState,
     VaultValidation,
     WithdrawQueue,
-    read_erc20_holdings,
     validate_vault,
     validate_vault_state,
 )
@@ -861,7 +860,6 @@ __all__ = [
     "VaultState",
     "VaultValidation",
     "WithdrawQueue",
-    "read_erc20_holdings",
     "validate_vault",
     "validate_vault_state",
     "compute_update_groups",

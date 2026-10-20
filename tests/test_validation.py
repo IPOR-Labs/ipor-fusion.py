@@ -25,16 +25,16 @@ from ipor_fusion import (
     Erc20Holdings,
     Finding,
     LendingMarketHealth,
-    PlasmaVault,
     VaultLendingHealth,
     VaultValidation,
     Web3Context,
-    read_erc20_holdings,
     validate_vault,
 )
+from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.validation import GET_MARKET_SUBSTRATES, Reconciliation
+from ipor_fusion.vault_erc20 import _Asset, _read_erc20_holdings
 
 
 def _addr(suffix: str) -> str:
@@ -61,6 +61,7 @@ def _substrate(address: str) -> bytes:
 @dataclass
 class Queue:
     shares_to_release: int
+    shares_to_release_assets: int | None = None
 
 
 @dataclass
@@ -76,6 +77,8 @@ class Unpriceable:
 
 @dataclass
 class State:
+    vault: str = VAULT
+    chain_id: int = 1
     block_number: int = 100
     block_timestamp: int = 1_700_000_000
     asset: str = ASSET
@@ -95,6 +98,8 @@ class State:
     lending_health: VaultLendingHealth | None = None
     unpriceable_priced_tokens: list[Unpriceable] | None = None
     unimplemented_getters: list[str] = field(default_factory=list)
+    market_balances: dict[int, int] = field(default_factory=dict)
+    erc20: Erc20Holdings = field(default_factory=Erc20Holdings)
 
 
 def _lending(health_factor: float | None, usage: float | None = 50.0):
@@ -233,10 +238,12 @@ class TestRouting:
         assert validate(state).findings == ()
 
     def test_total_assets_mismatch_with_pending_withdrawals_and_drift(self):
-        plasma_vault = MagicMock()
-        plasma_vault.convert_to_assets.return_value.call.return_value = 30 * WAD
-        state = State(withdraw_manager_data=Queue(shares_to_release=29 * WAD))
-        validation = validate(state, 150 * WAD, plasma_vault=plasma_vault)
+        state = State(
+            withdraw_manager_data=Queue(
+                shares_to_release=29 * WAD, shares_to_release_assets=30 * WAD
+            )
+        )
+        validation = validate(state, 150 * WAD)
         assert _checks(validation) == [
             ("total_assets_reconciliation", "warning"),
             ("pending_withdrawals", "warning"),
@@ -303,12 +310,12 @@ class TestReconciliation:
         assert (recon.sum_usd, recon.delta_usd) == (0.0, 0)
 
     def test_unreadable_pending_withdrawals_count_as_zero(self):
-        plasma_vault = MagicMock()
-        plasma_vault.convert_to_assets.return_value.call.side_effect = (
-            ContractLogicError("revert")
+        state = State(
+            withdraw_manager_data=Queue(
+                shares_to_release=WAD, shares_to_release_assets=None
+            )
         )
-        state = State(withdraw_manager_data=Queue(shares_to_release=WAD))
-        recon = validate(state, 100 * WAD, plasma_vault=plasma_vault).reconciliation
+        recon = validate(state, 100 * WAD).reconciliation
         assert recon.pending_withdrawals == 0
 
 
@@ -385,7 +392,19 @@ class TestReadErc20Holdings:
     def _read(self, state: State, **kwargs: Any) -> Erc20Holdings:
         chain = _Chain()
         ctx = Web3Context(chain.web3(), ChainId(1))
-        return read_erc20_holdings(ctx, PlasmaVault(ctx, VAULT), state, **kwargs)  # type: ignore[arg-type]
+        return _read_erc20_holdings(
+            ctx,
+            VAULT,  # type: ignore[arg-type]
+            balance_fuses=state.balance_fuses,
+            market_substrates=state.market_substrates or {},  # type: ignore[arg-type]
+            market_balances=chain.market_balances,  # type: ignore[arg-type]
+            oracle=price_oracle_middleware(ctx, ORACLE),  # type: ignore[arg-type]
+            asset=_Asset(ASSET, state.asset_decimals, state.asset_price_usd),  # type: ignore[arg-type]
+            resolve_symbol=kwargs.get(
+                "resolve_symbol",
+                lambda address: chain.symbols.get(_addr(address[-40:]), ""),
+            ),
+        )
 
     def test_values_priced_tokens_in_the_underlying(self):
         erc20 = self._read(_erc20_state())
@@ -411,42 +430,20 @@ class TestReadErc20Holdings:
 
 
 class TestValidateVault:
-    def _run(self, ctx: Web3Context, state: State, block: int | None = None):
+    def test_validates_the_snapshot_it_fetches(self):
+        ctx = MagicMock()
+        state = _erc20_state(
+            block_number=123,
+            market_balances={AAVE: 60 * WAD, ERC20_MARKET: 2 * WAD},
+            erc20=Erc20Holdings(value_in_asset=11 * WAD),
+        )
         with patch(
             "ipor_fusion.validation.fetch_vault_data", return_value=state
         ) as fetch:
-            validation = validate_vault(ctx, VAULT, block)
-        return validation, fetch
+            validation = validate_vault(ctx, VAULT, block=123)  # type: ignore[arg-type]
 
-    def test_reads_every_market_once_at_the_pinned_block(self):
-        chain = _Chain()
-        ctx = Web3Context(chain.web3(), ChainId(1))
-        state = _erc20_state(block_number=123)
-
-        validation, fetch = self._run(ctx, state, block=123)
-
-        pinned, plasma_vault, block = fetch.call_args.args
-        assert (block, fetch.call_args.kwargs) == (123, {"chain_id": 1})
-        assert pinned is not ctx and pinned.default_block == 123
-        assert plasma_vault.address == VAULT
-        assert ctx.default_block == "latest"
-        assert set(chain.blocks) == {123}
+        fetch.assert_called_once_with(ctx, VAULT, block=123, metadata=False)
         assert validation.reconciliation.balance_fuses_total == 62 * WAD
         assert (validation.vault, validation.chain_id) == (VAULT, 1)
         assert (validation.block_number, validation.asset_symbol) == (123, "USDC")
         assert validation.erc20.value_in_asset == 11 * WAD
-        assert validation.verdict == "warning"
-
-    def test_defaults_to_the_context_block(self):
-        chain = _Chain()
-        ctx = Web3Context(chain.web3(), ChainId(1))
-        ctx.default_block = 456
-        _, fetch = self._run(ctx, _erc20_state())
-        assert fetch.call_args.args[2] == 456
-
-    def test_pins_the_latest_block_otherwise(self):
-        chain = _Chain()
-        ctx = Web3Context(chain.web3(), ChainId(1))
-        _, fetch = self._run(ctx, _erc20_state())
-        assert fetch.call_args.args[2] == 777
-        assert set(chain.blocks) == {777}

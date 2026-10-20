@@ -233,7 +233,11 @@ def _aave_v3_middleware_tokens(
     for bf in balance_fuses:
         if bf.market_id not in AAVE_V3_MARKET_IDS:
             continue
-        code = bytes(ctx.web3.eth.get_code(Web3.to_checksum_address(bf.fuse)))
+        code = bytes(
+            ctx.web3.eth.get_code(
+                Web3.to_checksum_address(bf.fuse), block_identifier=ctx.default_block
+            )
+        )
         if not code or _PUSH4_GET_PRICE_ORACLE in code:
             continue
         tokens += [

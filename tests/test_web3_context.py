@@ -4,6 +4,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from eth_abi import encode
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractLogicError, Web3RPCError
@@ -611,3 +612,26 @@ class TestLogSource:
         ) as scan:
             ctx.get_logs(ADDR, [GRANTED])
         scan.assert_called_once()
+
+
+class TestPinnedContext:
+    def test_at_block_pins_block_reads_without_touching_the_original(self):
+        web3 = MagicMock()
+        web3.eth.get_block.side_effect = lambda block: {"number": block}
+        ctx = Web3Context(web3, ChainId(1))
+        pinned = ctx.at_block(123)
+
+        assert pinned.get_block()["number"] == 123
+        assert ctx.get_block()["number"] == "latest"
+        assert ctx.default_block == "latest"
+        assert pinned.web3 is ctx.web3
+
+    def test_call_pins_one_read_and_keeps_the_two_argument_default(self):
+        ctx = MagicMock()
+        ctx.call.return_value = encode(["uint256"], [7])
+        call = Call(to=ADDR, data=b"\x01", output_types=["uint256"], ctx=ctx)
+
+        assert call.call() == 7
+        assert ctx.call.call_args.args == (ADDR, b"\x01")
+        call.call(block=55)
+        assert ctx.call.call_args.args == (ADDR, b"\x01", 55)

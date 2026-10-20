@@ -32,7 +32,8 @@ from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sor
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.oracle import price_oracle_middleware
+from ipor_fusion.core.multicall import Multicall3
+from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.errors import (
     EmptyCallResultError,
@@ -59,13 +60,16 @@ from ipor_fusion.readers.unpriceable import (
     MiddlewarePricedToken,
     fetch_unpriceable_priced_tokens,
 )
+from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import (
     AccessManagerAddress,
     ChainId,
     FuseAddress,
     MarketId,
     PlasmaVaultAddress,
+    parse_hex_address,
 )
+from ipor_fusion.vault_erc20 import Erc20Holdings, _Asset, _read_erc20_holdings
 from ipor_fusion.vault_managers import (
     FeeData as FeeData,
 )
@@ -101,7 +105,6 @@ GET_PRICE_ORACLE_MIDDLEWARE = "getPriceOracleMiddleware()"
 _logger = logging.getLogger(__name__)
 
 _NO_CONTRACT = "no contract"
-_NO_CHAIN = ChainId(0)
 
 
 @dataclass
@@ -109,9 +112,13 @@ class VaultData:
     """A Plasma Vault's state at one block, as `fetch_vault_data` reads it.
 
     Amounts are raw on-chain integers. Optional data that could not be read
-    is ``None`` (or empty) rather than an error.
+    is ``None`` (or empty) rather than an error. Everything that depends on
+    chain state at ``block_number`` is in here, so validation and the
+    ``vault info`` document are computed from the snapshot alone.
     """
 
+    vault: PlasmaVaultAddress
+    chain_id: ChainId
     block_number: int
     is_latest: bool
     block_timestamp: int
@@ -183,6 +190,17 @@ class VaultData:
     # Getters the vault does not implement because it predates them (see
     # GET_MARKET_SUBSTRATES and friends); the data they serve is degraded.
     unimplemented_getters: list[str] = field(default_factory=list)
+    # totalAssetsInMarket of every balance-fuse market, once per market, in
+    # balance-fuse order.
+    market_balances: dict[MarketId, int] = field(default_factory=dict)
+    # The ERC20_VAULT_BALANCE tokens read directly (empty without that market).
+    erc20: Erc20Holdings = field(default_factory=Erc20Holdings)
+    # Symbols (lowercase address keys) of the substrate and breakdown tokens,
+    # and decimals of the breakdown tokens; empty when fetched with
+    # metadata=False. "" / None: not a token, or unreadable. Token metadata
+    # is cached on disk per address, so a cached value may postdate the block.
+    token_symbols: dict[HexAddress, str] = field(default_factory=dict)
+    token_decimals: dict[HexAddress, int | None] = field(default_factory=dict)
 
 
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
@@ -226,7 +244,7 @@ def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
         return cached
 
     checksum = Web3.to_checksum_address(address)
-    code = ctx.web3.eth.get_code(checksum)
+    code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
     if not code or code == b"":
         update_contract_cache(key, _NO_CONTRACT)
         return _NO_CONTRACT
@@ -248,7 +266,7 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
         return int(cached)
 
     checksum = Web3.to_checksum_address(address)
-    code = ctx.web3.eth.get_code(checksum)
+    code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
     if not code or code == b"":
         return None
 
@@ -260,10 +278,8 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
     return decimals
 
 
-def _fetch_block(ctx: Web3Context, block_number: int | None) -> tuple[int, int]:
-    """``(block_number, timestamp)`` of the requested block, latest by default."""
-    resolved = ctx.web3.eth.block_number if block_number is None else block_number
-    return resolved, ctx.web3.eth.get_block(resolved)["timestamp"]
+def _block_timestamp(ctx: Web3Context, block: int) -> int:
+    return ctx.web3.eth.get_block(block)["timestamp"]
 
 
 def _resolve_price_oracle(
@@ -290,8 +306,11 @@ def _resolve_price_oracle(
     return address
 
 
-def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str, Any]:
-    """Vault and underlying-asset state, as `VaultData` fields.
+def _fetch_vault_reads(
+    ctx: Web3Context, plasma_vault: PlasmaVault
+) -> tuple[dict[str, Any], PriceOracleMiddleware]:
+    """Vault and underlying-asset state, as `VaultData` fields, and the price
+    oracle wrapper resolved for them (reused, so its ABI is probed once).
 
     Two Multicall3 round trips: vault getters, then everything that needs the
     asset, the oracle or the fuse list (asset metadata, idle balance, price,
@@ -383,7 +402,7 @@ def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str,
         "asset_price_usd": price.readable() if price else None,
         "fuse_markets": fuse_markets or None,
         "unimplemented_getters": unimplemented,
-    }
+    }, oracle
 
 
 def _fetch_role_accounts(
@@ -408,26 +427,32 @@ class _MarketReads:
     # Only markets with at least one substrate.
     market_substrates: dict[MarketId, list[bytes]]
     aave_pools: dict[MarketId, ChecksumAddress]
+    market_balances: dict[MarketId, int]
     # False when the vault predates getMarketSubstrates (substrates unknown).
     substrates_available: bool = True
 
 
 def _fetch_market_reads(
-    ctx: Web3Context, plasma_vault: PlasmaVault, with_aave_pools: bool
+    ctx: Web3Context, plasma_vault: PlasmaVault, *, with_aave_pools: bool
 ) -> _MarketReads:
     """Balance fuses, then every market's dependency graph and substrates in
     one batch, then (optionally) the Aave V3 Pools behind the markets."""
     balance_fuses = plasma_vault.get_balance_fuses()
     market_ids = [bf.market_id for bf in balance_fuses]
     substrate_calls = [plasma_vault.get_market_substrates(mid) for mid in market_ids]
+    venues = list(dict.fromkeys(market_ids))
     try:
-        graphs, batched_substrates = _read_batch(
+        required, batched_substrates = _read_batch(
             ctx,
-            [plasma_vault.get_dependency_balance_graph(mid) for mid in market_ids],
+            [
+                *(plasma_vault.get_dependency_balance_graph(mid) for mid in market_ids),
+                *(plasma_vault.total_assets_in_market(mid) for mid in venues),
+            ],
             substrate_calls,
         )
     except EmptyCallResultError as exc:
         raise _missing_required_getter(plasma_vault, exc) from exc
+    graphs, balances = required[: len(market_ids)], required[len(market_ids) :]
     substrates = [
         _unless_unimplemented(value, call)
         for value, call in zip(batched_substrates, substrate_calls, strict=True)
@@ -443,6 +468,7 @@ def _fetch_market_reads(
             mid: subs for mid, subs in zip(market_ids, substrates, strict=True) if subs
         },
         aave_pools=_fetch_aave_pools(ctx, balance_fuses) if with_aave_pools else {},
+        market_balances=dict(zip(venues, balances, strict=True)),
         substrates_available=None not in substrates,
     )
 
@@ -458,7 +484,6 @@ def _fetch_lending_reads(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
     vault_addr: PlasmaVaultAddress,
-    chain_id: ChainId,
     markets: _MarketReads,
 ) -> _LendingReads:
     """Lending health (Morpho, Aave V3) plus the per-position breakdowns.
@@ -473,9 +498,8 @@ def _fetch_lending_reads(
             fetch_vault_lending_health,
             ctx,
             vault_addr,
-            chain_id,
-            [bf.market_id for bf in markets.balance_fuses],
-            markets.market_substrates,
+            balance_fuse_market_ids=[bf.market_id for bf in markets.balance_fuses],
+            market_substrates=markets.market_substrates,
             aave_pools=markets.aave_pools,
         ),
     )
@@ -494,16 +518,22 @@ def _fetch_lending_reads(
 
 def fetch_vault_data(
     ctx: Web3Context,
-    plasma_vault: PlasmaVault,
-    block_number: int | None = None,
-    chain_id: ChainId = _NO_CHAIN,
+    vault: PlasmaVaultAddress,
+    *,
+    block: int | None = None,
+    lending: bool = True,
+    metadata: bool = True,
 ) -> VaultData:
-    """Read the vault's state at ``block_number`` (latest when ``None``).
+    """Read the vault's state at one block: ``block``, else the context's
+    default block when that is a number, else the latest block, resolved once
+    up front. Every read, log scans included, runs on a copy of ``ctx`` pinned
+    to that block (`Web3Context.at_block`); ``ctx`` itself is not modified.
+    The chain is ``ctx.chain_id``.
 
-    Pin the reads themselves with ``ctx.default_block``; ``block_number`` only
-    selects the block reported in `VaultData`. ``chain_id=0`` skips lending
-    health, the Morpho / Aave position breakdowns, their token prices and the
-    unpriceable-token check: pass the real chain id for those.
+    ``lending=False`` skips lending health, the Morpho / Aave position
+    breakdowns, their token prices and the unpriceable-token check.
+    ``metadata=False`` skips the token symbols and decimals the ``vault info``
+    document shows (validation does not need them).
 
     Raises `UnsupportedChainError` on a chain the tooling is not validated on
     and `UnsupportedVaultVersionError` when the vault predates a getter the
@@ -511,93 +541,191 @@ def fetch_vault_data(
     """
     # Fail fast with a client-mappable typed error instead of letting the
     # fetch die deep in the stack on chains the tooling is not validated on.
-    ensure_supported_chain(chain_id or ctx.chain_id)
-    vault_addr = plasma_vault.address
+    ensure_supported_chain(ctx.chain_id)
+    if block is None and isinstance(ctx.default_block, int):
+        block = ctx.default_block
+    resolved_block = ctx.web3.eth.block_number if block is None else block
+    is_latest = block is None
+    ctx = ctx.at_block(resolved_block)
+    plasma_vault = PlasmaVault(ctx, vault)
     with ThreadPoolExecutor() as pool:
         # Independent pipelines, each a short chain of batched reads; none of
         # them waits on a pool future, so they cannot starve the pool.
-        f_block = pool.submit(_fetch_block, ctx, block_number)
+        f_timestamp = pool.submit(_block_timestamp, ctx, resolved_block)
         f_vault = pool.submit(_fetch_vault_reads, ctx, plasma_vault)
         f_fees = pool.submit(_fetch_fee_data, ctx, plasma_vault)
         f_withdraw = pool.submit(_fetch_withdraw_manager, ctx, plasma_vault)
         f_roles = pool.submit(_fetch_role_accounts, ctx, plasma_vault)
         f_markets = pool.submit(
-            _fetch_market_reads, ctx, plasma_vault, with_aave_pools=bool(chain_id)
+            _fetch_market_reads, ctx, plasma_vault, with_aave_pools=lending
         )
 
         markets = f_markets.result()
-        f_hypercore = pool.submit(
-            _fetch_hypercore_state, ctx, vault_addr, chain_id, markets
-        )
-        lending = (
-            _fetch_lending_reads(ctx, pool, vault_addr, chain_id, markets)
-            if chain_id
+        f_hypercore = pool.submit(_fetch_hypercore_state, ctx, vault, markets)
+        lending_reads = (
+            _fetch_lending_reads(ctx, pool, vault, markets)
+            if lending
             else _LendingReads()
         )
-        vault_reads = f_vault.result()
-        token_prices_usd = (
-            _fetch_breakdown_token_prices(
-                ctx,
-                price_oracle_middleware(ctx, vault_reads["price_oracle_addr"]),
-                _collect_breakdown_token_addresses(
-                    lending.morpho_positions, lending.aave_positions
-                ),
-            )
-            if chain_id
-            else None
+        vault_reads, oracle = f_vault.result()
+        derived = _derived_reads(
+            ctx,
+            pool,
+            vault,
+            vault_reads,
+            oracle,
+            markets,
+            lending_reads if lending else None,
+            metadata=metadata,
         )
-        unpriceable_priced_tokens = (
-            _safe_call(
-                partial(
-                    fetch_unpriceable_priced_tokens,
-                    ctx,
-                    vault_reads["price_oracle_addr"],
-                    vault_reads["asset"],
-                    markets.balance_fuses,
-                    markets.market_substrates,
-                    lending.morpho_positions,
-                )
-            )
-            if chain_id
-            else None
-        )
-        resolved_block, block_timestamp = f_block.result()
         withdraw_manager, withdraw_manager_data = f_withdraw.result()
         if not markets.substrates_available:
             vault_reads["unimplemented_getters"].append(GET_MARKET_SUBSTRATES)
 
         return VaultData(
             **vault_reads,
+            vault=vault,
+            chain_id=ctx.chain_id,
             block_number=resolved_block,
-            is_latest=block_number is None,
-            block_timestamp=block_timestamp,
+            is_latest=is_latest,
+            block_timestamp=f_timestamp.result(),
             withdraw_manager=withdraw_manager,
             withdraw_manager_data=withdraw_manager_data,
             fee_data=f_fees.result(),
             balance_fuses=markets.balance_fuses,
             dependency_graph=markets.dependency_graph or None,
             market_substrates=markets.market_substrates or None,
-            lending_health=lending.lending_health,
-            morpho_positions=lending.morpho_positions,
-            aave_positions=lending.aave_positions,
-            token_prices_usd=token_prices_usd,
-            unpriceable_priced_tokens=unpriceable_priced_tokens,
+            lending_health=lending_reads.lending_health,
+            morpho_positions=lending_reads.morpho_positions,
+            aave_positions=lending_reads.aave_positions,
             role_accounts=f_roles.result(),
             hypercore=f_hypercore.result(),
+            market_balances=markets.market_balances,
+            **derived,
         )
+
+
+def _derived_reads(
+    ctx: Web3Context,
+    pool: ThreadPoolExecutor,
+    vault: PlasmaVaultAddress,
+    vault_reads: dict[str, Any],
+    oracle: PriceOracleMiddleware,
+    markets: _MarketReads,
+    lending: _LendingReads | None,
+    *,
+    metadata: bool,
+) -> dict[str, Any]:
+    """The `VaultData` fields read on top of the vault and market reads: the
+    ERC20 holdings, and (with ``lending``) the breakdown token prices and the
+    unpriceable-token check, and (with ``metadata``) the token metadata."""
+    f_erc20 = pool.submit(
+        _read_erc20_holdings,
+        ctx,
+        vault,
+        balance_fuses=markets.balance_fuses,
+        market_substrates=markets.market_substrates,
+        market_balances=markets.market_balances,
+        oracle=oracle,
+        asset=_Asset(
+            address=vault_reads["asset"],
+            decimals=vault_reads["asset_decimals"],
+            price_usd=vault_reads["asset_price_usd"],
+        ),
+        resolve_symbol=partial(resolve_token_symbol, ctx),
+    )
+    fields: dict[str, Any] = {}
+    if lending is not None:
+        fields["token_prices_usd"] = _fetch_breakdown_token_prices(
+            ctx,
+            oracle,
+            _collect_breakdown_token_addresses(
+                lending.morpho_positions, lending.aave_positions
+            ),
+        )
+        fields["unpriceable_priced_tokens"] = _safe_call(
+            partial(
+                fetch_unpriceable_priced_tokens,
+                ctx,
+                vault_reads["price_oracle_addr"],
+                vault_reads["asset"],
+                markets.balance_fuses,
+                markets.market_substrates,
+                lending.morpho_positions,
+            )
+        )
+    if metadata:
+        fields["token_symbols"], fields["token_decimals"] = _token_metadata(
+            ctx, markets, lending or _LendingReads()
+        )
+    fields["erc20"] = f_erc20.result()
+    return fields
+
+
+def _token_metadata(
+    ctx: Web3Context, markets: _MarketReads, lending: _LendingReads
+) -> tuple[dict[HexAddress, str], dict[HexAddress, int | None]]:
+    """Symbols of every substrate and breakdown token, decimals of the
+    breakdown tokens (the amounts the document formats), keyed lowercase.
+
+    Cache hits first; the rest in one Multicall3 batch. A token that answers
+    nothing (not a token, or not deployed at this block) reads as ``""`` /
+    ``None`` and is not cached, so a later block can still resolve it."""
+    breakdown = {
+        parse_hex_address(address)
+        for address in _collect_breakdown_token_addresses(
+            lending.morpho_positions, lending.aave_positions
+        )
+    }
+    substrate_addresses = {
+        info.address
+        for market_id, subs in markets.market_substrates.items()
+        for sub in subs
+        if (info := decode_substrate(sub, market_id=market_id)).address
+    }
+    cache = load_contract_cache()
+    symbols: dict[HexAddress, str] = {}
+    decimals: dict[HexAddress, int | None] = {}
+    for address in breakdown | substrate_addresses:
+        if cached := cache.get(cache_key("symbol", address)):
+            symbols[address] = cached
+    for address in breakdown:
+        if cached := cache.get(cache_key("decimals", address)):
+            decimals[address] = int(cached)
+    missing_symbols = sorted((breakdown | substrate_addresses) - symbols.keys())
+    missing_decimals = sorted(breakdown - decimals.keys())
+    if not missing_symbols and not missing_decimals:
+        return symbols, decimals
+    tokens = {
+        a: ERC20(ctx, Web3.to_checksum_address(a))
+        for a in breakdown | substrate_addresses
+    }
+    calls: list[Call[Any]] = [tokens[a].symbol() for a in missing_symbols]
+    calls += [tokens[a].decimals() for a in missing_decimals]
+    results = Multicall3(ctx).try_aggregate(calls)
+    for address, symbol in zip(missing_symbols, results, strict=False):
+        symbols[address] = symbol or ""
+        if symbol:
+            update_contract_cache(cache_key("symbol", address), symbol)
+    for address, value in zip(
+        missing_decimals, results[len(missing_symbols) :], strict=True
+    ):
+        decimals[address] = value
+        if value is not None:
+            update_contract_cache(cache_key("decimals", address), str(value))
+    return symbols, decimals
 
 
 def _fetch_hypercore_state(
     ctx: Web3Context,
     vault_addr: PlasmaVaultAddress,
-    chain_id: ChainId,
     markets: _MarketReads,
 ) -> HyperCoreVaultState | None:
     """The HyperCore market's state, on HyperEVM only (the Core precompiles
     exist nowhere else) and only when the vault has a market-55 balance fuse.
     A failed read (a precompile, the oracle, a layout the valuation library
     would revert on) leaves the block out rather than failing `vault info`."""
-    if chain_id != HYPEREVM_CHAIN_ID:
+    if ctx.chain_id != HYPEREVM_CHAIN_ID:
         return None
     fuse = next(
         (
@@ -618,9 +746,9 @@ def _fetch_hypercore_state(
 
 def fetch_deployment_info(
     ctx: Web3Context,
-    chain_id: ChainId,
     vault_address: PlasmaVaultAddress,
-    api_key: str | None,
+    *,
+    api_key: str | None = None,
 ) -> tuple[int | None, int | None, str | None]:
     """Return ``(block, timestamp, error)`` for the vault deployment, using cache.
 
@@ -629,6 +757,7 @@ def fetch_deployment_info(
     Base/Optimism on the free Etherscan tier). ``None`` means either success or
     a benign empty response.
     """
+    chain_id = ctx.chain_id
     key = cache_key(chain_id, vault_address)
     cache = load_deployment_cache()
     if entry := cache.get(key):

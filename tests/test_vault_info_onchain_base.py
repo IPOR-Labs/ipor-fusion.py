@@ -25,7 +25,7 @@ import pytest
 from web3 import Web3
 from web3.providers.rpc import HTTPProvider
 
-from ipor_fusion import PlasmaVault, Web3Context, validate_vault
+from ipor_fusion import Web3Context, validate_vault
 from ipor_fusion.vault_data import fetch_vault_data
 
 VAULT = Web3.to_checksum_address("0x7743931f74157C8aC65697660102555d40D09a77")
@@ -40,7 +40,7 @@ def test_idle_underlying_reconciles_on_real_base_vault():
         pytest.skip("BASE_PROVIDER_URL not set")
 
     try:  # pylint: disable=broad-except
-        validation = validate_vault(Web3Context.from_url(url), VAULT, BLOCK)
+        validation = validate_vault(Web3Context.from_url(url), VAULT, block=BLOCK)
     except Exception as exc:  # pylint: disable=broad-except
         # Infra problem (provider unreachable or non-archive) — skip, don't fail.
         pytest.skip(f"BASE on-chain read failed (provider missing/non-archive?): {exc}")
@@ -80,9 +80,8 @@ def test_fetch_stays_within_round_trip_budget():
         # must be created under the patch for any request to be counted.
         with patch.object(HTTPProvider, "make_request", counting):
             ctx = Web3Context.from_url(url)
-            ctx.default_block = BLOCK
             methods.clear()
-            data = fetch_vault_data(ctx, PlasmaVault(ctx, VAULT), BLOCK, CHAIN_ID)
+            data = fetch_vault_data(ctx, VAULT, block=BLOCK)
     except Exception as exc:  # pylint: disable=broad-except
         pytest.skip(f"BASE on-chain read failed (provider missing/non-archive?): {exc}")
 

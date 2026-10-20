@@ -3,30 +3,16 @@
 
 from __future__ import annotations
 
-from functools import partial
-
 import click
 
 from ipor_fusion.cli.vault_rendering import _format_amount, _format_usd, _print_table
-from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.substrates import market_name
 from ipor_fusion.validation import (
     Erc20Holdings,
     VaultValidation,
-    read_erc20_holdings,
 )
-from ipor_fusion.vault_data import VaultData, resolve_token_symbol
+from ipor_fusion.vault_data import VaultData
 from ipor_fusion.vault_info import health_check_lists
-
-
-def _read_erc20_holdings(
-    ctx: Web3Context, plasma_vault: PlasmaVault, data: VaultData
-) -> Erc20Holdings:
-    """ERC20 holdings with token symbols from the CLI's contract cache."""
-    return read_erc20_holdings(
-        ctx, plasma_vault, data, partial(resolve_token_symbol, ctx)
-    )
 
 
 def _print_erc20_balances(data: VaultData, erc20: Erc20Holdings) -> None:

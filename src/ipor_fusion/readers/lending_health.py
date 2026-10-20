@@ -392,7 +392,7 @@ def _collect_lending_markets(
 def fetch_vault_lending_health(
     ctx: Web3Context,
     vault_address: PlasmaVaultAddress,
-    chain_id: ChainId,
+    *,
     balance_fuse_market_ids: list[MarketId],
     market_substrates: dict[MarketId, list[bytes]],
     aave_pools: dict[MarketId, ChecksumAddress] | None = None,
@@ -402,7 +402,6 @@ def fetch_vault_lending_health(
     Args:
         ctx: Web3 context for on-chain calls.
         vault_address: The Plasma Vault address.
-        chain_id: Chain ID (selects the default Aave V3 Core pool).
         balance_fuse_market_ids: List of market IDs from balance fuses.
         market_substrates: Map of market_id -> list of raw substrate bytes.
             Morpho market ids and Aave V4 Spokes are read from it.
@@ -413,7 +412,7 @@ def fetch_vault_lending_health(
             fuses.
     """
     if aave_pools is None:
-        core_pool = AAVE_V3_POOL.get(chain_id)
+        core_pool = AAVE_V3_POOL.get(ctx.chain_id)
         aave_pools = {IporFusionMarkets.AAVE_V3: core_pool} if core_pool else {}
 
     markets = _collect_lending_markets(

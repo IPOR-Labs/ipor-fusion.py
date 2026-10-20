@@ -56,6 +56,7 @@ from ipor_fusion import (
     parse_tx_hash,
     resolve_token_symbol,
     validate_vault,
+    validate_vault_state,
 )
 
 ETHEREUM = ChainId(1)
@@ -72,10 +73,12 @@ def access(am: AccessManager, account: ChecksumAddress) -> None:
 
 def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     ensure_supported_chain(ETHEREUM)
-    data = fetch_vault_data(ctx, vault, chain_id=ETHEREUM)
-    fetch_deployment_info(ctx, ETHEREUM, VAULT, None)
-    build_vault_info_json(ctx, vault, data, chain_id=ETHEREUM, chain_label="ethereum")
-    validate_vault(ctx, VAULT)
+    data = fetch_vault_data(ctx, vault.address, block=1, lending=False)
+    fetch_deployment_info(ctx, VAULT, api_key=None)
+    build_vault_info_json(data)
+    validate_vault_state(data)
+    validate_vault(ctx.at_block(1), VAULT)
+    vault.get_fuses().call(block=1)
     resolve_token_symbol(ctx, VAULT)
     fetch_unpriceable_priced_tokens(ctx, VAULT, VAULT, [], {}, None)
 

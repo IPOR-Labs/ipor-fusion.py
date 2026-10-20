@@ -448,7 +448,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "price_oracle_middleware",
             "quote_ccip_native_fee",
             "read_changelog",
-            "read_erc20_holdings",
             "read_external_state",
             "read_hypercore_evm_exit_ceiling",
             "read_hypercore_nav",

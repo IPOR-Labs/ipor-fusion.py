@@ -1,5 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import click
@@ -13,7 +15,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import cache
+from ipor_fusion import cache, vault_data, vault_erc20
 from ipor_fusion.cache import save_contract_cache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
@@ -27,7 +29,6 @@ from ipor_fusion.cli.vault_health import (
     _print_erc20_balances,
     _print_health_check,
     _print_reconciliation,
-    _read_erc20_holdings,
 )
 from ipor_fusion.cli.vault_info_view import (
     _print_fees,
@@ -50,6 +51,7 @@ from ipor_fusion.cli.vault_rendering import (
     _substrate_details,
 )
 from ipor_fusion.config.roles import Roles
+from ipor_fusion.core import oracle
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.core.multicall import Multicall3
@@ -66,6 +68,7 @@ from ipor_fusion.readers.morpho import MORPHO_BLUE_ADDRESSES, MorphoPositionBrea
 from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import (
     Amount,
+    ChainId,
     MarketId,
     parse_morpho_market_id,
 )
@@ -704,6 +707,43 @@ class TestResolveTokenSymbol:
 
 
 ADDR_1 = "0x1111111111111111111111111111111111111111"
+
+
+def _snapshot(**fields: Any) -> Any:
+    """The `VaultData` fields the market printers read, overridable."""
+    defaults: dict[str, Any] = {
+        "chain_id": ChainId(1),
+        "balance_fuses": [],
+        "market_substrates": {},
+        "market_balances": {},
+        "token_symbols": {},
+        "token_decimals": {},
+        "token_prices_usd": None,
+        "asset_decimals": 6,
+        "asset_symbol": "USDC",
+        "asset_price_usd": 1.0,
+        "unimplemented_getters": [],
+    }
+    return SimpleNamespace(**{**defaults, **fields})
+
+
+def _read_erc20_holdings(ctx, pv, data: VaultData) -> Erc20Holdings:
+    """The snapshot's ERC20 read, with market balances answered by ``pv``."""
+    return vault_erc20._read_erc20_holdings(
+        ctx,
+        pv.address,
+        balance_fuses=data.balance_fuses,
+        market_substrates=data.market_substrates or {},
+        market_balances={
+            bf.market_id: pv.total_assets_in_market(bf.market_id).call()
+            for bf in data.balance_fuses
+        },
+        oracle=oracle.price_oracle_middleware(ctx, data.price_oracle_addr),
+        asset=vault_erc20._Asset(data.asset, data.asset_decimals, data.asset_price_usd),
+        resolve_symbol=lambda address: vault_data.resolve_token_symbol(ctx, address),
+    )
+
+
 ADDR_2 = "0x2222222222222222222222222222222222222222"
 ADDR_ORACLE = "0x4444444444444444444444444444444444444444"
 
@@ -733,6 +773,8 @@ class TestPrintErc20Balances:
         ctx = MagicMock()
         pv = MagicMock()
         data = VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -756,9 +798,9 @@ class TestPrintErc20Balances:
         captured = capsys.readouterr()
         assert "(no ERC20_VAULT_BALANCE market)" in captured.out
 
-    @patch("ipor_fusion.cli.vault_health.resolve_token_symbol", return_value="USDC")
-    @patch("ipor_fusion.validation.price_oracle_middleware")
-    @patch("ipor_fusion.validation.ERC20")
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="USDC")
+    @patch("ipor_fusion.core.oracle.price_oracle_middleware")
+    @patch("ipor_fusion.vault_erc20.ERC20")
     def test_with_erc20_tokens(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -780,6 +822,8 @@ class TestPrintErc20Balances:
         )
 
         data = VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -809,9 +853,9 @@ class TestPrintErc20Balances:
         assert "USDC" in captured.out
         assert "$1.00" in captured.out
 
-    @patch("ipor_fusion.cli.vault_health.resolve_token_symbol", return_value="?")
-    @patch("ipor_fusion.validation.price_oracle_middleware")
-    @patch("ipor_fusion.validation.ERC20")
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="?")
+    @patch("ipor_fusion.core.oracle.price_oracle_middleware")
+    @patch("ipor_fusion.vault_erc20.ERC20")
     def test_with_error_balances(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -830,6 +874,8 @@ class TestPrintErc20Balances:
         )
 
         data = VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -858,13 +904,15 @@ class TestPrintErc20Balances:
         captured = capsys.readouterr()
         assert "error" in captured.out
 
-    @patch("ipor_fusion.validation.price_oracle_middleware")
+    @patch("ipor_fusion.core.oracle.price_oracle_middleware")
     def test_no_token_addrs(self, mock_oracle_cls, capsys):
         ctx = MagicMock()
         pv = MagicMock()
         pv.address = ADDR_1
 
         data = VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -923,6 +971,8 @@ class TestUnderlyingOnVault:
 
     def _make_data(self, balance_fuses, underlying_balance_on_vault=0):
         return VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -944,7 +994,7 @@ class TestUnderlyingOnVault:
             underlying_balance_on_vault=underlying_balance_on_vault,
         )
 
-    @patch("ipor_fusion.validation.price_oracle_middleware")
+    @patch("ipor_fusion.core.oracle.price_oracle_middleware")
     def test_underlying_counted_when_erc20_market_has_no_substrate(
         self, mock_oracle_cls
     ):
@@ -983,7 +1033,7 @@ class TestUnderlyingOnVault:
         recon = validate(data, erc20=erc20).reconciliation
         assert recon.underlying_on_vault == 10 * 10**6
 
-    @patch("ipor_fusion.validation.price_oracle_middleware")
+    @patch("ipor_fusion.core.oracle.price_oracle_middleware")
     def test_no_false_reconciliation_warning_for_idle_underlying(self, mock_oracle_cls):
         ctx = MagicMock()
         pv = MagicMock()
@@ -1023,7 +1073,7 @@ class TestPrintSubstrates:
 
     def test_no_substrates(self, capsys):
         _print_substrates(
-            MagicMock(), {}, [FakeBalanceFuse(market_id=1, fuse=ADDR_1)], 1, None
+            _snapshot(balance_fuses=[FakeBalanceFuse(market_id=1, fuse=ADDR_1)]), None
         )
         captured = capsys.readouterr()
         assert "(none)" in captured.out
@@ -1032,16 +1082,14 @@ class TestPrintSubstrates:
         "ipor_fusion.cli.vault_markets_view.get_contract_name",
         return_value="TestContract",
     )
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.resolve_token_symbol", return_value="WETH"
-    )
-    def test_with_substrates(self, mock_resolve, mock_get_name, capsys):
+    def test_with_substrates(self, mock_get_name, capsys):
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
         _print_substrates(
-            MagicMock(),
-            {7: [addr_bytes]},
-            [FakeBalanceFuse(market_id=7, fuse=ADDR_1)],
-            1,
+            _snapshot(
+                market_substrates={7: [addr_bytes]},
+                balance_fuses=[FakeBalanceFuse(market_id=7, fuse=ADDR_1)],
+                token_symbols={"0x" + "ab" * 20: "WETH"},
+            ),
             "key",
         )
         captured = capsys.readouterr()
@@ -1051,10 +1099,10 @@ class TestPrintSubstrates:
     def test_with_morpho_substrate(self, capsys):
         raw_bytes32 = bytes.fromhex("ff" * 32)
         _print_substrates(
-            MagicMock(),
-            {14: [raw_bytes32]},
-            [FakeBalanceFuse(market_id=14, fuse=ADDR_1)],
-            1,
+            _snapshot(
+                market_substrates={14: [raw_bytes32]},
+                balance_fuses=[FakeBalanceFuse(market_id=14, fuse=ADDR_1)],
+            ),
             None,
         )
         captured = capsys.readouterr()
@@ -1064,10 +1112,10 @@ class TestPrintSubstrates:
     def test_with_encoding_error_substrate(self, capsys):
         bad_bytes = bytes.fromhex("ff" * 16)
         _print_substrates(
-            MagicMock(),
-            {7: [bad_bytes]},
-            [FakeBalanceFuse(market_id=7, fuse=ADDR_1)],
-            1,
+            _snapshot(
+                market_substrates={7: [bad_bytes]},
+                balance_fuses=[FakeBalanceFuse(market_id=7, fuse=ADDR_1)],
+            ),
             None,
         )
         captured = capsys.readouterr()
@@ -1078,10 +1126,10 @@ class TestPrintSubstrates:
             "01" + (8453).to_bytes(11, "big").hex() + "ab" * 20
         )
         _print_substrates(
-            MagicMock(),
-            {54: [malformed_executor]},
-            [FakeBalanceFuse(market_id=54, fuse=ADDR_1)],
-            1,
+            _snapshot(
+                market_substrates={54: [malformed_executor]},
+                balance_fuses=[FakeBalanceFuse(market_id=54, fuse=ADDR_1)],
+            ),
             None,
         )
         captured = capsys.readouterr()
@@ -1094,14 +1142,14 @@ class TestPrintBalanceFusesTable:
         mock_get_name.side_effect = lambda chain, addr, key: (
             "ZeroBalanceFuse" if addr == ADDR_2 else "MorphoBalanceFuse"
         )
-        pv = MagicMock()
-        pv.total_assets_in_market.return_value.call.return_value = 0
         fuses = [
             FakeBalanceFuse(market_id=14, fuse=ADDR_1),
             FakeBalanceFuse(market_id=12, fuse=ADDR_2),
         ]
 
-        _print_balance_fuses_table(pv, fuses, 6, "USDC", 1.0, 1, None)
+        _print_balance_fuses_table(
+            _snapshot(balance_fuses=fuses, market_balances={14: 0, 12: 0}), None
+        )
         out = capsys.readouterr().out
         assert "Balance Fuses (1):" in out
         assert "Zero-Balance Fuses (1):" in out
@@ -1111,10 +1159,12 @@ class TestPrintBalanceFusesTable:
         return_value="MorphoBalanceFuse",
     )
     def test_no_zero_balance_section_when_all_venues(self, mock_get_name, capsys):
-        pv = MagicMock()
-        pv.total_assets_in_market.return_value.call.return_value = 0
         _print_balance_fuses_table(
-            pv, [FakeBalanceFuse(market_id=14, fuse=ADDR_1)], 6, "USDC", 1.0, 1, None
+            _snapshot(
+                balance_fuses=[FakeBalanceFuse(market_id=14, fuse=ADDR_1)],
+                market_balances={14: 0},
+            ),
+            None,
         )
         out = capsys.readouterr().out
         assert "Balance Fuses (1):" in out
@@ -1135,6 +1185,8 @@ class TestAddressTypeChecksumException:
 class TestPrintReconciliation:
     def test_within_threshold(self, capsys):
         data = VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1170,6 +1222,8 @@ class TestPrintReconciliation:
 
     def test_mismatch_over_1pct(self, capsys):
         data = VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1215,9 +1269,9 @@ class TestErc20BalancesNotes:
             cache_dir / "deployment_cache.json",
         )
 
-    @patch("ipor_fusion.cli.vault_health.resolve_token_symbol", return_value="TKN")
-    @patch("ipor_fusion.validation.price_oracle_middleware")
-    @patch("ipor_fusion.validation.ERC20")
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="TKN")
+    @patch("ipor_fusion.core.oracle.price_oracle_middleware")
+    @patch("ipor_fusion.vault_erc20.ERC20")
     def test_balance_zero_note(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -1239,6 +1293,8 @@ class TestErc20BalancesNotes:
         )
 
         data = VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1269,9 +1325,9 @@ class TestErc20BalancesNotes:
         assert "balance=0" in captured.out
         assert erc20.value_in_asset == 0
 
-    @patch("ipor_fusion.cli.vault_health.resolve_token_symbol", return_value="WETH")
-    @patch("ipor_fusion.validation.price_oracle_middleware")
-    @patch("ipor_fusion.validation.ERC20")
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.core.oracle.price_oracle_middleware")
+    @patch("ipor_fusion.vault_erc20.ERC20")
     def test_underlying_and_stale_notes(
         self, mock_erc20_cls, mock_oracle_cls, mock_resolve, capsys
     ):
@@ -1298,6 +1354,8 @@ class TestErc20BalancesNotes:
         )
 
         data = VaultData(
+            vault=ADDR_1,
+            chain_id=ChainId(1),
             block_number=1,
             is_latest=True,
             block_timestamp=0,
@@ -1337,6 +1395,8 @@ class TestErc20BalancesNotes:
 
 def _make_data(**overrides):
     defaults = {
+        "vault": "0x" + "11" * 20,
+        "chain_id": 1,
         "block_number": 1,
         "is_latest": True,
         "block_timestamp": 0,
@@ -1428,7 +1488,7 @@ def _make_lending_market(**overrides):
 class TestPrintLendingHealth:
     def test_no_lending_positions(self, capsys):
         data = _make_data()
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         captured = capsys.readouterr()
         assert "no lending positions" in captured.out
 
@@ -1436,7 +1496,7 @@ class TestPrintLendingHealth:
         m = _make_lending_market(substrate_id="ab" * 32, ltv_usage_percent=50.0)
         m.protocol = "morpho"
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         out = capsys.readouterr().out
         assert "Position Breakdown:" in out
         assert f"morpho market 0x{'ab' * 32}" in out
@@ -1447,7 +1507,7 @@ class TestPrintLendingHealth:
         m.protocol = "aave_v3"
         m.market_id = MarketId(1)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         out = capsys.readouterr().out
         assert "AAVE_V3 (1):" in out
         assert "Health Factor:" in out
@@ -1457,7 +1517,7 @@ class TestPrintLendingHealth:
         m.protocol = "aave_v3"
         m.market_id = MarketId(1)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         assert "CRITICAL" in capsys.readouterr().out
 
     def test_none_ltv_shows_na(self, capsys):
@@ -1469,7 +1529,7 @@ class TestPrintLendingHealth:
         m.protocol = "aave_v3"
         m.market_id = MarketId(1)
         data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         assert "N/A" in capsys.readouterr().out
 
 
@@ -1538,7 +1598,7 @@ def _aave_breakdown(asset=_TOKEN_USDC, supply=0, variable_debt=0, stable_debt=0)
 class TestPrintLendingPositionBreakdown:
     def test_no_positions_shows_no_lending(self, capsys):
         data = _make_data()
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         captured = capsys.readouterr()
         assert "no lending positions" in captured.out
 
@@ -1546,7 +1606,7 @@ class TestPrintLendingPositionBreakdown:
     @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
     def test_morpho_breakdown_renders_three_lines(self, _mock_sym, _mock_dec, capsys):
         data = _make_data(morpho_positions={14: [_morpho_breakdown()]})
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         captured = capsys.readouterr()
         assert "Position Breakdown:" in captured.out
         assert "morpho market 0x" in captured.out
@@ -1562,7 +1622,7 @@ class TestPrintLendingPositionBreakdown:
                 1: [_aave_breakdown(supply=100, variable_debt=50, stable_debt=0)]
             }
         )
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         captured = capsys.readouterr()
         assert "asset 0x" in captured.out
         assert "Supply:" in captured.out
@@ -1579,7 +1639,7 @@ class TestPrintLendingPositionBreakdown:
                 1: [_aave_breakdown(supply=0, variable_debt=0, stable_debt=42)]
             }
         )
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         captured = capsys.readouterr()
         assert "Stable Debt:" in captured.out
 
@@ -1617,7 +1677,7 @@ class TestInlineHealth:
         )
         data = _make_data(lending_health=VaultLendingHealth(markets=[v4]))
 
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
 
         out = capsys.readouterr().out
         assert f"spoke {spoke}:" in out
@@ -1648,23 +1708,16 @@ class TestInlineHealth:
         out = capsys.readouterr().out
         assert "CRITICAL" in out
 
-    @patch("ipor_fusion.cli.vault_markets_view.resolve_token_symbol")
-    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=18)
-    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
-    def test_morpho_market_renders_inline_health(
-        self, _mock_fetcher_sym, _mock_dec, mock_cmd_sym, capsys
-    ):
-        mock_cmd_sym.side_effect = lambda _ctx, addr: {
-            _TOKEN_USDC: "USDC",
-            _TOKEN_WETH: "WETH",
-        }.get(addr, "?")
+    def test_morpho_market_renders_inline_health(self, capsys):
         market = _make_lending_market(substrate_id="ab" * 32, ltv_usage_percent=50.0)
         market.protocol = "morpho"
         data = _make_data(
             lending_health=VaultLendingHealth(markets=[market]),
             morpho_positions={14: [_morpho_breakdown(market_id="ab" * 32)]},
+            token_symbols={_TOKEN_USDC.lower(): "USDC", _TOKEN_WETH.lower(): "WETH"},
+            token_decimals={_TOKEN_USDC.lower(): 6, _TOKEN_WETH.lower(): 18},
         )
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         out = capsys.readouterr().out
         # Per-substrate header lists the token pair
         assert f"morpho market 0x{'ab' * 32} (WETH/USDC)" in out
@@ -1675,14 +1728,7 @@ class TestInlineHealth:
         assert "Health Factor:" in out
         assert "Status:" in out
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.resolve_token_symbol", return_value="USDC"
-    )
-    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="USDC")
-    def test_aave_market_renders_inline_health_after_assets(
-        self, _mock_f_sym, _mock_dec, _mock_cmd_sym, capsys
-    ):
+    def test_aave_market_renders_inline_health_after_assets(self, capsys):
         market = _make_lending_market(ltv_usage_percent=70.0, health_factor=1.4)
         market.protocol = "aave_v3"
         market.market_id = MarketId(1)
@@ -1690,7 +1736,7 @@ class TestInlineHealth:
             lending_health=VaultLendingHealth(markets=[market]),
             aave_positions={1: [_aave_breakdown(supply=100, variable_debt=50)]},
         )
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         out = capsys.readouterr().out
         assert "asset 0x" in out
         # Health appears once for the aggregated Aave market
@@ -1710,8 +1756,8 @@ class TestFetcherCollectors:
         assert 14 in out and 1 not in out
         assert len(out[14]) == 1
 
-    @patch("ipor_fusion.vault_info.resolve_token_decimals", return_value=18)
-    @patch("ipor_fusion.vault_info.resolve_token_symbol", return_value="WETH")
+    @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=18)
+    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.vault_data.resolve_token_decimals", return_value=18)
     @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
     def test_collected_morpho_id_renders_with_one_prefix(
@@ -1727,9 +1773,9 @@ class TestFetcherCollectors:
             supply_assets=Amount(0),
         )
         data = _make_data(morpho_positions={14: [breakdown]})
-        (entry,) = _morpho_breakdown_json(MagicMock(), data, [breakdown])
+        (entry,) = _morpho_breakdown_json(data, [breakdown])
         assert entry["morpho_market_id"] == "0x" + "ab" * 32
-        _print_lending_health(MagicMock(), data)
+        _print_lending_health(data)
         out = capsys.readouterr().out
         assert f"morpho market 0x{'ab' * 32} " in out
         assert "0x0x" not in out
@@ -1985,17 +2031,18 @@ class TestBreakdownTokenPrices:
 
 
 class TestBreakdownAmountJson:
-    @patch("ipor_fusion.vault_info.resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.vault_info.resolve_token_symbol", return_value="USDC")
-    def test_includes_symbol_decimals_formatted_and_usd(self, _sym, _dec):
-        from ipor_fusion.vault_info import (
-            _build_breakdown_amount_json,
+    def _data(self, prices: dict | None) -> Any:
+        return _snapshot(
+            token_symbols={_TOKEN_USDC.lower(): "USDC"},
+            token_decimals={_TOKEN_USDC.lower(): 6},
+            token_prices_usd=prices,
         )
 
-        prices = {_TOKEN_USDC.lower(): 1.0}
-        entry = _build_breakdown_amount_json(
-            MagicMock(), 1_000_000, _TOKEN_USDC, prices
-        )
+    def test_includes_symbol_decimals_formatted_and_usd(self):
+        from ipor_fusion.vault_info import _build_breakdown_amount_json
+
+        data = self._data({_TOKEN_USDC.lower(): 1.0})
+        entry = _build_breakdown_amount_json(data, 1_000_000, _TOKEN_USDC)
         assert entry["raw"] == 1_000_000
         assert entry["token"] == _TOKEN_USDC
         assert entry["symbol"] == "USDC"
@@ -2003,51 +2050,42 @@ class TestBreakdownAmountJson:
         assert entry["formatted"] == "1.0"
         assert entry["usd"] == 1.0
 
-    @patch("ipor_fusion.vault_info.resolve_token_decimals", return_value=6)
-    @patch("ipor_fusion.vault_info.resolve_token_symbol", return_value="USDC")
-    def test_omits_usd_when_no_price(self, _sym, _dec):
-        from ipor_fusion.vault_info import (
-            _build_breakdown_amount_json,
-        )
+    def test_omits_usd_when_no_price(self):
+        from ipor_fusion.vault_info import _build_breakdown_amount_json
 
-        entry = _build_breakdown_amount_json(MagicMock(), 1_000_000, _TOKEN_USDC, None)
+        entry = _build_breakdown_amount_json(self._data(None), 1_000_000, _TOKEN_USDC)
         assert "usd" not in entry
         assert entry["formatted"] == "1.0"
 
 
 class TestFormatTokenAmountUsd:
-    @patch("ipor_fusion.cli.vault_markets_view.resolve_token_decimals", return_value=6)
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.resolve_token_symbol", return_value="USDC"
-    )
-    def test_appends_usd_when_price_known(self, _sym, _dec):
-        from ipor_fusion.cli.vault_markets_view import (
-            _format_token_amount,
+    def _data(self, prices: dict | None) -> Any:
+        return _snapshot(
+            token_symbols={_TOKEN_USDC.lower(): "USDC"},
+            token_decimals={_TOKEN_USDC.lower(): 6},
+            token_prices_usd=prices,
         )
 
-        prices = {_TOKEN_USDC.lower(): 1.0}
-        out = _format_token_amount(MagicMock(), 1_000_000, _TOKEN_USDC, prices)
+    def test_appends_usd_when_price_known(self):
+        from ipor_fusion.cli.vault_markets_view import _format_token_amount
+
+        out = _format_token_amount(
+            self._data({_TOKEN_USDC.lower(): 1.0}), 1_000_000, _TOKEN_USDC
+        )
         assert "1.0 USDC" in out
         assert "$1.00" in out
 
-    @patch("ipor_fusion.cli.vault_markets_view.resolve_token_decimals", return_value=6)
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.resolve_token_symbol", return_value="USDC"
-    )
-    def test_no_usd_suffix_when_price_missing(self, _sym, _dec):
-        from ipor_fusion.cli.vault_markets_view import (
-            _format_token_amount,
-        )
+    def test_no_usd_suffix_when_price_missing(self):
+        from ipor_fusion.cli.vault_markets_view import _format_token_amount
 
-        out = _format_token_amount(MagicMock(), 1_000_000, _TOKEN_USDC, {})
+        out = _format_token_amount(self._data({}), 1_000_000, _TOKEN_USDC)
         assert "$" not in out
 
 
 class TestPrintPendingRequests:
     def test_no_withdraw_manager_data(self, capsys):
         data = _make_data()
-        pv = MagicMock()
-        _print_pending_requests(data, pv)
+        _print_pending_requests(data)
         captured = capsys.readouterr()
         assert captured.out == ""
 
@@ -2063,8 +2101,7 @@ class TestPrintPendingRequests:
                 pending_requests=[],
             ),
         )
-        pv = MagicMock()
-        _print_pending_requests(data, pv)
+        _print_pending_requests(data)
         captured = capsys.readouterr()
         assert "Pending requests: (none)" in captured.out
 
@@ -2263,6 +2300,8 @@ class TestPartitionBalanceFuses:
 def _fee_vault_data(**overrides) -> VaultData:
     """Minimal VaultData for exercising the fees JSON builder."""
     base = {
+        "vault": "0x" + "11" * 20,
+        "chain_id": 1,
         "block_number": 1,
         "is_latest": True,
         "block_timestamp": 0,

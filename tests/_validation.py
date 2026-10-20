@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import dataclasses
 
 from ipor_fusion.validation import (
     Erc20Holding,
@@ -17,15 +17,14 @@ def validate(
     state: VaultState,
     balance_fuses_total: int = 0,
     erc20: Erc20Holdings | None = None,
-    plasma_vault: MagicMock | None = None,
 ) -> VaultValidation:
     """Validate ``state`` with every balance fuse summed into one market."""
     return validate_vault_state(
-        MagicMock(),
-        plasma_vault or MagicMock(),
-        state,
-        {0: balance_fuses_total},
-        erc20 or Erc20Holdings(),
+        dataclasses.replace(
+            state,  # type: ignore[type-var]
+            market_balances={0: balance_fuses_total},
+            erc20=erc20 or Erc20Holdings(),
+        )
     )
 
 

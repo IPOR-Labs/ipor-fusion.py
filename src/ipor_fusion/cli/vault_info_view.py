@@ -14,7 +14,6 @@ from ipor_fusion.cli.vault_health import (
     _print_erc20_balances,
     _print_health_check,
     _print_reconciliation,
-    _read_erc20_holdings,
 )
 from ipor_fusion.cli.vault_markets_view import _print_lending_health, _print_markets
 from ipor_fusion.cli.vault_rendering import (
@@ -26,7 +25,6 @@ from ipor_fusion.cli.vault_rendering import (
 )
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import RecipientFee
-from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.explorer import get_contract_name
 from ipor_fusion.readers.hypercore import HyperCorePendingState
 from ipor_fusion.substrates import (
@@ -48,7 +46,6 @@ from ipor_fusion.vault_info import (
     _wad_to_usd,
     build_vault_info_json,
 )
-from ipor_fusion.vault_reads import _safe_call
 
 
 def _print_role_accounts_table(role_accounts: list[dict[str, Any]]) -> None:
@@ -76,38 +73,28 @@ def _print_role_accounts(role_accounts: list[dict[str, Any]] | None) -> None:
 
 
 def _print_vault_info(
-    ctx: Web3Context,
-    plasma_vault: PlasmaVault,
-    cfg: FusionConfig,
-    data: VaultData,
-    vault_address: PlasmaVaultAddress,
-    chain_id: ChainId,
-    json_output: bool = False,
+    ctx: Web3Context, cfg: FusionConfig, data: VaultData, json_output: bool = False
 ) -> None:
     api_key = cfg.etherscan_api_key
+    chain_id = data.chain_id
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
 
     (
         data.deployment_block,
         data.deployment_timestamp,
         data.deployment_error,
-    ) = fetch_deployment_info(ctx, chain_id, vault_address, api_key)
+    ) = fetch_deployment_info(ctx, data.vault, api_key=api_key)
 
     if json_output:
         result = build_vault_info_json(
-            ctx,
-            plasma_vault,
-            data,
-            chain_id=chain_id,
-            chain_label=chain_label,
-            resolve_name=partial(get_contract_name, chain_id, api_key=api_key),
+            data, resolve_name=partial(get_contract_name, chain_id, api_key=api_key)
         )
         click.echo(json.dumps(result, indent=2))
         return
 
-    _print_identity(data, vault_address, chain_id, chain_label)
+    _print_identity(data, data.vault, chain_id, chain_label)
     _print_supply(data)
-    _print_managers(data, plasma_vault)
+    _print_managers(data)
     click.echo()
 
     _print_fees(data)
@@ -115,15 +102,9 @@ def _print_vault_info(
 
     _print_role_accounts(_role_accounts_json(data))
 
-    market_balances = _print_markets(ctx, plasma_vault, data, chain_id, api_key)
+    _print_markets(data, api_key)
 
-    validation = validate_vault_state(
-        ctx,
-        plasma_vault,
-        data,
-        market_balances,
-        _read_erc20_holdings(ctx, plasma_vault, data),
-    )
+    validation = validate_vault_state(data)
     click.echo("ERC20 Balances (vault holdings):")
     _print_erc20_balances(data, validation.erc20)
     click.echo()
@@ -131,7 +112,7 @@ def _print_vault_info(
     _print_reconciliation(data, validation)
     click.echo()
 
-    _print_lending_health(ctx, data)
+    _print_lending_health(data)
     click.echo()
     _print_hypercore(data)
 
@@ -207,7 +188,7 @@ def _print_supply(data: VaultData) -> None:
         )
 
 
-def _print_managers(data: VaultData, plasma_vault: PlasmaVault) -> None:
+def _print_managers(data: VaultData) -> None:
     click.echo(f"Access Manager:   {data.access_manager}")
     click.echo(f"Price Oracle:     {data.price_oracle_addr}")
     click.echo(f"Rewards Manager:  {data.rewards_manager or 'N/A'}")
@@ -222,7 +203,7 @@ def _print_managers(data: VaultData, plasma_vault: PlasmaVault) -> None:
         if wmd.last_release_funds_timestamp > 0:
             last_iso = _unix_to_iso(wmd.last_release_funds_timestamp)
             click.echo(f"  Last release:   {last_iso}")
-        _print_pending_requests(data, plasma_vault)
+        _print_pending_requests(data)
 
 
 def _format_fee_percent(value: float | None) -> str:
@@ -375,7 +356,7 @@ def _print_hypercore_pending(pending: HyperCorePendingState | None) -> None:
         )
 
 
-def _print_pending_requests(data: VaultData, plasma_vault: PlasmaVault) -> None:
+def _print_pending_requests(data: VaultData) -> None:
     if (wmd := data.withdraw_manager_data) is None:
         return
     if wmd.pending_requests is None:
@@ -389,16 +370,14 @@ def _print_pending_requests(data: VaultData, plasma_vault: PlasmaVault) -> None:
         return
 
     total_shares = Shares(sum(r.shares for r in requests))
-    total_assets: int | None = _safe_call(
-        lambda ts=total_shares: plasma_vault.convert_to_assets(ts).call()
+    request_assets = [wmd.pending_request_assets.get(r.account) for r in requests]
+    total_assets = (
+        None if None in request_assets else sum(a for a in request_assets if a)
     )
 
     click.echo(f"  Pending requests ({len(requests)}):")
     rows: list[tuple[str, ...]] = []
-    for req in requests:
-        assets: int | None = _safe_call(
-            lambda s=req.shares: plasma_vault.convert_to_assets(s).call()
-        )
+    for req, assets in zip(requests, request_assets, strict=True):
         assets_str = (
             f"{_format_amount(assets, data.asset_decimals)} {data.asset_symbol}"
             if assets is not None

@@ -69,15 +69,24 @@ class Call(Generic[T]):
             ctx=self.ctx,
         )
 
-    def call(self, ctx: Web3Context | None = None) -> T:
-        """Execute as `eth_call`; decode and convert per `output_types`/`decoder`."""
+    def call(
+        self, ctx: Web3Context | None = None, *, block: BlockIdentifier | None = None
+    ) -> T:
+        """Execute as `eth_call` at ``block`` (the context's default block when
+        ``None``); decode and convert per `output_types`/`decoder`."""
         actual = self._resolve_ctx(ctx)
         if not self.output_types:
             raise ValueError(
                 "Call.call() on a write-only Call — use .send() instead "
                 "(no output_types declared)."
             )
-        raw = actual.call(self.to, self.data)
+        # The default path keeps the two-argument call, so a context stand-in
+        # that implements only `call(to, data)` still works.
+        raw = (
+            actual.call(self.to, self.data)
+            if block is None
+            else actual.call(self.to, self.data, block)
+        )
         if len(raw) == 0:
             raise EmptyCallResultError(
                 f"eth_call to {self.to} on chain {actual.chain_id} returned no "
