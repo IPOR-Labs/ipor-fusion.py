@@ -752,6 +752,7 @@ class FakeBalanceFuse:
     fuse: str
 
 
+@pytest.mark.usefixtures("sequential_multicall")
 class TestPrintErc20Balances:
     @pytest.fixture(autouse=True)
     def _tmp_config(self, tmp_path, monkeypatch):
@@ -1227,6 +1228,7 @@ class TestPrintReconciliation:
         assert "MISMATCH" in captured.out
 
 
+@pytest.mark.usefixtures("sequential_multicall")
 class TestErc20BalancesNotes:
     @pytest.fixture(autouse=True)
     def _tmp_config(self, tmp_path, monkeypatch):

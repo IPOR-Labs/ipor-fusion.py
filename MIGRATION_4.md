@@ -98,6 +98,12 @@ converted amounts `Amount`. A custom `VaultState` annotates the same.
 now shown in share decimals labelled `shares` (``fusion vault info``) and its JSON
 ``formatted`` uses `share_decimals`; it was formatted with the asset's decimals.
 
+`Web3Context.from_url(..., max_concurrent_requests=8)` bounds the RPC requests in
+flight across every thread using the context (``None`` lifts the bound); the vault
+reads fan out on nested thread pools, and the bound is what a rate-limited provider
+sees. A context built from your own `Web3` object is not bounded unless you add the
+same middleware.
+
 `ensure_supported_chain` takes `ChainId`. `fetch_unpriceable_priced_tokens` takes the oracle and
 underlying as `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,
 `get_contract_name` and `get_deployment_tx` take `HexAddress` (a checksum address

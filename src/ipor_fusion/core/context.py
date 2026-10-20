@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import logging
+import threading
+from typing import Any
 
 from eth_account import Account
 from eth_typing import ChecksumAddress, HexStr
@@ -11,12 +13,21 @@ from requests import ConnectionError as RequestsConnectionError
 from requests import HTTPError, Timeout
 from web3 import Web3
 from web3.exceptions import ContractLogicError, Web3RPCError
-from web3.middleware import ExtraDataToPOAMiddleware
+from web3.middleware import ExtraDataToPOAMiddleware, Web3Middleware
 from web3.providers.rpc.utils import (
     REQUEST_RETRY_ALLOWLIST,
     ExceptionRetryConfiguration,
 )
-from web3.types import BlockIdentifier, LogReceipt, TxParams, TxReceipt, Wei
+from web3.types import (
+    BlockIdentifier,
+    LogReceipt,
+    MakeRequestFn,
+    RPCEndpoint,
+    RPCResponse,
+    TxParams,
+    TxReceipt,
+    Wei,
+)
 
 from ipor_fusion.cache import ContractCache, default_contract_cache
 from ipor_fusion.chains import GET_LOGS_RANGE_HINTS
@@ -70,6 +81,11 @@ class Web3Context:
     # multi-call read (vault fetch, health check) fans that out into minutes of
     # wall clock. Long-running services should pass something tighter.
     DEFAULT_RPC_TIMEOUT_S = 30.0
+    # RPC requests in flight at once through a `from_url` context. The vault
+    # reads fan out on nested thread pools; this bounds what reaches the
+    # provider, whatever the nesting, so a rate-limited endpoint sees a steady
+    # stream instead of bursts.
+    DEFAULT_MAX_CONCURRENT_REQUESTS = 8
 
     def __init__(
         self,
@@ -142,7 +158,7 @@ class Web3Context:
         return self._signer
 
     @classmethod
-    def from_url(
+    def from_url(  # proctor: ignore[primitives-too-many-params]
         cls,
         url: str,
         *,
@@ -153,7 +169,11 @@ class Web3Context:
         log_scan_max_requests: int | None = DEFAULT_LOG_SCAN_MAX_REQUESTS,
         log_source: LogSource | None = None,
         cache: ContractCache | None = None,
+        max_concurrent_requests: int | None = DEFAULT_MAX_CONCURRENT_REQUESTS,
     ) -> Web3Context:
+        """A context on an HTTP provider at ``url``. ``max_concurrent_requests``
+        bounds the RPC requests in flight across every thread using it
+        (``None``: unbounded)."""
         web3 = Web3(
             Web3.HTTPProvider(
                 url,
@@ -171,6 +191,8 @@ class Web3Context:
         # with a ValueError. The middleware moves it to proofOfAuthorityData
         # and leaves every other block untouched.
         web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        if max_concurrent_requests is not None:
+            web3.middleware_onion.add(_in_flight_limit(max_concurrent_requests))
         chain_id = ChainId(web3.eth.chain_id)
 
         return cls(
@@ -385,3 +407,21 @@ class Web3Context:
     @staticmethod
     def _percent_of(value: int, percentage: int) -> int:
         return value * percentage // 100
+
+
+def _in_flight_limit(limit: int) -> type[Web3Middleware]:
+    """A middleware class (web3 instantiates it per Web3) holding a semaphore
+    slot for the duration of each provider request."""
+    if limit < 1:
+        raise ValueError(f"max_concurrent_requests must be at least 1, got {limit}")
+    slots = threading.BoundedSemaphore(limit)
+
+    class InFlightLimit(Web3Middleware):
+        def wrap_make_request(self, make_request: MakeRequestFn) -> MakeRequestFn:
+            def limited(method: RPCEndpoint, params: Any) -> RPCResponse:
+                with slots:
+                    return make_request(method, params)
+
+            return limited
+
+    return InFlightLimit

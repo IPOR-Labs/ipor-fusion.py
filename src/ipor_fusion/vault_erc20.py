@@ -5,21 +5,21 @@ middleware price per token, valued in the underlying asset. Part of the
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from functools import partial
+from typing import Any
 
 from eth_typing import ChecksumAddress, HexAddress
 from web3 import Web3
 
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import MarketId, PlasmaVaultAddress
-from ipor_fusion.vault_reads import _safe_call
 
 
 @dataclass(frozen=True)
@@ -113,36 +113,32 @@ def _read_tokens(
     addresses: list[HexAddress],
     resolve_symbol: Callable[[HexAddress], str],
 ) -> list[_TokenRead]:
-    with ThreadPoolExecutor() as pool:
-        futures: list[tuple[HexAddress, Future, Future, Future, Future]] = []
-        for address in addresses:
-            checksum = Web3.to_checksum_address(address)
-            token = ERC20(checksum)
-            futures.append(
-                (
-                    address,
-                    pool.submit(resolve_symbol, address),
-                    pool.submit(_safe_call, partial(token.decimals().call, ctx)),
-                    pool.submit(_safe_call, partial(token.balance_of(vault).call, ctx)),
-                    pool.submit(
-                        _safe_call,
-                        partial(oracle.get_asset_price(checksum).call, ctx),
-                    ),
-                )
+    """Every token's decimals, the vault's balance and the middleware price in
+    one Multicall3 batch (a read that fails is ``None``); symbols through
+    ``resolve_symbol``."""
+    calls: list[Call[Any]] = []
+    for address in addresses:
+        checksum = Web3.to_checksum_address(address)
+        token = ERC20(checksum)
+        calls += [
+            token.decimals(),
+            token.balance_of(vault),
+            oracle.get_asset_price(checksum),
+        ]
+    results = Multicall3(ctx).try_aggregate(calls)
+    reads: list[_TokenRead] = []
+    for index, address in enumerate(addresses):
+        decimals, balance, price = results[3 * index : 3 * index + 3]
+        reads.append(
+            _TokenRead(
+                address=address,
+                symbol=resolve_symbol(address) or "?",
+                decimals=decimals,
+                balance=balance,
+                price_usd=price.readable() if price else None,
             )
-        reads: list[_TokenRead] = []
-        for address, symbol, decimals, balance, price in futures:
-            price_value = price.result()
-            reads.append(
-                _TokenRead(
-                    address=address,
-                    symbol=symbol.result() or "?",
-                    decimals=decimals.result(),
-                    balance=balance.result(),
-                    price_usd=price_value.readable() if price_value else None,
-                )
-            )
-        return reads
+        )
+    return reads
 
 
 def _value_tokens(
