@@ -734,7 +734,7 @@ def _read_erc20_holdings(ctx, pv, data: VaultData) -> Erc20Holdings:
         balance_fuses=data.balance_fuses,
         market_substrates=data.market_substrates or {},
         market_balances={
-            bf.market_id: pv.total_assets_in_market(bf.market_id).call()
+            bf.market_id: pv.total_assets_in_market(bf.market_id).call(ctx)
             for bf in data.balance_fuses
         },
         price_oracle=data.price_oracle_addr,
@@ -1913,7 +1913,7 @@ class TestFetchAavePositions:
     @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_drops_empty_breakdowns(self, mock_reader_cls):
         mock_reader = MagicMock()
-        mock_reader.position_breakdown.return_value = _aave_breakdown(
+        mock_reader.read_position_breakdown.return_value = _aave_breakdown(
             supply=0, variable_debt=0, stable_debt=0
         )
         mock_reader_cls.return_value = mock_reader
@@ -1931,7 +1931,7 @@ class TestFetchAavePositions:
     @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_returns_breakdowns_for_active_positions(self, mock_reader_cls):
         mock_reader = MagicMock()
-        mock_reader.position_breakdown.return_value = _aave_breakdown(supply=42)
+        mock_reader.read_position_breakdown.return_value = _aave_breakdown(supply=42)
         mock_reader_cls.return_value = mock_reader
 
         with ThreadPoolExecutor() as pool:
@@ -1949,8 +1949,8 @@ class TestFetchAavePositions:
         """Markets granting the same assets still hold separate positions: each
         breakdown comes from that market's Pool, never another market's."""
         supply_in_pool = {pool: i for i, pool in enumerate(_AAVE_POOLS.values(), 1)}
-        mock_reader_cls.side_effect = lambda _ctx, aave_pool: MagicMock(
-            position_breakdown=MagicMock(
+        mock_reader_cls.side_effect = lambda aave_pool: MagicMock(
+            read_position_breakdown=MagicMock(
                 return_value=_aave_breakdown(supply=supply_in_pool[aave_pool])
             )
         )
@@ -1980,7 +1980,7 @@ class TestFetchMorphoPositions:
     @patch("ipor_fusion.vault_positions.MorphoReader")
     def test_returns_breakdowns_for_morpho_substrates(self, mock_reader_cls):
         mock_reader = MagicMock()
-        mock_reader.position_breakdown.return_value = _morpho_breakdown()
+        mock_reader.read_position_breakdown.return_value = _morpho_breakdown()
         mock_reader_cls.return_value = mock_reader
 
         ctx = MagicMock()
@@ -1990,7 +1990,7 @@ class TestFetchMorphoPositions:
             result = _fetch_morpho_positions(ctx, pool, _VAULT_ADDR, {14: [morpho_sub]})
         assert result == {14: [_morpho_breakdown()]}
         # Arbitrum has its own Morpho deployment — never the Ethereum address.
-        mock_reader_cls.assert_called_once_with(ctx, MORPHO_BLUE_ADDRESSES[42161])
+        mock_reader_cls.assert_called_once_with(MORPHO_BLUE_ADDRESSES[42161])
 
 
 class TestBreakdownTokenPrices:
@@ -2021,7 +2021,7 @@ class TestBreakdownTokenPrices:
 
         ctx = MagicMock()
         ctx.call.side_effect = multicall_aware(handler)
-        oracle = PriceOracleMiddleware(ctx, oracle_addr)
+        oracle = PriceOracleMiddleware(oracle_addr)
 
         result = _fetch_breakdown_token_prices(ctx, oracle, {_TOKEN_USDC, _TOKEN_WETH})
 
@@ -2206,7 +2206,6 @@ class TestReadBatch:
             to=ADDR_1,
             data=bytes(4) + encode(["uint256"], [value]),
             output_types=["uint256"],
-            ctx=ctx,
         )
 
     @staticmethod
@@ -2251,7 +2250,7 @@ class TestFuseMarketIdCall:
 
         ctx = MagicMock()
         ctx.call.side_effect = multicall_aware(handler)
-        (result,) = Multicall3(ctx).try_aggregate([_fuse_market_id_call(ctx, ADDR_1)])
+        (result,) = Multicall3(ctx).try_aggregate([_fuse_market_id_call(ADDR_1)])
         return result
 
     def test_returns_decoded_uint256(self):
@@ -2535,7 +2534,7 @@ class TestFetchFeeData:
         vault.get_management_fee_data.return_value.call.return_value = None
         vault.get_unrealized_management_fee.return_value.call.return_value = 0
 
-        def empty_return():
+        def empty_return(_ctx):
             raise error
 
         with (
@@ -2554,7 +2553,7 @@ class TestFetchFeeData:
         vault.get_management_fee_data.return_value.call.return_value = None
         vault.get_unrealized_management_fee.return_value.call.return_value = 0
 
-        def revert():
+        def revert(_ctx):
             raise ContractLogicError("execution reverted")
 
         with (

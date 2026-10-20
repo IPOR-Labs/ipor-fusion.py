@@ -343,9 +343,9 @@ def _snapshot(scenario: str) -> tuple[Web3Context, VaultData]:
     data, chain = SCENARIOS[scenario]()
     ctx = Web3Context(web3=MagicMock(), chain_id=ChainId(1))
     ctx.call = multicall_aware(chain.handle)  # type: ignore[method-assign]
-    vault = PlasmaVault(ctx, VAULT)  # type: ignore[arg-type]
+    vault = PlasmaVault(VAULT)  # type: ignore[arg-type]
     data.market_balances = {
-        bf.market_id: vault.total_assets_in_market(bf.market_id).call()
+        bf.market_id: vault.total_assets_in_market(bf.market_id).call(ctx)
         for bf in data.balance_fuses
     }
     data.erc20 = vault_erc20._read_erc20_holdings(
@@ -361,9 +361,9 @@ def _snapshot(scenario: str) -> tuple[Web3Context, VaultData]:
     if (wmd := data.withdraw_manager_data) is not None:
         wmd.shares_to_release_assets = vault.convert_to_assets(
             Shares(wmd.shares_to_release)
-        ).call()
+        ).call(ctx)
         wmd.pending_request_assets = {
-            req.account: vault.convert_to_assets(req.shares).call()
+            req.account: vault.convert_to_assets(req.shares).call(ctx)
             for req in wmd.pending_requests or []
         }
     with ThreadPoolExecutor() as pool:

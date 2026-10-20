@@ -63,9 +63,9 @@ def _lane_class(transport_kind: CrosschainTransportKind) -> type[CrosschainLane]
         raise ValueError(f"unsupported transport {transport_kind.name}") from None
 
 
-def _probe(call: Call[T]) -> T | None:
+def _probe(call: Call[T], ctx: Web3Context) -> T | None:
     try:
-        return call.call()
+        return call.call(ctx)
     except (Web3Exception, EmptyCallResultError, ValueError):
         return None
 
@@ -76,7 +76,7 @@ def detect_transport(
     """Which transport an executor speaks, the way the fuses decide it: a CCIP
     executor reports ``transportKind()``, a Stargate executor exposes a
     non-zero ``STARGATE_POOL()`` and no ``transportKind()``."""
-    transport_kind = _probe(CcipCrosschainExecutor(ctx, executor).transport_kind())
+    transport_kind = _probe(CcipCrosschainExecutor(executor).transport_kind(), ctx)
     if transport_kind is not None:
         if transport_kind not in LANES:
             raise CrosschainDiscoveryError(
@@ -84,7 +84,7 @@ def detect_transport(
                 "which has no lane"
             )
         return transport_kind
-    pool = _probe(StargateCrosschainExecutor(ctx, executor).stargate_pool())
+    pool = _probe(StargateCrosschainExecutor(executor).stargate_pool(), ctx)
     if pool is not None and pool != ZERO_ADDRESS:
         return CrosschainTransportKind.STARGATE_LAYERZERO
     raise CrosschainDiscoveryError(
@@ -112,7 +112,7 @@ def discover_lane_fuses(
     }
     found: dict[str, FuseAddress] = {}
     for fuse in fuses:
-        if _probe(_market_id_call(ctx, fuse)) != market_id:
+        if _probe(_market_id_call(fuse), ctx) != market_id:
             continue
         code = bytes(ctx.web3.eth.get_code(fuse, block_identifier=ctx.default_block))
         for role, selector in selectors.items():
@@ -131,12 +131,11 @@ def discover_lane_fuses(
     return LaneFuses(found["supply"], found["command"], found["claim"])
 
 
-def _market_id_call(ctx: Web3Context, fuse: ChecksumAddress) -> Call[int]:
+def _market_id_call(fuse: ChecksumAddress) -> Call[int]:
     return Call(
         to=fuse,
         data=function_signature_to_4byte_selector("MARKET_ID()"),
         output_types=["uint256"],
-        ctx=ctx,
     )
 
 
@@ -187,10 +186,10 @@ def discover_deployment(
 ) -> CrosschainDeployment:
     """Read ``vault``'s crosschain market: its executors (transport, factory,
     fuses, attestation keys, spokes served) and the remote vaults per spoke."""
-    plasma_vault = PlasmaVault(hub_ctx, vault)
+    plasma_vault = PlasmaVault(vault)
     executors: list[ChecksumAddress] = []
     remote_vaults: dict[ChainId, list[ChecksumAddress]] = {}
-    for raw in plasma_vault.get_market_substrates(market_id).call():
+    for raw in plasma_vault.get_market_substrates(market_id).call(hub_ctx):
         raw_bytes = bytes(raw)
         try:
             substrate = CrosschainSubstrateLib.bytes32_to_substrate(raw_bytes)
@@ -220,11 +219,11 @@ def discover_deployment(
                 f"substrate {raw_bytes.hex()} on market {market_id} has type "
                 f"{substrate.substrate_type.name}"
             )
-    fuses = plasma_vault.get_fuses().call()
+    fuses = plasma_vault.get_fuses().call(hub_ctx)
     infos = []
     for address in executors:
-        wrapper = CrosschainExecutor(hub_ctx, address)
-        manager = wrapper.manager().call()
+        wrapper = CrosschainExecutor(address)
+        manager = wrapper.manager().call(hub_ctx)
         if manager != vault:
             raise CrosschainDiscoveryError(
                 f"executor {address} is managed by {manager}, not {vault}"
@@ -234,14 +233,14 @@ def discover_deployment(
             CrosschainExecutorInfo(
                 address=address,
                 transport_kind=transport_kind,
-                factory=wrapper.factory().call(),
+                factory=wrapper.factory().call(hub_ctx),
                 fuses=discover_lane_fuses(hub_ctx, fuses, transport_kind, market_id),
-                balance_proposer=wrapper.balance_proposer().call(),
-                balance_approver=wrapper.balance_approver().call(),
+                balance_proposer=wrapper.balance_proposer().call(hub_ctx),
+                balance_approver=wrapper.balance_approver().call(hub_ctx),
                 spoke_chain_ids=tuple(
                     chain_id
                     for chain_id in sorted(remote_vaults)
-                    if wrapper.has_dispatcher(chain_id).call()
+                    if wrapper.has_dispatcher(chain_id).call(hub_ctx)
                 ),
             )
         )
@@ -266,10 +265,10 @@ def open_lane(
     fuses on the executor's vault (its ``MANAGER``) under ``market_id``."""
     transport_kind = detect_transport(hub_ctx, executor)
     if fuses is None:
-        vault = CrosschainExecutor(hub_ctx, executor).manager().call()
+        vault = CrosschainExecutor(executor).manager().call(hub_ctx)
         fuses = discover_lane_fuses(
             hub_ctx,
-            PlasmaVault(hub_ctx, vault).get_fuses().call(),
+            PlasmaVault(vault).get_fuses().call(hub_ctx),
             transport_kind,
             market_id,
         )

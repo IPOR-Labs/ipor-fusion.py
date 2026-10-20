@@ -24,25 +24,27 @@ class Call(Generic[T]):
 
     Built by `ContractWrapper` methods (one per Solidity function) — instead of
     executing immediately, those methods return a `Call` so the same definition
-    powers `eth_call` (`.call()`), `eth_sendTransaction` (`.send()`), and
+    powers `eth_call` (`.call(ctx)`), `eth_sendTransaction` (`.send(ctx)`), and
     `eth_simulateV1` batching (`VaultSimulator.add_call`/`observe`).
+
+    A `Call` is offline data: it carries no context and names no chain. The
+    context passed to `.call`, `.send`, `.build_transaction` or
+    `.estimate_gas` decides where it runs (and the chain id of the
+    transaction), so a wrapper shared across chains, or an executor and
+    dispatcher at the same address, needs the caller to pick the context.
 
     Example — read, send, and simulate share the same builder:
 
-        balance = usdc.balance_of(addr).call()          # eth_call → Amount
-        usdc.transfer(addr, amount).send()              # tx → TxReceipt
+        balance = usdc.balance_of(addr).call(ctx)       # eth_call → Amount
+        usdc.transfer(addr, amount).send(ctx)           # tx → TxReceipt
         sim.observe("after", usdc.balance_of(vault))    # eth_simulateV1
         sim.add_call(call=usdc.approve(spender, amount), from_=user)
-
-    The `ctx` carried inside is a *default* — `Call.call(other_ctx)` overrides
-    it without rebuilding (useful for cross-context reads on the same address).
     """
 
     to: ChecksumAddress
     data: bytes
     output_types: list[str] | None = None
     decoder: Callable[..., T] | None = None
-    ctx: Web3Context | None = None
 
     @property
     def calldata(self) -> bytes:
@@ -66,30 +68,26 @@ class Call(Generic[T]):
             data=self.data,
             output_types=list(self.output_types),
             decoder=mapped,
-            ctx=self.ctx,
         )
 
-    def call(
-        self, ctx: Web3Context | None = None, *, block: BlockIdentifier | None = None
-    ) -> T:
-        """Execute as `eth_call` at ``block`` (the context's default block when
-        ``None``); decode and convert per `output_types`/`decoder`."""
-        actual = self._resolve_ctx(ctx)
+    def call(self, ctx: Web3Context, *, block: BlockIdentifier | None = None) -> T:
+        """Execute as `eth_call` on ``ctx`` at ``block`` (the context's default
+        block when ``None``); decode and convert per `output_types`/`decoder`."""
         if not self.output_types:
             raise ValueError(
-                "Call.call() on a write-only Call — use .send() instead "
+                "Call.call() on a write-only Call — use .send(ctx) instead "
                 "(no output_types declared)."
             )
         # The default path keeps the two-argument call, so a context stand-in
         # that implements only `call(to, data)` still works.
         raw = (
-            actual.call(self.to, self.data)
+            ctx.call(self.to, self.data)
             if block is None
-            else actual.call(self.to, self.data, block)
+            else ctx.call(self.to, self.data, block)
         )
         if len(raw) == 0:
             raise EmptyCallResultError(
-                f"eth_call to {self.to} on chain {actual.chain_id} returned no "
+                f"eth_call to {self.to} on chain {ctx.chain_id} returned no "
                 f"data (selector 0x{self.data[:4].hex()}): no contract at this "
                 "address at the requested block, or it does not implement the "
                 "function."
@@ -98,7 +96,7 @@ class Call(Generic[T]):
 
     def decode(self, raw: bytes) -> T:
         """Decode raw return data per `output_types`/`decoder` — the second half
-        of `.call()`, for return data fetched elsewhere (e.g. `Multicall3`)."""
+        of `.call(ctx)`, for return data fetched elsewhere (e.g. `Multicall3`)."""
         if not self.output_types:
             raise ValueError("Call.decode() on a write-only Call.")
         values = tuple(decode(self.output_types, bytes(raw)))
@@ -107,80 +105,44 @@ class Call(Generic[T]):
             return self.decoder(single)
         return cast(T, single)
 
-    def send(self, ctx: Web3Context | None = None) -> TxReceipt:
-        """Submit as a transaction via the resolved context's signer."""
-        actual = self._resolve_ctx(ctx)
-        return actual.send(self.to, self.data)
+    def send(self, ctx: Web3Context) -> TxReceipt:
+        """Submit as a transaction via ``ctx``'s signer."""
+        return ctx.send(self.to, self.data)
 
     def build_transaction(
-        self, ctx: Web3Context | None = None, *, block: BlockIdentifier = "latest"
+        self, ctx: Web3Context, *, block: BlockIdentifier = "latest"
     ) -> TxParams:
         """Build the transaction dict for this Call without signing or sending —
-        mirrors `.send()`, delegating to `Web3Context.build_transaction`. Returns
-        the dict a signer would submit; needs a signer address, no key."""
-        return self._resolve_ctx(ctx).build_transaction(self.to, self.data, block=block)
+        mirrors `.send(ctx)`, delegating to `Web3Context.build_transaction`.
+        Returns the dict a signer would submit; needs a signer address, no key."""
+        return ctx.build_transaction(self.to, self.data, block=block)
 
     def estimate_gas(
-        self, ctx: Web3Context | None = None, *, block: BlockIdentifier = "latest"
+        self, ctx: Web3Context, *, block: BlockIdentifier = "latest"
     ) -> int:
         """Estimate gas for this Call without signing or sending — mirrors
-        `.send()`, delegating to `Web3Context.estimate_gas`. A would-revert
+        `.send(ctx)`, delegating to `Web3Context.estimate_gas`. A would-revert
         Call raises the underlying revert."""
-        return self._resolve_ctx(ctx).estimate_gas(self.to, self.data, block=block)
-
-    def _resolve_ctx(self, ctx: Web3Context | None) -> Web3Context:
-        actual = ctx or self.ctx
-        if actual is None:
-            raise ValueError(
-                "Web3Context required: pass it to .call(ctx)/.send(ctx) or "
-                "build this Call via a wrapper instantiated with ctx."
-            )
-        return actual
-
-
-_ENCODER_PLACEHOLDER_ADDRESS: ChecksumAddress = cast(
-    ChecksumAddress, "0x0000000000000000000000000000000000000000"
-)
+        return ctx.estimate_gas(self.to, self.data, block=block)
 
 
 class ContractWrapper:
-    """Base wrapper. Subclasses expose one method per Solidity function that
-    returns a `Call[T]` — never executing eagerly. Callers chain `.call()` for
-    reads, `.send()` for writes, or hand the `Call` to `VaultSimulator`.
+    """Base wrapper: a contract address and nothing chain-bound. Subclasses
+    expose one method per Solidity function that returns a `Call[T]` — never
+    executing. Callers run it with `.call(ctx)` for reads, `.send(ctx)` for
+    writes, or hand the `Call` to `VaultSimulator` / `Multicall3`.
+
+    A method that must execute to answer (a storage read, a log scan, a read
+    that depends on another read) is named ``read_*`` and takes the context as
+    its first argument.
     """
 
-    def __init__(self, ctx: Web3Context, address: ChecksumAddress):
-        self._ctx = ctx
+    def __init__(self, address: ChecksumAddress):
         self._address = Web3.to_checksum_address(address)
 
     @property
     def address(self) -> ChecksumAddress:
         return self._address
-
-    @classmethod
-    def encoder(cls, address: ChecksumAddress | None = None):
-        """Build a ctx-less wrapper: every builder method, no Web3Context.
-
-        Named for its first use, external-signer flows (HTTP signing service,
-        multisig), which only need `Call.calldata` — the actual `to` and `ctx`
-        are filled in by the signer. It serves any builder that needs no chain
-        access, decoders included. Calling `.call()` or `.send()` on a Call
-        produced this way raises (no ctx).
-
-        Pass `address` unless `.calldata` really is the only consumer. The
-        encoding ignores it, but a builder that reads `self._address`
-        semantically — matching it against a log's emitter, say, or folding it
-        into a hash — runs against the placeholder zero address without one,
-        and so rejects input that is genuinely the caller's.
-        """
-        instance = cls.__new__(cls)
-        instance._ctx = None
-        instance._address = (
-            Web3.to_checksum_address(address)
-            if address is not None
-            else _ENCODER_PLACEHOLDER_ADDRESS
-        )
-        return instance
 
     def _view(
         self,
@@ -194,15 +156,10 @@ class ContractWrapper:
             data=_encode_calldata(signature, *args),
             output_types=output_types,
             decoder=decoder,
-            ctx=self._ctx,
         )
 
     def _write(self, signature: str, *args: Any) -> Call[None]:
-        return Call(
-            to=self._address,
-            data=_encode_calldata(signature, *args),
-            ctx=self._ctx,
-        )
+        return Call(to=self._address, data=_encode_calldata(signature, *args))
 
 
 def _encode_calldata(signature: str, *args: Any) -> bytes:

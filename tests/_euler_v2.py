@@ -210,45 +210,41 @@ def mine_salt(
 
 
 def evc_is_operator_authorized(
-    ctx: Web3Context, account: ChecksumAddress, operator: ChecksumAddress
+    account: ChecksumAddress, operator: ChecksumAddress
 ) -> Call[bool]:
     data = function_signature_to_4byte_selector(
         "isAccountOperatorAuthorized(address,address)"
     ) + encode(["address", "address"], [account, operator])
-    return Call(to=EULER_V2_EVC, data=data, output_types=["bool"], ctx=ctx)
+    return Call(to=EULER_V2_EVC, data=data, output_types=["bool"])
 
 
-def factory_deployed_pools(ctx: Web3Context, pool: ChecksumAddress) -> Call[bool]:
+def factory_deployed_pools(pool: ChecksumAddress) -> Call[bool]:
     data = function_signature_to_4byte_selector("deployedPools(address)") + encode(
         ["address"], [pool]
     )
-    return Call(to=EULERSWAP_FACTORY, data=data, output_types=["bool"], ctx=ctx)
+    return Call(to=EULERSWAP_FACTORY, data=data, output_types=["bool"])
 
 
-def pool_dynamic_params(ctx: Web3Context, pool: ChecksumAddress) -> Call[tuple]:
+def pool_dynamic_params(pool: ChecksumAddress) -> Call[tuple]:
     """Read the pool's current mutable curve / fee configuration."""
     data = function_signature_to_4byte_selector("getDynamicParams()")
-    return Call(to=pool, data=data, output_types=[_DYNAMIC_PARAMS_TYPE], ctx=ctx)
+    return Call(to=pool, data=data, output_types=[_DYNAMIC_PARAMS_TYPE])
 
 
-def registry_pool_by_euler_account(
-    ctx: Web3Context, account: ChecksumAddress
-) -> Call[ChecksumAddress]:
+def registry_pool_by_euler_account(account: ChecksumAddress) -> Call[ChecksumAddress]:
     """Read the EulerSwap registry's registered pool for an EVC account (0x0 if none)."""
     data = function_signature_to_4byte_selector("poolByEulerAccount(address)") + encode(
         ["address"], [account]
     )
-    return Call(to=EULERSWAP_REGISTRY, data=data, output_types=["address"], ctx=ctx)
+    return Call(to=EULERSWAP_REGISTRY, data=data, output_types=["address"])
 
 
-def evault_debt_of(
-    ctx: Web3Context, euler_vault: ChecksumAddress, account: ChecksumAddress
-) -> Call[int]:
+def evault_debt_of(euler_vault: ChecksumAddress, account: ChecksumAddress) -> Call[int]:
     """Read an Euler eVault's outstanding debt for an account (underlying units)."""
     data = function_signature_to_4byte_selector("debtOf(address)") + encode(
         ["address"], [account]
     )
-    return Call(to=euler_vault, data=data, output_types=["uint256"], ctx=ctx)
+    return Call(to=euler_vault, data=data, output_types=["uint256"])
 
 
 @dataclass(frozen=True)
@@ -275,12 +271,12 @@ def queue_setup(
     supply + deploy actions (NOT yet executed) so the caller controls execution
     order and observations.
     """
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, access_manager_address)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(access_manager_address)
     deploy_fuse = EulerV2SwapDeployFuse(EULER_SWAP_DEPLOY_FUSE)
     supply_fuse = EulerV2SupplyFuse(EULER_SUPPLY_FUSE)
-    cbeth = ERC20(ctx, BASE_CBETH)
-    weth = ERC20(ctx, BASE_WETH)
+    cbeth = ERC20(BASE_CBETH)
+    weth = ERC20(BASE_WETH)
 
     account = euler_account(vault_address, SUB_ACCOUNT)
     sp = static_params(account)

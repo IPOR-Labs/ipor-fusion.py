@@ -104,7 +104,7 @@ default run also logs the unsigned `clone(...)` creation calldata.
 
 These examples only simulate; they never broadcast. To submit a flow on-chain, take
 the `.calldata` each builder produces and sign it with your own signer -- a multisig,
-hardware wallet, or key-management service. (`Call.send()` performs a direct send from a
+hardware wallet, or key-management service. (`Call.send(ctx)` performs a direct send from a
 configured signer, but a production deployment should not sign with a hot key.) Always
 review production configuration independently before using it with real funds.
 

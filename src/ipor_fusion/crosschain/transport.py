@@ -26,7 +26,6 @@ from typing import Any, ClassVar
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
-from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.contracts import CrosschainDispatcher, CrosschainExecutor
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
@@ -91,15 +90,11 @@ class CrosschainTransport(ABC):
         return ()
 
     @abstractmethod
-    def executor(
-        self, ctx: Web3Context, address: ChecksumAddress
-    ) -> CrosschainExecutor:
+    def executor(self, address: ChecksumAddress) -> CrosschainExecutor:
         """Wrap an executor of this transport."""
 
     @abstractmethod
-    def dispatcher(
-        self, ctx: Web3Context, address: ChecksumAddress
-    ) -> CrosschainDispatcher:
+    def dispatcher(self, address: ChecksumAddress) -> CrosschainDispatcher:
         """Wrap a dispatcher of this transport."""
 
 

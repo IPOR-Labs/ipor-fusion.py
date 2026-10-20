@@ -254,12 +254,11 @@ class TestStargateTransport:
 
     def test_wrappers_and_chain_ids(self):
         transport = stargate_transport()
-        ctx = MagicMock()
         assert isinstance(
-            transport.executor(ctx, STARGATE_EXECUTOR), StargateCrosschainExecutor
+            transport.executor(STARGATE_EXECUTOR), StargateCrosschainExecutor
         )
         assert isinstance(
-            transport.dispatcher(ctx, STARGATE_EXECUTOR), StargateCrosschainDispatcher
+            transport.dispatcher(STARGATE_EXECUTOR), StargateCrosschainDispatcher
         )
         assert {ETHEREUM, BASE} <= transport.chain_ids
         assert transport.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO
@@ -584,12 +583,9 @@ class TestCcipTransport:
 
     def test_wrappers(self):
         transport = ccip_transport()
-        ctx = MagicMock()
+        assert isinstance(transport.executor(STARGATE_EXECUTOR), CcipCrosschainExecutor)
         assert isinstance(
-            transport.executor(ctx, STARGATE_EXECUTOR), CcipCrosschainExecutor
-        )
-        assert isinstance(
-            transport.dispatcher(ctx, STARGATE_EXECUTOR), CcipCrosschainDispatcher
+            transport.dispatcher(STARGATE_EXECUTOR), CcipCrosschainDispatcher
         )
         assert transport.transport_kind == CrosschainTransportKind.CHAINLINK_CCIP
 

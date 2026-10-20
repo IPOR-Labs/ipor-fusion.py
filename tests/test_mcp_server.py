@@ -2,7 +2,7 @@
 
 import asyncio
 import importlib.metadata
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from web3 import Web3
@@ -413,8 +413,8 @@ def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:
 def _mock_manager(accounts: list[RoleAccount]) -> MagicMock:
     manager = MagicMock()
     manager.address = "0xAM"
-    manager.get_all_role_accounts.return_value = accounts
-    manager.get_accounts_with_role.return_value = accounts
+    manager.read_all_role_accounts.return_value = accounts
+    manager.read_accounts_with_role.return_value = accounts
     return manager
 
 
@@ -433,8 +433,8 @@ class TestVaultRoleAccounts:
 
         result = vault_role_accounts(vault_address=VAULT_ADDR)
 
-        manager.get_all_role_accounts.assert_called_once()
-        manager.get_accounts_with_role.assert_not_called()
+        manager.read_all_role_accounts.assert_called_once()
+        manager.read_accounts_with_role.assert_not_called()
         assert result.role_filter is None
         assert result.access_manager == "0xAM"
         assert result.chain_id == 1  # single-provider fallback
@@ -458,8 +458,8 @@ class TestVaultRoleAccounts:
 
         result = vault_role_accounts(vault_address=VAULT_ADDR, role="atomist")
 
-        manager.get_accounts_with_role.assert_called_once_with(100)
-        manager.get_all_role_accounts.assert_not_called()
+        manager.read_accounts_with_role.assert_called_once_with(ANY, 100)
+        manager.read_all_role_accounts.assert_not_called()
         assert result.role_filter == "ATOMIST_ROLE"
 
     @patch("ipor_fusion.mcp.server._build_ctx")
@@ -778,8 +778,8 @@ def _stub_reader_instance():
         last_update=1700000000,
         fee=0,
     )
-    reader.require_market.return_value = (params, market)
-    reader.rates_from.return_value = MorphoMarketRates(
+    reader.read_existing_market.return_value = (params, market)
+    reader.read_rates_from.return_value = MorphoMarketRates(
         rate_per_second_wad=10**9,
         utilization=0.9,
         borrow_apy=0.032,
@@ -952,7 +952,9 @@ class TestMarketMorphoBlue:
     ):
         mock_ctx_cls.from_url.return_value = MagicMock()
         reader = _stub_reader_instance()
-        reader.require_market.side_effect = MorphoMarketNotFoundError("no such market")
+        reader.read_existing_market.side_effect = MorphoMarketNotFoundError(
+            "no such market"
+        )
         mock_reader_cls.return_value = reader
 
         with pytest.raises(MorphoMarketNotFoundError, match="no such market"):

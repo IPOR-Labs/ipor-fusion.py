@@ -10,6 +10,7 @@ from web3 import Web3
 from web3.exceptions import ContractPanicError
 from web3.types import LogReceipt, Timestamp
 
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.types import Amount, Fee, Period, PlasmaVaultAddress, Shares
@@ -110,18 +111,20 @@ class WithdrawManager(ContractWrapper):
             decoder=_withdraw_request_info_decoder,
         )
 
-    # ── Compound methods: event aggregation + per-account request_info reads ──
+    # ── Composite reads on ``ctx``: event aggregation + request_info reads ──
 
-    def get_pending_requests(
+    def read_pending_requests(
         self,
+        ctx: Web3Context,
         from_block: BlockNumber | None = None,
     ) -> list[AccountRequest]:
-        """Return per-account validated withdrawal requests (active only).
+        """Return per-account validated withdrawal requests (active only), as of
+        ``ctx.default_block`` (its timestamp included).
 
         Replays `WithdrawRequestUpdated` from ``from_block``, or from the
         WithdrawManager's creation when None."""
-        current_timestamp = self._ctx.get_block()["timestamp"]
-        events = self._get_withdraw_request_updated_events(from_block=from_block)
+        current_timestamp = ctx.get_block()["timestamp"]
+        events = self._get_withdraw_request_updated_events(ctx, from_block=from_block)
 
         accounts: list[str] = []
         for event in events:
@@ -137,14 +140,14 @@ class WithdrawManager(ContractWrapper):
 
         checksummed = [Web3.to_checksum_address(account) for account in accounts]
         calls = [self.request_info(account) for account in checksummed]
-        infos = Multicall3(self._ctx).try_aggregate(calls)
+        infos = Multicall3(ctx).try_aggregate(calls)
         results: list[AccountRequest] = []
         for account, call, req in zip(checksummed, calls, infos, strict=True):
             if req is None:
                 # Re-run the failed read alone: a panic skips the account,
                 # any other failure surfaces as it would unbatched.
                 try:
-                    req = call.call()
+                    req = call.call(ctx)
                 except ContractPanicError:
                     logger.warning("ContractPanicError for account %s", account)
                     continue
@@ -160,12 +163,13 @@ class WithdrawManager(ContractWrapper):
 
         return results
 
-    def get_pending_requests_info(
+    def read_pending_requests_info(
         self,
+        ctx: Web3Context,
         from_block: BlockNumber | None = None,
     ) -> PendingRequestsInfo:
-        current_timestamp = self._ctx.get_block()["timestamp"]
-        requests = self.get_pending_requests(from_block=from_block)
+        current_timestamp = ctx.get_block()["timestamp"]
+        requests = self.read_pending_requests(ctx, from_block=from_block)
         total = sum(r.shares for r in requests)
         return PendingRequestsInfo(
             shares=Shares(total),
@@ -174,13 +178,14 @@ class WithdrawManager(ContractWrapper):
 
     def _get_withdraw_request_updated_events(
         self,
+        ctx: Web3Context,
         from_block: BlockNumber | None = None,
     ) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="WithdrawRequestUpdated(address,uint256,uint32)")
         ).to_0x_hex()
         return list(
-            self._ctx.get_logs(
+            ctx.get_logs(
                 contract_address=self._address,
                 topics=[event_signature_hash],
                 from_block=from_block,

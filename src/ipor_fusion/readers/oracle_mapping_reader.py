@@ -118,8 +118,8 @@ class OracleMappingReader:
     def __init__(self, ctx: Web3Context, oracle: ChecksumAddress):
         self._ctx = ctx
         self._oracle_addr = oracle
-        self._oracle = PriceOracleMiddleware(ctx, oracle)
-        self._manager = PriceOracleMiddlewareManager(ctx, oracle)
+        self._oracle = PriceOracleMiddleware(oracle)
+        self._manager = PriceOracleMiddlewareManager(oracle)
 
     @cached_property
     def _pricing_oracle(self) -> PriceOracleMiddleware:
@@ -127,10 +127,9 @@ class OracleMappingReader:
         first use, since most readers in a mapping never read a price."""
         return price_oracle_middleware(self._ctx, self._oracle_addr)
 
-    @staticmethod
-    def _safe(call: Call[Any]) -> Any:
+    def _safe(self, call: Call[Any]) -> Any:
         try:
-            return call.call()
+            return call.call(self._ctx)
         except Exception:
             return None
 
@@ -159,7 +158,7 @@ class OracleMappingReader:
 
     def asset_price(self, asset: ChecksumAddress) -> Price | None:
         try:
-            return self._pricing_oracle.get_asset_price(asset).call()
+            return self._pricing_oracle.get_asset_price(asset).call(self._ctx)
         except Exception:
             return None
 
@@ -177,66 +176,66 @@ class OracleMappingReader:
 
     # -- token metadata ----------------------------------------------------
     def symbol(self, token: ChecksumAddress) -> str | None:
-        return self._safe(ERC20(self._ctx, token).symbol())
+        return self._safe(ERC20(token).symbol())
 
     def token_decimals(self, token: ChecksumAddress) -> int | None:
-        return self._safe(ERC20(self._ctx, token).decimals())
+        return self._safe(ERC20(token).decimals())
 
     # -- feed probes -------------------------------------------------------
     def feed_decimals(self, source: ChecksumAddress) -> int | None:
-        return self._safe(_Aggregator(self._ctx, source).decimals())
+        return self._safe(_Aggregator(source).decimals())
 
     def feed_description(self, source: ChecksumAddress) -> str | None:
-        return self._safe(_Aggregator(self._ctx, source).description())
+        return self._safe(_Aggregator(source).description())
 
     def feed_latest_round_data(
         self, source: ChecksumAddress
     ) -> tuple[int, int, int, int, int] | None:
-        return self._safe(_Aggregator(self._ctx, source).latest_round_data())
+        return self._safe(_Aggregator(source).latest_round_data())
 
     def feed_version(self, source: ChecksumAddress) -> int | None:
-        return self._safe(_Aggregator(self._ctx, source).version())
+        return self._safe(_Aggregator(source).version())
 
     def feed_aggregator(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_Aggregator(self._ctx, source).aggregator())
+        return self._safe(_Aggregator(source).aggregator())
 
     def feed_phase_id(self, source: ChecksumAddress) -> int | None:
-        return self._safe(_Aggregator(self._ctx, source).phase_id())
+        return self._safe(_Aggregator(source).phase_id())
 
     def feed_vault(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_Erc4626Feed(self._ctx, source).vault())
+        return self._safe(_Erc4626Feed(source).vault())
 
     def feed_morpho_oracle(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_MorphoFeed(self._ctx, source).morpho_oracle())
+        return self._safe(_MorphoFeed(source).morpho_oracle())
 
     def feed_collateral_token(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_MorphoFeed(self._ctx, source).collateral_token())
+        return self._safe(_MorphoFeed(source).collateral_token())
 
     def feed_loan_token(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_MorphoFeed(self._ctx, source).loan_token())
+        return self._safe(_MorphoFeed(source).loan_token())
 
     def morpho_oracle_price(self, morpho_oracle: ChecksumAddress) -> int | None:
-        return self._safe(_MorphoOracle(self._ctx, morpho_oracle).price())
+        return self._safe(_MorphoOracle(morpho_oracle).price())
 
     def feed_asset_x(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_DualXrefFeed(self._ctx, source).asset_x())
+        return self._safe(_DualXrefFeed(source).asset_x())
 
     def feed_asset_x_asset_y_feed(
         self, source: ChecksumAddress
     ) -> ChecksumAddress | None:
-        return self._safe(_DualXrefFeed(self._ctx, source).asset_x_asset_y_feed())
+        return self._safe(_DualXrefFeed(source).asset_x_asset_y_feed())
 
     def feed_asset_y_usd_feed(self, source: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_DualXrefFeed(self._ctx, source).asset_y_usd_feed())
+        return self._safe(_DualXrefFeed(source).asset_y_usd_feed())
 
     # -- ERC4626 vault reads ----------------------------------------------
     def vault_asset(self, vault: ChecksumAddress) -> ChecksumAddress | None:
-        return self._safe(_Erc4626Vault(self._ctx, vault).asset())
+        return self._safe(_Erc4626Vault(vault).asset())
 
     def vault_decimals(self, vault: ChecksumAddress) -> int | None:
-        return self._safe(_Erc4626Vault(self._ctx, vault).decimals())
+        return self._safe(_Erc4626Vault(vault).decimals())
 
     def vault_convert_to_assets(
         self, vault: ChecksumAddress, shares: int
     ) -> int | None:
-        return self._safe(_Erc4626Vault(self._ctx, vault).convert_to_assets(shares))
+        return self._safe(_Erc4626Vault(vault).convert_to_assets(shares))

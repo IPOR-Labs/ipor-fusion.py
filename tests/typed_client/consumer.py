@@ -11,9 +11,12 @@ executed.
 from eth_typing import ChecksumAddress
 
 from ipor_fusion import (
+    ERC20,
     AccessManager,
     Amount,
     AssetId,
+    BalanceProposal,
+    Call,
     CcipCrosschainDispatcher,
     CcipCrosschainExecutor,
     CcipCrosschainFactory,
@@ -23,10 +26,16 @@ from ipor_fusion import (
     CrosschainDispatcher,
     CrosschainExecutor,
     CrosschainFactory,
+    CrosschainLane,
+    Decimals,
+    ExternalStateExecutor,
     IporFusionMarkets,
+    LegacyPriceOracleMiddleware,
     MarketId,
+    Multicall3,
     Period,
     PlasmaVault,
+    Price,
     ProposalId,
     RewardsManager,
     RoleId,
@@ -52,6 +61,7 @@ from ipor_fusion import (
     parse_morpho_market_id,
     parse_plasma_vault_address,
     parse_tx_hash,
+    price_oracle_middleware,
     resolve_token_symbol,
     validate_vault,
     validate_vault_state,
@@ -61,12 +71,12 @@ ETHEREUM = ChainId(1)
 VAULT = parse_plasma_vault_address("0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2")
 
 
-def access(am: AccessManager, account: ChecksumAddress) -> None:
+def access(ctx: Web3Context, am: AccessManager, account: ChecksumAddress) -> None:
     am.has_role(RoleId(100), account)
     am.has_role(Roles.ATOMIST_ROLE, account)
     am.grant_role(Roles.ALPHA_ROLE, account, Period(0))
     am.revoke_role(Roles.ALPHA_ROLE, account)
-    am.get_accounts_with_role(Roles.resolve("ATOMIST"))
+    am.read_accounts_with_role(ctx, Roles.resolve("ATOMIST"))
 
 
 def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
@@ -76,7 +86,7 @@ def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     build_vault_info_json(data)
     validate_vault_state(data)
     validate_vault(ctx.at_block(1), VAULT)
-    vault.get_fuses().call(block=1)
+    vault.get_fuses().call(ctx, block=1)
     resolve_token_symbol(ctx, VAULT)
     fetch_unpriceable_priced_tokens(ctx, VAULT, VAULT, [], {}, None)
 
@@ -104,6 +114,7 @@ def crosschain(
 
 
 def crosschain_reads_feed_writes(
+    ctx: Web3Context,
     ccip: CcipCrosschainExecutor,
     ccip_dispatcher: CcipCrosschainDispatcher,
     ccip_factory: CcipCrosschainFactory,
@@ -111,44 +122,82 @@ def crosschain_reads_feed_writes(
     stargate_factory: StargateCrosschainFactory,
 ) -> None:
     # Ids read through the SDK go back in without re-wrapping.
-    ccip.approve_balance(ccip.active_proposal_id(ETHEREUM).call())
-    stargate.approve_balance(stargate.active_proposal_id(ETHEREUM).call())
-    ccip_factory.asset_frozen(ccip.asset_id().call())
-    ccip_factory.asset_config(ccip_dispatcher.asset_id().call())
-    stargate_factory.asset_config(stargate.asset_id().call())
-    ccip_dispatcher.processed_operation(ccip.active_return(ETHEREUM).call())
-    stargate.deployment_status(stargate.pending_request_by_chain(ETHEREUM).call())
+    ccip.approve_balance(ccip.active_proposal_id(ETHEREUM).call(ctx))
+    stargate.approve_balance(stargate.active_proposal_id(ETHEREUM).call(ctx))
+    ccip_factory.asset_frozen(ccip.asset_id().call(ctx))
+    ccip_factory.asset_config(ccip_dispatcher.asset_id().call(ctx))
+    stargate_factory.asset_config(stargate.asset_id().call(ctx))
+    ccip_dispatcher.processed_operation(ccip.active_return(ETHEREUM).call(ctx))
+    stargate.deployment_status(stargate.pending_request_by_chain(ETHEREUM).call(ctx))
     stargate_factory.cancel_pending_deployment(
-        stargate.pending_request_by_chain(ETHEREUM).call()
+        stargate.pending_request_by_chain(ETHEREUM).call(ctx)
     )
 
 
 def roles_flow_from_getters_into_writes(ctx: Web3Context) -> None:
-    vault = PlasmaVault(ctx, VAULT)
-    manager = AccessManager(ctx, vault.get_access_manager_address().call())
+    vault = PlasmaVault(VAULT)
+    manager = AccessManager(vault.get_access_manager_address().call(ctx))
     manager.has_role(Roles.ATOMIST_ROLE, vault.address)
-    fuses = vault.get_fuses().call()
+    fuses = vault.get_fuses().call(ctx)
     vault.remove_fuses(fuses)
-    for balance_fuse in vault.get_balance_fuses():
+    for balance_fuse in vault.read_balance_fuses(ctx):
         vault.balance_fuse_value(balance_fuse.fuse)
 
 
-def reward_fuses_flow(manager: RewardsManager) -> None:
-    fuses = manager.get_rewards_fuses().call()
+def reward_fuses_flow(ctx: Web3Context, manager: RewardsManager) -> None:
+    fuses = manager.get_rewards_fuses().call(ctx)
     manager.add_reward_fuses(fuses)
     manager.is_reward_fuse_supported(fuses[0])
 
 
-def remote_erc4626_destination(dispatcher: StargateCrosschainDispatcher) -> None:
+def remote_erc4626_destination(
+    ctx: Web3Context, dispatcher: StargateCrosschainDispatcher
+) -> None:
     # Allowlisted destinations are any ERC4626, not only Plasma Vaults.
-    target = dispatcher.get_allowed_vaults().call()[0]
+    target = dispatcher.get_allowed_vaults().call(ctx)[0]
     Command.deposit(target, Amount(1))
     dispatcher.is_allowed_vault(target)
 
 
 def layerzero_ids_round_trip(
-    executor: StargateCrosschainExecutor, factory: StargateCrosschainFactory
+    ctx: Web3Context,
+    executor: StargateCrosschainExecutor,
+    factory: StargateCrosschainFactory,
 ) -> None:
-    eid = executor.eid_of(ETHEREUM).call()
+    eid = executor.eid_of(ETHEREUM).call(ctx)
     executor.chain_id_of(eid)
-    factory.chain_id_of(factory.eid_of(ETHEREUM).call())
+    factory.chain_id_of(factory.eid_of(ETHEREUM).call(ctx))
+
+
+def offline_wrappers_and_executors(
+    ctx: Web3Context, token: ChecksumAddress, account: ChecksumAddress
+) -> None:
+    # Construction and Call building are offline; execution takes the context.
+    vault = PlasmaVault(VAULT)
+    calldata: bytes = vault.convert_to_public_vault().calldata
+    supply: Call[Amount] = ERC20(token).total_supply()
+    doubled: Call[int] = supply.map(lambda amount: amount * 2)
+    doubled.call(ctx)
+    supply.call(ctx=ctx, block=1)
+    supply.build_transaction(ctx)
+    supply.estimate_gas(ctx, block="pending")
+    vault.convert_to_public_vault().send(ctx)
+    decimals: list[Decimals] = Multicall3(ctx).aggregate([ERC20(token).decimals()])
+    legacy = LegacyPriceOracleMiddleware(token, Decimals(8))
+    price: Price = legacy.get_asset_price(account).call(ctx)
+    price_oracle_middleware(ctx, token).get_asset_price(account).call(ctx)
+    del calldata, decimals, price
+
+
+def proposals_are_chain_bound(
+    ctx: Web3Context, executor: ExternalStateExecutor
+) -> None:
+    pending: Call[BalanceProposal | None] = executor.pending_proposals(
+        VAULT, chain_id=ctx.chain_id
+    )
+    pending.call(ctx)
+
+
+def lanes_own_their_contexts(lane: CrosschainLane) -> None:
+    lane.get_balance().call(lane.hub_ctx)
+    lane.observation().call(lane.spoke_ctx)

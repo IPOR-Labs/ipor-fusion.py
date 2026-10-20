@@ -12,6 +12,14 @@ and cancel stay on the per-transport command fuses, reachable through
 
 ``open_lane`` in :mod:`ipor_fusion.crosschain.discovery` builds the right lane
 for an executor address.
+
+The executor and its dispatcher share one address, so a ``Call`` alone cannot
+tell which chain it belongs to. The lane owns both contexts: ``hub_ctx`` for
+the executor, ``spoke_ctx`` for the dispatcher. Its eager predicates
+(``needs_attestation``, ``command_in_flight``, ``transfer_in_flight``) read on
+``hub_ctx``; the Calls it returns stay unexecuted, so the caller runs them on
+the matching context: ``lane.get_balance().call(lane.hub_ctx)``,
+``lane.observation().call(lane.spoke_ctx)``.
 """
 
 from __future__ import annotations
@@ -82,9 +90,10 @@ class CrosschainLane(ABC):
     def __init__(
         self,
         *,
+        hub_ctx: Web3Context,
+        spoke_ctx: Web3Context,
         executor: CrosschainExecutor,
         dispatcher: CrosschainDispatcher,
-        spoke_chain_id: ChainId,
         fuses: LaneFuses,
     ) -> None:
         # CREATE3 puts the executor and its dispatcher at one address on every
@@ -94,9 +103,11 @@ class CrosschainLane(ABC):
                 "executor and dispatcher must share one address, got "
                 f"{executor.address} and {dispatcher.address}"
             )
+        self.hub_ctx = hub_ctx
+        self.spoke_ctx = spoke_ctx
         self.executor = executor
         self.dispatcher = dispatcher
-        self.spoke_chain_id = spoke_chain_id
+        self.spoke_chain_id: ChainId = spoke_ctx.chain_id
         self.fuses = fuses
         self.supply_fuse: CrosschainSupplyFuse = self.supply_fuse_cls(fuses.supply)
         self.command_fuse: CrosschainCommandFuse = self.command_fuse_cls(fuses.command)
@@ -113,7 +124,8 @@ class CrosschainLane(ABC):
         fuses: LaneFuses,
     ) -> CrosschainLane:
         """Wrap ``executor`` on the hub and its dispatcher on the spoke, reading
-        whatever else this transport's lane needs (the CCIP route)."""
+        whatever else this transport's lane needs (the CCIP route) on
+        ``hub_ctx``."""
 
     @property
     def executor_address(self) -> ChecksumAddress:
@@ -172,7 +184,7 @@ class CrosschainLane(ABC):
         """Pull up to ``amount`` of the executor's idle ledger into the vault."""
         return self.claim_fuse.enter(executor=self.executor_address, amount=amount)
 
-    # ── reads: Calls on the executor ──────────────────────────────────────
+    # ── reads: Calls on the executor, run them on ``hub_ctx`` ─────────────
 
     def settled_remote_balance(self) -> Call[Amount]:
         return self.executor.settled_remote_balance(self.spoke_chain_id)
@@ -232,14 +244,16 @@ class CrosschainLane(ABC):
         cannot change the remote state version without first being retried or
         cancelled. A receipt that never arrives (a stuck command or transfer)
         keeps this false; resolve it on the executor first."""
-        if self.settled_remote_balance().call() == 0:
+        if self.settled_remote_balance().call(self.hub_ctx) == 0:
             return False
         if self.transfer_in_flight():
             return False
         if self.command_in_flight():
             return False
-        last = self.last_approved_observed_at().call()
-        return last == 0 or now - last > self.staleness_max().call() - margin
+        last = self.last_approved_observed_at().call(self.hub_ctx)
+        return (
+            last == 0 or now - last > self.staleness_max().call(self.hub_ctx) - margin
+        )
 
     def approve_balance(self, proposal_id: ProposalId) -> Call[None]:
         """``BALANCE_APPROVER`` only."""
@@ -302,7 +316,8 @@ class CrosschainLane(ABC):
     @abstractmethod
     def command_in_flight(self) -> bool:
         """Whether a command receipt that can change the remote state version
-        is outstanding. A parked failed command is not in flight."""
+        is outstanding (read on ``hub_ctx``). A parked failed command is not in
+        flight."""
 
     @abstractmethod
     def pending_transfer_count(self) -> Call[int]:
@@ -313,16 +328,16 @@ class CrosschainLane(ABC):
     def transfer_in_flight(self) -> bool:
         """Whether an outbound transfer or recall is unresolved.
 
-        Reads the hub executor; CCIP needs a separate active-return read
+        Reads the hub executor on ``hub_ctx``; CCIP needs a separate active-return read
         because its pending counter covers only outbound transfers.
         """
 
     @abstractmethod
     def observation(self) -> Call[LaneObservation]:
-        """The dispatcher's canonical snapshot, read on the spoke chain."""
+        """The dispatcher's canonical snapshot: run it on ``spoke_ctx``."""
 
     @abstractmethod
     def propose_balance(self, observation: BalanceObservation) -> Call[Any]:
-        """``BALANCE_PROPOSER`` only. Returns the proposal id where the
+        """``BALANCE_PROPOSER`` only, sent on ``hub_ctx``. Returns the proposal id where the
         transport's function does (CCIP); Stargate emits it only, see
         ``proposal_id_from_logs``."""

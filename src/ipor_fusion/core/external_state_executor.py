@@ -277,9 +277,10 @@ class ExternalStateExecutor(ContractWrapper):
 
     Use `for_vault` when you have only the vault address -- it resolves the
     executor from the vault's ERC-7201 storage. Construct directly,
-    `ExternalStateExecutor(ctx, executor_address)`, when the executor address is
+    `ExternalStateExecutor(executor_address)`, when the executor address is
     already known (config, a cached resolution, a deploy event), to skip the
-    storage read.
+    storage read. The wrapper holds no context: the proposal readers take the
+    chain id the hash is bound to explicitly.
     """
 
     # ERC-7201 slot `io.ipor.externalState.Executor`; `executor` is the struct's
@@ -322,7 +323,9 @@ class ExternalStateExecutor(ContractWrapper):
     def for_vault(
         cls, ctx: Web3Context, vault_address: PlasmaVaultAddress
     ) -> ExternalStateExecutor:
-        """Resolve the per-vault executor from vault storage and wrap it.
+        """Resolve the per-vault executor from vault storage (at
+        ``ctx.default_block``) and wrap it. An eager resolver: the wrapper it
+        returns holds no context.
 
         Raises `ExternalStateError` when no executor is deployed yet (the slot
         reads zero) rather than returning a wrapper around the zero address, and
@@ -343,7 +346,7 @@ class ExternalStateExecutor(ContractWrapper):
             raise ExternalStateError(
                 f"no ExternalStateExecutor deployed for vault {vault_address}"
             )
-        return cls(ctx, Web3.to_checksum_address(f"0x{word:040x}"))
+        return cls(Web3.to_checksum_address(f"0x{word:040x}"))
 
     def balances(self, balance_account: ChecksumAddress) -> Call[Amount]:
         """Underlying-unit balance the executor tracks for `balance_account`.
@@ -431,7 +434,7 @@ class ExternalStateExecutor(ContractWrapper):
         self,
         balance_account: ChecksumAddress,
         *,
-        chain_id: ChainId | None = None,
+        chain_id: ChainId,
     ) -> Call[BalanceProposal | None]:
         """The proposal awaiting confirmation for `balance_account`, or `None`.
 
@@ -458,23 +461,17 @@ class ExternalStateExecutor(ContractWrapper):
         the slot, so that is the normal state between marks, not an error.
         Under `VaultSimulator.observe` that sentinel is ambiguous -- the
         simulator reports a failed decode as `None` too -- so distinguish the
-        two with `.call()` rather than an observed read.
+        two with `.call(ctx)` rather than an observed read.
 
-        The hash is bound to a chain. `chain_id` defaults to this wrapper's
-        context; pass it explicitly when the context that executes the call is
-        not the one the wrapper was built with (`Call.call(other_ctx)`), or to
-        read through a ctx-less `encoder()` instance.
+        The hash is bound to a chain: ``chain_id`` is the chain the proposal
+        lives on, captured in the decoder. Executing the Call on a context of
+        another chain does not change it; pass that context's
+        ``ctx.chain_id``.
         """
         account = Web3.to_checksum_address(balance_account)
+        executor = self._require_address()
 
         def to_proposal(values: tuple[int, str, int, int]) -> BalanceProposal | None:
-            # Both hash inputs first, before the empty-slot return. Resolved
-            # inside the decoder so a calldata-only `encoder()` wrapper keeps
-            # working like every sibling, but ahead of the sentinel so a
-            # misconfigured poller fails on its first read rather than on the
-            # first read that happens to find a proposal.
-            executor = self._require_address()
-            resolved_chain = self._require_chain_id(chain_id)
             value, raw_proposer, proposed_at, nonce = values
             proposer = Web3.to_checksum_address(raw_proposer)
             if proposer == ZERO_ADDRESS:
@@ -491,9 +488,7 @@ class ExternalStateExecutor(ContractWrapper):
             )
             return replace(
                 unstamped,
-                proposal_hash=_hash_of(
-                    unstamped, executor=executor, chain_id=resolved_chain
-                ),
+                proposal_hash=_hash_of(unstamped, executor=executor, chain_id=chain_id),
             )
 
         return self._view(
@@ -504,32 +499,18 @@ class ExternalStateExecutor(ContractWrapper):
         )
 
     def _require_address(self) -> ChecksumAddress:
-        """This executor's address, or a clear error on an address-less
-        `encoder()`.
+        """This executor's address, refusing the zero address.
 
-        The other half of the hash's binding, and the placeholder zero address
-        is not a usable stand-in for it: it stamps a hash bound to no contract,
-        and it matches only a log claiming to come from none."""
+        The other half of the hash's binding, and the zero address is not a
+        usable stand-in for it: it stamps a hash bound to no contract, and it
+        matches only a log claiming to come from none."""
         if self._address == ZERO_ADDRESS:
             raise ValueError(
                 "executor address required: the proposal hash binds it and the "
                 "event readers match it against a log's emitter, so build this "
-                "wrapper with an address rather than a bare encoder()."
+                "wrapper with the executor's address, not the zero address."
             )
         return self._address
-
-    def _require_chain_id(self, override: ChainId | None = None) -> ChainId:
-        """`override` if the caller named one, else the wrapper's chain, else a
-        clear error on a ctx-less `encoder()`."""
-        if override is not None:
-            return override
-        if self._ctx is None:
-            raise ValueError(
-                "Web3Context required: the proposal hash is bound to a chain id, "
-                "so build this wrapper with a ctx rather than via encoder(), "
-                "or pass chain_id= to this method."
-            )
-        return self._ctx.chain_id
 
     def propose_balance(
         self, balance_account: ChecksumAddress, value: Amount
@@ -644,15 +625,15 @@ class ExternalStateExecutor(ContractWrapper):
             return False
 
     def parse_balance_proposed(
-        self, log: RawLog, *, chain_id: ChainId | None = None
+        self, log: RawLog, *, chain_id: ChainId
     ) -> BalanceProposal:
         """Decode one `BalanceProposed` log this executor emitted, hash-verified.
 
         Accepts receipt-shaped logs (HexBytes) and JSON-RPC / `eth_simulateV1`
         -shaped logs (`0x`-hex strings) alike, so it also decodes rows from an
         event index. Needs no chain access. Raises `ValueError` for a log that
-        is not this event or was not emitted by this executor, and for a call
-        with no chain id available at all; `ExternalStateError` (also a
+        is not this event or was not emitted by this executor;
+        `ExternalStateError` (also a
         `ValueError`) for one of ours that carries a hash that is not the hash
         of its own fields, or whose data is missing or malformed.
 
@@ -671,10 +652,8 @@ class ExternalStateExecutor(ContractWrapper):
         be attributed, which is not the same as being attributable to someone
         else, but is equally not proof it is ours.
 
-        The hash is bound to a chain. `chain_id` defaults to this wrapper's
-        context; a caller with no context -- decoding indexer or `get_logs`
-        rows -- reaches this through `encoder(address)` and passes `chain_id`
-        explicitly. Either way the whole path is pure, with no RPC.
+        The hash is bound to a chain: ``chain_id`` is the chain the log was
+        emitted on. The whole path is pure, with no RPC.
 
         `find_balance_proposed` applies the same emitter check while scanning.
         """
@@ -689,7 +668,7 @@ class ExternalStateExecutor(ContractWrapper):
         _require_matching_hash(
             proposal,
             executor=self._address,
-            chain_id=self._require_chain_id(chain_id),
+            chain_id=chain_id,
         )
         return proposal
 
@@ -722,7 +701,7 @@ class ExternalStateExecutor(ContractWrapper):
         logs: Iterable[RawLog],
         balance_account: ChecksumAddress | None = None,
         *,
-        chain_id: ChainId | None = None,
+        chain_id: ChainId,
     ) -> BalanceProposal:
         """The last `BalanceProposed` log THIS executor emitted among `logs`,
         hash-verified.
@@ -753,9 +732,8 @@ class ExternalStateExecutor(ContractWrapper):
         Pass `balance_account` when the logs may span several accounts, so the
         match is the one you proposed for rather than whichever came last.
 
-        The hash is bound to a chain. `chain_id` defaults to this wrapper's
-        context; pass it explicitly to verify against a different chain, or to
-        scan through a ctx-less `encoder()` instance.
+        The hash is bound to a chain: ``chain_id`` is the chain the logs were
+        emitted on.
 
         Over a `get_logs` range this still answers a different question than
         `pending_proposals`: a proposal may have been confirmed since, which
@@ -775,7 +753,7 @@ class ExternalStateExecutor(ContractWrapper):
         self,
         logs: Iterable[RawLog],
         balance_account: ChecksumAddress | None,
-        chain_id: ChainId | None,
+        chain_id: ChainId,
     ) -> BalanceProposal | None:
         """`find_balance_proposed` without the raise when nothing matches."""
         self._require_address()
@@ -799,7 +777,7 @@ class ExternalStateExecutor(ContractWrapper):
             _require_matching_hash(
                 found,
                 executor=self._address,
-                chain_id=self._require_chain_id(chain_id),
+                chain_id=chain_id,
             )
         return found
 
@@ -850,8 +828,6 @@ class ExternalStateExecutor(ContractWrapper):
         proposer_address = Web3.to_checksum_address(proposer)
         if proposer_address == Web3.to_checksum_address(confirmer):
             raise ValueError("proposer and confirmer must be different custodians")
-        # The two signing contexts only; the wrapper may legitimately be built
-        # from a third, on a chain it never signs from.
         if proposer_ctx.chain_id != confirmer_ctx.chain_id:
             raise ValueError(
                 f"proposer_ctx is on chain {proposer_ctx.chain_id} but "
@@ -863,7 +839,7 @@ class ExternalStateExecutor(ContractWrapper):
             proposer_ctx
         )
         # Verified against the CONFIRMER's chain, which is the one the confirm
-        # will be checked on; the wrapper's own ctx may be a third context.
+        # will be checked on (validated equal to the proposer's above).
         proposal = self._last_balance_proposed(
             propose_receipt["logs"], balance_account, confirmer_ctx.chain_id
         )

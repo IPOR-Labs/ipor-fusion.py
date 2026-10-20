@@ -1,4 +1,4 @@
-"""Unit tests for `Call.call()` — the eth_call + decode path shared by every
+"""Unit tests for `Call.call(ctx)` — the eth_call + decode path shared by every
 reader and wrapper."""
 
 from unittest.mock import MagicMock
@@ -24,32 +24,27 @@ def _ctx(raw: bytes) -> MagicMock:
 
 
 def test_decodes_return_values():
-    call: Call[int] = Call(
-        to=TARGET,
-        data=SELECTOR,
-        output_types=["uint256"],
-        ctx=_ctx(encode(["uint256"], [7])),
-    )
-    assert call.call() == 7
+    ctx = _ctx(encode(["uint256"], [7]))
+    call: Call[int] = Call(to=TARGET, data=SELECTOR, output_types=["uint256"])
+    assert call.call(ctx) == 7
 
 
 def test_map_composes_decoder_and_preserves_call():
+    ctx = _ctx(encode(["uint256"], [7]))
     call: Call[str] = Call(
         to=TARGET,
         data=SELECTOR,
         output_types=["uint256"],
         decoder=lambda value: f"value={value}",
-        ctx=_ctx(encode(["uint256"], [7])),
     )
 
     mapped = call.map(len)
 
-    assert mapped.call() == len("value=7")
+    assert mapped.call(ctx) == len("value=7")
     assert mapped.to == call.to
     assert mapped.data == call.data
     assert mapped.output_types == call.output_types
     assert mapped.output_types is not call.output_types
-    assert mapped.ctx is call.ctx
 
 
 def test_map_rejects_write_only_call():
@@ -62,12 +57,11 @@ def test_map_rejects_write_only_call():
 def test_empty_return_raises_typed_error_naming_target_chain_and_selector():
     """An address with no code answers eth_call with empty data; surface that
     instead of the decoder's bare "Tried to read 32 bytes, only got 0 bytes"."""
-    call: Call[int] = Call(
-        to=TARGET, data=SELECTOR, output_types=["uint256"], ctx=_ctx(b"")
-    )
+    ctx = _ctx(b"")
+    call: Call[int] = Call(to=TARGET, data=SELECTOR, output_types=["uint256"])
 
     with pytest.raises(EmptyCallResultError) as exc_info:
-        call.call()
+        call.call(ctx)
 
     message = str(exc_info.value)
     assert TARGET in message
@@ -83,18 +77,18 @@ def test_empty_return_error_is_an_sdk_error_not_a_decode_error():
 
 
 def test_short_return_data_still_raises_the_decoder_error():
-    call: Call[int] = Call(
-        to=TARGET, data=SELECTOR, output_types=["uint256"], ctx=_ctx(b"\x01")
-    )
+    ctx = _ctx(b"\x01")
+    call: Call[int] = Call(to=TARGET, data=SELECTOR, output_types=["uint256"])
 
     with pytest.raises(InsufficientDataBytes):
-        call.call()
+        call.call(ctx)
 
 
 def test_write_only_call_cannot_be_read():
-    call: Call[None] = Call(to=TARGET, data=SELECTOR, ctx=_ctx(b""))
+    ctx = _ctx(b"")
+    call: Call[None] = Call(to=TARGET, data=SELECTOR)
 
     with pytest.raises(ValueError, match="write-only Call"):
-        call.call()
+        call.call(ctx)
     with pytest.raises(ValueError, match="write-only Call"):
         call.decode(b"")

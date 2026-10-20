@@ -28,21 +28,21 @@ DAO_RECIPIENT = Web3.to_checksum_address("0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccc
 
 def _make_fee_manager() -> tuple[FeeManager, MagicMock]:
     ctx = MagicMock()
-    return FeeManager(ctx, FEE_MANAGER_ADDR), ctx
+    return FeeManager(FEE_MANAGER_ADDR), ctx
 
 
 class TestFeeAccount:
     def test_fee_manager_address(self):
         ctx = MagicMock()
-        account = FeeAccount(ctx, FEE_ACCOUNT_ADDR)
+        account = FeeAccount(FEE_ACCOUNT_ADDR)
         ctx.call.return_value = encode(["address"], [FEE_MANAGER_ADDR])
 
-        result = account.fee_manager().call()
+        result = account.fee_manager().call(ctx)
 
         assert result == FEE_MANAGER_ADDR
 
     def test_fee_manager_selector(self):
-        call = FeeAccount.encoder().fee_manager()
+        call = FeeAccount(FEE_ACCOUNT_ADDR).fee_manager()
 
         assert call.calldata == function_signature_to_4byte_selector("FEE_MANAGER()")
 
@@ -52,7 +52,7 @@ class TestFeeManagerViews:
         manager, ctx = _make_fee_manager()
         ctx.call.return_value = encode(["uint256"], [10**16])  # 1% in WAD
 
-        result = manager.get_deposit_fee().call()
+        result = manager.get_deposit_fee().call(ctx)
 
         assert result == Fee(10**16)
 
@@ -60,7 +60,7 @@ class TestFeeManagerViews:
         manager, ctx = _make_fee_manager()
         ctx.call.return_value = encode(["uint256"], [1000])  # 10% with 2 decimals
 
-        result = manager.get_total_performance_fee().call()
+        result = manager.get_total_performance_fee().call(ctx)
 
         assert result == Fee(1000)
 
@@ -68,7 +68,7 @@ class TestFeeManagerViews:
         manager, ctx = _make_fee_manager()
         ctx.call.return_value = encode(["uint256"], [100])  # 1% with 2 decimals
 
-        result = manager.get_total_management_fee().call()
+        result = manager.get_total_management_fee().call(ctx)
 
         assert result == Fee(100)
 
@@ -79,7 +79,7 @@ class TestFeeManagerViews:
             [[(RECIPIENT_1, 700), (RECIPIENT_2, 300)]],
         )
 
-        result = manager.get_performance_fee_recipients().call()
+        result = manager.get_performance_fee_recipients().call(ctx)
 
         assert result == [
             RecipientFee(recipient=RECIPIENT_1, fee_value=Fee(700)),
@@ -90,7 +90,7 @@ class TestFeeManagerViews:
         manager, ctx = _make_fee_manager()
         ctx.call.return_value = encode(["(address,uint256)[]"], [[]])
 
-        result = manager.get_management_fee_recipients().call()
+        result = manager.get_management_fee_recipients().call(ctx)
 
         assert result == []
 
@@ -98,7 +98,7 @@ class TestFeeManagerViews:
         manager, ctx = _make_fee_manager()
         ctx.call.return_value = encode(["address"], [DAO_RECIPIENT])
 
-        result = manager.get_ipor_dao_fee_recipient_address().call()
+        result = manager.get_ipor_dao_fee_recipient_address().call(ctx)
 
         assert result == DAO_RECIPIENT
 
@@ -108,7 +108,7 @@ class TestFeeManagerViews:
             ["(uint128,uint32,uint32)"], [(10**18, 1_750_000_000, 86400)]
         )
 
-        result = manager.get_plasma_vault_high_water_mark_performance_fee().call()
+        result = manager.get_plasma_vault_high_water_mark_performance_fee().call(ctx)
 
         assert result == HighWaterMarkPerformanceFee(
             high_water_mark=10**18,
@@ -123,7 +123,7 @@ class TestFeeManagerSelectors:
     call to a nonexistent function on-chain."""
 
     def test_selectors(self):
-        encoder = FeeManager.encoder()
+        encoder = FeeManager(FEE_MANAGER_ADDR)
         for call, signature in [
             (encoder.get_deposit_fee(), "getDepositFee()"),
             (encoder.get_total_performance_fee(), "getTotalPerformanceFee()"),

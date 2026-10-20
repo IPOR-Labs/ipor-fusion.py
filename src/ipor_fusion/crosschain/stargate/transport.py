@@ -8,7 +8,6 @@ from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
 
-from ipor_fusion.core.context import Web3Context
 from ipor_fusion.crosschain.logs import log_address, log_topic0
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
 from ipor_fusion.crosschain.stargate.contracts import (
@@ -117,15 +116,11 @@ class StargateTransport(CrosschainTransport):
     def chain(self, chain_id: ChainId) -> StargateChain:
         return self._chains[chain_id]
 
-    def executor(
-        self, ctx: Web3Context, address: ChecksumAddress
-    ) -> StargateCrosschainExecutor:
-        return StargateCrosschainExecutor(ctx, address)
+    def executor(self, address: ChecksumAddress) -> StargateCrosschainExecutor:
+        return StargateCrosschainExecutor(address)
 
-    def dispatcher(
-        self, ctx: Web3Context, address: ChecksumAddress
-    ) -> StargateCrosschainDispatcher:
-        return StargateCrosschainDispatcher(ctx, address)
+    def dispatcher(self, address: ChecksumAddress) -> StargateCrosschainDispatcher:
+        return StargateCrosschainDispatcher(address)
 
     def outbound_messages(
         self, src_chain_id: ChainId, logs: Iterable[Mapping]

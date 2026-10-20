@@ -35,8 +35,8 @@ def _connect(url: str) -> tuple[Web3Context, PlasmaVault]:
     try:
         ctx = Web3Context.from_url(url)
         ctx.default_block = BLOCK
-        pv = PlasmaVault(ctx, VAULT)
-        pv.underlying_asset_address().call()  # state read at BLOCK needs archive
+        pv = PlasmaVault(VAULT)
+        pv.underlying_asset_address().call(ctx)  # state read at BLOCK needs archive
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"BASE on-chain read failed (provider missing/non-archive?): {exc}")
     return ctx, pv
@@ -48,7 +48,7 @@ def test_vault_without_withdraw_manager_fetches_on_real_base_vault():
         pytest.skip("BASE_PROVIDER_URL not set")
     ctx, pv = _connect(url)
 
-    withdraw_manager = pv.withdraw_manager_address()
+    withdraw_manager = pv.read_withdraw_manager_address(ctx)
     data = fetch_vault_data(ctx, pv.address, block=BLOCK)
 
     # Sanity: confirm we are reading the expected vault at this block.

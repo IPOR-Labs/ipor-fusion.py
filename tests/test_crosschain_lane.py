@@ -82,20 +82,28 @@ OBSERVATION = BalanceObservation(
 )
 
 
+def _chain_ctx(chain_id: int) -> MagicMock:
+    ctx = MagicMock()
+    ctx.chain_id = ChainId(chain_id)
+    return ctx
+
+
 def _stargate_lane(hub_ctx=None, spoke_ctx=None) -> StargateLane:
     return StargateLane(
-        executor=StargateCrosschainExecutor(hub_ctx or MagicMock(), EXECUTOR),
-        dispatcher=StargateCrosschainDispatcher(spoke_ctx or MagicMock(), EXECUTOR),
-        spoke_chain_id=SPOKE,
+        hub_ctx=hub_ctx or _chain_ctx(1),
+        spoke_ctx=spoke_ctx or _chain_ctx(SPOKE),
+        executor=StargateCrosschainExecutor(EXECUTOR),
+        dispatcher=StargateCrosschainDispatcher(EXECUTOR),
         fuses=FUSES,
     )
 
 
 def _ccip_lane(hub_ctx=None, spoke_ctx=None, rate: int = 1) -> CcipLane:
     return CcipLane(
-        executor=CcipCrosschainExecutor(hub_ctx or MagicMock(), EXECUTOR),
-        dispatcher=CcipCrosschainDispatcher(spoke_ctx or MagicMock(), EXECUTOR),
-        spoke_chain_id=SPOKE,
+        hub_ctx=hub_ctx or _chain_ctx(1),
+        spoke_ctx=spoke_ctx or _chain_ctx(SPOKE),
+        executor=CcipCrosschainExecutor(EXECUTOR),
+        dispatcher=CcipCrosschainDispatcher(EXECUTOR),
         fuses=FUSES,
         route=ROUTE,
         decimal_conversion_rate=rate,
@@ -105,9 +113,10 @@ def _ccip_lane(hub_ctx=None, spoke_ctx=None, rate: int = 1) -> CcipLane:
 def test_lane_rejects_a_dispatcher_at_another_address():
     with pytest.raises(ValueError, match="must share one address"):
         StargateLane(
-            executor=StargateCrosschainExecutor(MagicMock(), EXECUTOR),
-            dispatcher=StargateCrosschainDispatcher(MagicMock(), REMOTE_VAULT),
-            spoke_chain_id=SPOKE,
+            hub_ctx=_chain_ctx(1),
+            spoke_ctx=_chain_ctx(SPOKE),
+            executor=StargateCrosschainExecutor(EXECUTOR),
+            dispatcher=StargateCrosschainDispatcher(REMOTE_VAULT),
             fuses=FUSES,
         )
 
@@ -246,11 +255,11 @@ class TestReads:
             ["bool", "bool", "bool", "uint8", "bytes32", "uint64", "uint64"],
             [True, False, False, 1, HASH, 4, 0],
         )
-        assert _stargate_lane(hub_ctx=ctx).has_active_command().call() is True
+        assert _stargate_lane(hub_ctx=ctx).has_active_command().call(ctx) is True
         ctx.call.return_value = encode(["bytes32"], [bytes(32)])
-        assert _ccip_lane(hub_ctx=ctx).has_active_command().call() is False
+        assert _ccip_lane(hub_ctx=ctx).has_active_command().call(ctx) is False
         ctx.call.return_value = encode(["bytes32"], [HASH])
-        assert _ccip_lane(hub_ctx=ctx).has_active_command().call() is True
+        assert _ccip_lane(hub_ctx=ctx).has_active_command().call(ctx) is True
 
     @pytest.mark.parametrize(
         ("active", "awaiting_cancel", "status", "expected"),
@@ -298,7 +307,7 @@ class TestReads:
             ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
             [(100, [REMOTE_VAULT.lower()], [900], 5, 1, HASH)],
         )
-        assert _stargate_lane(spoke_ctx=ctx).observation().call() == LaneObservation(
+        assert _stargate_lane(spoke_ctx=ctx).observation().call(ctx) == LaneObservation(
             100, 1000, 5, 1, HASH
         )
         ctx.call.return_value = encode(
@@ -306,7 +315,7 @@ class TestReads:
             [(1000, 100, 0, 4, 1, HASH)],
         )
         lane = _ccip_lane(spoke_ctx=ctx, rate=10**12)
-        observation = lane.observation().call()
+        observation = lane.observation().call(ctx)
         assert observation == LaneObservation(100 * 10**12, 1000 * 10**12, 4, 1, HASH)
         assert (
             lane.attestation(
@@ -634,7 +643,6 @@ class TestLaneParts:
 def _deployment_ctx() -> MagicMock:
     """A hub whose crosschain market grants two executors (one per transport)
     and two remote vaults; the CCIP executor serves Base only."""
-    vault = MagicMock()
     substrates = [
         CrosschainSubstrateLib.executor_substrate(EXECUTOR),
         CrosschainSubstrateLib.executor_substrate(CCIP_EXECUTOR),
@@ -648,8 +656,8 @@ def _deployment_ctx() -> MagicMock:
         CCIP_FUSES.command,
         FUSES.claim,
     ]
-    probe_vault = PlasmaVault(vault, VAULT)
-    probe_exec = StargateCrosschainExecutor(vault, EXECUTOR)
+    probe_vault = PlasmaVault(VAULT)
+    probe_exec = StargateCrosschainExecutor(EXECUTOR)
     route_raw = encode(
         ["(uint64,address,address,uint96,uint96,uint256,bool)"], [ROUTE.as_tuple()]
     )
@@ -753,7 +761,7 @@ class TestDeploymentDiscovery:
     def test_discover_deployment_rejects_a_foreign_executor(self):
         ctx = _deployment_ctx()
         inner = ctx.call.side_effect
-        manager = _sel(StargateCrosschainExecutor(MagicMock(), EXECUTOR).manager())
+        manager = _sel(StargateCrosschainExecutor(EXECUTOR).manager())
 
         def call(to, data, block=None):
             if to == CCIP_EXECUTOR and bytes(data)[:4] == manager:
@@ -839,8 +847,8 @@ class TestDeploymentDiscovery:
 
 
 def test_id_getters_decode_into_the_types_their_writes_take():
-    ccip = CcipCrosschainExecutor(MagicMock(), EXECUTOR)
-    stargate = StargateCrosschainExecutor(MagicMock(), EXECUTOR)
+    ccip = CcipCrosschainExecutor(EXECUTOR)
+    stargate = StargateCrosschainExecutor(EXECUTOR)
     word = encode(["bytes32"], [b"\x01" * 32])
     number = encode(["uint256"], [7])
     chain = ChainId(1)
@@ -850,3 +858,100 @@ def test_id_getters_decode_into_the_types_their_writes_take():
     assert stargate.active_proposal_id(chain).decode(number) == 7
     assert stargate.pending_request_by_chain(chain).decode(number) == 7
     assert type(ccip.asset_id().decode(word)) is bytes
+
+
+class TestContextOwnership:
+    """The executor and its dispatcher share one address, so only the context
+    tells the chains apart: the lane reads the executor on ``hub_ctx`` and
+    leaves the choice for the Calls it returns to the caller."""
+
+    @staticmethod
+    def _wrong_chain(chain_id: int) -> MagicMock:
+        ctx = _chain_ctx(chain_id)
+        ctx.call.side_effect = AssertionError("read on the wrong chain")
+        return ctx
+
+    def test_lane_keeps_both_contexts_and_derives_the_spoke(self):
+        hub, spoke = _chain_ctx(1), _chain_ctx(SPOKE)
+        lane = _stargate_lane(hub_ctx=hub, spoke_ctx=spoke)
+        assert lane.hub_ctx is hub
+        assert lane.spoke_ctx is spoke
+        assert lane.spoke_chain_id == SPOKE
+        assert not hasattr(lane.observation(), "ctx")
+
+    @pytest.mark.parametrize("factory", [_stargate_lane, _ccip_lane])
+    def test_eager_predicates_read_only_the_hub(self, factory):
+        probe = factory()
+        active_command = (
+            encode(
+                ["bool", "bool", "bool", "uint8", "bytes32", "uint64", "uint64"],
+                [False, False, False, 0, HASH, 0, 0],
+            )
+            if factory is _stargate_lane
+            else encode(["bytes32"], [bytes(32)])
+        )
+        hub = _ctx_answering(
+            {
+                _sel(probe.settled_remote_balance()): encode(["uint256"], [5]),
+                _sel(probe.pending_transfer_count()): encode(["uint256"], [0]),
+                selector("activeReturn(uint256)"): encode(["bytes32"], [bytes(32)]),
+                selector("activeCommand(uint256)"): active_command,
+                _sel(probe.last_approved_observed_at()): encode(["uint64"], [0]),
+                _sel(probe.staleness_max()): encode(["uint256"], [3_600]),
+            }
+        )
+        spoke = self._wrong_chain(SPOKE)
+        lane = factory(hub_ctx=hub, spoke_ctx=spoke)
+
+        assert lane.transfer_in_flight() is False
+        assert lane.command_in_flight() is False
+        assert lane.needs_attestation(now=10) is True
+        assert hub.call.called
+        spoke.call.assert_not_called()
+
+    def test_returned_calls_run_where_the_caller_says(self):
+        hub = self._wrong_chain(1)
+        spoke = _ctx_answering(
+            {
+                selector("observation()"): encode(
+                    ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
+                    [(7, [], [], 3, 1, HASH)],
+                )
+            },
+            chain_id=SPOKE,
+        )
+        lane = _stargate_lane(hub_ctx=hub, spoke_ctx=spoke)
+
+        observation = lane.observation().call(lane.spoke_ctx)
+
+        assert observation.accounted_balance == 7
+        hub.call.assert_not_called()
+
+    def test_ccip_open_reads_the_route_on_the_hub(self):
+        route_raw = encode(
+            ["(uint64,address,address,uint96,uint96,uint256,bool)"], [ROUTE.as_tuple()]
+        )
+        hub = _ctx_answering(
+            {
+                selector("ccipRoute(uint256)"): route_raw,
+                selector("DECIMAL_CONVERSION_RATE()"): encode(
+                    ["uint256"], [DECIMAL_CONVERSION_RATE]
+                ),
+            }
+        )
+        spoke = self._wrong_chain(SPOKE)
+
+        lane = CcipLane.open(hub, spoke, executor=EXECUTOR, fuses=FUSES)
+
+        assert lane.route == ROUTE
+        assert lane.decimal_conversion_rate == DECIMAL_CONVERSION_RATE
+        assert lane.spoke_chain_id == SPOKE
+        route_data = [
+            c.args[1]
+            for c in hub.call.call_args_list
+            if c.args[1][:4] == selector("ccipRoute(uint256)")
+        ]
+        assert route_data == [
+            selector("ccipRoute(uint256)") + encode(["uint256"], [SPOKE])
+        ]
+        spoke.call.assert_not_called()

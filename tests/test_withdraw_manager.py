@@ -28,7 +28,7 @@ def ctx():
 
 @pytest.fixture()
 def wm(ctx):
-    return WithdrawManager(ctx=ctx, address=FAKE_ADDRESS)
+    return WithdrawManager(address=FAKE_ADDRESS)
 
 
 # ── basic properties ─────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ def test_address_returns_configured_address(wm):
 
 def test_request(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.request(Amount(1000)).send()
+    receipt = wm.request(Amount(1000)).send(ctx)
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
@@ -53,7 +53,7 @@ def test_request(wm, ctx):
 
 def test_request_shares(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.request_shares(Shares(500)).send()
+    receipt = wm.request_shares(Shares(500)).send(ctx)
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
@@ -63,7 +63,7 @@ def test_request_shares(wm, ctx):
 
 def test_update_withdraw_window(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.update_withdraw_window(Period(3600)).send()
+    receipt = wm.update_withdraw_window(Period(3600)).send(ctx)
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
@@ -74,7 +74,7 @@ def test_update_withdraw_window(wm, ctx):
 def test_update_plasma_vault_address(wm, ctx):
     ctx.send.return_value = {"status": 1}
     new_vault = Web3.to_checksum_address("0x0000000000000000000000000000000000000099")
-    receipt = wm.update_plasma_vault_address(new_vault).send()
+    receipt = wm.update_plasma_vault_address(new_vault).send(ctx)
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
@@ -84,28 +84,28 @@ def test_update_plasma_vault_address(wm, ctx):
 
 def test_release_funds_no_args(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.release_funds().send()
+    receipt = wm.release_funds().send(ctx)
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
 
 def test_release_funds_timestamp_only(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.release_funds(timestamp=1000).send()
+    receipt = wm.release_funds(timestamp=1000).send(ctx)
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
 
 def test_release_funds_timestamp_and_shares(wm, ctx):
     ctx.send.return_value = {"status": 1}
-    receipt = wm.release_funds(timestamp=1000, shares=Shares(500)).send()
+    receipt = wm.release_funds(timestamp=1000, shares=Shares(500)).send(ctx)
     ctx.send.assert_called_once()
     assert receipt == {"status": 1}
 
 
 def test_release_funds_shares_without_timestamp_raises(wm):
     with pytest.raises(ValueError, match="timestamp is required"):
-        wm.release_funds(shares=Shares(500)).send()
+        wm.release_funds(shares=Shares(500)).send(ctx)
 
 
 # ── read-only getters ────────────────────────────────────────────────────────
@@ -113,31 +113,31 @@ def test_release_funds_shares_without_timestamp_raises(wm):
 
 def test_get_withdraw_window(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [3600])
-    result = wm.get_withdraw_window().call()
+    result = wm.get_withdraw_window().call(ctx)
     assert result == Period(3600)
 
 
 def test_get_last_release_funds_timestamp(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [12345])
-    result = wm.get_last_release_funds_timestamp().call()
+    result = wm.get_last_release_funds_timestamp().call(ctx)
     assert result == 12345
 
 
 def test_get_shares_to_release(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [999])
-    result = wm.get_shares_to_release().call()
+    result = wm.get_shares_to_release().call(ctx)
     assert result == Shares(999)
 
 
 def test_get_request_fee(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [50])
-    result = wm.get_request_fee().call()
+    result = wm.get_request_fee().call(ctx)
     assert result == Fee(50)
 
 
 def test_get_withdraw_fee(wm, ctx):
     ctx.call.return_value = encode(["uint256"], [100])
-    result = wm.get_withdraw_fee().call()
+    result = wm.get_withdraw_fee().call(ctx)
     assert result == Fee(100)
 
 
@@ -149,7 +149,7 @@ def test_request_info(wm, ctx):
         ["uint256", "uint256", "bool", "uint256"],
         [1000, 2000, True, 3600],
     )
-    info = wm.request_info(FAKE_ACCOUNT).call()
+    info = wm.request_info(FAKE_ACCOUNT).call(ctx)
     assert isinstance(info, WithdrawRequestInfo)
     assert info.shares == 1000
     assert info.end_withdraw_window_timestamp == 2000
@@ -189,7 +189,7 @@ def test_pending_requests_aggregates_active(wm, ctx):
         )
     )
 
-    pending = wm.get_pending_requests_info()
+    pending = wm.read_pending_requests_info(ctx)
     assert pending.shares == Shares(200)
     assert pending.timestamp == current_ts - 1
 
@@ -199,7 +199,7 @@ def test_pending_requests_skips_expired_events(wm, ctx):
     ctx.get_block.return_value = {"timestamp": current_ts}
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 100, current_ts - 1)]
 
-    pending = wm.get_pending_requests_info()
+    pending = wm.read_pending_requests_info(ctx)
     assert pending.shares == Shares(0)
     assert pending.timestamp == current_ts - 1
 
@@ -209,7 +209,7 @@ def test_pending_requests_skips_zero_amount_events(wm, ctx):
     ctx.get_block.return_value = {"timestamp": current_ts}
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 0, current_ts + 1000)]
 
-    pending = wm.get_pending_requests_info()
+    pending = wm.read_pending_requests_info(ctx)
     assert pending.shares == Shares(0)
 
 
@@ -227,7 +227,7 @@ def test_pending_requests_deduplicates_accounts(wm, ctx):
         )
     )
 
-    pending = wm.get_pending_requests_info()
+    pending = wm.read_pending_requests_info(ctx)
     assert ctx.call.call_count == 1
     assert pending.shares == Shares(300)
 
@@ -238,7 +238,7 @@ def test_pending_requests_handles_contract_panic(wm, ctx):
     ctx.get_logs.return_value = [_event(FAKE_ACCOUNT, 100, current_ts + 1000)]
     ctx.call.side_effect = multicall_aware(_raise(ContractPanicError("overflow")))
 
-    pending = wm.get_pending_requests_info()
+    pending = wm.read_pending_requests_info(ctx)
     assert pending.shares == Shares(0)
     assert pending.timestamp == current_ts - 1
 
@@ -254,7 +254,7 @@ def test_pending_requests_skips_expired_request_info(wm, ctx):
         )
     )
 
-    pending = wm.get_pending_requests_info()
+    pending = wm.read_pending_requests_info(ctx)
     assert pending.shares == Shares(0)
 
 
@@ -263,7 +263,7 @@ def test_pending_requests_passes_from_block(wm, ctx):
     ctx.get_block.return_value = {"timestamp": current_ts}
     ctx.get_logs.return_value = []
 
-    wm.get_pending_requests_info(from_block=BlockNumber(1234))
+    wm.read_pending_requests_info(ctx, from_block=BlockNumber(1234))
     call_kwargs = ctx.get_logs.call_args
     assert call_kwargs[1]["from_block"] == BlockNumber(1234)
 
@@ -283,7 +283,7 @@ def test_pending_requests_reads_every_account_in_one_batch(wm, ctx):
         )
     )
 
-    requests = wm.get_pending_requests()
+    requests = wm.read_pending_requests(ctx)
 
     assert [r.account for r in requests] == [FAKE_ACCOUNT, other]
     assert ctx.call.call_count == 1
@@ -297,7 +297,7 @@ def test_pending_requests_non_panic_revert_propagates(wm, ctx):
     ctx.call.side_effect = multicall_aware(_raise(ContractLogicError("boom")))
 
     with pytest.raises(ContractLogicError, match="boom"):
-        wm.get_pending_requests()
+        wm.read_pending_requests(ctx)
 
 
 def test_pending_requests_filter_by_the_pinned_block_time():
@@ -315,7 +315,5 @@ def test_pending_requests_filter_by_the_pinned_block_time():
         ),
         patch.object(Web3Context, "call", side_effect=_answer(answer)),
     ):
-        requests = WithdrawManager(
-            ctx=pinned, address=FAKE_ADDRESS
-        ).get_pending_requests()
+        requests = WithdrawManager(address=FAKE_ADDRESS).read_pending_requests(pinned)
     assert [r.account for r in requests] == [FAKE_ACCOUNT]

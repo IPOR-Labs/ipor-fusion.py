@@ -1395,12 +1395,12 @@ class TestEnumerateAssets:
 
 
 class _Ret:
-    """Wraps a value as a Call-like object exposing .call()."""
+    """Wraps a value as a Call-like object exposing .call(ctx)."""
 
     def __init__(self, value: Any):
         self._value = value
 
-    def call(self) -> Any:
+    def call(self, ctx: Any) -> Any:
         return self._value
 
 
@@ -1415,7 +1415,7 @@ class _FakeVault:
         self._name = name
         self._name_raises = name_raises
 
-    def price_oracle_address(self) -> str:
+    def read_price_oracle_address(self, ctx: Any) -> str:
         return self._oracle
 
     def underlying_asset_address(self) -> _Ret:

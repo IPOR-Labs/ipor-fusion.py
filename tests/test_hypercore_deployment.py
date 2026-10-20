@@ -139,17 +139,17 @@ def test_new_vault_deployment(hyper_web3: Web3) -> None:
 
     ctx = Web3Context(hyper_web3, FIXTURE["chain_id"])
     ctx.default_block = block
-    vault = PlasmaVault(ctx, vault_address)
-    assert vault.underlying_asset_address().call() == deployment["underlying"]
-    fuses = set(vault.get_fuses().call())
+    vault = PlasmaVault(vault_address)
+    assert vault.underlying_asset_address().call(ctx) == deployment["underlying"]
+    fuses = set(vault.get_fuses().call(ctx))
     for name in FUSE_NAMES - {"HyperCoreSettlementFuse", "HyperCoreBalanceFuse"}:
         assert FIXTURE["contracts"][name]["address"] in fuses
     assert fuse in fuses
     assert any(
         item.market_id == 55
         and item.fuse == FIXTURE["contracts"]["HyperCoreBalanceFuse"]["address"]
-        for item in vault.get_balance_fuses()
+        for item in vault.read_balance_fuses(ctx)
     )
-    substrates = vault.get_market_substrates(MarketId(55)).call()
+    substrates = vault.get_market_substrates(MarketId(55)).call(ctx)
     assert len(substrates) == 12
     assert HyperCoreSubstrates.destination(vault_address) in substrates

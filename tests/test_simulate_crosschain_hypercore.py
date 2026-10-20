@@ -126,7 +126,7 @@ def _wire(run: Run, web3_hyperevm) -> PlasmaVault:
     lane = run.lane
     assert isinstance(lane, CcipLane)
     hub_vault = run.vault
-    granted = list(hub_vault.get_market_substrates(run.market_id).call())
+    granted = list(hub_vault.get_market_substrates(run.market_id).call(lane.hub_ctx))
     granted.append(
         CrosschainSubstrateLib.remote_vault_substrate(
             run.spoke_chain_id, HYPERCORE_VAULT
@@ -149,10 +149,8 @@ def _wire(run: Run, web3_hyperevm) -> PlasmaVault:
     )
     spoke_ctx = Web3Context(web3_hyperevm, chain_id=ChainId(999))
     spoke_ctx.default_block = SPOKE_BLOCK
-    hypercore_vault = PlasmaVault(spoke_ctx, HYPERCORE_VAULT)
-    access = AccessManager(
-        spoke_ctx, hypercore_vault.get_access_manager_address().call()
-    )
+    hypercore_vault = PlasmaVault(HYPERCORE_VAULT)
+    access = AccessManager(hypercore_vault.get_access_manager_address().call(spoke_ctx))
     run.spoke_sim.add_call(
         access.grant_role(Roles.WHITELIST_ROLE, lane.executor_address, 0),
         from_=run.owner,
@@ -300,7 +298,7 @@ def _trade_on_hypercore(run: Run, vault: PlasmaVault, web3_hyperevm, usdc: int) 
     # The fee leaves the reserve; nothing else stays on Core. The EVM credit is
     # the transfer HyperCore would make, modelled as a balance override.
     _set_core_state(run, spot_usdc_wei=0, xyz_value_usd6=0)
-    usdc_address = run.remote_vault.underlying_asset_address().call()
+    usdc_address = run.remote_vault.underlying_asset_address().call(run.lane.spoke_ctx)
     run.spoke_sim.with_erc20_balance(
         usdc_address,
         HYPERCORE_VAULT,

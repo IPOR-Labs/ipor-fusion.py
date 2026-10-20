@@ -155,11 +155,13 @@ def test_off_ramp_reads_decode_to_typed_values():
             ),
         }
     )
-    off_ramp = CcipOffRamp(ctx, OFF_RAMP)
+    off_ramp = CcipOffRamp(OFF_RAMP)
 
-    assert off_ramp.type_and_version().call() == "OffRamp 2.0.0"
-    assert off_ramp.execution_state(MESSAGE_ID).call() is MessageExecutionState.SUCCESS
-    assert off_ramp.ccvs_for_message(ENCODED).call() == CcvRequirements(
+    assert off_ramp.type_and_version().call(ctx) == "OffRamp 2.0.0"
+    assert (
+        off_ramp.execution_state(MESSAGE_ID).call(ctx) is MessageExecutionState.SUCCESS
+    )
+    assert off_ramp.ccvs_for_message(ENCODED).call(ctx) == CcvRequirements(
         (RESOLVER,), (COMMITTEE,), 1
     )
 
@@ -167,7 +169,7 @@ def test_off_ramp_reads_decode_to_typed_values():
 def test_off_ramp_execute_encodes_one_result_per_ccv():
     from ipor_fusion import CcipOffRamp
 
-    off_ramp = CcipOffRamp(_ctx({}), OFF_RAMP)
+    off_ramp = CcipOffRamp(OFF_RAMP)
 
     call = off_ramp.execute(ENCODED, [RESOLVER], [CCV_DATA])
 
@@ -218,16 +220,16 @@ def test_resolver_and_committee_verifier_reads():
             ),
         }
     )
-    resolver = CcipVerifierResolver(ctx, RESOLVER)
-    committee = CcipCommitteeVerifier(ctx, COMMITTEE)
+    resolver = CcipVerifierResolver(RESOLVER)
+    committee = CcipCommitteeVerifier(COMMITTEE)
 
-    assert resolver.inbound_implementation(CCV_DATA).call() == COMMITTEE
-    assert resolver.all_inbound_implementations().call() == (
+    assert resolver.inbound_implementation(CCV_DATA).call(ctx) == COMMITTEE
+    assert resolver.all_inbound_implementations().call(ctx) == (
         (bytes.fromhex("e9a05a20"), COMMITTEE),
     )
-    assert committee.type_and_version().call() == "CommitteeVerifier 2.0.0"
-    assert committee.version_tag().call() == bytes.fromhex("e9a05a20")
-    assert committee.storage_locations().call() == (
+    assert committee.type_and_version().call(ctx) == "CommitteeVerifier 2.0.0"
+    assert committee.version_tag().call(ctx) == bytes.fromhex("e9a05a20")
+    assert committee.storage_locations().call(ctx) == (
         "aggregator-1.ccip.chain.link",
         "aggregator-2.ccip.chain.link",
     )
@@ -245,7 +247,7 @@ def test_router_lists_its_off_ramps_per_source():
             )
         }
     )
-    assert CcipRouter(ctx, ROUTER).get_off_ramps().call() == [
+    assert CcipRouter(ROUTER).get_off_ramps().call(ctx) == [
         (HYPEREVM, old),
         (HYPEREVM, new),
     ]

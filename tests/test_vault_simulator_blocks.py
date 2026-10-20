@@ -587,7 +587,7 @@ def test_add_transaction_rejects_what_it_cannot_send_faithfully(transaction, mes
 
 def test_a_simulator_without_vault_or_alpha_observes_but_cannot_execute():
     sim = VaultSimulator(MagicMock(), block=100)
-    call = Call(to=PAYER, data=b"\x01", ctx=MagicMock())
+    call = Call(to=PAYER, data=b"\x01")
     with pytest.raises(ValueError, match="vault= and alpha="):
         sim.execute([])
     with pytest.raises(ValueError, match="from_ or"):

@@ -82,18 +82,18 @@ def test_simulate_euler_v2_batch_base(web3_base):
     block = web3_base.eth.block_number
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
     ctx.default_block = block
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # Predict the deterministic clone addresses.
-    preview = factory.clone(**clone_args()).call()
+    preview = factory.clone(**clone_args()).call(ctx)
     vault_address = preview.plasma_vault
     access_manager_address = preview.access_manager
     account = euler_account(vault_address, BATCH_SUB_ACCOUNT)  # == vault_address
 
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, access_manager_address)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(access_manager_address)
     batch_fuse = EulerV2BatchFuse(EULER_BATCH_FUSE)
-    weth = ERC20(ctx, BASE_WETH)
+    weth = ERC20(BASE_WETH)
 
     # Self-repaying flash-loan batch on the eWETH eVault.
     batch_action = batch_fuse.batch(

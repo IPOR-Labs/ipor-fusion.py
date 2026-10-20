@@ -438,12 +438,12 @@ def build_oracle_mapping(
     `UnsupportedVaultVersionError` for a vault that exposes no price-oracle
     getter.
     """
-    vault = PlasmaVault(ctx, vault_address)
-    oracle_addr = vault.price_oracle_address()
-    asset_addr = vault.underlying_asset_address().call()
+    vault = PlasmaVault(vault_address)
+    oracle_addr = vault.read_price_oracle_address(ctx)
+    asset_addr = vault.underlying_asset_address().call(ctx)
 
     try:
-        vault_name = vault.name().call()
+        vault_name = vault.name().call(ctx)
     except Exception:
         vault_name = None
 

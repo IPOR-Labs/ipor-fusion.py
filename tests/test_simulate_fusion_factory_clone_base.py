@@ -127,10 +127,8 @@ def _clone_receipt(*, component_index: int = 138):
 
 
 def _bare_factory() -> FusionFactory:
-    """Build a FusionFactory without a Web3Context. Delegates to the
-    public `encoder()` classmethod — `.calldata` only reads `Call.data`
-    so the placeholder ctx is fine."""
-    return FusionFactory.encoder(BASE_FUSION_FACTORY)
+    """The Base FusionFactory wrapper: an address, no context."""
+    return FusionFactory(BASE_FUSION_FACTORY)
 
 
 # --- pure encoding ----------------------------------------------------------
@@ -277,7 +275,7 @@ def test_simulate_clone_preview_base(web3_base):
     """eth_call against IporFusionFactoryProxy on BASE — decodes FusionInstance
     and verifies the returned CREATE address layout."""
     ctx = Web3Context(web3=web3_base, chain_id=8453, signer=SAMPLE_OWNER)
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
     instance = factory.clone(
         asset_name="IPOR USDC Vault",
         asset_symbol="ipUSDC",
@@ -285,7 +283,7 @@ def test_simulate_clone_preview_base(web3_base):
         redemption_delay_seconds=86400,
         owner=SAMPLE_OWNER,
         dao_fee_package_index=0,
-    ).call()
+    ).call(ctx)
 
     # Sanity on structural fields.
     assert instance.index > 0
@@ -325,21 +323,21 @@ def test_simulate_clone_two_calls_same_index(web3_base):
     state changes returns the same FusionInstance.index (factory storage
     not mutated)."""
     ctx = Web3Context(web3=web3_base, chain_id=8453, signer=SAMPLE_OWNER)
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
     first = factory.clone(
         asset_name="a",
         asset_symbol="b",
         underlying_token=BASE_USDC,
         redemption_delay_seconds=86400,
         owner=SAMPLE_OWNER,
-    ).call()
+    ).call(ctx)
     second = factory.clone(
         asset_name="a",
         asset_symbol="b",
         underlying_token=BASE_USDC,
         redemption_delay_seconds=86400,
         owner=SAMPLE_OWNER,
-    ).call()
+    ).call(ctx)
     assert first.index == second.index, (
         "eth_call must not mutate the factory index; got "
         f"first={first.index} second={second.index}"
@@ -393,10 +391,10 @@ def test_decode_clone_calldata_rejects_short_calldata():
         FusionFactory.decode_clone_calldata(b"\x86\x97\xb1")
 
 
-def test_encoder_classmethod_builds_ctx_less_wrapper():
-    """`FusionFactory.encoder(addr)` returns a wrapper with no ctx but a
-    real address; `.calldata` works, but `.call()` / `.send()` raise."""
-    f = FusionFactory.encoder(BASE_FUSION_FACTORY)
+def test_wrapper_builds_clone_calldata_offline():
+    """`FusionFactory(addr)` is an address and nothing chain-bound: the clone
+    Call targets the factory and its calldata needs no context."""
+    f = FusionFactory(BASE_FUSION_FACTORY)
     assert f.address == BASE_FUSION_FACTORY
     call = f.clone(
         asset_name="a",
@@ -405,26 +403,8 @@ def test_encoder_classmethod_builds_ctx_less_wrapper():
         redemption_delay_seconds=0,
         owner=SAMPLE_OWNER,
     )
-    # calldata works without ctx
+    assert call.to == BASE_FUSION_FACTORY
     assert call.calldata[:4] == FusionFactory.CLONE_SELECTOR
-    # .call() requires a ctx — should refuse since encoder()'s placeholder is None
-    with pytest.raises(ValueError, match="Web3Context required"):
-        call.call()
-
-
-def test_encoder_classmethod_defaults_to_zero_address():
-    """No address arg → placeholder zero address. Calldata still encodes
-    fine because `to` is irrelevant to ABI-encoded args."""
-    f = FusionFactory.encoder()
-    assert int(f.address, 16) == 0
-    data = f.clone(
-        asset_name="a",
-        asset_symbol="b",
-        underlying_token=BASE_USDC,
-        redemption_delay_seconds=0,
-        owner=SAMPLE_OWNER,
-    ).calldata
-    assert data[:4] == FusionFactory.CLONE_SELECTOR
 
 
 def test_clone_calldata_known_layout():

@@ -4,11 +4,15 @@ and decoding for both PriceOracleMiddleware and PriceOracleMiddlewareManager."""
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import multicall_aware
+from _simulate import simulate_response
 from eth_abi import encode
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
+from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
     LegacyPriceOracleMiddleware,
@@ -16,7 +20,8 @@ from ipor_fusion.core.oracle import (
     PriceOracleMiddlewareManager,
     price_oracle_middleware,
 )
-from ipor_fusion.types import Price
+from ipor_fusion.core.simulation import VaultSimulator
+from ipor_fusion.types import ChainId, Price
 
 CONTRACT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 MANAGER_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
@@ -30,13 +35,13 @@ MIDDLEWARE_ADDR = Web3.to_checksum_address("0xfFFfFffFffFFfFFffFFFffFfFfFFFFffFF
 
 def _make_oracle():
     ctx = MagicMock()
-    oracle = PriceOracleMiddleware(ctx, CONTRACT_ADDR)
+    oracle = PriceOracleMiddleware(CONTRACT_ADDR)
     return oracle, ctx
 
 
 def _make_manager():
     ctx = MagicMock()
-    manager = PriceOracleMiddlewareManager(ctx, MANAGER_ADDR)
+    manager = PriceOracleMiddlewareManager(MANAGER_ADDR)
     return manager, ctx
 
 
@@ -45,7 +50,7 @@ class TestGetSourceOfAssetPrice:
         oracle, ctx = _make_oracle()
         ctx.call.return_value = encode(["address"], [SOURCE_ADDR])
 
-        result = oracle.get_source_of_asset_price(ASSET_ADDR).call()
+        result = oracle.get_source_of_asset_price(ASSET_ADDR).call(ctx)
 
         assert result == SOURCE_ADDR
         ctx.call.assert_called_once()
@@ -56,7 +61,7 @@ class TestChainlinkFeedRegistry:
         oracle, ctx = _make_oracle()
         ctx.call.return_value = encode(["address"], [FEED_REGISTRY])
 
-        result = oracle.chainlink_feed_registry().call()
+        result = oracle.chainlink_feed_registry().call(ctx)
 
         assert result == FEED_REGISTRY
         ctx.call.assert_called_once()
@@ -68,7 +73,7 @@ class TestGetAssetsPriceSources:
         event_data = encode(["address", "address"], [ASSET_ADDR, SOURCE_ADDR])
         ctx.get_logs.return_value = [{"data": event_data}]
 
-        result = oracle.get_assets_price_sources()
+        result = oracle.read_assets_price_sources(ctx)
 
         assert len(result) == 1
         assert isinstance(result[0], AssetPriceSource)
@@ -81,7 +86,7 @@ class TestGetAssetsPriceSources:
         event2 = encode(["address", "address"], [ASSET_2, SOURCE_2])
         ctx.get_logs.return_value = [{"data": event1}, {"data": event2}]
 
-        result = oracle.get_assets_price_sources()
+        result = oracle.read_assets_price_sources(ctx)
 
         assert len(result) == 2
         assert result[0].asset == ASSET_ADDR
@@ -93,7 +98,7 @@ class TestGetAssetsPriceSources:
         oracle, ctx = _make_oracle()
         ctx.get_logs.return_value = []
 
-        result = oracle.get_assets_price_sources()
+        result = oracle.read_assets_price_sources(ctx)
 
         assert not result
 
@@ -103,7 +108,7 @@ class TestGetAssetPrice:
         oracle, ctx = _make_oracle()
         ctx.call.return_value = encode(["uint256", "uint256"], [1_500_000_000, 8])
 
-        result = oracle.get_asset_price(ASSET_ADDR).call()
+        result = oracle.get_asset_price(ASSET_ADDR).call(ctx)
 
         assert isinstance(result, Price)
         assert result.asset == ASSET_ADDR
@@ -114,10 +119,10 @@ class TestGetAssetPrice:
 class TestLegacyGetAssetPrice:
     def test_price_is_the_bare_answer_in_base_currency_decimals(self):
         ctx = MagicMock()
-        oracle = LegacyPriceOracleMiddleware(ctx, CONTRACT_ADDR, 8)
+        oracle = LegacyPriceOracleMiddleware(CONTRACT_ADDR, 8)
         ctx.call.return_value = encode(["uint256"], [99_990_543])
 
-        result = oracle.get_asset_price(ASSET_ADDR).call()
+        result = oracle.get_asset_price(ASSET_ADDR).call(ctx)
 
         assert result == Price(asset=ASSET_ADDR, amount=99_990_543, decimals=8)
 
@@ -132,7 +137,7 @@ class TestPriceOracleMiddlewareFactory:
         assert isinstance(oracle, LegacyPriceOracleMiddleware)
         assert oracle.address == CONTRACT_ADDR
         ctx.call.return_value = encode(["uint256"], [10**8])
-        assert oracle.get_asset_price(ASSET_ADDR).call().decimals == 8
+        assert oracle.get_asset_price(ASSET_ADDR).call(ctx).decimals == 8
 
     def test_reverting_probe_means_current_oracle(self):
         ctx = MagicMock()
@@ -163,7 +168,7 @@ class TestGetAssetPriceSourceUpdatedEvents:
         oracle, ctx = _make_oracle()
         ctx.get_logs.return_value = []
 
-        oracle.get_assets_price_sources()
+        oracle.read_assets_price_sources(ctx)
 
         expected_hash = HexBytes(
             Web3.keccak(text="AssetPriceSourceUpdated(address,address)")
@@ -189,7 +194,7 @@ class TestManagerSetAssetsPriceSources:
         manager, ctx = _make_manager()
         ctx.send.return_value = {"status": 1}
 
-        result = manager.set_assets_price_sources([ASSET_ADDR], [SOURCE_ADDR]).send()
+        result = manager.set_assets_price_sources([ASSET_ADDR], [SOURCE_ADDR]).send(ctx)
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -199,7 +204,7 @@ class TestManagerSetAssetsPriceSources:
         # setAssetsPricesSources, one letter apart and a different contract.
         manager, ctx = _make_manager()
 
-        manager.set_assets_price_sources([ASSET_ADDR], [SOURCE_ADDR]).send()
+        manager.set_assets_price_sources([ASSET_ADDR], [SOURCE_ADDR]).send(ctx)
 
         sent_to, sent_data = ctx.send.call_args[0]
         assert sent_to == MANAGER_ADDR
@@ -213,7 +218,7 @@ class TestManagerSetAssetsPriceSources:
 
         manager.set_assets_price_sources(
             [ASSET_ADDR, ASSET_2], [SOURCE_ADDR, SOURCE_2]
-        ).send()
+        ).send(ctx)
 
         _, sent_data = ctx.send.call_args[0]
         selector = Web3.keccak(text="setAssetsPriceSources(address[],address[])")[:4]
@@ -228,7 +233,7 @@ class TestManagerRemoveAssetsPriceSources:
         manager, ctx = _make_manager()
         ctx.send.return_value = {"status": 1}
 
-        result = manager.remove_assets_price_sources([ASSET_ADDR]).send()
+        result = manager.remove_assets_price_sources([ASSET_ADDR]).send(ctx)
 
         assert result == {"status": 1}
         ctx.send.assert_called_once()
@@ -236,7 +241,7 @@ class TestManagerRemoveAssetsPriceSources:
     def test_encodes_calldata(self):
         manager, ctx = _make_manager()
 
-        manager.remove_assets_price_sources([ASSET_ADDR, ASSET_2]).send()
+        manager.remove_assets_price_sources([ASSET_ADDR, ASSET_2]).send(ctx)
 
         sent_to, sent_data = ctx.send.call_args[0]
         assert sent_to == MANAGER_ADDR
@@ -249,7 +254,7 @@ class TestManagerReads:
         manager, ctx = _make_manager()
         ctx.call.return_value = encode(["address"], [SOURCE_ADDR])
 
-        result = manager.get_source_of_asset_price(ASSET_ADDR).call()
+        result = manager.get_source_of_asset_price(ASSET_ADDR).call(ctx)
 
         assert result == SOURCE_ADDR
         ctx.call.assert_called_once()
@@ -260,7 +265,7 @@ class TestManagerReads:
         manager, ctx = _make_manager()
         ctx.call.return_value = encode(["uint256", "uint256"], [2 * 10**18, 18])
 
-        result = manager.get_asset_price(ASSET_ADDR).call()
+        result = manager.get_asset_price(ASSET_ADDR).call(ctx)
 
         assert isinstance(result, Price)
         assert result.asset == ASSET_ADDR
@@ -272,7 +277,7 @@ class TestManagerReads:
         manager, ctx = _make_manager()
         ctx.call.return_value = encode(["address[]"], [[ASSET_ADDR, ASSET_2]])
 
-        result = manager.get_configured_assets().call()
+        result = manager.get_configured_assets().call(ctx)
 
         assert result == [ASSET_ADDR, ASSET_2]
         ctx.call.assert_called_once()
@@ -281,7 +286,7 @@ class TestManagerReads:
         manager, ctx = _make_manager()
         ctx.call.return_value = encode(["address[]"], [[]])
 
-        result = manager.get_configured_assets().call()
+        result = manager.get_configured_assets().call(ctx)
 
         assert result == []
         ctx.call.assert_called_once()
@@ -290,7 +295,44 @@ class TestManagerReads:
         manager, ctx = _make_manager()
         ctx.call.return_value = encode(["address"], [MIDDLEWARE_ADDR])
 
-        result = manager.get_price_oracle_middleware().call()
+        result = manager.get_price_oracle_middleware().call(ctx)
 
         assert result == MIDDLEWARE_ADDR
         ctx.call.assert_called_once()
+
+
+class TestLegacyOracleIsContextFree:
+    """The resolver probes on the context it is given (its pinned block too)
+    and returns a wrapper that carries the ABI, not the context: the legacy
+    decoding is the same on every execution path."""
+
+    def test_probe_runs_at_the_pinned_block_and_decoding_needs_no_context(self):
+        web3 = MagicMock()
+        web3.eth.call.return_value = HexBytes(encode(["uint256"], [8]))
+        pinned = Web3Context(web3, ChainId(1)).at_block(77)
+
+        oracle = price_oracle_middleware(pinned, CONTRACT_ADDR)
+
+        assert isinstance(oracle, LegacyPriceOracleMiddleware)
+        assert not hasattr(oracle, "_ctx")
+        assert web3.eth.call.call_args.kwargs["block_identifier"] == 77
+        raw = encode(["uint256"], [99_990_543])
+        expected = Price(asset=ASSET_ADDR, amount=99_990_543, decimals=8)
+        call = oracle.get_asset_price(ASSET_ADDR)
+        assert call.decode(raw) == expected
+
+        batch_ctx = MagicMock()
+        batch_ctx.call.side_effect = multicall_aware(lambda _to, _data: raw)
+        assert Multicall3(batch_ctx).aggregate([call]) == [expected]
+
+        sim = VaultSimulator(MagicMock())
+        sim.observe("price", call)
+        result = sim._parse_response(
+            simulate_response(
+                returnData=HexBytes(raw).to_0x_hex(),
+                status="0x1",
+                gasUsed="0x0",
+                logs=[],
+            )
+        )
+        assert result.get("price") == expected

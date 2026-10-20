@@ -174,7 +174,7 @@ def run_failed_deposit_recovery(run: Run, *, cancel: bool) -> None:
     run.advance(1)
     if not cancel:
         run.spoke_sim.add_call(
-            AccessManager.encoder(failed["access"]).grant_role(
+            AccessManager(failed["access"]).grant_role(
                 Roles.WHITELIST_ROLE, lane.executor_address, 0
             ),
             from_=run.owner,

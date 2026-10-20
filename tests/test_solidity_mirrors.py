@@ -231,7 +231,7 @@ def test_declared_signature_ignores_comments():
         pytest.param(
             _EXECUTOR_SOL,
             "syncSubstrates",
-            ExternalStateExecutor.encoder(_ANY_ADDRESS).sync_substrates().data,
+            ExternalStateExecutor(_ANY_ADDRESS).sync_substrates().data,
             id="syncSubstrates",
         ),
     ],

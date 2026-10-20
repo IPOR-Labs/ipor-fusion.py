@@ -88,8 +88,8 @@ def test_market55_vault_flow_with_explicit_hypercore_model() -> None:
     )
     ctx = Web3Context(web3, 999)
     ctx.default_block = BLOCK
-    vault = PlasmaVault(ctx, VAULT)
-    usdc = ERC20(ctx, USDC)
+    vault = PlasmaVault(VAULT)
+    usdc = ERC20(USDC)
     sim = VaultSimulator(web3, vault=VAULT, alpha=OPERATOR, block=BLOCK)
     for address, code in runtimes.items():
         sim.with_state_override(address, code="0x" + code.hex())

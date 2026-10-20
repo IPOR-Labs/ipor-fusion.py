@@ -81,14 +81,14 @@ def test_create_executor_caches_grants_and_sync_refreshes_custodians(
     ctx = Web3Context(web3=web3_base, chain_id=mod.BASE_CHAIN_ID, signer=mod.OWNER)
     ctx.default_block = mod.PINNED_BLOCK
 
-    factory = FusionFactory(ctx, mod.BASE_FUSION_FACTORY)
-    preview = factory.clone(**mod.clone_args()).call()
-    vault = PlasmaVault(ctx, preview.plasma_vault)
-    access_manager = AccessManager(ctx, preview.access_manager)
+    factory = FusionFactory(mod.BASE_FUSION_FACTORY)
+    preview = factory.clone(**mod.clone_args()).call(ctx)
+    vault = PlasmaVault(preview.plasma_vault)
+    access_manager = AccessManager(preview.access_manager)
     executor_address = Web3.to_checksum_address(
         get_create_address(preview.plasma_vault, 1)
     )
-    executor = ExternalStateExecutor(ctx, executor_address)
+    executor = ExternalStateExecutor(executor_address)
 
     block_time = (
         int(web3_base.eth.get_block(mod.PINNED_BLOCK)["timestamp"]) + BLOCK_TIME_SHIFT
@@ -176,7 +176,12 @@ def test_create_executor_caches_grants_and_sync_refreshes_custodians(
         from_=CUSTODIAN_C,
         label="propose_c_after_sync",
     )
-    sim.observe("pending_from_c", executor.pending_proposals(mod.VENUE_BALANCE_ACCOUNT))
+    sim.observe(
+        "pending_from_c",
+        executor.pending_proposals(
+            mod.VENUE_BALANCE_ACCOUNT, chain_id=mod.BASE_CHAIN_ID
+        ),
+    )
 
     # Revoking B: the executor keeps trusting its cache until the next sync.
     sim.add_call(
@@ -191,7 +196,12 @@ def test_create_executor_caches_grants_and_sync_refreshes_custodians(
         from_=mod.CUSTODIAN_B,
         label="propose_b_before_sync",
     )
-    sim.observe("pending_from_b", executor.pending_proposals(mod.VENUE_BALANCE_ACCOUNT))
+    sim.observe(
+        "pending_from_b",
+        executor.pending_proposals(
+            mod.VENUE_BALANCE_ACCOUNT, chain_id=mod.BASE_CHAIN_ID
+        ),
+    )
     sim.add_call(call=executor.sync_substrates(), from_=BYSTANDER, label="resync")
     sim.add_call(
         call=executor.propose_balance(mod.VENUE_BALANCE_ACCOUNT, REVOKED_VALUE),

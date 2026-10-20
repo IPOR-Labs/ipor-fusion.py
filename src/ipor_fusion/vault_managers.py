@@ -4,6 +4,7 @@ WithdrawManager snapshot."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import partial
 
 from eth_abi.exceptions import DecodingError
 from web3.types import ChecksumAddress
@@ -81,10 +82,10 @@ def _fetch_withdraw_manager(
     ctx: Web3Context, plasma_vault: PlasmaVault
 ) -> tuple[ChecksumAddress | None, WithdrawManagerData | None]:
     """Resolve the vault's WithdrawManager and snapshot its state."""
-    address = plasma_vault.withdraw_manager_address()
+    address = plasma_vault.read_withdraw_manager_address(ctx)
     if not address:
         return None, None
-    wm = WithdrawManager(ctx, address)
+    wm = WithdrawManager(address)
     _, (window, request_fee, withdraw_fee, shares, last_ts) = _read_batch(
         ctx,
         [],
@@ -96,7 +97,7 @@ def _fetch_withdraw_manager(
             wm.get_last_release_funds_timestamp(),
         ],
     )
-    pending = _scan_or_none(wm.get_pending_requests)
+    pending = _scan_or_none(partial(wm.read_pending_requests, ctx))
     to_release = Shares(shares or 0)
     _, (release_assets, *request_assets) = _read_batch(
         ctx,
@@ -133,7 +134,7 @@ def _fetch_fee_manager_address(
     decode is treated the same.
     """
     try:
-        return _safe_call(FeeAccount(ctx, fee_account).fee_manager().call)
+        return _safe_call(partial(FeeAccount(fee_account).fee_manager().call, ctx))
     except (EmptyCallResultError, DecodingError):
         return None
 
@@ -182,7 +183,7 @@ def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> FeeData:
         return result
     result.fee_manager = fee_manager_addr
 
-    fee_manager = FeeManager(ctx, fee_manager_addr)
+    fee_manager = FeeManager(fee_manager_addr)
     (
         _,
         (

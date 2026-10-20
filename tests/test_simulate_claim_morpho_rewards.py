@@ -66,11 +66,9 @@ def test_simulate_claim_morpho_rewards(web3_eth):
     ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
-    plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    rewards = RewardsManager(
-        ctx, plasma_vault.get_rewards_claim_manager_address().call()
-    )
-    rewards_token = ERC20(ctx, REWARDS_TOKEN)
+    plasma_vault = PlasmaVault(VAULT_ADDRESS)
+    rewards = RewardsManager(plasma_vault.get_rewards_claim_manager_address().call(ctx))
+    rewards_token = ERC20(REWARDS_TOKEN)
 
     morpho = MorphoClaimFuse(ETHEREUM_MORPHO_CLAIM_FUSE)
     claim_action = morpho.claim(

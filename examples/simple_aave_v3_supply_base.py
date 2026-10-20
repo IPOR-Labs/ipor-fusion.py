@@ -4,7 +4,7 @@ This is the canonical starting example. It shows, end to end and without reading
 the test suite, how to:
 
   1. connect a ``Web3Context`` to Base;
-  2. preview a vault deployment with ``FusionFactory.clone(...).call()`` to learn
+  2. preview a vault deployment with ``FusionFactory.clone(...).call(ctx)`` to learn
      its state-dependent CREATE addresses for the atomic simulation;
   3. obtain the unsigned creation calldata via ``.calldata``;
   4. bootstrap the vault's roles in the correct order;
@@ -201,12 +201,12 @@ def clone_args() -> dict:
 def unsigned_clone_calldata() -> bytes:
     """Unsigned creation calldata (selector + ABI-encoded args) for the deploy.
 
-    Built with a ctx-less encoder, so it needs no provider. Hand these bytes to
-    an external signer / multisig instead of calling ``.send()``. NOTE: the owner
+    Built from an address-only wrapper, so it needs no provider. Hand these bytes to
+    an external signer / multisig instead of calling ``.send(ctx)``. NOTE: the owner
     encoded here is the simulation ``OWNER`` (a throwaway EOA) -- set your real
     owner in ``clone_args()`` before deploying, or the vault is owned by it.
     """
-    return FusionFactory.encoder(BASE_FUSION_FACTORY).clone(**clone_args()).calldata
+    return FusionFactory(BASE_FUSION_FACTORY).clone(**clone_args()).calldata
 
 
 def build_supply_action(amount: Amount) -> FuseAction:
@@ -227,10 +227,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     """Build, fund, deposit and supply -- all in one eth_simulateV1 batch."""
     ctx = Web3Context(web3=web3, chain_id=BASE_CHAIN_ID, signer=OWNER)
     ctx.default_block = PINNED_BLOCK
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # 1. Preview the deterministic addresses (eth_call, no gas, no state change).
-    preview = factory.clone(**clone_args()).call()
+    preview = factory.clone(**clone_args()).call(ctx)
     log.info(
         "predicted vault=%s access_manager=%s price_manager=%s (index=%d)",
         preview.plasma_vault,
@@ -241,18 +241,18 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # 2. The unsigned creation calldata (external-signer path).
     log.info("unsigned clone calldata: 0x%s", unsigned_clone_calldata().hex())
 
-    plasma_vault = PlasmaVault(ctx, preview.plasma_vault)
-    access_manager = AccessManager(ctx, preview.access_manager)
-    price_manager = PriceOracleMiddlewareManager(ctx, preview.price_manager)
-    usdc = ERC20(ctx, BASE_USDC)
+    plasma_vault = PlasmaVault(preview.plasma_vault)
+    access_manager = AccessManager(preview.access_manager)
+    price_manager = PriceOracleMiddlewareManager(preview.price_manager)
+    usdc = ERC20(BASE_USDC)
 
     # The whole flow runs as ONE eth_simulateV1 batch; nothing here is signed or
     # broadcast (see the module docstring). Each simulator primitive stands in for
     # a production action, read as "simulation -> production":
-    #   - sim.add_call(call=X, from_=OWNER) -> X.send() by the owner/atomist
+    #   - sim.add_call(call=X, from_=OWNER) -> X.send(ctx) by the owner/atomist
     #     (or X.calldata to a multisig / timelock).
-    #   - sim.execute([action]) -> plasma_vault.execute([action]).send() by the alpha.
-    #   - sim.observe("key", X) -> X.call(), a plain read.
+    #   - sim.execute([action]) -> plasma_vault.execute([action]).send(ctx) by the alpha.
+    #   - sim.observe("key", X) -> X.call(ctx), a plain read.
     sim = VaultSimulator(
         web3=web3, vault=preview.plasma_vault, alpha=ALPHA, block=PINNED_BLOCK
     )

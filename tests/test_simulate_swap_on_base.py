@@ -53,7 +53,7 @@ def _build_universal_swap(
     """
     targets = [token_in, UNIV3_UNIVERSAL_ROUTER]
     transfer_data = (
-        ERC20(ctx, token_in).transfer(UNIV3_UNIVERSAL_ROUTER, Amount(amount)).data
+        ERC20(token_in).transfer(UNIV3_UNIVERSAL_ROUTER, Amount(amount)).data
     )
     path = encode_packed(["address", "uint24", "address"], [token_in, fee, token_out])
     inputs = [
@@ -91,13 +91,11 @@ def test_simulate_swap_cbbtc_to_usdc(web3_base):
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
     ctx.default_block = pinned_block
 
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    cbbtc = ERC20(ctx, CBBTC)
-    usdc = ERC20(ctx, BASE_USDC)
-    atomist = access_manager.atomists()[0]
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    cbbtc = ERC20(CBBTC)
+    usdc = ERC20(BASE_USDC)
+    atomist = access_manager.read_atomists(ctx)[0]
 
     deposit_amount = 1_00000000  # 1 cbBTC, exactly as in the original test
     swap_amount = deposit_amount // 2
@@ -167,9 +165,9 @@ def test_simulate_swap_weth_to_pepe(web3_base):
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
     ctx.default_block = pinned_block
 
-    weth = ERC20(ctx, BASE_WETH)
-    pepe_token = ERC20(ctx, pepe)
-    weth_balance = weth.balance_of(vault_address).call()
+    weth = ERC20(BASE_WETH)
+    pepe_token = ERC20(pepe)
+    weth_balance = weth.balance_of(vault_address).call(ctx)
 
     universal = UniversalTokenSwapperFuse(BASE_UNIVERSAL_SWAP_FUSE)
     swap_action = _build_universal_swap(

@@ -151,7 +151,7 @@ class IporFusionError(Exception):
     The rule the SDK follows everywhere: a subclass when the chain, a provider
     or a remote API answers something it cannot use. A caller's mistake (a bad
     argument, or an operation the object was not built for, such as
-    ``.call()`` on a write-only ``Call``) raises a builtin ``ValueError``
+    ``.call(ctx)`` on a write-only ``Call``) raises a builtin ``ValueError``
     instead, as the standard library does for an operation on a closed file;
     an argument of the wrong type raises ``TypeError`` and an unknown name in a
     mapping-style lookup ``KeyError``. A subclass that also describes bad input

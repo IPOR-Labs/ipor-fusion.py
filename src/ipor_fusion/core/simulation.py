@@ -183,7 +183,7 @@ class VaultSimulator:
 
         result = sim.run()
         if result.all_success and is_health_safe(result.get("ltv_after")):
-            vault.execute([flash_loan_action]).send()  # green-light real execution
+            vault.execute([flash_loan_action]).send(ctx)  # green-light real execution
 
     Limitations:
       - State does not survive across separate `run()` calls (each is fresh)

@@ -325,8 +325,8 @@ class StargateCrosschainFactory(CrosschainFactory):
     def create_executor(
         self, user_salt: bytes, params: ExecutorInitParams
     ) -> Call[ChecksumAddress]:
-        """Deploy an executor for ``msg.sender``/``user_salt``. A write: ``.send()``
-        it, or ``.call()`` inside a simulation to preview the address (equal to
+        """Deploy an executor for ``msg.sender``/``user_salt``. A write: ``.send(ctx)``
+        it, or ``.call(ctx)`` inside a simulation to preview the address (equal to
         ``compute_executor_address``). Reverts ``CreatorNotAllowed`` while
         creation is restricted and the caller is not allowlisted."""
         return self._view(

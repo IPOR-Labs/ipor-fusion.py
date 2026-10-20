@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Self
 
 from eth_abi import decode
 from eth_abi.exceptions import InsufficientDataBytes
@@ -68,16 +67,12 @@ def _role_status_decoder(values: tuple) -> RoleStatus:
 class AccessManager(ContractWrapper):
     """Manages role-based access control for PlasmaVault operations."""
 
-    def __init__(self, ctx: Web3Context, address: AccessManagerAddress):
-        super().__init__(ctx, address)
+    def __init__(self, address: AccessManagerAddress):
+        super().__init__(address)
 
     @property
     def address(self) -> AccessManagerAddress:
         return AccessManagerAddress(self._address)
-
-    @classmethod
-    def encoder(cls, address: AccessManagerAddress | None = None) -> Self:  # type: ignore[override]
-        return super().encoder(address)
 
     def grant_role(
         self, role_id: RoleId | Roles, account: ChecksumAddress, execution_delay: Period
@@ -114,39 +109,42 @@ class AccessManager(ContractWrapper):
             decoder=_role_status_decoder,
         )
 
-    # ── Compound methods: event replay + per-account hasRole reads ─────────
-    # These don't fit the single-eth_call `Call` shape, so they stay as
-    # immediate-execute methods.
+    # ── Composite reads on ``ctx``: event replay + batched hasRole reads ───
 
-    def owner(self) -> ChecksumAddress:
-        return self.owners()[0]
+    def read_owner(self, ctx: Web3Context) -> ChecksumAddress:
+        return self.read_owners(ctx)[0]
 
-    def owners(self) -> list[ChecksumAddress]:
+    def read_owners(self, ctx: Web3Context) -> list[ChecksumAddress]:
         return [
             role_account.account
-            for role_account in self.get_accounts_with_role(Roles.OWNER_ROLE)
+            for role_account in self.read_accounts_with_role(ctx, Roles.OWNER_ROLE)
         ]
 
-    def atomists(self) -> list[ChecksumAddress]:
+    def read_atomists(self, ctx: Web3Context) -> list[ChecksumAddress]:
         return [
             role_account.account
-            for role_account in self.get_accounts_with_role(Roles.ATOMIST_ROLE)
+            for role_account in self.read_accounts_with_role(ctx, Roles.ATOMIST_ROLE)
         ]
 
-    def get_accounts_with_role(self, role_id: RoleId | Roles) -> list[RoleAccount]:
+    def read_accounts_with_role(
+        self, ctx: Web3Context, role_id: RoleId | Roles
+    ) -> list[RoleAccount]:
         return self._resolve_role_accounts(
-            self._get_grant_role_events(),
+            ctx,
+            self._get_grant_role_events(ctx),
             predicate=lambda rid, _: rid == role_id,
         )
 
-    def get_all_role_accounts(self) -> list[RoleAccount]:
+    def read_all_role_accounts(self, ctx: Web3Context) -> list[RoleAccount]:
         return self._resolve_role_accounts(
-            self._get_grant_role_events(),
+            ctx,
+            self._get_grant_role_events(ctx),
             predicate=lambda _rid, _acc: True,
         )
 
     def _resolve_role_accounts(
         self,
+        ctx: Web3Context,
         events: list[LogReceipt],
         predicate: "Callable[[RoleId, ChecksumAddress], bool]",
     ) -> list[RoleAccount]:
@@ -161,7 +159,7 @@ class AccessManager(ContractWrapper):
             if predicate(role_id, account):
                 candidates[(role_id, account)] = None
 
-        statuses = Multicall3(self._ctx).aggregate(
+        statuses = Multicall3(ctx).aggregate(
             [self.has_role(role_id, account) for role_id, account in candidates]
         )
         return [
@@ -175,21 +173,20 @@ class AccessManager(ContractWrapper):
             if status.is_member
         ]
 
-    def _get_grant_role_events(self) -> list[LogReceipt]:
+    def _get_grant_role_events(self, ctx: Web3Context) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="RoleGranted(uint64,address,uint32,uint48,bool)")
         ).to_0x_hex()
         return list(
-            self._ctx.get_logs(
-                contract_address=self._address, topics=[event_signature_hash]
-            )
+            ctx.get_logs(contract_address=self._address, topics=[event_signature_hash])
         )
 
 
 def resolve_access_manager(
     ctx: Web3Context, vault_address: ChecksumAddress
 ) -> AccessManager:
-    """Resolve a vault address to its AccessManager, with typed guards.
+    """Resolve a vault address to its AccessManager, with typed guards. An
+    eager resolver: it reads on ``ctx`` and returns a context-free wrapper.
 
     Raises ContractNotFoundError when no code is deployed at the address (as
     of ctx.default_block), and NotPlasmaVaultError when the contract does not
@@ -211,13 +208,13 @@ def resolve_access_manager(
         )
     try:
         manager_address = (
-            PlasmaVault(ctx, PlasmaVaultAddress(checksum))
+            PlasmaVault(PlasmaVaultAddress(checksum))
             .get_access_manager_address()
-            .call()
+            .call(ctx)
         )
     except (EmptyCallResultError, InsufficientDataBytes, ContractLogicError) as exc:
         raise NotPlasmaVaultError(
             f"Address {checksum} on chain {ctx.chain_id} does not appear "
             f"to be a Plasma Vault."
         ) from exc
-    return AccessManager(ctx, manager_address)
+    return AccessManager(manager_address)

@@ -48,10 +48,10 @@ def test_simulate_euler_v2_swap_registry_base(web3_base):
     block = web3_base.eth.block_number
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
     ctx.default_block = block
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # Predict the deterministic clone addresses.
-    preview = factory.clone(**clone_args()).call()
+    preview = factory.clone(**clone_args()).call(ctx)
     vault_address = preview.plasma_vault
     access_manager_address = preview.access_manager
 
@@ -68,7 +68,7 @@ def test_simulate_euler_v2_swap_registry_base(web3_base):
     sim.execute(plan.supply_actions + [plan.deploy_action])
     sim.observe(
         "registered_before",
-        registry_pool_by_euler_account(ctx, plan.euler_account),
+        registry_pool_by_euler_account(plan.euler_account),
     )
 
     # Register the pool in the public registry.
@@ -77,7 +77,7 @@ def test_simulate_euler_v2_swap_registry_base(web3_base):
     )
     sim.observe(
         "registered_after",
-        registry_pool_by_euler_account(ctx, plan.euler_account),
+        registry_pool_by_euler_account(plan.euler_account),
     )
 
     # Remove the EVC operator first (the registry blocks unregister otherwise), then unregister.
@@ -89,7 +89,7 @@ def test_simulate_euler_v2_swap_registry_base(web3_base):
     )
     sim.observe(
         "registered_after_unregister",
-        registry_pool_by_euler_account(ctx, plan.euler_account),
+        registry_pool_by_euler_account(plan.euler_account),
     )
 
     result = sim.run()

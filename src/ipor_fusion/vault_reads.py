@@ -51,14 +51,14 @@ def _safe_call(func: Callable[[], T]) -> T | None:
         return None
 
 
-def _unless_unimplemented(value: T | None, call: Call[T]) -> T | None:
+def _unless_unimplemented(ctx: Web3Context, value: T | None, call: Call[T]) -> T | None:
     """An optional batch read, re-run when it failed: ``None`` only when the
     contract returned no data (it predates the getter); a revert or RPC error
-    raises exactly what `Call.call()` would, so real failures stay loud."""
+    raises exactly what `Call.call(ctx)` would, so real failures stay loud."""
     if value is not None:
         return value
     try:
-        return call.call()
+        return call.call(ctx)
     except EmptyCallResultError:
         return None
 
@@ -71,11 +71,11 @@ def _read_batch(
     """Read `required` + `optional` in one Multicall3 round trip.
 
     A failing optional read is ``None``. A failing required read is re-run on
-    its own, so it raises exactly what `Call.call()` would.
+    its own on ``ctx``, so it raises exactly what `Call.call(ctx)` would.
     """
     results = Multicall3(ctx).try_aggregate([*required, *optional])
     head = [
-        value if value is not None else call.call()
+        value if value is not None else call.call(ctx)
         for value, call in zip(results, required, strict=False)
     ]
     return head, results[len(required) :]

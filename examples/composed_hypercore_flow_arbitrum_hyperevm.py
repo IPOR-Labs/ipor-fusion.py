@@ -346,13 +346,13 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     substrate grants and estimate each one from the alpha at head. Six
     independent previews against the live inventory; none changes state."""
     ctx = Web3Context(web3_hype, chain_id=HYPEREVM_CHAIN_ID)
-    vault = PlasmaVault(ctx, HYPERCORE_VAULT)
+    vault = PlasmaVault(HYPERCORE_VAULT)
 
     # 1. What the vault is allowed to do on Core: every parameter below comes
     #    from a granted substrate, not from this script.
     grants = [
         decode_substrate(raw, HYPERCORE_MARKET)
-        for raw in vault.get_market_substrates(HYPERCORE_MARKET).call()
+        for raw in vault.get_market_substrates(HYPERCORE_MARKET).call(ctx)
     ]
     by_type: dict[str, list[Any]] = {}
     for info in grants:
@@ -398,7 +398,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     )
 
     # 2. The fuses the vault registered for market 55, read from the vault.
-    fuses = {Web3.to_checksum_address(f) for f in vault.get_fuses().call()}
+    fuses = {Web3.to_checksum_address(f) for f in vault.get_fuses().call(ctx)}
     deposit_fuse = HyperCoreDepositFuse(
         parse_fuse_address("0xDbE31Da504ac89B618664bB02e1521c335a41E73")
     )
@@ -419,25 +419,25 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     #    Core -> EVM amount must be representable on the EVM), the mark, and
     #    the pending gate: only one Core action may be pending per vault.
     state = read_hypercore_vault_state(ctx, HYPERCORE_VAULT, HYPERCORE_BALANCE_FUSE)
-    reader = HyperCoreReader(ctx)
+    reader = HyperCoreReader()
     pending = bool(state.pending and state.pending.pending)
-    spot = reader.spot_balance(HYPERCORE_VAULT, USDC_TOKEN_INDEX).call()
+    spot = reader.spot_balance(HYPERCORE_VAULT, USDC_TOKEN_INDEX).call(ctx)
     spot_available = _available_spot_wei(spot.total, spot.hold)
-    usdc_info = reader.token_info(USDC_TOKEN_INDEX).call()
+    usdc_info = reader.token_info(USDC_TOKEN_INDEX).call(ctx)
     evm_step = 10 ** max(int(usdc_info.wei_decimals) - 6, 0)
     xyz_equity_usd6 = int(
-        reader.account_margin_summary(XYZ_DEX, HYPERCORE_VAULT).call().account_value
+        reader.account_margin_summary(XYZ_DEX, HYPERCORE_VAULT).call(ctx).account_value
     )
     read_index = read_index_of(XYZ_NVDA_ASSET)
     # The precompile quotes a perp price with ``6 - szDecimals`` decimals; the
     # order fuse takes 8 implied decimals. Read szDecimals, then rescale.
-    sz_decimals = int(reader.perp_asset_info(read_index).call().sz_decimals)
-    mark = int(reader.mark_px(read_index).call()) * 10 ** (2 + sz_decimals)
+    sz_decimals = int(reader.perp_asset_info(read_index).call(ctx).sz_decimals)
+    mark = int(reader.mark_px(read_index).call(ctx)) * 10 ** (2 + sz_decimals)
     _check(
         10 * CORE_WEI < mark < 100_000 * CORE_WEI,
         f"mark {mark} (8 dp) is not a sane NVDA price",
     )
-    position = reader.position(HYPERCORE_VAULT, read_index).call()
+    position = reader.position(HYPERCORE_VAULT, read_index).call(ctx)
     log.info(
         "live: nav_wad=%s balance_fuse_wad=%s pending=%s spot total=%d hold=%d (available %d wei) xyz account value=%d USD6 position_szi=%d (szDecimals %d) mark=%d (8 dp)",
         state.nav.value_wad,
@@ -696,15 +696,15 @@ def redeem_command_preview(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
     hub_ctx = _pinned(web3_arb, ARBITRUM_CHAIN_ID, ARBITRUM_BLOCK_BEFORE_REDEEM)
     spoke_ctx = _pinned(web3_hype, HYPEREVM_CHAIN_ID, HYPEREVM_BLOCK_BEFORE_REDEEM)
     lane = open_lane(hub_ctx, spoke_ctx, executor=EXECUTOR, market_id=CROSSCHAIN_MARKET)
-    hub_vault = PlasmaVault(hub_ctx, HUB_VAULT)
-    remote = PlasmaVault(spoke_ctx, HYPERCORE_VAULT)
+    hub_vault = PlasmaVault(HUB_VAULT)
+    remote = PlasmaVault(HYPERCORE_VAULT)
 
     # Everything the dispatcher holds when its value fits what can leave the
     # vault through the EVM (idle underlying and maxWithdraw), otherwise
     # min(idle, maxWithdraw) less a 1,000-unit buffer, converted to shares.
     # Whatever stays is attested as residual shares later.
     ceiling = read_hypercore_evm_exit_ceiling(spoke_ctx, HYPERCORE_VAULT, EXECUTOR)
-    max_withdraw = int(remote.max_withdraw(EXECUTOR).call())
+    max_withdraw = int(remote.max_withdraw(EXECUTOR).call(spoke_ctx))
     sized = _redeem_size(
         ceiling.shares, ceiling.share_assets, ceiling.idle_underlying, max_withdraw
     )
@@ -713,10 +713,10 @@ def redeem_command_preview(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
         shares = Shares(int(sized))
         branch = "all shares: their value fits idle and maxWithdraw"
     else:
-        shares = Shares(int(remote.convert_to_shares(Amount(sized)).call()))
+        shares = Shares(int(remote.convert_to_shares(Amount(sized)).call(spoke_ctx)))
         branch = f"partial: min(idle {ceiling.idle_underlying}, maxWithdraw {max_withdraw}) - 1,000 = {sized} units"
     _check(0 < shares <= ceiling.shares, "sizing left no redeemable shares")
-    expected = int(remote.convert_to_assets(shares).call())
+    expected = int(remote.convert_to_assets(shares).call(spoke_ctx))
     _check(
         expected <= min(ceiling.idle_underlying, max_withdraw),
         f"expected {expected} does not fit idle {ceiling.idle_underlying} / maxWithdraw {max_withdraw}",
@@ -728,9 +728,7 @@ def redeem_command_preview(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
     # The fee gate: the executor pays the CCIP fee from its own native
     # balance and the quote moves between samples, so the balance must cover
     # the route's maxFee (the contract cap), not merely today's quote.
-    route = (
-        CcipCrosschainExecutor(hub_ctx, EXECUTOR).ccip_route(HYPEREVM_CHAIN_ID).call()
-    )
+    route = CcipCrosschainExecutor(EXECUTOR).ccip_route(HYPEREVM_CHAIN_ID).call(hub_ctx)
     quote = quote_ccip_native_fee(
         web3_arb, send, payer=EXECUTOR, from_=ALPHA, block=ARBITRUM_BLOCK_BEFORE_REDEEM
     )
@@ -884,20 +882,20 @@ def recall_attest_claim(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
         simulator,
         hub,
         spoke,
-        PlasmaVault(hub_ctx, HUB_VAULT),
-        ERC20(hub_ctx, ARBITRUM_USDC),
+        PlasmaVault(HUB_VAULT),
+        ERC20(ARBITRUM_USDC),
         {},
     )
 
     # Where the live cycle stood: the settled bucket carries attestation 8, the
     # dispatcher holds the redeemed idle and the residual shares.
-    settled_before = int(lane.settled_remote_balance().call())
-    observation_before = lane.observation().call()
+    settled_before = int(lane.settled_remote_balance().call(hub_ctx))
+    observation_before = lane.observation().call(spoke_ctx)
     remote_idle = Amount(int(observation_before.tracked_idle))
     residual_shares = int(
-        PlasmaVault(spoke_ctx, HYPERCORE_VAULT).balance_of(EXECUTOR).call()
+        PlasmaVault(HYPERCORE_VAULT).balance_of(EXECUTOR).call(spoke_ctx)
     )
-    vault_usdc_before = int(flow.hub_usdc.balance_of(HUB_VAULT).call())
+    vault_usdc_before = int(flow.hub_usdc.balance_of(HUB_VAULT).call(hub_ctx))
     log.info(
         "before the recall: settled=%d dispatcher idle=%d accounted=%d residual shares=%d hub vault USDC=%d",
         settled_before,
@@ -939,7 +937,7 @@ def recall_attest_claim(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
     log.info("recall: idle=%d settled=%d (the residual's value)", idle, settled)
     flow.numbers.update({"recalled": idle, "settled_after_return": settled})
 
-    flow.advance(int(lane.executor.min_update_interval().call()))
+    flow.advance(int(lane.executor.min_update_interval().call(hub_ctx)))
     residual = _attest(flow, "residual", "observation_after_return", hub_idle=idle)
     _check(
         residual == settled, f"the residual attestation {residual} != settled {settled}"

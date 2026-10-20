@@ -48,10 +48,10 @@ def test_simulate_euler_v2_swap_reconfigure_base(web3_base):
     block = web3_base.eth.block_number
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
     ctx.default_block = block
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # Predict the deterministic clone addresses.
-    preview = factory.clone(**clone_args()).call()
+    preview = factory.clone(**clone_args()).call(ctx)
     vault_address = preview.plasma_vault
     access_manager_address = preview.access_manager
 
@@ -64,7 +64,7 @@ def test_simulate_euler_v2_swap_reconfigure_base(web3_base):
 
     # Deploy the pool first (supply collateral + deploy).
     sim.execute(plan.supply_actions + [plan.deploy_action])
-    sim.observe("dynamic_before", pool_dynamic_params(ctx, plan.predicted_pool))
+    sim.observe("dynamic_before", pool_dynamic_params(plan.predicted_pool))
 
     # Reconfigure: bump both fees to 0.5% and raise the equilibrium reserves.
     reconfigure_fuse = EulerV2SwapReconfigureFuse(EULER_SWAP_RECONFIGURE_FUSE)
@@ -77,7 +77,7 @@ def test_simulate_euler_v2_swap_reconfigure_base(web3_base):
         initial_state=initial_state(reserve=_NEW_EQUILIBRIUM_RESERVE),
     )
     sim.execute([reconfigure_action])
-    sim.observe("dynamic_after", pool_dynamic_params(ctx, plan.predicted_pool))
+    sim.observe("dynamic_after", pool_dynamic_params(plan.predicted_pool))
 
     result = sim.run()
     log.info(

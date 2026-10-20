@@ -106,13 +106,11 @@ def test_simulate_open_new_position_ramses_v2(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    owner = access_manager.owner()
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    usdt = ERC20(ctx, ARBITRUM_USDT)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    owner = access_manager.read_owner(ctx)
+    usdc = ERC20(ARBITRUM_USDC)
+    usdt = ERC20(ARBITRUM_USDT)
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
@@ -164,11 +162,9 @@ def test_simulate_open_new_position_ramses_v2(web3_arb):
 
 def _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, amount_desired):
     """Build a sim that swaps USDC→USDT and opens a Ramses position with given amounts."""
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    owner = access_manager.owner()
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    owner = access_manager.read_owner(ctx)
 
     uniswap_swap = UniswapV3SwapFuse(ARBITRUM_UNISWAP_V3_SWAP_FUSE)
     ramses_new_pos = RamsesV2NewPositionFuse(ARBITRUM_RAMSES_V2_NEW_POSITION_FUSE)
@@ -214,8 +210,8 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    usdt = ERC20(ctx, ARBITRUM_USDT)
+    usdc = ERC20(ARBITRUM_USDC)
+    usdt = ERC20(ARBITRUM_USDT)
 
     # Step 1: extract token_id from new_position event logs
     sim1 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(499e6))
@@ -264,8 +260,8 @@ def test_simulate_increase_liquidity(web3_arb):
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    usdt = ERC20(ctx, ARBITRUM_USDT)
+    usdc = ERC20(ARBITRUM_USDC)
+    usdt = ERC20(ARBITRUM_USDT)
 
     # Step 1: extract token_id from event
     sim1 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(300e6))
@@ -320,16 +316,12 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    rewards = RewardsManager(
-        ctx, plasma_vault.get_rewards_claim_manager_address().call()
-    )
-    owner = access_manager.owner()
-    ram = ERC20(ctx, ARBITRUM_RAM_TOKEN)
-    xram = ERC20(ctx, ARBITRUM_XRAM_TOKEN)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    rewards = RewardsManager(plasma_vault.get_rewards_claim_manager_address().call(ctx))
+    owner = access_manager.read_owner(ctx)
+    ram = ERC20(ARBITRUM_RAM_TOKEN)
+    xram = ERC20(ARBITRUM_XRAM_TOKEN)
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
 
     # Step 1: extract token_id from event

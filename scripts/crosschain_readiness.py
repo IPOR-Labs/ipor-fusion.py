@@ -194,8 +194,7 @@ def _view(
         to=to,
         data=function_signature_to_4byte_selector(signature),
         output_types=output_types,
-        ctx=ctx,
-    ).call()
+    ).call(ctx)
 
 
 def _block_facts(block: Mapping[str, Any]) -> dict[str, Any]:
@@ -207,9 +206,9 @@ def _block_facts(block: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _read_token(ctx: Web3Context, spec: ChainSpec) -> dict[str, Any]:
-    token = ERC20(ctx, spec.usdc)
-    symbol = token.symbol().call()
-    decimals = int(token.decimals().call())
+    token = ERC20(spec.usdc)
+    symbol = token.symbol().call(ctx)
+    decimals = int(token.decimals().call(ctx))
     return {
         "address": spec.usdc,
         "symbol": symbol,
@@ -274,15 +273,15 @@ def _off_ramp_from(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> Any:
     """The CCIP 2.0 OffRamp delivering ``peer``'s messages on ``spec``."""
     candidates = [
         ramp
-        for selector, ramp in CcipRouter(ctx, spec.router).get_off_ramps().call()
+        for selector, ramp in CcipRouter(spec.router).get_off_ramps().call(ctx)
         if selector == peer.chain_selector
     ]
     current = [
         ramp
         for ramp in candidates
-        if CcipOffRamp(ctx, ramp)
+        if CcipOffRamp(ramp)
         .type_and_version()
-        .call()
+        .call(ctx)
         .startswith(SUPPORTED_OFF_RAMP_PREFIX)
     ]
     if len(current) != 1:
@@ -383,30 +382,30 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
     """The factory's USDC asset, its route to ``peer``, the creation gates and
     the canary creator's standing, each read once; ``gates`` holds every
     boolean ``ready`` is made of."""
-    factory = CcipCrosschainFactory(ctx, FACTORY)
-    route = factory.ccip_route(peer.chain_id).call()
+    factory = CcipCrosschainFactory(FACTORY)
+    route = factory.ccip_route(peer.chain_id).call(ctx)
     configured_deployment_gas = int(
-        factory.dispatcher_deployment_gas_limit(peer.chain_id).call()
+        factory.dispatcher_deployment_gas_limit(peer.chain_id).call(ctx)
     )
     deployment_gas = configured_deployment_gas or route.message_gas_limit
-    token, shared_decimals, enabled = factory.asset_config(USDC_ASSET_ID).call()
+    token, shared_decimals, enabled = factory.asset_config(USDC_ASSET_ID).call(ctx)
     testtr_token, testtr_decimals, testtr_enabled = factory.asset_config(
         TESTTR_ASSET_ID
-    ).call()
+    ).call(ctx)
     testtr_ready = bool(
         testtr_enabled
         and testtr_token == spec.testtr
         and testtr_decimals == TESTTR_DECIMALS
     )
-    peer_chain_id = int(factory.chain_id_of_selector(peer.chain_selector).call())
+    peer_chain_id = int(factory.chain_id_of_selector(peer.chain_selector).call(ctx))
     owner = _view(ctx, FACTORY, "OWNER()", ["address"])
-    router = factory.ccip_router().call()
-    restricted = bool(factory.creation_restricted().call())
-    creator_allowed = bool(factory.is_allowed_creator(CREATOR).call())
+    router = factory.ccip_router().call(ctx)
+    restricted = bool(factory.creation_restricted().call(ctx))
+    creator_allowed = bool(factory.is_allowed_creator(CREATOR).call(ctx))
     creation_code_hashes = {
-        "executor": "0x" + bytes(factory.executor_creation_code_hash().call()).hex(),
+        "executor": "0x" + bytes(factory.executor_creation_code_hash().call(ctx)).hex(),
         "dispatcher": "0x"
-        + bytes(factory.dispatcher_creation_code_hash().call()).hex(),
+        + bytes(factory.dispatcher_creation_code_hash().call(ctx)).hex(),
     }
     creator: dict[str, Any] = {
         "address": CREATOR,
@@ -424,13 +423,15 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
         and peer_chain_id == peer.chain_id
         and route.peer == FACTORY
     )
-    interface_version = int(factory.factory_interface_version().call())
+    interface_version = int(factory.factory_interface_version().call(ctx))
     gates = {
         "interface_version_supported": (
             interface_version == EXPECTED_FACTORY_INTERFACE_VERSION
         ),
         "router_matches": router == spec.router,
-        "creation_codes_configured": bool(factory.creation_codes_configured().call()),
+        "creation_codes_configured": bool(
+            factory.creation_codes_configured().call(ctx)
+        ),
         "creation_codes_expected": creation_code_hashes
         == EXPECTED_CREATION_CODE_HASHES,
         "creator_authorized": (not restricted) or creator_allowed,

@@ -309,9 +309,9 @@ def vault_role_accounts(
 
     access_manager = resolve_access_manager(ctx, checksum)
     accounts = (
-        access_manager.get_all_role_accounts()
+        access_manager.read_all_role_accounts(ctx)
         if role_id is None
-        else access_manager.get_accounts_with_role(role_id)
+        else access_manager.read_accounts_with_role(ctx, role_id)
     )
     return RoleAccountsResponse.from_role_accounts(
         accounts,
@@ -443,7 +443,7 @@ def vault_add(
         provider_url = _resolve_provider(cfg, chain_id)
         ctx = Web3Context.from_url(provider_url)
         try:
-            label = PlasmaVault(ctx, checksum).name().call()
+            label = PlasmaVault(checksum).name().call(ctx)
         except Exception:
             label = checksum
 
@@ -574,9 +574,9 @@ def market_morpho_blue(
 
     cfg = load_config()
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
-    reader = MorphoReader(ctx, morpho_blue_address(chain_id))
-    params, state = reader.require_market(mid)
-    rates = reader.rates_from(state, params)
+    reader = MorphoReader(morpho_blue_address(chain_id))
+    params, state = reader.read_existing_market(ctx, mid)
+    rates = reader.read_rates_from(ctx, state, params)
 
     api_market = None
     api_error: str | None = None

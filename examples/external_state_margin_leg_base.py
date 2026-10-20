@@ -10,7 +10,7 @@ values that figure into the vault's NAV.
 This example shows the whole lifecycle an alpha drives, end to end:
 
   1. connect a ``Web3Context`` to Base;
-  2. preview a vault deployment with ``FusionFactory.clone(...).call()`` and read
+  2. preview a vault deployment with ``FusionFactory.clone(...).call(ctx)`` and read
      its state-dependent CREATE addresses for the atomic simulation, plus the
      unsigned creation calldata via ``.calldata``;
   3. bootstrap the vault's access control -- five ``Roles`` grants across three
@@ -438,12 +438,12 @@ def clone_args() -> dict:
 def unsigned_clone_calldata() -> bytes:
     """Unsigned creation calldata (selector + ABI-encoded args) for the deploy.
 
-    Built with a ctx-less encoder, so it needs no provider. Hand these bytes to
-    an external signer / multisig instead of calling ``.send()``. NOTE: the owner
+    Built from an address-only wrapper, so it needs no provider. Hand these bytes to
+    an external signer / multisig instead of calling ``.send(ctx)``. NOTE: the owner
     encoded here is the simulation ``OWNER`` (a throwaway EOA) -- set your real
     owner in ``clone_args()`` before deploying, or the vault is owned by it.
     """
-    return FusionFactory.encoder(BASE_FUSION_FACTORY).clone(**clone_args()).calldata
+    return FusionFactory(BASE_FUSION_FACTORY).clone(**clone_args()).calldata
 
 
 def market_substrates() -> list[bytes]:
@@ -534,9 +534,9 @@ def market_substrates() -> list[bytes]:
 def venue_transfer_calldata(amount: Amount) -> bytes:
     """``USDC.transfer(VENUE_DEPOSIT_ADDRESS, amount)`` calldata, run from the executor.
 
-    Encoded with a ctx-less ERC20 wrapper -- pure bytes, no chain access.
+    Encoded with an address-only ERC20 wrapper -- pure bytes, no chain access.
     """
-    return ERC20.encoder(BASE_USDC).transfer(VENUE_DEPOSIT_ADDRESS, amount).calldata
+    return ERC20(BASE_USDC).transfer(VENUE_DEPOSIT_ADDRESS, amount).calldata
 
 
 def build_enter_action(amount: Amount) -> FuseAction:
@@ -770,7 +770,7 @@ def _discovery_pass(
     ``ExternalStateExecutor.for_vault(ctx, vault)``, which resolves it out of the
     vault's own storage and is what a service restarting with nothing but the
     vault address uses. The depositor's client calls
-    ``convert_to_shares(...).call()`` against the live vault. One transaction and
+    ``convert_to_shares(...).call(ctx)`` against the live vault. One transaction and
     one read, no replay. (``for_vault`` is no help here: it is a live storage
     read, not a queued ``Call``, and at the pinned block the vault does not exist
     yet.) Nothing else depends on the repetition: identical calls on an identical
@@ -810,10 +810,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     ctx = Web3Context(web3=web3, chain_id=BASE_CHAIN_ID, signer=OWNER)
     ctx.default_block = PINNED_BLOCK
 
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # 1. Preview the deterministic addresses (eth_call, no gas, no state change).
-    preview = factory.clone(**clone_args()).call()
+    preview = factory.clone(**clone_args()).call(ctx)
     log.info(
         "predicted vault=%s access_manager=%s withdraw_manager=%s (index=%d)",
         preview.plasma_vault,
@@ -826,9 +826,9 @@ def run_simulation(web3: Web3) -> SimulationResult:
 
     # Built once, and shared with the discovery pass: it replays this exact
     # bootstrap, so the same wrappers must drive both.
-    plasma_vault = PlasmaVault(ctx, preview.plasma_vault)
-    access_manager = AccessManager(ctx, preview.access_manager)
-    usdc = ERC20(ctx, BASE_USDC)
+    plasma_vault = PlasmaVault(preview.plasma_vault)
+    access_manager = AccessManager(preview.access_manager)
+    usdc = ERC20(BASE_USDC)
 
     # 3. Discovery pass -- see _discovery_pass for why this runs at all.
     executor_address, requested_shares, discovery = _discovery_pass(
@@ -841,10 +841,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
         discovery.gas_used,
     )
 
-    price_manager = PriceOracleMiddlewareManager(ctx, preview.price_manager)
-    withdraw_manager = WithdrawManager(ctx, preview.withdraw_manager)
+    price_manager = PriceOracleMiddlewareManager(preview.price_manager)
+    withdraw_manager = WithdrawManager(preview.withdraw_manager)
     # Only constructible now: the discovery pass is what learned the address.
-    executor = ExternalStateExecutor(ctx, executor_address)
+    executor = ExternalStateExecutor(executor_address)
 
     # The pinned block's timestamp, the origin every *_OFFSET is measured from.
     # Read once here; two calls further down need it as an argument.
@@ -852,10 +852,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
 
     # Each simulator primitive stands in for a production action, read as
     # "simulation -> production":
-    #   - sim.add_call(call=X, from_=OWNER) -> X.send() by the owner/atomist
+    #   - sim.add_call(call=X, from_=OWNER) -> X.send(ctx) by the owner/atomist
     #     (or X.calldata to a multisig / timelock).
-    #   - sim.execute([action]) -> plasma_vault.execute([action]).send() by the alpha.
-    #   - sim.observe("key", X) -> X.call(), a plain read.
+    #   - sim.execute([action]) -> plasma_vault.execute([action]).send(ctx) by the alpha.
+    #   - sim.observe("key", X) -> X.call(ctx), a plain read.
     # SIMULATION ONLY (per-call senders): `from_` lets one process act as all five
     # actors, because in simulation they are addresses with no keys. In production
     # they are five separate signers on separate systems, and that separation is
@@ -897,7 +897,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     #
     # ExternalStateExecutor.mark_nav runs the propose, the confirm and -- when
     # handed a vault -- the refresh in one call. It cannot be used here for a
-    # mechanical reason: it .send()s each leg, and nothing is broadcast under
+    # mechanical reason: it .send(ctx)s each leg, and nothing is broadcast under
     # eth_simulateV1. It is also not what a production deployment wants, for the
     # reason above: one process holding both custodian keys is one key wearing
     # two hats.
@@ -1021,7 +1021,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
 
     # release_funds marks every request filed up to `timestamp` as withdrawable,
     # for at most `shares` shares. "One second ago" is the SDK's own idiom for
-    # "everything requested so far" (see WithdrawManager.get_pending_requests_info),
+    # "everything requested so far" (see WithdrawManager.read_pending_requests_info),
     # and the timestamp must be in the past. This is the last thing the alpha does
     # for a scheduled exit; the user's own redemption is theirs to send, and out
     # of scope here.
@@ -1178,7 +1178,7 @@ def _assert_attestation(
     # from the right contract. What it does NOT answer is the question below:
     # whether the hash the confirm was encoded with is this one.
     logged = executor.find_balance_proposed(
-        _logs_of(result, "propose"), VENUE_BALANCE_ACCOUNT
+        _logs_of(result, "propose"), VENUE_BALANCE_ACCOUNT, chain_id=BASE_CHAIN_ID
     )
     # The hash equality below is the check that matters, and the four field
     # comparisons before it are diagnostics rather than extra verification:

@@ -25,7 +25,7 @@ from ipor_fusion.fuses.crosschain.stargate import (
     StargateCrosschainSupplyFuse,
     StargateSendParams,
 )
-from ipor_fusion.types import Amount, ChainId
+from ipor_fusion.types import Amount
 
 
 class StargateLane(CrosschainLane):
@@ -66,9 +66,10 @@ class StargateLane(CrosschainLane):
         fuses: LaneFuses,
     ) -> StargateLane:
         return cls(
-            executor=StargateCrosschainExecutor(hub_ctx, executor),
-            dispatcher=StargateCrosschainDispatcher(spoke_ctx, executor),
-            spoke_chain_id=ChainId(spoke_ctx.chain_id),
+            hub_ctx=hub_ctx,
+            spoke_ctx=spoke_ctx,
+            executor=StargateCrosschainExecutor(executor),
+            dispatcher=StargateCrosschainDispatcher(executor),
             fuses=fuses,
         )
 
@@ -100,7 +101,7 @@ class StargateLane(CrosschainLane):
         )
 
     def command_in_flight(self) -> bool:
-        command = self.executor.active_command(self.spoke_chain_id).call()
+        command = self.executor.active_command(self.spoke_chain_id).call(self.hub_ctx)
         return command.active and (
             command.status == CommandStatus.PENDING or command.awaiting_cancel
         )
@@ -109,7 +110,7 @@ class StargateLane(CrosschainLane):
         return self.executor.pending_transfer_count(self.spoke_chain_id)
 
     def transfer_in_flight(self) -> bool:
-        return self.pending_transfer_count().call() != 0
+        return self.pending_transfer_count().call(self.hub_ctx) != 0
 
     def observation(self) -> Call[LaneObservation]:
         return self.dispatcher.observation().map(_to_lane)

@@ -210,13 +210,13 @@ def prepare_deployed_run(
     assert lane.fuses == dep.lane_fuses(transport_kind)
     # Drift guards: the executor generation the wrappers mirror comes from this
     # factory, and it must be bound to the hub vault.
-    assert lane.executor.factory().call() == dep.factory(transport_kind)
-    assert lane.executor.manager().call() == dep.vault
+    assert lane.executor.factory().call(hub_ctx) == dep.factory(transport_kind)
+    assert lane.executor.manager().call(hub_ctx) == dep.vault
     # The spoke side really is this executor's dispatcher: same CREATE3 address
     # (the lane enforces it), created by the same factory, pointing at the hub.
-    assert lane.dispatcher.executor_chain_id().call() == dep.hub.chain_id
-    assert lane.dispatcher.factory().call() == dep.factory(transport_kind)
-    assert lane.executor.has_dispatcher(spoke.chain_id).call()
+    assert lane.dispatcher.executor_chain_id().call(spoke_ctx) == dep.hub.chain_id
+    assert lane.dispatcher.factory().call(spoke_ctx) == dep.factory(transport_kind)
+    assert lane.executor.has_dispatcher(spoke.chain_id).call(hub_ctx)
     # Discovery from the vault alone must describe the pinned deployment.
     deployment = discover_deployment(hub_ctx, dep.vault, dep.market_id)
     assert {e.transport_kind for e in deployment.executors} == set(dep.transports)
@@ -263,15 +263,15 @@ def prepare_deployed_run(
         csim=csim,
         hub=hub,
         spoke_sim=spoke_sim,
-        vault=PlasmaVault(hub_ctx, dep.vault),
-        remote_vault=PlasmaVault(spoke_ctx, remote_vault),
-        hub_asset=ERC20(hub_ctx, dep.hub.usdc),
+        vault=PlasmaVault(dep.vault),
+        remote_vault=PlasmaVault(remote_vault),
+        hub_asset=ERC20(dep.hub.usdc),
         amount=SUPPLY_AMOUNT[transport_kind],
         hub_start=hub_start,
-        staleness_max=lane.staleness_max().call(),
+        staleness_max=lane.staleness_max().call(hub_ctx),
         ccip_debits_sent_amount=dep.ccip_debits_sent_amount,
         attestation_zero_dust_sd=dep.attestation_zero_dust_sd,
-        min_update_interval=lane.executor.min_update_interval().call(),
+        min_update_interval=lane.executor.min_update_interval().call(hub_ctx),
     )
     run.log(
         "open_lane",

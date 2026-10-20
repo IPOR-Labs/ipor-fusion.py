@@ -74,12 +74,10 @@ def test_simulate_deposit(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    owner = access_manager.owner()
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    usdc = ERC20(ARBITRUM_USDC)
+    owner = access_manager.read_owner(ctx)
     amount = 100_000000
 
     sim = VaultSimulator(
@@ -121,14 +119,12 @@ def test_simulate_mint(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    owner = access_manager.owner()
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    usdc = ERC20(ARBITRUM_USDC)
+    owner = access_manager.read_owner(ctx)
     amount = 110_000000
-    decimals = plasma_vault.decimals().call()
+    decimals = plasma_vault.decimals().call(ctx)
     shares_amount = 100 * 10**decimals
 
     sim = VaultSimulator(
@@ -181,18 +177,16 @@ def test_simulate_redeem(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    withdraw_manager = WithdrawManager(ctx, plasma_vault.withdraw_manager_address())
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    owner = access_manager.owner()
-    decimals = plasma_vault.decimals().call()
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    withdraw_manager = WithdrawManager(plasma_vault.read_withdraw_manager_address(ctx))
+    usdc = ERC20(ARBITRUM_USDC)
+    owner = access_manager.read_owner(ctx)
+    decimals = plasma_vault.decimals().call(ctx)
     amount = 100_000000
     to_redeem = 50 * 10**decimals
     # convert_to_assets is deterministic at the pinned block (vault ratio is stable)
-    to_withdraw = plasma_vault.convert_to_assets(to_redeem).call()
+    to_withdraw = plasma_vault.convert_to_assets(to_redeem).call(ctx)
 
     sim = VaultSimulator(
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
@@ -264,14 +258,12 @@ def test_simulate_withdraw(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    withdraw_manager = WithdrawManager(ctx, plasma_vault.withdraw_manager_address())
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    owner = access_manager.owner()
-    decimals = plasma_vault.decimals().call()
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    withdraw_manager = WithdrawManager(plasma_vault.read_withdraw_manager_address(ctx))
+    usdc = ERC20(ARBITRUM_USDC)
+    owner = access_manager.read_owner(ctx)
+    decimals = plasma_vault.decimals().call(ctx)
     amount = 100_000000
     shares_amount = 100 * 10**decimals
     # max_withdraw at the pinned block before deposit; we'll request the full
@@ -349,12 +341,10 @@ def test_simulate_transfer(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    owner = access_manager.owner()
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    usdc = ERC20(ARBITRUM_USDC)
+    owner = access_manager.read_owner(ctx)
 
     amount = 100_000000
     user_one = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
@@ -401,12 +391,10 @@ def test_simulate_transfer_from(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    owner = access_manager.owner()
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    usdc = ERC20(ARBITRUM_USDC)
+    owner = access_manager.read_owner(ctx)
 
     amount = 100_000000
     user_one = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")

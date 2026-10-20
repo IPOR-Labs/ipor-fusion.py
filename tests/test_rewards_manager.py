@@ -18,7 +18,7 @@ FUSE_ADDR = Web3.to_checksum_address("0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd
 
 def _make_manager():
     ctx = MagicMock()
-    return RewardsManager(ctx, CONTRACT_ADDR), ctx
+    return RewardsManager(CONTRACT_ADDR), ctx
 
 
 class TestBalanceOf:
@@ -26,7 +26,7 @@ class TestBalanceOf:
         mgr, ctx = _make_manager()
         ctx.call.return_value = encode(["uint256"], [42_000])
 
-        result = mgr.balance_of().call()
+        result = mgr.balance_of().call(ctx)
 
         assert result == Amount(42_000)
 
@@ -34,7 +34,7 @@ class TestBalanceOf:
         mgr, ctx = _make_manager()
         ctx.call.return_value = encode(["uint256"], [0])
 
-        result = mgr.balance_of().call()
+        result = mgr.balance_of().call(ctx)
 
         assert result == Amount(0)
 
@@ -47,7 +47,7 @@ class TestGetVestingData:
             [(1000, 2000, 500_000, 300_000)],
         )
 
-        vesting = mgr.get_vesting_data().call()
+        vesting = mgr.get_vesting_data().call(ctx)
 
         assert vesting.vesting_time == 1000
         assert vesting.update_balance_timestamp == 2000
@@ -61,7 +61,7 @@ class TestGetVestingData:
             [(0, 0, 0, 0)],
         )
 
-        vesting = mgr.get_vesting_data().call()
+        vesting = mgr.get_vesting_data().call(ctx)
 
         assert vesting.vesting_time == 0
         assert vesting.update_balance_timestamp == 0
@@ -74,13 +74,13 @@ class TestIsRewardFuseSupported:
         mgr, ctx = _make_manager()
         ctx.call.return_value = encode(["bool"], [True])
 
-        assert mgr.is_reward_fuse_supported(FUSE_ADDR).call() is True
+        assert mgr.is_reward_fuse_supported(FUSE_ADDR).call(ctx) is True
 
     def test_returns_false(self):
         mgr, ctx = _make_manager()
         ctx.call.return_value = encode(["bool"], [False])
 
-        assert mgr.is_reward_fuse_supported(FUSE_ADDR).call() is False
+        assert mgr.is_reward_fuse_supported(FUSE_ADDR).call(ctx) is False
 
 
 class TestUpdateBalance:
@@ -89,7 +89,7 @@ class TestUpdateBalance:
         mock_receipt = {"status": 1}
         ctx.send.return_value = mock_receipt
 
-        result = mgr.update_balance().send()
+        result = mgr.update_balance().send(ctx)
 
         assert result == mock_receipt
         ctx.send.assert_called_once()
@@ -101,7 +101,7 @@ class TestTransfer:
         mock_receipt = {"status": 1}
         ctx.send.return_value = mock_receipt
 
-        result = mgr.transfer(TOKEN_A, RECIPIENT, Amount(1000)).send()
+        result = mgr.transfer(TOKEN_A, RECIPIENT, Amount(1000)).send(ctx)
 
         assert result == mock_receipt
         ctx.send.assert_called_once()
@@ -115,7 +115,7 @@ class TestGetRewardsFuses:
             [[TOKEN_A, FUSE_ADDR]],
         )
 
-        result = mgr.get_rewards_fuses().call()
+        result = mgr.get_rewards_fuses().call(ctx)
 
         assert len(result) == 2
         assert result[0] == TOKEN_A
@@ -125,7 +125,7 @@ class TestGetRewardsFuses:
         mgr, ctx = _make_manager()
         ctx.call.return_value = encode(["address[]"], [[]])
 
-        result = mgr.get_rewards_fuses().call()
+        result = mgr.get_rewards_fuses().call(ctx)
 
         assert result == []
 
@@ -154,7 +154,7 @@ class TestClaimRewards:
         ctx.send.return_value = mock_receipt
 
         action = FuseAction(fuse=FUSE_ADDR, data=b"\x01\x02\x03")
-        result = mgr.claim_rewards([action]).send()
+        result = mgr.claim_rewards([action]).send(ctx)
 
         assert result == mock_receipt
         ctx.send.assert_called_once()

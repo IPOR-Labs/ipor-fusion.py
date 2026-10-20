@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar
 
 from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
@@ -148,20 +148,16 @@ class PlasmaVault(ContractWrapper):
     service, multisig), grab the bytes directly: `vault.add_fuses(...).calldata`.
     """
 
-    def __init__(self, ctx: Web3Context, address: PlasmaVaultAddress):
-        super().__init__(ctx, address)
+    def __init__(self, address: PlasmaVaultAddress):
+        super().__init__(address)
 
     @property
     def address(self) -> PlasmaVaultAddress:
         return PlasmaVaultAddress(self._address)
 
-    @classmethod
-    def encoder(cls, address: PlasmaVaultAddress | None = None) -> Self:  # type: ignore[override]
-        return super().encoder(address)
-
     def execute(self, actions: list[FuseAction]) -> Call[None]:
         data = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
-        return Call(to=self._address, data=data, ctx=self._ctx)
+        return Call(to=self._address, data=data)
 
     def deposit(self, assets: Amount, receiver: ChecksumAddress) -> Call[None]:
         return self._write("deposit(uint256,address)", assets, receiver)
@@ -483,7 +479,7 @@ class PlasmaVault(ContractWrapper):
             decoder=Web3.to_checksum_address,
         )
 
-    def price_oracle_address(self) -> ChecksumAddress:
+    def read_price_oracle_address(self, ctx: Web3Context) -> ChecksumAddress:
         """The vault's price oracle: ``getPriceOracleMiddleware()``, or
         ``getPriceOracle()`` on vaults deployed before the August 2024 audit.
 
@@ -494,7 +490,7 @@ class PlasmaVault(ContractWrapper):
             self.get_price_oracle_address(),
         ):
             try:
-                return call.call()
+                return call.call(ctx)
             except EmptyCallResultError:
                 continue
         raise UnsupportedVaultVersionError(
@@ -550,56 +546,61 @@ class PlasmaVault(ContractWrapper):
             decoder=_market_id_list_decoder,
         )
 
-    # ── Compound methods: storage reads or event replay, no `Call` shape ────
+    # ── Composite reads: storage, event replay or dependent reads on ``ctx`` ──
 
-    def get_balance_fuses(self) -> list[BalanceFuse]:
+    def read_balance_fuses(self, ctx: Web3Context) -> list[BalanceFuse]:
         """The balance fuse of every market that has one.
 
         Read from storage (`getActiveMarketsInBalanceFuses` plus each market's
         fuse slot, at ``ctx.default_block``); vaults that predate the view
         fall back to replaying BalanceFuseAdded/BalanceFuseRemoved logs."""
         try:
-            market_ids = self.get_active_markets_in_balance_fuses().call()
+            market_ids = self.get_active_markets_in_balance_fuses().call(ctx)
         except (EmptyCallResultError, ContractLogicError):
-            return self._replay_balance_fuses()
+            return self._replay_balance_fuses(ctx)
         # The list can repeat a market (seen for the zero-balance market); the
         # fuse mapping holds one fuse per market either way.
         market_ids = list(dict.fromkeys(market_ids))
         with ThreadPoolExecutor(max(1, min(len(market_ids), 16))) as pool:
-            fuses = list(pool.map(self._balance_fuse_in_storage, market_ids))
+            fuses = list(
+                pool.map(lambda m: self._balance_fuse_in_storage(ctx, m), market_ids)
+            )
         return [
             BalanceFuse(market_id=market_id, fuse=fuse)
             for market_id, fuse in zip(market_ids, fuses, strict=True)
         ]
 
-    def _address_at(self, slot: int) -> ChecksumAddress:
-        return _address_in_word(self._ctx.get_storage_at(self._address, slot))
+    def _address_at(self, ctx: Web3Context, slot: int) -> ChecksumAddress:
+        return _address_in_word(ctx.get_storage_at(self._address, slot))
 
-    def _is_own_withdraw_manager(self, candidate: ChecksumAddress) -> bool:
+    def _is_own_withdraw_manager(
+        self, ctx: Web3Context, candidate: ChecksumAddress
+    ) -> bool:
         call = Call(
             to=candidate,
             data=_GET_PLASMA_VAULT_ADDRESS,
             output_types=["address"],
             decoder=Web3.to_checksum_address,
-            ctx=self._ctx,
         )
         try:
-            return call.call() == self._address
+            return call.call(ctx) == self._address
         except (EmptyCallResultError, ContractLogicError):
             return False
 
-    def _balance_fuse_in_storage(self, market_id: MarketId) -> FuseAddress:
+    def _balance_fuse_in_storage(
+        self, ctx: Web3Context, market_id: MarketId
+    ) -> FuseAddress:
         slot = Web3.keccak(
             encode(["uint256", "uint256"], [market_id, _BALANCE_FUSES_SLOT])
         )
-        return FuseAddress(self._address_at(int.from_bytes(slot)))
+        return FuseAddress(self._address_at(ctx, int.from_bytes(slot)))
 
-    def _replay_balance_fuses(self) -> list[BalanceFuse]:
+    def _replay_balance_fuses(self, ctx: Web3Context) -> list[BalanceFuse]:
         # Replay Added/Removed events chronologically to mirror on-chain storage.
         # Sorting by (blockNumber, logIndex) handles provider-side ordering quirks
         # and re-add-after-remove cases that a set-subtraction approach misses.
         events = sorted(
-            self._get_balance_fuse_events(),
+            self._get_balance_fuse_events(ctx),
             key=lambda event: (event["blockNumber"], event["logIndex"]),
         )
 
@@ -616,7 +617,7 @@ class PlasmaVault(ContractWrapper):
 
         return list(state.values())
 
-    def withdraw_manager_address(self) -> ChecksumAddress | None:
+    def read_withdraw_manager_address(self, ctx: Web3Context) -> ChecksumAddress | None:
         """The vault's WithdrawManager, or None when unset.
 
         Read from storage, as the contracts resolve it: the WithdrawManager
@@ -629,13 +630,13 @@ class PlasmaVault(ContractWrapper):
         (e.g. legacy Base vaults), so the zero address means "none" — it is
         not a contract that can be queried.
         """
-        stored = self._address_at(_WITHDRAW_MANAGER_SLOT)
+        stored = self._address_at(ctx, _WITHDRAW_MANAGER_SLOT)
         if stored != ZERO_ADDRESS:
             return stored
-        legacy = self._address_at(_WITHDRAW_MANAGER_LEGACY_SLOT)
-        if legacy != ZERO_ADDRESS and self._is_own_withdraw_manager(legacy):
+        legacy = self._address_at(ctx, _WITHDRAW_MANAGER_LEGACY_SLOT)
+        if legacy != ZERO_ADDRESS and self._is_own_withdraw_manager(ctx, legacy):
             return legacy
-        events = self._get_withdraw_manager_changed_events()
+        events = self._get_withdraw_manager_changed_events(ctx)
         sorted_events = sorted(
             events, key=lambda event: event["blockNumber"], reverse=True
         )
@@ -645,20 +646,20 @@ class PlasmaVault(ContractWrapper):
         checksum = Web3.to_checksum_address(decoded_address)
         return None if checksum == ZERO_ADDRESS else checksum
 
-    def _get_withdraw_manager_changed_events(self) -> list[LogReceipt]:
+    def _get_withdraw_manager_changed_events(
+        self, ctx: Web3Context
+    ) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="WithdrawManagerChanged(address)")
         ).to_0x_hex()
         return list(
-            self._ctx.get_logs(
-                contract_address=self._address, topics=[event_signature_hash]
-            )
+            ctx.get_logs(contract_address=self._address, topics=[event_signature_hash])
         )
 
-    def _get_balance_fuse_events(self) -> list[LogReceipt]:
+    def _get_balance_fuse_events(self, ctx: Web3Context) -> list[LogReceipt]:
         """BalanceFuseAdded and BalanceFuseRemoved logs, from one eth_getLogs."""
         return list(
-            self._ctx.get_logs(
+            ctx.get_logs(
                 contract_address=self._address,
                 topics=[
                     [
