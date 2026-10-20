@@ -4,6 +4,7 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.types import Decimals
 
 
 @dataclass(slots=True)
@@ -53,5 +54,5 @@ class AaveV4SpokeReader(ContractWrapper):
 class AaveV4OracleReader(ContractWrapper):
     """Reader for the price oracle of an Aave V4 Spoke."""
 
-    def decimals(self) -> Call[int]:
-        return self._view("decimals()", output_types=["uint8"])
+    def decimals(self) -> Call[Decimals]:
+        return self._view("decimals()", output_types=["uint8"], decoder=Decimals)

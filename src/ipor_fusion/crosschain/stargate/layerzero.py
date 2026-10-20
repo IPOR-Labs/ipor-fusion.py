@@ -30,7 +30,13 @@ from web3 import Web3
 from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.logs import log_bytes
-from ipor_fusion.types import ZERO_ADDRESS, LayerZeroEid, MessageId, StargateAssetId
+from ipor_fusion.types import (
+    ZERO_ADDRESS,
+    Amount,
+    LayerZeroEid,
+    MessageId,
+    StargateAssetId,
+)
 
 _TYPE_3 = b"\x00\x03"
 _EXECUTOR_WORKER_ID = 1
@@ -187,7 +193,7 @@ class TaxiMessage:
 
     asset_id: StargateAssetId
     receiver: ChecksumAddress
-    amount_sd: int
+    amount_sd: Amount
     compose_msg: bytes
 
     @classmethod
@@ -197,7 +203,7 @@ class TaxiMessage:
         return cls(
             asset_id=StargateAssetId(int.from_bytes(message[1:3], "big")),
             receiver=bytes32_to_address(message[3:35]),
-            amount_sd=int.from_bytes(message[35:43], "big"),
+            amount_sd=Amount(int.from_bytes(message[35:43], "big")),
             compose_msg=message[43:],
         )
 

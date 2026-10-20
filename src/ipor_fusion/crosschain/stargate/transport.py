@@ -28,7 +28,7 @@ from ipor_fusion.crosschain.transport import (
     OutboundMessage,
     transfer_call,
 )
-from ipor_fusion.types import ChainId, LayerZeroEid, StargateAssetId
+from ipor_fusion.types import Amount, ChainId, Decimals, LayerZeroEid, StargateAssetId
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,8 +50,8 @@ class StargateChain:
     stargate_pool: ChecksumAddress
     token: ChecksumAddress
     asset_id: StargateAssetId
-    local_decimals: int
-    shared_decimals: int
+    local_decimals: Decimals
+    shared_decimals: Decimals
     token_source: ChecksumAddress | None = None
 
     def __post_init__(self) -> None:
@@ -75,8 +75,8 @@ class StargateChain:
     def credit_source(self) -> ChecksumAddress:
         return self.token_source or self.stargate_pool
 
-    def to_local_decimals(self, amount_sd: int) -> int:
-        return amount_sd * 10 ** (self.local_decimals - self.shared_decimals)
+    def to_local_decimals(self, amount_sd: Amount) -> Amount:
+        return Amount(amount_sd * 10 ** (self.local_decimals - self.shared_decimals))
 
 
 class StargateTransport(CrosschainTransport):

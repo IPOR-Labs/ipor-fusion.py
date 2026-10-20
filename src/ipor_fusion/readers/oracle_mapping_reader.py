@@ -21,6 +21,8 @@ from ipor_fusion.core.oracle import (
     price_oracle_middleware,
 )
 from ipor_fusion.types import (
+    Amount,
+    Decimals,
     Price,
 )
 
@@ -74,8 +76,8 @@ class _DualXrefFeed(ContractWrapper):
 
 
 class _Aggregator(ContractWrapper):
-    def decimals(self) -> Call[int]:
-        return self._view("decimals()", output_types=["uint8"], decoder=int)
+    def decimals(self) -> Call[Decimals]:
+        return self._view("decimals()", output_types=["uint8"], decoder=Decimals)
 
     def description(self) -> Call[str]:
         return self._view("description()", output_types=["string"])
@@ -100,15 +102,15 @@ class _Erc4626Vault(ContractWrapper):
     def asset(self) -> Call[ChecksumAddress]:
         return self._view("asset()", output_types=["address"], decoder=_addr)
 
-    def decimals(self) -> Call[int]:
-        return self._view("decimals()", output_types=["uint8"], decoder=int)
+    def decimals(self) -> Call[Decimals]:
+        return self._view("decimals()", output_types=["uint8"], decoder=Decimals)
 
-    def convert_to_assets(self, shares: int) -> Call[int]:
+    def convert_to_assets(self, shares: int) -> Call[Amount]:
         return self._view(
             "convertToAssets(uint256)",
             shares,
             output_types=["uint256"],
-            decoder=int,
+            decoder=Amount,
         )
 
 
@@ -178,11 +180,11 @@ class OracleMappingReader:
     def symbol(self, token: ChecksumAddress) -> str | None:
         return self._safe(ERC20(token).symbol())
 
-    def token_decimals(self, token: ChecksumAddress) -> int | None:
+    def token_decimals(self, token: ChecksumAddress) -> Decimals | None:
         return self._safe(ERC20(token).decimals())
 
     # -- feed probes -------------------------------------------------------
-    def feed_decimals(self, source: ChecksumAddress) -> int | None:
+    def feed_decimals(self, source: ChecksumAddress) -> Decimals | None:
         return self._safe(_Aggregator(source).decimals())
 
     def feed_description(self, source: ChecksumAddress) -> str | None:
@@ -232,10 +234,10 @@ class OracleMappingReader:
     def vault_asset(self, vault: ChecksumAddress) -> ChecksumAddress | None:
         return self._safe(_Erc4626Vault(vault).asset())
 
-    def vault_decimals(self, vault: ChecksumAddress) -> int | None:
+    def vault_decimals(self, vault: ChecksumAddress) -> Decimals | None:
         return self._safe(_Erc4626Vault(vault).decimals())
 
     def vault_convert_to_assets(
         self, vault: ChecksumAddress, shares: int
-    ) -> int | None:
+    ) -> Amount | None:
         return self._safe(_Erc4626Vault(vault).convert_to_assets(shares))

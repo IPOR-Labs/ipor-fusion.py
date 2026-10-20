@@ -52,7 +52,7 @@ class CloneArgs:
     asset_name: str
     asset_symbol: str
     underlying_token: ChecksumAddress
-    redemption_delay_seconds: int
+    redemption_delay_seconds: Period
     owner: ChecksumAddress
     dao_fee_package_index: int
 
@@ -391,7 +391,7 @@ class FusionFactory(ContractWrapper):
             asset_name=asset_name,
             asset_symbol=asset_symbol,
             underlying_token=Web3.to_checksum_address(underlying_token),
-            redemption_delay_seconds=int(redemption_delay_seconds),
+            redemption_delay_seconds=Period(redemption_delay_seconds),
             owner=Web3.to_checksum_address(owner),
             dao_fee_package_index=int(dao_fee_package_index),
         )

@@ -543,7 +543,8 @@ converted amounts `Amount`. A custom `VaultState` annotates the same.
 `erc20_direct_total`, `sum`, `on_chain_total_assets`, `delta`,
 `pending_withdrawals`, `implied_market_total`, `market_storage_divergence`) are
 `Amount`. `FusionInstance.asset_decimals` / `underlying_token_decimals` are
-`Decimals`. `VaultSimulator.current_time` is a `Timestamp`.
+`Decimals`, and `CloneArgs.redemption_delay_seconds` is a `Period`.
+`VaultSimulator.current_time` is a `Timestamp`.
 
 **Vault data and helpers.** `ensure_supported_chain` takes `ChainId`.
 `fetch_unpriceable_priced_tokens` takes the oracle and underlying as
@@ -577,6 +578,10 @@ Decimals`, and `PriceOracleMiddleware.base_currency_decimals()` returns
 `Call[Decimals]`. `get_logs_adaptive(chain_id=)` takes `ChainId | None` and
 `LogSource.get_logs` a `ChainId`; `quote_ccip_native_fee(block=)` and
 `OracleMappingReader.asset_source_events` take a `BlockIdentifier`.
+`OracleMappingReader.token_decimals`, `feed_decimals` and `vault_decimals` return
+`Decimals | None` and `vault_convert_to_assets` an `Amount | None`;
+`AaveV4OracleReader.decimals()` returns `Call[Decimals]`; and `OraclePrice.decimals`, `OracleNode.decimals` and
+`OracleAsset.decimals` are `Decimals` (`| None` on the nodes).
 
 **Address roles.** `PlasmaVault(address)`,
 `validate_vault`, `fetch_deployment_info`, the HyperCore, lending-health and
@@ -628,6 +633,12 @@ takes a `ChecksumAddress`, and `build_morpho_blue_market_json` takes
 records is `ChecksumAddress`; optional ones (`curator`, `guardian`, `fee_recipient`,
 `performance_fee_recipient`, `management_fee_recipient`, `inner_vault`,
 `VaultFlowCap.admin`, the `VaultV2Cap` market params) are `ChecksumAddress | None`.
+Token amounts on those records are `Amount` (`VaultFlowCap.max_in` / `max_out`, the
+`VaultAllocation`, `VaultV1Info`, `VaultV1MarketAllocation`, `VaultV2Info` and
+`MorphoApiMarket` asset amounts and caps, `VaultV2Cap.absolute_cap` / `allocation`
+/ `room`, `VaultV2Adapter.assets`, `cap_room`), token decimals are `Decimals` and
+`MorphoApiMarket.timestamp` is a `Timestamp`. `lltv`, `fee_wad`,
+`relative_cap_wad` and `fee_wei` stay `int`.
 
 **Crosschain.** The executor, dispatcher and factory wrappers, the lanes and
 `StargateCrosschainCommandFuse.enter(request_id=)` take the crosschain ids above, and
@@ -644,7 +655,20 @@ on CCIP, `active_return` → `OperationId`, `asset_id`, `tracked_position_set_ha
 `STALENESS_MAX` / `BALANCE_STALENESS_MAX` on the executors) a `Period`, and so do
 the `LaneHubState` fields; `attestation(remote_timestamp=, expiry=)` and
 `BalanceObservation` take `Timestamp`, `needs_attestation(now=, margin=)` a
-`Timestamp` and a `Period`. Decoded event values
+`Timestamp` and a `Period`. The other durations are `Period` too: the executors'
+`min_update_interval()`, `transfer_staleness_max()` and `deployment_ttl()`, both
+factories' `config_delay()`, and the time fields of `ExecutorInitParams` and
+`SafetyConfig` (`rescue_delay`, the staleness fields, `min_update_interval`,
+`deployment_ttl`); `in_flight_since()`, `last_approval_at()`, `oldest_pending_at()`
+and `pending_deployment_created_at()` return a `Timestamp`. Decimals are
+`Decimals`: `local_decimals()` / `shared_decimals()` on the executor and dispatcher,
+`CcipChain.local_decimals`, `StargateChain.local_decimals` / `shared_decimals`, the
+`shared_decimals` of `CcipCrosschainFactory.asset_config()`, `schedule_asset` and
+`execute_asset`. Token amounts are `Amount` (`EVMTokenAmount.amount`,
+`TokenTransferV1.amount`, `TaxiMessage.amount_sd`, `OutboundMessage.token_amount`,
+`StargateChain.to_local_decimals`), and `pending_request_shares()` returns
+`Shares`. Counters, sequences, epochs, versions, bps and gas limits stay `int`.
+Decoded event values
 (`ccip_events` → `CcipEvent.values`) stay a generic mapping: convert a value
 before passing it on.
 
@@ -667,7 +691,11 @@ fuse's `eid=` take it (`LayerZeroEid(30101)`). CCIP chain selectors are
 `read_hypercore_transfer_snapshot` and the helpers `system_address`,
 `precompile_index_of`, `perp_dex_of`, `is_native_perp_asset`, `is_hip3_asset` take the
 HyperCore ids; `HyperCorePerpAssetInfo`, `HyperCorePerpMarket`, `HyperCoreSpotLeg`,
-`HyperCorePendingState` and `HyperCoreTransferSnapshot` carry them.
+`HyperCorePendingState` and `HyperCoreTransferSnapshot` carry them. Token decimals
+(`HyperCoreTokenInfo.sz_decimals` / `wei_decimals` / `evm_extra_wei_decimals`,
+`HyperCorePerpAssetInfo.sz_decimals`, `HyperCoreSpotLeg.wei_decimals`) are
+`Decimals`, and `HyperCorePendingState.pending_until` / `current_timestamp` are
+`Timestamp`; Core amounts, positions, WAD values and L1 block numbers stay `int`.
 
 **External state.** `ExternalStateExecutor.proposal_hash` returns and `confirm_balance`
 takes a `ProposalHash`; `BalanceProposal.proposal_hash` is a `ProposalHash`;
@@ -676,6 +704,9 @@ takes a `ProposalHash`; `BalanceProposal.proposal_hash` is a `ProposalHash`;
 `BalanceFuseSnapshot.last_custodian_update_timestamp`, `BalanceProposal.proposed_at`,
 `last_updated()` and `get_oldest_update_timestamp()` are web3's `Timestamp`, and
 `ExternalStateExecutor.proposal_hash(proposed_at=)` takes one.
+`ExternalStateExecutor.staleness_max()` / `min_update_interval()` return a `Period`,
+and `ExternalStateSubstrates.staleness_max` / `min_update_interval` take one
+(`Period.DAY`).
 
 **Errors and explorer.** `TransactionError(tx_hash=)` takes a `TxHash | None`,
 `LogScanError(address=)` a `ChecksumAddress`; `get_revert_reason` takes a `TxHash`;
@@ -687,7 +718,8 @@ except as listed under [Behavior changes](#behavior-changes)): `chain_id` fields
 `ChainId`, `role_id` `RoleId`, `market_id` `MarketId` (except
 `LendingMarketHealth.market_id`, which stays `str | int`: a Morpho market id is a
 string). Calling an MCP tool function
-directly from Python takes `ChainId`.
+directly from Python takes `ChainId`. Their amount, decimals and time fields stay
+`int`: they are JSON output models, and the SDK values above fit them unchanged.
 
 ## Behavior changes
 

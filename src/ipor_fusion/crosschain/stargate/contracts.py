@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
+from web3.types import Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.contracts import (
@@ -69,14 +70,14 @@ class ExecutorInitParams:
     manager: PlasmaVaultAddress
     admin: ChecksumAddress
     rescue_guardian: ChecksumAddress
-    rescue_delay: int
+    rescue_delay: Period
     balance_proposer: ChecksumAddress
     balance_approver: ChecksumAddress
-    staleness_max: int
+    staleness_max: Period
     big_change_bps: int
-    min_update_interval: int
-    deployment_ttl: int
-    transfer_staleness_max: int
+    min_update_interval: Period
+    deployment_ttl: Period
+    transfer_staleness_max: Period
 
     def as_tuple(self) -> tuple:
         return (
@@ -115,8 +116,8 @@ class StargateCrosschainExecutor(CrosschainExecutor):
     def staleness_max(self) -> Call[Period]:
         return self._view("STALENESS_MAX()", output_types=["uint256"], decoder=Period)
 
-    def deployment_ttl(self) -> Call[int]:
-        return self._view("DEPLOYMENT_TTL()", output_types=["uint256"])
+    def deployment_ttl(self) -> Call[Period]:
+        return self._view("DEPLOYMENT_TTL()", output_types=["uint256"], decoder=Period)
 
     def registered_chain_count(self) -> Call[int]:
         return self._view("registeredChainCount()", output_types=["uint256"])
@@ -147,8 +148,13 @@ class StargateCrosschainExecutor(CrosschainExecutor):
             "pendingArrivalReserve()", output_types=["uint256"], decoder=Amount
         )
 
-    def in_flight_since(self, chain_id: ChainId) -> Call[int]:
-        return self._view("inFlightSince(uint256)", chain_id, output_types=["uint64"])
+    def in_flight_since(self, chain_id: ChainId) -> Call[Timestamp]:
+        return self._view(
+            "inFlightSince(uint256)",
+            chain_id,
+            output_types=["uint64"],
+            decoder=Timestamp,
+        )
 
     def acknowledged_remote_state_version(self, chain_id: ChainId) -> Call[int]:
         return self._view(
@@ -207,8 +213,13 @@ class StargateCrosschainExecutor(CrosschainExecutor):
             decoder=ProposalId,
         )
 
-    def last_approval_at(self, chain_id: ChainId) -> Call[int]:
-        return self._view("lastApprovalAt(uint256)", chain_id, output_types=["uint64"])
+    def last_approval_at(self, chain_id: ChainId) -> Call[Timestamp]:
+        return self._view(
+            "lastApprovalAt(uint256)",
+            chain_id,
+            output_types=["uint64"],
+            decoder=Timestamp,
+        )
 
     def deployment_status(
         self, request_id: DeploymentRequestId
@@ -365,8 +376,8 @@ class StargateCrosschainFactory(CrosschainFactory):
     def max_native_fee(self, chain_id: ChainId) -> Call[int]:
         return self._view("maxNativeFee(uint256)", chain_id, output_types=["uint256"])
 
-    def config_delay(self) -> Call[int]:
-        return self._view("CONFIG_DELAY()", output_types=["uint256"])
+    def config_delay(self) -> Call[Period]:
+        return self._view("CONFIG_DELAY()", output_types=["uint256"], decoder=Period)
 
     def request_count(self) -> Call[int]:
         return self._view("requestCount()", output_types=["uint256"])
