@@ -21,7 +21,7 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.logs import log_bytes
-from ipor_fusion.types import CcipChainSelector, MessageId
+from ipor_fusion.types import Amount, CcipChainSelector, MessageId
 
 #: topic0 of ``OnRamp 2.0.0``'s ``CCIPMessageSent``; ``destChainSelector``,
 #: ``sender`` and ``messageId`` are indexed.
@@ -72,7 +72,7 @@ class TokenTransferV1:
     """``MessageV1Codec.TokenTransferV1``. Address fields are raw bytes as
     encoded for the destination chain (20 bytes on EVM)."""
 
-    amount: int
+    amount: Amount
     source_pool_address: bytes
     source_token_address: bytes
     dest_token_address: bytes
@@ -84,7 +84,7 @@ class TokenTransferV1:
         if reader.uint(1) != _MESSAGE_VERSION:
             raise ValueError("unsupported CCIP token transfer version")
         return cls(
-            amount=reader.uint(32),
+            amount=Amount(reader.uint(32)),
             source_pool_address=reader.prefixed(1),
             source_token_address=reader.prefixed(1),
             dest_token_address=reader.prefixed(1),
@@ -207,7 +207,7 @@ class EVMTokenAmount:
     """``CcipClient.EVMTokenAmount``."""
 
     token: ChecksumAddress
-    amount: int
+    amount: Amount
 
 
 @dataclass(frozen=True, slots=True)

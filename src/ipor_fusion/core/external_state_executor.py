@@ -35,6 +35,7 @@ from ipor_fusion.types import (
     ZERO_ADDRESS,
     Amount,
     ChainId,
+    Period,
     PlasmaVaultAddress,
     ProposalHash,
 )
@@ -371,10 +372,10 @@ class ExternalStateExecutor(ContractWrapper):
             "getOldestUpdateTimestamp()", output_types=["uint256"], decoder=Timestamp
         )
 
-    def staleness_max(self) -> Call[int]:
+    def staleness_max(self) -> Call[Period]:
         """Seconds after which a custodian report counts as stale: the pre-hook
         blocks the vault's gated user operations past it."""
-        return self._view("stalenessMax()", output_types=["uint256"])
+        return self._view("stalenessMax()", output_types=["uint256"], decoder=Period)
 
     def big_change_bps(self) -> Call[int]:
         """Basis points of total-balance change between two custodian updates
@@ -385,10 +386,12 @@ class ExternalStateExecutor(ContractWrapper):
         """Underlying units below which a leftover is dust, not a balance."""
         return self._view("dustThreshold()", output_types=["uint256"])
 
-    def min_update_interval(self) -> Call[int]:
+    def min_update_interval(self) -> Call[Period]:
         """Seconds a balance account must wait between two custodian
         updates."""
-        return self._view("minUpdateInterval()", output_types=["uint256"])
+        return self._view(
+            "minUpdateInterval()", output_types=["uint256"], decoder=Period
+        )
 
     def nonce(self) -> Call[int]:
         """Monotonic proposal nonce, incremented on every `proposeBalance`.

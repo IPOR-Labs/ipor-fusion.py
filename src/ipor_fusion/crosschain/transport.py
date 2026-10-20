@@ -29,7 +29,7 @@ from web3 import Web3
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.contracts import CrosschainDispatcher, CrosschainExecutor
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
-from ipor_fusion.types import ChainId, MessageId
+from ipor_fusion.types import Amount, ChainId, MessageId
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +49,7 @@ class OutboundMessage:
     sender: ChecksumAddress
     receiver: ChecksumAddress
     payload: bytes
-    token_amount: int = 0
+    token_amount: Amount = Amount(0)
     raw: Any = None
 
 
@@ -106,7 +106,7 @@ SYNTHETIC_TOKEN_SOURCE: ChecksumAddress = Web3.to_checksum_address(
 
 
 def transfer_call(
-    token: ChecksumAddress, source: ChecksumAddress, to: ChecksumAddress, amount: int
+    token: ChecksumAddress, source: ChecksumAddress, to: ChecksumAddress, amount: Amount
 ) -> DeliveryCall:
     return DeliveryCall(
         to=token,

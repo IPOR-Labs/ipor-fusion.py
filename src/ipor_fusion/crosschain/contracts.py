@@ -25,9 +25,12 @@ from ipor_fusion.types import (
     AssetId,
     ChainId,
     CommandId,
+    Decimals,
+    Period,
     PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
+    Shares,
 )
 
 
@@ -107,17 +110,21 @@ class CrosschainExecutor(ContractWrapper):
     def big_change_bps(self) -> Call[int]:
         return self._view("BIG_CHANGE_BPS()", output_types=["uint256"])
 
-    def min_update_interval(self) -> Call[int]:
-        return self._view("MIN_UPDATE_INTERVAL()", output_types=["uint256"])
+    def min_update_interval(self) -> Call[Period]:
+        return self._view(
+            "MIN_UPDATE_INTERVAL()", output_types=["uint256"], decoder=Period
+        )
 
-    def transfer_staleness_max(self) -> Call[int]:
-        return self._view("TRANSFER_STALENESS_MAX()", output_types=["uint256"])
+    def transfer_staleness_max(self) -> Call[Period]:
+        return self._view(
+            "TRANSFER_STALENESS_MAX()", output_types=["uint256"], decoder=Period
+        )
 
-    def local_decimals(self) -> Call[int]:
-        return self._view("LOCAL_DECIMALS()", output_types=["uint8"])
+    def local_decimals(self) -> Call[Decimals]:
+        return self._view("LOCAL_DECIMALS()", output_types=["uint8"], decoder=Decimals)
 
-    def shared_decimals(self) -> Call[int]:
-        return self._view("SHARED_DECIMALS()", output_types=["uint8"])
+    def shared_decimals(self) -> Call[Decimals]:
+        return self._view("SHARED_DECIMALS()", output_types=["uint8"], decoder=Decimals)
 
     def get_balance(self) -> Call[Amount]:
         """Fail-closed aggregate NAV in local asset decimals: idle plus every
@@ -197,11 +204,11 @@ class CrosschainDispatcher(ContractWrapper):
             "EXECUTOR_CHAIN_ID()", output_types=["uint256"], decoder=ChainId
         )
 
-    def local_decimals(self) -> Call[int]:
-        return self._view("LOCAL_DECIMALS()", output_types=["uint8"])
+    def local_decimals(self) -> Call[Decimals]:
+        return self._view("LOCAL_DECIMALS()", output_types=["uint8"], decoder=Decimals)
 
-    def shared_decimals(self) -> Call[int]:
-        return self._view("SHARED_DECIMALS()", output_types=["uint8"])
+    def shared_decimals(self) -> Call[Decimals]:
+        return self._view("SHARED_DECIMALS()", output_types=["uint8"], decoder=Decimals)
 
     def state_version(self) -> Call[int]:
         return self._view("stateVersion()", output_types=["uint64"])
@@ -221,9 +228,12 @@ class CrosschainDispatcher(ContractWrapper):
     def is_tracked_vault(self, vault: ChecksumAddress) -> Call[bool]:
         return self._view("isTrackedVault(address)", vault, output_types=["bool"])
 
-    def pending_request_shares(self, vault: PlasmaVaultAddress) -> Call[int]:
+    def pending_request_shares(self, vault: PlasmaVaultAddress) -> Call[Shares]:
         return self._view(
-            "pendingRequestShares(address)", vault, output_types=["uint256"]
+            "pendingRequestShares(address)",
+            vault,
+            output_types=["uint256"],
+            decoder=Shares,
         )
 
     def command_status(self, command_id: CommandId) -> Call[CommandStatus]:

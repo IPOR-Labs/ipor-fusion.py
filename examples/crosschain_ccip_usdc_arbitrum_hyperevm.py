@@ -86,7 +86,7 @@ from ipor_fusion import (
     parse_plasma_vault_address,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, ChainId, MarketId, Period, Shares
+from ipor_fusion.types import Amount, ChainId, Decimals, MarketId, Period, Shares
 
 log = logging.getLogger("crosschain_ccip_usdc_arbitrum_hyperevm")
 
@@ -223,14 +223,14 @@ def transport() -> CcipTransport:
                 ARBITRUM_CCIP_SELECTOR,
                 ARBITRUM_CCIP_ROUTER,
                 ARBITRUM_USDC,
-                6,
+                Decimals(6),
             ),
             CcipChain(
                 HYPEREVM_CHAIN_ID,
                 HYPEREVM_CCIP_SELECTOR,
                 HYPEREVM_CCIP_ROUTER,
                 HYPEREVM_USDC,
-                6,
+                Decimals(6),
             ),
         )
     )

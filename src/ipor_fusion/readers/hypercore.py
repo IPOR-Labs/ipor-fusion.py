@@ -34,6 +34,7 @@ from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.types import Timestamp
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
@@ -52,6 +53,7 @@ from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import (
     ChainId,
+    Decimals,
     FuseAddress,
     HyperCoreActionId,
     HyperCoreAsset,
@@ -139,9 +141,9 @@ class HyperCoreTokenInfo:
     deployer_trading_fee_share: int
     deployer: ChecksumAddress
     evm_contract: ChecksumAddress
-    sz_decimals: int
-    wei_decimals: int
-    evm_extra_wei_decimals: int
+    sz_decimals: Decimals
+    wei_decimals: Decimals
+    evm_extra_wei_decimals: Decimals
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,7 +152,7 @@ class HyperCorePerpAssetInfo:
 
     coin: str
     margin_table_id: MarginTableId
-    sz_decimals: int
+    sz_decimals: Decimals
     max_leverage: int
     only_isolated: bool
 
@@ -329,7 +331,7 @@ class HyperCorePendingState:
     cannot tell "pending" from "settled, not yet cleared".
     """
 
-    pending_until: int
+    pending_until: Timestamp
     enqueued_l1_block: int
     enqueued_evm_block: int
     action_class: HyperCoreActionClass
@@ -344,7 +346,7 @@ class HyperCorePendingState:
     pending: bool
     settled: bool
     current_l1_block: int
-    current_timestamp: int
+    current_timestamp: Timestamp
     l1_block_available: bool
 
 
@@ -442,7 +444,7 @@ class HyperCoreSpotLeg:
     evm_asset: ChecksumAddress
     total: int
     hold: int
-    wei_decimals: int | None
+    wei_decimals: Decimals | None
     price: Price | None
     value_wad: int
 

@@ -16,6 +16,7 @@ from ipor_fusion.readers.oracle_mapping_reader import OracleMappingReader
 from ipor_fusion.types import (
     ZERO_ADDRESS,
     AssetSource,
+    Decimals,
     MappingStatus,
     NodeStatus,
     PlasmaVaultAddress,
@@ -46,7 +47,7 @@ class OraclePrice:
     """
 
     raw: str
-    decimals: int
+    decimals: Decimals
     normalized_wad: str
 
 
@@ -62,7 +63,7 @@ class OracleNode:
 
     asset: ChecksumAddress
     symbol: str | None
-    decimals: int | None
+    decimals: Decimals | None
     source: ChecksumAddress | None
     price: OraclePrice | None
     source_type: str = TYPE_UNKNOWN
@@ -85,7 +86,7 @@ class OracleAsset:
 
     address: ChecksumAddress
     symbol: str | None
-    decimals: int | None
+    decimals: Decimals | None
 
 
 @dataclass(slots=True)
@@ -148,7 +149,7 @@ def _price_block(price: Price | None) -> OraclePrice | None:
         return None
     return OraclePrice(
         raw=str(price.amount),
-        decimals=int(price.decimals),
+        decimals=price.decimals,
         normalized_wad=normalize_wad(price.amount, int(price.decimals)),
     )
 
@@ -156,7 +157,7 @@ def _price_block(price: Price | None) -> OraclePrice | None:
 def _partial(
     asset: ChecksumAddress,
     symbol: str | None,
-    decimals: int | None,
+    decimals: Decimals | None,
     source: ChecksumAddress | None,
     source_type: str,
     reason: str,
@@ -192,7 +193,7 @@ def _utc_twin(epoch: int | None) -> str | None:
 def _aggregator_detail(
     description: str | None,
     rnd: tuple[int, int, int, int, int] | None,
-    feed_decimals: int | None,
+    feed_decimals: Decimals | None,
 ) -> dict[str, Any]:
     """Uniform metadata block for one aggregator-compatible feed read.
 

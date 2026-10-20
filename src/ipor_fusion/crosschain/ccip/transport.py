@@ -29,7 +29,7 @@ from ipor_fusion.crosschain.transport import (
     OutboundMessage,
     transfer_call,
 )
-from ipor_fusion.types import CcipChainSelector, ChainId
+from ipor_fusion.types import Amount, CcipChainSelector, ChainId, Decimals
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +45,7 @@ class CcipChain:
     chain_selector: CcipChainSelector
     router: ChecksumAddress
     token: ChecksumAddress
-    local_decimals: int
+    local_decimals: Decimals
     token_source: ChecksumAddress | None = None
 
     def __post_init__(self) -> None:
@@ -119,7 +119,7 @@ class CcipTransport(CrosschainTransport):
             raise ValueError(
                 f"CCIP message to unconfigured selector {message.dest_chain_selector}"
             )
-        token_amount = 0
+        token_amount = Amount(0)
         if message.token_transfer:
             # The codec admits at most one transfer (MAX_NUMBER_OF_TOKENS = 1).
             transfer = message.token_transfer[0]

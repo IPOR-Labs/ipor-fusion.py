@@ -20,9 +20,16 @@ from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from web3 import Web3
+from web3.types import Timestamp
 
 from ipor_fusion.errors import MorphoApiError
-from ipor_fusion.types import ChainId, MorphoBlueMarketId, parse_morpho_market_id
+from ipor_fusion.types import (
+    Amount,
+    ChainId,
+    Decimals,
+    MorphoBlueMarketId,
+    parse_morpho_market_id,
+)
 
 MORPHO_API_URL = "https://blue-api.morpho.org/graphql"
 
@@ -115,8 +122,8 @@ class VaultFlowCap:
     """PublicAllocator flow caps for a (vault, market) pair."""
 
     fee_wei: int
-    max_in: int
-    max_out: int
+    max_in: Amount
+    max_out: Amount
     admin: ChecksumAddress | None  # the address that can configure these flow caps
 
 
@@ -128,10 +135,10 @@ class VaultAllocation:
     vault_name: str
     vault_symbol: str
     asset_symbol: str
-    asset_decimals: int
-    total_assets: int
-    supply_assets: int  # currently allocated to *this* market
-    supply_cap: int  # cap configured by curator for *this* market
+    asset_decimals: Decimals
+    total_assets: Amount
+    supply_assets: Amount  # currently allocated to *this* market
+    supply_cap: Amount  # cap configured by curator for *this* market
     allocators: list[ChecksumAddress]  # addresses with ALLOCATOR_ROLE on the vault
     flow_cap: VaultFlowCap | None  # None if PublicAllocator not configured
 
@@ -144,20 +151,20 @@ class MorphoApiMarket:
     lltv: int
     loan_token: ChecksumAddress
     loan_symbol: str
-    loan_decimals: int
+    loan_decimals: Decimals
     collateral_token: ChecksumAddress
     collateral_symbol: str
-    collateral_decimals: int
+    collateral_decimals: Decimals
     oracle: ChecksumAddress
     irm: ChecksumAddress
-    supply_assets: int
-    borrow_assets: int
-    liquidity_assets: int
+    supply_assets: Amount
+    borrow_assets: Amount
+    liquidity_assets: Amount
     utilization: float
     supply_apy: float
     borrow_apy: float
     fee_wad: int
-    timestamp: int
+    timestamp: Timestamp
     vaults: list[VaultAllocation]
 
 
@@ -252,20 +259,20 @@ def _parse_market(raw: dict) -> MorphoApiMarket:
         lltv=int(raw["lltv"]),
         loan_token=_api_address(raw["loanAsset"]["address"]),
         loan_symbol=raw["loanAsset"]["symbol"],
-        loan_decimals=int(raw["loanAsset"]["decimals"]),
+        loan_decimals=Decimals(int(raw["loanAsset"]["decimals"])),
         collateral_token=_api_address(raw["collateralAsset"]["address"]),
         collateral_symbol=raw["collateralAsset"]["symbol"],
-        collateral_decimals=int(raw["collateralAsset"]["decimals"]),
+        collateral_decimals=Decimals(int(raw["collateralAsset"]["decimals"])),
         oracle=_api_address(raw["oracle"]["address"]),
         irm=_api_address(raw["irmAddress"]),
-        supply_assets=int(state.get("supplyAssets") or 0),
-        borrow_assets=int(state.get("borrowAssets") or 0),
-        liquidity_assets=int(state.get("liquidityAssets") or 0),
+        supply_assets=Amount(int(state.get("supplyAssets") or 0)),
+        borrow_assets=Amount(int(state.get("borrowAssets") or 0)),
+        liquidity_assets=Amount(int(state.get("liquidityAssets") or 0)),
         utilization=float(state.get("utilization") or 0.0),
         supply_apy=float(state.get("supplyApy") or 0.0),
         borrow_apy=float(state.get("borrowApy") or 0.0),
         fee_wad=int(state.get("fee") or 0),
-        timestamp=int(state.get("timestamp") or 0),
+        timestamp=Timestamp(int(state.get("timestamp") or 0)),
         vaults=[_parse_vault(v, market_id) for v in raw.get("supplyingVaults") or []],
     )
 
@@ -343,9 +350,9 @@ class VaultV2Cap:
     cap_id: str
     cap_type: str
     id_data: str
-    absolute_cap: int
+    absolute_cap: Amount
     relative_cap_wad: int
-    allocation: int
+    allocation: Amount
     market_id: MorphoBlueMarketId | None
     loan_token: ChecksumAddress | None
     collateral_token: ChecksumAddress | None
@@ -354,9 +361,9 @@ class VaultV2Cap:
     lltv: int | None
 
     @property
-    def room(self) -> int:
+    def room(self) -> Amount:
         """Free space below the absolute cap (clamped at 0)."""
-        return max(self.absolute_cap - self.allocation, 0)
+        return Amount(max(self.absolute_cap - self.allocation, 0))
 
 
 @dataclass(slots=True)
@@ -365,7 +372,7 @@ class VaultV2Adapter:
 
     address: ChecksumAddress
     adapter_type: str
-    assets: int
+    assets: Amount
     inner_vault: (
         ChecksumAddress | None
     )  # for MorphoVaultV2Adapter: the underlying market vault
@@ -380,10 +387,10 @@ class VaultV2Info:
     symbol: str
     asset_address: ChecksumAddress
     asset_symbol: str
-    asset_decimals: int
-    total_assets: int
-    idle_assets: int
-    liquidity: int
+    asset_decimals: Decimals
+    total_assets: Amount
+    idle_assets: Amount
+    liquidity: Amount
     share_price: float
     max_apy: float
     performance_fee: float
@@ -406,17 +413,17 @@ class VaultV1MarketAllocation:
     market_id: MorphoBlueMarketId
     lltv: int
     loan_symbol: str
-    loan_decimals: int
+    loan_decimals: Decimals
     collateral_symbol: str
-    market_supply_assets: int
-    market_borrow_assets: int
+    market_supply_assets: Amount
+    market_borrow_assets: Amount
     market_supply_apy: float
-    supply_assets: int
-    supply_cap: int
+    supply_assets: Amount
+    supply_cap: Amount
 
     @property
-    def cap_room(self) -> int:
-        return max(self.supply_cap - self.supply_assets, 0)
+    def cap_room(self) -> Amount:
+        return Amount(max(self.supply_cap - self.supply_assets, 0))
 
 
 @dataclass(slots=True)
@@ -428,8 +435,8 @@ class VaultV1Info:
     symbol: str
     asset_address: ChecksumAddress
     asset_symbol: str
-    asset_decimals: int
-    total_assets: int
+    asset_decimals: Decimals
+    total_assets: Amount
     fee_wad: int
     owner: ChecksumAddress
     curator: ChecksumAddress | None
@@ -484,10 +491,10 @@ def _parse_vault_v2(raw: dict) -> VaultV2Info:
         symbol=raw.get("symbol") or "",
         asset_address=_api_address(asset.get("address")),
         asset_symbol=asset.get("symbol") or "",
-        asset_decimals=int(asset.get("decimals") or 0),
-        total_assets=int(raw.get("totalAssets") or 0),
-        idle_assets=int(raw.get("idleAssets") or 0),
-        liquidity=int(raw.get("liquidity") or 0),
+        asset_decimals=Decimals(int(asset.get("decimals") or 0)),
+        total_assets=Amount(int(raw.get("totalAssets") or 0)),
+        idle_assets=Amount(int(raw.get("idleAssets") or 0)),
+        liquidity=Amount(int(raw.get("liquidity") or 0)),
         share_price=float(raw.get("sharePrice") or 0.0),
         max_apy=float(raw.get("maxApy") or 0.0),
         performance_fee=float(raw.get("performanceFee") or 0.0),
@@ -520,7 +527,7 @@ def _parse_v2_adapter(raw: dict) -> VaultV2Adapter:
     return VaultV2Adapter(
         address=_api_address(raw.get("address")),
         adapter_type=raw.get("type") or raw.get("__typename") or "",
-        assets=int(raw.get("assets") or 0),
+        assets=Amount(int(raw.get("assets") or 0)),
         inner_vault=_api_optional_address((raw.get("metaMorpho") or {}).get("address")),
     )
 
@@ -538,9 +545,9 @@ def _parse_v2_cap(raw: dict) -> VaultV2Cap:
         cap_id=raw.get("id") or "",
         cap_type=cap_type,
         id_data=id_data,
-        absolute_cap=int(raw.get("absoluteCap") or 0),
+        absolute_cap=Amount(int(raw.get("absoluteCap") or 0)),
         relative_cap_wad=int(raw.get("relativeCap") or 0),
-        allocation=int(raw.get("allocation") or 0),
+        allocation=Amount(int(raw.get("allocation") or 0)),
         market_id=market_id,
         loan_token=loan,
         collateral_token=collat,
@@ -651,13 +658,13 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
                 market_id=_api_market_id(market.get("marketId")),
                 lltv=int(market.get("lltv") or 0),
                 loan_symbol=loan_asset.get("symbol") or "",
-                loan_decimals=int(loan_asset.get("decimals") or 0),
+                loan_decimals=Decimals(int(loan_asset.get("decimals") or 0)),
                 collateral_symbol=collat_asset.get("symbol") or "",
-                market_supply_assets=int(m_state.get("supplyAssets") or 0),
-                market_borrow_assets=int(m_state.get("borrowAssets") or 0),
+                market_supply_assets=Amount(int(m_state.get("supplyAssets") or 0)),
+                market_borrow_assets=Amount(int(m_state.get("borrowAssets") or 0)),
                 market_supply_apy=float(m_state.get("supplyApy") or 0.0),
-                supply_assets=int(entry.get("supplyAssets") or 0),
-                supply_cap=int(entry.get("supplyCap") or 0),
+                supply_assets=Amount(int(entry.get("supplyAssets") or 0)),
+                supply_cap=Amount(int(entry.get("supplyCap") or 0)),
             )
         )
 
@@ -667,8 +674,8 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
     if pac:
         flow_cap_summary = VaultFlowCap(
             fee_wei=int(pac.get("fee") or 0),
-            max_in=0,
-            max_out=0,
+            max_in=Amount(0),
+            max_out=Amount(0),
             admin=_api_optional_address(pac.get("admin")),
         )
         for fc in pac.get("flowCaps") or []:
@@ -684,8 +691,8 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
         symbol=raw.get("symbol") or "",
         asset_address=_api_address(asset.get("address")),
         asset_symbol=asset.get("symbol") or "",
-        asset_decimals=int(asset.get("decimals") or 0),
-        total_assets=int(state.get("totalAssets") or 0),
+        asset_decimals=Decimals(int(asset.get("decimals") or 0)),
+        total_assets=Amount(int(state.get("totalAssets") or 0)),
         fee_wad=int(state.get("fee") or 0),
         owner=_api_address(state.get("owner")),
         curator=_api_optional_address(state.get("curator")),
@@ -729,8 +736,8 @@ def _parse_vault(raw: dict, market_id: MorphoBlueMarketId) -> VaultAllocation:
         if flow_for_market:
             flow_cap = VaultFlowCap(
                 fee_wei=int(pac.get("fee") or 0),
-                max_in=int(flow_for_market.get("maxIn") or 0),
-                max_out=int(flow_for_market.get("maxOut") or 0),
+                max_in=Amount(int(flow_for_market.get("maxIn") or 0)),
+                max_out=Amount(int(flow_for_market.get("maxOut") or 0)),
                 admin=_api_optional_address(pac.get("admin")),
             )
     allocators = [
@@ -743,10 +750,10 @@ def _parse_vault(raw: dict, market_id: MorphoBlueMarketId) -> VaultAllocation:
         vault_name=raw.get("name") or "",
         vault_symbol=raw.get("symbol") or "",
         asset_symbol=asset.get("symbol") or "",
-        asset_decimals=int(asset.get("decimals") or 0),
-        total_assets=int(state.get("totalAssets") or 0),
-        supply_assets=int(allocation_for_market.get("supplyAssets") or 0),
-        supply_cap=int(allocation_for_market.get("supplyCap") or 0),
+        asset_decimals=Decimals(int(asset.get("decimals") or 0)),
+        total_assets=Amount(int(state.get("totalAssets") or 0)),
+        supply_assets=Amount(int(allocation_for_market.get("supplyAssets") or 0)),
+        supply_cap=Amount(int(allocation_for_market.get("supplyCap") or 0)),
         allocators=allocators,
         flow_cap=flow_cap,
     )

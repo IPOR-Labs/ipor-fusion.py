@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
+from web3.types import Timestamp
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.contracts import (
@@ -24,6 +25,7 @@ from ipor_fusion.types import (
     CcipChainSelector,
     ChainId,
     CommandId,
+    Decimals,
     MessageId,
     OperationId,
     Period,
@@ -93,11 +95,11 @@ class SafetyConfig:
     rescue_guardian: ChecksumAddress
     balance_proposer: ChecksumAddress
     balance_approver: ChecksumAddress
-    rescue_delay: int
-    balance_staleness_max: int
+    rescue_delay: Period
+    balance_staleness_max: Period
     big_change_bps: int
-    min_update_interval: int
-    transfer_staleness_max: int
+    min_update_interval: Period
+    transfer_staleness_max: Period
 
     def as_tuple(self) -> tuple:
         return (
@@ -231,8 +233,13 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             decoder=CommandStatus,
         )
 
-    def oldest_pending_at(self, chain_id: ChainId) -> Call[int]:
-        return self._view("oldestPendingAt(uint256)", chain_id, output_types=["uint64"])
+    def oldest_pending_at(self, chain_id: ChainId) -> Call[Timestamp]:
+        return self._view(
+            "oldestPendingAt(uint256)",
+            chain_id,
+            output_types=["uint64"],
+            decoder=Timestamp,
+        )
 
     def pending_transfer_count(self, chain_id: ChainId) -> Call[int]:
         return self._view(
@@ -390,13 +397,13 @@ class CcipCrosschainFactory(CrosschainFactory):
 
     def asset_config(
         self, asset_id: AssetId
-    ) -> Call[tuple[ChecksumAddress, int, bool]]:
+    ) -> Call[tuple[ChecksumAddress, Decimals, bool]]:
         """``(token, sharedDecimals, enabled)`` for an asset id."""
         return self._view(
             "assetConfig(bytes32)",
             asset_id,
             output_types=["address", "uint8", "bool"],
-            decoder=lambda v: (_address(v[0]), int(v[1]), bool(v[2])),
+            decoder=lambda v: (_address(v[0]), Decimals(v[1]), bool(v[2])),
         )
 
     def is_dispatcher(self, dispatcher: ChecksumAddress) -> Call[bool]:
@@ -415,22 +422,23 @@ class CcipCrosschainFactory(CrosschainFactory):
 
     def pending_deployment_created_at(
         self, executor: ChecksumAddress, dst_chain_id: ChainId
-    ) -> Call[int]:
+    ) -> Call[Timestamp]:
         return self._view(
             "pendingDeploymentCreatedAt(address,uint256)",
             executor,
             dst_chain_id,
             output_types=["uint64"],
+            decoder=Timestamp,
         )
 
     def owner(self) -> Call[ChecksumAddress]:
         return self._view("OWNER()", output_types=["address"], decoder=_address)
 
-    def config_delay(self) -> Call[int]:
+    def config_delay(self) -> Call[Period]:
         """Timelock of every scheduled asset, factory route and dispatcher
         deployment gas limit: 24 hours in source, 300 seconds on the test
         builds."""
-        return self._view("CONFIG_DELAY()", output_types=["uint256"])
+        return self._view("CONFIG_DELAY()", output_types=["uint256"], decoder=Period)
 
     def executor_creation_code_hash(self) -> Call[bytes]:
         """keccak of the executor creation code the factory stores. It tells
@@ -469,7 +477,7 @@ class CcipCrosschainFactory(CrosschainFactory):
         )
 
     def schedule_asset(
-        self, asset_id: AssetId, token: ChecksumAddress, shared_decimals: int
+        self, asset_id: AssetId, token: ChecksumAddress, shared_decimals: Decimals
     ) -> Call[None]:
         """Owner-only; executable after ``config_delay`` with the same arguments."""
         return self._write(
@@ -477,7 +485,7 @@ class CcipCrosschainFactory(CrosschainFactory):
         )
 
     def execute_asset(
-        self, asset_id: AssetId, token: ChecksumAddress, shared_decimals: int
+        self, asset_id: AssetId, token: ChecksumAddress, shared_decimals: Decimals
     ) -> Call[None]:
         return self._write(
             "executeAsset(bytes32,address,uint8)", asset_id, token, shared_decimals

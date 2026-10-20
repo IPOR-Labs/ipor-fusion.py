@@ -96,6 +96,7 @@ from ipor_fusion.readers.oracle_mapping_reader import (
 )
 from ipor_fusion.types import (
     AssetSource,
+    Decimals,
     PlasmaVaultAddress,
     Price,
 )
@@ -192,7 +193,7 @@ def _resolve_middleware_fallback(
     reader: OracleMappingReader,
     asset: ChecksumAddress,
     symbol: str | None,
-    decimals: int | None,
+    decimals: Decimals | None,
     source: ChecksumAddress | None,
     label: str,
     price: Price | None,

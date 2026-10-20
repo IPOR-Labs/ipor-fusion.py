@@ -30,7 +30,7 @@ from ipor_fusion.fuses.base import (
     _validate_not_zero_address,
     _validate_selector,
 )
-from ipor_fusion.types import Amount
+from ipor_fusion.types import Amount, Period
 
 #: One external call run from the executor context: (target, calldata).
 ExternalStateAction = tuple[ChecksumAddress, bytes]
@@ -203,7 +203,7 @@ class ExternalStateSubstrates:
             raise ValueError(f"{name} must not be zero")
 
     @classmethod
-    def staleness_max(cls, seconds: int) -> bytes:
+    def staleness_max(cls, seconds: Period) -> bytes:
         """Maximum age of the confirmed balance, in seconds, before user
         operations are blocked. Must be non-zero -- the executor treats a zero
         as a missing grant and refuses to sync its substrate cache."""
@@ -225,7 +225,7 @@ class ExternalStateSubstrates:
         return _encode_uint248_substrate(cls._DUST_THRESHOLD, percent, "dust threshold")
 
     @classmethod
-    def min_update_interval(cls, seconds: int) -> bytes:
+    def min_update_interval(cls, seconds: Period) -> bytes:
         """Minimum delay, in seconds, between two confirmed balance updates."""
         return _encode_uint248_substrate(
             cls._MIN_UPDATE_INTERVAL, seconds, "min update interval"
