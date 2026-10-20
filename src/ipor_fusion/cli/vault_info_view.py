@@ -187,7 +187,7 @@ def _print_supply(data: VaultData) -> None:
     else:
         click.echo(
             f"Supply Cap:       "
-            f"{_format_amount(data.supply_cap, data.asset_decimals)} {data.asset_symbol}"
+            f"{_format_amount(data.supply_cap, data.share_decimals)} shares"
         )
 
 

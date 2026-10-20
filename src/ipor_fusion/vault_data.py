@@ -123,7 +123,7 @@ class VaultData:
     asset_decimals: Decimals
     total_assets: Amount
     total_supply: Shares
-    supply_cap: Amount
+    supply_cap: Shares
     asset: ChecksumAddress
     asset_symbol: str
     access_manager: AccessManagerAddress
@@ -218,7 +218,7 @@ def _fuse_market_id_call(fuse: ChecksumAddress) -> Call[int]:
     )
 
 
-_UNCAPPED = 2**256 - 1
+_UNCAPPED = Shares(2**256 - 1)
 
 
 def _missing_required_getter(
