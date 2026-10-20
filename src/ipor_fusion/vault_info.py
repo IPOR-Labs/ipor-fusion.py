@@ -645,7 +645,7 @@ def _supply_cap_json(data: VaultData) -> dict[str, Any]:
         "formatted": (
             "unlimited"
             if data.supply_cap == UINT256_MAX
-            else _format_amount(data.supply_cap, data.asset_decimals)
+            else _format_amount(data.supply_cap, data.share_decimals)
         ),
     }
 

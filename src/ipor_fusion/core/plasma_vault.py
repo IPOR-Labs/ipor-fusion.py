@@ -191,7 +191,7 @@ class PlasmaVault(ContractWrapper):
         `addFuses` steps must be reverted before the vault is usable."""
         return self._write("removeFuses(address[])", fuses)
 
-    def set_total_supply_cap(self, cap: Amount) -> Call[None]:
+    def set_total_supply_cap(self, cap: Shares) -> Call[None]:
         return self._write("setTotalSupplyCap(uint256)", cap)
 
     def convert_to_public_vault(self) -> Call[None]:
@@ -362,25 +362,26 @@ class PlasmaVault(ContractWrapper):
             "configureInstantWithdrawalFuses((address,bytes32[])[])", normalized
         )
 
-    def transfer(self, to: ChecksumAddress, value: Amount) -> Call[None]:
+    def transfer(self, to: ChecksumAddress, value: Shares) -> Call[None]:
         return self._write("transfer(address,uint256)", to, value)
 
-    def approve(self, account: ChecksumAddress, amount: Amount) -> Call[None]:
+    def approve(self, account: ChecksumAddress, amount: Shares) -> Call[None]:
         return self._write("approve(address,uint256)", account, amount)
 
     def transfer_from(
-        self, _from: ChecksumAddress, to: ChecksumAddress, amount: Amount
+        self, _from: ChecksumAddress, to: ChecksumAddress, amount: Shares
     ) -> Call[None]:
         return self._write("transferFrom(address,address,uint256)", _from, to, amount)
 
-    def balance_of(self, account: ChecksumAddress) -> Call[Amount]:
+    def balance_of(self, account: ChecksumAddress) -> Call[Shares]:
         return self._view(
-            "balanceOf(address)", account, output_types=["uint256"], decoder=Amount
+            "balanceOf(address)", account, output_types=["uint256"], decoder=Shares
         )
 
-    def get_total_supply_cap(self) -> Call[Amount]:
+    def get_total_supply_cap(self) -> Call[Shares]:
+        """The maximum total supply, in shares (``2**256 - 1``: uncapped)."""
         return self._view(
-            "getTotalSupplyCap()", output_types=["uint256"], decoder=Amount
+            "getTotalSupplyCap()", output_types=["uint256"], decoder=Shares
         )
 
     def max_withdraw(self, account: ChecksumAddress) -> Call[Amount]:
@@ -418,8 +419,8 @@ class PlasmaVault(ContractWrapper):
     def total_assets(self) -> Call[Amount]:
         return self._view("totalAssets()", output_types=["uint256"], decoder=Amount)
 
-    def total_supply(self) -> Call[Amount]:
-        return self._view("totalSupply()", output_types=["uint256"], decoder=Amount)
+    def total_supply(self) -> Call[Shares]:
+        return self._view("totalSupply()", output_types=["uint256"], decoder=Shares)
 
     def name(self) -> Call[str]:
         return self._view("name()", output_types=["string"])

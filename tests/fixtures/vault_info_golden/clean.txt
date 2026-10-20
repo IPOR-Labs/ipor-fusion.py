@@ -11,7 +11,7 @@ Share decimals:   6
 Asset price:      N/A
 Total Assets:     0.0 USDC
 Total Supply:     0.0 shares
-Supply Cap:       1,000,000.0 USDC
+Supply Cap:       1,000,000.0 shares
 Access Manager:   0x00000000000000000000000000000000000000AC
 Price Oracle:     0x000000000000000000000000000000000000000C
 Rewards Manager:  N/A
