@@ -351,8 +351,12 @@ Contract names, token symbols and decimals and deployment blocks are cached in a
   (`fetch_vault_data(metadata=True)`) and `fetch_deployment_info` use `ctx.cache`.
   `get_contract_name(chain_id, address, api_key=None, *, cache=None)` takes the cache
   explicitly (default: the file cache); pass `cache=ctx.cache` to share the
-  context's policy. `build_vault_info_json` without `resolve_name` still names
-  contracts from the default file cache; pass `resolve_name` to avoid it.
+  context's policy. The CLI's text and JSON output name contracts through the
+  context's cache.
+- `build_vault_info_json(data)` without `resolve_name` names no contract (every
+  `contract` is `"?"`) instead of reading names from the on-disk cache; pass
+  `resolve_name=partial(get_contract_name, chain_id, api_key=..., cache=ctx.cache)`
+  for the CLI's document.
 - `ipor_fusion.cache` is a public module now and exports `ContractCache`,
   `FileContractCache`, `NullCache`, `CacheKey`, `CacheField`, `cache_key` and
   `default_contract_cache` (also from `ipor_fusion`). Its 3.x functions and constants
@@ -384,7 +388,8 @@ Etherscan key) and the old file can be deleted.
 - A cache never fails a read: a corrupt or unreadable file reads as empty (logged
   warning from `ipor_fusion.cache`) and is rewritten by the next write; an unwritable
   directory (read-only file system) keeps the entries in memory for the process; a
-  custom cache that raises is treated as a miss.
+  custom cache that raises is treated as a miss, and so is a stored number that does
+  not parse.
 - `fetch_deployment_info` returns `rpc-fetch-failed` only when the creation
   transaction or its block cannot be read; a cache failure is no longer reported as
   one (the deployment block is returned).

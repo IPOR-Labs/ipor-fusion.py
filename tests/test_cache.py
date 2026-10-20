@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -128,6 +129,30 @@ class TestFileContractCache:
         key = cache_key(BASE, LOWER, "name")
         assert cache.get([key]) == {key: "Other"}
 
+    def test_concurrent_writers_never_tear_the_file(self, path):
+        writers = [FileContractCache(path) for _ in range(4)]
+        barrier = threading.Barrier(len(writers))
+
+        def write(index: int) -> None:
+            barrier.wait()
+            for n in range(25):
+                address = f"0x{index:02x}{n:038x}"
+                writers[index].put({cache_key(ETHEREUM, address, "name"): str(n)})
+
+        threads = [threading.Thread(target=write, args=(i,)) for i in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        on_disk = _on_disk(path)
+        assert on_disk
+        assert all(key.endswith(":name") for key in on_disk)
+        assert sorted(p.name for p in path.parent.iterdir()) == [path.name]
+        # Each writer still serves every entry it wrote, persisted or not.
+        for index, writer in enumerate(writers):
+            key = cache_key(ETHEREUM, f"0x{index:02x}{24:038x}", "name")
+            assert writer.get([key]) == {key: "24"}
+
     @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permissions")
     def test_a_read_only_directory_degrades_to_memory(self, path, caplog):
         path.parent.mkdir(parents=True)
@@ -229,6 +254,13 @@ class TestTokenResolvers:
         ctx.web3.eth.get_code.assert_not_called()
         assert _on_disk(path) == {f"1:{LOWER}:decimals": "6"}
 
+    @pytest.mark.parametrize("value", ["\u00b2", "9" * 5000, "-1", " 6"])
+    @patch("ipor_fusion.vault_data.ERC20")
+    def test_a_corrupt_decimals_entry_is_a_miss(self, erc20, path, value):
+        _write(path, {f"1:{LOWER}:decimals": value})
+        erc20.return_value.decimals.return_value.call.return_value = 6
+        assert resolve_token_decimals(_ctx(FileContractCache(path)), CHECKSUM) == 6
+
     def test_token_metadata_reads_and_fills_the_contexts_cache(self, path):
         cache = FileContractCache(path)
         cache.put({cache_key(ETHEREUM, LOWER, "symbol"): "MAINNET"})
@@ -306,6 +338,20 @@ class TestFetchDeploymentInfo:
     def test_an_unwritable_file_cache_is_not_an_error(self, _replace, _get_tx, path):
         ctx = _deployment_ctx(FileContractCache(path))
         assert fetch_deployment_info(ctx, VAULT) == (100, 1_700_000_000, None)
+
+    @pytest.mark.parametrize("value", ["\u00b2", "9" * 5000])
+    @patch("ipor_fusion.vault_data.get_deployment_tx", return_value=(TX, None))
+    def test_a_corrupt_deployment_entry_is_a_miss(self, get_tx, path, value):
+        _write(
+            path,
+            {
+                f"1:{LOWER}:deployment_block": value,
+                f"1:{LOWER}:deployment_timestamp": "5",
+            },
+        )
+        ctx = _deployment_ctx(FileContractCache(path))
+        assert fetch_deployment_info(ctx, VAULT) == (100, 1_700_000_000, None)
+        get_tx.assert_called_once()
 
     @patch(
         "ipor_fusion.vault_data.get_deployment_tx",

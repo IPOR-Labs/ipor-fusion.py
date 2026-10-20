@@ -158,7 +158,7 @@ the lifecycle matrix follows that.
   subpackage (`core`, `config`, `fuses`, `readers`, `crosschain`,
   `crosschain.fuses`, `crosschain.ccip`, `crosschain.stargate`) also goes in that
   subpackage's `__all__`. `ipor_fusion.guide` keeps its own namespace. The
-  public modules (`about`, `chains`, `dependency_graph`, `errors`, `explorer`,
+  public modules (`about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`,
   `field_docs`, `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`,
   `validation`, `vault_data`, `vault_info`) stay importable for the names they
   define; `cli`, `mcp` and every other module are internal. Examples, the guide

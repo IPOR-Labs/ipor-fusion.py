@@ -26,7 +26,13 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion import vault_data, vault_erc20
-from ipor_fusion.cache import cache_key, default_contract_cache
+from ipor_fusion.cache import (
+    ContractCache,
+    FileContractCache,
+    NullCache,
+    cache_key,
+    default_contract_cache,
+)
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig
 from ipor_fusion.cli.vault_info_view import (
@@ -312,32 +318,35 @@ NAMES = {
 }
 
 
+_SYMBOLS = {
+    ASSET: "USDC",
+    TOKEN_STALE: "STALE",
+    TOKEN_UNPRICED: "NOPRICE",
+    TOKEN_EMPTY: "EMPTY",
+    TOKEN_BROKEN: "BROKEN",
+}
+_CACHED = {cache_key(ChainId(1), a, "name"): n for a, n in NAMES.items()} | {
+    cache_key(ChainId(1), a, "symbol"): s for a, s in _SYMBOLS.items()
+}
+
+
 @pytest.fixture
 def isolated_cache(tmp_path, monkeypatch):
     cache_dir = tmp_path / ".cache"
     monkeypatch.setattr(config_store, "CONFIG_DIR", tmp_path / ".fusion")
     monkeypatch.setattr(config_store, "CONFIG_FILE", tmp_path / ".fusion" / "c.json")
     monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
-    symbols = {
-        ASSET: "USDC",
-        TOKEN_STALE: "STALE",
-        TOKEN_UNPRICED: "NOPRICE",
-        TOKEN_EMPTY: "EMPTY",
-        TOKEN_BROKEN: "BROKEN",
-    }
-    chain = ChainId(1)
-    default_contract_cache().put(
-        {cache_key(chain, a, "name"): n for a, n in NAMES.items()}
-        | {cache_key(chain, a, "symbol"): s for a, s in symbols.items()}
-    )
+    default_contract_cache().put(_CACHED)
 
 
-def _snapshot(scenario: str) -> tuple[Web3Context, VaultData]:
+def _snapshot(
+    scenario: str, cache: ContractCache | None = None
+) -> tuple[Web3Context, VaultData]:
     """The scenario's `VaultData` completed from its fake chain by the readers
     `fetch_vault_data` uses: market balances, ERC20 holdings, withdrawal
     assets and token metadata."""
     data, chain = SCENARIOS[scenario]()
-    ctx = Web3Context(web3=MagicMock(), chain_id=ChainId(1))
+    ctx = Web3Context(web3=MagicMock(), chain_id=ChainId(1), cache=cache)
     ctx.call = multicall_aware(chain.handle)  # type: ignore[method-assign]
     vault = PlasmaVault(VAULT)  # type: ignore[arg-type]
     data.market_balances = {
@@ -372,8 +381,10 @@ def _snapshot(scenario: str) -> tuple[Web3Context, VaultData]:
     return ctx, data
 
 
-def _render(scenario: str, json_output: bool) -> str:
-    ctx, data = _snapshot(scenario)
+def _render(
+    scenario: str, json_output: bool, cache: ContractCache | None = None
+) -> str:
+    ctx, data = _snapshot(scenario, cache)
     runner = CliRunner()
     with (
         patch(
@@ -398,6 +409,36 @@ def test_vault_info_output_matches_fixture(scenario: str, json_output: bool) -> 
     assert rendered == path.read_text(encoding="utf-8")
     if json_output:
         json.loads(rendered)
+
+
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+@pytest.mark.parametrize("json_output", [False, True], ids=["text", "json"])
+def test_vault_info_reads_only_the_injected_cache(
+    scenario: str, json_output: bool, tmp_path: Path
+) -> None:
+    """Names and symbols come from the context's cache in both outputs; the
+    default file cache is never consulted."""
+    cache = FileContractCache(tmp_path / "injected.json")
+    cache.put(_CACHED)
+    untouchable = MagicMock(side_effect=AssertionError("default cache used"))
+    with (
+        patch("ipor_fusion.explorer.default_contract_cache", untouchable),
+        patch("ipor_fusion.core.context.default_contract_cache", untouchable),
+    ):
+        rendered = _render(scenario, json_output, cache)
+    path = FIXTURES / f"{scenario}.{'json' if json_output else 'txt'}"
+    assert rendered == path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+def test_public_builder_names_nothing_without_a_resolver(scenario: str) -> None:
+    _, data = _snapshot(scenario, NullCache())
+    untouchable = MagicMock(side_effect=AssertionError("default cache used"))
+    with patch("ipor_fusion.explorer.default_contract_cache", untouchable):
+        result = build_vault_info_json(data)
+    fuses = result["fuses"] + result["balance_fuses"]
+    assert fuses
+    assert {fuse["contract"] for fuse in fuses} == {"?"}
 
 
 # The CLI's cached lookup matches an address in any spelling; so does this one.
