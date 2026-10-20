@@ -549,8 +549,10 @@ def fetch_vault_data(
     ``lending=False`` skips lending health, the Morpho / Aave position
     breakdowns, their token prices and the unpriceable-token check.
     ``metadata=False`` skips the token symbols and decimals the ``vault info``
-    document shows (validation does not need them) and reads no symbol at all:
-    the ERC20 holdings are then named ``"?"``.
+    document shows (validation does not need them): `token_symbols` and
+    `token_decimals` stay empty and the ERC20 holdings are named ``"?"``. The
+    underlying asset's symbol and decimals and the decimals the valuation needs
+    are read either way.
 
     Raises `UnsupportedChainError` on a chain the tooling is not validated on
     and `UnsupportedVaultVersionError` when the vault predates a getter the

@@ -168,11 +168,15 @@ class Web3Context:
         log_scan_max_requests: int | None = DEFAULT_LOG_SCAN_MAX_REQUESTS,
         log_source: LogSource | None = None,
         cache: ContractCache | None = None,
-        max_concurrent_requests: int | None = DEFAULT_MAX_CONCURRENT_REQUESTS,
+        max_concurrent_requests: int
+        | InFlightLimit
+        | None = DEFAULT_MAX_CONCURRENT_REQUESTS,
     ) -> Web3Context:
         """A context on an HTTP provider at ``url``. ``max_concurrent_requests``
-        bounds the RPC requests in flight across every thread using it
-        (``None``: unbounded)."""
+        bounds the RPC requests in flight: an ``int`` across every thread using
+        this context, an `InFlightLimit` across every context and `Web3` it is
+        installed on (share one per provider in a service that builds a context
+        per request); ``None`` leaves them unbounded."""
         web3 = Web3(
             Web3.HTTPProvider(
                 url,
@@ -190,15 +194,11 @@ class Web3Context:
         # with a ValueError. The middleware moves it to proofOfAuthorityData
         # and leaves every other block untouched.
         web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        if isinstance(max_concurrent_requests, int):
+            max_concurrent_requests = InFlightLimit(max_concurrent_requests)
         if max_concurrent_requests is not None:
-            # Innermost (layer 0, injected last): a slot covers only the provider
-            # call, so a middleware that issues its own request (the gas price
-            # strategy reads a block) never waits on the slot it already holds.
-            web3.middleware_onion.inject(
-                _in_flight_limit(max_concurrent_requests),
-                name="in_flight_limit",
-                layer=0,
-            )
+            # Injected last, so innermost (see `InFlightLimit.install`).
+            max_concurrent_requests.install(web3)
         chain_id = ChainId(web3.eth.chain_id)
 
         return cls(
@@ -415,15 +415,43 @@ class Web3Context:
         return value * percentage // 100
 
 
-def _in_flight_limit(limit: int) -> type[Web3Middleware]:
-    """A middleware class (web3 instantiates it per Web3) holding a semaphore
-    slot for the duration of each provider call; a JSON-RPC batch is one HTTP
-    request, so it takes one slot whatever its item count."""
-    if limit < 1:
-        raise ValueError(f"max_concurrent_requests must be at least 1, got {limit}")
-    slots = threading.BoundedSemaphore(limit)
+class InFlightLimit:
+    """A bound on the RPC requests in flight, shareable across `Web3` objects.
 
-    class InFlightLimit(Web3Middleware):
+    Every `Web3` it is installed on (``install``, or
+    ``Web3Context.from_url(max_concurrent_requests=limit)``) takes a slot from
+    the same semaphore for each provider call, so several contexts on one
+    provider, or a service that builds a context per request, stay within
+    ``limit`` in total. A JSON-RPC batch is one HTTP request and takes one slot
+    whatever its item count; a failed request releases its slot.
+    """
+
+    def __init__(self, limit: int):
+        if limit < 1:
+            raise ValueError(f"an in-flight limit must be at least 1, got {limit}")
+        self._limit = limit
+        self._middleware = _slot_middleware(threading.BoundedSemaphore(limit))
+
+    @property
+    def limit(self) -> int:
+        return self._limit
+
+    @property
+    def middleware(self) -> type[Web3Middleware]:
+        """The middleware class to add to a `Web3` by hand; every instance
+        web3 builds from it shares this limit's slots."""
+        return self._middleware
+
+    def install(self, web3: Web3) -> None:
+        """Add the limit to ``web3`` as its innermost middleware
+        (``in_flight_limit``). A slot then covers only the provider call, so a
+        middleware that issues its own request (the gas price strategy reads a
+        block) never waits on the slot it already holds."""
+        web3.middleware_onion.inject(self._middleware, name="in_flight_limit", layer=0)
+
+
+def _slot_middleware(slots: threading.BoundedSemaphore) -> type[Web3Middleware]:
+    class InFlightLimitMiddleware(Web3Middleware):
         def wrap_make_request(self, make_request: MakeRequestFn) -> MakeRequestFn:
             def limited(method: RPCEndpoint, params: Any) -> RPCResponse:
                 with slots:
@@ -442,4 +470,4 @@ def _in_flight_limit(limit: int) -> type[Web3Middleware]:
 
             return limited
 
-    return InFlightLimit
+    return InFlightLimitMiddleware

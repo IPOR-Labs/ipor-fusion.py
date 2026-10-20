@@ -1,35 +1,19 @@
 """The declared public API (README, "Public API and stability").
 
-The snapshot below is the contract: adding or removing a name from any
-``__all__`` must change it here too, so every change to the surface is
-deliberate and visible in review.
+The snapshots below are the contract: adding or removing a name from any
+``__all__``, or from the names a public module keeps importable by its path,
+must change them here too, so every change to the surface is deliberate and
+visible in review.
 """
 
 import importlib
+import inspect
+import re
 from types import ModuleType
 
 import pytest
 
 import ipor_fusion
-
-# Public modules whose names are exported through ``ipor_fusion.__all__``; their
-# import paths stay valid for those names.
-PUBLIC_MODULES = (
-    "ipor_fusion.about",
-    "ipor_fusion.chains",
-    "ipor_fusion.dependency_graph",
-    "ipor_fusion.errors",
-    "ipor_fusion.explorer",
-    "ipor_fusion.field_docs",
-    "ipor_fusion.market_ids",
-    "ipor_fusion.market_info",
-    "ipor_fusion.morpho_api",
-    "ipor_fusion.substrates",
-    "ipor_fusion.types",
-    "ipor_fusion.validation",
-    "ipor_fusion.vault_data",
-    "ipor_fusion.vault_info",
-)
 
 # The packaged docs keep their own namespace (``ipor_fusion.guide.QUICKSTART``),
 # so their names are not re-exported from the top level.
@@ -41,7 +25,9 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "AaveV3BorrowFuse",
             "AaveV3FuseReader",
             "AaveV3PoolAddressesProvider",
+            "AaveV3PositionBreakdown",
             "AaveV3Reader",
+            "AaveV3ReserveTokens",
             "AaveV3SupplyFuse",
             "AaveV3UserAccountData",
             "AaveV4OracleReader",
@@ -49,6 +35,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "AaveV4UserAccountData",
             "AccessManager",
             "AccessManagerAddress",
+            "AccountRequest",
             "ActiveCommand",
             "Amount",
             "Any2EVMMessage",
@@ -72,6 +59,8 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "CODEC_VERSION",
             "CROSSCHAIN_ERROR_SIGNATURES",
             "CUSTOM_ERRORS",
+            "CacheField",
+            "CacheKey",
             "Call",
             "CcipChain",
             "CcipChainSelector",
@@ -101,12 +90,14 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "CcvRequirements",
             "ChainId",
             "ChangelogEntry",
+            "Check",
             "CloneArgs",
             "Command",
             "CommandId",
             "CommandStatus",
             "CompoundV3Reader",
             "CompoundV3SupplyFuse",
+            "ContractCache",
             "ContractNotFoundError",
             "CrosschainClaimFuse",
             "CrosschainCommandFuse",
@@ -166,6 +157,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "FeeAccount",
             "FeeData",
             "FeeManager",
+            "FileContractCache",
             "Finding",
             "FluidInstadappStakingFuse",
             "FluidInstadappSupplyFuse",
@@ -179,6 +171,9 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "GearboxSupplyFuse",
             "HYPERCORE_EVENTS",
             "HYPERCORE_EVENT_SPECS",
+            "HYPERCORE_MARKET",
+            "HYPERCORE_PENDING_READERS",
+            "HYPEREVM_CHAIN_ID",
             "HighWaterMarkPerformanceFee",
             "HyperCoreAccountMarginSummary",
             "HyperCoreActionClass",
@@ -217,6 +212,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "HyperCoreVaultState",
             "INDEXER_URLS",
             "INSUFFICIENT_NATIVE_FEE_SELECTOR",
+            "InFlightLimit",
             "IporFusionError",
             "IporFusionMarkets",
             "LANES",
@@ -261,6 +257,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "NavMark",
             "NodeStatus",
             "NotPlasmaVaultError",
+            "NullCache",
             "Observation",
             "OperationId",
             "OptionsBuilder",
@@ -313,6 +310,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "SafetyConfig",
             "SendParams",
             "SettlementMode",
+            "Severity",
             "Shares",
             "SimulatedCallResult",
             "SimulationError",
@@ -331,6 +329,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "StargateSendParams",
             "StargateTokenMessaging",
             "StargateTransport",
+            "StateOverrideProvider",
             "SubstrateInfo",
             "TaxiMessage",
             "Tick",
@@ -338,6 +337,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "TokenId",
             "TokenTransferV1",
             "TransactionError",
+            "TransferDirection",
             "TransferId",
             "TxHash",
             "USDC_SYSTEM_ADDRESS",
@@ -370,6 +370,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "VaultV2Cap",
             "VaultV2Info",
             "VaultValidation",
+            "Verdict",
             "VerifierResult",
             "VerifierResultUnavailable",
             "VestingData",
@@ -384,6 +385,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "build_morpho_blue_market_json",
             "build_oracle_mapping",
             "build_vault_info_json",
+            "cache_key",
             "ccip_events",
             "ccip_receive_calldata",
             "ccip_token_lane",
@@ -400,6 +402,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "decode_external_state_event",
             "decode_hypercore_event",
             "decode_substrate",
+            "default_contract_cache",
             "detect_transport",
             "discover_deployment",
             "discover_lane_fuses",
@@ -425,13 +428,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "format_market_label",
             "get_contract_name",
             "get_deployment_tx",
-            "CacheField",
-            "CacheKey",
-            "ContractCache",
-            "FileContractCache",
-            "NullCache",
-            "cache_key",
-            "default_contract_cache",
             "get_logs_adaptive",
             "get_revert_reason",
             "hip3_action_asset",
@@ -440,6 +436,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "is_hip3_asset",
             "is_native_perp_asset",
             "is_simulate_v1_supported",
+            "log_bytes",
             "lz_compose_calldata",
             "lz_receive_calldata",
             "manual_execution",
@@ -484,6 +481,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
     "ipor_fusion.core": frozenset(
         {
             "AccessManager",
+            "AccountRequest",
             "AssetPriceSource",
             "BalanceFuse",
             "CloneArgs",
@@ -493,6 +491,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "FusionFactory",
             "FusionInstance",
             "HighWaterMarkPerformanceFee",
+            "InFlightLimit",
             "LegacyPriceOracleMiddleware",
             "MULTICALL3_ADDRESS",
             "ManagementFeeData",
@@ -619,6 +618,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "encode_oft_compose_msg",
             "fetch_verifier_result",
             "find_ccip_events",
+            "log_bytes",
             "lz_compose_calldata",
             "lz_receive_calldata",
             "manual_execution",
@@ -807,12 +807,17 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
         {
             "AaveV3FuseReader",
             "AaveV3PoolAddressesProvider",
+            "AaveV3PositionBreakdown",
             "AaveV3Reader",
+            "AaveV3ReserveTokens",
             "AaveV3UserAccountData",
             "AaveV4OracleReader",
             "AaveV4SpokeReader",
             "AaveV4UserAccountData",
             "CompoundV3Reader",
+            "HYPERCORE_MARKET",
+            "HYPERCORE_PENDING_READERS",
+            "HYPEREVM_CHAIN_ID",
             "HyperCoreAccountMarginSummary",
             "HyperCoreActionClass",
             "HyperCoreEvmExitCeiling",
@@ -848,6 +853,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "PositionData",
             "RamsesV2Position",
             "RamsesV2Reader",
+            "TransferDirection",
             "UniswapV3Position",
             "UniswapV3Reader",
             "VaultLendingHealth",
@@ -865,6 +871,216 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
         }
     ),
 }
+
+
+# Public modules (README) and the top-level names each keeps importable by its
+# own path: the names it defines, plus the re-exports README, AGENTS.md or
+# MIGRATION_4.md promise at that path (a 3.x home a name moved out of, such as
+# ``vault_data.FeeData``). Moving a name out of one of these modules must keep a
+# re-export there; a module-path import outside this table is internal.
+_MODULE_PATH_SNAPSHOT: dict[str, frozenset[str]] = {
+    "ipor_fusion.about": frozenset(
+        {
+            "ChangelogEntry",
+            "PREVIEW_FEATURES",
+            "PREVIEW_STATEMENT",
+            "PreviewFeature",
+            "package_version",
+            "read_changelog",
+            "repository_url",
+        }
+    ),
+    "ipor_fusion.cache": frozenset(
+        {
+            "CacheField",
+            "CacheKey",
+            "ContractCache",
+            "FileContractCache",
+            "NullCache",
+            "cache_key",
+            "default_contract_cache",
+        }
+    ),
+    "ipor_fusion.chains": frozenset(
+        {
+            "CHAIN_NAMES",
+            "CHAIN_NAME_TO_ID",
+            "GET_LOGS_RANGE_HINTS",
+            "SUPPORTED_CHAIN_IDS",
+            "ensure_supported_chain",
+        }
+    ),
+    "ipor_fusion.dependency_graph": frozenset(
+        {
+            "compute_update_groups",
+            "compute_update_reach",
+            "find_markets_missing_erc20_dependency",
+            "find_orphan_fuse_markets",
+        }
+    ),
+    "ipor_fusion.errors": frozenset(
+        {
+            "ExternalStateEventDecodeError",
+            "OwnerNotFoundError",
+            "VerifierResultUnavailable",
+            "BalanceSlotNotFoundError",
+            "CUSTOM_ERRORS",
+            "ContractNotFoundError",
+            "CrosschainDiscoveryError",
+            "EmptyCallResultError",
+            "ExternalStateError",
+            "HyperCoreValuationError",
+            "IporFusionError",
+            "LogScanError",
+            "LogSourceUnavailable",
+            "MorphoApiError",
+            "MorphoMarketNotFoundError",
+            "NotPlasmaVaultError",
+            "SimulationError",
+            "SimulationRunError",
+            "TransactionError",
+            "UnsupportedChainError",
+            "UnsupportedContractVersionError",
+            "UnsupportedVaultVersionError",
+            "decode_custom_error",
+            "get_revert_reason",
+            "register_custom_errors",
+        }
+    ),
+    "ipor_fusion.explorer": frozenset(
+        {
+            "get_contract_name",
+            "get_deployment_tx",
+        }
+    ),
+    "ipor_fusion.field_docs": frozenset(
+        {
+            "DOCS",
+        }
+    ),
+    "ipor_fusion.market_ids": frozenset(
+        {
+            "IporFusionMarkets",
+        }
+    ),
+    "ipor_fusion.market_info": frozenset(
+        {
+            "build_meta_morpho_json",
+            "build_morpho_blue_market_json",
+        }
+    ),
+    "ipor_fusion.morpho_api": frozenset(
+        {
+            "MorphoApiError",
+            "MorphoApiMarket",
+            "PUBLIC_ALLOCATOR_ADDRESSES",
+            "VaultAllocation",
+            "VaultFlowCap",
+            "VaultV1Info",
+            "VaultV1MarketAllocation",
+            "VaultV2Adapter",
+            "VaultV2Cap",
+            "VaultV2Info",
+            "fetch_market",
+            "fetch_vault",
+        }
+    ),
+    "ipor_fusion.substrates": frozenset(
+        {
+            "SubstrateInfo",
+            "decode_substrate",
+            "format_market_label",
+            "market_name",
+        }
+    ),
+    "ipor_fusion.types": frozenset(
+        {
+            "CcipChainSelector",
+            "AccessManagerAddress",
+            "Amount",
+            "AssetId",
+            "AssetSource",
+            "ChainId",
+            "Check",
+            "CommandId",
+            "Decimals",
+            "DeploymentRequestId",
+            "Fee",
+            "FuseAddress",
+            "HyperCoreActionId",
+            "HyperCoreAsset",
+            "HyperCoreClientOrderId",
+            "HyperCoreOrderId",
+            "HyperCoreTokenIndex",
+            "LayerZeroEid",
+            "Liquidity",
+            "MAX_UINT256",
+            "MappingStatus",
+            "MarginTableId",
+            "MarketId",
+            "MessageId",
+            "MorphoBlueMarketId",
+            "NodeStatus",
+            "OperationId",
+            "PayloadHash",
+            "Period",
+            "PlasmaVaultAddress",
+            "PositionSetHash",
+            "Price",
+            "ProposalHash",
+            "ProposalId",
+            "ReturnRequestId",
+            "RoleId",
+            "Severity",
+            "Shares",
+            "StargateAssetId",
+            "Tick",
+            "TokenId",
+            "TransferId",
+            "TxHash",
+            "Verdict",
+            "ZERO_ADDRESS",
+            "parse_access_manager_address",
+            "parse_fuse_address",
+            "parse_hex_address",
+            "parse_morpho_market_id",
+            "parse_plasma_vault_address",
+            "parse_tx_hash",
+        }
+    ),
+    "ipor_fusion.validation": frozenset(
+        {
+            "Erc20Holding",
+            "Erc20Holdings",
+            "Finding",
+            "Reconciliation",
+            "UnpriceableToken",
+            "VaultState",
+            "VaultValidation",
+            "WithdrawQueue",
+            "validate_vault",
+            "validate_vault_state",
+        }
+    ),
+    "ipor_fusion.vault_data": frozenset(
+        {
+            "FeeData",
+            "VaultData",
+            "WithdrawManagerData",
+            "fetch_deployment_info",
+            "fetch_vault_data",
+            "resolve_token_decimals",
+            "resolve_token_symbol",
+        }
+    ),
+    "ipor_fusion.vault_info": frozenset(
+        {
+            "build_vault_info_json",
+        }
+    ),
+}
+
+PUBLIC_MODULES = tuple(sorted(_MODULE_PATH_SNAPSHOT))
 
 
 def _module(name: str) -> ModuleType:
@@ -902,13 +1118,40 @@ def test_subpackage_names_are_exported_from_the_top_level(package: str) -> None:
         assert getattr(ipor_fusion, name) is getattr(module, name), name
 
 
+def _defined_in(module: ModuleType) -> set[str]:
+    """Top-level names whose object is defined in ``module``: a class, function
+    or ``NewType`` by its ``__module__``, a constant or alias by a module-level
+    assignment."""
+    source = inspect.getsource(module)
+    defined = set()
+    for name in ipor_fusion.__all__:
+        obj = getattr(ipor_fusion, name)
+        if vars(module).get(name) is not obj:
+            continue
+        if (
+            inspect.isclass(obj)
+            or inspect.isfunction(obj)
+            or hasattr(obj, "__supertype__")
+        ):
+            if obj.__module__ == module.__name__:
+                defined.add(name)
+        elif re.search(rf"^{re.escape(name)}\s*(?::[^=\n]*)?=", source, re.MULTILINE):
+            defined.add(name)
+    return defined
+
+
 @pytest.mark.parametrize("module_name", PUBLIC_MODULES)
 def test_public_module_paths_resolve(module_name: str) -> None:
     module = _module(module_name)
-    exported = [
-        name
-        for name in ipor_fusion.__all__
-        if getattr(getattr(ipor_fusion, name), "__module__", None) == module_name
-    ]
-    for name in exported:
-        assert getattr(module, name) is getattr(ipor_fusion, name)
+    for name in _MODULE_PATH_SNAPSHOT[module_name]:
+        assert name in ipor_fusion.__all__, name
+        assert getattr(module, name, None) is getattr(ipor_fusion, name), name
+
+
+@pytest.mark.parametrize("module_name", PUBLIC_MODULES)
+def test_module_path_snapshot_lists_every_defined_name(module_name: str) -> None:
+    missing = _defined_in(_module(module_name)) - _MODULE_PATH_SNAPSHOT[module_name]
+    assert not missing, (
+        f"{module_name} defines exported names {sorted(missing)} missing from "
+        "_MODULE_PATH_SNAPSHOT; add them deliberately"
+    )

@@ -1,7 +1,9 @@
 from ipor_fusion.readers.aave_v3 import (
     AaveV3FuseReader,
     AaveV3PoolAddressesProvider,
+    AaveV3PositionBreakdown,
     AaveV3Reader,
+    AaveV3ReserveTokens,
     AaveV3UserAccountData,
 )
 from ipor_fusion.readers.aave_v4 import (
@@ -11,6 +13,9 @@ from ipor_fusion.readers.aave_v4 import (
 )
 from ipor_fusion.readers.compound_v3 import CompoundV3Reader
 from ipor_fusion.readers.hypercore import (
+    HYPERCORE_MARKET,
+    HYPERCORE_PENDING_READERS,
+    HYPEREVM_CHAIN_ID,
     HyperCoreAccountMarginSummary,
     HyperCoreActionClass,
     HyperCoreNav,
@@ -35,6 +40,7 @@ from ipor_fusion.readers.hypercore_outcome import (
     HyperCoreTransferOutcome,
     HyperCoreTransferSnapshot,
     HyperCoreTransferStatus,
+    TransferDirection,
     compare_hypercore_transfer,
     read_hypercore_evm_exit_ceiling,
     read_hypercore_transfer_outcome,
@@ -80,12 +86,17 @@ __all__ = [
     "morpho_blue_address",
     "AaveV3FuseReader",
     "AaveV3PoolAddressesProvider",
+    "AaveV3PositionBreakdown",
     "AaveV3Reader",
+    "AaveV3ReserveTokens",
     "AaveV3UserAccountData",
     "AaveV4OracleReader",
     "AaveV4SpokeReader",
     "AaveV4UserAccountData",
     "CompoundV3Reader",
+    "HYPERCORE_MARKET",
+    "HYPERCORE_PENDING_READERS",
+    "HYPEREVM_CHAIN_ID",
     "HyperCoreAccountMarginSummary",
     "HyperCoreActionClass",
     "HyperCoreNav",
@@ -105,6 +116,7 @@ __all__ = [
     "HyperCoreTransferOutcome",
     "HyperCoreTransferSnapshot",
     "HyperCoreTransferStatus",
+    "TransferDirection",
     "compare_hypercore_transfer",
     "read_hypercore_evm_exit_ceiling",
     "read_hypercore_transfer_outcome",

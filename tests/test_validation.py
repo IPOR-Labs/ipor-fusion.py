@@ -8,7 +8,6 @@ depends on the CLI's fetch types.
 from __future__ import annotations
 
 import dataclasses
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -30,13 +29,14 @@ from ipor_fusion import (
     VaultValidation,
     Web3Context,
     validate_vault,
+    vault_data,
 )
 from ipor_fusion.cache import NullCache
 from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.validation import GET_MARKET_SUBSTRATES, Reconciliation
-from ipor_fusion.vault_data import _derived_reads, _MarketReads
+from ipor_fusion.vault_data import VaultData, _MarketReads
 from ipor_fusion.vault_erc20 import _Asset, _erc20_holdings, _read_erc20_market
 
 
@@ -444,10 +444,12 @@ class TestReadErc20Holdings:
 
 
 class TestSnapshotTokenMetadata:
-    """`fetch_vault_data`'s ERC20 holdings and token metadata, from the
-    vault and market reads on."""
+    """`fetch_vault_data`'s optional token metadata. The vault, fee, queue,
+    role and market pipelines (the underlying asset's symbol and decimals
+    among them) are stubbed; the ERC20 market and the metadata batch run on
+    the fake chain, whose code reads raise."""
 
-    def _derive(self, *, metadata: bool) -> tuple[_Chain, dict[str, Any]]:
+    def _fetch(self, *, metadata: bool) -> tuple[_Chain, VaultData]:
         state = _erc20_state()
         chain = _Chain()
         ctx = Web3Context(chain.web3(), ChainId(1), cache=NullCache())
@@ -459,44 +461,69 @@ class TestSnapshotTokenMetadata:
             market_balances=chain.market_balances,  # type: ignore[arg-type]
         )
         vault_reads = {
+            "share_decimals": 18,
+            "total_assets": state.total_assets,
+            "total_supply": state.total_assets,
+            "supply_cap": state.total_assets,
             "asset": ASSET,
+            "access_manager": _addr("ac"),
+            "price_oracle": ORACLE,
+            "fuses": [FUSE],
+            "instant_fuses": [],
+            "vault_name": "Vault",
+            "rewards_manager": None,
             "asset_decimals": state.asset_decimals,
+            "underlying_balance_on_vault": state.underlying_balance_on_vault,
+            "asset_symbol": "USDC",
             "asset_price_usd": state.asset_price_usd,
+            "fuse_markets": None,
+            "unimplemented_getters": [],
         }
-        with ThreadPoolExecutor() as pool:
-            fields = _derived_reads(
+        oracle = price_oracle_middleware(ctx, ORACLE)  # type: ignore[arg-type]
+        with (
+            patch.object(vault_data, "_block_timestamp", return_value=1),
+            patch.object(
+                vault_data, "_fetch_vault_reads", return_value=(vault_reads, oracle)
+            ),
+            patch.object(vault_data, "_fetch_fee_data", return_value=None),
+            patch.object(
+                vault_data, "_fetch_withdraw_manager", return_value=(None, None)
+            ),
+            patch.object(vault_data, "_fetch_role_accounts", return_value=None),
+            patch.object(vault_data, "_fetch_market_reads", return_value=markets),
+            patch.object(vault_data, "_fetch_hypercore_state", return_value=None),
+        ):
+            data = vault_data.fetch_vault_data(
                 ctx,
-                pool,
                 VAULT,  # type: ignore[arg-type]
-                vault_reads,
-                price_oracle_middleware(ctx, ORACLE),  # type: ignore[arg-type]
-                markets,
-                None,
+                block=123,
+                lending=False,
                 metadata=metadata,
             )
-        return chain, fields
+        return chain, data
 
-    def test_without_metadata_no_symbol_is_read(self):
-        chain, fields = self._derive(metadata=False)
+    def test_without_metadata_no_token_symbol_is_read(self):
+        chain, data = self._fetch(metadata=False)
 
         assert chain.symbol_reads == 0
-        assert "token_symbols" not in fields
-        erc20 = fields["erc20"]
-        assert [t.symbol for t in erc20.tokens] == ["?", "?", "?"]
-        assert erc20.value_in_asset == 11 * WAD
+        assert (data.token_symbols, data.token_decimals) == ({}, {})
+        assert [t.symbol for t in data.erc20.tokens] == ["?", "?", "?"]
+        assert [t.decimals for t in data.erc20.tokens] == [18, 18, 18]
+        assert data.erc20.value_in_asset == 11 * WAD
+        assert data.asset_symbol == "USDC"
 
     def test_metadata_names_the_holdings_in_one_batch(self):
-        chain, fields = self._derive(metadata=True)
+        chain, data = self._fetch(metadata=True)
 
-        without, _ = self._derive(metadata=False)
+        without, _ = self._fetch(metadata=False)
         assert chain.symbol_reads == 3
         assert len(chain.blocks) == len(without.blocks) + 1
-        assert fields["token_symbols"] == {
+        assert data.token_symbols == {
             ASSET.lower(): "",
             TOKEN.lower(): "TKN",
             OTHER.lower(): "",
         }
-        assert [t.symbol for t in fields["erc20"].tokens] == ["?", "TKN", "?"]
+        assert [t.symbol for t in data.erc20.tokens] == ["?", "TKN", "?"]
 
 
 class TestValidateVault:

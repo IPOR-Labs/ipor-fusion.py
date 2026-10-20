@@ -1,5 +1,5 @@
 from ipor_fusion.core.access import AccessManager, RoleAccount, RoleStatus
-from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.context import InFlightLimit, Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.fee_manager import (
     FeeAccount,
@@ -23,6 +23,7 @@ from ipor_fusion.core.plasma_vault import (
 )
 from ipor_fusion.core.rewards_manager import RewardsManager, VestingData
 from ipor_fusion.core.withdraw_manager import (
+    AccountRequest,
     PendingRequestsInfo,
     WithdrawManager,
     WithdrawRequestInfo,
@@ -30,6 +31,7 @@ from ipor_fusion.core.withdraw_manager import (
 
 __all__ = [
     "Web3Context",
+    "InFlightLimit",
     "Multicall3",
     "MULTICALL3_ADDRESS",
     "PlasmaVault",
@@ -40,6 +42,7 @@ __all__ = [
     "VestingData",
     "ERC20",
     "WithdrawManager",
+    "AccountRequest",
     "WithdrawRequestInfo",
     "PendingRequestsInfo",
     "BalanceFuse",

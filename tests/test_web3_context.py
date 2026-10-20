@@ -14,6 +14,7 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError, Web3RPCError
 from web3.providers.rpc import HTTPProvider
 
+from ipor_fusion import InFlightLimit
 from ipor_fusion.core.context import _RETRY_EXCEPT_GET_LOGS, Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
@@ -767,9 +768,43 @@ class TestConcurrencyLimit:
                 ctx.web3.eth.block_number  # noqa: B018
             assert ctx.web3.eth.block_number == 1
 
+    def test_contexts_sharing_a_limit_stay_within_it_together(self):
+        in_flight = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def make_request(provider, method, params):
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.02)
+            with lock:
+                in_flight -= 1
+            return {"jsonrpc": "2.0", "id": 1, "result": "0x1"}
+
+        shared = InFlightLimit(3)
+        with patch.object(HTTPProvider, "make_request", make_request):
+            contexts = [
+                Web3Context.from_url(
+                    "http://localhost:8545", max_concurrent_requests=shared
+                )
+                for _ in range(2)
+            ]
+            installed = Web3(HTTPProvider("http://localhost:8545"))
+            shared.install(installed)
+            injected = Web3(HTTPProvider("http://localhost:8545"))
+            injected.middleware_onion.inject(shared.middleware, layer=0)
+            web3s = [ctx.web3 for ctx in contexts] + [installed, injected]
+            with ThreadPoolExecutor(24) as pool:
+                list(pool.map(lambda i: web3s[i % 4].eth.block_number, range(48)))
+        assert 1 < peak <= 3
+
     def test_a_limit_below_one_is_rejected(self):
         with (
             patch.object(HTTPProvider, "make_request"),
             pytest.raises(ValueError, match="at least 1"),
         ):
             Web3Context.from_url("http://localhost:8545", max_concurrent_requests=0)
+        with pytest.raises(ValueError, match="at least 1"):
+            InFlightLimit(0)

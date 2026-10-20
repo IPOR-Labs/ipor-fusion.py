@@ -161,11 +161,16 @@ the lifecycle matrix follows that.
   public modules (`about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`,
   `field_docs`, `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`,
   `validation`, `vault_data`, `vault_info`) stay importable for the names they
-  define; `cli`, `mcp` and every other module are internal. Examples, the guide
-  and the skill import from `ipor_fusion` or a public module, never an internal
+  define and the moved names README lists; `cli`, `mcp`, every other module and
+  every submodule of a public subpackage (`core.contract`, `fuses.base`, ...) are
+  internal. Examples, the guide, the skill and `scripts/` import from
+  `ipor_fusion`, a public subpackage or a public module, never an internal
   path. Adding or removing a
-  name updates the snapshot in `tests/test_public_api.py`; a removal or rename
-  is a breaking change. The package is `py.typed`, so public APIs stay fully
+  name updates the snapshots in `tests/test_public_api.py` (every `__all__`, and
+  the names each public module keeps by path); moving a name out of a public
+  module leaves a re-export there. A removal or rename is a breaking change.
+  A project type used in a public signature or field is exported too
+  (`tests/test_public_type_reachability.py`). The package is `py.typed`, so public APIs stay fully
   annotated.
 
 ## Invariants that must change together
@@ -401,8 +406,9 @@ role-accounts, oracle-mapping). `vault info` runs independent fetch pipelines
 (vault/asset, fees, WithdrawManager, markets, roles) concurrently on a
 `ThreadPoolExecutor`, each a short chain of `Multicall3` batches; keep new
 reads inside a batch rather than adding per-call round trips. A `from_url` context
-bounds requests in flight (`max_concurrent_requests`, default 8) whatever the pool
-nesting, so a new fan-out does not need its own limit. Contract names,
+bounds requests in flight (`max_concurrent_requests`, default 8; an
+`InFlightLimit` shares one bound across contexts) whatever the pool nesting, so a
+new fan-out does not need its own limit. Contract names,
 token symbols and decimals and deployment blocks are cached per chain in
 `$XDG_CACHE_HOME/ipor-fusion/contract_cache.json` (`<chain>:<address>:<field>`
 keys); tests redirect it with `monkeypatch.setenv("XDG_CACHE_HOME", ...)` or
@@ -435,9 +441,10 @@ are not validated.
   everything validation and the ``vault info`` document need, so neither reads the
   chain. The chain is `ctx.chain_id`; ``lending=False`` skips lending health, the
   position breakdowns, their prices and the unpriceable check; ``metadata=False``
-  reads no token symbol or decimals at all (`validate_vault`'s default), and
-  ``metadata=True`` reads them in one cached Multicall3 batch that also names the
-  ERC20 holdings. Add a new chain-state input to the snapshot, never a
+  (`validate_vault`'s default) skips the display metadata (`token_symbols`,
+  `token_decimals`, the ERC20 holdings' symbols) but not the asset's symbol and
+  decimals or the decimals valuation needs; ``metadata=True`` reads it in one cached
+  Multicall3 batch that also names the ERC20 holdings. Add a new chain-state input to the snapshot, never a
   read inside a renderer or validator.
 - PlasmaVault serves governance/view functions via `fallback()` delegatecall to
   PlasmaVaultBase, so Etherscan's ABI for the vault address omits callable
