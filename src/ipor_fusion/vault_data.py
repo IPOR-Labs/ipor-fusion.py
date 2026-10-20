@@ -697,7 +697,7 @@ def _token_metadata(
     if not missing_symbols and not missing_decimals:
         return symbols, decimals
     tokens = {
-        a: ERC20(ctx, Web3.to_checksum_address(a))
+        a: ERC20(Web3.to_checksum_address(a))
         for a in breakdown | substrate_addresses
     }
     calls: list[Call[Any]] = [tokens[a].symbol() for a in missing_symbols]
