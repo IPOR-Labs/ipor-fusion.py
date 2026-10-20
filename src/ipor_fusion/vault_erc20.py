@@ -13,7 +13,7 @@ from web3 import Web3
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.oracle import price_oracle_middleware
+from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
@@ -78,7 +78,7 @@ def _read_erc20_holdings(
     balance_fuses: Sequence[BalanceFuse],
     market_substrates: Mapping[MarketId, Sequence[bytes]],
     market_balances: Mapping[MarketId, int],
-    price_oracle: ChecksumAddress,
+    oracle: PriceOracleMiddleware,
     asset: _Asset,
     resolve_symbol: Callable[[HexAddress], str],
 ) -> Erc20Holdings:
@@ -101,18 +101,17 @@ def _read_erc20_holdings(
     ]
     if not addresses:
         return Erc20Holdings(market_cached_value=cached_value)
-    reads = _read_tokens(ctx, vault, price_oracle, addresses, resolve_symbol)
+    reads = _read_tokens(ctx, vault, oracle, addresses, resolve_symbol)
     return _value_tokens(asset, reads, cached_value)
 
 
 def _read_tokens(
     ctx: Web3Context,
     vault: PlasmaVaultAddress,
-    price_oracle: ChecksumAddress,
+    oracle: PriceOracleMiddleware,
     addresses: list[HexAddress],
     resolve_symbol: Callable[[HexAddress], str],
 ) -> list[_TokenRead]:
-    oracle = price_oracle_middleware(ctx, price_oracle)
     with ThreadPoolExecutor() as pool:
         futures: list[tuple[HexAddress, Future, Future, Future, Future]] = []
         for address in addresses:

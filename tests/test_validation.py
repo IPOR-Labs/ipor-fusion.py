@@ -30,6 +30,7 @@ from ipor_fusion import (
     Web3Context,
     validate_vault,
 )
+from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.validation import GET_MARKET_SUBSTRATES, Reconciliation
@@ -397,7 +398,7 @@ class TestReadErc20Holdings:
             balance_fuses=state.balance_fuses,
             market_substrates=state.market_substrates or {},  # type: ignore[arg-type]
             market_balances=chain.market_balances,  # type: ignore[arg-type]
-            price_oracle=ORACLE,  # type: ignore[arg-type]
+            oracle=price_oracle_middleware(ctx, ORACLE),  # type: ignore[arg-type]
             asset=_Asset(ASSET, state.asset_decimals, state.asset_price_usd),  # type: ignore[arg-type]
             resolve_symbol=kwargs.get(
                 "resolve_symbol",

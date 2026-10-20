@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,6 +33,7 @@ from ipor_fusion.cli.vault_info_view import (
     _print_vault_info,
 )
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import LendingMarketHealth, VaultLendingHealth
@@ -354,7 +354,7 @@ def _snapshot(scenario: str) -> tuple[Web3Context, VaultData]:
         balance_fuses=data.balance_fuses,
         market_substrates=data.market_substrates or {},
         market_balances=data.market_balances,
-        price_oracle=data.price_oracle_addr,
+        oracle=price_oracle_middleware(ctx, data.price_oracle_addr),
         asset=vault_erc20._Asset(data.asset, data.asset_decimals, data.asset_price_usd),
         resolve_symbol=partial(vault_data.resolve_token_symbol, ctx),
     )
@@ -366,16 +366,13 @@ def _snapshot(scenario: str) -> tuple[Web3Context, VaultData]:
             req.account: vault.convert_to_assets(req.shares).call()
             for req in wmd.pending_requests or []
         }
-    with ThreadPoolExecutor() as pool:
-        data.token_symbols, data.token_decimals = vault_data._token_metadata(
-            ctx,
-            pool,
-            SimpleNamespace(market_substrates=data.market_substrates or {}),  # type: ignore[arg-type]
-            SimpleNamespace(  # type: ignore[arg-type]
-                morpho_positions=data.morpho_positions,
-                aave_positions=data.aave_positions,
-            ),
-        )
+    data.token_symbols, data.token_decimals = vault_data._token_metadata(
+        ctx,
+        SimpleNamespace(market_substrates=data.market_substrates or {}),  # type: ignore[arg-type]
+        SimpleNamespace(  # type: ignore[arg-type]
+            morpho_positions=data.morpho_positions, aave_positions=data.aave_positions
+        ),
+    )
     return ctx, data
 
 

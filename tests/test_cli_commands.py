@@ -1185,9 +1185,8 @@ class TestVaultInfoJson:
         assert data["deployment"]["timestamp_utc"] == "2023-11-14T22:13:20Z"
         assert isinstance(data["deployment"]["age_days"], int)
 
-    @patch("ipor_fusion.vault_erc20.price_oracle_middleware")
+    @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_erc20.ERC20")
-    @patch("ipor_fusion.vault_data.resolve_token_symbol", return_value="WETH")
     @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")
     @patch("ipor_fusion.vault_data.ERC20")
@@ -1200,7 +1199,6 @@ class TestVaultInfoJson:
         mock_erc20_cls,
         mock_oracle_cls,
         mock_get_name,
-        mock_resolve_sym,
         mock_health_erc20_cls,
         mock_health_oracle_cls,
         tmp_config,
@@ -1272,7 +1270,7 @@ class TestVaultInfoJson:
         assert "ERC20_VAULT_BALANCE (7)" in data["substrates"]
         subs = data["substrates"]["ERC20_VAULT_BALANCE (7)"]
         assert len(subs) == 1
-        assert subs[0]["symbol"] == "WETH"
+        assert subs[0]["symbol"] == "X"
         assert subs[0]["contract"] == "SomeFuse"
 
 
