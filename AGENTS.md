@@ -216,8 +216,8 @@ the lifecycle matrix follows that.
   time and request budget, and raises `LogScanError` rather than return partial logs;
   `LogSource`: an optional index `Web3Context.get_logs` asks first for a topic0-only
   filter, falling back to the scan on `LogSourceUnavailable`;
-  prefer a storage or view read over a scan, as `get_balance_fuses` and
-  `withdraw_manager_address` do), `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
+  prefer a storage or view read over a scan, as `read_balance_fuses` and
+  `read_withdraw_manager_address` do), `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
   `simulation` (`VaultSimulator`, eth_simulateV1, `erc20_balance_slot` and ERC-20 balance
   overrides), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`, `fuse_action`
@@ -279,16 +279,36 @@ Two patterns explain most of the code; know both before writing SDK code
 or examples.
 
 - `Call[T]` (`core/contract.py`): every `ContractWrapper` method (one per
-  Solidity function) returns a `Call` instead of executing. `.call()` runs
-  `eth_call` and decodes to `T`; `.send()` signs and submits, returning a
-  `TxReceipt`; `.calldata` hands the bytes to an external signer;
-  `.build_transaction()` / `Web3Context.estimate_gas` preview without signing.
-  A `Call` without `output_types` (a write) raises on `.call()`. The same
-  `Call` feeds `VaultSimulator.observe`, so reads, sends and simulations share
-  one definition.
+  Solidity function) returns a `Call` instead of executing. Construction and
+  Call building are offline: a wrapper is its address (plus genuine contract
+  parameters such as a legacy oracle's decimals) and holds no `Web3Context`;
+  a `Call` holds `to`, `data`, output types and decoder, never a context.
+  Execution takes the context as a required argument: `.call(ctx)` runs
+  `eth_call` (at the context's, possibly pinned, block; `block=` overrides)
+  and decodes to `T`; `.send(ctx)` signs and submits, returning a `TxReceipt`;
+  `.build_transaction(ctx)` / `.estimate_gas(ctx)` preview without signing
+  (default `"latest"`). `.calldata`, `.decode(raw)` and `.map(f)` stay
+  offline. A `Call` without `output_types` (a write) raises on `.call(ctx)`.
+  The same `Call` feeds `VaultSimulator.observe`, so reads, sends and
+  simulations share one definition.
+- A wrapper method that must execute to answer (storage, a log scan, a read
+  that depends on another read) is named `read_*` and takes `ctx` first:
+  `PlasmaVault.read_balance_fuses(ctx)`, `AccessManager.read_all_role_accounts(ctx)`,
+  `MorphoReader.read_rates(ctx, id)`. Decide by the I/O a method performs, not
+  by the class name. Resolvers that probe the chain to pick a wrapper
+  (`price_oracle_middleware(ctx, a)`, `resolve_access_manager`,
+  `ExternalStateExecutor.for_vault`) return context-free wrappers. Executors
+  and orchestrators own their contexts: `Multicall3(ctx)`, `VaultSimulator`,
+  `CrosschainSimulator`, `OracleMappingReader(ctx, oracle)` and
+  `CrosschainLane` (`hub_ctx` for the executor, `spoke_ctx` for the
+  dispatcher at the same address: run a lane's Calls on the matching one).
+  A chain-dependent decode takes the chain explicitly
+  (`ExternalStateExecutor.pending_proposals(account, chain_id=)`); a decoder
+  never consults the executing context.
 - Batch independent reads: `Multicall3(ctx).aggregate(calls)` (raises as
-  `.call()` would) or `.try_aggregate(calls)` (``None`` per failed read) runs
-  many `Call`s in one `eth_call` at one block. A loop of `.call()`s, or a
+  `.call(ctx)` would) or `.try_aggregate(calls)` (``None`` per failed read) runs
+  many `Call`s in one `eth_call` at one block; every batch, re-run and
+  no-Multicall fallback runs on its `ctx`. A loop of `.call(ctx)`s, or a
   thread pool of them, costs one round trip each; RPC latency, not decoding,
   is what makes the vault tooling slow.
 - Fuses (`fuses/`) are stateless encoders: a method returns an immutable
@@ -297,7 +317,7 @@ or examples.
   helpers raise before encoding. `PlasmaVault.execute([actions])` runs the
   batch atomically.
 - Pin reads, never mutate a shared context: `ctx.at_block(n)` is a copy whose
-  reads (and `get_logs` upper bound) default to block ``n``; `Call.call(block=n)`
+  reads (and `get_logs` upper bound) default to block ``n``; `Call.call(ctx, block=n)`
   pins one read.
 - Simulate before sending: `VaultSimulator(web3, vault=, alpha=)` batches
   `execute` and `observe` calls into one `eth_simulateV1` round trip, across

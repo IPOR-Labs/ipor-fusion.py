@@ -93,8 +93,8 @@ ctx = Web3Context.from_url(
     private_key="0x...",
 )
 
-# 2. Wrap the PlasmaVault contract
-vault = PlasmaVault(ctx, Web3.to_checksum_address("0xVAULT_ADDRESS"))
+# 2. Wrap the PlasmaVault contract (an address only; contexts are passed at execution)
+vault = PlasmaVault(Web3.to_checksum_address("0xVAULT_ADDRESS"))
 
 # 3. Build a fuse action (e.g. supply USDC to Aave V3)
 fuse = AaveV3SupplyFuse(Web3.to_checksum_address("0xFUSE_ADDRESS"))
@@ -103,25 +103,28 @@ action = fuse.supply(
     amount=1_000_000,  # 1 USDC (6 decimals)
 )
 
-# 4. Execute on-chain (execute() returns a Call; .send() signs and submits it)
-receipt = vault.execute([action]).send()
+# 4. Execute on-chain (execute() returns a Call; .send(ctx) signs and submits it)
+receipt = vault.execute([action]).send(ctx)
 ```
 
 Fuse, factory and manager addresses per chain are published in
 [ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`).
-A fuse must also be registered on the vault; `vault.get_fuses().call()` lists the registered ones.
+A fuse must also be registered on the vault; `vault.get_fuses().call(ctx)` lists the registered ones.
 
 Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK never scales by decimals.
 
 ### Read, send, or simulate
 
-Every wrapper method returns a `Call` instead of executing. The same `Call` powers all three modes:
+Every wrapper method returns a `Call` instead of executing. Wrappers and `Call`s hold no
+`Web3Context`: the context is a required argument wherever something runs, and methods that
+must read the chain to answer are named `read_*` and take it first
+(`vault.read_balance_fuses(ctx)`). The same `Call` powers all three modes:
 
 ```python
 from ipor_fusion import VaultSimulator
 
-total = vault.total_assets().call()          # eth_call -> Amount
-receipt = vault.execute([action]).send()     # signed tx -> TxReceipt
+total = vault.total_assets().call(ctx)          # eth_call -> Amount
+receipt = vault.execute([action]).send(ctx)     # signed tx -> TxReceipt
 payload = vault.execute([action]).calldata   # raw bytes for an external signer
 
 # Simulate first via eth_simulateV1 (no local node); alpha is the account allowed to call execute()
@@ -264,7 +267,7 @@ Reverts on the deploy-and-configure path, keyed by selector so a failed transact
 | `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse | `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
 | `0x4bf4de4e` | `HandlerNotFound()` | A protocol called back into the vault during `execute()` (a flash loan) and no handler is registered for its address and selector | `update_callback_handler(handler, sender, selector)` before the first `execute` that triggers the callback |
 | `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`, `update_callback_handler`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, 0)` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
-| `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send()` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
+| `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send(ctx)` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
 
 `clone()` grants the owner only `Roles.OWNER_ROLE` (1). OWNER grants `Roles.ATOMIST_ROLE` (100), which administers `Roles.FUSE_MANAGER_ROLE` (300, configuration), `Roles.ALPHA_ROLE` (200, `execute`) and `Roles.WHITELIST_ROLE` (800, `deposit` on a private vault).
 
@@ -350,10 +353,10 @@ The SDK uses a **fuse adapter pattern**:
 - **Fuses** encode protocol-specific calls into `FuseAction` objects (pure calldata, no state)
 - **PlasmaVault** batches and executes `FuseAction` sequences on-chain via `execute()`; a batch is atomic
 - **Web3Context** manages provider connections, signing, and transaction dispatch
-- **Call** is the lazy result of every wrapper method: `.call()`, `.send()`, `.calldata`, or feed it to `VaultSimulator`
+- **Call** is the lazy result of every wrapper method: `.call(ctx)`, `.send(ctx)`, `.calldata`, or feed it to `VaultSimulator`
 
 ```
-Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  -->  .send() / simulate
+Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  -->  .send(ctx) / simulate
 ```
 
 ### Core modules (`ipor_fusion.core`)
@@ -361,7 +364,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Module | Purpose |
 |--------|---------|
 | `Web3Context` | Provider connection, signing, tx dispatch, gas estimation |
-| `Call` | Pre-encoded contract call; `.call()`, `.send()`, `.calldata`, `.build_transaction()` |
+| `Call` | Pre-encoded contract call; `.call(ctx)`, `.send(ctx)`, `.calldata`, `.build_transaction(ctx)` |
 | `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw, fuse and market configuration |
 | `VaultSimulator` | Batch `execute` + reads through `eth_simulateV1`, multi-block, no local node |
 | `FusionFactory` | Deploy a new vault (`clone`, `clone_supervised`) |

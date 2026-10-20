@@ -44,7 +44,7 @@ from ipor_fusion.fuses import AaveV3SupplyFuse
 
 # A Base RPC, or an anvil fork of Base: anvil --fork-url <BASE_RPC_URL> --chain-id 8453
 w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-OWNER_PRIVATE_KEY = os.environ["OWNER_PRIVATE_KEY"]  # .send() signs locally; .call() previews need no key
+OWNER_PRIVATE_KEY = os.environ["OWNER_PRIVATE_KEY"]  # .send(ctx) signs locally; .call(ctx) previews need no key
 owner = Account.from_key(OWNER_PRIVATE_KEY).address  # owns, configures and operates the vault
 ctx = Web3Context(w3, chain_id=8453, signer=owner, private_key=OWNER_PRIVATE_KEY)
 
@@ -54,9 +54,9 @@ SUPPLY_FUSE = "0x26fD6EF391E98C78CfCA27e00c3d15be4D941625"  # SupplyFuseAaveV3, 
 BALANCE_FUSE = "0xf53f3EaFfDf67539256365cA7299540A98b60BA9"  # BalanceFuseAaveV3, Base
 
 # 1. Deploy, then read the addresses actually created from the mined receipt.
-#    Do not use a prior .call() preview: another clone can consume those CREATE
+#    Do not use a prior .call(ctx) preview: another clone can consume those CREATE
 #    addresses before this transaction lands.
-factory = FusionFactory(ctx, FACTORY_PROXY)
+factory = FusionFactory(FACTORY_PROXY)
 clone = factory.clone(
     asset_name="My Vault",
     asset_symbol="MV",
@@ -70,13 +70,13 @@ vault_address = instance.plasma_vault
 access_manager_address = instance.access_manager
 
 # 2. Roles. The clone grants `owner` only OWNER_ROLE. ATOMIST first: it administers the rest.
-am = AccessManager(ctx, access_manager_address)
+am = AccessManager(access_manager_address)
 am.grant_role(Roles.ATOMIST_ROLE, owner, 0).send(ctx)
 am.grant_role(Roles.FUSE_MANAGER_ROLE, owner, 0).send(ctx)
 am.grant_role(Roles.ALPHA_ROLE, owner, 0).send(ctx)
 
 # 3. Market, in this order: fuses -> substrates -> balance fuse.
-vault = PlasmaVault(ctx, vault_address)
+vault = PlasmaVault(vault_address)
 vault.add_fuses([SUPPLY_FUSE]).send(ctx)
 usdc_substrate = bytes(12) + bytes.fromhex(USDC[2:])  # address right-aligned in bytes32
 vault.grant_market_substrates(IporFusionMarkets.AAVE_V3, [usdc_substrate]).send(ctx)
@@ -88,7 +88,7 @@ am.grant_role(Roles.WHITELIST_ROLE, owner, 0).send(ctx)  # (a) own bot: whitelis
 
 # 5. Fund and run the first strategy step. The depositor must already hold the USDC.
 amount = 1_000 * 10**6
-ERC20(ctx, USDC).approve(vault_address, amount).send(ctx)
+ERC20(USDC).approve(vault_address, amount).send(ctx)
 vault.deposit(amount, owner).send(ctx)
 vault.execute([AaveV3SupplyFuse(SUPPLY_FUSE).supply(asset=USDC, amount=amount)]).send(ctx)
 ```
@@ -100,7 +100,7 @@ Notes on the walk:
 - The balance fuse above is the `BalanceFuseAaveV3` entry of the registry
   for Base and is verified working on a fresh clone. Vaults already in
   production may register a different one for the same market; to match
-  them, read `PlasmaVault(ctx, address).get_balance_fuses()` on such a vault.
+  them, read `PlasmaVault(address).read_balance_fuses(ctx)` on such a vault.
 - Substrate layouts are market-specific. For Aave V3 the substrate is the
   asset address right-aligned in 32 bytes; other markets use typed layouts,
   decoded by `ipor_fusion.substrates` and documented in the fuse libraries
