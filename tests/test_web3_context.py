@@ -1,6 +1,9 @@
 # pyright: reportAttributeAccessIssue=false
 """Unit tests for Web3Context — mock Web3 calls, no network required."""
 
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -126,7 +129,7 @@ class TestFromUrl:
 
         def make_request(_provider, method, _params):
             methods.append(method)
-            result = "0x1" if method == "eth_chainId" else "0x" + "00" * 32
+            result = "0x1" + "00" * 32
             return {"jsonrpc": "2.0", "id": 1, "result": result}
 
         with patch.object(HTTPProvider, "make_request", make_request):
@@ -635,3 +638,42 @@ class TestPinnedContext:
         assert ctx.call.call_args.args == (ADDR, b"\x01")
         call.call(ctx, block=55)
         assert ctx.call.call_args.args == (ADDR, b"\x01", 55)
+
+
+class TestConcurrencyLimit:
+    def _peak(self, limit: int | None) -> int:
+        in_flight = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def make_request(provider, method, params):
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.02)
+            with lock:
+                in_flight -= 1
+            result = "0x1"
+            return {"jsonrpc": "2.0", "id": 1, "result": result}
+
+        with patch.object(HTTPProvider, "make_request", make_request):
+            ctx = Web3Context.from_url(
+                "http://localhost:8545", max_concurrent_requests=limit
+            )
+            with ThreadPoolExecutor(16) as pool:
+                list(pool.map(lambda _: ctx.web3.eth.block_number, range(32)))
+        return peak
+
+    def test_requests_in_flight_never_exceed_the_limit(self):
+        assert self._peak(3) <= 3
+
+    def test_none_leaves_requests_unbounded(self):
+        assert self._peak(None) > 3
+
+    def test_a_limit_below_one_is_rejected(self):
+        with (
+            patch.object(HTTPProvider, "make_request"),
+            pytest.raises(ValueError, match="at least 1"),
+        ):
+            Web3Context.from_url("http://localhost:8545", max_concurrent_requests=0)

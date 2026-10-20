@@ -394,7 +394,9 @@ byte, e.g. Ebisu ZAPPER/REGISTRY).
 role-accounts, oracle-mapping). `vault info` runs independent fetch pipelines
 (vault/asset, fees, WithdrawManager, markets, roles) concurrently on a
 `ThreadPoolExecutor`, each a short chain of `Multicall3` batches; keep new
-reads inside a batch rather than adding per-call round trips. Contract names,
+reads inside a batch rather than adding per-call round trips. A `from_url` context
+bounds requests in flight (`max_concurrent_requests`, default 8) whatever the pool
+nesting, so a new fan-out does not need its own limit. Contract names,
 token symbols and decimals and deployment blocks are cached per chain in
 `$XDG_CACHE_HOME/ipor-fusion/contract_cache.json` (`<chain>:<address>:<field>`
 keys); tests redirect it with `monkeypatch.setenv("XDG_CACHE_HOME", ...)` or
