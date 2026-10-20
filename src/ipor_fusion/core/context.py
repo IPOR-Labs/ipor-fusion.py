@@ -21,6 +21,7 @@ from web3.providers.rpc.utils import (
 from web3.types import (
     BlockIdentifier,
     LogReceipt,
+    MakeBatchRequestFn,
     MakeRequestFn,
     RPCEndpoint,
     RPCResponse,
@@ -192,7 +193,14 @@ class Web3Context:
         # and leaves every other block untouched.
         web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         if max_concurrent_requests is not None:
-            web3.middleware_onion.add(_in_flight_limit(max_concurrent_requests))
+            # Innermost (layer 0, injected last): a slot covers only the provider
+            # call, so a middleware that issues its own request (the gas price
+            # strategy reads a block) never waits on the slot it already holds.
+            web3.middleware_onion.inject(
+                _in_flight_limit(max_concurrent_requests),
+                name="in_flight_limit",
+                layer=0,
+            )
         chain_id = ChainId(web3.eth.chain_id)
 
         return cls(
@@ -411,7 +419,8 @@ class Web3Context:
 
 def _in_flight_limit(limit: int) -> type[Web3Middleware]:
     """A middleware class (web3 instantiates it per Web3) holding a semaphore
-    slot for the duration of each provider request."""
+    slot for the duration of each provider call; a JSON-RPC batch is one HTTP
+    request, so it takes one slot whatever its item count."""
     if limit < 1:
         raise ValueError(f"max_concurrent_requests must be at least 1, got {limit}")
     slots = threading.BoundedSemaphore(limit)
@@ -421,6 +430,17 @@ def _in_flight_limit(limit: int) -> type[Web3Middleware]:
             def limited(method: RPCEndpoint, params: Any) -> RPCResponse:
                 with slots:
                     return make_request(method, params)
+
+            return limited
+
+        def wrap_make_batch_request(
+            self, make_batch_request: MakeBatchRequestFn
+        ) -> MakeBatchRequestFn:
+            def limited(
+                requests_info: list[tuple[RPCEndpoint, Any]],
+            ) -> list[RPCResponse] | RPCResponse:
+                with slots:
+                    return make_batch_request(requests_info)
 
             return limited
 

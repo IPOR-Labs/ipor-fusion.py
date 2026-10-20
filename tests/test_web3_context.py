@@ -4,6 +4,7 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -670,6 +671,103 @@ class TestConcurrencyLimit:
 
     def test_none_leaves_requests_unbounded(self):
         assert self._peak(None) > 3
+
+    def test_a_nested_middleware_request_does_not_deadlock_at_limit_one(self):
+        """web3's gas price strategy reads a block while handling
+        eth_sendTransaction; that nested request must not wait on the slot the
+        outer one would hold."""
+        block = {
+            "number": "0x1",
+            "hash": "0x" + "11" * 32,
+            "parentHash": "0x" + "22" * 32,
+            "timestamp": "0x1",
+            "baseFeePerGas": "0x1",
+            "transactions": [],
+        }
+
+        def make_request(provider, method, params):
+            result: Any = {
+                "eth_chainId": "0x1",
+                "eth_getBlockByNumber": block,
+                "eth_sendTransaction": "0x" + "ab" * 32,
+            }.get(method, "0x1")
+            return {"jsonrpc": "2.0", "id": 1, "result": result}
+
+        with patch.object(HTTPProvider, "make_request", make_request):
+            ctx = Web3Context.from_url(
+                "http://localhost:8545", max_concurrent_requests=1
+            )
+            done = threading.Event()
+
+            def send():
+                ctx.web3.eth.send_transaction(
+                    {"from": ADDR, "to": ADDR, "gas": 21_000, "gasPrice": 1}
+                )
+                done.set()
+
+            worker = threading.Thread(target=send, daemon=True)
+            worker.start()
+            worker.join(timeout=2)
+        assert done.is_set()
+
+    def _batch_peak(self, limit: int) -> int:
+        in_flight = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def make_request(provider, method, params):
+            return {"jsonrpc": "2.0", "id": 1, "result": "0x1"}
+
+        def make_batch_request(provider, requests):
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.02)
+            with lock:
+                in_flight -= 1
+            return [
+                {"jsonrpc": "2.0", "id": i, "result": "0x1"}
+                for i, _ in enumerate(requests)
+            ]
+
+        with (
+            patch.object(HTTPProvider, "make_request", make_request),
+            patch.object(HTTPProvider, "make_batch_request", make_batch_request),
+        ):
+            ctx = Web3Context.from_url(
+                "http://localhost:8545", max_concurrent_requests=limit
+            )
+
+            def one_batch(_):
+                with ctx.web3.batch_requests() as batch:
+                    batch.add(ctx.web3.eth.get_block_number())
+                    return batch.execute()
+
+            with ThreadPoolExecutor(8) as pool:
+                list(pool.map(one_batch, range(16)))
+        return peak
+
+    def test_batches_take_one_slot_each_within_the_limit(self):
+        assert self._batch_peak(2) <= 2
+
+    def test_a_failed_request_releases_its_slot(self):
+        calls = 0
+
+        def make_request(provider, method, params):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise ConnectionError("dropped")
+            return {"jsonrpc": "2.0", "id": 1, "result": "0x1"}
+
+        with patch.object(HTTPProvider, "make_request", make_request):
+            ctx = Web3Context.from_url(
+                "http://localhost:8545", max_concurrent_requests=1
+            )
+            with pytest.raises(ConnectionError):
+                ctx.web3.eth.block_number  # noqa: B018
+            assert ctx.web3.eth.block_number == 1
 
     def test_a_limit_below_one_is_rejected(self):
         with (
