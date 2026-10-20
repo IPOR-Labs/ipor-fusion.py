@@ -231,12 +231,12 @@ class TestTool:
     def test_latest_passes_no_block(self):
         response, validate = self._run()
         assert validate.call_args.args[1:] == (VAULT,)
-        assert validate.call_args.kwargs == {"block": None}
+        assert validate.call_args.kwargs == {"block": None, "metadata": True}
         assert response.chain == "base"
 
     def test_a_block_is_passed_through(self):
         _, validate = self._run(block_number=52500581)
-        assert validate.call_args.kwargs == {"block": 52500581}
+        assert validate.call_args.kwargs == {"block": 52500581, "metadata": True}
 
     def test_an_unsupported_vault_version_reaches_the_caller(self):
         validate = MagicMock(

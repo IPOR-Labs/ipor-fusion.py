@@ -427,23 +427,23 @@ def _enumerate_assets(
 
 def build_oracle_mapping(
     ctx: Web3Context,
-    vault_address: PlasmaVaultAddress,
+    vault: PlasmaVaultAddress,
     effective_block: int,
     max_depth: int = 6,
 ) -> OracleMapping:
-    """Build the full oracle mapping for ``vault_address``.
+    """Build the full oracle mapping for ``vault``.
 
     ``ctx`` must already be pinned to ``effective_block`` (the caller sets
     ``ctx.default_block``); the block is echoed in the output. Raises
     `UnsupportedVaultVersionError` for a vault that exposes no price-oracle
     getter.
     """
-    vault = PlasmaVault(vault_address)
-    oracle_addr = vault.read_price_oracle_address(ctx)
-    asset_addr = vault.underlying_asset_address().call(ctx)
+    pv = PlasmaVault(vault)
+    oracle_addr = pv.read_price_oracle_address(ctx)
+    asset_addr = pv.underlying_asset_address().call(ctx)
 
     try:
-        vault_name = vault.name().call(ctx)
+        vault_name = pv.name().call(ctx)
     except Exception:
         vault_name = None
 
@@ -468,7 +468,7 @@ def build_oracle_mapping(
             )
 
     return OracleMapping(
-        vault=vault_address,
+        vault=vault,
         vault_name=vault_name,
         asset=OracleAsset(
             address=asset_addr,

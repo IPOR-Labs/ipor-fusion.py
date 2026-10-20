@@ -392,7 +392,7 @@ def _collect_lending_markets(
 
 def fetch_vault_lending_health(
     ctx: Web3Context,
-    vault_address: PlasmaVaultAddress,
+    vault: PlasmaVaultAddress,
     *,
     balance_fuse_market_ids: list[MarketId],
     market_substrates: dict[MarketId, list[bytes]],
@@ -402,7 +402,7 @@ def fetch_vault_lending_health(
 
     Args:
         ctx: Web3 context for on-chain calls.
-        vault_address: The Plasma Vault address.
+        vault: The Plasma Vault address.
         balance_fuse_market_ids: List of market IDs from balance fuses.
         market_substrates: Map of market_id -> list of raw substrate bytes.
             Morpho market ids and Aave V4 Spokes are read from it.
@@ -434,7 +434,7 @@ def fetch_vault_lending_health(
                         ctx,
                         morpho_reader,
                         morpho_mid,
-                        vault_address,
+                        vault,
                         ipor_mid,
                         name,
                     )
@@ -447,7 +447,7 @@ def fetch_vault_lending_health(
                     _compute_aave_market_health,
                     ctx,
                     AaveV3Reader(aave_pool),
-                    vault_address,
+                    vault,
                     ipor_mid,
                     name,
                 )
@@ -459,7 +459,7 @@ def fetch_vault_lending_health(
                     _compute_aave_v4_market_health,
                     ctx,
                     spoke,
-                    vault_address,
+                    vault,
                     ipor_mid,
                     name,
                 )

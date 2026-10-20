@@ -14,10 +14,11 @@ type-checked or not. In particular, `fetch_market` and
 (pyright, mypy, Pylance) also wraps literals and raw values as below. Values the SDK
 returns already carry their type and go back in unwrapped.
 
-All types are importable from `ipor_fusion` (and `ipor_fusion.types`), as are
-`USDC_TOKEN_INDEX` and `hip3_action_asset`; `ChecksumAddress` and `HexAddress` come
-from `eth_typing` and `BlockIdentifier` from `web3.types`. The wrappers label values;
-they do not validate byte widths or address spelling.
+The SDK's own types are importable from `ipor_fusion` (and `ipor_fusion.types`),
+as are `USDC_TOKEN_INDEX` and `hip3_action_asset`. Third-party types are not
+re-exported: `ChecksumAddress` and `HexAddress` come from `eth_typing`, and
+`BlockIdentifier`, `Timestamp` and `TxParams` from `web3.types`. The wrappers label
+values; they do not validate byte widths or address spelling.
 
 ## Building the types
 
@@ -68,12 +69,15 @@ chain is always the context's:
   the vault address (not a `PlasmaVault`) and no `chain_id`. It resolves one block
   (``block``, else a numeric `ctx.default_block`, else the latest) and runs every
   read, log scans included, on `ctx.at_block(block)`; `ctx` is not modified. The old
-  ``chain_id=0`` switch is ``lending=False``; ``metadata=False`` skips token symbols
-  and decimals. `VaultData` gains `vault`, `chain_id`, `market_balances`, `erc20`,
+  ``chain_id=0`` switch is ``lending=False``; ``metadata=False`` reads no token
+  symbol or decimals (the ERC20 holdings' symbols are then `"?"`), and with
+  ``metadata=True`` the holdings are named by the same cached, batched read as
+  `token_symbols`. `VaultData` gains `vault`, `chain_id`, `market_balances`, `erc20`,
   `token_symbols` and `token_decimals`; `WithdrawManagerData` gains
   `shares_to_release_assets` and `pending_request_assets`.
-- `validate_vault(ctx, vault, *, block=None)` fetches with ``metadata=False`` and
-  validates; it no longer takes ``resolve_symbol``. `validate_vault_state(state)` is
+- `validate_vault(ctx, vault, *, block=None, metadata=False)` fetches (by default
+  without token metadata) and validates; it no longer takes ``resolve_symbol``.
+  ``metadata=True`` names the ERC20 holdings in the result and its findings. `validate_vault_state(state)` is
   pure: a custom `VaultState` also provides `vault`, `chain_id`, `market_balances`,
   `erc20` and the queue's `shares_to_release_assets`. `read_erc20_holdings` is gone:
   the holdings are `VaultData.erc20`.
@@ -96,6 +100,10 @@ are `Fee`, `management_fee_last_update` a `Timestamp`, `unrealized_management_fe
 `Amount`; `WithdrawManagerData.withdraw_window` is a `Period`, its fees `Fee`,
 `shares_to_release` `Shares`, `last_release_funds_timestamp` a `Timestamp` and the
 converted amounts `Amount`. A custom `VaultState` annotates the same.
+`VaultValidation.block_timestamp` is a `Timestamp` and `asset_decimals` `Decimals`;
+`Erc20Holding.decimals` / `balance` are `Decimals | None` / `Amount | None` and
+`Erc20Holdings.value_in_asset` / `market_cached_value` `Amount`;
+`VaultData.token_decimals` values and `resolve_token_decimals` are `Decimals | None`.
 `PlasmaVault.total_supply()`, `balance_of()` and `get_total_supply_cap()` return
 `Shares` (vault shares), and `transfer` / `approve` / `transfer_from` /
 `set_total_supply_cap` take `Shares`; `ERC20` keeps `Amount`. The supply cap is
@@ -123,13 +131,15 @@ typed for `str` still fits). Market-keyed data is keyed by `MarketId`:
 and the `dependency_graph` helpers (`compute_update_reach`, `compute_update_groups`,
 `find_orphan_fuse_markets`, `find_markets_missing_erc20_dependency`).
 
-`VaultData.asset`, `price_oracle_addr`, `rewards_manager`, `withdraw_manager`,
+`VaultData.price_oracle_addr` is renamed `price_oracle`, like its sibling
+address fields (a custom `VaultState` renames it too).
+`VaultData.asset`, `price_oracle`, `rewards_manager`, `withdraw_manager`,
 `FeeData.fee_manager` / `ipor_dao_fee_recipient` and `VaultValidation.vault` /
 `asset` are `ChecksumAddress` (`VaultValidation.vault` a `PlasmaVaultAddress`);
 `VaultData.access_manager` is an `AccessManagerAddress`, `fuses` / `instant_fuses`
 and the `fuse_markets` keys are `FuseAddress`, `balance_fuses` is
 `list[BalanceFuse]`, and `token_prices_usd` is keyed by lowercase `HexAddress`. A
-custom `VaultState` implementation annotates `asset` and `price_oracle_addr` as
+custom `VaultState` implementation annotates `asset` and `price_oracle` as
 `ChecksumAddress`, `fuse_markets` keys as `FuseAddress`, and its
 `unpriceable_priced_tokens` items' `market_id` as `MarketId` (`UnpriceableToken`).
 The Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` are
@@ -163,6 +173,13 @@ Every fuse constructor, `FuseAction.fuse`, `BalanceFuse.fuse`,
 `get_access_manager_address()`, `VaultData.access_manager` and
 `FusionInstance.access_manager` return one. `resolve_access_manager` still takes any
 `ChecksumAddress`: it is what checks that the address is a vault.
+
+The vault parameter is named `vault` throughout: `validate_vault`,
+`fetch_deployment_info`, `fetch_vault_lending_health`, `build_oracle_mapping`,
+`read_external_state`, `ExternalStateExecutor.for_vault`, `read_hypercore_nav`,
+`read_hypercore_vault_state`, `read_hypercore_transfer_snapshot`,
+`read_hypercore_evm_exit_ceiling` and `resolve_access_manager` renamed
+``vault_address`` to ``vault``; only a call that passes it by keyword changes.
 
 **Simulation and factory records.** `VaultSimulator(web3, *, vault=None, alpha=None,
 block=...)` takes every argument after `web3` by keyword, and `vault` and `alpha` are

@@ -8,6 +8,7 @@ depends on the CLI's fetch types.
 from __future__ import annotations
 
 import dataclasses
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -30,11 +31,13 @@ from ipor_fusion import (
     Web3Context,
     validate_vault,
 )
+from ipor_fusion.cache import NullCache
 from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.validation import GET_MARKET_SUBSTRATES, Reconciliation
-from ipor_fusion.vault_erc20 import _Asset, _read_erc20_holdings
+from ipor_fusion.vault_data import _derived_reads, _MarketReads
+from ipor_fusion.vault_erc20 import _Asset, _erc20_holdings, _read_erc20_market
 
 
 def _addr(suffix: str) -> str:
@@ -87,7 +90,7 @@ class State:
     asset_price_usd: float | None = 1.0
     total_assets: int = 100 * WAD
     underlying_balance_on_vault: int = 0
-    price_oracle_addr: str = ORACLE
+    price_oracle: str = ORACLE
     balance_fuses: list[BalanceFuse] = field(
         default_factory=lambda: [BalanceFuse(AAVE, FUSE)]  # type: ignore[arg-type]
     )
@@ -332,10 +335,13 @@ class _Chain:
         self.balances = {ASSET: 5 * WAD, TOKEN: 3 * WAD, OTHER: WAD}
         self.prices = {ASSET: WAD, TOKEN: 2 * WAD}
         self.symbols = {TOKEN: "TKN"}
+        self.symbol_reads = 0
 
     def handle(self, to: str, data: bytes) -> bytes:  # noqa: C901, PLR0911
         to = Web3.to_checksum_address(to)
         selector, args = data[:4], data[4:]
+        if selector == _selector("symbol()"):
+            self.symbol_reads += 1
         if to == VAULT and selector == _selector("totalAssetsInMarket(uint256)"):
             (market,) = decode(["uint256"], args)
             return encode(["uint256"], [self.market_balances[market]])
@@ -365,6 +371,7 @@ class _Chain:
             return call(tx["to"], tx["data"])
 
         web3.eth.call.side_effect = eth_call
+        web3.eth.get_code.side_effect = AssertionError("no per-token code read")
         return web3
 
 
@@ -389,21 +396,24 @@ def _erc20_state(**overrides: Any) -> State:
 
 
 class TestReadErc20Holdings:
-    def _read(self, state: State, **kwargs: Any) -> Erc20Holdings:
+    def _read(
+        self, state: State, symbols: dict[str, str] | None = None
+    ) -> Erc20Holdings:
         chain = _Chain()
-        ctx = Web3Context(chain.web3(), ChainId(1))
-        return _read_erc20_holdings(
+        ctx = Web3Context(chain.web3(), ChainId(1), cache=NullCache())
+        market = _read_erc20_market(
             ctx,
             VAULT,  # type: ignore[arg-type]
             balance_fuses=state.balance_fuses,
             market_substrates=state.market_substrates or {},  # type: ignore[arg-type]
             market_balances=chain.market_balances,  # type: ignore[arg-type]
             oracle=price_oracle_middleware(ctx, ORACLE),  # type: ignore[arg-type]
-            asset=_Asset(ASSET, state.asset_decimals, state.asset_price_usd),  # type: ignore[arg-type]
-            resolve_symbol=kwargs.get(
-                "resolve_symbol",
-                lambda address: chain.symbols.get(_addr(address[-40:]), ""),
-            ),
+        )
+        assert chain.symbol_reads == 0
+        return _erc20_holdings(
+            _Asset(ASSET, state.asset_decimals, state.asset_price_usd),  # type: ignore[arg-type]
+            market,
+            {TOKEN.lower(): "TKN"} if symbols is None else symbols,  # type: ignore[dict-item]
         )
 
     def test_values_priced_tokens_in_the_underlying(self):
@@ -417,9 +427,13 @@ class TestReadErc20Holdings:
         assert erc20.market_cached_value == 2 * WAD
         assert erc20.unpriced_tokens == (f"{OTHER.lower()} (?)",)
 
-    def test_resolve_symbol_overrides_the_onchain_symbol(self):
-        erc20 = self._read(_erc20_state(), resolve_symbol=lambda a: a[-2:])
+    def test_symbols_name_the_holdings(self):
+        symbols = {a.lower(): a.lower()[-2:] for a in (ASSET, TOKEN, OTHER)}
+        erc20 = self._read(_erc20_state(), symbols)
         assert [t.symbol for t in erc20.tokens] == ["a1", "b1", "b2"]
+        assert self._read(_erc20_state(), {}).unpriced_tokens == (
+            f"{OTHER.lower()} (?)",
+        )
 
     def test_no_erc20_market(self):
         assert self._read(State()) == Erc20Holdings()
@@ -427,6 +441,62 @@ class TestReadErc20Holdings:
     def test_market_without_substrates_keeps_its_cached_value(self):
         erc20 = self._read(_erc20_state(market_substrates=None))
         assert erc20 == Erc20Holdings(market_cached_value=2 * WAD)
+
+
+class TestSnapshotTokenMetadata:
+    """`fetch_vault_data`'s ERC20 holdings and token metadata, from the
+    vault and market reads on."""
+
+    def _derive(self, *, metadata: bool) -> tuple[_Chain, dict[str, Any]]:
+        state = _erc20_state()
+        chain = _Chain()
+        ctx = Web3Context(chain.web3(), ChainId(1), cache=NullCache())
+        markets = _MarketReads(
+            balance_fuses=state.balance_fuses,
+            dependency_graph={},
+            market_substrates=state.market_substrates,  # type: ignore[arg-type]
+            aave_pools={},
+            market_balances=chain.market_balances,  # type: ignore[arg-type]
+        )
+        vault_reads = {
+            "asset": ASSET,
+            "asset_decimals": state.asset_decimals,
+            "asset_price_usd": state.asset_price_usd,
+        }
+        with ThreadPoolExecutor() as pool:
+            fields = _derived_reads(
+                ctx,
+                pool,
+                VAULT,  # type: ignore[arg-type]
+                vault_reads,
+                price_oracle_middleware(ctx, ORACLE),  # type: ignore[arg-type]
+                markets,
+                None,
+                metadata=metadata,
+            )
+        return chain, fields
+
+    def test_without_metadata_no_symbol_is_read(self):
+        chain, fields = self._derive(metadata=False)
+
+        assert chain.symbol_reads == 0
+        assert "token_symbols" not in fields
+        erc20 = fields["erc20"]
+        assert [t.symbol for t in erc20.tokens] == ["?", "?", "?"]
+        assert erc20.value_in_asset == 11 * WAD
+
+    def test_metadata_names_the_holdings_in_one_batch(self):
+        chain, fields = self._derive(metadata=True)
+
+        without, _ = self._derive(metadata=False)
+        assert chain.symbol_reads == 3
+        assert len(chain.blocks) == len(without.blocks) + 1
+        assert fields["token_symbols"] == {
+            ASSET.lower(): "",
+            TOKEN.lower(): "TKN",
+            OTHER.lower(): "",
+        }
+        assert [t.symbol for t in fields["erc20"].tokens] == ["?", "TKN", "?"]
 
 
 class TestValidateVault:
@@ -441,8 +511,10 @@ class TestValidateVault:
             "ipor_fusion.validation.fetch_vault_data", return_value=state
         ) as fetch:
             validation = validate_vault(ctx, VAULT, block=123)  # type: ignore[arg-type]
+            fetch.assert_called_once_with(ctx, VAULT, block=123, metadata=False)
+            validate_vault(ctx, VAULT, block=123, metadata=True)  # type: ignore[arg-type]
+            fetch.assert_called_with(ctx, VAULT, block=123, metadata=True)
 
-        fetch.assert_called_once_with(ctx, VAULT, block=123, metadata=False)
         assert validation.reconciliation.balance_fuses_total == 62 * WAD
         assert (validation.vault, validation.chain_id) == (VAULT, 1)
         assert (validation.block_number, validation.asset_symbol) == (123, "USDC")
