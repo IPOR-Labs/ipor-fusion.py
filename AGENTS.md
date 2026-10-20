@@ -141,11 +141,16 @@ the lifecycle matrix follows that.
   it is pinned exactly (`ipor-fusion==3.17.0.dev4`); pip also takes it when
   no stable release satisfies the specifier (`>=3.17` before 3.17.0). `fusion
   changelog` has no section for a dev version.
-- Release notes render only the commit subject; body prose is dropped. Two
-  footers survive: `BREAKING CHANGE: <what breaks, what to do instead>` is
-  required whenever the subject carries `!` (the `!` bumps the version but
-  renders nothing), and `NOTICE: <what the reader must do>` is for changes that
-  need action (a migration, a new env var or config key). Omit it otherwise.
+- Release notes (CHANGELOG.md and the GitHub release) render only commit
+  subjects. python-semantic-release's default template (10.5.3) shows the
+  `BREAKING CHANGE:` / `NOTICE:` footers of only the first commit per section,
+  so in practice they do not reach the notes. Still write them: a `!` subject
+  requires a `BREAKING CHANGE: <what breaks, what to do instead>` footer (the
+  `!` bumps the version), and `NOTICE: <what the reader must do>` marks changes
+  that need action (a migration, a new env var or config key); the release
+  author uses them to edit the GitHub release notes by hand after a release.
+  Anything a consumer must do also belongs in the migration guide or README,
+  which ship in the wheel.
 - No AI attribution trailers or "generated with" lines in commits or PRs.
 - Branch and open a PR; `main` only moves through PRs and the release workflow.
 - Dependencies: `>=x,<next-major` ranges in `pyproject.toml`, resolved by
