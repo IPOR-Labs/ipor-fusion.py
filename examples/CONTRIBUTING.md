@@ -63,11 +63,7 @@ role-separation note is about. Label the collapse itself, not the calls: sending
 as two separate calls *is* the production shape, and only "both keys in one process" is
 simulation-only.
 
-Cross-reference the SDK method a production caller would use instead, where one exists -- but only
-where the SDK method is the one to reach for. `ExternalStateExecutor.mark_nav` is the counter-example:
-it composes both custodian calls, its own docstring warns that this "does not preserve the
-dual-custodian separation", and it is expected to be deprecated in favour of the two primitives. Do
-not point readers at it.
+Cross-reference the SDK method a production caller would use instead, where one exists.
 
 ## 3. One self-contained file
 

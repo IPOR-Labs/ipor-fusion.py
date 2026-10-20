@@ -6,20 +6,19 @@ by the external-state market. Its address lives in the VAULT's ERC-7201 storage
 
 NAV for the external-state market is marked by a dual-custodian propose/confirm
 on this executor, then a `update_markets_balances([EXTERNAL_STATE])` refresh on
-the vault. `mark_nav` runs that whole sequence in one process; a separate
-confirm service instead reads `pending_proposals` and confirms the hash it
-returns, never guessing the executor's global nonce. The same proposal reaches
-an offline reader through the `BalanceProposed` event -- `find_balance_proposed`
-picks it out of a receipt's logs, `parse_balance_proposed` decodes one row from
-an index -- and `balances` and `last_updated` report what the custodians last
-confirmed for an account.
+the vault. The confirming custodian's service reads `pending_proposals` and
+confirms the hash it returns, never guessing the executor's global nonce. The
+same proposal reaches an offline reader through the `BalanceProposed` event --
+`find_balance_proposed` picks it out of a receipt's logs,
+`parse_balance_proposed` decodes one row from an index -- and `balances` and
+`last_updated` report what the custodians last confirmed for an account.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -27,24 +26,18 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import BlockIdentifier, TxReceipt
+from web3.types import BlockIdentifier
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.errors import ExternalStateError
-from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import (
     ZERO_ADDRESS,
     Amount,
     ChainId,
-    MarketId,
     PlasmaVaultAddress,
     ProposalHash,
 )
-
-if TYPE_CHECKING:
-    from ipor_fusion.core.plasma_vault import PlasmaVault
-
 
 # The log shapes the event readers below accept: a receipt log from web3.py
 # (HexBytes fields, checksummed address), and a raw JSON-RPC or
@@ -139,22 +132,6 @@ def _require_matching_hash(
             "with another proposal's hash, or it was computed for a different "
             "executor or chain id"
         )
-
-
-@dataclass(frozen=True, slots=True)
-class NavMark:
-    """Outcome of a `mark_nav` run: the confirmed proposal plus every receipt.
-
-    `refresh_receipt` is `None` when `mark_nav` was called without a `vault`
-    (propose + confirm only, no cached-NAV refresh).
-    """
-
-    proposed_at: int
-    nonce: int
-    proposal_hash: ProposalHash
-    propose_receipt: TxReceipt
-    confirm_receipt: TxReceipt
-    refresh_receipt: TxReceipt | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -516,7 +493,8 @@ class ExternalStateExecutor(ContractWrapper):
     ) -> Call[None]:
         """CUSTODIAN-only: propose `value` (underlying units) as the new tracked
         balance of `balance_account`. Confirm it from a *different* custodian
-        with `confirm_balance`; see `mark_nav` for the full sequence."""
+        with `confirm_balance`, then refresh the vault's cached NAV with
+        `PlasmaVault.update_markets_balances([EXTERNAL_STATE])`."""
         return self._write("proposeBalance(address,uint256)", balance_account, value)
 
     def confirm_balance(
@@ -779,102 +757,3 @@ class ExternalStateExecutor(ContractWrapper):
                 chain_id=chain_id,
             )
         return found
-
-    def mark_nav(
-        self,
-        *,
-        value: Amount,
-        balance_account: ChecksumAddress,
-        proposer_ctx: Web3Context,
-        confirmer_ctx: Web3Context,
-        vault: PlasmaVault | None = None,
-    ) -> NavMark:
-        """Mark the external-state NAV: propose `value` (custodian A), confirm it
-        (custodian B), and optionally refresh the vault's cached NAV.
-
-        `proposer_ctx` signs the propose; `confirmer_ctx` signs the confirm (and,
-        when `vault` is given, the `update_markets_balances([EXTERNAL_STATE])`
-        refresh). The two signers MUST be different custodians, and MUST be on
-        the same chain; both are checked before the propose is sent, since the
-        hash is chain-bound and a mismatch would otherwise only surface with a
-        proposal already stranded on the proposer's chain. The confirm hash,
-        nonce, and timestamp are taken from the propose tx's `BalanceProposed`
-        event -- exactly what the contract stored, so no read can race the
-        executor's global nonce. Returns a `NavMark` with the proposal and every
-        receipt.
-
-        The marked balance is valued into the vault's `totalAssets` via the
-        external-state market (50), so it moves the share price; the refresh is
-        what propagates the new value into the vault's cached NAV.
-
-        Sends up to three transactions and blocks on each; see `NavMark`. If the
-        propose receipt does not record the value and proposer this call sent,
-        or carries a hash that is not the hash of those fields, it raises rather
-        than confirming -- note the propose transaction has already landed at
-        that point, leaving a pending proposal behind.
-
-        Security: mark_nav composes `propose_balance` + `confirm_balance`, so it
-        needs both custodian keys in one process and does not preserve the
-        dual-custodian separation. When that separation is the point, run the two
-        primitives from separate services instead.
-        """
-        proposer = proposer_ctx.signer
-        confirmer = confirmer_ctx.signer
-        if proposer is None:
-            raise ValueError("proposer_ctx must have a signer")
-        if confirmer is None:
-            raise ValueError("confirmer_ctx must have a signer")
-        proposer_address = Web3.to_checksum_address(proposer)
-        if proposer_address == Web3.to_checksum_address(confirmer):
-            raise ValueError("proposer and confirmer must be different custodians")
-        if proposer_ctx.chain_id != confirmer_ctx.chain_id:
-            raise ValueError(
-                f"proposer_ctx is on chain {proposer_ctx.chain_id} but "
-                f"confirmer_ctx is on {confirmer_ctx.chain_id}; both custodians "
-                "must sign on the same chain"
-            )
-
-        propose_receipt = self.propose_balance(balance_account, value).send(
-            proposer_ctx
-        )
-        # Verified against the CONFIRMER's chain, which is the one the confirm
-        # will be checked on (validated equal to the proposer's above).
-        proposal = self._last_balance_proposed(
-            propose_receipt["logs"], balance_account, confirmer_ctx.chain_id
-        )
-        if proposal is None:
-            raise ExternalStateError(
-                "the propose receipt records "
-                + _no_balance_proposed(self._address, balance_account)
-            )
-        # The receipt is data from the node, so confirm only what we asked for:
-        # signing off on a proposal that differs from the one just sent would
-        # attest a value this call never chose.
-        if proposal.value != value:
-            raise ExternalStateError(
-                f"proposed {value} but the receipt records {proposal.value}; "
-                "refusing to confirm"
-            )
-        if proposal.proposer != proposer_address:
-            raise ExternalStateError(
-                f"proposal was made by {proposal.proposer}, not {proposer_address}; "
-                "refusing to confirm"
-            )
-        confirm_receipt = self.confirm_balance(
-            balance_account, proposal.proposal_hash
-        ).send(confirmer_ctx)
-
-        refresh_receipt: TxReceipt | None = None
-        if vault is not None:
-            refresh_receipt = vault.update_markets_balances(
-                [MarketId(IporFusionMarkets.EXTERNAL_STATE)]
-            ).send(confirmer_ctx)
-
-        return NavMark(
-            proposed_at=proposal.proposed_at,
-            nonce=proposal.nonce,
-            proposal_hash=proposal.proposal_hash,
-            propose_receipt=propose_receipt,
-            confirm_receipt=confirm_receipt,
-            refresh_receipt=refresh_receipt,
-        )
