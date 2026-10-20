@@ -69,9 +69,13 @@ alt="Release">
   </tr>
 </table>
 
-> **Upgrading from 3.x?** 4.0 types the public API's ids and addresses and changes
-> a few behaviors (Morpho market ids, nullable optional addresses); see
-> [MIGRATION_4.md](MIGRATION_4.md).
+> **Upgrading from 3.x?** 4.0 breaks 3.x SDK code at run time: wrappers are
+> built from an address alone and every execution takes the context
+> (`.call(ctx)`, `.send(ctx)`), chain-reading methods are `read_*(ctx, ...)`, the
+> vault read is one pinned snapshot, and several modules and names moved. A 3.x call
+> such as `PlasmaVault(ctx, address)` fails only when it runs, so a broad
+> `except Exception` can hide it. Follow the ordered checklist in
+> [MIGRATION_4.md, *Start here*](MIGRATION_4.md#start-here).
 
 ## Quickstart
 
@@ -84,7 +88,14 @@ pip install ipor-fusion
 ### Connect and execute
 
 ```python
-from ipor_fusion import Web3Context, PlasmaVault, AaveV3SupplyFuse
+from ipor_fusion import (
+    AaveV3SupplyFuse,
+    Amount,
+    PlasmaVault,
+    Web3Context,
+    parse_fuse_address,
+    parse_plasma_vault_address,
+)
 from web3 import Web3
 
 # 1. Create a Web3 context with your provider and private key
@@ -94,13 +105,13 @@ ctx = Web3Context.from_url(
 )
 
 # 2. Wrap the PlasmaVault contract (an address only; contexts are passed at execution)
-vault = PlasmaVault(Web3.to_checksum_address("0xVAULT_ADDRESS"))
+vault = PlasmaVault(parse_plasma_vault_address("0xVAULT_ADDRESS"))
 
 # 3. Build a fuse action (e.g. supply USDC to Aave V3)
-fuse = AaveV3SupplyFuse(Web3.to_checksum_address("0xFUSE_ADDRESS"))
+fuse = AaveV3SupplyFuse(parse_fuse_address("0xFUSE_ADDRESS"))
 action = fuse.supply(
     asset=Web3.to_checksum_address("0xUSDC_ADDRESS"),
-    amount=1_000_000,  # 1 USDC (6 decimals)
+    amount=Amount(1_000_000),  # 1 USDC (6 decimals)
 )
 
 # 4. Execute on-chain (execute() returns a Call; .send(ctx) signs and submits it)
@@ -266,7 +277,7 @@ Reverts on the deploy-and-configure path, keyed by selector so a failed transact
 | `0x8745fbfd` | `DaoFeePackagesArrayEmpty()` | `clone()` was sent to `IporFusionFactoryImpl` | Send it to `IporFusionFactoryProxy` for that chain |
 | `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse | `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
 | `0x4bf4de4e` | `HandlerNotFound()` | A protocol called back into the vault during `execute()` (a flash loan) and no handler is registered for its address and selector | `update_callback_handler(handler, sender, selector)` before the first `execute` that triggers the callback |
-| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`, `update_callback_handler`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, 0)` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
+| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`, `update_callback_handler`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, Period(0))` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
 | `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send(ctx)` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
 
 `clone()` grants the owner only `Roles.OWNER_ROLE` (1). OWNER grants `Roles.ATOMIST_ROLE` (100), which administers `Roles.FUSE_MANAGER_ROLE` (300, configuration), `Roles.ALPHA_ROLE` (200, `execute`) and `Roles.WHITELIST_ROLE` (800, `deposit` on a private vault).
@@ -347,6 +358,10 @@ release; adding one does not.
   and tools, not as Python modules.
 - **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`: crosschain,
   HyperCore) are exported like the rest but may change in a minor release.
+- **Third-party types** are not re-exported: import `ChecksumAddress` and
+  `HexAddress` from `eth_typing`, and `BlockIdentifier`, `Timestamp` and `TxParams`
+  from `web3.types`. The SDK's own types (`ChainId`, `Amount`, `PlasmaVaultAddress`,
+  ...) come from `ipor_fusion` or `ipor_fusion.types`.
 
 `tests/test_public_api.py` snapshots every `__all__` and the names each public
 module keeps by path, so a change to the surface is a deliberate, reviewed edit.

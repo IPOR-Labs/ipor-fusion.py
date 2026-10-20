@@ -15,7 +15,9 @@ from web3 import Web3
 from ipor_fusion.guide import QUICKSTART
 
 _ASSIGNMENT = re.compile(
-    r'^(?P<name>[A-Z][A-Z0-9_]*)\s*=\s*"(?P<address>0x[0-9a-fA-F]{40})"', re.MULTILINE
+    r"^(?P<name>[A-Z][A-Z0-9_]*)\s*=\s*(?:[\w.]+\()?"
+    r'"(?P<address>0x[0-9a-fA-F]{40})"',
+    re.MULTILINE,
 )
 
 GUIDE_ADDRESSES: dict[str, ChecksumAddress] = {
