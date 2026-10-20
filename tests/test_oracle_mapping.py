@@ -1453,7 +1453,7 @@ class TestBuildOracleMapping:
             ),
             patch.object(om, "OracleMappingReader", return_value=r),
         ):
-            out = om.build_oracle_mapping(object(), vault, 123)
+            out = om.build_oracle_mapping(object(), vault, effective_block=123)
 
         assert out.vault == vault
         assert out.vault_name == "Reservoir"
@@ -1489,7 +1489,7 @@ class TestBuildOracleMapping:
             patch.object(om, "OracleMappingReader", return_value=r),
             patch.object(om, "resolve_asset", side_effect=flaky),
         ):
-            out = om.build_oracle_mapping(object(), vault, 0)
+            out = om.build_oracle_mapping(object(), vault, effective_block=0)
 
         by_asset = {n.asset: n for n in out.configured_assets}
         assert by_asset[good].status == "resolved"  # other assets unaffected
@@ -1511,7 +1511,7 @@ class TestBuildOracleMapping:
             patch.object(om, "PlasmaVault", return_value=fake_vault),
             patch.object(om, "OracleMappingReader", return_value=r),
         ):
-            out = om.build_oracle_mapping(object(), vault, 7)
+            out = om.build_oracle_mapping(object(), vault, effective_block=7)
 
         # a failing name() must not abort the map — vault_name falls back to None
         assert out.vault_name is None

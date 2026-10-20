@@ -94,7 +94,7 @@ placeholder wrapper.
   `aggregate3(calls)` still returns the raw `Call`), `VaultSimulator`,
   `CrosschainSimulator` and `OracleMappingReader(ctx, oracle)`.
 - Resolvers that probe the chain stay eager and return context-free wrappers:
-  `price_oracle_middleware(ctx, oracle)`, `resolve_access_manager(ctx, vault)`,
+  `price_oracle_middleware(ctx, address)`, `resolve_access_manager(ctx, vault)`,
   `ExternalStateExecutor.for_vault(ctx, vault)`. A resolved oracle carries the ABI
   found on that chain and block; resolve again for another one.
 - Crosschain lanes own both contexts: `CcipLane` / `StargateLane` take `hub_ctx=` and
@@ -113,9 +113,9 @@ placeholder wrapper.
   do not see a CCIP recall or tell a parked command from a pending one. `CrosschainTransport.executor(address)`
   and `.dispatcher(address)` no longer take a context.
 - Chain-bound decoding takes the chain explicitly:
-  `ExternalStateExecutor.pending_proposals(account, *, chain_id)`,
+  `ExternalStateExecutor.pending_proposals(balance_account, *, chain_id)`,
   `parse_balance_proposed(log, *, chain_id)` and
-  `find_balance_proposed(logs, account=None, *, chain_id)` require it (3.x fell back
+  `find_balance_proposed(logs, balance_account=None, *, chain_id)` require it (3.x fell back
   to the wrapper's context). The decoder captures it, so `.call(ctx)`, `Multicall3`
   and `VaultSimulator.observe` stamp the same hash for the same bytes, whatever
   context executes them. Pass `ctx.chain_id` for the chain you read from.
@@ -134,7 +134,7 @@ placeholder wrapper.
 | `call.build_transaction(block=b)`, `call.estimate_gas(block=b)` | `call.build_transaction(ctx, block=b)`, `call.estimate_gas(ctx, block=b)` |
 | `call.ctx` | gone: keep the context yourself |
 | `Multicall3(ctx, address)` | `Multicall3(ctx, address=address)` |
-| `executor.pending_proposals(account)` | `executor.pending_proposals(account, chain_id=ctx.chain_id)` |
+| `executor.pending_proposals(balance_account)` | `executor.pending_proposals(balance_account, chain_id=ctx.chain_id)` |
 | `executor.parse_balance_proposed(log)` / `find_balance_proposed(logs)` | `...(log, chain_id=...)` / `...(logs, chain_id=...)` |
 | `CcipLane(executor=, dispatcher=, spoke_chain_id=, ...)` | `CcipLane(hub_ctx=, spoke_ctx=, executor=, dispatcher=, ...)` (same for `StargateLane`) |
 | `transport.executor(ctx, address)` / `transport.dispatcher(ctx, address)` | `transport.executor(address)` / `transport.dispatcher(address)` |
@@ -174,7 +174,8 @@ The vault read is one pinned snapshot, and the chain is always the context's:
 
 - `fetch_vault_data(ctx, vault, *, block=None, lending=True, metadata=True)` takes
   the vault address (not a `PlasmaVault`) and no `chain_id`. It resolves one block
-  (`block`, else a numeric `ctx.default_block`, else the latest) and runs every
+  (`block`, else `ctx.default_block`, with a `safe` / `finalized` tag or a block hash
+  resolved to its number, else the latest) and runs every
   read, log scans included, on `ctx.at_block(block)`; `ctx` is not modified. In 3.x
   `block_number` only selected the block reported in `VaultData`, and the reads ran
   wherever `ctx` pointed. The old `chain_id=0` switch is `lending=False`;
@@ -289,6 +290,8 @@ fails at run time:
   keyword.
 - `encode_oft_compose_msg(*, nonce=, src_eid=, amount_ld=, compose_msg=)` takes
   keyword arguments only.
+- `build_oracle_mapping(ctx, vault, *, effective_block, max_depth=6)` takes
+  `effective_block` and `max_depth` by keyword.
 - The vault parameter is named `vault` throughout: `validate_vault`,
   `fetch_deployment_info`, `fetch_vault_lending_health`, `build_oracle_mapping`,
   `read_external_state`, `ExternalStateExecutor.for_vault`, `read_hypercore_nav`,
@@ -434,8 +437,8 @@ are cached in a `ContractCache`, injected instead of always written to `~/.cache
   explicitly (default: the file cache); pass `cache=ctx.cache` to share the
   context's policy. The CLI's text and JSON output name contracts through the
   context's cache.
-- `build_vault_info_json(data)` without `resolve_name` names no contract (every
-  `contract` is `"?"`) instead of reading names from the on-disk cache; pass
+- `build_vault_info_json(data)` without `resolve_name` names no contract (fuse and
+  balance-fuse entries show `contract` as `"?"`, substrate entries omit it) instead of reading names from the on-disk cache; pass
   `resolve_name=partial(get_contract_name, chain_id, api_key=..., cache=ctx.cache)`
   for the CLI's document.
 - `ipor_fusion.cache` is a public module now and exports `ContractCache`,
@@ -536,13 +539,18 @@ converted amounts `Amount`. A custom `VaultState` annotates the same.
 `PlasmaVault.total_supply()`, `balance_of()` and `get_total_supply_cap()` return
 `Shares` (vault shares), and `transfer` / `approve` / `transfer_from` /
 `set_total_supply_cap` take `Shares`; `ERC20` keeps `Amount`.
+`Reconciliation` amounts (`balance_fuses_total`, `underlying_on_vault`,
+`erc20_direct_total`, `sum`, `on_chain_total_assets`, `delta`,
+`pending_withdrawals`, `implied_market_total`, `market_storage_divergence`) are
+`Amount`. `FusionInstance.asset_decimals` / `underlying_token_decimals` are
+`Decimals`. `VaultSimulator.current_time` is a `Timestamp`.
 
 **Vault data and helpers.** `ensure_supported_chain` takes `ChainId`.
 `fetch_unpriceable_priced_tokens` takes the oracle and underlying as
 `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,
 `get_contract_name` and `get_deployment_tx` take `HexAddress` (a checksum address
-fits), and the `resolve_name` / `resolve_symbol` callbacks receive one (a callback
-typed for `str` still fits). Market-keyed data is keyed by `MarketId`:
+fits), and the `resolve_name` callback receives one (a callback typed for `str`
+still fits). Market-keyed data is keyed by `MarketId`:
 `VaultData.market_substrates`, `dependency_graph`, `morpho_positions`,
 `aave_positions`, `market_balances`; the `VaultState` protocol,
 `fetch_vault_lending_health`, `fetch_unpriceable_priced_tokens` and the
@@ -566,8 +574,8 @@ The Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` 
 `MarketId`; `Erc20Holding.address` is `HexAddress`, and `SubstrateInfo.address` is
 `HexAddress | None`. `LegacyPriceOracleMiddleware` takes `base_currency_decimals:
 Decimals`, and `PriceOracleMiddleware.base_currency_decimals()` returns
-`Call[Decimals]`. `get_logs_adaptive(chain_id=)` and `LogSource.get_logs` take
-`ChainId`; `quote_ccip_native_fee(block=)` and
+`Call[Decimals]`. `get_logs_adaptive(chain_id=)` takes `ChainId | None` and
+`LogSource.get_logs` a `ChainId`; `quote_ccip_native_fee(block=)` and
 `OracleMappingReader.asset_source_events` take a `BlockIdentifier`.
 
 **Address roles.** `PlasmaVault(address)`,
@@ -602,7 +610,8 @@ by `ChainId` (`HYPEREVM_CHAIN_ID` is one) and `explorer.SUPPORTED_CHAINS` is a
 type-checks; `PUBLIC_ALLOCATOR_ADDRESSES` values are `ChecksumAddress`.
 
 **Markets, substrates and access.** Every `IporFusionMarkets` member is a `MarketId`.
-`decode_substrate`, `market_name`, `format_market_label` take `MarketId`.
+`market_name` and `format_market_label` take `MarketId`, `decode_substrate` a
+`MarketId | None`.
 `AccessManager.has_role`, `grant_role`, `revoke_role` and `read_accounts_with_role`
 take `RoleId | Roles`; `RoleAccount.role_id` is `RoleId`.
 
@@ -630,7 +639,12 @@ on CCIP, `active_return` → `OperationId`, `asset_id`, `tracked_position_set_ha
 `CcipObservation`, `OutboundMessage`, `CcipMessageSent`, `Any2EVMMessage`,
 `VerifierResult`, `Packet.guid`, `TaxiMessage`, `StargateChain`; and the helpers
 `fetch_verifier_result(message_id=)`, `lz_receive_calldata(guid=)` and
-`lz_compose_calldata(guid=)` take a `MessageId`. Decoded event values
+`lz_compose_calldata(guid=)` take a `MessageId`. Lane times are typed:
+`last_approved_observed_at()` returns a `Timestamp` and `staleness_max()` (with
+`STALENESS_MAX` / `BALANCE_STALENESS_MAX` on the executors) a `Period`, and so do
+the `LaneHubState` fields; `attestation(remote_timestamp=, expiry=)` and
+`BalanceObservation` take `Timestamp`, `needs_attestation(now=, margin=)` a
+`Timestamp` and a `Period`. Decoded event values
 (`ccip_events` → `CcipEvent.values`) stay a generic mapping: convert a value
 before passing it on.
 
@@ -657,20 +671,22 @@ HyperCore ids; `HyperCorePerpAssetInfo`, `HyperCorePerpMarket`, `HyperCoreSpotLe
 
 **External state.** `ExternalStateExecutor.proposal_hash` returns and `confirm_balance`
 takes a `ProposalHash`; `BalanceProposal.proposal_hash` is a `ProposalHash`;
-`ExternalStateEvent.transaction_hash` is a `TxHash`.
+`ExternalStateEvent.transaction_hash` is a `TxHash | None`.
 `ExternalStateVaultState.last_checked_custodian_timestamp`,
 `BalanceFuseSnapshot.last_custodian_update_timestamp`, `BalanceProposal.proposed_at`,
 `last_updated()` and `get_oldest_update_timestamp()` are web3's `Timestamp`, and
 `ExternalStateExecutor.proposal_hash(proposed_at=)` takes one.
 
-**Errors and explorer.** `TransactionError(tx_hash=)` takes a `TxHash`,
+**Errors and explorer.** `TransactionError(tx_hash=)` takes a `TxHash | None`,
 `LogScanError(address=)` a `ChecksumAddress`; `get_revert_reason` takes a `TxHash`;
 `get_deployment_tx` returns a `TxHash` (a malformed hash from Etherscan is reported
 as the error `malformed-tx-hash`).
 
 **MCP response models** (Python constructors only; the JSON schemas are unchanged
 except as listed under [Behavior changes](#behavior-changes)): `chain_id` fields are
-`ChainId`, `role_id` `RoleId`, `market_id` `MarketId`. Calling an MCP tool function
+`ChainId`, `role_id` `RoleId`, `market_id` `MarketId` (except
+`LendingMarketHealth.market_id`, which stays `str | int`: a Morpho market id is a
+string). Calling an MCP tool function
 directly from Python takes `ChainId`.
 
 ## Behavior changes

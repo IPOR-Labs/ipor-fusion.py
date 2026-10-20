@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
+from web3.types import Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.messages import CommandStatus
@@ -42,8 +43,8 @@ class BalanceObservation:
     settled_balance: Amount
     state_version: int
     remote_block: int
-    remote_timestamp: int
-    expiry: int
+    remote_timestamp: Timestamp
+    expiry: Timestamp
     tracked_position_set_hash: PositionSetHash
 
     def as_tuple(self) -> tuple:
@@ -160,9 +161,12 @@ class CrosschainExecutor(ContractWrapper):
     def chain_blocked(self, chain_id: ChainId) -> Call[bool]:
         return self._view("chainBlocked(uint256)", chain_id, output_types=["bool"])
 
-    def last_approved_observed_at(self, chain_id: ChainId) -> Call[int]:
+    def last_approved_observed_at(self, chain_id: ChainId) -> Call[Timestamp]:
         return self._view(
-            "lastApprovedObservedAt(uint256)", chain_id, output_types=["uint64"]
+            "lastApprovedObservedAt(uint256)",
+            chain_id,
+            output_types=["uint64"],
+            decoder=Timestamp,
         )
 
     def approve_balance(self, proposal_id: ProposalId) -> Call[None]:

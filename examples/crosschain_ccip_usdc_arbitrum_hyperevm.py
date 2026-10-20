@@ -66,6 +66,7 @@ import sys
 from typing import NamedTuple
 
 from web3 import Web3
+from web3.types import Timestamp
 
 from ipor_fusion import (
     ERC20,
@@ -431,7 +432,7 @@ def _attest(flow: _Flow, tag: str, observation_label: str, *, hub_idle: int = 0)
         observation,
         remote_block=flow.spoke.current_block_number,
         remote_timestamp=flow.spoke.current_time,
-        expiry=flow.hub.current_time + PROPOSAL_TTL,
+        expiry=Timestamp(flow.hub.current_time + PROPOSAL_TTL),
     )
     # SIMULATION ONLY: the proposer and the approver are two addresses with no
     # keys here, driven from one process. Live they are two separate signers,

@@ -398,7 +398,7 @@ def vault_oracle_mapping(
 
     resolve_access_manager(ctx, checksum)
 
-    mapping = build_oracle_mapping(ctx, checksum, effective_block)
+    mapping = build_oracle_mapping(ctx, checksum, effective_block=effective_block)
     return OracleMappingResponse.from_mapping(mapping)
 
 

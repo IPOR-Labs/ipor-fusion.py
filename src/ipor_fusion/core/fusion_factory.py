@@ -35,6 +35,7 @@ from web3.types import TxReceipt
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.types import (
     AccessManagerAddress,
+    Decimals,
     Period,
     PlasmaVaultAddress,
     parse_access_manager_address,
@@ -64,10 +65,10 @@ class FusionInstance:
     version: int
     asset_name: str
     asset_symbol: str
-    asset_decimals: int
+    asset_decimals: Decimals
     underlying_token: ChecksumAddress
     underlying_token_symbol: str
-    underlying_token_decimals: int
+    underlying_token_decimals: Decimals
     initial_owner: ChecksumAddress
     plasma_vault: PlasmaVaultAddress
     plasma_vault_base: ChecksumAddress
@@ -118,10 +119,10 @@ _INSTANCE_FIELDS: dict[str, Callable[[Any], Any]] = {
     "version": _integer,
     "asset_name": _text,
     "asset_symbol": _text,
-    "asset_decimals": _integer,
+    "asset_decimals": lambda value: Decimals(_integer(value)),
     "underlying_token": _address,
     "underlying_token_symbol": _text,
-    "underlying_token_decimals": _integer,
+    "underlying_token_decimals": lambda value: Decimals(_integer(value)),
     "initial_owner": _address,
     "plasma_vault": lambda value: parse_plasma_vault_address(_text(value)),
     "plasma_vault_base": _address,
@@ -185,10 +186,10 @@ def _fusion_instance_decoder(values: tuple) -> FusionInstance:
         version=version,
         asset_name=asset_name,
         asset_symbol=asset_symbol,
-        asset_decimals=asset_decimals,
+        asset_decimals=Decimals(asset_decimals),
         underlying_token=addr(underlying_token),
         underlying_token_symbol=underlying_token_symbol,
-        underlying_token_decimals=underlying_token_decimals,
+        underlying_token_decimals=Decimals(underlying_token_decimals),
         initial_owner=addr(initial_owner),
         plasma_vault=PlasmaVaultAddress(addr(plasma_vault)),
         plasma_vault_base=addr(plasma_vault_base),
@@ -347,10 +348,10 @@ class FusionFactory(ContractWrapper):
             version=int(values[1]),
             asset_name=values[2],
             asset_symbol=values[3],
-            asset_decimals=int(values[4]),
+            asset_decimals=Decimals(int(values[4])),
             underlying_token=Web3.to_checksum_address(values[5]),
             underlying_token_symbol=values[6],
-            underlying_token_decimals=int(values[7]),
+            underlying_token_decimals=Decimals(int(values[7])),
             initial_owner=Web3.to_checksum_address(values[8]),
             plasma_vault=PlasmaVaultAddress(Web3.to_checksum_address(values[9])),
             plasma_vault_base=Web3.to_checksum_address(values[10]),

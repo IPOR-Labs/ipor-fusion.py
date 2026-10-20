@@ -10,7 +10,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import BlockIdentifier, Nonce, RPCEndpoint
+from web3.types import BlockIdentifier, Nonce, RPCEndpoint, Timestamp
 from web3.utils.address import get_create_address
 
 from ipor_fusion.core.contract import Call, _encode_calldata
@@ -221,13 +221,13 @@ class VaultSimulator:
         return any(block.calls for block in self._blocks)
 
     @property
-    def current_time(self) -> int:
+    def current_time(self) -> Timestamp:
         """Timestamp of the latest sent block or an explicit pending time.
 
         A pending block without an explicit time will run 12 seconds later
         once it contains a call.
         """
-        return self._current_time()
+        return Timestamp(self._current_time())
 
     @property
     def current_block_number(self) -> int:

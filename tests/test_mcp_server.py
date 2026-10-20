@@ -570,7 +570,7 @@ class TestVaultOracleMapping:
         result = vault_oracle_mapping(vault_address=VAULT_ADDR)
 
         # latest resolved to a number, passed to the SDK, and pinned on the ctx
-        assert mock_build.call_args.args[2] == 777
+        assert mock_build.call_args.kwargs["effective_block"] == 777
         assert mock_build.call_args.args[0].default_block == 777
         assert ctx.default_block == "latest"
         assert result.block_number == 777
@@ -595,7 +595,7 @@ class TestVaultOracleMapping:
 
         vault_oracle_mapping(vault_address=VAULT_ADDR, block_number=500)
 
-        assert mock_build.call_args.args[2] == 500
+        assert mock_build.call_args.kwargs["effective_block"] == 500
         assert mock_build.call_args.args[0].default_block == 500
 
     @patch("ipor_fusion.mcp.server._build_ctx")

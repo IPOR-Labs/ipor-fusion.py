@@ -26,6 +26,7 @@ from ipor_fusion.types import (
     CommandId,
     MessageId,
     OperationId,
+    Period,
     PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
@@ -143,8 +144,10 @@ class CcipCrosschainExecutor(CrosschainExecutor):
     def decimal_conversion_rate(self) -> Call[int]:
         return self._view("DECIMAL_CONVERSION_RATE()", output_types=["uint256"])
 
-    def balance_staleness_max(self) -> Call[int]:
-        return self._view("BALANCE_STALENESS_MAX()", output_types=["uint256"])
+    def balance_staleness_max(self) -> Call[Period]:
+        return self._view(
+            "BALANCE_STALENESS_MAX()", output_types=["uint256"], decoder=Period
+        )
 
     def ccip_route(self, chain_id: ChainId) -> Call[CcipRouteConfig]:
         return self._view(

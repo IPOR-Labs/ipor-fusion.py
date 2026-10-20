@@ -165,29 +165,29 @@ class Reconciliation:
     only; ``erc20_direct_total`` is informational and never added to it.
     """
 
-    balance_fuses_total: int
+    balance_fuses_total: Amount
     balance_fuses_total_usd: float
-    underlying_on_vault: int
+    underlying_on_vault: Amount
     underlying_on_vault_usd: float
-    erc20_direct_total: int
+    erc20_direct_total: Amount
     erc20_direct_total_usd: float
-    sum: int
+    sum: Amount
     sum_usd: float
-    on_chain_total_assets: int
+    on_chain_total_assets: Amount
     on_chain_total_assets_usd: float | None
-    delta: int
+    delta: Amount
     delta_usd: float
     delta_percent: float
     # sharesToRelease of the WithdrawManager converted to assets.
-    pending_withdrawals: int
+    pending_withdrawals: Amount
     pending_withdrawals_usd: float
     # totalAssets minus idle underlying: the global market total the vault
     # stores, which per-market caches drift from after partial refreshes.
-    implied_market_total: int
+    implied_market_total: Amount
 
     @property
-    def market_storage_divergence(self) -> int:
-        return self.balance_fuses_total - self.implied_market_total
+    def market_storage_divergence(self) -> Amount:
+        return Amount(self.balance_fuses_total - self.implied_market_total)
 
 
 @dataclass(frozen=True)
@@ -288,10 +288,10 @@ def _reconcile(state: VaultState) -> Reconciliation:
     decimals = state.asset_decimals
     price = state.asset_price_usd
 
-    balance_fuses_total = 0
+    balance_fuses_total = Amount(0)
     balance_fuses_usd = 0.0
     for balance in market_balances.values():
-        balance_fuses_total += balance
+        balance_fuses_total = Amount(balance_fuses_total + balance)
         if price is not None:
             balance_fuses_usd += (balance / 10**decimals) * price
 
@@ -300,17 +300,17 @@ def _reconcile(state: VaultState) -> Reconciliation:
     if underlying > 0 and price:
         underlying_usd = (underlying / 10**decimals) * price
 
-    total = balance_fuses_total + underlying
+    total = Amount(balance_fuses_total + underlying)
     total_usd = balance_fuses_usd + underlying_usd
     on_chain = state.total_assets
-    delta = total - on_chain
+    delta = Amount(total - on_chain)
     delta_usd = abs(total_usd - (on_chain / 10**decimals * price)) if price else 0
     delta_percent = abs(delta / on_chain * 100) if on_chain else 0.0
 
     # totalAssets reads the global market total while balance fuses report
     # per-market caches; they diverge after withdrawals with sharesToRelease,
     # which refresh only the markets the instant-withdrawal fuses touch.
-    pending = 0
+    pending = Amount(0)
     pending_usd = 0.0
     queue = state.withdraw_manager_data
     if queue and queue.shares_to_release > 0:
@@ -336,7 +336,7 @@ def _reconcile(state: VaultState) -> Reconciliation:
         delta_percent=delta_percent,
         pending_withdrawals=pending,
         pending_withdrawals_usd=pending_usd,
-        implied_market_total=max(0, on_chain - underlying),
+        implied_market_total=Amount(max(0, on_chain - underlying)),
     )
 
 

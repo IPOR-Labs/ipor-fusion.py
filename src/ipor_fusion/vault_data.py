@@ -532,6 +532,16 @@ def _fetch_lending_reads(
     )
 
 
+def _pinned_default_block(ctx: Web3Context) -> int | None:
+    """The number ``ctx.default_block`` names, or None for the latest block."""
+    default = ctx.default_block
+    if isinstance(default, int):
+        return default
+    if default in ("latest", "pending"):
+        return None
+    return ctx.web3.eth.get_block(default)["number"]
+
+
 def fetch_vault_data(
     ctx: Web3Context,
     vault: PlasmaVaultAddress,
@@ -541,8 +551,8 @@ def fetch_vault_data(
     metadata: bool = True,
 ) -> VaultData:
     """Read the vault's state at one block: ``block``, else the context's
-    default block when that is a number, else the latest block, resolved once
-    up front. Every read, log scans included, runs on a copy of ``ctx`` pinned
+    default block (a ``safe`` / ``finalized`` tag or a block hash is resolved
+    to its number), else the latest block, resolved once up front. Every read, log scans included, runs on a copy of ``ctx`` pinned
     to that block (`Web3Context.at_block`); ``ctx`` itself is not modified.
     The chain is ``ctx.chain_id``.
 
@@ -561,8 +571,8 @@ def fetch_vault_data(
     # Fail fast with a client-mappable typed error instead of letting the
     # fetch die deep in the stack on chains the tooling is not validated on.
     ensure_supported_chain(ctx.chain_id)
-    if block is None and isinstance(ctx.default_block, int):
-        block = ctx.default_block
+    if block is None:
+        block = _pinned_default_block(ctx)
     resolved_block = ctx.web3.eth.block_number if block is None else block
     is_latest = block is None
     ctx = ctx.at_block(resolved_block)

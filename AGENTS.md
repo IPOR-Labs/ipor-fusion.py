@@ -441,7 +441,8 @@ are not validated.
 ## Domain rules (verified against the contracts)
 
 - `fetch_vault_data(ctx, vault, *, block=, lending=, metadata=)` is the snapshot:
-  it resolves one block (``block``, else a numeric `ctx.default_block`, else latest),
+  it resolves one block (``block``, else `ctx.default_block` with a tag or hash resolved to its
+  number, else latest),
   runs every read on `ctx.at_block(block)` (log scans end there too) and returns
   everything validation and the ``vault info`` document need, so neither reads the
   chain. The chain is `ctx.chain_id`; ``lending=False`` skips lending health, the

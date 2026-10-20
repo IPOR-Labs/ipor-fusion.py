@@ -34,6 +34,7 @@ from typing import Any, ClassVar, cast
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
+from web3.types import Timestamp
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
@@ -52,7 +53,14 @@ from ipor_fusion.crosschain.fuses.base import (
 )
 from ipor_fusion.crosschain.logs import log_address, log_bytes, log_topic0
 from ipor_fusion.crosschain.messages import Command, CrosschainTransportKind
-from ipor_fusion.types import Amount, ChainId, FuseAddress, PositionSetHash, ProposalId
+from ipor_fusion.types import (
+    Amount,
+    ChainId,
+    FuseAddress,
+    Period,
+    PositionSetHash,
+    ProposalId,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +81,7 @@ class LaneObservation:
 # set pinned to the number the tag resolves to once keeps the tag's meaning.
 # "pending" names no mined block and is left as is.
 _MOVING_BLOCK_TAGS = frozenset({"latest", "safe", "finalized"})
+_NO_MARGIN = Period(0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,8 +95,8 @@ class LaneHubState:
     idle_ledger: Amount
     dispatcher_ready: bool
     chain_blocked: bool
-    last_approved_observed_at: int
-    staleness_max: int
+    last_approved_observed_at: Timestamp
+    staleness_max: Period
     remote_state_version: int
     has_active_command: bool
     pending_transfer_count: int
@@ -233,7 +242,7 @@ class CrosschainLane(ABC):
     def chain_blocked(self) -> Call[bool]:
         return self.executor.chain_blocked(self.spoke_chain_id)
 
-    def last_approved_observed_at(self) -> Call[int]:
+    def last_approved_observed_at(self) -> Call[Timestamp]:
         """Remote timestamp of the approved observation NAV freshness is
         measured from; 0 before the first attestation."""
         return self.executor.last_approved_observed_at(self.spoke_chain_id)
@@ -279,8 +288,8 @@ class CrosschainLane(ABC):
         observation: LaneObservation,
         *,
         remote_block: int,
-        remote_timestamp: int,
-        expiry: int,
+        remote_timestamp: Timestamp,
+        expiry: Timestamp,
     ) -> BalanceObservation:
         """The proposal for ``observation``, read on the spoke at
         ``remote_block`` / ``remote_timestamp`` and valid on the hub until
@@ -297,7 +306,7 @@ class CrosschainLane(ABC):
             tracked_position_set_hash=observation.tracked_position_set_hash,
         )
 
-    def needs_attestation(self, *, now: int, margin: int = 0) -> bool:
+    def needs_attestation(self, *, now: Timestamp, margin: Period = _NO_MARGIN) -> bool:
         """Whether a keeper should propose now (up to seven reads on the hub):
         the settled bucket is non-zero, no transfer or command receipt is in
         flight, and the approved observation is missing or older than
@@ -362,7 +371,7 @@ class CrosschainLane(ABC):
         """Bind ``min_received`` into the transport's send parameters."""
 
     @abstractmethod
-    def staleness_max(self) -> Call[int]:
+    def staleness_max(self) -> Call[Period]:
         """Seconds an approved observation keeps the settled bucket in NAV
         (``STALENESS_MAX`` on Stargate, ``BALANCE_STALENESS_MAX`` on CCIP)."""
 

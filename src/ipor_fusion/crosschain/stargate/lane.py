@@ -25,7 +25,7 @@ from ipor_fusion.crosschain.stargate.contracts import (
     StargateCrosschainExecutor,
 )
 from ipor_fusion.crosschain.stargate.layerzero import OptionsBuilder
-from ipor_fusion.types import Amount
+from ipor_fusion.types import Amount, Period
 
 
 class StargateLane(CrosschainLane):
@@ -73,7 +73,7 @@ class StargateLane(CrosschainLane):
             fuses=fuses,
         )
 
-    def staleness_max(self) -> Call[int]:
+    def staleness_max(self) -> Call[Period]:
         return self.executor.staleness_max()
 
     def default_send(self, *, token: bool) -> StargateSendParams:
