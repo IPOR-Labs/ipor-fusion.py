@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import os
-from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -199,7 +198,7 @@ def _rich_vault() -> tuple[VaultData, _Chain]:
         asset=ASSET,
         asset_symbol="USDC",
         access_manager=ACCESS,
-        price_oracle_addr=ORACLE,
+        price_oracle=ORACLE,
         rewards_manager=None,
         withdraw_manager=WITHDRAW_MANAGER,
         asset_price_usd=1.0,
@@ -293,7 +292,7 @@ def _clean_vault() -> tuple[VaultData, _Chain]:
         asset=ASSET,
         asset_symbol="USDC",
         access_manager=ACCESS,
-        price_oracle_addr=ORACLE,
+        price_oracle=ORACLE,
         rewards_manager=None,
         withdraw_manager=None,
         asset_price_usd=None,
@@ -353,15 +352,24 @@ def _snapshot(
         bf.market_id: vault.total_assets_in_market(bf.market_id).call(ctx)
         for bf in data.balance_fuses
     }
-    data.erc20 = vault_erc20._read_erc20_holdings(
+    data.token_symbols, data.token_decimals = vault_data._token_metadata(
         ctx,
-        data.vault,
-        balance_fuses=data.balance_fuses,
-        market_substrates=data.market_substrates or {},
-        market_balances=data.market_balances,
-        oracle=price_oracle_middleware(ctx, data.price_oracle_addr),
-        asset=vault_erc20._Asset(data.asset, data.asset_decimals, data.asset_price_usd),
-        resolve_symbol=partial(vault_data.resolve_token_symbol, ctx),
+        SimpleNamespace(market_substrates=data.market_substrates or {}),  # type: ignore[arg-type]
+        SimpleNamespace(  # type: ignore[arg-type]
+            morpho_positions=data.morpho_positions, aave_positions=data.aave_positions
+        ),
+    )
+    data.erc20 = vault_erc20._erc20_holdings(
+        vault_erc20._Asset(data.asset, data.asset_decimals, data.asset_price_usd),
+        vault_erc20._read_erc20_market(
+            ctx,
+            data.vault,
+            balance_fuses=data.balance_fuses,
+            market_substrates=data.market_substrates or {},
+            market_balances=data.market_balances,
+            oracle=price_oracle_middleware(ctx, data.price_oracle),
+        ),
+        data.token_symbols,
     )
     if (wmd := data.withdraw_manager_data) is not None:
         wmd.shares_to_release_assets = vault.convert_to_assets(
@@ -371,13 +379,6 @@ def _snapshot(
             req.account: vault.convert_to_assets(req.shares).call(ctx)
             for req in wmd.pending_requests or []
         }
-    data.token_symbols, data.token_decimals = vault_data._token_metadata(
-        ctx,
-        SimpleNamespace(market_substrates=data.market_substrates or {}),  # type: ignore[arg-type]
-        SimpleNamespace(  # type: ignore[arg-type]
-            morpho_positions=data.morpho_positions, aave_positions=data.aave_positions
-        ),
-    )
     return ctx, data
 
 

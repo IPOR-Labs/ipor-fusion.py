@@ -193,7 +193,7 @@ class TestVaultReads:
         reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
 
         assert reads["supply_cap"] == UINT256_MAX
-        assert reads["price_oracle_addr"] == LEGACY_ORACLE
+        assert reads["price_oracle"] == LEGACY_ORACLE
         assert reads["unimplemented_getters"] == [
             GET_TOTAL_SUPPLY_CAP,
             GET_PRICE_ORACLE_MIDDLEWARE,
@@ -207,7 +207,7 @@ class TestVaultReads:
         reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
 
         assert reads["supply_cap"] == 10**12
-        assert reads["price_oracle_addr"] == ORACLE
+        assert reads["price_oracle"] == ORACLE
         assert reads["unimplemented_getters"] == []
         assert reads["asset_price_usd"] == 1.0
 
@@ -247,7 +247,7 @@ def _vault_data(unimplemented: list[str]) -> VaultData:
         asset=ASSET,
         asset_symbol="USDC",
         access_manager=ACCESS_MANAGER,
-        price_oracle_addr=LEGACY_ORACLE,
+        price_oracle=LEGACY_ORACLE,
         rewards_manager=None,
         withdraw_manager=None,
         asset_price_usd=None,

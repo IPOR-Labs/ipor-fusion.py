@@ -575,7 +575,7 @@ def _perp_leg(
 
 def read_hypercore_nav(
     ctx: Web3Context,
-    vault_address: PlasmaVaultAddress,
+    vault: PlasmaVaultAddress,
     market_id: MarketId = HYPERCORE_MARKET,
 ) -> HyperCoreNav:
     """Reproduce ``HyperCoreValuationLib.liveValueWad(market_id)`` for the
@@ -589,17 +589,17 @@ def read_hypercore_nav(
     library reverts on (no price, overflow, a failed precompile) raise
     :class:`~ipor_fusion.errors.HyperCoreValuationError`.
     """
-    vault = PlasmaVault(vault_address)
+    pv = PlasmaVault(vault)
     reader = HyperCoreReader()
     multicall = Multicall3(ctx)
     substrates, oracle_address, exists, native = multicall.aggregate(
         cast(
             list[Call[Any]],
             [
-                vault.get_market_substrates(market_id),
-                vault.get_price_oracle_middleware_address(),
-                reader.core_user_exists(vault_address),
-                reader.account_margin_summary(NATIVE_PERP_DEX, vault_address),
+                pv.get_market_substrates(market_id),
+                pv.get_price_oracle_middleware_address(),
+                reader.core_user_exists(vault),
+                reader.account_margin_summary(NATIVE_PERP_DEX, vault),
             ],
         )
     )
@@ -611,11 +611,11 @@ def read_hypercore_nav(
     calls: list[Call[Any]] = []
     for index, evm_asset in tokens:
         calls += [
-            reader.spot_balance(vault_address, index),
+            reader.spot_balance(vault, index),
             reader.token_info(index),
             oracle.get_asset_price(evm_asset),
         ]
-    calls += [reader.account_margin_summary(dex, vault_address) for dex in dexes]
+    calls += [reader.account_margin_summary(dex, vault) for dex in dexes]
     results = multicall.try_aggregate(calls)
     spot = tuple(
         _spot_leg(index, evm_asset, *results[3 * i : 3 * i + 3])
@@ -685,7 +685,7 @@ def _granted_perp_markets(
 
 def read_hypercore_vault_state(
     ctx: Web3Context,
-    vault_address: PlasmaVaultAddress,
+    vault: PlasmaVaultAddress,
     balance_fuse: FuseAddress,
     market_id: MarketId = HYPERCORE_MARKET,
     *,
@@ -695,14 +695,14 @@ def read_hypercore_vault_state(
     the vault's context, the pending state (when a reader is known for the
     chain or given) and the granted perp markets with their coin names, all
     at ``ctx.default_block``."""
-    nav = read_hypercore_nav(ctx, vault_address, market_id)
-    vault = PlasmaVault(vault_address)
+    nav = read_hypercore_nav(ctx, vault, market_id)
+    pv = PlasmaVault(vault)
     reader = HyperCoreReader()
     pending_reader = pending_reader or HYPERCORE_PENDING_READERS.get(ctx.chain_id)
-    granted = _granted_perp_markets(vault.get_market_substrates(market_id).call(ctx))
-    calls: list[Call[Any]] = [vault.balance_fuse_value(balance_fuse)]
+    granted = _granted_perp_markets(pv.get_market_substrates(market_id).call(ctx))
+    calls: list[Call[Any]] = [pv.balance_fuse_value(balance_fuse)]
     if pending_reader is not None:
-        calls.append(HyperCorePendingReader(vault, pending_reader).pending_state())
+        calls.append(HyperCorePendingReader(pv, pending_reader).pending_state())
     calls += [reader.perp_asset_info(read_index_of(asset)) for asset, _, _ in granted]
     results = Multicall3(ctx).try_aggregate(calls)
     fuse_value = results[0]

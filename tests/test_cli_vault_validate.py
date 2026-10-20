@@ -48,7 +48,7 @@ def _data() -> VaultData:
         asset=ASSET,
         asset_symbol="USDC",
         access_manager=ASSET,
-        price_oracle_addr=ASSET,
+        price_oracle=ASSET,
         rewards_manager=None,
         withdraw_manager=None,
         asset_price_usd=1.0,
@@ -104,7 +104,7 @@ def test_warning_verdict_exits_zero():
     assert "Criticals" not in result.output
     args, kwargs = validate_vault.call_args
     assert args[1:] == (VAULT,)
-    assert kwargs == {"block": 123}
+    assert kwargs == {"block": 123, "metadata": True}
 
 
 def test_ok_verdict_prints_the_block():

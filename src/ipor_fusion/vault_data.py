@@ -66,7 +66,12 @@ from ipor_fusion.types import (
     Shares,
     parse_hex_address,
 )
-from ipor_fusion.vault_erc20 import Erc20Holdings, _Asset, _read_erc20_holdings
+from ipor_fusion.vault_erc20 import (
+    Erc20Holdings,
+    _Asset,
+    _erc20_holdings,
+    _read_erc20_market,
+)
 from ipor_fusion.vault_managers import (
     FeeData as FeeData,
 )
@@ -127,7 +132,7 @@ class VaultData:
     asset: ChecksumAddress
     asset_symbol: str
     access_manager: AccessManagerAddress
-    price_oracle_addr: ChecksumAddress
+    price_oracle: ChecksumAddress
     rewards_manager: ChecksumAddress | None
     withdraw_manager: ChecksumAddress | None
     asset_price_usd: float | None
@@ -194,11 +199,11 @@ class VaultData:
     erc20: Erc20Holdings = field(default_factory=Erc20Holdings)
     # Symbols (lowercase address keys) of the substrate and breakdown tokens,
     # and decimals of the breakdown tokens; empty when fetched with
-    # metadata=False. "" / None: not a token, or unreadable. Token metadata
-    # is cached per chain and address (ctx.cache), so a cached value may
-    # postdate the block.
+    # metadata=False (the ERC20 holdings' symbols are then "?"). "" / None:
+    # not a token, or unreadable. Token metadata is cached per chain and
+    # address (ctx.cache), so a cached value may postdate the block.
     token_symbols: dict[HexAddress, str] = field(default_factory=dict)
-    token_decimals: dict[HexAddress, int | None] = field(default_factory=dict)
+    token_decimals: dict[HexAddress, Decimals | None] = field(default_factory=dict)
 
 
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
@@ -267,13 +272,13 @@ def _cached_int(cached: dict[CacheKey, str], key: CacheKey) -> int | None:
         return None
 
 
-def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
+def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> Decimals | None:
     """ERC-20 decimals on ``ctx``'s chain, cached in ``ctx.cache``; ``None``
     (not cached) when ``address`` has no code at the context's block or does
     not answer."""
     key = cache_key(ctx.chain_id, address, "decimals")
     if (cached := _cached_int(cache_get(ctx.cache, [key]), key)) is not None:
-        return cached
+        return Decimals(cached)
 
     checksum = Web3.to_checksum_address(address)
     code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
@@ -368,12 +373,12 @@ def _fetch_vault_reads(
     if supply_cap is None:
         unimplemented.append(GET_TOTAL_SUPPLY_CAP)
         supply_cap = _UNCAPPED
-    price_oracle_addr = _resolve_price_oracle(
+    price_oracle = _resolve_price_oracle(
         ctx, pv, middleware_oracle, legacy_oracle, unimplemented
     )
 
     asset_erc20 = ERC20(asset)
-    oracle = price_oracle_middleware(ctx, price_oracle_addr)
+    oracle = price_oracle_middleware(ctx, price_oracle)
     (asset_decimals, underlying_balance), (symbol, price, *fuse_market_ids) = (
         _read_batch(
             ctx,
@@ -402,7 +407,7 @@ def _fetch_vault_reads(
         "supply_cap": supply_cap,
         "asset": asset,
         "access_manager": access_manager,
-        "price_oracle_addr": price_oracle_addr,
+        "price_oracle": price_oracle,
         "fuses": fuses,
         "instant_fuses": instant_fuses,
         "vault_name": vault_name or "",
@@ -544,7 +549,8 @@ def fetch_vault_data(
     ``lending=False`` skips lending health, the Morpho / Aave position
     breakdowns, their token prices and the unpriceable-token check.
     ``metadata=False`` skips the token symbols and decimals the ``vault info``
-    document shows (validation does not need them).
+    document shows (validation does not need them) and reads no symbol at all:
+    the ERC20 holdings are then named ``"?"``.
 
     Raises `UnsupportedChainError` on a chain the tooling is not validated on
     and `UnsupportedVaultVersionError` when the vault predates a getter the
@@ -629,21 +635,16 @@ def _derived_reads(
 ) -> dict[str, Any]:
     """The `VaultData` fields read on top of the vault and market reads: the
     ERC20 holdings, and (with ``lending``) the breakdown token prices and the
-    unpriceable-token check, and (with ``metadata``) the token metadata."""
+    unpriceable-token check, and (with ``metadata``) the token metadata, which
+    also names the ERC20 holdings."""
     f_erc20 = pool.submit(
-        _read_erc20_holdings,
+        _read_erc20_market,
         ctx,
         vault,
         balance_fuses=markets.balance_fuses,
         market_substrates=markets.market_substrates,
         market_balances=markets.market_balances,
         oracle=oracle,
-        asset=_Asset(
-            address=vault_reads["asset"],
-            decimals=vault_reads["asset_decimals"],
-            price_usd=vault_reads["asset_price_usd"],
-        ),
-        resolve_symbol=partial(resolve_token_symbol, ctx),
     )
     fields: dict[str, Any] = {}
     if lending is not None:
@@ -658,7 +659,7 @@ def _derived_reads(
             partial(
                 fetch_unpriceable_priced_tokens,
                 ctx,
-                vault_reads["price_oracle_addr"],
+                vault_reads["price_oracle"],
                 vault_reads["asset"],
                 markets.balance_fuses,
                 markets.market_substrates,
@@ -669,13 +670,21 @@ def _derived_reads(
         fields["token_symbols"], fields["token_decimals"] = _token_metadata(
             ctx, markets, lending or _LendingReads()
         )
-    fields["erc20"] = f_erc20.result()
+    fields["erc20"] = _erc20_holdings(
+        _Asset(
+            address=vault_reads["asset"],
+            decimals=vault_reads["asset_decimals"],
+            price_usd=vault_reads["asset_price_usd"],
+        ),
+        f_erc20.result(),
+        fields.get("token_symbols", {}),
+    )
     return fields
 
 
 def _token_metadata(
     ctx: Web3Context, markets: _MarketReads, lending: _LendingReads
-) -> tuple[dict[HexAddress, str], dict[HexAddress, int | None]]:
+) -> tuple[dict[HexAddress, str], dict[HexAddress, Decimals | None]]:
     """Symbols of every substrate and breakdown token, decimals of the
     breakdown tokens (the amounts the document formats), keyed lowercase.
 
@@ -703,8 +712,8 @@ def _token_metadata(
     symbols: dict[HexAddress, str] = {
         a: cached[k] for a, k in symbol_keys.items() if cached.get(k)
     }
-    decimals: dict[HexAddress, int | None] = {
-        a: value
+    decimals: dict[HexAddress, Decimals | None] = {
+        a: Decimals(value)
         for a, k in decimals_keys.items()
         if (value := _cached_int(cached, k)) is not None
     }
@@ -763,7 +772,7 @@ def _fetch_hypercore_state(
 
 def fetch_deployment_info(
     ctx: Web3Context,
-    vault_address: PlasmaVaultAddress,
+    vault: PlasmaVaultAddress,
     *,
     api_key: str | None = None,
 ) -> tuple[int | None, Timestamp | None, str | None]:
@@ -778,15 +787,15 @@ def fetch_deployment_info(
     that cannot be read or written is skipped.
     """
     chain_id = ctx.chain_id
-    block_key = cache_key(chain_id, vault_address, "deployment_block")
-    time_key = cache_key(chain_id, vault_address, "deployment_timestamp")
+    block_key = cache_key(chain_id, vault, "deployment_block")
+    time_key = cache_key(chain_id, vault, "deployment_timestamp")
     cached = cache_get(ctx.cache, [block_key, time_key])
     block = _cached_int(cached, block_key)
     stamp = _cached_int(cached, time_key)
     if block is not None and stamp is not None:
         return block, Timestamp(stamp), None
 
-    tx_hash, error = get_deployment_tx(chain_id, vault_address, api_key)
+    tx_hash, error = get_deployment_tx(chain_id, vault, api_key)
     if not tx_hash:
         return None, None, error
 
