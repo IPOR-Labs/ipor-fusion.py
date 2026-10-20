@@ -275,7 +275,9 @@ class TestReporting:
         assert not [w for w in health.warnings if "vault predates" in w]
 
     def test_substrates_section_says_unavailable(self, capsys):
-        addrs = _print_market_substrates(_vault_data([GET_MARKET_SUBSTRATES]), None)
+        addrs = _print_market_substrates(
+            _vault_data([GET_MARKET_SUBSTRATES]), lambda _address: ""
+        )
 
         assert addrs == set()
         assert f"unavailable: the vault predates {GET_MARKET_SUBSTRATES}" in (

@@ -703,6 +703,10 @@ class TestResolveTokenSymbol:
 ADDR_1 = "0x1111111111111111111111111111111111111111"
 
 
+def _no_name(_address: str) -> str:
+    return ""
+
+
 def _snapshot(**fields: Any) -> Any:
     """The `VaultData` fields the market printers read, overridable."""
     defaults: dict[str, Any] = {
@@ -1049,16 +1053,13 @@ class TestPrintSubstrates:
 
     def test_no_substrates(self, capsys):
         _print_substrates(
-            _snapshot(balance_fuses=[FakeBalanceFuse(market_id=1, fuse=ADDR_1)]), None
+            _snapshot(balance_fuses=[FakeBalanceFuse(market_id=1, fuse=ADDR_1)]),
+            _no_name,
         )
         captured = capsys.readouterr()
         assert "(none)" in captured.out
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name",
-        return_value="TestContract",
-    )
-    def test_with_substrates(self, mock_get_name, capsys):
+    def test_with_substrates(self, capsys):
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
         _print_substrates(
             _snapshot(
@@ -1066,7 +1067,7 @@ class TestPrintSubstrates:
                 balance_fuses=[FakeBalanceFuse(market_id=7, fuse=ADDR_1)],
                 token_symbols={"0x" + "ab" * 20: "WETH"},
             ),
-            "key",
+            lambda _address: "TestContract",
         )
         captured = capsys.readouterr()
         assert "WETH" in captured.out
@@ -1079,7 +1080,7 @@ class TestPrintSubstrates:
                 market_substrates={14: [raw_bytes32]},
                 balance_fuses=[FakeBalanceFuse(market_id=14, fuse=ADDR_1)],
             ),
-            None,
+            _no_name,
         )
         captured = capsys.readouterr()
         assert "morpho_market_id" in captured.out
@@ -1092,7 +1093,7 @@ class TestPrintSubstrates:
                 market_substrates={7: [bad_bytes]},
                 balance_fuses=[FakeBalanceFuse(market_id=7, fuse=ADDR_1)],
             ),
-            None,
+            _no_name,
         )
         captured = capsys.readouterr()
         assert "[encoding error]" in captured.out
@@ -1106,41 +1107,37 @@ class TestPrintSubstrates:
                 market_substrates={54: [malformed_executor]},
                 balance_fuses=[FakeBalanceFuse(market_id=54, fuse=ADDR_1)],
             ),
-            None,
+            _no_name,
         )
         captured = capsys.readouterr()
         assert "[encoding error: EXECUTOR, chain_id=8453]" in captured.out
 
 
 class TestPrintBalanceFusesTable:
-    @patch("ipor_fusion.cli.vault_markets_view.get_contract_name")
-    def test_splits_venues_and_zero_balance(self, mock_get_name, capsys):
-        mock_get_name.side_effect = lambda chain, addr, key: (
-            "ZeroBalanceFuse" if addr == ADDR_2 else "MorphoBalanceFuse"
-        )
+    def test_splits_venues_and_zero_balance(self, capsys):
+        def resolve_name(addr):
+            return "ZeroBalanceFuse" if addr == ADDR_2 else "MorphoBalanceFuse"
+
         fuses = [
             FakeBalanceFuse(market_id=14, fuse=ADDR_1),
             FakeBalanceFuse(market_id=12, fuse=ADDR_2),
         ]
 
         _print_balance_fuses_table(
-            _snapshot(balance_fuses=fuses, market_balances={14: 0, 12: 0}), None
+            _snapshot(balance_fuses=fuses, market_balances={14: 0, 12: 0}),
+            resolve_name,
         )
         out = capsys.readouterr().out
         assert "Balance Fuses (1):" in out
         assert "Zero-Balance Fuses (1):" in out
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name",
-        return_value="MorphoBalanceFuse",
-    )
-    def test_no_zero_balance_section_when_all_venues(self, mock_get_name, capsys):
+    def test_no_zero_balance_section_when_all_venues(self, capsys):
         _print_balance_fuses_table(
             _snapshot(
                 balance_fuses=[FakeBalanceFuse(market_id=14, fuse=ADDR_1)],
                 market_balances={14: 0},
             ),
-            None,
+            lambda _address: "MorphoBalanceFuse",
         )
         out = capsys.readouterr().out
         assert "Balance Fuses (1):" in out
@@ -2081,19 +2078,14 @@ class TestPrintFuseSection:
     Fuses. Dedupes by address, reports a Registrations column, and surfaces
     duplicate registrations in the section header."""
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name",
-        return_value="MorphoSupplyFuse",
-    )
-    def test_renders_market_label_and_substrate_count(self, _mock_name, capsys):
+    def test_renders_market_label_and_substrate_count(self, capsys):
         addr = ADDR_1
         _print_fuse_section(
             "Fuses",
             [addr],
             fuse_markets={addr: IporFusionMarkets.MORPHO},
             market_substrates={IporFusionMarkets.MORPHO: [b"\x11" * 32, b"\x22" * 32]},
-            chain_id=1,
-            api_key=None,
+            resolve_name=lambda _address: "MorphoSupplyFuse",
         )
         captured = capsys.readouterr()
         assert "Fuses (1 unique)" in captured.out
@@ -2103,52 +2095,37 @@ class TestPrintFuseSection:
         # Substrate count comes from market_substrates, not from registrations
         assert "  2  " in captured.out or "2\n" in captured.out
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name",
-        return_value="UnknownFuse",
-    )
-    def test_renders_question_mark_without_fuse_markets(self, _mock_name, capsys):
+    def test_renders_question_mark_without_fuse_markets(self, capsys):
         _print_fuse_section(
             "Fuses",
             [ADDR_1],
             fuse_markets=None,
             market_substrates=None,
-            chain_id=1,
-            api_key=None,
+            resolve_name=lambda _address: "UnknownFuse",
         )
         captured = capsys.readouterr()
         assert "?" in captured.out
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name",
-        return_value="MorphoSupplyFuse",
-    )
-    def test_dedupes_repeated_fuse_address(self, _mock_name, capsys):
+    def test_dedupes_repeated_fuse_address(self, capsys):
         addr = ADDR_1
         _print_fuse_section(
             "Instant Withdrawal Fuses",
             [addr, addr, addr],
             fuse_markets={addr: IporFusionMarkets.MORPHO},
             market_substrates={IporFusionMarkets.MORPHO: [b"\x11" * 32] * 3},
-            chain_id=1,
-            api_key=None,
+            resolve_name=lambda _address: "MorphoSupplyFuse",
         )
         captured = capsys.readouterr()
         assert "1 unique / 3 registrations" in captured.out
         assert captured.out.count(addr) == 1
 
-    @patch(
-        "ipor_fusion.cli.vault_markets_view.get_contract_name",
-        return_value="MorphoSupplyFuse",
-    )
-    def test_no_registrations_suffix_when_unique(self, _mock_name, capsys):
+    def test_no_registrations_suffix_when_unique(self, capsys):
         _print_fuse_section(
             "Fuses",
             [ADDR_1, ADDR_2],
             fuse_markets=None,
             market_substrates=None,
-            chain_id=1,
-            api_key=None,
+            resolve_name=lambda _address: "MorphoSupplyFuse",
         )
         captured = capsys.readouterr()
         assert "registrations" not in captured.out
@@ -2160,8 +2137,7 @@ class TestPrintFuseSection:
             [],
             fuse_markets=None,
             market_substrates=None,
-            chain_id=1,
-            api_key=None,
+            resolve_name=_no_name,
         )
         captured = capsys.readouterr()
         assert "(none)" in captured.out
