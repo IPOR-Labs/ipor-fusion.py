@@ -38,7 +38,13 @@ def _module_name(path: Path) -> str:
     return ".".join(parts)
 
 
-MODULES = {_module_name(path): path for path in sorted(PACKAGE.rglob("*.py"))}
+#: Module name -> (source, is a package ``__init__``).
+Sources = dict[str, tuple[str, bool]]
+
+SOURCES: Sources = {
+    _module_name(path): (path.read_text(), path.name == "__init__.py")
+    for path in sorted(PACKAGE.rglob("*.py"))
+}
 
 
 def _ancestors(name: str) -> Iterator[str]:
@@ -47,18 +53,32 @@ def _ancestors(name: str) -> Iterator[str]:
         yield ".".join(parts[:end])
 
 
-def _top_level_imports(path: Path) -> Iterator[tuple[str, list[str]]]:
-    """``(module, names)`` per module-level import; ``names`` is empty for
-    ``import x``."""
-    for node in ast.parse(path.read_text()).body:
-        if isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            yield node.module, [alias.name for alias in node.names]
+def _absolute(name: str, is_package: bool, node: ast.ImportFrom) -> str:
+    """The module an ``ImportFrom`` names, relative imports resolved against
+    the importer's package."""
+    if not node.level:
+        return node.module or ""
+    package = name.split(".") if is_package else name.split(".")[:-1]
+    base = package[: len(package) - node.level + 1]
+    return ".".join([*base, *([node.module] if node.module else [])])
+
+
+def _top_level_imports(name: str, sources: Sources) -> Iterator[tuple[str, list[str]]]:
+    """``(module, names)`` per module-level import of ``name``; ``names`` is
+    empty for ``import x``."""
+    source, is_package = sources[name]
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.ImportFrom):
+            yield (
+                _absolute(name, is_package, node),
+                [alias.name for alias in node.names],
+            )
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 yield alias.name, []
 
 
-def _edges(name: str) -> set[str]:
+def _edges(name: str, sources: Sources) -> set[str]:
     """The SDK modules whose top level runs, or must have finished, when
     ``name``'s top level runs.
 
@@ -69,10 +89,10 @@ def _edges(name: str) -> set[str]:
     """
     own = set(_ancestors(name))
     edges: set[str] = set()
-    for module, names in _top_level_imports(MODULES[name]):
-        if module not in MODULES:
+    for module, names in _top_level_imports(name, sources):
+        if module not in sources:
             continue
-        submodules = [f"{module}.{n}" for n in names if f"{module}.{n}" in MODULES]
+        submodules = [f"{module}.{n}" for n in names if f"{module}.{n}" in sources]
         targets = submodules or [module]
         if len(submodules) < len(names):
             edges.add(module)
@@ -80,7 +100,11 @@ def _edges(name: str) -> set[str]:
             edges.add(target)
             edges.update(a for a in _ancestors(target) if a not in own)
     edges.discard(name)
-    return {edge for edge in edges if edge.startswith("ipor_fusion")}
+    return edges
+
+
+def _graph(sources: Sources) -> dict[str, set[str]]:
+    return {name: _edges(name, sources) for name in sources}
 
 
 def _find_cycle(graph: dict[str, set[str]]) -> list[str] | None:
@@ -108,15 +132,30 @@ def _find_cycle(graph: dict[str, set[str]]) -> list[str] | None:
 def _imports_under(prefix: str) -> list[tuple[str, str]]:
     return [
         (name, module)
-        for name, path in MODULES.items()
+        for name in SOURCES
         if name == prefix or name.startswith(f"{prefix}.")
-        for module, _ in _top_level_imports(path)
+        for module, _ in _top_level_imports(name, SOURCES)
     ]
 
 
 def test_import_graph_is_acyclic():
-    graph = {name: _edges(name) for name in MODULES}
-    assert _find_cycle(graph) is None, " -> ".join(_find_cycle(graph) or [])
+    cycle = _find_cycle(_graph(SOURCES))
+    assert cycle is None, " -> ".join(cycle or [])
+
+
+def test_relative_imports_are_resolved():
+    """Two siblings importing each other relatively form a cycle; a relative
+    import from a package ``__init__`` resolves against the package itself."""
+    sources: Sources = {
+        "pkg": ("from .sub import a\n", True),
+        "pkg.sub": ("", True),
+        "pkg.sub.a": ("from .b import B\nfrom .. import sub\n", False),
+        "pkg.sub.b": ("from .a import A\n", False),
+    }
+    graph = _graph(sources)
+    assert graph["pkg"] == {"pkg.sub", "pkg.sub.a"}
+    assert graph["pkg.sub.a"] == {"pkg.sub", "pkg.sub.b"}
+    assert _find_cycle(graph) == ["pkg.sub.a", "pkg.sub.b", "pkg.sub.a"]
 
 
 def test_cycle_detection_sees_a_package_namespace_reentry():
@@ -154,7 +193,7 @@ def test_package_does_not_import(importer: str, forbidden: str):
 
 
 def test_fuses_package_holds_no_crosschain_code():
-    assert not [name for name in MODULES if name.startswith("ipor_fusion.fuses.cross")]
+    assert not [name for name in SOURCES if name.startswith("ipor_fusion.fuses.cross")]
 
 
 @pytest.mark.parametrize(
