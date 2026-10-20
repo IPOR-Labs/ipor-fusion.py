@@ -109,6 +109,58 @@ def test_fetch_reports_every_indexer_when_none_serves(monkeypatch):
         fetch_verifier_result(b"\x01")
 
 
+def _malformed(field: str, value: object) -> dict:
+    body = _body()
+    body["results"][0]["verifierResult"][field] = value
+    return body
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        {"results": "x"},
+        {"results": [{}]},
+        _malformed("message_id", "0x" + bytes(32).hex()),
+        _malformed("message_id", MESSAGE_ID.hex()),
+        _malformed("ccv_data", "0xzz"),
+        _malformed("message_ccv_addresses", ["0x1234"]),
+        _malformed("message_ccv_addresses", []),
+        _malformed("message_ccv_addresses", {RESOLVER: True}),
+        _malformed("message_executor_address", None),
+        _malformed("message", "text"),
+    ],
+)
+def test_a_malformed_answer_is_skipped_and_reported(monkeypatch, body):
+    get = MagicMock(return_value=_response(200, body))
+    monkeypatch.setattr(indexer_module.requests, "get", get)
+
+    with pytest.raises(VerifierResultUnavailable, match="https://a: malformed answer"):
+        fetch_verifier_result(MESSAGE_ID, indexers=("https://a",))
+
+
+def test_an_answer_without_ccvs_falls_back_to_the_next_indexer(monkeypatch):
+    empty = _response(200, _malformed("message_ccv_addresses", []))
+    get = MagicMock(side_effect=[empty, _response()])
+    monkeypatch.setattr(indexer_module.requests, "get", get)
+
+    result = fetch_verifier_result(MESSAGE_ID, indexers=("https://a", "https://b"))
+
+    assert result.indexer == "https://b"
+    assert result.ccv_addresses == (RESOLVER,)
+
+
+def test_an_answer_that_is_not_json_is_skipped(monkeypatch):
+    broken = _response()
+    broken.json.side_effect = requests.JSONDecodeError("bad", "", 0)
+    get = MagicMock(side_effect=[broken, _response()])
+    monkeypatch.setattr(indexer_module.requests, "get", get)
+
+    result = fetch_verifier_result(MESSAGE_ID, indexers=("https://a", "https://b"))
+
+    assert result.indexer == "https://b"
+
+
 def test_manual_execution_builds_execute_and_checks_the_message_hash():
     off_ramp = CcipOffRamp(MagicMock(), OFF_RAMP)
     result = VerifierResult(

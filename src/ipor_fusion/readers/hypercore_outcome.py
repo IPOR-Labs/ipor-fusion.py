@@ -17,6 +17,7 @@ from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.errors import UnsupportedChainError
 from ipor_fusion.fuses.hypercore import USDC_TOKEN_INDEX
 from ipor_fusion.readers.hypercore import (
     HYPERCORE_PENDING_READERS,
@@ -124,7 +125,9 @@ def read_hypercore_transfer_snapshot(
     pinned, block = _pinned_context(ctx)
     pending_reader = pending_reader or HYPERCORE_PENDING_READERS.get(ctx.chain_id)
     if pending_reader is None:
-        raise ValueError(f"no HyperCorePendingReader known for chain {ctx.chain_id}")
+        raise UnsupportedChainError(
+            f"no HyperCorePendingReader known for chain {ctx.chain_id}"
+        )
     vault = PlasmaVault(pinned, vault_address)
     reader = HyperCoreReader(pinned)
     calls = cast(

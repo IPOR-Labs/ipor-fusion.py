@@ -10,7 +10,7 @@ from _simulate import simulate_response
 from eth_abi import encode
 from web3 import Web3
 
-from ipor_fusion import quote_ccip_native_fee
+from ipor_fusion import SimulationError, quote_ccip_native_fee
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.ccip.quote import INSUFFICIENT_NATIVE_FEE_SELECTOR
 
@@ -72,6 +72,9 @@ def test_quote_names_an_earlier_revert():
     web3 = _web3(_reverted(data))
 
     with pytest.raises(
-        ValueError, match="before the CCIP fee check: CreatorNotAllowed"
-    ):
+        SimulationError, match="before the CCIP fee check: CreatorNotAllowed"
+    ) as raised:
         quote_ccip_native_fee(web3, REQUEST, payer=FACTORY, from_=ALPHA)
+    assert raised.value.label == "quote"
+    assert raised.value.revert_reason is not None
+    assert raised.value.revert_reason.startswith("CreatorNotAllowed")

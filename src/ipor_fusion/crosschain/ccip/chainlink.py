@@ -16,6 +16,7 @@ from eth_typing import ChecksumAddress
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.contracts import _address
+from ipor_fusion.errors import UnsupportedContractVersionError
 from ipor_fusion.types import ZERO_ADDRESS, MessageId
 
 
@@ -118,9 +119,9 @@ def ccip_token_lane(
     chain_selector: int,
 ) -> CcipTokenLane:
     """Read, on ``router``'s chain, whether a message lane and a ``token`` lane
-    exist towards ``chain_selector``. Seven reads at most. Raises ``ValueError``
-    before reading static config when the OnRamp version has an unverified
-    layout."""
+    exist towards ``chain_selector``. Seven reads at most. Raises
+    ``UnsupportedContractVersionError`` before reading static config when the
+    OnRamp version has an unverified layout."""
     router_wrapper = CcipRouter(ctx, router)
     if not router_wrapper.is_chain_supported(chain_selector).call():
         return CcipTokenLane(chain_selector, message_lane=False)
@@ -128,7 +129,7 @@ def ccip_token_lane(
     on_ramp_wrapper = CcipOnRamp(ctx, on_ramp)
     on_ramp_version = on_ramp_wrapper.type_and_version().call()
     if on_ramp_version not in _SUPPORTED_ON_RAMP_VERSIONS:
-        raise ValueError(
+        raise UnsupportedContractVersionError(
             f"unsupported CCIP OnRamp version {on_ramp_version!r} at {on_ramp}; "
             "ccip_token_lane supports OnRamp 2.0.0"
         )

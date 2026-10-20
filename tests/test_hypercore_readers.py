@@ -23,6 +23,7 @@ from ipor_fusion import (
     HyperCoreReportedResult,
     HyperCoreSpotBalance,
     HyperCoreTokenInfo,
+    HyperCoreValuationError,
     PlasmaVault,
     SettlementMode,
     convert_to_wad_int,
@@ -358,7 +359,7 @@ class TestNavIdentity:
         ctx.call.side_effect = multicall_aware(_vault_state_handler(xyz_value=-10_000))
         nav = read_hypercore_nav(ctx, VAULT, MARKET)
         assert nav.value_wad < 0
-        with pytest.raises(ValueError, match="negative"):
+        with pytest.raises(HyperCoreValuationError, match="negative"):
             _ = nav.balance_wad
 
     def test_an_unpriced_held_token_raises_like_the_library(self):
@@ -366,7 +367,7 @@ class TestNavIdentity:
         ctx.call.side_effect = multicall_aware(
             _vault_state_handler(price=ContractLogicError("no source"))
         )
-        with pytest.raises(ValueError, match="prices no"):
+        with pytest.raises(HyperCoreValuationError, match="prices no"):
             read_hypercore_nav(ctx, VAULT, MARKET)
 
     def test_an_unsupported_dex_bitmap_is_rejected_before_any_read(self):
@@ -377,7 +378,20 @@ class TestNavIdentity:
                 substrates=[SUBSTRATES[0], bitmap_word.to_bytes(32, "big")]
             )
         )
-        with pytest.raises(ValueError, match="unsupported HIP-3"):
+        with pytest.raises(HyperCoreValuationError, match="unsupported HIP-3"):
+            read_hypercore_nav(ctx, VAULT, MARKET)
+
+    def test_a_failed_precompile_read_raises(self):
+        handler = _vault_state_handler()
+
+        def failing_spot_balance(to: str, data: bytes) -> bytes:
+            if to == SPOT_BALANCE_PRECOMPILE:
+                raise ContractLogicError("precompile failed")
+            return handler(to, data)
+
+        ctx = _ctx()
+        ctx.call.side_effect = multicall_aware(failing_spot_balance)
+        with pytest.raises(HyperCoreValuationError, match="spotBalance precompile"):
             read_hypercore_nav(ctx, VAULT, MARKET)
 
 
