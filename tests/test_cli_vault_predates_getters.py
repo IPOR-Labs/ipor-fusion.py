@@ -190,7 +190,7 @@ class TestVaultReads:
     def test_pre_audit_vault_degrades_supply_cap_and_oracle_getter(self):
         ctx = _ctx(PRE_AUDIT)
 
-        reads = _fetch_vault_reads(ctx, _vault(ctx))
+        reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
 
         assert reads["supply_cap"] == UINT256_MAX
         assert reads["price_oracle_addr"] == LEGACY_ORACLE
@@ -204,7 +204,7 @@ class TestVaultReads:
     def test_current_vault_reports_no_unimplemented_getter(self):
         ctx = _ctx(CURRENT)
 
-        reads = _fetch_vault_reads(ctx, _vault(ctx))
+        reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
 
         assert reads["supply_cap"] == 10**12
         assert reads["price_oracle_addr"] == ORACLE

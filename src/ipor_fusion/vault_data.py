@@ -32,7 +32,8 @@ from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sor
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.oracle import price_oracle_middleware
+from ipor_fusion.core.multicall import Multicall3
+from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.errors import (
     EmptyCallResultError,
@@ -305,8 +306,11 @@ def _resolve_price_oracle(
     return address
 
 
-def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str, Any]:
-    """Vault and underlying-asset state, as `VaultData` fields.
+def _fetch_vault_reads(
+    ctx: Web3Context, plasma_vault: PlasmaVault
+) -> tuple[dict[str, Any], PriceOracleMiddleware]:
+    """Vault and underlying-asset state, as `VaultData` fields, and the price
+    oracle wrapper resolved for them (reused, so its ABI is probed once).
 
     Two Multicall3 round trips: vault getters, then everything that needs the
     asset, the oracle or the fuse list (asset metadata, idle balance, price,
@@ -398,7 +402,7 @@ def _fetch_vault_reads(ctx: Web3Context, plasma_vault: PlasmaVault) -> dict[str,
         "asset_price_usd": price.readable() if price else None,
         "fuse_markets": fuse_markets or None,
         "unimplemented_getters": unimplemented,
-    }
+    }, oracle
 
 
 def _fetch_role_accounts(
@@ -563,12 +567,13 @@ def fetch_vault_data(
             if lending
             else _LendingReads()
         )
-        vault_reads = f_vault.result()
+        vault_reads, oracle = f_vault.result()
         derived = _derived_reads(
             ctx,
             pool,
             vault,
             vault_reads,
+            oracle,
             markets,
             lending_reads if lending else None,
             metadata=metadata,
@@ -605,6 +610,7 @@ def _derived_reads(
     pool: ThreadPoolExecutor,
     vault: PlasmaVaultAddress,
     vault_reads: dict[str, Any],
+    oracle: PriceOracleMiddleware,
     markets: _MarketReads,
     lending: _LendingReads | None,
     *,
@@ -613,7 +619,6 @@ def _derived_reads(
     """The `VaultData` fields read on top of the vault and market reads: the
     ERC20 holdings, and (with ``lending``) the breakdown token prices and the
     unpriceable-token check, and (with ``metadata``) the token metadata."""
-    oracle = vault_reads["price_oracle_addr"]
     f_erc20 = pool.submit(
         _read_erc20_holdings,
         ctx,
@@ -621,7 +626,7 @@ def _derived_reads(
         balance_fuses=markets.balance_fuses,
         market_substrates=markets.market_substrates,
         market_balances=markets.market_balances,
-        price_oracle=oracle,
+        oracle=oracle,
         asset=_Asset(
             address=vault_reads["asset"],
             decimals=vault_reads["asset_decimals"],
@@ -633,7 +638,7 @@ def _derived_reads(
     if lending is not None:
         fields["token_prices_usd"] = _fetch_breakdown_token_prices(
             ctx,
-            price_oracle_middleware(ctx, oracle),
+            oracle,
             _collect_breakdown_token_addresses(
                 lending.morpho_positions, lending.aave_positions
             ),
@@ -642,7 +647,7 @@ def _derived_reads(
             partial(
                 fetch_unpriceable_priced_tokens,
                 ctx,
-                oracle,
+                vault_reads["price_oracle_addr"],
                 vault_reads["asset"],
                 markets.balance_fuses,
                 markets.market_substrates,
@@ -651,20 +656,21 @@ def _derived_reads(
         )
     if metadata:
         fields["token_symbols"], fields["token_decimals"] = _token_metadata(
-            ctx, pool, markets, lending or _LendingReads()
+            ctx, markets, lending or _LendingReads()
         )
     fields["erc20"] = f_erc20.result()
     return fields
 
 
 def _token_metadata(
-    ctx: Web3Context,
-    pool: ThreadPoolExecutor,
-    markets: _MarketReads,
-    lending: _LendingReads,
+    ctx: Web3Context, markets: _MarketReads, lending: _LendingReads
 ) -> tuple[dict[HexAddress, str], dict[HexAddress, int | None]]:
     """Symbols of every substrate and breakdown token, decimals of the
-    breakdown tokens (the amounts the document formats), keyed lowercase."""
+    breakdown tokens (the amounts the document formats), keyed lowercase.
+
+    Cache hits first; the rest in one Multicall3 batch. A token that answers
+    nothing (not a token, or not deployed at this block) reads as ``""`` /
+    ``None`` and is not cached, so a later block can still resolve it."""
     breakdown = {
         parse_hex_address(address)
         for address in _collect_breakdown_token_addresses(
@@ -677,18 +683,37 @@ def _token_metadata(
         for sub in subs
         if (info := decode_substrate(sub, market_id=market_id)).address
     }
-    symbols = {
-        address: pool.submit(resolve_token_symbol, ctx, address)
-        for address in breakdown | substrate_addresses
+    cache = load_contract_cache()
+    symbols: dict[HexAddress, str] = {}
+    decimals: dict[HexAddress, int | None] = {}
+    for address in breakdown | substrate_addresses:
+        if cached := cache.get(cache_key("symbol", address)):
+            symbols[address] = cached
+    for address in breakdown:
+        if cached := cache.get(cache_key("decimals", address)):
+            decimals[address] = int(cached)
+    missing_symbols = sorted((breakdown | substrate_addresses) - symbols.keys())
+    missing_decimals = sorted(breakdown - decimals.keys())
+    if not missing_symbols and not missing_decimals:
+        return symbols, decimals
+    tokens = {
+        a: ERC20(ctx, Web3.to_checksum_address(a))
+        for a in breakdown | substrate_addresses
     }
-    decimals = {
-        address: pool.submit(resolve_token_decimals, ctx, address)
-        for address in breakdown
-    }
-    return (
-        {address: future.result() for address, future in symbols.items()},
-        {address: future.result() for address, future in decimals.items()},
-    )
+    calls: list[Call[Any]] = [tokens[a].symbol() for a in missing_symbols]
+    calls += [tokens[a].decimals() for a in missing_decimals]
+    results = Multicall3(ctx).try_aggregate(calls)
+    for address, symbol in zip(missing_symbols, results, strict=False):
+        symbols[address] = symbol or ""
+        if symbol:
+            update_contract_cache(cache_key("symbol", address), symbol)
+    for address, value in zip(
+        missing_decimals, results[len(missing_symbols) :], strict=True
+    ):
+        decimals[address] = value
+        if value is not None:
+            update_contract_cache(cache_key("decimals", address), str(value))
+    return symbols, decimals
 
 
 def _fetch_hypercore_state(
