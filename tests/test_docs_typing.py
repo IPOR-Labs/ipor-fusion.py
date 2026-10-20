@@ -43,7 +43,11 @@ def _write_samples(directory: Path) -> dict[str, Path]:
 
 def test_doc_samples_type_check_as_a_consumer(tmp_path):
     modules = _write_samples(tmp_path)
-    assert {"README.md", "src/ipor_fusion/guide/quickstart.md"} <= set(modules)
+    assert {
+        "README.md",
+        "src/ipor_fusion/guide/quickstart.md",
+        "skills/ipor-deploy-vault/SKILL.md",
+    } <= set(modules)
     (tmp_path / "pyrightconfig.json").write_text(json.dumps(_CONSUMER_CONFIG))
     result = subprocess.run(  # noqa: S603 - fixed argv, the test's own interpreter
         [
