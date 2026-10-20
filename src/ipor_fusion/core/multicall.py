@@ -43,7 +43,7 @@ class Multicall3(ContractWrapper):
 
     def __init__(
         self,
-        ctx: Web3Context,
+        ctx: Web3Context | None,
         address: ChecksumAddress = MULTICALL3_ADDRESS,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ):
@@ -66,20 +66,22 @@ class Multicall3(ContractWrapper):
 
     def aggregate(self, calls: Sequence[Call[T]]) -> list[T]:
         """Execute all `calls`; raise as `Call.call()` would on any failure."""
+        ctx = self._require_ctx()
         raw = self._fetch(calls)
         if raw is None:
-            return [call.call(self._ctx) for call in calls]
+            return [call.call(ctx) for call in calls]
         return [
-            call.decode(data) if ok and data else call.call(self._ctx)
+            call.decode(data) if ok and data else call.call(ctx)
             for call, (ok, data) in zip(calls, raw, strict=True)
         ]
 
     def try_aggregate(self, calls: Sequence[Call[T]]) -> list[T | None]:
         """Execute all `calls`; ``None`` for each that reverts, returns no data
         or returns data its `Call` cannot decode."""
+        ctx = self._require_ctx()
         raw = self._fetch(calls)
         if raw is None:
-            return [_try_call(call, self._ctx) for call in calls]
+            return [_try_call(call, ctx) for call in calls]
         return [
             _try_decode(call, ok, data)
             for call, (ok, data) in zip(calls, raw, strict=True)

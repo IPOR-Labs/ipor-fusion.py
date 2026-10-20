@@ -191,7 +191,7 @@ class MorphoReader(ContractWrapper):
             self.market(market_id),
             self.market_params(market_id),
         ]
-        pos, market, params = Multicall3(self._ctx).aggregate(calls)
+        pos, market, params = Multicall3(self._require_ctx()).aggregate(calls)
         if market.total_borrow_shares > 0:
             borrow_assets = math.ceil(
                 pos.borrow_shares
@@ -240,7 +240,7 @@ class MorphoReader(ContractWrapper):
         if market.last_update == 0:
             raise MorphoMarketNotFoundError(
                 f"Morpho Blue market {market_id} does not exist on chain "
-                f"{self._ctx.chain_id} (Morpho at {self.address})"
+                f"{self._require_ctx().chain_id} (Morpho at {self.address})"
             )
         return params, market
 
@@ -268,7 +268,7 @@ class MorphoReader(ContractWrapper):
             # markets): no interest accrues, so every rate is zero.
             rate_wad = 0
         else:
-            rate_wad = _irm_borrow_rate_view(self._ctx, params, market)
+            rate_wad = _irm_borrow_rate_view(self._require_ctx(), params, market)
         rate = rate_wad / WAD
         borrow_apy = math.expm1(rate * SECONDS_PER_YEAR)
         if market.total_supply_assets > 0:

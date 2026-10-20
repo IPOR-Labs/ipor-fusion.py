@@ -877,6 +877,23 @@ class TestUniversalTokenSwapperFuse:
         assert legacy == UniversalTokenSwapperFuse(FUSE_ADDR)
 
 
+class TestFuseEquality:
+    @pytest.mark.parametrize("cls", [GearboxStakeFuse, FluidInstadappStakingFuse])
+    def test_stake_fuses_compare_on_the_staking_contract(self, cls):
+        fuse = cls(STAKING_FUSE, STAKING_CONTRACT)
+        other = cls(STAKING_FUSE, TOKEN_A)
+        assert fuse != other
+        assert len({fuse, other}) == 2
+        assert fuse == cls(STAKING_FUSE, STAKING_CONTRACT)
+        assert hash(fuse) == hash(cls(STAKING_FUSE, STAKING_CONTRACT))
+
+    def test_fuses_compare_on_the_address_and_the_class(self):
+        assert AaveV3SupplyFuse(FUSE_ADDR) == AaveV3SupplyFuse(FUSE_ADDR)
+        assert AaveV3SupplyFuse(FUSE_ADDR) != AaveV3SupplyFuse(FUSE_ADDR_2)
+        assert AaveV3SupplyFuse(FUSE_ADDR) != AaveV3BorrowFuse(FUSE_ADDR)
+        assert AaveV3SupplyFuse(FUSE_ADDR) != FUSE_ADDR
+
+
 # ── Input Validation ──────────────────────────────────────────────────
 
 ZERO_ADDR = Web3.to_checksum_address(ZERO_ADDRESS)

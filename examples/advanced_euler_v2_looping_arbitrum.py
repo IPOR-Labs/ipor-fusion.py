@@ -208,7 +208,7 @@ def clone_args() -> dict:
 
 
 def unsigned_clone_calldata() -> bytes:
-    return FusionFactory.encoder(ARBITRUM_FUSION_FACTORY).clone(**clone_args()).calldata
+    return FusionFactory(None, ARBITRUM_FUSION_FACTORY).clone(**clone_args()).calldata
 
 
 def euler_market_substrates() -> list[bytes]:
@@ -260,7 +260,7 @@ def enable_euler_actions() -> list[FuseAction]:
 def build_swap_action() -> FuseAction:
     """Swap the borrowed USDC through Uniswap V3 and require flash repayment."""
     transfer_data = (
-        ERC20.encoder(ARBITRUM_USDC)
+        ERC20(None, ARBITRUM_USDC)
         .transfer(UNISWAP_UNIVERSAL_ROUTER, BORROW_USDC)
         .calldata
     )

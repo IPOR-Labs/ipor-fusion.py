@@ -42,7 +42,7 @@ class TestFeeAccount:
         assert result == FEE_MANAGER_ADDR
 
     def test_fee_manager_selector(self):
-        call = FeeAccount.encoder().fee_manager()
+        call = FeeAccount(None, FEE_ACCOUNT_ADDR).fee_manager()
 
         assert call.calldata == function_signature_to_4byte_selector("FEE_MANAGER()")
 
@@ -123,7 +123,7 @@ class TestFeeManagerSelectors:
     call to a nonexistent function on-chain."""
 
     def test_selectors(self):
-        encoder = FeeManager.encoder()
+        encoder = FeeManager(None, FEE_MANAGER_ADDR)
         for call, signature in [
             (encoder.get_deposit_fee(), "getDepositFee()"),
             (encoder.get_total_performance_fee(), "getTotalPerformanceFee()"),

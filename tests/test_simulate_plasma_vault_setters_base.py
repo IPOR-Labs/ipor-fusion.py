@@ -42,10 +42,7 @@ SAMPLE_FUSE_B = Web3.to_checksum_address("0x" + "b2" * 20)
 def _bare_vault() -> PlasmaVault:
     """Build a PlasmaVault without a Web3Context. Safe because `.calldata`
     only reads the pre-encoded `Call.data` — never touches ctx."""
-    vault = PlasmaVault.__new__(PlasmaVault)
-    vault._ctx = None  # type: ignore[assignment]
-    vault._address = BASE_PLASMA_VAULT
-    return vault
+    return PlasmaVault(None, BASE_PLASMA_VAULT)
 
 
 # --- pure encoding: selector + ABI round-trip -------------------------------

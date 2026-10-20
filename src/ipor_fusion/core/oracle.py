@@ -78,7 +78,7 @@ class PriceOracleMiddleware(ContractWrapper):
             Web3.keccak(text="AssetPriceSourceUpdated(address,address)")
         ).to_0x_hex()
         return list(
-            self._ctx.get_logs(
+            self._require_ctx().get_logs(
                 contract_address=self._address, topics=[event_signature_hash]
             )
         )
@@ -91,7 +91,7 @@ class LegacyPriceOracleMiddleware(PriceOracleMiddleware):
 
     def __init__(
         self,
-        ctx: Web3Context,
+        ctx: Web3Context | None,
         address: ChecksumAddress,
         base_currency_decimals: Decimals,
     ):

@@ -438,12 +438,12 @@ def clone_args() -> dict:
 def unsigned_clone_calldata() -> bytes:
     """Unsigned creation calldata (selector + ABI-encoded args) for the deploy.
 
-    Built with a ctx-less encoder, so it needs no provider. Hand these bytes to
+    Built on a wrapper with ctx=None, so it needs no provider. Hand these bytes to
     an external signer / multisig instead of calling ``.send()``. NOTE: the owner
     encoded here is the simulation ``OWNER`` (a throwaway EOA) -- set your real
     owner in ``clone_args()`` before deploying, or the vault is owned by it.
     """
-    return FusionFactory.encoder(BASE_FUSION_FACTORY).clone(**clone_args()).calldata
+    return FusionFactory(None, BASE_FUSION_FACTORY).clone(**clone_args()).calldata
 
 
 def market_substrates() -> list[bytes]:
@@ -534,9 +534,9 @@ def market_substrates() -> list[bytes]:
 def venue_transfer_calldata(amount: Amount) -> bytes:
     """``USDC.transfer(VENUE_DEPOSIT_ADDRESS, amount)`` calldata, run from the executor.
 
-    Encoded with a ctx-less ERC20 wrapper -- pure bytes, no chain access.
+    Encoded with an ERC20 wrapper built with ctx=None -- pure bytes, no chain access.
     """
-    return ERC20.encoder(BASE_USDC).transfer(VENUE_DEPOSIT_ADDRESS, amount).calldata
+    return ERC20(None, BASE_USDC).transfer(VENUE_DEPOSIT_ADDRESS, amount).calldata
 
 
 def build_enter_action(amount: Amount) -> FuseAction:

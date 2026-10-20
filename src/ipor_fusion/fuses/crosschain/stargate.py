@@ -20,6 +20,8 @@ from enum import IntEnum
 
 from eth_typing import ChecksumAddress
 
+from ipor_fusion.core.fuse import Fuse
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.crosschain.messages import (
     COMMAND_TUPLE_TYPE,
     EMPTY_COMMAND,
@@ -27,7 +29,6 @@ from ipor_fusion.crosschain.messages import (
     Command,
 )
 from ipor_fusion.crosschain.stargate.layerzero import OptionsBuilder
-from ipor_fusion.fuses.base import Fuse, FuseAction
 from ipor_fusion.fuses.crosschain.base import (
     CrosschainCommandFuse,
     CrosschainSupplyFuse,

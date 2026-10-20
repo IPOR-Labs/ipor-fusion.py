@@ -788,7 +788,7 @@ class TestPlasmaVaultFeeData:
         assert result == Amount(123_456)
 
     def test_selectors(self):
-        encoder = PlasmaVault.encoder()
+        encoder = PlasmaVault(None, VAULT_ADDR)
         for call, signature in [
             (encoder.get_performance_fee_data(), "getPerformanceFeeData()"),
             (encoder.get_management_fee_data(), "getManagementFeeData()"),
