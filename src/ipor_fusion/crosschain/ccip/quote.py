@@ -18,6 +18,7 @@ from web3.types import BlockIdentifier
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.simulation import VaultSimulator
+from ipor_fusion.errors import SimulationError
 
 #: Selector of ``CcipInsufficientNativeFeeBalance(uint256 balance, uint256 required)``.
 INSUFFICIENT_NATIVE_FEE_SELECTOR: bytes = keccak(
@@ -40,8 +41,8 @@ def quote_ccip_native_fee(
     ``payer`` is the contract that pays: the factory for ``requestDispatcher``,
     the executor for a supply or command (``from_`` is then the alpha sending
     the vault's ``execute``), the dispatcher for a return. The call must be
-    valid at ``block`` up to the fee check; a revert before it, or a call that
-    sends no message, raises ``ValueError``.
+    valid at ``block`` up to the fee check: a revert before it raises
+    ``SimulationError`` and a call that sends no message ``ValueError``.
     """
     simulator = VaultSimulator(web3, alpha=from_, block=block)
     simulator.with_state_override(payer, balance=hex(0))
@@ -55,6 +56,8 @@ def quote_ccip_native_fee(
         raise ValueError(
             "the call succeeded with the payer at zero balance: it sends no CCIP message"
         )
-    raise ValueError(
-        f"the call reverted before the CCIP fee check: {result.revert_reason}"
+    raise SimulationError(
+        f"the call reverted before the CCIP fee check: {result.revert_reason}",
+        label="quote",
+        revert_reason=result.revert_reason,
     )

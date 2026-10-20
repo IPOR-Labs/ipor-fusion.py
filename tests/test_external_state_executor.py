@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from _simulate import simulate_response
 from eth_abi import decode, encode
-from eth_abi.exceptions import NonEmptyPaddingBytes, ValueOutOfBounds
+from eth_abi.exceptions import ValueOutOfBounds
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
@@ -18,6 +18,7 @@ from ipor_fusion.core.external_state_executor import (
     NavMark,
 )
 from ipor_fusion.core.simulation import VaultSimulator
+from ipor_fusion.errors import ExternalStateError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId, MarketId
 
@@ -132,7 +133,9 @@ class TestForVault:
         ctx = MagicMock()
         ctx.get_storage_at.return_value = HexBytes(b"\x00" * 32)
 
-        with pytest.raises(ValueError, match="no ExternalStateExecutor deployed"):
+        with pytest.raises(
+            ExternalStateError, match="no ExternalStateExecutor deployed"
+        ):
             ExternalStateExecutor.for_vault(ctx, VAULT_ADDR)
 
     @pytest.mark.parametrize("empty", ["0x00", "0x"])
@@ -141,18 +144,20 @@ class TestForVault:
         ctx = MagicMock()
         ctx.get_storage_at.return_value = HexBytes(empty)
 
-        with pytest.raises(ValueError, match="no ExternalStateExecutor deployed"):
+        with pytest.raises(
+            ExternalStateError, match="no ExternalStateExecutor deployed"
+        ):
             ExternalStateExecutor.for_vault(ctx, VAULT_ADDR)
 
     def test_raises_on_nonzero_high_bytes(self):
         # Non-zero high 12 bytes are not a clean address-in-slot (wrong/corrupt
-        # slot); `decode` rejects it rather than masking the low 20 bytes.
+        # slot); rejected rather than masking the low 20 bytes.
         ctx = MagicMock()
         ctx.get_storage_at.return_value = HexBytes(
             bytes(range(1, 13)) + bytes.fromhex(EXECUTOR_ADDR[2:])
         )
 
-        with pytest.raises(NonEmptyPaddingBytes):
+        with pytest.raises(ExternalStateError, match="malformed executor word"):
             ExternalStateExecutor.for_vault(ctx, VAULT_ADDR)
 
 
@@ -803,7 +808,7 @@ class TestParseBalanceProposed:
         executor, _ = _make_executor()
         log = {"address": EXECUTOR_ADDR, "topics": [_BALANCE_PROPOSED_TOPIC]}
 
-        with pytest.raises(ValueError, match="carries no data"):
+        with pytest.raises(ExternalStateError, match="carries no data"):
             executor.parse_balance_proposed(log)
 
     @pytest.mark.parametrize("as_strings", [False, True], ids=["hexbytes", "0x-string"])
@@ -834,7 +839,7 @@ class TestParseBalanceProposed:
         other_hash = _consistent_hash(EVENT_CHAIN, value=999_000_000_000)
         log = _proposed_log(as_strings=False, proposal_hash=other_hash)
 
-        with pytest.raises(ValueError, match="another proposal's hash"):
+        with pytest.raises(ExternalStateError, match="another proposal's hash"):
             executor.parse_balance_proposed(log)
 
     def test_rejects_a_log_hashed_for_another_chain(self):
@@ -842,7 +847,7 @@ class TestParseBalanceProposed:
         # the wrong chain must not pass -- otherwise chain_id is decoration.
         executor, _ = _make_executor()
 
-        with pytest.raises(ValueError, match="different executor or chain id"):
+        with pytest.raises(ExternalStateError, match="different executor or chain id"):
             executor.parse_balance_proposed(
                 _proposed_log(as_strings=False), chain_id=ChainId(1)
             )
@@ -855,7 +860,7 @@ class TestParseBalanceProposed:
         executor, ctx = _make_executor()
         ctx.chain_id = ChainId(1)
 
-        with pytest.raises(ValueError, match="different executor or chain id"):
+        with pytest.raises(ExternalStateError, match="different executor or chain id"):
             executor.parse_balance_proposed(_proposed_log(as_strings=False))
 
     def test_rejects_a_self_consistent_forgery(self):
@@ -887,8 +892,8 @@ class TestParseBalanceProposed:
             executor.parse_balance_proposed(log)
 
     @pytest.mark.parametrize("data", [{}, ["0x00"]], ids=["dict", "list"])
-    def test_non_hex_data_raises_type_error(self, data):
-        # The docstring promises TypeError for a field that is not hex at all.
+    def test_non_hex_data_raises_external_state_error(self, data):
+        # A field that is not hex at all is malformed data like any other.
         executor, _ = _make_executor()
         log = {
             "address": EXECUTOR_ADDR,
@@ -896,7 +901,7 @@ class TestParseBalanceProposed:
             "data": data,
         }
 
-        with pytest.raises(TypeError):
+        with pytest.raises(ExternalStateError, match="malformed BalanceProposed"):
             executor.parse_balance_proposed(log)
 
     @pytest.mark.parametrize("topic", ["0xnothex", {}], ids=["bad-hex", "wrong-type"])
@@ -1077,15 +1082,14 @@ class TestFindBalanceProposed:
             executor.find_balance_proposed([bad])
 
     @pytest.mark.parametrize("data", [{}, ["0x00"]], ids=["dict", "list"])
-    def test_non_hex_data_on_our_log_raises_type_error(self, data):
-        # `_decode_balance_proposed` catches DecodingError and ValueError, so a
-        # field that is not hex at all surfaces as TypeError here too, matching
-        # what `parse_balance_proposed` documents.
+    def test_non_hex_data_on_our_log_raises_external_state_error(self, data):
+        # A field that is not hex at all on one of our logs aborts the scan as
+        # malformed data, as `parse_balance_proposed` documents.
         executor, _ = _make_executor()
         log = dict(_proposed_log(as_strings=False))
         log["data"] = data
 
-        with pytest.raises(TypeError):
+        with pytest.raises(ExternalStateError, match="malformed BalanceProposed"):
             executor.find_balance_proposed([log])
 
     def test_a_malformed_log_aborts_even_a_filtered_scan(self):
@@ -1095,7 +1099,7 @@ class TestFindBalanceProposed:
         bad = dict(_proposed_log(as_strings=False, balance_account=OTHER_ACCOUNT))
         bad["data"] = HexBytes(b"\x01\x02")
 
-        with pytest.raises(ValueError, match="malformed BalanceProposed data"):
+        with pytest.raises(ExternalStateError, match="malformed BalanceProposed data"):
             executor.find_balance_proposed(
                 [bad, _proposed_log(as_strings=False)], BALANCE_ACCOUNT
             )
@@ -1107,7 +1111,7 @@ class TestFindBalanceProposed:
         log = dict(_proposed_log(as_strings=False))
         log["data"] = HexBytes(b"\x01\x02")
 
-        with pytest.raises(ValueError, match="malformed BalanceProposed data"):
+        with pytest.raises(ExternalStateError, match="malformed BalanceProposed data"):
             executor.find_balance_proposed([log])
 
     def test_an_addressless_encoder_refuses_to_scan(self):
@@ -1129,7 +1133,7 @@ class TestFindBalanceProposed:
             proposal_hash=_consistent_hash(EVENT_CHAIN, value=999_000_000_000),
         )
 
-        with pytest.raises(ValueError, match="another proposal's hash"):
+        with pytest.raises(ExternalStateError, match="another proposal's hash"):
             executor.find_balance_proposed([log])
 
     def test_a_bad_hash_on_another_account_does_not_abort_the_scan(self):
@@ -1327,7 +1331,7 @@ class TestMarkNav:
             "logs": [_proposed_log(as_strings=False, value=self.VALUE + 1)],
         }
 
-        with pytest.raises(ValueError, match="refusing to confirm"):
+        with pytest.raises(ExternalStateError, match="refusing to confirm"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1343,7 +1347,7 @@ class TestMarkNav:
             "logs": [_proposed_log(as_strings=False, proposer=CONFIRMER)],
         }
 
-        with pytest.raises(ValueError, match="refusing to confirm"):
+        with pytest.raises(ExternalStateError, match="refusing to confirm"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1359,7 +1363,7 @@ class TestMarkNav:
         lifted = _consistent_hash(self.CHAIN, value=999_000_000_000)
         executor, proposer_ctx, confirmer_ctx = self._setup(proposal_hash=lifted)
 
-        with pytest.raises(ValueError, match="another proposal's hash"):
+        with pytest.raises(ExternalStateError, match="another proposal's hash"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1435,7 +1439,7 @@ class TestMarkNav:
         executor, proposer_ctx, confirmer_ctx = self._setup()
         proposer_ctx.send.return_value = self._propose_receipt(address=OTHER_EMITTER)
 
-        with pytest.raises(ValueError, match="no BalanceProposed log"):
+        with pytest.raises(ExternalStateError, match="no BalanceProposed log"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1448,7 +1452,7 @@ class TestMarkNav:
         executor, proposer_ctx, confirmer_ctx = self._setup()
         proposer_ctx.send.return_value = {"blockNumber": self.BLOCK, "logs": []}
 
-        with pytest.raises(ValueError, match="no BalanceProposed log"):
+        with pytest.raises(ExternalStateError, match="no BalanceProposed log"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1591,7 +1595,7 @@ class TestReadExternalState:
             words = {self.BASE + i: HexBytes(b"") for i in range(4)}
             words[self.BASE + slot] = HexBytes(b"\x01" + b"\x00" * 32)
             ctx.get_storage_at.side_effect = lambda v, s, b=None, w=words: w[s]
-            with pytest.raises(ValueError, match="more than a 32-byte slot"):
+            with pytest.raises(ExternalStateError, match="more than a 32-byte slot"):
                 read_external_state(ctx, VAULT_ADDR)
 
         top = read_external_state(
@@ -1639,9 +1643,9 @@ class TestReadExternalState:
     def test_malformed_words_raise_instead_of_passing_as_values(self):
         from ipor_fusion import read_external_state
 
-        with pytest.raises(ValueError, match="malformed executor word"):
+        with pytest.raises(ExternalStateError, match="malformed executor word"):
             read_external_state(self._ctx([1 << 161, 0, 0, 0]), VAULT_ADDR)
-        with pytest.raises(ValueError, match="malformed pause flag"):
+        with pytest.raises(ExternalStateError, match="malformed pause flag"):
             read_external_state(self._ctx([0, 0, 0, 2]), VAULT_ADDR)
 
     def test_an_rpc_failure_propagates(self):

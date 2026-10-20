@@ -238,15 +238,20 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 ## Errors
 
 Every exception class the SDK defines now derives from `IporFusionError` and is
-importable from `ipor_fusion`; the builtin bases they had are kept. The rule the
-changes below apply is: a caller's mistake (a bad argument, or an operation the
-object was not built for) raises a plain `ValueError`; a chain, provider or remote
-API answering something the SDK cannot use raises an `IporFusionError` subclass.
-4.0 applies it to the paths listed here, not yet everywhere: the HyperCore NAV
-reader (`read_hypercore_nav`) still raises `ValueError` for a failed precompile read,
-a missing oracle price or an unsupported dex configuration,
-`fetch_verifier_result` can still raise `KeyError` or `ValueError` on a malformed
-indexer answer, and `erc20_balance_slot` raises `ValueError` when no slot answers.
+importable from `ipor_fusion`; the builtin bases they had are kept. One rule holds
+across the whole SDK: a caller's mistake (a bad argument, or an operation the object
+was not built for) raises a plain `ValueError` (`TypeError` for an argument of the
+wrong type, `KeyError` for an unknown name in a mapping-style lookup such as
+`ipor_fusion.guide.guide_text`); a chain, provider or remote API answering something the
+SDK cannot use raises an `IporFusionError` subclass. Except for
+`CrosschainDiscoveryError` (discovery) and `SimulationError` (`quote_ccip_native_fee`),
+every subclass that replaces a `ValueError` raise also derives from `ValueError`, so
+`except ValueError` keeps catching it; catch the subclass to tell a chain fact from a
+bad argument. Receipts,
+logs and transports passed in that do not contain what the call needs (a clone
+receipt without its events, logs without the lane's `BalanceProposed`, a CCIP
+message to a chain the transport does not configure) stay `ValueError`: the input
+is the wrong one.
 
 - `MorphoApiError` (still a `RuntimeError`), `ExternalStateEventDecodeError` (still a
   `ValueError`) and `VerifierResultUnavailable` (still a `LookupError`) now derive
@@ -274,3 +279,40 @@ indexer answer, and `erc20_balance_slot` raises `ValueError` when no slot answer
 - The Morpho API client raises `MorphoApiError` for every response it cannot read and
   for any `OSError` or `http.client.HTTPException` while fetching (it caught only
   `URLError` and `TimeoutError` before).
+- The MCP `market_meta_morpho` tool lets `MorphoApiError` propagate instead of
+  re-raising it as `ValueError`. MCP clients see the same tool error message; only a
+  direct Python call of the tool function sees the new type.
+- `read_hypercore_nav` (and `read_hypercore_vault_state`, which calls it) raises the new
+  `HyperCoreValuationError` (still a `ValueError`) for a failed `spotBalance`,
+  `tokenInfo` or `accountMarginSummary` precompile read, a granted spot token the
+  oracle does not price, a price overflow and an unsupported HIP-3 dex bitmap;
+  `HyperCoreNav.balance_wad` raises it for a negative NAV.
+- `read_hypercore_transfer_snapshot` raises `UnsupportedChainError` (still a
+  `ValueError`) on a chain with no known `HyperCorePendingReader` when none is passed.
+- `fetch_verifier_result` no longer leaks `KeyError`, `TypeError` or `ValueError` from
+  an indexer answer it cannot read (not JSON, a missing or mistyped field, invalid hex
+  or address, an empty or non-array CCV list, or a result for a different message id,
+  both now checked): that
+  indexer is skipped like an unreachable one, and when none serves a readable result
+  it raises `VerifierResultUnavailable` naming each indexer's reason. A `message_id`
+  that is not 32 bytes is still a `ValueError`.
+- `erc20_balance_slot` raises the new `BalanceSlotNotFoundError` (still a
+  `ValueError`) when no slot up to `max_slot` answers as the balances mapping; a
+  negative `max_slot` is a `ValueError` with its own message.
+- The external-state market raises the new `ExternalStateError` (still a
+  `ValueError`): `read_external_state` for a storage word longer than 32 bytes, an
+  executor word with bits above the address or a pause word other than 0 or 1;
+  `ExternalStateExecutor.for_vault` when no executor is deployed and, instead of
+  eth_abi's `NonEmptyPaddingBytes`, for a slot that is not an address;
+  `parse_balance_proposed` / `find_balance_proposed` for one of the executor's own
+  `BalanceProposed` logs whose data is missing or malformed (including data that is
+  not hex at all, which raised `TypeError`) or whose hash is not the hash of its own
+  fields; and `mark_nav` when the propose receipt it fetched has no such log or
+  records another value or proposer. A log that is not the event or not from the
+  executor, and `find_balance_proposed` over logs that hold no match, are still
+  `ValueError`.
+- `ccip_token_lane` raises the new `UnsupportedContractVersionError` (still a
+  `ValueError`) for an OnRamp version whose layout is not verified.
+- `quote_ccip_native_fee` raises `SimulationError` (label `"quote"`, with
+  `revert_reason`) instead of `ValueError` when the call reverts before the CCIP fee
+  check. A call that succeeds without sending a message is still a `ValueError`.

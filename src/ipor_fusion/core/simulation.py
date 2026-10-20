@@ -16,6 +16,7 @@ from web3.utils.address import get_create_address
 from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.errors import (
+    BalanceSlotNotFoundError,
     SimulationError,
     SimulationRunError,
     decode_custom_error,
@@ -751,13 +752,13 @@ def erc20_balance_slot(
     """Find the storage slot of ``token``'s ``balances`` mapping by overriding
     every candidate in one ``eth_simulateV1`` request, using a distinct holder
     per slot, until ``balanceOf`` reflects the override (slot 9 for Circle's
-    FiatToken, 0 for OpenZeppelin ERC20). Raises ``ValueError`` when no slot up
-    to ``max_slot`` answers, which is the case for tokens whose balances are not
-    a plain address-keyed mapping."""
+    FiatToken, 0 for OpenZeppelin ERC20). Raises ``BalanceSlotNotFoundError``
+    when no slot up to ``max_slot`` answers, which is the case for tokens whose
+    balances are not a plain address-keyed mapping, and ``ValueError`` for a
+    negative ``max_slot``."""
     probe = 0x1234_5678_9ABC
-    no_slot = f"no balances mapping slot found for {token} up to {max_slot}"
     if max_slot < 0:
-        raise ValueError(no_slot)
+        raise ValueError(f"max_slot must be non-negative, got {max_slot}")
 
     sim = VaultSimulator(web3, block=block)
     for slot in range(max_slot + 1):
@@ -778,7 +779,9 @@ def erc20_balance_slot(
     for slot in range(max_slot + 1):
         if result.get(f"balance_slot_{slot}") == probe:
             return slot
-    raise ValueError(no_slot)
+    raise BalanceSlotNotFoundError(
+        f"no balances mapping slot found for {token} up to {max_slot}"
+    )
 
 
 def _normalize_call_error(

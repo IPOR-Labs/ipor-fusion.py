@@ -1,6 +1,7 @@
 """Post-pending transfer outcomes from observed Core and EVM state."""
 
 from dataclasses import replace
+from unittest.mock import MagicMock
 
 import pytest
 from web3 import Web3
@@ -8,9 +9,12 @@ from web3 import Web3
 from ipor_fusion import (
     HyperCoreTransferSnapshot,
     HyperCoreTransferStatus,
+    UnsupportedChainError,
+    Web3Context,
     compare_hypercore_transfer,
+    read_hypercore_transfer_snapshot,
 )
-from ipor_fusion.types import Amount
+from ipor_fusion.types import Amount, ChainId
 
 VAULT = Web3.to_checksum_address("0xB8De01Ca5ca57A14671E1c696337134a02B4A478")
 USDC = Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f")
@@ -122,3 +126,10 @@ def test_snapshots_must_track_one_action_and_one_vault() -> None:
         )
     with pytest.raises(ValueError, match="later block"):
         compare_hypercore_transfer(_snapshot(), _snapshot(), "core_to_evm")
+
+
+def test_snapshot_on_a_chain_without_a_pending_reader_is_unsupported() -> None:
+    ctx = Web3Context(MagicMock(), ChainId(1))
+    ctx.default_block = 100
+    with pytest.raises(UnsupportedChainError, match="no HyperCorePendingReader"):
+        read_hypercore_transfer_snapshot(ctx, VAULT, USDC)
