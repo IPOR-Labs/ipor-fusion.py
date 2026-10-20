@@ -102,7 +102,7 @@ def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     resolve_token_symbol(ctx, VAULT)
     fetch_unpriceable_priced_tokens(
         ctx,
-        oracle_address=VAULT,
+        price_oracle=VAULT,
         underlying=VAULT,
         balance_fuses=[],
         market_substrates={},

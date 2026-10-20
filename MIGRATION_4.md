@@ -116,12 +116,13 @@ sees. A context built from your own `Web3` object is not bounded unless you add 
 same middleware.
 
 `ensure_supported_chain` takes `ChainId`. `fetch_unpriceable_priced_tokens(ctx, *,
-oracle_address, underlying, balance_fuses, market_substrates, morpho_positions)` takes
+price_oracle, underlying, balance_fuses, market_substrates, morpho_positions)` takes
 everything after `ctx` by keyword, the oracle and underlying as `ChecksumAddress`.
 `resolve_token_symbol`, `resolve_token_decimals`,
 `get_contract_name` and `get_deployment_tx` take `HexAddress` (a checksum address
 fits) and `api_key` by keyword only (`get_contract_name(chain_id, address, *,
-api_key=None, cache=None)`, `get_deployment_tx(chain_id, address, *, api_key=None)`), and the `resolve_name` / `resolve_symbol` callbacks receive one (a callback
+api_key=None, cache=None)`, `get_deployment_tx(chain_id, address, *, api_key=None)`),
+and the `resolve_name` / `resolve_symbol` callbacks receive one (a callback
 typed for `str` still fits). Market-keyed data is keyed by `MarketId`:
 `VaultData.market_substrates`, `dependency_graph`, `morpho_positions`,
 `aave_positions`, `market_balances`; the `VaultState` protocol, `fetch_vault_lending_health`, `fetch_unpriceable_priced_tokens`

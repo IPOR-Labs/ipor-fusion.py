@@ -81,7 +81,7 @@ def chain(monkeypatch):
 def _fetch(chain, substrates, balance_fuses=(), morpho_positions=None):
     return fetch_unpriceable_priced_tokens(
         chain.ctx,
-        oracle_address=ORACLE,
+        price_oracle=ORACLE,
         underlying=UNDERLYING,
         balance_fuses=list(balance_fuses),
         market_substrates=substrates,
