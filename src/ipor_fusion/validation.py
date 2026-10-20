@@ -245,9 +245,10 @@ def validate_vault(
     else the context's numeric default block, else the latest) and validate
     it; ``ctx`` itself is not modified.
 
-    The checks need no token metadata, so none is read by default and the
-    ERC20 holdings are named ``"?"``; ``metadata=True`` adds one batched,
-    cached symbol read that names them in the holdings and findings."""
+    The checks need no display metadata, so by default the snapshot has no
+    `token_symbols` / `token_decimals` and the ERC20 holdings are named
+    ``"?"``; ``metadata=True`` adds one batched, cached read that names them
+    in the holdings and findings."""
     return validate_vault_state(
         fetch_vault_data(ctx, vault, block=block, metadata=metadata)
     )
