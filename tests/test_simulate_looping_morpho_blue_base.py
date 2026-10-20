@@ -102,8 +102,9 @@ def test_simulate_looping_morpho_blue(web3_base):
     # Historical block from the original anvil-based test — vault state, oracle
     # prices, and wsteth_holder's WStETH balance are deterministic on this block.
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(
+        web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id)
+    ).at_block(PINNED_BLOCK)
     plasma_vault = PlasmaVault(VAULT_ADDRESS)
     access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
     oracle = PriceOracleMiddleware(

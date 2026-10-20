@@ -27,6 +27,8 @@ AssetId = NewType("AssetId", bytes)
 StargateAssetId = NewType("StargateAssetId", int)
 # A LayerZero V2 endpoint id (uint32), distinct from the EVM chain id.
 LayerZeroEid = NewType("LayerZeroEid", int)
+# A CCIP chain selector (uint64), Chainlink's chain id, distinct from the EVM one.
+CcipChainSelector = NewType("CcipChainSelector", int)
 ProposalId = NewType("ProposalId", int)
 # A factory's uint256 dispatcher deployment request; a return (recall) request
 # is the bytes32 ReturnRequestId.

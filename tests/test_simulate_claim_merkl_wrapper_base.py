@@ -132,8 +132,9 @@ def _prepared_sim(web3_base: Web3) -> _Setup:
     granted MERKL substrate. The wiring asserts below are real pinned-block
     reads documenting those preconditions.
     """
-    ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(
+        web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id)
+    ).at_block(PINNED_BLOCK)
 
     plasma_vault = PlasmaVault(VAULT_ADDRESS)
     rewards = RewardsManager(plasma_vault.get_rewards_claim_manager_address().call(ctx))

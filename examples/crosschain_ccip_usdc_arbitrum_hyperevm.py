@@ -70,6 +70,7 @@ from web3 import Web3
 from ipor_fusion import (
     ERC20,
     CcipChain,
+    CcipChainSelector,
     CcipTransport,
     Command,
     CrosschainLane,
@@ -93,8 +94,8 @@ log = logging.getLogger("crosschain_ccip_usdc_arbitrum_hyperevm")
 # (docs.chain.link -> CCIP -> Directory -> Arbitrum One / Hyperliquid).
 ARBITRUM_CHAIN_ID = ChainId(42161)
 HYPEREVM_CHAIN_ID = ChainId(999)
-ARBITRUM_CCIP_SELECTOR = 4949039107694359620
-HYPEREVM_CCIP_SELECTOR = 2442541497099098535
+ARBITRUM_CCIP_SELECTOR = CcipChainSelector(4949039107694359620)
+HYPEREVM_CCIP_SELECTOR = CcipChainSelector(2442541497099098535)
 ARBITRUM_CCIP_ROUTER = Web3.to_checksum_address(
     "0x141fa059441E0ca23ce184B6A78bafD2A517DdE8"
 )
@@ -205,9 +206,7 @@ def _connected_web3(env_var: str, chain_id: ChainId) -> Web3:
 
 
 def _pinned_context(web3: Web3, chain_id: ChainId, block: int) -> Web3Context:
-    ctx = Web3Context(web3, chain_id=chain_id)
-    ctx.default_block = block
-    return ctx
+    return Web3Context(web3, chain_id=chain_id).at_block(block)
 
 
 # ── Pure builders (no chain access, unit-testable offline) ───────────────────

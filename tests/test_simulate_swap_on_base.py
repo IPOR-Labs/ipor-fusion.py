@@ -88,8 +88,9 @@ def test_simulate_swap_cbbtc_to_usdc(web3_base):
         "0x17548bc38669D3D6590C861E505716245b4598bB"
     )
 
-    ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
-    ctx.default_block = pinned_block
+    ctx = Web3Context(
+        web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id)
+    ).at_block(pinned_block)
 
     plasma_vault = PlasmaVault(vault_address)
     access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
@@ -162,8 +163,9 @@ def test_simulate_swap_weth_to_pepe(web3_base):
     )
     pepe = Web3.to_checksum_address("0x52b492a33E447Cdb854c7FC19F1e57E8BfA1777D")
 
-    ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
-    ctx.default_block = pinned_block
+    ctx = Web3Context(
+        web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id)
+    ).at_block(pinned_block)
 
     weth = ERC20(BASE_WETH)
     pepe_token = ERC20(pepe)

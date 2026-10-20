@@ -29,7 +29,7 @@ from ipor_fusion.crosschain.transport import (
     OutboundMessage,
     transfer_call,
 )
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import CcipChainSelector, ChainId
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +42,7 @@ class CcipChain:
     cross-decimal token credits."""
 
     chain_id: ChainId
-    chain_selector: int
+    chain_selector: CcipChainSelector
     router: ChecksumAddress
     token: ChecksumAddress
     local_decimals: int
@@ -66,7 +66,7 @@ class CcipTransport(CrosschainTransport):
 
     def __init__(self, chains: Iterable[CcipChain]) -> None:
         self._chains: dict[ChainId, CcipChain] = {}
-        self._by_selector: dict[int, CcipChain] = {}
+        self._by_selector: dict[CcipChainSelector, CcipChain] = {}
         for chain in chains:
             if chain.chain_id in self._chains:
                 raise ValueError(f"duplicate CCIP chain_id {chain.chain_id}")

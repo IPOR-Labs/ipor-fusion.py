@@ -33,7 +33,6 @@ from ipor_fusion import (
     PlasmaVault,
     TimeInForce,
     VaultSimulator,
-    Web3Context,
     erc20_balance_slot,
 )
 from ipor_fusion.fuses.hypercore import SPOT_DEX
@@ -86,8 +85,6 @@ def test_market55_vault_flow_with_explicit_hypercore_model() -> None:
     runtimes = compile_hypercore_shadow_runtimes(
         Path(source_dir), web3, ADDRESSES, BLOCK, remappings
     )
-    ctx = Web3Context(web3, 999)
-    ctx.default_block = BLOCK
     vault = PlasmaVault(VAULT)
     usdc = ERC20(USDC)
     sim = VaultSimulator(web3, vault=VAULT, alpha=OPERATOR, block=BLOCK)

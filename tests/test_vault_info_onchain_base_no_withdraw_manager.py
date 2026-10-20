@@ -33,8 +33,7 @@ BLOCK = 50788912
 def _connect(url: str) -> tuple[Web3Context, PlasmaVault]:
     """Skip on infra problems only (unreachable or non-archive provider)."""
     try:
-        ctx = Web3Context.from_url(url)
-        ctx.default_block = BLOCK
+        ctx = Web3Context.from_url(url).at_block(BLOCK)
         pv = PlasmaVault(VAULT)
         pv.underlying_asset_address().call(ctx)  # state read at BLOCK needs archive
     except Exception as exc:  # noqa: BLE001

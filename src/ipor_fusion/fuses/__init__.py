@@ -46,7 +46,7 @@ from ipor_fusion.fuses.hypercore import (
     is_hip3_asset,
     is_native_perp_asset,
     perp_dex_of,
-    read_index_of,
+    precompile_index_of,
     system_address,
 )
 from ipor_fusion.fuses.hypercore_events import (
@@ -150,7 +150,7 @@ __all__ = [
     "is_hip3_asset",
     "is_native_perp_asset",
     "perp_dex_of",
-    "read_index_of",
+    "precompile_index_of",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",

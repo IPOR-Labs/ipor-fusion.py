@@ -7,6 +7,7 @@ from dataclasses import astuple
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import multicall_aware
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector as selector
 from web3 import Web3
@@ -20,6 +21,7 @@ from ipor_fusion import (
     CrosschainLane,
     IporFusionError,
     LaneFuses,
+    LaneHubState,
     LaneObservation,
     PlasmaVault,
     StargateLane,
@@ -53,7 +55,7 @@ from ipor_fusion.crosschain.fuses import (
     StargateCrosschainSupplyFuse,
     StargateSendParams,
 )
-from ipor_fusion.types import ZERO_ADDRESS, ChainId
+from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId
 
 EXECUTOR = Web3.to_checksum_address("0x1d5c9d44f8d556ec7f557ae992401cc770937e6e")
 VAULT = Web3.to_checksum_address("0x0Aa75BfD30Ae2d4061FF8261453b933Ab5959991")
@@ -908,6 +910,67 @@ class TestContextOwnership:
         assert lane.needs_attestation(now=10) is True
         assert hub.call.called
         spoke.call.assert_not_called()
+
+    @pytest.mark.parametrize("factory", [_stargate_lane, _ccip_lane])
+    def test_read_hub_state_batches_the_executor_on_the_hub(self, factory):
+        probe = factory()
+        active_command = (
+            encode(
+                ["bool", "bool", "bool", "uint8", "bytes32", "uint64", "uint64"],
+                [True, False, False, 1, HASH, 0, 0],
+            )
+            if factory is _stargate_lane
+            else encode(["bytes32"], [HASH])
+        )
+        answers = {
+            _sel(probe.settled_remote_balance()): encode(["uint256"], [5]),
+            _sel(probe.outbound_in_flight()): encode(["uint256"], [6]),
+            _sel(probe.idle_ledger()): encode(["uint256"], [7]),
+            _sel(probe.is_dispatcher_ready()): encode(["bool"], [True]),
+            _sel(probe.chain_blocked()): encode(["bool"], [False]),
+            _sel(probe.last_approved_observed_at()): encode(["uint64"], [8]),
+            _sel(probe.staleness_max()): encode(["uint256"], [3_600]),
+            _sel(probe.remote_state_version()): encode(["uint64"], [9]),
+            selector("activeCommand(uint256)"): active_command,
+            _sel(probe.pending_transfer_count()): encode(["uint256"], [2]),
+        }
+        hub = _chain_ctx(1)
+        hub.call.side_effect = multicall_aware(lambda _to, data: answers[data[:4]])
+        spoke = self._wrong_chain(SPOKE)
+
+        state = factory(hub_ctx=hub, spoke_ctx=spoke).read_hub_state()
+
+        assert state == LaneHubState(
+            settled_remote_balance=Amount(5),
+            outbound_in_flight=Amount(6),
+            idle_ledger=Amount(7),
+            dispatcher_ready=True,
+            chain_blocked=False,
+            last_approved_observed_at=8,
+            staleness_max=3_600,
+            remote_state_version=9,
+            has_active_command=True,
+            pending_transfer_count=2,
+        )
+        assert hub.call.call_count == 1
+        spoke.call.assert_not_called()
+
+    def test_read_observation_runs_on_the_spoke(self):
+        hub = self._wrong_chain(1)
+        spoke = _ctx_answering(
+            {
+                selector("observation()"): encode(
+                    ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
+                    [(7, [], [], 3, 1, HASH)],
+                )
+            },
+            chain_id=SPOKE,
+        )
+
+        observation = _stargate_lane(hub_ctx=hub, spoke_ctx=spoke).read_observation()
+
+        assert observation.accounted_balance == 7
+        hub.call.assert_not_called()
 
     def test_returned_calls_run_where_the_caller_says(self):
         hub = self._wrong_chain(1)

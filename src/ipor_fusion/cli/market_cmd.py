@@ -123,7 +123,7 @@ def morpho_blue(
     provider_url = _resolve_provider(cfg, chain_id)
     ctx = Web3Context.from_url(provider_url)
     if block is not None:
-        ctx.default_block = block
+        ctx = ctx.at_block(block)
     reader = MorphoReader(morpho_blue_address(chain_id))
     mid = market_id
     params, state = reader.read_existing_market(ctx, mid)
@@ -143,14 +143,14 @@ def morpho_blue(
         click.echo(
             json_lib.dumps(
                 build_morpho_blue_market_json(
-                    market_id,
-                    chain_id,
-                    params,
-                    state,
-                    rates,
-                    api_market,
-                    api_error,
-                    public_allocator,
+                    market_id=market_id,
+                    chain_id=chain_id,
+                    params=params,
+                    state=state,
+                    rates=rates,
+                    api_market=api_market,
+                    api_error=api_error,
+                    public_allocator=public_allocator,
                 ),
                 indent=2,
             )

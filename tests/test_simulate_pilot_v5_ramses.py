@@ -102,8 +102,9 @@ def _extract_ramses_new_position(execute_logs):
 def test_simulate_open_new_position_ramses_v2(web3_arb):
     """Swap USDC→USDT then mint a Ramses V2 LP position."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -205,8 +206,9 @@ def _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, amount_desire
 
 def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
     """Open Ramses position → decrease liquidity → collect → close. Two-step sim."""
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
@@ -255,8 +257,9 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
 
 def test_simulate_increase_liquidity(web3_arb):
     """Open Ramses position → increase liquidity. Two-step."""
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
@@ -312,8 +315,9 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     RAM rewards. Two-step sim: extract token_id from new position event, then
     replay setup + multi-block move-time + claim.
     """
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V5_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)

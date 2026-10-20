@@ -543,10 +543,12 @@ def _oracle_mapping(block_number: int = 123) -> OracleMapping:
     )
 
 
-def _oracle_ctx(latest_block: int = 777) -> MagicMock:
+def _oracle_ctx(latest_block: int = 777, block: object = "latest") -> MagicMock:
+    """A context whose `at_block` returns a pinned copy, as the real one does."""
     ctx = MagicMock()
     ctx.web3.eth.block_number = latest_block
-    ctx.default_block = "latest"
+    ctx.default_block = block
+    ctx.at_block.side_effect = lambda pinned: _oracle_ctx(latest_block, pinned)
     return ctx
 
 
@@ -569,7 +571,8 @@ class TestVaultOracleMapping:
 
         # latest resolved to a number, passed to the SDK, and pinned on the ctx
         assert mock_build.call_args.args[2] == 777
-        assert ctx.default_block == 777
+        assert mock_build.call_args.args[0].default_block == 777
+        assert ctx.default_block == "latest"
         assert result.block_number == 777
         assert result.vault_name == "Reservoir"
         assert result.asset_source == "getConfiguredAssets"
@@ -593,7 +596,7 @@ class TestVaultOracleMapping:
         vault_oracle_mapping(vault_address=VAULT_ADDR, block_number=500)
 
         assert mock_build.call_args.args[2] == 500
-        assert ctx.default_block == 500
+        assert mock_build.call_args.args[0].default_block == 500
 
     @patch("ipor_fusion.mcp.server._build_ctx")
     @patch(

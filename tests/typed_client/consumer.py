@@ -15,6 +15,7 @@ from web3 import Web3
 
 from ipor_fusion import (
     ERC20,
+    PUBLIC_ALLOCATOR_ADDRESSES,
     AccessManager,
     Amount,
     AssetId,
@@ -33,14 +34,18 @@ from ipor_fusion import (
     Decimals,
     ExternalStateExecutor,
     FileContractCache,
+    HyperCorePendingReader,
     IporFusionMarkets,
+    LaneObservation,
     LegacyPriceOracleMiddleware,
     MarketId,
+    MorphoReader,
     Multicall3,
     NullCache,
     Period,
     PlasmaVault,
     Price,
+    PriceOracleMiddleware,
     ProposalId,
     RewardsManager,
     RoleId,
@@ -50,6 +55,7 @@ from ipor_fusion import (
     StargateCrosschainFactory,
     TransactionError,
     Web3Context,
+    build_morpho_blue_market_json,
     build_vault_info_json,
     decode_substrate,
     ensure_supported_chain,
@@ -58,6 +64,7 @@ from ipor_fusion import (
     fetch_unpriceable_priced_tokens,
     fetch_vault,
     fetch_vault_data,
+    find_orphan_fuse_markets,
     format_market_label,
     get_contract_name,
     market_name,
@@ -93,7 +100,14 @@ def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     validate_vault(ctx.at_block(1), VAULT)
     vault.get_fuses().call(ctx, block=1)
     resolve_token_symbol(ctx, VAULT)
-    fetch_unpriceable_priced_tokens(ctx, VAULT, VAULT, [], {}, None)
+    fetch_unpriceable_priced_tokens(
+        ctx,
+        oracle_address=VAULT,
+        underlying=VAULT,
+        balance_fuses=[],
+        market_substrates={},
+        morpho_positions=None,
+    )
 
 
 def caches(web3: Web3) -> None:
@@ -213,3 +227,39 @@ def proposals_are_chain_bound(
 def lanes_own_their_contexts(lane: CrosschainLane) -> None:
     lane.get_balance().call(lane.hub_ctx)
     lane.observation().call(lane.spoke_ctx)
+    settled: Amount = lane.read_hub_state().settled_remote_balance
+    observation: LaneObservation = lane.read_observation()
+    del settled, observation
+
+
+def producers_feed_consumers(ctx: Web3Context, oracle: ChecksumAddress) -> None:
+    # A value one SDK call returns goes into the next one without re-wrapping.
+    vault = PlasmaVault(VAULT)
+    decimals = PriceOracleMiddleware(oracle).base_currency_decimals().call(ctx)
+    LegacyPriceOracleMiddleware(oracle, decimals)
+    data = fetch_vault_data(ctx, VAULT, lending=False)
+    orphans = find_orphan_fuse_markets(data.fuse_markets or {}, set())
+    vault.remove_fuses([fuse for fuses in orphans.values() for fuse in fuses])
+    vault.configure_instant_withdrawal_fuses(
+        [(fuse, [bytes(32)]) for fuse in vault.get_instant_withdrawal_fuses().call(ctx)]
+    )
+    HyperCorePendingReader(vault.address, oracle).is_pending().call(ctx)
+
+
+def ccip_selectors_round_trip(ctx: Web3Context, factory: CcipCrosschainFactory) -> None:
+    route = factory.ccip_route(ETHEREUM).call(ctx)
+    factory.chain_id_of_selector(route.chain_selector)
+
+
+def morpho_market_document(ctx: Web3Context) -> None:
+    market_id = parse_morpho_market_id("0x" + "ab" * 32)
+    reader = MorphoReader(morpho_blue_address(ETHEREUM))
+    params, state = reader.read_existing_market(ctx, market_id)
+    build_morpho_blue_market_json(
+        market_id=market_id,
+        chain_id=ETHEREUM,
+        params=params,
+        state=state,
+        rates=reader.read_rates_from(ctx, state, params),
+        public_allocator=PUBLIC_ALLOCATOR_ADDRESSES.get(ETHEREUM),
+    )

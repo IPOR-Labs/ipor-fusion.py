@@ -98,8 +98,9 @@ def _aerodrome_swap(
 
 def test_simulate_supply_borrow_in_flash_loan(web3_base):
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(
+        web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id)
+    ).at_block(PINNED_BLOCK)
 
     plasma_vault = PlasmaVault(VAULT_ADDRESS)
     access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))

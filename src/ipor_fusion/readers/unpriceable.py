@@ -284,6 +284,7 @@ def _unpriceable(
 
 def fetch_unpriceable_priced_tokens(
     ctx: Web3Context,
+    *,
     oracle_address: ChecksumAddress,
     underlying: ChecksumAddress,
     balance_fuses: list[BalanceFuse],

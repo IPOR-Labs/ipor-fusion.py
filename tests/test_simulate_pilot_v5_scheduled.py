@@ -70,8 +70,9 @@ def _whale_fund(sim, usdc, recipient, amount):
 def test_simulate_deposit(web3_arb):
     """Whale funds ANVIL_WALLET, deposits into vault."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -115,8 +116,9 @@ def test_simulate_deposit(web3_arb):
 def test_simulate_mint(web3_arb):
     """Mint exact shares (vs deposit which takes assets)."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -173,8 +175,9 @@ def test_simulate_mint(web3_arb):
 def test_simulate_redeem(web3_arb):
     """Deposit → move_time(7h) → update_window + request → move_time(1h) → release → redeem."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -254,8 +257,9 @@ def test_simulate_redeem(web3_arb):
 def test_simulate_withdraw(web3_arb):
     """Deposit → move_time(7h) → update_window + request → move_time(1h) → release → withdraw."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -337,8 +341,9 @@ def test_simulate_withdraw(web3_arb):
 def test_simulate_transfer(web3_arb):
     """Deposit on user_one's behalf, transfer shares to user_two."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -387,8 +392,9 @@ def test_simulate_transfer(web3_arb):
 def test_simulate_transfer_from(web3_arb):
     """Deposit + approve + transferFrom shares to a third party."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_SCHEDULED_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)

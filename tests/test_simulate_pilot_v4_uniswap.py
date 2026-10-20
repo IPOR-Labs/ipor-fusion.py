@@ -104,8 +104,9 @@ def _build_universal_swap(ctx, token_in, token_out, amount_in, min_out, path):
 def test_simulate_swap_when_one_hop_uniswap_v3(web3_arb):
     """USDC→USDT single-hop swap via Uniswap V3 universal router."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -142,8 +143,9 @@ def test_simulate_swap_when_one_hop_uniswap_v3(web3_arb):
 def test_simulate_swap_when_multiple_hop(web3_arb):
     """USDC→WETH→USDT multi-hop swap."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -181,8 +183,9 @@ def test_simulate_swap_when_multiple_hop(web3_arb):
 def test_simulate_open_new_position_uniswap_v3(web3_arb):
     """Swap USDC→USDT then mint a Uniswap V3 LP position."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -334,8 +337,9 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
     first call mints the position to extract token_id from events; second call
     replays setup + adds decrease/collect/close.
     """
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET
@@ -386,8 +390,9 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
 
 def test_simulate_increase_liquidity(web3_arb):
     """Open position → increase liquidity. Pre-extract token_id then replay."""
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V4_PLASMA_VAULT
     deadline = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"]) + DEADLINE_OFFSET

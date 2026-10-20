@@ -134,7 +134,7 @@ class ContractWrapper:
 
     A method that must execute to answer (a storage read, a log scan, a read
     that depends on another read) is named ``read_*`` and takes the context as
-    its first argument.
+    its first argument; no other method carries the prefix.
     """
 
     def __init__(self, address: ChecksumAddress):

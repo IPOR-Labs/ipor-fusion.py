@@ -315,8 +315,9 @@ def build_loop_action() -> FuseAction:
 
 def run_simulation(web3: Web3) -> SimulationResult:
     """Build, configure and run the WBTC/USDC leveraged loop without broadcasting."""
-    ctx = Web3Context(web3=web3, chain_id=ARBITRUM_CHAIN_ID, signer=OWNER)
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3, chain_id=ARBITRUM_CHAIN_ID, signer=OWNER).at_block(
+        PINNED_BLOCK
+    )
     factory = FusionFactory(ARBITRUM_FUSION_FACTORY)
     preview = factory.clone(**clone_args()).call(ctx)
 

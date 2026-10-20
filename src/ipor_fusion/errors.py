@@ -221,6 +221,18 @@ class ExternalStateError(IporFusionError, ValueError):
     """
 
 
+class ExternalStateEventDecodeError(IporFusionError, ValueError):
+    """A log carries a listed ExternalState topic but its data does not decode
+    to the declared parameters: malformed, never a plausible event. Also a
+    ValueError: the log the caller passed is not a decodable event."""
+
+
+class OwnerNotFoundError(IporFusionError, LookupError):
+    """An access manager has no account holding ``OWNER_ROLE`` (every owner
+    was revoked or renounced). Also a LookupError: the owner looked up is not
+    there."""
+
+
 class BalanceSlotNotFoundError(IporFusionError, ValueError):
     """No candidate storage slot of a token answers as its ``balances``
     mapping: its balances are not a plain address-keyed mapping, or the
@@ -280,6 +292,13 @@ class CrosschainDiscoveryError(IporFusionError):
     """A crosschain vault's on-chain configuration is not one discovery can
     use: a malformed or unexpected market grant, an executor managed by another
     vault or of no known transport, or a missing or duplicate lane fuse."""
+
+
+class VerifierResultUnavailable(IporFusionError, LookupError):
+    """No indexer could serve a verifier result for the message (not verified
+    yet, the indexers were unreachable, or they answered something unreadable);
+    the message says which, per indexer. Also a LookupError: the result looked
+    up is not there (yet)."""
 
 
 class SimulationRunError(IporFusionError, RuntimeError):

@@ -51,8 +51,8 @@ _etherscan_limiter = _RateLimiter(2.5)
 def get_contract_name(
     chain_id: ChainId,
     address: HexAddress,
-    api_key: str | None = None,
     *,
+    api_key: str | None = None,
     cache: ContractCache | None = None,
 ) -> str:
     """The verified contract name at ``address``, ``""`` when unknown. Read from
@@ -70,7 +70,7 @@ def get_contract_name(
 
 
 def get_deployment_tx(
-    chain_id: ChainId, address: HexAddress, api_key: str | None = None
+    chain_id: ChainId, address: HexAddress, *, api_key: str | None = None
 ) -> tuple[TxHash | None, str | None]:
     """Return ``(tx_hash, error)`` for a contract deployment.
 

@@ -13,6 +13,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.types import Timestamp
 
 from ipor_fusion.core.external_state_executor import (
     BalanceProposal,
@@ -195,10 +196,9 @@ class TestLastUpdated:
         (account,) = decode(["address"], call.data[4:])
         assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
         assert call.output_types == ["uint256"]
-        # A timestamp carries no unit, so no decoder. Pinned because `Amount` is
-        # a NewType -- adding one here would change nothing at runtime and pass
-        # pyright, leaving this assertion the only thing that would notice.
-        assert call.decoder is None
+        # `Timestamp` is a NewType: pinned here because swapping it for another
+        # one would change nothing at runtime and still pass pyright.
+        assert call.decoder is Timestamp
 
     def test_decodes_uint256(self):
         executor, ctx = _make_executor()

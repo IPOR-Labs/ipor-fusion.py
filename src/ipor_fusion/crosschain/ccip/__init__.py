@@ -48,7 +48,6 @@ from ipor_fusion.crosschain.ccip.events import (
 from ipor_fusion.crosschain.ccip.indexer import (
     INDEXER_URLS,
     VerifierResult,
-    VerifierResultUnavailable,
     fetch_verifier_result,
     manual_execution,
 )
@@ -56,6 +55,7 @@ from ipor_fusion.crosschain.ccip.quote import (
     INSUFFICIENT_NATIVE_FEE_SELECTOR,
     quote_ccip_native_fee,
 )
+from ipor_fusion.errors import VerifierResultUnavailable
 
 __all__ = [
     "CCIP_EVENTS",

@@ -32,7 +32,7 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 from web3.types import TxReceipt
 
-from ipor_fusion.errors import IporFusionError
+from ipor_fusion.errors import ExternalStateEventDecodeError
 from ipor_fusion.types import TxHash, parse_tx_hash
 
 
@@ -122,12 +122,6 @@ EXTERNAL_STATE_EVENTS: dict[bytes, ExternalStateEventSpec] = {
 EXTERNAL_STATE_TOPICS: tuple[str, ...] = tuple(
     "0x" + spec.topic.hex() for spec in EXTERNAL_STATE_EVENT_SPECS
 )
-
-
-class ExternalStateEventDecodeError(IporFusionError, ValueError):
-    """A log carries a listed ExternalState topic but its data does not decode
-    to the declared parameters: malformed, never a plausible event. Also a
-    ValueError: the log the caller passed is not a decodable event."""
 
 
 @dataclass(frozen=True, slots=True)

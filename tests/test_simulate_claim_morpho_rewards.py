@@ -63,8 +63,9 @@ PROOF: list[str] = [
 
 def test_simulate_claim_morpho_rewards(web3_eth):
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     plasma_vault = PlasmaVault(VAULT_ADDRESS)
     rewards = RewardsManager(plasma_vault.get_rewards_claim_manager_address().call(ctx))

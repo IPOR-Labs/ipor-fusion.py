@@ -64,8 +64,14 @@ class TestGetContractName:
         response = {"status": "1", "result": [{"ContractName": "PlasmaVault"}]}
         mock_urlopen_fn.return_value = _mock_urlopen(json.dumps(response).encode())
 
-        assert get_contract_name(1, DEF, "key123", cache=NullCache()) == "PlasmaVault"
-        assert get_contract_name(1, DEF, "key123", cache=NullCache()) == "PlasmaVault"
+        assert (
+            get_contract_name(1, DEF, api_key="key123", cache=NullCache())
+            == "PlasmaVault"
+        )
+        assert (
+            get_contract_name(1, DEF, api_key="key123", cache=NullCache())
+            == "PlasmaVault"
+        )
 
         assert mock_urlopen_fn.call_count == 2
         assert not (tmp_path / ".cache").exists()
@@ -78,7 +84,9 @@ class TestGetContractName:
         broken.get.side_effect = OSError("read-only file system")
         broken.put.side_effect = OSError("read-only file system")
 
-        assert get_contract_name(1, DEF, "key123", cache=broken) == "PlasmaVault"
+        assert (
+            get_contract_name(1, DEF, api_key="key123", cache=broken) == "PlasmaVault"
+        )
         broken.put.assert_called_once()
 
     def test_returns_empty_for_unsupported_chain(self):

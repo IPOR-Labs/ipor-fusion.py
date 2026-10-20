@@ -445,8 +445,7 @@ class TestPreview:
     def test_build_transaction_pins_nonce_base_fee_and_estimate_to_block(self):
         # A pinned build reads nonce, base fee and gas at the same block, and
         # ignores default_block: only the explicit argument pins it.
-        ctx = _make_ctx(signer=ADDR)
-        ctx.default_block = 99
+        ctx = _make_ctx(signer=ADDR).at_block(99)
         web3 = ctx.web3
         web3.eth.get_transaction_count.return_value = 3
         web3.eth.gas_price = 20 * GWEI
@@ -465,8 +464,7 @@ class TestPreview:
         )
 
     def test_build_transaction_ignores_default_block(self):
-        ctx = _make_ctx(signer=ADDR)
-        ctx.default_block = 99
+        ctx = _make_ctx(signer=ADDR).at_block(99)
         _build_tx(ctx, gas_price=20 * GWEI, block={"baseFeePerGas": 15 * GWEI})
         ctx.web3.eth.get_transaction_count.assert_called_once_with(
             ADDR, block_identifier="latest"

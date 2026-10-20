@@ -807,8 +807,9 @@ def run_simulation(web3: Web3) -> SimulationResult:
     function does (exactly one failure, with the expected revert selector), not
     with ``result.all_success``.
     """
-    ctx = Web3Context(web3=web3, chain_id=BASE_CHAIN_ID, signer=OWNER)
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3, chain_id=BASE_CHAIN_ID, signer=OWNER).at_block(
+        PINNED_BLOCK
+    )
 
     factory = FusionFactory(BASE_FUSION_FACTORY)
 

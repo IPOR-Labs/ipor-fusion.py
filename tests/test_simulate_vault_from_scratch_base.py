@@ -119,8 +119,9 @@ def test_simulate_vault_from_scratch_supply_aave_v3(
 ):
     whale = Web3.to_checksum_address(BASE_USDC_WHALE)
 
-    ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
-    ctx.default_block = block
+    ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER).at_block(
+        block
+    )
     factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # ── 1. Predict the deterministic addresses ──────────────────────────────

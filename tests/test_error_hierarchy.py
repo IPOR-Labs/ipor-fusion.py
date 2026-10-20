@@ -24,6 +24,7 @@ from ipor_fusion import (
     MorphoApiError,
     MorphoMarketNotFoundError,
     NotPlasmaVaultError,
+    OwnerNotFoundError,
     SimulationError,
     SimulationRunError,
     TransactionError,
@@ -63,6 +64,15 @@ def test_every_sdk_exception_derives_from_the_base():
     assert stray == []
 
 
+def test_every_sdk_exception_lives_in_the_errors_module():
+    elsewhere = sorted(
+        f"{cls.__module__}.{cls.__qualname__}"
+        for cls in _sdk_exceptions()
+        if cls.__module__ != "ipor_fusion.errors"
+    )
+    assert elsewhere == []
+
+
 def test_every_sdk_exception_is_exported():
     exported = {
         getattr(ipor_fusion, name)
@@ -89,6 +99,7 @@ def test_every_sdk_exception_is_exported():
         (MorphoApiError, RuntimeError),
         (SimulationRunError, RuntimeError),
         (VerifierResultUnavailable, LookupError),
+        (OwnerNotFoundError, LookupError),
     ],
 )
 def test_builtin_bases_are_kept(error, builtin):
@@ -108,6 +119,7 @@ def test_builtin_bases_are_kept(error, builtin):
         SimulationRunError,
         TransactionError,
         VerifierResultUnavailable,
+        OwnerNotFoundError,
     ],
 )
 def test_chain_and_remote_failures_are_not_bad_input(error):

@@ -46,7 +46,7 @@ from ipor_fusion.fuses.hypercore import (
     SUPPORTED_HIP3_DEXES,
     SettlementMode,
     perp_dex_of,
-    read_index_of,
+    precompile_index_of,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
@@ -203,7 +203,7 @@ class HyperCoreReader:
     Mirrors ``HyperCoreLib``'s reads: a precompile takes its arguments as raw
     ABI-encoded words (no selector) and answers one ABI-encoded value. The
     perp reads take the *read index* of a market
-    (:func:`ipor_fusion.read_index_of`: the action asset without the HIP-3
+    (:func:`ipor_fusion.precompile_index_of`: the action asset without the HIP-3
     offset), never the action asset itself.
     """
 
@@ -400,12 +400,12 @@ class HyperCorePendingReader:
     reverts ``execute`` and ``updateMarketsBalances`` while it is true.
     """
 
-    def __init__(self, vault: PlasmaVault, reader: ChecksumAddress):
-        self._vault = vault
+    def __init__(self, vault: PlasmaVaultAddress, reader: ChecksumAddress):
+        self._vault = PlasmaVault(vault)
         self._reader = reader
 
     def pending_state(self) -> Call[HyperCorePendingState]:
-        return self._vault.read_as(
+        return self._vault.universal_read_decoded(
             self._reader,
             _PENDING_STATE_SELECTOR,
             output_types=[PENDING_STATE_TYPE],
@@ -413,7 +413,7 @@ class HyperCorePendingReader:
         )
 
     def is_pending(self) -> Call[bool]:
-        return self._vault.read_as(
+        return self._vault.universal_read_decoded(
             self._reader, _IS_PENDING_SELECTOR, output_types=["bool"], decoder=bool
         )
 
@@ -702,8 +702,12 @@ def read_hypercore_vault_state(
     granted = _granted_perp_markets(vault.get_market_substrates(market_id).call(ctx))
     calls: list[Call[Any]] = [vault.balance_fuse_value(balance_fuse)]
     if pending_reader is not None:
-        calls.append(HyperCorePendingReader(vault, pending_reader).pending_state())
-    calls += [reader.perp_asset_info(read_index_of(asset)) for asset, _, _ in granted]
+        calls.append(
+            HyperCorePendingReader(vault_address, pending_reader).pending_state()
+        )
+    calls += [
+        reader.perp_asset_info(precompile_index_of(asset)) for asset, _, _ in granted
+    ]
     results = Multicall3(ctx).try_aggregate(calls)
     fuse_value = results[0]
     pending = results[1] if pending_reader is not None else None
@@ -712,7 +716,7 @@ def read_hypercore_vault_state(
         HyperCorePerpMarket(
             asset=asset,
             dex=perp_dex_of(asset),
-            read_index=read_index_of(asset),
+            read_index=precompile_index_of(asset),
             coin=info.coin if info is not None else None,
             max_notional_usd6=cap,
             reduce_only_required=reduce_only,

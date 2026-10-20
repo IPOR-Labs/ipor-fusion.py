@@ -44,7 +44,7 @@ from web3.types import RPCEndpoint
 from ipor_fusion import ERC20, Web3Context, ccip_token_lane
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain import CcipCrosschainFactory, CcipOffRamp, CcipRouter
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import CcipChainSelector, ChainId
 
 SCHEMA = "ipor-fusion.crosschain-readiness/4"
 EXIT_OK = 0
@@ -127,7 +127,7 @@ class ChainSpec:
 
     name: str
     chain_id: ChainId
-    chain_selector: int
+    chain_selector: CcipChainSelector
     env_var: str
     router: ChecksumAddress
     usdc: ChecksumAddress
@@ -138,7 +138,7 @@ class ChainSpec:
 ARBITRUM = ChainSpec(
     name="arbitrum",
     chain_id=ChainId(42161),
-    chain_selector=4949039107694359620,
+    chain_selector=CcipChainSelector(4949039107694359620),
     env_var="ARBITRUM_PROVIDER_URL",
     router=Web3.to_checksum_address("0x141fa059441E0ca23ce184B6A78bafD2A517DdE8"),
     usdc=Web3.to_checksum_address("0xaf88d065e77c8cC2239327C5EDb3A432268e5831"),
@@ -151,7 +151,7 @@ ARBITRUM = ChainSpec(
 HYPEREVM = ChainSpec(
     name="hyperevm",
     chain_id=ChainId(999),
-    chain_selector=2442541497099098535,
+    chain_selector=CcipChainSelector(2442541497099098535),
     env_var="HYPEREVM_PROVIDER_URL",
     router=Web3.to_checksum_address("0x13b3332b66389B1467CA6eBd6fa79775CCeF65ec"),
     usdc=Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f"),
@@ -757,9 +757,7 @@ def connect(spec: ChainSpec) -> Web3Context:
         raise ReadinessConfigError(
             f"{spec.env_var}: chain id {chain_id}, expected {spec.chain_id}"
         )
-    ctx = Web3Context(web3=web3, chain_id=spec.chain_id)
-    ctx.default_block = head
-    return ctx
+    return Web3Context(web3=web3, chain_id=spec.chain_id).at_block(head)
 
 
 def config_error_report(message: str) -> dict[str, Any]:

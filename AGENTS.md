@@ -181,7 +181,8 @@ the lifecycle matrix follows that.
 
 ## Layout (`src/ipor_fusion/`)
 
-- `chains.py` chain registry; `market_ids.py` `IporFusionMarkets`; `types.py`, `errors.py`
+- `chains.py` chain registry; `market_ids.py` `IporFusionMarkets`; `types.py`; `errors.py`
+  defines every SDK exception class (`tests/test_error_hierarchy.py` pins it)
 - `about.py` — package version, repository URL, CHANGELOG parsing (`fusion changelog`,
   `server_info`); `field_docs.py` — `DOCS`, the JSON field descriptions shared by CLI
   output and MCP models
@@ -306,13 +307,18 @@ or examples.
   that depends on another read) is named `read_*` and takes `ctx` first:
   `PlasmaVault.read_balance_fuses(ctx)`, `AccessManager.read_all_role_accounts(ctx)`,
   `MorphoReader.read_rates(ctx, id)`. Decide by the I/O a method performs, not
-  by the class name. Resolvers that probe the chain to pick a wrapper
+  by the class name; the prefix is reserved for that, so a method that builds
+  a `Call` offline (`PlasmaVault.universal_read`) or a pure helper
+  (`precompile_index_of`) never takes it. Resolvers that probe the chain to pick a wrapper
   (`price_oracle_middleware(ctx, a)`, `resolve_access_manager`,
   `ExternalStateExecutor.for_vault`) return context-free wrappers. Executors
   and orchestrators own their contexts: `Multicall3(ctx)`, `VaultSimulator`,
   `CrosschainSimulator`, `OracleMappingReader(ctx, oracle)` and
   `CrosschainLane` (`hub_ctx` for the executor, `spoke_ctx` for the
-  dispatcher at the same address: run a lane's Calls on the matching one).
+  dispatcher at the same address; its eager `read_hub_state()` and
+  `read_observation()` run on the right one, and its Calls on whichever the
+  caller picks). A context is pinned by copy, `ctx.at_block(n)`;
+  `default_block` is read-only.
   A chain-dependent decode takes the chain explicitly
   (`ExternalStateExecutor.pending_proposals(account, chain_id=)`); a decoder
   never consults the executing context.

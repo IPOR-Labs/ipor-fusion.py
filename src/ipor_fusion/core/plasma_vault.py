@@ -255,7 +255,7 @@ class PlasmaVault(ContractWrapper):
             [list(group) for group in substrates],
         )
 
-    def read(self, target: ChecksumAddress, data: bytes) -> Call[bytes]:
+    def universal_read(self, target: ChecksumAddress, data: bytes) -> Call[bytes]:
         """``UniversalReader.read``: delegatecall ``data`` on ``target`` in the
         vault's own storage context and return the raw ABI-encoded result, for
         helpers that must see the vault's storage (a market's pending-action
@@ -268,7 +268,7 @@ class PlasmaVault(ContractWrapper):
             decoder=_universal_read_decoder(None, None),
         )
 
-    def read_as(
+    def universal_read_decoded(
         self,
         target: ChecksumAddress,
         data: bytes,
@@ -276,7 +276,8 @@ class PlasmaVault(ContractWrapper):
         output_types: list[str],
         decoder: Callable[..., T] | None = None,
     ) -> Call[T]:
-        """:meth:`read` with the result decoded like a view's return value."""
+        """:meth:`universal_read` with the result decoded like a view's return
+        value."""
         return self._view(
             "read(address,bytes)",
             target,
@@ -288,7 +289,7 @@ class PlasmaVault(ContractWrapper):
     def balance_fuse_value(self, balance_fuse: FuseAddress) -> Call[Amount]:
         """``balanceOf()`` of ``balance_fuse`` evaluated in the vault's context:
         the figure ``updateMarketsBalances`` would store for its market now."""
-        return self.read_as(
+        return self.universal_read_decoded(
             balance_fuse, _BALANCE_OF_SELECTOR, output_types=["uint256"], decoder=Amount
         )
 
@@ -353,7 +354,7 @@ class PlasmaVault(ContractWrapper):
         return self._write("updateMarketsBalances(uint256[])", list(market_ids))
 
     def configure_instant_withdrawal_fuses(
-        self, configs: list[tuple[ChecksumAddress, list[bytes]]]
+        self, configs: Sequence[tuple[FuseAddress, Sequence[bytes]]]
     ) -> Call[None]:
         """CONFIG_INSTANT_WITHDRAWAL_FUSES-only: (fuse, bytes32[] params) tuples.
         Order defines priority — index 0 is queried first on instant withdraw."""

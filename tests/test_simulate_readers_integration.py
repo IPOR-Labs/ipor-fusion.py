@@ -47,9 +47,7 @@ ZERO = Web3.to_checksum_address("0x" + "00" * 20)
 
 
 def _ctx(web3: Web3, block: int) -> Web3Context:
-    ctx = Web3Context(web3=web3, chain_id=ChainId(web3.eth.chain_id))
-    ctx.default_block = block
-    return ctx
+    return Web3Context(web3=web3, chain_id=ChainId(web3.eth.chain_id)).at_block(block)
 
 
 # ── Ethereum ───────────────────────────────────────────────────────────

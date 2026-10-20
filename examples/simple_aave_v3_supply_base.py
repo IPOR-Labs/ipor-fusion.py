@@ -225,8 +225,9 @@ def build_supply_action(amount: Amount) -> FuseAction:
 
 def run_simulation(web3: Web3) -> SimulationResult:
     """Build, fund, deposit and supply -- all in one eth_simulateV1 batch."""
-    ctx = Web3Context(web3=web3, chain_id=BASE_CHAIN_ID, signer=OWNER)
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3, chain_id=BASE_CHAIN_ID, signer=OWNER).at_block(
+        PINNED_BLOCK
+    )
     factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # 1. Preview the deterministic addresses (eth_call, no gas, no state change).

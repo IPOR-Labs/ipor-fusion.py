@@ -22,7 +22,7 @@ from ipor_fusion.fuses.hypercore import (
     is_hip3_asset,
     is_native_perp_asset,
     perp_dex_of,
-    read_index_of,
+    precompile_index_of,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import HyperCoreAsset, MarketId, parse_hex_address
@@ -349,7 +349,7 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
         # outside the native and HIP-3 families, which the perp fuses reject.
         if is_native_perp_asset(asset) or is_hip3_asset(asset):
             extra["dex"] = str(perp_dex_of(asset))
-            extra["read_index"] = str(read_index_of(asset))
+            extra["read_index"] = str(precompile_index_of(asset))
         return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
     if type_byte == 3:
         return SubstrateInfo(address=_address(hex_str[24:]), type_label=label)

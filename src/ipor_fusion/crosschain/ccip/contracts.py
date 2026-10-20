@@ -21,6 +21,7 @@ from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKi
 from ipor_fusion.types import (
     Amount,
     AssetId,
+    CcipChainSelector,
     ChainId,
     CommandId,
     MessageId,
@@ -49,7 +50,7 @@ class CcipRouteConfig:
     and ``peer`` are immutable after registration; the rest is delivery policy
     synchronized from the factory."""
 
-    chain_selector: int
+    chain_selector: CcipChainSelector
     peer: ChecksumAddress
     fee_token: ChecksumAddress
     message_gas_limit: int
@@ -72,7 +73,7 @@ class CcipRouteConfig:
     def from_tuple(cls, values: tuple) -> CcipRouteConfig:
         selector, peer, fee_token, message_gas, token_gas, max_fee, enabled = values
         return cls(
-            chain_selector=int(selector),
+            chain_selector=CcipChainSelector(selector),
             peer=_address(peer),
             fee_token=_address(fee_token),
             message_gas_limit=int(message_gas),
@@ -153,7 +154,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             decoder=CcipRouteConfig.from_tuple,
         )
 
-    def chain_id_of_selector(self, selector: int) -> Call[ChainId]:
+    def chain_id_of_selector(self, selector: CcipChainSelector) -> Call[ChainId]:
         return self._view(
             "chainIdOfSelector(uint64)",
             selector,
@@ -376,7 +377,7 @@ class CcipCrosschainFactory(CrosschainFactory):
             decoder=CcipRouteConfig.from_tuple,
         )
 
-    def chain_id_of_selector(self, selector: int) -> Call[ChainId]:
+    def chain_id_of_selector(self, selector: CcipChainSelector) -> Call[ChainId]:
         return self._view(
             "chainIdOfSelector(uint64)",
             selector,
