@@ -65,14 +65,15 @@ chain is always the context's:
   the vault address (not a `PlasmaVault`) and no `chain_id`. It resolves one block
   (``block``, else a numeric `ctx.default_block`, else the latest) and runs every
   read, log scans included, on `ctx.at_block(block)`; `ctx` is not modified. The old
-  ``chain_id=0`` switch is ``lending=False``; ``metadata=False`` reads no token
-  symbol or decimals (the ERC20 holdings' symbols are then `"?"`), and with
-  ``metadata=True`` the holdings are named by the same cached, batched read as
-  `token_symbols`. `VaultData` gains `vault`, `chain_id`, `market_balances`, `erc20`,
+  ``chain_id=0`` switch is ``lending=False``; ``metadata=False`` skips the
+  display metadata: `token_symbols` and `token_decimals` stay empty and the ERC20
+  holdings' symbols are `"?"`. The underlying asset's symbol and decimals and the
+  decimals the valuation needs are still read. With ``metadata=True`` the holdings
+  are named by the same cached, batched read as `token_symbols`. `VaultData` gains `vault`, `chain_id`, `market_balances`, `erc20`,
   `token_symbols` and `token_decimals`; `WithdrawManagerData` gains
   `shares_to_release_assets` and `pending_request_assets`.
 - `validate_vault(ctx, vault, *, block=None, metadata=False)` fetches (by default
-  without token metadata) and validates; it no longer takes ``resolve_symbol``.
+  without display metadata) and validates; it no longer takes ``resolve_symbol``.
   ``metadata=True`` names the ERC20 holdings in the result and its findings. `validate_vault_state(state)` is
   pure: a custom `VaultState` also provides `vault`, `chain_id`, `market_balances`,
   `erc20` and the queue's `shares_to_release_assets`. `read_erc20_holdings` is gone:

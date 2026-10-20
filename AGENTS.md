@@ -429,9 +429,10 @@ are not validated.
   everything validation and the ``vault info`` document need, so neither reads the
   chain. The chain is `ctx.chain_id`; ``lending=False`` skips lending health, the
   position breakdowns, their prices and the unpriceable check; ``metadata=False``
-  reads no token symbol or decimals at all (`validate_vault`'s default), and
-  ``metadata=True`` reads them in one cached Multicall3 batch that also names the
-  ERC20 holdings. Add a new chain-state input to the snapshot, never a
+  (`validate_vault`'s default) skips the display metadata (`token_symbols`,
+  `token_decimals`, the ERC20 holdings' symbols) but not the asset's symbol and
+  decimals or the decimals valuation needs; ``metadata=True`` reads it in one cached
+  Multicall3 batch that also names the ERC20 holdings. Add a new chain-state input to the snapshot, never a
   read inside a renderer or validator.
 - PlasmaVault serves governance/view functions via `fallback()` delegatecall to
   PlasmaVaultBase, so Etherscan's ABI for the vault address omits callable
