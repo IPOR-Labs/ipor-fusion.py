@@ -101,6 +101,7 @@ from ipor_fusion.crosschain.fuses.stargate import (
     StargateSendParams,
 )
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
+from ipor_fusion.crosschain.logs import log_bytes
 from ipor_fusion.crosschain.messages import (
     CCIP_VERSION,
     CODEC_VERSION,
@@ -173,6 +174,7 @@ __all__ = [
     "open_lane",
     "open_lanes",
     "CrosschainLane",
+    "log_bytes",
     "LaneFuses",
     "LaneObservation",
     "CrosschainSimulator",

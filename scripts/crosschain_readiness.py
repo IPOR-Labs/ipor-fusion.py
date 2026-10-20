@@ -41,8 +41,7 @@ from eth_utils import function_signature_to_4byte_selector, keccak
 from web3 import Web3
 from web3.types import RPCEndpoint
 
-from ipor_fusion import ERC20, Web3Context, ccip_token_lane
-from ipor_fusion.core.contract import Call
+from ipor_fusion import ERC20, Call, Web3Context, ccip_token_lane
 from ipor_fusion.crosschain import CcipCrosschainFactory, CcipOffRamp, CcipRouter
 from ipor_fusion.types import ChainId
 
