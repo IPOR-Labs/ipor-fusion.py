@@ -101,17 +101,6 @@ def _hash_of(
     )
 
 
-def _no_balance_proposed(
-    executor: ChecksumAddress, balance_account: ChecksumAddress | None
-) -> str:
-    for_account = (
-        f" for account {Web3.to_checksum_address(balance_account)}"
-        if balance_account is not None
-        else ""
-    )
-    return f"no BalanceProposed log from executor {executor}{for_account}"
-
-
 def _require_matching_hash(
     proposal: BalanceProposal, *, executor: ChecksumAddress, chain_id: ChainId
 ) -> None:
@@ -721,18 +710,6 @@ class ExternalStateExecutor(ContractWrapper):
         silently skips, and over a range you filtered yourself a foreign log
         means the filter is wrong, not that the row is uninteresting.
         """
-        found = self._last_balance_proposed(logs, balance_account, chain_id)
-        if found is not None:
-            return found
-        raise ValueError(_no_balance_proposed(self._address, balance_account))
-
-    def _last_balance_proposed(
-        self,
-        logs: Iterable[RawLog],
-        balance_account: ChecksumAddress | None,
-        chain_id: ChainId,
-    ) -> BalanceProposal | None:
-        """`find_balance_proposed` without the raise when nothing matches."""
         self._require_address()
         wanted = (
             Web3.to_checksum_address(balance_account)
@@ -748,12 +725,16 @@ class ExternalStateExecutor(ContractWrapper):
             proposal = self._decode_balance_proposed(log)
             if wanted is None or proposal.balance_account == wanted:
                 found = proposal
-        if found is not None:
-            # Outside the loop: one hash instead of N, and only over the log
-            # actually being returned.
-            _require_matching_hash(
-                found,
-                executor=self._address,
-                chain_id=chain_id,
+        if found is None:
+            for_account = f" for account {wanted}" if wanted is not None else ""
+            raise ValueError(
+                f"no BalanceProposed log from executor {self._address}{for_account}"
             )
+        # Outside the loop: one hash instead of N, and only over the log
+        # actually being returned.
+        _require_matching_hash(
+            found,
+            executor=self._address,
+            chain_id=chain_id,
+        )
         return found

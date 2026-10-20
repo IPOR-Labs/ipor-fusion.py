@@ -1023,11 +1023,12 @@ class TestFindBalanceProposed:
 
     def test_raises_when_the_wanted_account_is_absent(self):
         executor, _ = _make_executor()
-        absent = Web3.to_checksum_address("0x9999999999999999999999999999999999999999")
+        # Lowercase, so the message must name the checksummed form.
+        absent = cast(ChecksumAddress, MIXED_CASE.lower())
 
         # The message names the account, so "emitted nothing" and "emitted only
         # for others" are distinguishable when triaging.
-        with pytest.raises(ValueError, match=f"for account {absent}"):
+        with pytest.raises(ValueError, match=f"for account {MIXED_CASE}"):
             executor.find_balance_proposed(
                 [_proposed_log(as_strings=False)], absent, chain_id=EVENT_CHAIN
             )
