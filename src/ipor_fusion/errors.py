@@ -212,10 +212,9 @@ class HyperCoreValuationError(IporFusionError, ValueError):
 
 class ExternalStateError(IporFusionError, ValueError):
     """The external-state market's on-chain data is not usable: the vault's
-    storage holds no executor or a malformed word, an executor's
+    storage holds no executor or a malformed word, or an executor's
     ``BalanceProposed`` log is malformed or carries a hash that is not the hash
-    of its own fields, or a propose receipt does not record the proposal that
-    was sent.
+    of its own fields.
 
     Also a ValueError, the type these failures had before 4.0.
     """
