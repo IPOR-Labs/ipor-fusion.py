@@ -41,7 +41,7 @@ from ipor_fusion.crosschain import (
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
 )
-from ipor_fusion.fuses.crosschain import (
+from ipor_fusion.crosschain.fuses import (
     CcipCrosschainCommandFuse,
     CcipCrosschainSupplyFuse,
     CcipSendParams,

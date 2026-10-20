@@ -220,6 +220,27 @@ live in `ipor_fusion.core.fuse`; `ipor_fusion.fuses.base`, `ipor_fusion.fuses` a
 hash now cover every attribute a fuse stores, not only its class and address (see
 [Behavior changes](#behavior-changes)).
 
+**Crosschain fuse encoders moved.** The crosschain market encoders moved from
+`ipor_fusion.fuses.crosschain` into the crosschain package, and
+`ipor_fusion.fuses` no longer re-exports them. There is no shim: the old paths
+raise `ImportError`. The top-level names (`from ipor_fusion import ...`) are
+unchanged.
+
+| 3.x import | 4.0 import |
+|---|---|
+| `ipor_fusion.fuses.crosschain` | `ipor_fusion.crosschain.fuses` (or `ipor_fusion.crosschain`) |
+| `ipor_fusion.fuses.crosschain.base` | `ipor_fusion.crosschain.fuses.base` |
+| `ipor_fusion.fuses.crosschain.ccip` | `ipor_fusion.crosschain.fuses.ccip` |
+| `ipor_fusion.fuses.crosschain.stargate` | `ipor_fusion.crosschain.fuses.stargate` |
+| `from ipor_fusion.fuses import CcipCrosschainSupplyFuse` (and the other crosschain encoders, `SendParams`, `CrosschainSubstrate*`, `crosschain_market_id`) | `from ipor_fusion.crosschain import ...` or `from ipor_fusion import ...` |
+
+`ipor_fusion.crosschain` now exports the whole crosschain surface: besides the
+codecs and wrappers, the encoders, `CrosschainLane`, `CcipLane`, `StargateLane`,
+the transports and chains, `discover_deployment`, `open_lane(s)`, `LANES` and
+`CrosschainSimulator`, which 3.x exported only from `ipor_fusion`.
+`ipor_fusion.crosschain.ccip` and `.stargate` keep exporting only their codecs
+and wrappers.
+
 **Moved, still importable.** `FuseAction` lives in `ipor_fusion.core.fuse_action` and
 `ZERO_ADDRESS` in `ipor_fusion.types`; both are re-exported from
 `ipor_fusion.fuses.base` and `FuseAction` from `ipor_fusion`. The CLI's internal

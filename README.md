@@ -329,8 +329,8 @@ renaming a name in it, or changing a signature incompatibly, waits for a major
 release; adding one does not.
 
 - **Public subpackages** declare their own `__all__`, each a subset of the top
-  level: `ipor_fusion.core`, `config`, `fuses`, `fuses.crosschain`, `readers`,
-  `crosschain`, `crosschain.ccip` and `crosschain.stargate`. `ipor_fusion.guide`
+  level: `ipor_fusion.core`, `config`, `fuses`, `readers`, `crosschain`,
+  `crosschain.fuses`, `crosschain.ccip` and `crosschain.stargate`. `ipor_fusion.guide`
   (the packaged docs) keeps its names in its own namespace.
 - **Public modules** stay importable for the top-level names they define:
   `about`, `chains`, `dependency_graph`, `errors`, `explorer`, `field_docs`,

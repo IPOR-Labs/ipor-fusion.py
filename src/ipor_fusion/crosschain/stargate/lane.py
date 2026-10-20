@@ -11,6 +11,12 @@ from eth_utils import keccak
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain.contracts import BalanceObservation
+from ipor_fusion.crosschain.fuses.base import SendParams
+from ipor_fusion.crosschain.fuses.stargate import (
+    StargateCrosschainCommandFuse,
+    StargateCrosschainSupplyFuse,
+    StargateSendParams,
+)
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
 from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
 from ipor_fusion.crosschain.stargate.contracts import (
@@ -19,12 +25,6 @@ from ipor_fusion.crosschain.stargate.contracts import (
     StargateCrosschainExecutor,
 )
 from ipor_fusion.crosschain.stargate.layerzero import OptionsBuilder
-from ipor_fusion.fuses.crosschain.base import SendParams
-from ipor_fusion.fuses.crosschain.stargate import (
-    StargateCrosschainCommandFuse,
-    StargateCrosschainSupplyFuse,
-    StargateSendParams,
-)
 from ipor_fusion.types import Amount
 
 

@@ -14,14 +14,14 @@ from ipor_fusion.crosschain.ccip.contracts import (
     CcipRouteConfig,
 )
 from ipor_fusion.crosschain.contracts import BalanceObservation
-from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
-from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
-from ipor_fusion.fuses.crosschain.base import SendParams
-from ipor_fusion.fuses.crosschain.ccip import (
+from ipor_fusion.crosschain.fuses.base import SendParams
+from ipor_fusion.crosschain.fuses.ccip import (
     CcipCrosschainCommandFuse,
     CcipCrosschainSupplyFuse,
     CcipSendParams,
 )
+from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
+from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
 from ipor_fusion.types import Amount, ProposalId
 
 

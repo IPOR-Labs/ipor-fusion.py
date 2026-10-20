@@ -1,49 +1,34 @@
-"""Import layering of the crosschain packages.
+"""Import layering of the crosschain package.
 
-The fuse encoders (``ipor_fusion.fuses.crosschain``) import the crosschain
-wire vocabulary and wrappers; lanes, discovery, transports and the simulator
-import the encoders. Python runs a package's ``__init__`` before any of its
-modules, so the namespaces the encoders import through must never reach back
-into the encoders, or the graph re-enters a half-initialized module and every
-import in the package would have to go lazy again. These tests pin the rule
-statically: no import inside a function, class or ``if`` block anywhere in
-the two packages, and the leaf namespace imports nothing from
-``ipor_fusion.fuses``: even ``fuses.base`` runs the ``fuses`` package
-``__init__``, which loads the encoders.
+The crosschain market fuse encoders live in ``ipor_fusion.crosschain.fuses``,
+so the dependency direction is ``core`` <- ``crosschain``: ``ipor_fusion.fuses``
+holds no crosschain code and neither package imports the other.
+
+Inside ``ipor_fusion.crosschain`` the encoders import the wire vocabulary and
+wrappers (``messages``, ``ccip.contracts``, ``stargate.layerzero``); lanes,
+discovery and the simulator import the encoders. Python runs a package's
+``__init__`` before any of its modules, so importing ``ccip.contracts`` also
+runs ``crosschain/ccip/__init__``: a namespace an encoder imports through must
+not import the encoders back. ``test_import_graph_is_acyclic`` checks that
+statically for the whole SDK, modelling those implicit ``__init__`` edges.
+Every import in the crosschain package stays at module level, so the graph
+is the whole story: no lazy or ``TYPE_CHECKING`` import hides a cycle.
 """
 
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+import ipor_fusion
 import ipor_fusion.crosschain as crosschain_pkg
-import ipor_fusion.fuses.crosschain as fuses_pkg
 
-SRC = Path(crosschain_pkg.__file__).parents[2]
+PACKAGE = Path(ipor_fusion.__file__).parent
+SRC = PACKAGE.parent
 CROSSCHAIN = Path(crosschain_pkg.__file__).parent
-FUSES = Path(fuses_pkg.__file__).parent
-
-#: The fuse-free half of ``ipor_fusion.crosschain``: what the encoders may import.
-LEAF = {
-    "ipor_fusion.crosschain",
-    "ipor_fusion.crosschain.contracts",
-    "ipor_fusion.crosschain.errors",
-    "ipor_fusion.crosschain.logs",
-    "ipor_fusion.crosschain.messages",
-    "ipor_fusion.crosschain.ccip",
-    "ipor_fusion.crosschain.ccip.chainlink",
-    "ipor_fusion.crosschain.ccip.codec",
-    "ipor_fusion.crosschain.ccip.contracts",
-    "ipor_fusion.crosschain.ccip.events",
-    "ipor_fusion.crosschain.ccip.indexer",
-    "ipor_fusion.crosschain.ccip.quote",
-    "ipor_fusion.crosschain.stargate",
-    "ipor_fusion.crosschain.stargate.contracts",
-    "ipor_fusion.crosschain.stargate.layerzero",
-}
 
 
 def _module_name(path: Path) -> str:
@@ -53,25 +38,130 @@ def _module_name(path: Path) -> str:
     return ".".join(parts)
 
 
-def _module_path(name: str) -> Path:
-    path = SRC.joinpath(*name.split("."))
-    return path / "__init__.py" if path.is_dir() else path.with_suffix(".py")
+MODULES = {_module_name(path): path for path in sorted(PACKAGE.rglob("*.py"))}
 
 
-def _imported(path: Path) -> list[str]:
-    names = []
-    for node in ast.walk(ast.parse(path.read_text())):
-        if isinstance(node, ast.ImportFrom):
-            names.append(node.module or "")
+def _ancestors(name: str) -> Iterator[str]:
+    parts = name.split(".")
+    for end in range(1, len(parts)):
+        yield ".".join(parts[:end])
+
+
+def _top_level_imports(path: Path) -> Iterator[tuple[str, list[str]]]:
+    """``(module, names)`` per module-level import; ``names`` is empty for
+    ``import x``."""
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            yield node.module, [alias.name for alias in node.names]
         elif isinstance(node, ast.Import):
-            names.extend(alias.name for alias in node.names)
-    return names
+            for alias in node.names:
+                yield alias.name, []
 
 
-MODULES = sorted([*CROSSCHAIN.rglob("*.py"), *FUSES.rglob("*.py")])
+def _edges(name: str) -> set[str]:
+    """The SDK modules whose top level runs, or must have finished, when
+    ``name``'s top level runs.
+
+    Importing ``a.b.c`` runs ``a`` and ``a.b`` first. The importer's own
+    ancestors have already started, so those implicit edges are harmless and
+    skipped; reading a name from a package namespace is an explicit edge and
+    kept, ancestor or not, because a half-initialized ``__init__`` lacks it.
+    """
+    own = set(_ancestors(name))
+    edges: set[str] = set()
+    for module, names in _top_level_imports(MODULES[name]):
+        if module not in MODULES:
+            continue
+        submodules = [f"{module}.{n}" for n in names if f"{module}.{n}" in MODULES]
+        targets = submodules or [module]
+        if len(submodules) < len(names):
+            edges.add(module)
+        for target in targets:
+            edges.add(target)
+            edges.update(a for a in _ancestors(target) if a not in own)
+    edges.discard(name)
+    return {edge for edge in edges if edge.startswith("ipor_fusion")}
 
 
-@pytest.mark.parametrize("path", MODULES, ids=_module_name)
+def _find_cycle(graph: dict[str, set[str]]) -> list[str] | None:
+    state: dict[str, int] = {}
+    stack: list[str] = []
+
+    def visit(node: str) -> list[str] | None:
+        state[node] = 1
+        stack.append(node)
+        for nxt in sorted(graph[node]):
+            if state.get(nxt) == 1:
+                return [*stack[stack.index(nxt) :], nxt]
+            if nxt not in state and (cycle := visit(nxt)):
+                return cycle
+        stack.pop()
+        state[node] = 2
+        return None
+
+    for node in sorted(graph):
+        if node not in state and (cycle := visit(node)):
+            return cycle
+    return None
+
+
+def _imports_under(prefix: str) -> list[tuple[str, str]]:
+    return [
+        (name, module)
+        for name, path in MODULES.items()
+        if name == prefix or name.startswith(f"{prefix}.")
+        for module, _ in _top_level_imports(path)
+    ]
+
+
+def test_import_graph_is_acyclic():
+    graph = {name: _edges(name) for name in MODULES}
+    assert _find_cycle(graph) is None, " -> ".join(_find_cycle(graph) or [])
+
+
+def test_cycle_detection_sees_a_package_namespace_reentry():
+    """The pre-move layout: ``ccip/__init__`` exporting the lane, which needs
+    the encoders, which import ``ccip.contracts``."""
+    graph = {
+        "ipor_fusion.crosschain.ccip": {"ipor_fusion.crosschain.ccip.lane"},
+        "ipor_fusion.crosschain.ccip.lane": {"ipor_fusion.crosschain.fuses.ccip"},
+        "ipor_fusion.crosschain.fuses.ccip": {"ipor_fusion.crosschain.ccip"},
+    }
+    assert _find_cycle(graph) == [
+        "ipor_fusion.crosschain.ccip",
+        "ipor_fusion.crosschain.ccip.lane",
+        "ipor_fusion.crosschain.fuses.ccip",
+        "ipor_fusion.crosschain.ccip",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("importer", "forbidden"),
+    [
+        ("ipor_fusion.fuses", "ipor_fusion.crosschain"),
+        ("ipor_fusion.crosschain", "ipor_fusion.fuses"),
+        ("ipor_fusion.core", "ipor_fusion.crosschain"),
+        ("ipor_fusion.core", "ipor_fusion.fuses"),
+    ],
+)
+def test_package_does_not_import(importer: str, forbidden: str):
+    offenders = [
+        (name, module)
+        for name, module in _imports_under(importer)
+        if module == forbidden or module.startswith(f"{forbidden}.")
+    ]
+    assert not offenders
+
+
+def test_fuses_package_holds_no_crosschain_code():
+    assert not [name for name in MODULES if name.startswith("ipor_fusion.fuses.cross")]
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted(CROSSCHAIN.rglob("*.py")),
+    ids=lambda path: _module_name(path),
+)
 def test_every_import_is_at_module_level(path: Path):
     tree = ast.parse(path.read_text())
     top = {id(node) for node in tree.body}
@@ -81,37 +171,3 @@ def test_every_import_is_at_module_level(path: Path):
         if isinstance(node, (ast.Import, ast.ImportFrom)) and id(node) not in top
     ]
     assert not nested, f"{_module_name(path)}: imports inside a block at {nested}"
-
-
-@pytest.mark.parametrize("path", sorted(FUSES.rglob("*.py")), ids=_module_name)
-def test_fuse_encoders_import_only_the_leaf_namespace(path: Path):
-    offenders = [
-        name
-        for name in _imported(path)
-        if name.startswith("ipor_fusion.crosschain") and name not in LEAF
-    ]
-    assert not offenders, f"{_module_name(path)} imports {offenders}"
-
-
-@pytest.mark.parametrize("name", sorted(LEAF))
-def test_leaf_namespace_stays_fuse_free(name: str):
-    offenders = [
-        imported
-        for imported in _imported(_module_path(name))
-        if imported.startswith("ipor_fusion.fuses")
-        or (imported.startswith("ipor_fusion.crosschain") and imported not in LEAF)
-    ]
-    assert not offenders, f"{name} imports {offenders}"
-
-
-@pytest.mark.parametrize("path", sorted(FUSES.rglob("*.py")), ids=_module_name)
-def test_crosschain_encoders_build_on_the_core_fuse_base(path: Path):
-    """The fuse base lives in ``ipor_fusion.core.fuse``; the crosschain
-    encoders import it from there, not through the other encoders' modules."""
-    offenders = [
-        name
-        for name in _imported(path)
-        if name.startswith("ipor_fusion.fuses")
-        and not name.startswith("ipor_fusion.fuses.crosschain")
-    ]
-    assert not offenders, f"{_module_name(path)} imports {offenders}"

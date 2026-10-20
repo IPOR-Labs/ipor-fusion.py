@@ -44,7 +44,7 @@ from ipor_fusion import (
     Web3Context,
 )
 from ipor_fusion.crosschain import CrosschainTransportKind
-from ipor_fusion.fuses.crosschain import crosschain_market_id
+from ipor_fusion.crosschain.fuses import crosschain_market_id
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId
 

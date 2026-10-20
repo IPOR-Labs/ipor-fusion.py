@@ -7,7 +7,7 @@ here hold the surface both transports share; ``stargate.contracts`` and
 executor functions (``sendAssetToDispatcher``, ``sendCommandToDispatcher``,
 ``registerChain``, ...) are deliberately absent: the executor's ``MANAGER`` is
 the PlasmaVault, so those are reachable only through the fuses in
-``ipor_fusion.fuses.crosschain``.
+``ipor_fusion.crosschain.fuses``.
 """
 
 from __future__ import annotations
