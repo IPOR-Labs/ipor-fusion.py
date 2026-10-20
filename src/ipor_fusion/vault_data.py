@@ -18,7 +18,7 @@ from typing import Any, TypeVar
 from eth_typing import HexAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.types import ChecksumAddress
+from web3.types import ChecksumAddress, Timestamp
 
 from ipor_fusion.cache import CacheKey, cache_get, cache_key, cache_put
 from ipor_fusion.chains import ensure_supported_chain
@@ -57,10 +57,13 @@ from ipor_fusion.readers.unpriceable import (
 from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import (
     AccessManagerAddress,
+    Amount,
     ChainId,
+    Decimals,
     FuseAddress,
     MarketId,
     PlasmaVaultAddress,
+    Shares,
     parse_hex_address,
 )
 from ipor_fusion.vault_erc20 import Erc20Holdings, _Asset, _read_erc20_holdings
@@ -115,12 +118,12 @@ class VaultData:
     chain_id: ChainId
     block_number: int
     is_latest: bool
-    block_timestamp: int
-    share_decimals: int
-    asset_decimals: int
-    total_assets: int
-    total_supply: int
-    supply_cap: int
+    block_timestamp: Timestamp
+    share_decimals: Decimals
+    asset_decimals: Decimals
+    total_assets: Amount
+    total_supply: Shares
+    supply_cap: Amount
     asset: ChecksumAddress
     asset_symbol: str
     access_manager: AccessManagerAddress
@@ -135,10 +138,10 @@ class VaultData:
     # totalAssets via ERC4626 base accounting; by design NOT tracked as an
     # ERC20_VAULT_BALANCE substrate, so it is read directly in
     # fetch_vault_data rather than derived from substrates.
-    underlying_balance_on_vault: int = 0
+    underlying_balance_on_vault: Amount = Amount(0)
     vault_name: str = ""
     deployment_block: int | None = None
-    deployment_timestamp: int | None = None
+    deployment_timestamp: Timestamp | None = None
     # Short error code from `fetch_deployment_info` when block/timestamp could
     # not be resolved. Surfaced in CLI output and the JSON `deployment` field
     # so users can distinguish "lookup not attempted/failed" from
@@ -186,7 +189,7 @@ class VaultData:
     unimplemented_getters: list[str] = field(default_factory=list)
     # totalAssetsInMarket of every balance-fuse market, once per market, in
     # balance-fuse order.
-    market_balances: dict[MarketId, int] = field(default_factory=dict)
+    market_balances: dict[MarketId, Amount] = field(default_factory=dict)
     # The ERC20_VAULT_BALANCE tokens read directly (empty without that market).
     erc20: Erc20Holdings = field(default_factory=Erc20Holdings)
     # Symbols (lowercase address keys) of the substrate and breakdown tokens,
@@ -278,7 +281,7 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
     return decimals
 
 
-def _block_timestamp(ctx: Web3Context, block: int) -> int:
+def _block_timestamp(ctx: Web3Context, block: int) -> Timestamp:
     return ctx.web3.eth.get_block(block)["timestamp"]
 
 
@@ -428,7 +431,7 @@ class _MarketReads:
     # Only markets with at least one substrate.
     market_substrates: dict[MarketId, list[bytes]]
     aave_pools: dict[MarketId, ChecksumAddress]
-    market_balances: dict[MarketId, int]
+    market_balances: dict[MarketId, Amount]
     # False when the vault predates getMarketSubstrates (substrates unknown).
     substrates_available: bool = True
 
@@ -756,7 +759,7 @@ def fetch_deployment_info(
     vault_address: PlasmaVaultAddress,
     *,
     api_key: str | None = None,
-) -> tuple[int | None, int | None, str | None]:
+) -> tuple[int | None, Timestamp | None, str | None]:
     """Return ``(block, timestamp, error)`` for the vault deployment, cached in
     ``ctx.cache``.
 
@@ -774,7 +777,7 @@ def fetch_deployment_info(
     if (block := cached.get(block_key, "")).isdigit() and (
         stamp := cached.get(time_key, "")
     ).isdigit():
-        return int(block), int(stamp), None
+        return int(block), Timestamp(int(stamp)), None
 
     tx_hash, error = get_deployment_tx(chain_id, vault_address, api_key)
     if not tx_hash:
@@ -783,7 +786,7 @@ def fetch_deployment_info(
     try:
         tx = ctx.web3.eth.get_transaction(tx_hash)
         block_number: int = tx["blockNumber"]
-        timestamp: int = ctx.web3.eth.get_block(block_number)["timestamp"]
+        timestamp: Timestamp = ctx.web3.eth.get_block(block_number)["timestamp"]
     except Exception:
         return None, None, "rpc-fetch-failed"
     cache_put(ctx.cache, {block_key: str(block_number), time_key: str(timestamp)})

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from functools import partial
 
 from eth_abi.exceptions import DecodingError
-from web3.types import ChecksumAddress
+from web3.types import ChecksumAddress, Timestamp
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import (
@@ -19,7 +19,7 @@ from ipor_fusion.core.fee_manager import (
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
 from ipor_fusion.errors import EmptyCallResultError
-from ipor_fusion.types import ZERO_ADDRESS, Shares
+from ipor_fusion.types import ZERO_ADDRESS, Amount, Fee, Period, Shares
 from ipor_fusion.vault_reads import _read_batch, _safe_call, _scan_or_none
 
 
@@ -41,15 +41,15 @@ class FeeData:
     configurations have drifted.
     """
 
-    performance_fee_vault_bps: int | None = None
-    management_fee_vault_bps: int | None = None
-    management_fee_last_update: int | None = None
-    unrealized_management_fee: int | None = None
+    performance_fee_vault_bps: Fee | None = None
+    management_fee_vault_bps: Fee | None = None
+    management_fee_last_update: Timestamp | None = None
+    unrealized_management_fee: Amount | None = None
     fee_manager: ChecksumAddress | None = None
     ipor_dao_fee_recipient: ChecksumAddress | None = None
-    deposit_fee_wad: int | None = None
-    performance_fee_manager_bps: int | None = None
-    management_fee_manager_bps: int | None = None
+    deposit_fee_wad: Fee | None = None
+    performance_fee_manager_bps: Fee | None = None
+    management_fee_manager_bps: Fee | None = None
     performance_fee_recipients: list[RecipientFee] | None = None
     management_fee_recipients: list[RecipientFee] | None = None
     high_water_mark: HighWaterMarkPerformanceFee | None = None
@@ -59,21 +59,21 @@ class FeeData:
 class WithdrawManagerData:
     """On-chain state snapshot from the WithdrawManager contract."""
 
-    withdraw_window: int
+    withdraw_window: Period
     # None (not 0) when the getter failed: a zero fee and an unreadable fee
     # are different facts, and the fees section reports both.
-    request_fee: int | None
-    withdraw_fee: int | None
-    shares_to_release: int
-    last_release_funds_timestamp: int
+    request_fee: Fee | None
+    withdraw_fee: Fee | None
+    shares_to_release: Shares
+    last_release_funds_timestamp: Timestamp
     # None when the WithdrawRequestUpdated scan or its reads failed.
     pending_requests: list[AccountRequest] | None
     # convertToAssets of shares_to_release at the snapshot block; None when
     # the read failed (or there is nothing to release: 0).
-    shares_to_release_assets: int | None = None
+    shares_to_release_assets: Amount | None = None
     # convertToAssets of each pending request's shares, by account; a failed
     # read is None.
-    pending_request_assets: dict[ChecksumAddress, int | None] = field(
+    pending_request_assets: dict[ChecksumAddress, Amount | None] = field(
         default_factory=dict
     )
 
@@ -108,11 +108,11 @@ def _fetch_withdraw_manager(
         ],
     )
     return address, WithdrawManagerData(
-        withdraw_window=window or 0,
+        withdraw_window=window or Period(0),
         request_fee=request_fee,
         withdraw_fee=withdraw_fee,
         shares_to_release=to_release,
-        last_release_funds_timestamp=last_ts or 0,
+        last_release_funds_timestamp=last_ts or Timestamp(0),
         pending_requests=pending,
         shares_to_release_assets=release_assets,
         pending_request_assets={

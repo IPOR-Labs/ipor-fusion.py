@@ -373,9 +373,9 @@ class PlasmaVault(ContractWrapper):
     ) -> Call[None]:
         return self._write("transferFrom(address,address,uint256)", _from, to, amount)
 
-    def balance_of(self, account: ChecksumAddress) -> Call[Amount]:
+    def balance_of(self, account: ChecksumAddress) -> Call[Shares]:
         return self._view(
-            "balanceOf(address)", account, output_types=["uint256"], decoder=Amount
+            "balanceOf(address)", account, output_types=["uint256"], decoder=Shares
         )
 
     def get_total_supply_cap(self) -> Call[Amount]:
@@ -418,8 +418,8 @@ class PlasmaVault(ContractWrapper):
     def total_assets(self) -> Call[Amount]:
         return self._view("totalAssets()", output_types=["uint256"], decoder=Amount)
 
-    def total_supply(self) -> Call[Amount]:
-        return self._view("totalSupply()", output_types=["uint256"], decoder=Amount)
+    def total_supply(self) -> Call[Shares]:
+        return self._view("totalSupply()", output_types=["uint256"], decoder=Shares)
 
     def name(self) -> Call[str]:
         return self._view("name()", output_types=["string"])

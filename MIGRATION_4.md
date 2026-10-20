@@ -84,6 +84,17 @@ chain is always the context's:
   the context's default block and `Web3Context.get_block(block=None)` returns it,
   both instead of ``"latest"``.
 
+Snapshot fields carry their units: `VaultData.total_assets`, `supply_cap`,
+`underlying_balance_on_vault` and `market_balances` values are `Amount`;
+`total_supply` is `Shares`; `share_decimals` / `asset_decimals` are `Decimals`;
+`block_timestamp` and `deployment_timestamp` are `Timestamp`. `FeeData` fee fields
+are `Fee`, `management_fee_last_update` a `Timestamp`, `unrealized_management_fee` an
+`Amount`; `WithdrawManagerData.withdraw_window` is a `Period`, its fees `Fee`,
+`shares_to_release` `Shares`, `last_release_funds_timestamp` a `Timestamp` and the
+converted amounts `Amount`. A custom `VaultState` annotates the same.
+`PlasmaVault.total_supply()` and `balance_of()` return `Shares` (vault shares), not
+`Amount`; `ERC20` keeps `Amount`.
+
 `ensure_supported_chain` takes `ChainId`. `fetch_unpriceable_priced_tokens` takes the oracle and
 underlying as `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,
 `get_contract_name` and `get_deployment_tx` take `HexAddress` (a checksum address
