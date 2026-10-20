@@ -584,8 +584,8 @@ def _deploy_source_generation(
         spoke, artifacts, router=HYPEREVM_ROUTER
     )
     assert (factory_address, libraries) == (spoke_factory_address, spoke_libraries)
-    hub_factory = CcipCrosschainFactory(arb_ctx, factory_address)
-    spoke_factory = CcipCrosschainFactory(hyper_ctx, factory_address)
+    hub_factory = CcipCrosschainFactory(factory_address)
+    spoke_factory = CcipCrosschainFactory(factory_address)
     # The factory's own timelock (24 h in source, 300 s on the patched test
     # builds), so a patched checkout rehearses unchanged.
     simulator.observe(ARBITRUM, "source_config_delay", hub_factory.config_delay())
@@ -711,15 +711,14 @@ def _feed_read(ctx, address, signature, output_types):
         to=address,
         data=bytes(Web3.keccak(text=signature)[:4]),
         output_types=output_types,
-        ctx=ctx,
-    ).call()
+    ).call(ctx)
 
 
 def _assert_configured_prices(
     simulator, contexts, instances, asset: RehearsalAsset, factory: ChecksumAddress
 ):
     for index, ctx in enumerate(contexts):
-        manager = PriceOracleMiddlewareManager(ctx, instances[index].price_manager)
+        manager = PriceOracleMiddlewareManager(instances[index].price_manager)
         simulator.observe(
             ctx.chain_id, "asset_price", manager.get_asset_price(asset.tokens[index])
         )
@@ -731,7 +730,7 @@ def _assert_configured_prices(
         simulator.observe(
             ctx.chain_id,
             "factory_asset",
-            CcipCrosschainFactory(ctx, factory).asset_config(asset.asset_id),
+            CcipCrosschainFactory(factory).asset_config(asset.asset_id),
         )
     results = simulator.relay()
     for index, ctx in enumerate(contexts):
@@ -793,7 +792,7 @@ def test_simulate_clone_htest_vault(
 ):
     web3 = request.getfixturevalue(web3_fixture)
     ctx = _ctx(web3, chain_id, block)
-    factory = FusionFactory(ctx, factory_address)
+    factory = FusionFactory(factory_address)
     clone = factory.clone(
         "Crosschain HTEST Rehearsal",
         "xcHTEST",
@@ -801,11 +800,11 @@ def test_simulate_clone_htest_vault(
         1,
         OWNER,
     )
-    preview = clone.call()
+    preview = clone.call(ctx)
     simulator = VaultSimulator(web3, alpha=OWNER, block=block)
     simulator.with_block_override(gasLimit=30_000_000)
     simulator.add_call(clone, from_=OWNER, label="clone_vault")
-    vault = PlasmaVault(ctx, preview.plasma_vault)
+    vault = PlasmaVault(preview.plasma_vault)
     simulator.observe("vault_asset", vault.underlying_asset_address())
     simulator.observe("vault_access_manager", vault.get_access_manager_address())
 
@@ -845,38 +844,40 @@ def test_deployed_factory_pair_identity(web3_arb, web3_hyperevm, index, pair):
     chain = (ARBITRUM, HYPEREVM)[index]
     peer = (HYPEREVM, ARBITRUM)[index]
     ctx = _ctx(web3, chain, pair.blocks[index])
-    factory = CcipCrosschainFactory(ctx, pair.address)
+    factory = CcipCrosschainFactory(pair.address)
 
     runtime = web3.eth.get_code(pair.address, block_identifier=pair.blocks[index])
     assert bytes(Web3.keccak(runtime)) == pair.runtime_keccak[index]
-    assert factory.factory_interface_version().call() == 1
-    assert factory.ccip_router().call() == (ARBITRUM_ROUTER, HYPEREVM_ROUTER)[index]
-    assert factory.owner().call() == OWNER
-    assert factory.config_delay().call() == 300
-    assert factory.creation_codes_configured().call()
-    assert factory.creation_restricted().call()
-    assert factory.is_allowed_creator(CREATOR).call()
-    assert factory.executor_creation_code_hash().call() == pair.executor_creation_keccak
+    assert factory.factory_interface_version().call(ctx) == 1
+    assert factory.ccip_router().call(ctx) == (ARBITRUM_ROUTER, HYPEREVM_ROUTER)[index]
+    assert factory.owner().call(ctx) == OWNER
+    assert factory.config_delay().call(ctx) == 300
+    assert factory.creation_codes_configured().call(ctx)
+    assert factory.creation_restricted().call(ctx)
+    assert factory.is_allowed_creator(CREATOR).call(ctx)
     assert (
-        factory.dispatcher_creation_code_hash().call()
+        factory.executor_creation_code_hash().call(ctx) == pair.executor_creation_keccak
+    )
+    assert (
+        factory.dispatcher_creation_code_hash().call(ctx)
         == pair.dispatcher_creation_keccak
     )
-    route = factory.ccip_route(peer).call()
+    route = factory.ccip_route(peer).call(ctx)
     assert route.enabled
     assert route.peer == pair.address
     assert route.chain_selector == (HYPEREVM_SELECTOR, ARBITRUM_SELECTOR)[index]
-    assert factory.chain_id_of_selector(route.chain_selector).call() == peer
+    assert factory.chain_id_of_selector(route.chain_selector).call(ctx) == peer
     assert (route.message_gas_limit, route.token_gas_limit) == (
         pair.message_gas_limit,
         pair.token_gas_limit,
     )
     if pair.dispatcher_deployment_gas_limit is not None:
         assert (
-            factory.dispatcher_deployment_gas_limit(peer).call()
+            factory.dispatcher_deployment_gas_limit(peer).call(ctx)
             == pair.dispatcher_deployment_gas_limit
         )
     for asset in REHEARSAL_ASSETS:
-        assert factory.asset_config(asset.asset_id).call() == (
+        assert factory.asset_config(asset.asset_id).call(ctx) == (
             asset.tokens[index],
             asset.decimals,
             True,
@@ -895,7 +896,7 @@ def test_simulate_v3_dispatcher_deployment_gas_governance(web3_arb):
     the contract byte for byte), an execute before ``CONFIG_DELAY`` reverts,
     and an execute after it writes the getter."""
     block = V3.blocks[0]
-    factory = CcipCrosschainFactory(_ctx(web3_arb, ARBITRUM, block), V3.address)
+    factory = CcipCrosschainFactory(V3.address)
     new_limit = 4_000_000
     simulator = VaultSimulator(web3_arb, vault=V3.address, alpha=OWNER, block=block)
     simulator.with_state_override(OWNER, balance=hex(10**18))
@@ -1031,11 +1032,11 @@ def test_usdc_pinned_prerequisites(web3_arb, web3_hyperevm, index):
     chain = (ARBITRUM, HYPEREVM)[index]
     usdc = _asset_for(USDC, V3.name)
     ctx = _ctx(web3, chain, usdc.blocks[index])
-    token = ERC20(ctx, usdc.tokens[index])
-    assert token.symbol().call() == "USDC"
-    assert token.decimals().call() == 6
-    factory = CcipCrosschainFactory(ctx, V3.address)
-    assert factory.asset_config(usdc.asset_id).call() == (
+    token = ERC20(usdc.tokens[index])
+    assert token.symbol().call(ctx) == "USDC"
+    assert token.decimals().call(ctx) == 6
+    factory = CcipCrosschainFactory(V3.address)
+    assert factory.asset_config(usdc.asset_id).call(ctx) == (
         usdc.tokens[index],
         usdc.decimals,
         True,
@@ -1216,8 +1217,7 @@ def _check_hub_usdc_roundtrip(run: Run, usdc: RehearsalAsset):
 
 
 def _check_spoke_usdc_rounding(run: Run, web3, usdc: RehearsalAsset):
-    ctx = _ctx(web3, HYPEREVM, usdc.blocks[1])
-    token = ERC20(ctx, usdc.tokens[1])
+    token = ERC20(usdc.tokens[1])
     vault = run.remote_vault
     holder = run.lane.executor_address
     run.spoke_sim.with_erc20_balance(
@@ -1271,8 +1271,8 @@ def _prepare_asset_run(
     artifacts = _compile_crosschain_contracts()
     arb_ctx = _ctx(web3_arb, ARBITRUM, asset.blocks[0])
     hyper_ctx = _ctx(web3_hyperevm, HYPEREVM, asset.blocks[1])
-    arb_fusion_factory = FusionFactory(arb_ctx, ARBITRUM_FUSION_FACTORY)
-    hyper_fusion_factory = FusionFactory(hyper_ctx, HYPEREVM_FUSION_FACTORY)
+    arb_fusion_factory = FusionFactory(ARBITRUM_FUSION_FACTORY)
+    hyper_fusion_factory = FusionFactory(HYPEREVM_FUSION_FACTORY)
     hub_clone = arb_fusion_factory.clone(
         f"Crosschain {asset.symbol} Hub Rehearsal",
         f"xc{asset.symbol}-ARB",
@@ -1287,8 +1287,8 @@ def _prepare_asset_run(
         1,
         OWNER,
     )
-    hub_instance = hub_clone.call()
-    spoke_instance = spoke_clone.call()
+    hub_instance = hub_clone.call(arb_ctx)
+    spoke_instance = spoke_clone.call(hyper_ctx)
 
     user_salt = Web3.keccak(text="ipor-fusion.py Arbitrum HyperEVM full lifecycle")
     simulator = CrosschainSimulator(transport or _asset_transport(asset))
@@ -1314,7 +1314,7 @@ def _prepare_asset_run(
         # calls on HyperEVM, it was starved.
         hub.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
         spoke.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
-        ccip_factory = CcipCrosschainFactory(arb_ctx, factory_address)
+        ccip_factory = CcipCrosschainFactory(factory_address)
         simulator.observe(
             ARBITRUM,
             "source_executor_address",
@@ -1333,9 +1333,11 @@ def _prepare_asset_run(
         if asset.blocks != pair.blocks:
             raise ValueError(f"{asset.symbol} is not pinned at the {pair.name} pins")
         factory_address = pair.address
-        ccip_factory = CcipCrosschainFactory(arb_ctx, factory_address)
-        executor = ccip_factory.compute_executor_address(creator, user_salt).call()
-        route = replace(ccip_factory.ccip_route(HYPEREVM).call(), peer=executor)
+        ccip_factory = CcipCrosschainFactory(factory_address)
+        executor = ccip_factory.compute_executor_address(creator, user_salt).call(
+            arb_ctx
+        )
+        route = replace(ccip_factory.ccip_route(HYPEREVM).call(arb_ctx), peer=executor)
         hub.with_state_override(SIMULATED_DEPLOYER, balance=hex(10**18), nonce=hex(0))
         first_fuse_nonce = 0
 
@@ -1355,7 +1357,7 @@ def _prepare_asset_run(
     spoke.add_call(spoke_clone, from_=OWNER, label="clone_spoke_vault")
     spoke.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
 
-    hub_access = AccessManager(arb_ctx, hub_instance.access_manager)
+    hub_access = AccessManager(hub_instance.access_manager)
     for role in (
         Roles.ATOMIST_ROLE,
         Roles.ALPHA_ROLE,
@@ -1369,7 +1371,7 @@ def _prepare_asset_run(
             from_=OWNER,
             label=f"grant_hub_{role.name.lower()}",
         )
-    spoke_access = AccessManager(hyper_ctx, spoke_instance.access_manager)
+    spoke_access = AccessManager(spoke_instance.access_manager)
     spoke.add_call(
         spoke_access.grant_role(Roles.ATOMIST_ROLE, OWNER, 0),
         from_=OWNER,
@@ -1388,7 +1390,7 @@ def _prepare_asset_run(
     )
     spoke.add_call(
         PriceOracleMiddlewareManager(
-            hyper_ctx, spoke_instance.price_manager
+            spoke_instance.price_manager
         ).set_assets_price_sources([asset.tokens[1]], [asset.feeds[1]]),
         from_=OWNER,
         label="configure_spoke_asset_price",
@@ -1396,7 +1398,7 @@ def _prepare_asset_run(
 
     hub.add_call(
         PriceOracleMiddlewareManager(
-            arb_ctx, hub_instance.price_manager
+            hub_instance.price_manager
         ).set_assets_price_sources([asset.tokens[0]], [asset.feeds[0]]),
         from_=OWNER,
         label="configure_hub_asset_price",
@@ -1412,7 +1414,7 @@ def _prepare_asset_run(
         label="create_executor",
     )
 
-    hub_vault = PlasmaVault(arb_ctx, hub_instance.plasma_vault)
+    hub_vault = PlasmaVault(hub_instance.plasma_vault)
     hub.add_call(
         hub_vault.add_fuses(
             [
@@ -1445,7 +1447,7 @@ def _prepare_asset_run(
         label="grant_crosschain_substrates",
     )
 
-    token = ERC20(arb_ctx, asset.tokens[0])
+    token = ERC20(asset.tokens[0])
     hub.with_erc20_balance(
         asset.tokens[0],
         OWNER,
@@ -1464,9 +1466,10 @@ def _prepare_asset_run(
     )
 
     lane = CcipLane(
-        executor=CcipCrosschainExecutor(arb_ctx, executor),
-        dispatcher=CcipCrosschainDispatcher(hyper_ctx, executor),
-        spoke_chain_id=HYPEREVM,
+        hub_ctx=arb_ctx,
+        spoke_ctx=hyper_ctx,
+        executor=CcipCrosschainExecutor(executor),
+        dispatcher=CcipCrosschainDispatcher(executor),
         fuses=LaneFuses(
             supply=fuse_addresses["CcipCrosschainSupplyFuse"],
             command=fuse_addresses["CcipCrosschainCommandFuse"],
@@ -1514,12 +1517,12 @@ def _prepare_asset_run(
     simulator.observe(
         ARBITRUM,
         "dispatcher_ready",
-        CcipCrosschainExecutor(arb_ctx, executor).has_dispatcher(HYPEREVM),
+        CcipCrosschainExecutor(executor).has_dispatcher(HYPEREVM),
     )
     simulator.observe(
         HYPEREVM,
         "dispatcher_registered",
-        CcipCrosschainFactory(hyper_ctx, factory_address).is_dispatcher(executor),
+        CcipCrosschainFactory(factory_address).is_dispatcher(executor),
     )
     simulator.observe(ARBITRUM, "hub_shares", hub_vault.balance_of(OWNER))
     simulator.observe(
@@ -1564,7 +1567,7 @@ def _prepare_asset_run(
         hub=hub,
         spoke_sim=spoke,
         vault=hub_vault,
-        remote_vault=PlasmaVault(hyper_ctx, spoke_instance.plasma_vault),
+        remote_vault=PlasmaVault(spoke_instance.plasma_vault),
         hub_asset=token,
         amount=10**asset.decimals + 1,
         hub_start=hub_start,
@@ -1582,11 +1585,11 @@ def _simulate_factory_deployment(web3_arb, web3_hyperevm, *, big_block: bool):
     arb_block, hyper_block = V3.blocks
     arb_ctx = _ctx(web3_arb, ARBITRUM, arb_block)
     hyper_ctx = _ctx(web3_hyperevm, HYPEREVM, hyper_block)
-    arb_factory = CcipCrosschainFactory(arb_ctx, V3.address)
+    arb_factory = CcipCrosschainFactory(V3.address)
     asset_id = Web3.keccak(text="HTEST")
     user_salt = Web3.keccak(text="ipor-fusion.py Arbitrum HyperEVM rehearsal")
-    executor = arb_factory.compute_executor_address(CREATOR, user_salt).call()
-    route = replace(arb_factory.ccip_route(HYPEREVM).call(), peer=executor)
+    executor = arb_factory.compute_executor_address(CREATOR, user_salt).call(arb_ctx)
+    route = replace(arb_factory.ccip_route(HYPEREVM).call(arb_ctx), peer=executor)
     transport = CcipTransport(
         (
             CcipChain(
@@ -1639,13 +1642,11 @@ def test_hyperevm_one_value_feed_is_ready(web3_hyperevm):
         to=HYPEREVM_ONE_VALUE_FEED,
         data=bytes(Web3.keccak(text="decimals()")[:4]),
         output_types=["uint8"],
-        ctx=ctx,
     )
     latest_round_data = Call(
         to=HYPEREVM_ONE_VALUE_FEED,
         data=bytes(Web3.keccak(text="latestRoundData()")[:4]),
         output_types=["uint80", "int256", "uint256", "uint256", "uint80"],
-        ctx=ctx,
     )
 
     assert (
@@ -1656,8 +1657,8 @@ def test_hyperevm_one_value_feed_is_ready(web3_hyperevm):
         )
         > 0
     )
-    assert decimals.call() == 8
-    assert latest_round_data.call() == (0, 1, 0, 0, 0)
+    assert decimals.call(ctx) == 8
+    assert latest_round_data.call(ctx) == (0, 1, 0, 0, 0)
 
 
 @pytest.mark.parametrize(("symbol", "tokens"), ASSETS.items())
@@ -1680,8 +1681,8 @@ def test_ccip_assets_travel_both_ways(web3_arb, web3_hyperevm, symbol, tokens):
         ),
     )
     for ctx, router, token, peer_selector in specs:
-        factory = CcipCrosschainFactory(ctx, V3.address)
-        assert factory.asset_config(asset_id).call() == (token, 18, True)
+        factory = CcipCrosschainFactory(V3.address)
+        assert factory.asset_config(asset_id).call(ctx) == (token, 18, True)
         lane = ccip_token_lane(ctx, router, token, peer_selector)
         assert lane.message_lane
         assert lane.on_ramp_version is not None
@@ -1728,12 +1729,12 @@ def test_simulate_executor_and_dispatcher_deployment(web3_arb, web3_hyperevm):
     simulator.observe(
         ARBITRUM,
         "dispatcher_ready",
-        CcipCrosschainExecutor(arb_ctx, executor).has_dispatcher(HYPEREVM),
+        CcipCrosschainExecutor(executor).has_dispatcher(HYPEREVM),
     )
     simulator.observe(
         HYPEREVM,
         "dispatcher_registered",
-        CcipCrosschainFactory(hyper_ctx, V3.address).is_dispatcher(executor),
+        CcipCrosschainFactory(V3.address).is_dispatcher(executor),
     )
     results = simulator.relay()
     for result in results.values():

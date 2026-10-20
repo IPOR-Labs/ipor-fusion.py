@@ -72,7 +72,7 @@ class RewardsManager(ContractWrapper):
         data = FuseAction.encode_execute_payload(
             claims, "claimRewards((address,bytes)[])"
         )
-        return Call(to=self._address, data=data, ctx=self._ctx)
+        return Call(to=self._address, data=data)
 
     def update_balance(self) -> Call[None]:
         return self._write("updateBalance()")

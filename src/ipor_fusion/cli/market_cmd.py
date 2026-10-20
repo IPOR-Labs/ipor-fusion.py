@@ -124,10 +124,10 @@ def morpho_blue(
     ctx = Web3Context.from_url(provider_url)
     if block is not None:
         ctx.default_block = block
-    reader = MorphoReader(ctx, morpho_blue_address(chain_id))
+    reader = MorphoReader(morpho_blue_address(chain_id))
     mid = market_id
-    params, state = reader.require_market(mid)
-    rates = reader.rates_from(state, params)
+    params, state = reader.read_existing_market(ctx, mid)
+    rates = reader.read_rates_from(ctx, state, params)
 
     api_market: MorphoApiMarket | None = None
     api_error: str | None = None

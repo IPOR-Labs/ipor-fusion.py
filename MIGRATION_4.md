@@ -80,7 +80,7 @@ chain is always the context's:
   market_substrates, aave_pools=None)` take the chain from `ctx`.
 - `Web3Context(web3, chain_id, *, ...)` and `Web3Context.from_url(url, *, ...)` take
   their options by keyword. New: `Web3Context.at_block(block)` (a pinned copy) and
-  `Call.call(ctx=None, *, block=None)`. `Web3Context.get_logs(to_block=None)` ends at
+  `Call.call(ctx, *, block=None)` (see [Context-free wrappers](#context-free-wrappers)). `Web3Context.get_logs(to_block=None)` ends at
   the context's default block and `Web3Context.get_block(block=None)` returns it,
   both instead of ``"latest"``.
 
@@ -113,7 +113,7 @@ The Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` 
 `quote_ccip_native_fee(block=)` and `OracleMappingReader.asset_source_events` take a
 `BlockIdentifier`.
 
-**Address roles.** `PlasmaVault(ctx, address)` (`ctx` may be `None`, see below),
+**Address roles.** `PlasmaVault(address)`,
 `validate_vault`, `fetch_deployment_info`, the HyperCore, lending-health and
 oracle-mapping readers, `read_external_state`, `VaultSimulator(vault=)`,
 `CrosschainSimulator`, crosschain discovery, the hub-manager inputs
@@ -130,7 +130,7 @@ Every fuse constructor, `FuseAction.fuse`, `BalanceFuse.fuse`,
 `LaneFuses` and the HyperCore balance-fuse argument take a `FuseAddress`, and
 `get_fuses()`, `get_instant_withdrawal_fuses()`, `get_rewards_fuses()` and
 `VaultData.fuses` / `instant_fuses` / `fuse_markets` keys return it.
-`AccessManager(ctx, address)` takes an `AccessManagerAddress`;
+`AccessManager(address)` takes an `AccessManagerAddress`;
 `get_access_manager_address()`, `VaultData.access_manager` and
 `FusionInstance.access_manager` return one. `resolve_access_manager` still takes any
 `ChecksumAddress`: it is what checks that the address is a vault.
@@ -167,7 +167,7 @@ gone: use `morpho_blue_address(chain_id)`.
 `decode_substrate`, `market_name`, `format_market_label` take `MarketId`.
 
 **Access.** `AccessManager.has_role`, `grant_role`, `revoke_role`,
-`get_accounts_with_role` take `RoleId | Roles`; `RoleAccount.role_id` is `RoleId`.
+`read_accounts_with_role` take `RoleId | Roles`; `RoleAccount.role_id` is `RoleId`.
 
 **Morpho.** `MorphoBlueMarketId` now always carries `0x`; build it with
 `parse_morpho_market_id` instead of `MorphoBlueMarketId("<64 hex>")`. `fetch_market`,
@@ -214,29 +214,6 @@ are `ProposalHash`; `ExternalStateEvent.transaction_hash` is a `TxHash`.
 except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 `MarketId`. Calling an MCP tool function directly from Python takes `ChainId`.
 
-**Offline wrappers.** `ContractWrapper.encoder()` (and the `PlasmaVault` /
-`AccessManager` overrides) is gone. Every wrapper constructor takes
-`ctx: Web3Context | None`, so build an offline wrapper with the normal
-constructor and an address: `PlasmaVault(None, vault)`, `ERC20(None, token)`,
-`FusionFactory(None, factory)`, `LegacyPriceOracleMiddleware(None, oracle,
-Decimals(8))`. The address is required (there is no zero-address placeholder) and
-subclass parameters stay required, so the wrapper is fully initialized:
-`.encoder()` skipped the constructor, and a legacy oracle built that way failed to
-decode `get_asset_price`. `.calldata` still needs no context; `.call()`, `.send()`,
-`.build_transaction()` and `.estimate_gas()` raise `ValueError` until one is passed
-to them, and a method that reads the chain itself (log scans such as
-`get_balance_fuses` or `get_pending_requests`, `withdraw_manager_address`,
-`Multicall3.aggregate` / `try_aggregate`, the Aave V3 and Morpho position reads)
-raises `ValueError("Web3Context required: <wrapper> at <address> ...")` instead of
-an `AttributeError` on `None`. `ExternalStateExecutor` still refuses the zero
-address for its hash and event readers.
-
-| 3.x | 4.0 |
-|---|---|
-| `PlasmaVault.encoder(vault)` | `PlasmaVault(None, vault)` |
-| `ERC20.encoder()` (no address) | `ERC20(None, token)`: pass the real address |
-| `Cls.__new__(Cls)` + `_ctx` / `_address` | `Cls(None, address)` |
-
 **Fuse base.** `Fuse`, `StakeFuse` and the shared validators and substrate packers
 live in `ipor_fusion.core.fuse`; `ipor_fusion.fuses.base`, `ipor_fusion.fuses` and
 `ipor_fusion` re-export them, so existing imports keep working. Fuse equality and
@@ -248,6 +225,93 @@ hash now cover every attribute a fuse stores, not only its class and address (se
 `ipor_fusion.fuses.base` and `FuseAction` from `ipor_fusion`. The CLI's internal
 `ipor_fusion.cli.vault_cmd` was split into `options`, `vault_info_view`,
 `vault_markets_view` and `oracle_mapping_view` (private names, not API).
+
+## Context-free wrappers
+
+A contract wrapper is its address (plus genuine contract parameters, such as a legacy
+oracle's decimals) and nothing chain-bound. Construction and `Call` building are
+offline; the `Web3Context` is a required argument where something executes. In 3.x
+the context was stored on the wrapper and copied into every `Call`; that is gone,
+together with `ContractWrapper.encoder()`, `Call.ctx` and the zero-address
+placeholder wrapper.
+
+- Build every wrapper from its address: `PlasmaVault(vault)`, `ERC20(token)`,
+  `FusionFactory(factory)`, `AccessManager(manager)`,
+  `LegacyPriceOracleMiddleware(oracle, Decimals(8))`, the crosschain executor,
+  dispatcher and factory wrappers, the Chainlink CCIP wrappers, the readers
+  (`MorphoReader(morpho)`, `AaveV3Reader(pool)`, ...). `HyperCoreReader()` takes no
+  argument. The nominal address types are unchanged.
+- Execute a `Call` on a context: `.call(ctx, *, block=None)` (reads default to the
+  context's, possibly pinned, block), `.send(ctx)`, `.build_transaction(ctx, *,
+  block="latest")`, `.estimate_gas(ctx, *, block="latest")`. `ctx` may be passed by
+  keyword. Without it Python raises `TypeError` (and pyright reports the call),
+  instead of the 3.x `ValueError("Web3Context required ...")`. `.calldata`,
+  `.decode(raw)` and `.map(f)` need no context. `Call(...)` no longer takes `ctx=`.
+- A wrapper method that executes to answer (storage, log scans, dependent reads) is
+  named `read_*` and takes the context first (table below).
+- Executors and orchestrators keep their contexts: `Multicall3(ctx)` (every batch,
+  every re-run of a failed sub-call and the per-call fallback run on its `ctx`, so a
+  pinned context keeps them all at its block; it is no longer a `ContractWrapper`,
+  `aggregate3(calls)` still returns the raw `Call`), `VaultSimulator`,
+  `CrosschainSimulator` and `OracleMappingReader(ctx, oracle)`.
+- Resolvers that probe the chain stay eager and return context-free wrappers:
+  `price_oracle_middleware(ctx, oracle)`, `resolve_access_manager(ctx, vault)`,
+  `ExternalStateExecutor.for_vault(ctx, vault)`. A resolved oracle carries the ABI
+  found on that chain and block; resolve again for another one.
+- Crosschain lanes own both contexts: `CcipLane` / `StargateLane` take `hub_ctx=` and
+  `spoke_ctx=` instead of `spoke_chain_id=` (it is `spoke_ctx.chain_id`), and expose
+  them as `lane.hub_ctx` / `lane.spoke_ctx`. `needs_attestation`,
+  `command_in_flight` and `transfer_in_flight` read on `hub_ctx`. The Calls a lane
+  returns are unexecuted, and the executor and dispatcher share one address, so pick
+  the context yourself: `lane.get_balance().call(lane.hub_ctx)`,
+  `lane.observation().call(lane.spoke_ctx)`. `CrosschainTransport.executor(address)`
+  and `.dispatcher(address)` no longer take a context.
+- Chain-bound decoding takes the chain explicitly:
+  `ExternalStateExecutor.pending_proposals(account, *, chain_id)`,
+  `parse_balance_proposed(log, *, chain_id)` and
+  `find_balance_proposed(logs, account=None, *, chain_id)` require it (3.x fell back
+  to the wrapper's context). The decoder captures it, so `.call(ctx)`, `Multicall3`
+  and `VaultSimulator.observe` stamp the same hash for the same bytes, whatever
+  context executes them. Pass `ctx.chain_id` for the chain you read from.
+  `pending_proposals` now refuses an executor at the zero address when the Call is
+  built, not when it is decoded. `mark_nav` takes the chain from its contexts.
+
+| 3.x | 4.0 |
+|---|---|
+| `PlasmaVault(ctx, vault)`, `ERC20(ctx, token)`, any `Wrapper(ctx, address, ...)` | `PlasmaVault(vault)`, `ERC20(token)`, `Wrapper(address, ...)` |
+| `PlasmaVault.encoder(vault)`, `ERC20.encoder()` | `PlasmaVault(vault)`, `ERC20(token)` (the real address) |
+| `LegacyPriceOracleMiddleware(ctx, oracle, decimals)` | `LegacyPriceOracleMiddleware(oracle, decimals)` |
+| `HyperCoreReader(ctx)` | `HyperCoreReader()` |
+| `Call(to=, data=, ..., ctx=ctx)` | `Call(to=, data=, ...)` |
+| `call.call()` / `call.call(block=n)` | `call.call(ctx)` / `call.call(ctx, block=n)` |
+| `call.send()` | `call.send(ctx)` |
+| `call.build_transaction(block=b)`, `call.estimate_gas(block=b)` | `call.build_transaction(ctx, block=b)`, `call.estimate_gas(ctx, block=b)` |
+| `call.ctx` | gone: keep the context yourself |
+| `PlasmaVault.get_balance_fuses()` | `PlasmaVault.read_balance_fuses(ctx)` |
+| `PlasmaVault.withdraw_manager_address()` | `PlasmaVault.read_withdraw_manager_address(ctx)` |
+| `PlasmaVault.price_oracle_address()` | `PlasmaVault.read_price_oracle_address(ctx)` |
+| `AccessManager.owner()` / `owners()` / `atomists()` | `read_owner(ctx)` / `read_owners(ctx)` / `read_atomists(ctx)` |
+| `AccessManager.get_accounts_with_role(role)` | `AccessManager.read_accounts_with_role(ctx, role)` |
+| `AccessManager.get_all_role_accounts()` | `AccessManager.read_all_role_accounts(ctx)` |
+| `PriceOracleMiddleware.get_assets_price_sources()` | `PriceOracleMiddleware.read_assets_price_sources(ctx)` |
+| `WithdrawManager.get_pending_requests(from_block)` | `WithdrawManager.read_pending_requests(ctx, from_block)` |
+| `WithdrawManager.get_pending_requests_info(from_block)` | `WithdrawManager.read_pending_requests_info(ctx, from_block)` |
+| `MorphoReader.position_breakdown(id, user)` | `MorphoReader.read_position_breakdown(ctx, id, user)` |
+| `MorphoReader.require_market(id)` | `MorphoReader.read_existing_market(ctx, id)` |
+| `MorphoReader.rates(id)` | `MorphoReader.read_rates(ctx, id)` |
+| `MorphoReader.rates_from(market, params)` | `MorphoReader.read_rates_from(ctx, market, params)` (it reads the IRM) |
+| `AaveV3Reader.position_breakdown(asset, user)` | `AaveV3Reader.read_position_breakdown(ctx, asset, user)` |
+| `AaveV3FuseReader.pool()` | `AaveV3FuseReader.read_pool(ctx)` |
+| `executor.pending_proposals(account)` | `executor.pending_proposals(account, chain_id=ctx.chain_id)` |
+| `executor.parse_balance_proposed(log)` / `find_balance_proposed(logs)` | `...(log, chain_id=...)` / `...(logs, chain_id=...)` |
+| `CcipLane(executor=, dispatcher=, spoke_chain_id=, ...)` | `CcipLane(hub_ctx=, spoke_ctx=, executor=, dispatcher=, ...)` (same for `StargateLane`) |
+| `transport.executor(ctx, address)` / `transport.dispatcher(ctx, address)` | `transport.executor(address)` / `transport.dispatcher(address)` |
+
+A service that caches wrappers per chain can now share one wrapper across chains and
+snapshots; what it must not share is a `Call` result decoded with a chain-bound
+argument (`chain_id=`) for another chain. An external signer still needs the real
+target address (`call.to`) and builds the chain-qualified transaction itself, or
+gets it from `call.build_transaction(ctx)`.
 
 ## Behavior changes
 
@@ -325,7 +389,7 @@ is the wrong one.
   executor of a transport. An executor reporting `transportKind()` `UNDEFINED` is now
   rejected by `detect_transport` instead of being returned. A transport kind passed in
   that has no lane is still a `ValueError`.
-- `Call.call()` and `Call.decode()` on a write-only `Call` raise `ValueError`, not
+- `Call.call(ctx)` and `Call.decode()` on a write-only `Call` raise `ValueError`, not
   `RuntimeError`. `CrosschainSimulator.relay` raises `ValueError`, not
   `RuntimeError`, for a message to a chain that was not added.
 - `VaultSimulator.run` (provider error from `eth_simulateV1`, or a result count that

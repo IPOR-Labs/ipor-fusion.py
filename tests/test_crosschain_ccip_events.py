@@ -277,12 +277,12 @@ def test_accounting_readers_encode_selector_and_decode_return(
 ):
     ctx = MagicMock()
     ctx.call.return_value = encode([return_type], [raw])
-    call = getattr(CcipCrosschainExecutor(ctx, ADDR), method)(42161)
+    call = getattr(CcipCrosschainExecutor(ADDR), method)(42161)
     assert call.to == ADDR
     assert call.data == function_signature_to_4byte_selector(signature) + encode(
         ["uint256"], [42161]
     )
-    assert call.call() == expected
+    assert call.call(ctx) == expected
 
 
 # --- mirrored from a contracts checkout ------------------------------------------

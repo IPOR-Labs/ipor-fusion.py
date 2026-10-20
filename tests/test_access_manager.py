@@ -37,20 +37,20 @@ def _grant_event(role_id: int, account: str) -> dict:
 
 def _manager_with(
     events: list[dict], is_member: bool = True, execution_delay: int = 0
-) -> AccessManager:
+) -> tuple[AccessManager, MagicMock]:
     ctx = MagicMock()
     ctx.get_logs.return_value = events
     ctx.call.side_effect = multicall_aware(
         lambda _to, _data: encode(["bool", "uint32"], [is_member, execution_delay])
     )
-    return AccessManager(ctx, MANAGER_ADDR)
+    return AccessManager(MANAGER_ADDR), ctx
 
 
 class TestGetAllRoleAccounts:
     def test_returns_confirmed_members(self):
-        manager = _manager_with([_grant_event(1, ALICE), _grant_event(100, BOB)])
+        manager, ctx = _manager_with([_grant_event(1, ALICE), _grant_event(100, BOB)])
 
-        accounts = manager.get_all_role_accounts()
+        accounts = manager.read_all_role_accounts(ctx)
 
         assert [(ra.role_id, ra.account) for ra in accounts] == [
             (1, ALICE),
@@ -58,21 +58,23 @@ class TestGetAllRoleAccounts:
         ]
 
     def test_skips_revoked_members(self):
-        manager = _manager_with([_grant_event(1, ALICE)], is_member=False)
+        manager, ctx = _manager_with([_grant_event(1, ALICE)], is_member=False)
 
-        assert manager.get_all_role_accounts() == []
+        assert manager.read_all_role_accounts(ctx) == []
 
     def test_execution_delay_passthrough(self):
-        manager = _manager_with([_grant_event(1, ALICE)], execution_delay=3600)
+        manager, ctx = _manager_with([_grant_event(1, ALICE)], execution_delay=3600)
 
-        (account,) = manager.get_all_role_accounts()
+        (account,) = manager.read_all_role_accounts(ctx)
 
         assert account.execution_delay == 3600
 
     def test_role_name_property(self):
-        manager = _manager_with([_grant_event(100, ALICE), _grant_event(1234, BOB)])
+        manager, ctx = _manager_with(
+            [_grant_event(100, ALICE), _grant_event(1234, BOB)]
+        )
 
-        atomist, unknown = manager.get_all_role_accounts()
+        atomist, unknown = manager.read_all_role_accounts(ctx)
 
         assert atomist.role_name == "ATOMIST_ROLE"
         assert unknown.role_name == "UNKNOWN_ROLE_1234"
@@ -80,20 +82,19 @@ class TestGetAllRoleAccounts:
     def test_deduplicates_repeated_grants(self):
         # A re-granted (role, account) emits two RoleGranted events but is one
         # current membership.
-        manager = _manager_with([_grant_event(1, ALICE), _grant_event(1, ALICE)])
+        manager, ctx = _manager_with([_grant_event(1, ALICE), _grant_event(1, ALICE)])
 
-        accounts = manager.get_all_role_accounts()
+        accounts = manager.read_all_role_accounts(ctx)
 
         assert len(accounts) == 1
 
     def test_resolves_all_candidates_in_one_multicall(self):
-        manager = _manager_with(
+        manager, ctx = _manager_with(
             [_grant_event(1, ALICE), _grant_event(100, BOB), _grant_event(1, ALICE)]
         )
 
-        manager.get_all_role_accounts()
+        manager.read_all_role_accounts(ctx)
 
-        ctx: MagicMock = manager._ctx  # type: ignore[assignment]
         ((to, data), _kwargs) = ctx.call.call_args
         assert ctx.call.call_count == 1
         assert is_aggregate3(to, data)
@@ -114,29 +115,29 @@ class TestGetAllRoleAccounts:
 
         ctx.call.side_effect = multicall_aware(has_role)
 
-        accounts = AccessManager(ctx, MANAGER_ADDR).get_all_role_accounts()
+        accounts = AccessManager(MANAGER_ADDR).read_all_role_accounts(ctx)
 
         assert [ra.account for ra in accounts] == [BOB]
 
     def test_no_grants_skips_the_rpc(self):
-        manager = _manager_with([])
+        manager, ctx = _manager_with([])
 
-        assert manager.get_all_role_accounts() == []
-        manager._ctx.call.assert_not_called()  # type: ignore[attr-defined]
+        assert manager.read_all_role_accounts(ctx) == []
+        ctx.call.assert_not_called()
 
 
 class TestGetAccountsWithRole:
     def test_filters_by_role(self):
-        manager = _manager_with([_grant_event(1, ALICE), _grant_event(100, BOB)])
+        manager, ctx = _manager_with([_grant_event(1, ALICE), _grant_event(100, BOB)])
 
-        accounts = manager.get_accounts_with_role(100)
+        accounts = manager.read_accounts_with_role(ctx, 100)
 
         assert [(ra.role_id, ra.account) for ra in accounts] == [(100, BOB)]
 
     def test_deduplicates_repeated_grants(self):
-        manager = _manager_with([_grant_event(100, BOB), _grant_event(100, BOB)])
+        manager, ctx = _manager_with([_grant_event(100, BOB), _grant_event(100, BOB)])
 
-        assert len(manager.get_accounts_with_role(100)) == 1
+        assert len(manager.read_accounts_with_role(ctx, 100)) == 1
 
 
 class TestRoleAccountHelpers:

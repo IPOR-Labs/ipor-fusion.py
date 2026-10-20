@@ -78,7 +78,7 @@ def _aerodrome_swap(
 ):
     targets = [token_in, AERODROME_ROUTER_ADDRESS]
     approve_data = (
-        ERC20(ctx, token_in).approve(AERODROME_ROUTER_ADDRESS, Amount(amount_in)).data
+        ERC20(token_in).approve(AERODROME_ROUTER_ADDRESS, Amount(amount_in)).data
     )
     path = _aerodrome_path(token_in, token_out)
     swap_data = function_signature_to_4byte_selector(
@@ -101,21 +101,19 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
-    plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
+    plasma_vault = PlasmaVault(VAULT_ADDRESS)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
     oracle = PriceOracleMiddleware(
-        ctx, plasma_vault.get_price_oracle_middleware_address().call()
+        plasma_vault.get_price_oracle_middleware_address().call(ctx)
     )
-    wsteth = ERC20(ctx, BASE_WSTETH)
-    weth = ERC20(ctx, BASE_WETH)
-    awsteth = ERC20(ctx, BASE_AAVE_V3_A_WSTETH)
-    dweth = ERC20(ctx, BASE_AAVE_V3_VARIABLE_DEBT_WETH)
+    wsteth = ERC20(BASE_WSTETH)
+    weth = ERC20(BASE_WETH)
+    awsteth = ERC20(BASE_AAVE_V3_A_WSTETH)
+    dweth = ERC20(BASE_AAVE_V3_VARIABLE_DEBT_WETH)
 
-    pre_balance_int = wsteth.balance_of(VAULT_ADDRESS).call()
-    wsteth_price = oracle.get_asset_price(BASE_WSTETH).call().readable()
-    weth_price = oracle.get_asset_price(BASE_WETH).call().readable()
+    pre_balance_int = wsteth.balance_of(VAULT_ADDRESS).call(ctx)
+    wsteth_price = oracle.get_asset_price(BASE_WSTETH).call(ctx).readable()
+    weth_price = oracle.get_asset_price(BASE_WETH).call(ctx).readable()
     deadline = int(web3_base.eth.get_block(PINNED_BLOCK)["timestamp"]) + 1000
 
     # Strategy maths — vault holdings + 1 WStETH deposit, 10x leverage, 90% LTV

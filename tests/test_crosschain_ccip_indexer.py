@@ -162,7 +162,7 @@ def test_an_answer_that_is_not_json_is_skipped(monkeypatch):
 
 
 def test_manual_execution_builds_execute_and_checks_the_message_hash():
-    off_ramp = CcipOffRamp(MagicMock(), OFF_RAMP)
+    off_ramp = CcipOffRamp(OFF_RAMP)
     result = VerifierResult(
         MESSAGE_ID, (RESOLVER,), CCV_DATA, EXECUTOR, {}, INDEXER_URLS[0]
     )

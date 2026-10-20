@@ -8,7 +8,7 @@ from eth_abi import decode, encode
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import MULTICALL3_ADDRESS, Multicall3
+from ipor_fusion import MULTICALL3_ADDRESS, ChainId, Multicall3, Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.errors import EmptyCallResultError
 
@@ -22,7 +22,6 @@ def _uint_call(ctx: MagicMock, target: str, arg: int) -> Call[int]:
         to=target,  # type: ignore[arg-type]
         data=SELECTOR + encode(["uint256"], [arg]),
         output_types=["uint256"],
-        ctx=ctx,
     )
 
 
@@ -69,7 +68,6 @@ class TestAggregate:
             data=SELECTOR + encode(["uint256"], [21]),
             output_types=["uint256"],
             decoder=str,
-            ctx=ctx,
         )
 
         assert Multicall3(ctx).aggregate([call]) == ["42"]
@@ -167,3 +165,50 @@ class TestWithoutMulticall3:
         calls = [_uint_call(ctx, TOKEN_A, 1), _uint_call(ctx, TOKEN_B, 2)]
 
         assert Multicall3(ctx).try_aggregate(calls) == [2, None]
+
+
+class TestPinnedContext:
+    """Multicall3 owns its context: the batch, the re-run of a failed
+    sub-call and the per-call fallback all read at the pinned block."""
+
+    BLOCK = 123
+
+    def _pinned(self, *, multicall: bool, failing: str | None = None):
+        web3 = MagicMock()
+        seen: list[tuple[str, object]] = []
+
+        def eth_call(tx, block_identifier=None):
+            to, data = tx["to"], tx["data"]
+            seen.append((to, block_identifier))
+            if to == MULTICALL3_ADDRESS:
+                if not multicall:
+                    return b""
+                return multicall_aware(_answer)(to, data)
+            return _answer(to, data)
+
+        def _answer(to: str, data: bytes) -> bytes:
+            if to == failing:
+                raise ContractLogicError("execution reverted: NotAllowed")
+            return _echo(to, data)
+
+        web3.eth.call.side_effect = eth_call
+        ctx = Web3Context(web3, ChainId(1)).at_block(self.BLOCK)
+        return ctx, seen
+
+    def test_fallback_without_multicall_stays_at_the_pinned_block(self):
+        ctx, seen = self._pinned(multicall=False)
+        calls = [_uint_call(ctx, TOKEN_A, 1), _uint_call(ctx, TOKEN_B, 2)]
+
+        assert Multicall3(ctx).aggregate(calls) == [2, 4]
+        assert Multicall3(ctx).try_aggregate(calls) == [2, 4]
+        assert [to for to, _ in seen] == [MULTICALL3_ADDRESS, TOKEN_A, TOKEN_B] * 2
+        assert {block for _, block in seen} == {self.BLOCK}
+
+    def test_rerun_of_a_failed_subcall_stays_at_the_pinned_block(self):
+        ctx, seen = self._pinned(multicall=True, failing=TOKEN_B)
+        calls = [_uint_call(ctx, TOKEN_A, 1), _uint_call(ctx, TOKEN_B, 2)]
+
+        with pytest.raises(ContractLogicError, match="NotAllowed"):
+            Multicall3(ctx).aggregate(calls)
+        assert [to for to, _ in seen] == [MULTICALL3_ADDRESS, TOKEN_B]
+        assert {block for _, block in seen} == {self.BLOCK}

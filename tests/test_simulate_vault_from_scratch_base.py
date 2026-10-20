@@ -121,10 +121,10 @@ def test_simulate_vault_from_scratch_supply_aave_v3(
 
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
     ctx.default_block = block
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # ── 1. Predict the deterministic addresses ──────────────────────────────
-    preview = factory.clone(**_clone_args()).call()
+    preview = factory.clone(**_clone_args()).call(ctx)
     vault_address = preview.plasma_vault
     access_manager_address = preview.access_manager
     log.info(
@@ -134,9 +134,9 @@ def test_simulate_vault_from_scratch_supply_aave_v3(
         preview.index,
     )
 
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(ctx, access_manager_address)
-    usdc = ERC20(ctx, BASE_USDC)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(access_manager_address)
+    usdc = ERC20(BASE_USDC)
     aave = AaveV3SupplyFuse(supply_fuse)
 
     sim = VaultSimulator(

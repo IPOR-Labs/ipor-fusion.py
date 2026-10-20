@@ -26,31 +26,8 @@ DEFAULT_BATCH_SIZE = 100
 _CALL_FAILURES = (ContractLogicError, EmptyCallResultError, DecodingError)
 
 
-class Multicall3(ContractWrapper):
-    """Batch many view `Call`s into one `eth_call` via Multicall3 `aggregate3`.
-
-    All sub-calls execute at the same block (`ctx.default_block`), in one round
-    trip per `batch_size` calls. Each sub-call runs with `allowFailure`, so one
-    failing read never takes the batch down:
-
-    - `try_aggregate` maps a failed or undecodable sub-call to ``None``.
-    - `aggregate` re-runs each failed sub-call on its own, so it raises exactly
-      what `Call.call()` would (revert reason, `EmptyCallResultError`).
-
-    Where Multicall3 is not deployed (a chain without it, or a block before
-    its deployment) both fall back to one `eth_call` per sub-call.
-    """
-
-    def __init__(
-        self,
-        ctx: Web3Context | None,
-        address: ChecksumAddress = MULTICALL3_ADDRESS,
-        batch_size: int = DEFAULT_BATCH_SIZE,
-    ):
-        super().__init__(ctx, address)
-        if batch_size < 1:
-            raise ValueError("batch_size must be >= 1")
-        self._batch_size = batch_size
+class _Multicall3Contract(ContractWrapper):
+    """The Multicall3 contract as an offline Call builder. `Multicall3` runs it."""
 
     def aggregate3(
         self, calls: Sequence[Call[object]]
@@ -64,24 +41,62 @@ class Multicall3(ContractWrapper):
             decoder=lambda results: [(ok, bytes(data)) for ok, data in results],
         )
 
+
+class Multicall3:
+    """Batch many view `Call`s into one `eth_call` via Multicall3 `aggregate3`.
+
+    An executor that owns its context: every batch, every re-run of a failed
+    sub-call and the per-call fallback run on ``ctx`` at its default block
+    (so a context from `Web3Context.at_block` keeps every read at that block),
+    in one round trip per `batch_size` calls. Each sub-call runs with
+    `allowFailure`, so one failing read never takes the batch down:
+
+    - `try_aggregate` maps a failed or undecodable sub-call to ``None``.
+    - `aggregate` re-runs each failed sub-call on its own, so it raises exactly
+      what `Call.call(ctx)` would (revert reason, `EmptyCallResultError`).
+
+    Where Multicall3 is not deployed (a chain without it, or a block before
+    its deployment) both fall back to one `eth_call` per sub-call.
+    """
+
+    def __init__(
+        self,
+        ctx: Web3Context,
+        address: ChecksumAddress = MULTICALL3_ADDRESS,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ):
+        if batch_size < 1:
+            raise ValueError("batch_size must be >= 1")
+        self._ctx = ctx
+        self._contract = _Multicall3Contract(address)
+        self._batch_size = batch_size
+
+    @property
+    def address(self) -> ChecksumAddress:
+        return self._contract.address
+
+    def aggregate3(
+        self, calls: Sequence[Call[object]]
+    ) -> Call[list[tuple[bool, bytes]]]:
+        """The raw `aggregate3` Call, unexecuted: run it with `.call(ctx)`."""
+        return self._contract.aggregate3(calls)
+
     def aggregate(self, calls: Sequence[Call[T]]) -> list[T]:
-        """Execute all `calls`; raise as `Call.call()` would on any failure."""
-        ctx = self._require_ctx()
+        """Execute all `calls`; raise as `Call.call(ctx)` would on any failure."""
         raw = self._fetch(calls)
         if raw is None:
-            return [call.call(ctx) for call in calls]
+            return [call.call(self._ctx) for call in calls]
         return [
-            call.decode(data) if ok and data else call.call(ctx)
+            call.decode(data) if ok and data else call.call(self._ctx)
             for call, (ok, data) in zip(calls, raw, strict=True)
         ]
 
     def try_aggregate(self, calls: Sequence[Call[T]]) -> list[T | None]:
         """Execute all `calls`; ``None`` for each that reverts, returns no data
         or returns data its `Call` cannot decode."""
-        ctx = self._require_ctx()
         raw = self._fetch(calls)
         if raw is None:
-            return [_try_call(call, ctx) for call in calls]
+            return [_try_call(call, self._ctx) for call in calls]
         return [
             _try_decode(call, ok, data)
             for call, (ok, data) in zip(calls, raw, strict=True)
@@ -95,7 +110,7 @@ class Multicall3(ContractWrapper):
                 Sequence[Call[object]], calls[start : start + self._batch_size]
             )
             try:
-                results.extend(self.aggregate3(chunk).call())
+                results.extend(self._contract.aggregate3(chunk).call(self._ctx))
             except EmptyCallResultError:
                 return None
         return results

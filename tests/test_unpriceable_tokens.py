@@ -157,7 +157,7 @@ class TestFetch:
         ]
 
     def test_get_silos_decodes_both_silos(self, chain):
-        call = unpriceable._silos_call(chain.ctx, SILO_CONFIG)
+        call = unpriceable._silos_call(SILO_CONFIG)
         raw = encode(["address", "address"], [SILO_0, SILO_1])
         assert call.decode(raw) == [SILO_0, SILO_1]
 

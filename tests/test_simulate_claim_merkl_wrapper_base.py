@@ -135,20 +135,16 @@ def _prepared_sim(web3_base: Web3) -> _Setup:
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(web3_base.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
-    plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    rewards = RewardsManager(
-        ctx, plasma_vault.get_rewards_claim_manager_address().call()
-    )
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
+    plasma_vault = PlasmaVault(VAULT_ADDRESS)
+    rewards = RewardsManager(plasma_vault.get_rewards_claim_manager_address().call(ctx))
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
 
     claim_role = access_manager.get_target_function_role(
         rewards.address, CLAIM_REWARDS_SELECTOR
-    ).call()
+    ).call(ctx)
     assert claim_role == Roles.CLAIM_REWARDS_ROLE
-    assert access_manager.has_role(claim_role, ALPHA_ADDRESS).call().is_member
-    assert rewards.is_reward_fuse_supported(BASE_MERKL_CLAIM_WRAPPER_FUSE).call()
+    assert access_manager.has_role(claim_role, ALPHA_ADDRESS).call(ctx).is_member
+    assert rewards.is_reward_fuse_supported(BASE_MERKL_CLAIM_WRAPPER_FUSE).call(ctx)
 
     sim = VaultSimulator(
         web3=web3_base,
@@ -160,8 +156,8 @@ def _prepared_sim(web3_base: Web3) -> _Setup:
         sim=sim,
         plasma_vault=plasma_vault,
         rewards=rewards,
-        reward_token=ERC20(ctx, A_BAS_CB_ETH),
-        wrapper_token=ERC20(ctx, WRAPPER),
+        reward_token=ERC20(A_BAS_CB_ETH),
+        wrapper_token=ERC20(WRAPPER),
     )
 
 

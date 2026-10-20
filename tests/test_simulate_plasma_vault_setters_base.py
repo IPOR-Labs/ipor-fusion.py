@@ -40,9 +40,8 @@ SAMPLE_FUSE_B = Web3.to_checksum_address("0x" + "b2" * 20)
 
 
 def _bare_vault() -> PlasmaVault:
-    """Build a PlasmaVault without a Web3Context. Safe because `.calldata`
-    only reads the pre-encoded `Call.data` — never touches ctx."""
-    return PlasmaVault(None, BASE_PLASMA_VAULT)
+    """A PlasmaVault wrapper: an address, no context, so offline."""
+    return PlasmaVault(BASE_PLASMA_VAULT)
 
 
 # --- pure encoding: selector + ABI round-trip -------------------------------
@@ -140,8 +139,8 @@ def test_simulate_plasma_vault_get_fuses_base(web3_base):
     wrapper class round-trips correctly against the deployed bytecode and
     the wrapper's `_view`/`Call` path decodes the address[] result type."""
     ctx = Web3Context(web3=web3_base, chain_id=8453, signer=SAMPLE_OWNER)
-    vault = PlasmaVault(ctx, BASE_PLASMA_VAULT)
-    fuses = vault.get_fuses().call()
+    vault = PlasmaVault(BASE_PLASMA_VAULT)
+    fuses = vault.get_fuses().call(ctx)
     # Returned shape: list[ChecksumAddress]. The vault may or may not have
     # any fuses registered depending on which smoke ran last; we only assert
     # the shape/decoding is valid.

@@ -75,18 +75,16 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    owner = access_manager.owner()
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    fluid_stake_token = ERC20(ctx, FLUID_STAKING_CONTRACT)
-    ausdc = ERC20(ctx, AAVE_AUSDC_TOKEN)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    owner = access_manager.read_owner(ctx)
+    usdc = ERC20(ARBITRUM_USDC)
+    fluid_stake_token = ERC20(FLUID_STAKING_CONTRACT)
+    ausdc = ERC20(AAVE_AUSDC_TOKEN)
 
     # Probe vault state at the pinned block — deterministic on archive.
-    raw_usdc = usdc.balance_of(vault_address).call()
-    fluid_stake = fluid_stake_token.balance_of(vault_address).call()
+    raw_usdc = usdc.balance_of(vault_address).call(ctx)
+    fluid_stake = fluid_stake_token.balance_of(vault_address).call(ctx)
     log.info(
         "owner=%s raw_usdc=%s fluid_stake=%s (block=%s)",
         owner,
@@ -183,17 +181,15 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    owner = access_manager.owner()
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    fluid_stake_token = ERC20(ctx, FLUID_STAKING_CONTRACT)
-    cusdc = ERC20(ctx, COMPOUND_CUSDC_TOKEN)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    owner = access_manager.read_owner(ctx)
+    usdc = ERC20(ARBITRUM_USDC)
+    fluid_stake_token = ERC20(FLUID_STAKING_CONTRACT)
+    cusdc = ERC20(COMPOUND_CUSDC_TOKEN)
 
-    raw_usdc = usdc.balance_of(vault_address).call()
-    fluid_stake = fluid_stake_token.balance_of(vault_address).call()
+    raw_usdc = usdc.balance_of(vault_address).call(ctx)
+    fluid_stake = fluid_stake_token.balance_of(vault_address).call(ctx)
     log.info("raw_usdc=%s fluid_stake=%s", raw_usdc / 1e6, fluid_stake / 1e6)
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
         pytest.skip("vault preconditions not met for Compound V3 supply test")
@@ -249,16 +245,14 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    owner = access_manager.owner()
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    fluid_stake_token = ERC20(ctx, FLUID_STAKING_CONTRACT)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    owner = access_manager.read_owner(ctx)
+    usdc = ERC20(ARBITRUM_USDC)
+    fluid_stake_token = ERC20(FLUID_STAKING_CONTRACT)
 
-    raw_usdc = usdc.balance_of(vault_address).call()
-    fluid_stake = fluid_stake_token.balance_of(vault_address).call()
+    raw_usdc = usdc.balance_of(vault_address).call(ctx)
+    fluid_stake = fluid_stake_token.balance_of(vault_address).call(ctx)
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
         pytest.skip("vault preconditions not met for Fluid re-supply test")
 
@@ -315,17 +309,15 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     ctx.default_block = PINNED_BLOCK
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
-    plasma_vault = PlasmaVault(ctx, vault_address)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    owner = access_manager.owner()
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    fluid_stake_token = ERC20(ctx, FLUID_STAKING_CONTRACT)
-    farmd_token = ERC20(ctx, GEARBOX_FARMD_TOKEN)
+    plasma_vault = PlasmaVault(vault_address)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    owner = access_manager.read_owner(ctx)
+    usdc = ERC20(ARBITRUM_USDC)
+    fluid_stake_token = ERC20(FLUID_STAKING_CONTRACT)
+    farmd_token = ERC20(GEARBOX_FARMD_TOKEN)
 
-    raw_usdc = usdc.balance_of(vault_address).call()
-    fluid_stake = fluid_stake_token.balance_of(vault_address).call()
+    raw_usdc = usdc.balance_of(vault_address).call(ctx)
+    fluid_stake = fluid_stake_token.balance_of(vault_address).call(ctx)
     if fluid_stake == 0 and raw_usdc < 11_000_000_000:
         pytest.skip("vault preconditions not met for Gearbox test")
 

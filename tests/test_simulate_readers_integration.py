@@ -59,14 +59,16 @@ class TestMorphoReaderIntegration:
     BLOCK = 22066578
 
     def test_market_returns_nonzero_supply(self, web3_eth):
-        reader = MorphoReader(_ctx(web3_eth, self.BLOCK), ETHEREUM_MORPHO_BLUE)
-        market = reader.market(MORPHO_USDC_MARKET_ID).call()
+        ctx = _ctx(web3_eth, self.BLOCK)
+        reader = MorphoReader(ETHEREUM_MORPHO_BLUE)
+        market = reader.market(MORPHO_USDC_MARKET_ID).call(ctx)
         assert market.total_supply_assets > 0
         assert market.total_supply_shares > 0
 
     def test_market_params_returns_valid_addresses(self, web3_eth):
-        reader = MorphoReader(_ctx(web3_eth, self.BLOCK), ETHEREUM_MORPHO_BLUE)
-        params = reader.market_params(MORPHO_USDC_MARKET_ID).call()
+        ctx = _ctx(web3_eth, self.BLOCK)
+        reader = MorphoReader(ETHEREUM_MORPHO_BLUE)
+        params = reader.market_params(MORPHO_USDC_MARKET_ID).call(ctx)
         assert params.loan_token == ETHEREUM_USDC
         assert params.lltv > 0
         assert params.collateral_token != ZERO
@@ -74,8 +76,11 @@ class TestMorphoReaderIntegration:
         assert params.irm != ZERO
 
     def test_position_returns_valid_dataclass(self, web3_eth):
-        reader = MorphoReader(_ctx(web3_eth, self.BLOCK), ETHEREUM_MORPHO_BLUE)
-        position = reader.position(MORPHO_USDC_MARKET_ID, ETHEREUM_MORPHO_VAULT).call()
+        ctx = _ctx(web3_eth, self.BLOCK)
+        reader = MorphoReader(ETHEREUM_MORPHO_BLUE)
+        position = reader.position(MORPHO_USDC_MARKET_ID, ETHEREUM_MORPHO_VAULT).call(
+            ctx
+        )
         assert position.supply_shares >= 0
         assert position.borrow_shares >= 0
         assert position.collateral >= 0
@@ -85,8 +90,9 @@ class TestAaveV3ReaderIntegration:
     BLOCK = 22616438
 
     def test_get_user_account_data(self, web3_eth):
-        reader = AaveV3Reader(_ctx(web3_eth, self.BLOCK), ETHEREUM_AAVE_V3_POOL)
-        data = reader.get_user_account_data(ETHEREUM_AAVE_VAULT).call()
+        ctx = _ctx(web3_eth, self.BLOCK)
+        reader = AaveV3Reader(ETHEREUM_AAVE_V3_POOL)
+        data = reader.get_user_account_data(ETHEREUM_AAVE_VAULT).call(ctx)
         assert data.health_factor > 0
         assert data.total_collateral_base >= 0
         assert data.ltv >= 0
@@ -99,17 +105,15 @@ class TestCompoundV3ReaderIntegration:
     BLOCK = 250690377
 
     def test_balance_of_comet(self, web3_arb):
-        reader = CompoundV3Reader(
-            _ctx(web3_arb, self.BLOCK), ARBITRUM_COMPOUND_V3_C_USDC
-        )
-        balance = reader.balance_of(ARBITRUM_COMPOUND_V3_C_USDC).call()
+        ctx = _ctx(web3_arb, self.BLOCK)
+        reader = CompoundV3Reader(ARBITRUM_COMPOUND_V3_C_USDC)
+        balance = reader.balance_of(ARBITRUM_COMPOUND_V3_C_USDC).call(ctx)
         assert balance >= 0
 
     def test_borrow_balance_of(self, web3_arb):
-        reader = CompoundV3Reader(
-            _ctx(web3_arb, self.BLOCK), ARBITRUM_COMPOUND_V3_C_USDC
-        )
-        borrow = reader.borrow_balance_of(ARBITRUM_COMPOUND_V3_C_USDC).call()
+        ctx = _ctx(web3_arb, self.BLOCK)
+        reader = CompoundV3Reader(ARBITRUM_COMPOUND_V3_C_USDC)
+        borrow = reader.borrow_balance_of(ARBITRUM_COMPOUND_V3_C_USDC).call(ctx)
         assert borrow >= 0
 
 
@@ -117,10 +121,9 @@ class TestUniswapV3ReaderIntegration:
     BLOCK = 254084008
 
     def test_positions_reads_existing_position(self, web3_arb):
-        reader = UniswapV3Reader(
-            _ctx(web3_arb, self.BLOCK), ARBITRUM_UNISWAP_V3_POSITION_MANAGER
-        )
-        position = reader.positions(1).call()
+        ctx = _ctx(web3_arb, self.BLOCK)
+        reader = UniswapV3Reader(ARBITRUM_UNISWAP_V3_POSITION_MANAGER)
+        position = reader.positions(1).call(ctx)
         assert position.token0 != ZERO
         assert position.token1 != ZERO
         assert position.fee > 0
@@ -130,10 +133,9 @@ class TestRamsesV2ReaderIntegration:
     BLOCK = 261946538
 
     def test_positions_reads_existing_position(self, web3_arb):
-        reader = RamsesV2Reader(
-            _ctx(web3_arb, self.BLOCK), ARBITRUM_RAMSES_V2_POSITION_MANAGER
-        )
-        position = reader.positions(1).call()
+        ctx = _ctx(web3_arb, self.BLOCK)
+        reader = RamsesV2Reader(ARBITRUM_RAMSES_V2_POSITION_MANAGER)
+        position = reader.positions(1).call(ctx)
         assert position.token0 != ZERO
         assert position.token1 != ZERO
         assert position.fee > 0

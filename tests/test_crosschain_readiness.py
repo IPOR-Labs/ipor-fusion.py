@@ -102,10 +102,9 @@ def test_ccip_usdc_travels_both_ways(request, spoke: Spoke):
     _spokes("the hub CCIP factory has no timelocked route policy for HyperEVM"),
 )
 def test_hub_ccip_factory_route_policy(request, spoke: Spoke):
-    factory = CcipCrosschainFactory(
-        _ctx(request, HUB), POC.factory(CrosschainTransportKind.CHAINLINK_CCIP)
-    )
-    route = factory.ccip_route(spoke.chain_id).call()
+    hub = _ctx(request, HUB)
+    factory = CcipCrosschainFactory(POC.factory(CrosschainTransportKind.CHAINLINK_CCIP))
+    route = factory.ccip_route(spoke.chain_id).call(hub)
     assert route.enabled, f"factory route for {spoke.name} disabled"
     assert route.chain_selector == spoke.chain.chain_selector
 
@@ -115,12 +114,13 @@ def test_hub_ccip_factory_route_policy(request, spoke: Spoke):
     _spokes("the hub CCIP executor has no route registered for HyperEVM"),
 )
 def test_hub_ccip_executor_route(request, spoke: Spoke):
+    hub = _ctx(request, HUB)
     executor = CcipCrosschainExecutor(
-        _ctx(request, HUB), POC.executor(CrosschainTransportKind.CHAINLINK_CCIP)
+        POC.executor(CrosschainTransportKind.CHAINLINK_CCIP)
     )
-    route = executor.ccip_route(spoke.chain_id).call()
+    route = executor.ccip_route(spoke.chain_id).call(hub)
     assert route.enabled and route.chain_selector == spoke.chain.chain_selector
-    assert executor.has_dispatcher(spoke.chain_id).call()
+    assert executor.has_dispatcher(spoke.chain_id).call(hub)
 
 
 @pytest.mark.parametrize(
@@ -129,14 +129,12 @@ def test_hub_ccip_executor_route(request, spoke: Spoke):
 )
 def test_stargate_route_and_hub_factory_eid(request, spoke: Spoke):
     ctx = _ctx(request, HUB)
-    peer = StargateTokenMessaging(ctx, checksum(HUB.token_messaging)).peers(
-        spoke.chain.eid
-    )
-    assert peer.call() != bytes(32), f"no Stargate route to {spoke.name}"
+    peer = StargateTokenMessaging(checksum(HUB.token_messaging)).peers(spoke.chain.eid)
+    assert peer.call(ctx) != bytes(32), f"no Stargate route to {spoke.name}"
     factory = StargateCrosschainFactory(
-        ctx, POC.factory(CrosschainTransportKind.STARGATE_LAYERZERO)
+        POC.factory(CrosschainTransportKind.STARGATE_LAYERZERO)
     )
-    assert factory.eid_of(spoke.chain_id).call() == spoke.chain.eid
+    assert factory.eid_of(spoke.chain_id).call(ctx) == spoke.chain.eid
 
 
 @pytest.mark.parametrize(

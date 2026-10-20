@@ -128,14 +128,14 @@ def read_hypercore_transfer_snapshot(
         raise UnsupportedChainError(
             f"no HyperCorePendingReader known for chain {ctx.chain_id}"
         )
-    vault = PlasmaVault(pinned, vault_address)
-    reader = HyperCoreReader(pinned)
+    vault = PlasmaVault(vault_address)
+    reader = HyperCoreReader()
     calls = cast(
         list[Call[Any]],
         [
             reader.core_user_exists(vault_address),
             reader.spot_balance(vault_address, token_index),
-            ERC20(pinned, evm_token).balance_of(vault_address),
+            ERC20(evm_token).balance_of(vault_address),
             HyperCorePendingReader(vault, pending_reader).pending_state(),
         ],
     )
@@ -265,7 +265,7 @@ def read_hypercore_evm_exit_ceiling(
     This uses idle ERC-20 only and is a ceiling, not an executable quote.
     """
     pinned, _ = _pinned_context(ctx)
-    vault = PlasmaVault(pinned, vault_address)
+    vault = PlasmaVault(vault_address)
     shares, asset = Multicall3(pinned).aggregate(
         cast(
             list[Call[Any]],
@@ -277,7 +277,7 @@ def read_hypercore_evm_exit_ceiling(
             list[Call[Any]],
             [
                 vault.convert_to_assets(shares),
-                ERC20(pinned, asset).balance_of(vault_address),
+                ERC20(asset).balance_of(vault_address),
             ],
         )
     )

@@ -45,12 +45,12 @@ def _vault_data(pending: list[AccountRequest] | None) -> MagicMock:
 
 def _fetch(side_effect: BaseException | list[AccountRequest]):
     vault = MagicMock()
-    vault.withdraw_manager_address.return_value = WM
+    vault.read_withdraw_manager_address.return_value = WM
     wm = MagicMock()
     if isinstance(side_effect, BaseException):
-        wm.get_pending_requests.side_effect = side_effect
+        wm.read_pending_requests.side_effect = side_effect
     else:
-        wm.get_pending_requests.return_value = side_effect
+        wm.read_pending_requests.return_value = side_effect
     with (
         patch("ipor_fusion.vault_managers.WithdrawManager", return_value=wm),
         patch(

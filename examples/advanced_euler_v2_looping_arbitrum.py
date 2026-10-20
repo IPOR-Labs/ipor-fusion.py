@@ -183,14 +183,13 @@ def _euler_account(plasma_vault: ChecksumAddress) -> ChecksumAddress:
 
 
 def _debt_of(
-    ctx: Web3Context,
     contract: ChecksumAddress,
     account: ChecksumAddress,
 ) -> Call[int]:
     data = function_signature_to_4byte_selector("debtOf(address)") + encode(
         ["address"], [account]
     )
-    return Call(to=contract, data=data, output_types=["uint256"], ctx=ctx)
+    return Call(to=contract, data=data, output_types=["uint256"])
 
 
 # ── Pure builders (no chain access) ──────────────────────────────────────────
@@ -208,7 +207,7 @@ def clone_args() -> dict:
 
 
 def unsigned_clone_calldata() -> bytes:
-    return FusionFactory(None, ARBITRUM_FUSION_FACTORY).clone(**clone_args()).calldata
+    return FusionFactory(ARBITRUM_FUSION_FACTORY).clone(**clone_args()).calldata
 
 
 def euler_market_substrates() -> list[bytes]:
@@ -260,9 +259,7 @@ def enable_euler_actions() -> list[FuseAction]:
 def build_swap_action() -> FuseAction:
     """Swap the borrowed USDC through Uniswap V3 and require flash repayment."""
     transfer_data = (
-        ERC20(None, ARBITRUM_USDC)
-        .transfer(UNISWAP_UNIVERSAL_ROUTER, BORROW_USDC)
-        .calldata
+        ERC20(ARBITRUM_USDC).transfer(UNISWAP_UNIVERSAL_ROUTER, BORROW_USDC).calldata
     )
     path = encode_packed(
         ["address", "uint24", "address"],
@@ -320,8 +317,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     """Build, configure and run the WBTC/USDC leveraged loop without broadcasting."""
     ctx = Web3Context(web3=web3, chain_id=ARBITRUM_CHAIN_ID, signer=OWNER)
     ctx.default_block = PINNED_BLOCK
-    factory = FusionFactory(ctx, ARBITRUM_FUSION_FACTORY)
-    preview = factory.clone(**clone_args()).call()
+    factory = FusionFactory(ARBITRUM_FUSION_FACTORY)
+    preview = factory.clone(**clone_args()).call(ctx)
 
     log.info(
         "predicted vault=%s access_manager=%s price_manager=%s",
@@ -331,11 +328,11 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     log.info("unsigned clone calldata: 0x%s", unsigned_clone_calldata().hex())
 
-    vault = PlasmaVault(ctx, preview.plasma_vault)
-    access_manager = AccessManager(ctx, preview.access_manager)
-    price_manager = PriceOracleMiddlewareManager(ctx, preview.price_manager)
-    wbtc = ERC20(ctx, ARBITRUM_WBTC)
-    usdc = ERC20(ctx, ARBITRUM_USDC)
+    vault = PlasmaVault(preview.plasma_vault)
+    access_manager = AccessManager(preview.access_manager)
+    price_manager = PriceOracleMiddlewareManager(preview.price_manager)
+    wbtc = ERC20(ARBITRUM_WBTC)
+    usdc = ERC20(ARBITRUM_USDC)
     euler_account = _euler_account(preview.plasma_vault)
 
     sim = VaultSimulator(
@@ -427,11 +424,11 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.add_call(call=vault.update_markets_balances([EULER_MARKET]), from_=ALPHA)
     sim.observe(
         "collateral_shares",
-        ERC20(ctx, EVAULT_WBTC).balance_of(euler_account),
+        ERC20(EVAULT_WBTC).balance_of(euler_account),
     )
     sim.observe(
         "usdc_debt",
-        _debt_of(ctx, EVAULT_USDC, euler_account),
+        _debt_of(EVAULT_USDC, euler_account),
     )
     sim.observe("vault_wbtc", wbtc.balance_of(preview.plasma_vault))
     sim.observe("vault_usdc", usdc.balance_of(preview.plasma_vault))

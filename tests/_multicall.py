@@ -83,13 +83,13 @@ class SequentialMulticall:
         self._ctx = ctx
 
     def aggregate(self, calls: Sequence[Any]) -> list[Any]:
-        return [call.call() for call in calls]
+        return [call.call(self._ctx) for call in calls]
 
     def try_aggregate(self, calls: Sequence[Any]) -> list[Any]:
         results = []
         for call in calls:
             try:
-                results.append(call.call())
+                results.append(call.call(self._ctx))
             except (ContractLogicError, EmptyCallResultError, DecodingError):
                 results.append(None)
         return results

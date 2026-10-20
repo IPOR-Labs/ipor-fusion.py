@@ -66,13 +66,13 @@ def _fetch_morpho_positions(
     if not per_market_substrates:
         return None
 
-    reader = MorphoReader(ctx, morpho_blue_address(ctx.chain_id))
+    reader = MorphoReader(morpho_blue_address(ctx.chain_id))
     futures: dict[MarketId, list[Future]] = {
         mid: [
             pool.submit(
                 _safe_call,
-                lambda mid_hex=morpho_mid: reader.position_breakdown(
-                    mid_hex, vault_addr
+                lambda mid_hex=morpho_mid: reader.read_position_breakdown(
+                    ctx, mid_hex, vault_addr
                 ),
             )
             for morpho_mid in morpho_mids
@@ -131,10 +131,7 @@ def _fetch_aave_pools(
         return {}
     multicall = Multicall3(ctx)
     providers = multicall.try_aggregate(
-        [
-            AaveV3FuseReader(ctx, fuse).pool_addresses_provider()
-            for fuse in fuses.values()
-        ]
+        [AaveV3FuseReader(fuse).pool_addresses_provider() for fuse in fuses.values()]
     )
     resolved = {
         mid: provider
@@ -142,7 +139,7 @@ def _fetch_aave_pools(
         if provider is not None
     }
     pools = multicall.try_aggregate(
-        [AaveV3PoolAddressesProvider(ctx, p).get_pool() for p in resolved.values()]
+        [AaveV3PoolAddressesProvider(p).get_pool() for p in resolved.values()]
     )
     return {
         mid: pool for mid, pool in zip(resolved, pools, strict=True) if pool is not None
@@ -172,11 +169,12 @@ def _fetch_aave_positions(
     if not per_market_assets:
         return None
 
-    readers = {mid: AaveV3Reader(ctx, aave_pools[mid]) for mid in per_market_assets}
+    readers = {mid: AaveV3Reader(aave_pools[mid]) for mid in per_market_assets}
     futures: dict[MarketId, list[Future]] = {
         mid: [
             pool.submit(
-                _safe_call, partial(readers[mid].position_breakdown, asset, vault_addr)
+                _safe_call,
+                partial(readers[mid].read_position_breakdown, ctx, asset, vault_addr),
             )
             for asset in assets
         ]

@@ -246,6 +246,7 @@ def _compute_morpho_market_health(
 
 
 def _compute_aave_market_health(
+    ctx: Web3Context,
     reader: AaveV3Reader,
     vault_address: PlasmaVaultAddress,
     ipor_market_id: MarketId,
@@ -253,7 +254,7 @@ def _compute_aave_market_health(
 ) -> LendingMarketHealth | None:
     """Compute LTV health for the vault's Aave V3 position."""
     try:
-        data = reader.get_user_account_data(vault_address).call()
+        data = reader.get_user_account_data(vault_address).call(ctx)
     except Exception:
         _logger.debug("Failed to read Aave V3 account data for %s", vault_address)
         return None
@@ -306,11 +307,11 @@ def _compute_aave_v4_market_health(
     market_name: str,
 ) -> LendingMarketHealth | None:
     """Compute LTV health for the vault's account on one Aave V4 Spoke."""
-    reader = AaveV4SpokeReader(ctx, spoke)
+    reader = AaveV4SpokeReader(spoke)
     try:
-        data = reader.get_user_account_data(vault_address).call()
-        oracle_decimals = AaveV4OracleReader(ctx, reader.oracle().call()).decimals()
-        value_scale = 10 ** (oracle_decimals.call() + 18)
+        data = reader.get_user_account_data(vault_address).call(ctx)
+        oracle_decimals = AaveV4OracleReader(reader.oracle().call(ctx)).decimals()
+        value_scale = 10 ** (oracle_decimals.call(ctx) + 18)
     except Exception:
         _logger.debug("Failed to read Aave V4 account data on spoke %s", spoke)
         return None
@@ -425,7 +426,7 @@ def fetch_vault_lending_health(
         futures = []
 
         if markets.morpho:
-            morpho_reader = MorphoReader(ctx, morpho_blue_address(ctx.chain_id))
+            morpho_reader = MorphoReader(morpho_blue_address(ctx.chain_id))
             for ipor_mid, name, morpho_mid in markets.morpho:
                 futures.append(
                     pool.submit(
@@ -444,7 +445,8 @@ def fetch_vault_lending_health(
             futures.append(
                 pool.submit(
                     _compute_aave_market_health,
-                    AaveV3Reader(ctx, aave_pool),
+                    ctx,
+                    AaveV3Reader(aave_pool),
                     vault_address,
                     ipor_mid,
                     name,

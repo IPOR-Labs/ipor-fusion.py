@@ -471,11 +471,11 @@ class TestVaultInfo:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = [ADDR_FUSE_1, ADDR_FUSE_2]
-        mock_pv.get_balance_fuses.return_value = [balance_fuse_1]
+        mock_pv.read_balance_fuses.return_value = [balance_fuse_1]
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = (
             ADDR_REWARDS
         )
-        mock_pv.withdraw_manager_address.return_value = ADDR_WITHDRAW
+        mock_pv.read_withdraw_manager_address.return_value = ADDR_WITHDRAW
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.get_market_substrates.return_value.call.return_value = []
@@ -506,7 +506,7 @@ class TestVaultInfo:
         mock_wm.get_last_release_funds_timestamp.return_value.call.return_value = (
             1699999000
         )
-        mock_wm.get_pending_requests.return_value = [
+        mock_wm.read_pending_requests.return_value = [
             AccountRequest(
                 account=ADDR_USER_1,
                 shares=100 * 10**18,
@@ -590,9 +590,9 @@ class TestVaultInfo:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = []
-        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.read_balance_fuses.return_value = []
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
-        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.read_withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
         _configure_fee_mocks(mock_pv)
@@ -667,9 +667,9 @@ class TestVaultInfo:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = []
-        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.read_balance_fuses.return_value = []
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
-        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.read_withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
         _configure_fee_mocks(mock_pv)
@@ -732,9 +732,9 @@ class TestVaultInfo:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = []
-        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.read_balance_fuses.return_value = []
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
-        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.read_withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
         _configure_fee_mocks(mock_pv)
@@ -810,9 +810,9 @@ class TestVaultInfo:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = []
-        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.read_balance_fuses.return_value = []
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
-        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.read_withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
         _configure_fee_mocks(mock_pv)
@@ -876,9 +876,9 @@ class TestVaultInfo:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = []
-        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.read_balance_fuses.return_value = []
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
-        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.read_withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
         _configure_fee_mocks(mock_pv)
@@ -986,13 +986,13 @@ class TestVaultInfoJson:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = [ADDR_FUSE_1]
-        mock_pv.get_balance_fuses.return_value = [
+        mock_pv.read_balance_fuses.return_value = [
             FakeBalanceFuse(market_id=14, fuse=ADDR_FUSE_1)
         ]
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = (
             ADDR_REWARDS
         )
-        mock_pv.withdraw_manager_address.return_value = ADDR_WITHDRAW
+        mock_pv.read_withdraw_manager_address.return_value = ADDR_WITHDRAW
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         morpho_sub = bytes.fromhex(
             "32e253d33f1594a67fc6ef51bf7a39cc4bf2d14904998dee769706fcde489ed9"
@@ -1023,7 +1023,7 @@ class TestVaultInfoJson:
         mock_wm.get_last_release_funds_timestamp.return_value.call.return_value = (
             1699999000
         )
-        mock_wm.get_pending_requests.return_value = [
+        mock_wm.read_pending_requests.return_value = [
             AccountRequest(
                 account=ADDR_USER_1,
                 shares=100 * 10**18,
@@ -1155,9 +1155,9 @@ class TestVaultInfoJson:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = []
-        mock_pv.get_balance_fuses.return_value = []
+        mock_pv.read_balance_fuses.return_value = []
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
-        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.read_withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = []
         _configure_fee_mocks(mock_pv)
@@ -1236,11 +1236,11 @@ class TestVaultInfoJson:
             ADDR_ORACLE
         )
         mock_pv.get_fuses.return_value.call.return_value = []
-        mock_pv.get_balance_fuses.return_value = [
+        mock_pv.read_balance_fuses.return_value = [
             FakeBalanceFuse(market_id=7, fuse=ADDR_FUSE_1)
         ]
         mock_pv.get_rewards_claim_manager_address.return_value.call.return_value = None
-        mock_pv.withdraw_manager_address.return_value = None
+        mock_pv.read_withdraw_manager_address.return_value = None
         mock_pv.get_instant_withdrawal_fuses.return_value.call.return_value = []
         mock_pv.get_market_substrates.return_value.call.return_value = [addr_bytes]
         mock_pv.total_assets_in_market.return_value.call.return_value = 0

@@ -181,9 +181,9 @@ class TestUniversalRead:
     def test_pending_state_reads_through_the_vault(self):
         ctx = _ctx()
         ctx.call.return_value = _pending_state_raw(pending=False, settled=True)
-        reader = HyperCorePendingReader(PlasmaVault(ctx, VAULT), READER)
+        reader = HyperCorePendingReader(PlasmaVault(VAULT), READER)
 
-        state = reader.pending_state().call()
+        state = reader.pending_state().call(ctx)
 
         to, data = ctx.call.call_args.args[:2]
         assert to == VAULT
@@ -208,19 +208,19 @@ class TestUniversalRead:
 
     def test_is_pending_and_balance_fuse_value_decode_their_payloads(self):
         ctx = _ctx()
-        vault = PlasmaVault(ctx, VAULT)
+        vault = PlasmaVault(VAULT)
         ctx.call.return_value = encode(["(bytes)"], [(encode(["bool"], [True]),)])
-        assert HyperCorePendingReader(vault, READER).is_pending().call() is True
+        assert HyperCorePendingReader(vault, READER).is_pending().call(ctx) is True
         ctx.call.return_value = encode(
             ["(bytes)"], [(encode(["uint256"], [8_245_000_000_000_000]),)]
         )
-        assert vault.balance_fuse_value(BALANCE_FUSE).call() == 8_245_000_000_000_000
+        assert vault.balance_fuse_value(BALANCE_FUSE).call(ctx) == 8_245_000_000_000_000
         data = ctx.call.call_args.args[1]
         assert data[4:] == encode(
             ["address", "bytes"], [BALANCE_FUSE, _selector("balanceOf()")]
         )
         ctx.call.return_value = encode(["(bytes)"], [(b"\x01\x02",)])
-        assert vault.read(READER, b"\xaa\xbb\xcc\xdd").call() == b"\x01\x02"
+        assert vault.read(READER, b"\xaa\xbb\xcc\xdd").call(ctx) == b"\x01\x02"
 
     def test_reported_order_state_maps_the_enums(self):
         ctx = _ctx()
@@ -228,9 +228,7 @@ class TestUniversalRead:
         inner = encode([PENDING_STATE_TYPE], [(state, True, False, True, 0, 0, False)])
         ctx.call.return_value = encode(["(bytes)"], [(inner,)])
         decoded = (
-            HyperCorePendingReader(PlasmaVault(ctx, VAULT), READER)
-            .pending_state()
-            .call()
+            HyperCorePendingReader(PlasmaVault(VAULT), READER).pending_state().call(ctx)
         )
         assert decoded.action_class is HyperCoreActionClass.ORDER
         assert decoded.settlement_mode is SettlementMode.REPORTED

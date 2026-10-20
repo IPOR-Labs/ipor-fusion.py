@@ -49,7 +49,7 @@ def _make_reader(cls):
     without accessing protected attributes.
     """
     ctx = MagicMock()
-    return cls(ctx, CONTRACT_ADDR), ctx
+    return cls(CONTRACT_ADDR), ctx
 
 
 # ── Morpho ─────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ class TestMorphoReaderMarket:
         )
         ctx.call.return_value = raw
 
-        result = reader.market(MARKET_ID).call()
+        result = reader.market(MARKET_ID).call(ctx)
 
         assert isinstance(result, MorphoMarket)
         assert result.total_supply_assets == 1000
@@ -81,7 +81,7 @@ class TestMorphoReaderPosition:
         raw = encode(["uint256", "uint128", "uint128"], [5000, 100, 200])
         ctx.call.return_value = raw
 
-        result = reader.position(MARKET_ID, USER_ADDR).call()
+        result = reader.position(MARKET_ID, USER_ADDR).call(ctx)
 
         assert isinstance(result, MorphoPosition)
         assert result.supply_shares == 5000
@@ -98,7 +98,7 @@ class TestMorphoReaderMarketParams:
         )
         ctx.call.return_value = raw
 
-        result = reader.market_params(MARKET_ID).call()
+        result = reader.market_params(MARKET_ID).call(ctx)
 
         assert isinstance(result, MorphoMarketParams)
         assert result.loan_token == TOKEN_A
@@ -127,7 +127,7 @@ class TestAaveV3Reader:
         )
         ctx.call.return_value = raw
 
-        result = reader.get_user_account_data(USER_ADDR).call()
+        result = reader.get_user_account_data(USER_ADDR).call(ctx)
 
         assert isinstance(result, AaveV3UserAccountData)
         assert result.total_collateral_base == 10_000_000_000
@@ -188,7 +188,7 @@ class TestAaveV3ReaderReserveTokens:
         reader, ctx = _make_reader(AaveV3Reader)
         ctx.call.return_value = self._encode_reserve_data()
 
-        tokens = reader.reserve_tokens(TOKEN_A).call()
+        tokens = reader.reserve_tokens(TOKEN_A).call(ctx)
 
         assert isinstance(tokens, AaveV3ReserveTokens)
         assert tokens.a_token == self.A_TOKEN
@@ -254,7 +254,7 @@ class TestAaveV3ReaderPositionBreakdown:
             ]
         )
 
-        breakdown = reader.position_breakdown(TOKEN_A, USER_ADDR)
+        breakdown = reader.read_position_breakdown(ctx, TOKEN_A, USER_ADDR)
 
         assert isinstance(breakdown, AaveV3PositionBreakdown)
         assert breakdown.asset == TOKEN_A
@@ -276,7 +276,7 @@ class TestAaveV3ReaderPositionBreakdown:
             ]
         )
 
-        breakdown = reader.position_breakdown(TOKEN_A, USER_ADDR)
+        breakdown = reader.read_position_breakdown(ctx, TOKEN_A, USER_ADDR)
 
         assert breakdown.stable_debt == 0
         assert breakdown.is_empty
@@ -287,7 +287,7 @@ class TestAaveV3ReaderPositionBreakdown:
         reader, ctx = _make_reader(AaveV3Reader)
         ctx.call.return_value = self._reserve_data(self.ZERO, self.ZERO, self.ZERO)
 
-        breakdown = reader.position_breakdown(TOKEN_A, USER_ADDR)
+        breakdown = reader.read_position_breakdown(ctx, TOKEN_A, USER_ADDR)
 
         assert breakdown.is_empty
         ctx.call.assert_called_once()
@@ -304,7 +304,7 @@ class TestAaveV3FuseReaderPool:
             encode(["address"], [self.POOL]),
         ]
 
-        assert reader.pool() == self.POOL
+        assert reader.read_pool(ctx) == self.POOL
 
         (fuse_call, provider_call) = ctx.call.call_args_list
         assert fuse_call.args == (
@@ -334,7 +334,7 @@ class TestMorphoReaderPositionBreakdown:
         )
         ctx.call.side_effect = sequenced([position_raw, market_raw, params_raw])
 
-        result = reader.position_breakdown(MARKET_ID, USER_ADDR)
+        result = reader.read_position_breakdown(ctx, MARKET_ID, USER_ADDR)
 
         assert isinstance(result, MorphoPositionBreakdown)
         assert result.market_id == MARKET_ID
@@ -359,7 +359,7 @@ class TestMorphoReaderPositionBreakdown:
         )
         ctx.call.side_effect = sequenced([position_raw, market_raw, params_raw])
 
-        result = reader.position_breakdown(MARKET_ID, USER_ADDR)
+        result = reader.read_position_breakdown(ctx, MARKET_ID, USER_ADDR)
 
         assert result.borrow_assets == 0
         assert result.supply_assets == 0
@@ -407,7 +407,7 @@ class TestMorphoReaderRequireMarket:
         )
         ctx.call.side_effect = [params_raw, market_raw]
 
-        params, market = reader.require_market(MARKET_ID)
+        params, market = reader.read_existing_market(ctx, MARKET_ID)
 
         assert params.irm == IRM
         assert market.last_update == 1700000000
@@ -427,7 +427,7 @@ class TestMorphoReaderRequireMarket:
         ctx.call.side_effect = [params_raw, market_raw]
 
         with pytest.raises(MorphoMarketNotFoundError) as exc_info:
-            reader.require_market(MARKET_ID)
+            reader.read_existing_market(ctx, MARKET_ID)
 
         message = str(exc_info.value)
         assert MARKET_ID in message
@@ -455,7 +455,7 @@ class TestMorphoReaderRates:
             lltv=0,
         )
 
-        result = reader.rates_from(market, params)
+        result = reader.read_rates_from(ctx, market, params)
 
         assert result == MorphoMarketRates(
             rate_per_second_wad=0, utilization=0.0, borrow_apy=0.0, supply_apy=0.0
@@ -478,7 +478,7 @@ class TestMorphoReaderRates:
         rate_raw = encode(["uint256"], [10**9])
         ctx.call.side_effect = [market_raw, params_raw, rate_raw]
 
-        result = reader.rates(MARKET_ID)
+        result = reader.read_rates(ctx, MARKET_ID)
 
         assert isinstance(result, MorphoMarketRates)
         assert result.rate_per_second_wad == 10**9
@@ -500,7 +500,7 @@ class TestMorphoReaderRates:
         rate_raw = encode(["uint256"], [0])
         ctx.call.side_effect = [market_raw, params_raw, rate_raw]
 
-        result = reader.rates(MARKET_ID)
+        result = reader.read_rates(ctx, MARKET_ID)
 
         assert result.utilization == 0.0
         assert result.borrow_apy == 0.0
@@ -521,7 +521,7 @@ class TestMorphoReaderRates:
         rate_raw = encode(["uint256"], [10**9])
         ctx.call.side_effect = [market_raw, params_raw, rate_raw]
 
-        result = reader.rates(MARKET_ID)
+        result = reader.read_rates(ctx, MARKET_ID)
 
         # supply_apy = borrow_apy * util(=1.0) * 0.9
         assert abs(result.supply_apy - result.borrow_apy * 0.9) < 1e-12
@@ -536,7 +536,7 @@ class TestCompoundV3Reader:
         raw = encode(["uint256"], [42_000])
         ctx.call.return_value = raw
 
-        result = reader.balance_of(USER_ADDR).call()
+        result = reader.balance_of(USER_ADDR).call(ctx)
 
         assert result == Amount(42_000)
 
@@ -545,7 +545,7 @@ class TestCompoundV3Reader:
         raw = encode(["uint256"], [7_500])
         ctx.call.return_value = raw
 
-        result = reader.borrow_balance_of(USER_ADDR).call()
+        result = reader.borrow_balance_of(USER_ADDR).call(ctx)
 
         assert result == Amount(7_500)
 
@@ -588,7 +588,7 @@ class TestUniswapV3Reader:
         )
         ctx.call.return_value = raw
 
-        result = reader.positions(42).call()
+        result = reader.positions(42).call(ctx)
 
         assert isinstance(result, UniswapV3Position)
         assert result.nonce == 1
@@ -643,7 +643,7 @@ class TestRamsesV2Reader:
         )
         ctx.call.return_value = raw
 
-        result = reader.positions(99).call()
+        result = reader.positions(99).call(ctx)
 
         assert isinstance(result, RamsesV2Position)
         assert result.nonce == 0

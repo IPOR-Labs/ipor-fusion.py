@@ -83,13 +83,13 @@ def _aave_v4_substrate(spoke: str, reserve_id: int, flags: int) -> bytes:
 
 def _make_morpho_reader():
     ctx = MagicMock()
-    return MorphoReader(ctx, morpho_blue_address(ChainId(1))), ctx
+    return MorphoReader(morpho_blue_address(ChainId(1))), ctx
 
 
 def _make_aave_reader():
     ctx = MagicMock()
     pool = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
-    return AaveV3Reader(ctx, pool), ctx
+    return AaveV3Reader(pool), ctx
 
 
 def _aave_account_data(health_factor_wad: int) -> bytes:
@@ -423,7 +423,7 @@ class TestComputeAaveMarketHealth:
             [10_000_000_00, 0, 8_000_000_00, 8500, 8000, 2**256 - 1],
         )
 
-        result = _compute_aave_market_health(reader, VAULT_ADDR, 1, "AAVE_V3")
+        result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
         assert result is not None
         assert result.protocol == "aave_v3"
@@ -451,7 +451,7 @@ class TestComputeAaveMarketHealth:
             ],
         )
 
-        result = _compute_aave_market_health(reader, VAULT_ADDR, 1, "AAVE_V3")
+        result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
         assert result is not None
         assert result.current_ltv == 0.5
@@ -477,7 +477,7 @@ class TestComputeAaveMarketHealth:
             ],
         )
 
-        result = _compute_aave_market_health(reader, VAULT_ADDR, 1, "AAVE_V3")
+        result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
         assert result is not None
         assert result.is_warning
@@ -500,7 +500,7 @@ class TestComputeAaveMarketHealth:
             ],
         )
 
-        result = _compute_aave_market_health(reader, VAULT_ADDR, 1, "AAVE_V3")
+        result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
         assert result is not None
         assert result.is_critical
@@ -511,7 +511,7 @@ class TestComputeAaveMarketHealth:
         reader, ctx = _make_aave_reader()
         ctx.call.side_effect = Exception("RPC error")
 
-        result = _compute_aave_market_health(reader, VAULT_ADDR, 1, "AAVE_V3")
+        result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
         assert result is None
 

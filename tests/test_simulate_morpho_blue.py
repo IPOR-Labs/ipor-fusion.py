@@ -30,8 +30,8 @@ def test_simulate_supply_and_withdraw_morpho_blue(web3_eth):
     ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
-    plasma_vault = PlasmaVault(ctx, VAULT)
-    usdc = ERC20(ctx, ETHEREUM_USDC)
+    plasma_vault = PlasmaVault(VAULT)
+    usdc = ERC20(ETHEREUM_USDC)
 
     morpho = MorphoSupplyFuse(ETHEREUM_MORPHO_SUPPLY_FUSE)
     supply_action = morpho.supply(market_id=MARKET_ID, amount=SUPPLY_AMOUNT)
@@ -93,13 +93,13 @@ def test_simulate_the_pinned_transaction_a_signer_would_receive(web3_eth):
     supply = MorphoSupplyFuse(ETHEREUM_MORPHO_SUPPLY_FUSE).supply(
         market_id=MARKET_ID, amount=SUPPLY_AMOUNT
     )
-    call = PlasmaVault(ctx, VAULT).execute([supply])
+    call = PlasmaVault(VAULT).execute([supply])
 
-    transaction = call.build_transaction(block=PINNED_BLOCK)
+    transaction = call.build_transaction(ctx, block=PINNED_BLOCK)
     assert transaction["nonce"] == web3_eth.eth.get_transaction_count(
         ALPHA, block_identifier=PINNED_BLOCK
     )
-    assert call.estimate_gas(block=PINNED_BLOCK) == transaction["gas"]
+    assert call.estimate_gas(ctx, block=PINNED_BLOCK) == transaction["gas"]
 
     sim = VaultSimulator(
         web3=web3_eth,

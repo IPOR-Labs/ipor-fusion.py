@@ -96,9 +96,9 @@ XYZ_NVDA = 110_002
 DEPOSIT = 15_000_000  # 15 USDC, ERC-20 units
 TO_XYZ = 1_490_000_000  # 14.9 USDC in Core wei
 
-vault = PlasmaVault(None, VAULT)
-access = AccessManager(None, ACCESS_MANAGER)
-usdc = ERC20(None, USDC)
+vault = PlasmaVault(VAULT)
+access = AccessManager(ACCESS_MANAGER)
+usdc = ERC20(USDC)
 deposit_fuse = HyperCoreDepositFuse(DEPOSIT_FUSE)
 send_fuse = HyperCoreSendFuse(SEND_FUSE)
 order_fuse = HyperCoreOrderFuse(ORDER_FUSE)

@@ -83,18 +83,18 @@ def ctx() -> Web3Context:
 
 
 @pytest.fixture(scope="module")
-def vault(ctx: Web3Context) -> PlasmaVault:
-    return PlasmaVault(ctx, VAULT)
+def vault() -> PlasmaVault:
+    return PlasmaVault(VAULT)
 
 
 @pytest.fixture(scope="module")
-def pending(ctx: Web3Context, vault: PlasmaVault) -> HyperCorePendingReader:
+def pending(vault: PlasmaVault) -> HyperCorePendingReader:
     return HyperCorePendingReader(vault, CREATED["HyperCorePendingReader"])
 
 
 def test_nav_identity_matches_the_balance_fuse(ctx: Web3Context, vault: PlasmaVault):
     nav = read_hypercore_nav(ctx, VAULT, LIVE_MARKET)
-    on_chain = vault.balance_fuse_value(CREATED["HyperCoreBalanceFuse"]).call()
+    on_chain = vault.balance_fuse_value(CREATED["HyperCoreBalanceFuse"]).call(ctx)
     assert nav.value_wad == on_chain
     assert nav.perp_dex_bitmap == 1 << XYZ_DEX
     assert [leg.token_index for leg in nav.spot] == [0]
@@ -116,16 +116,18 @@ def test_vault_state_reads_everything_at_one_block(ctx: Web3Context):
     assert nvda.coin is not None and nvda.coin.startswith("xyz:")
 
 
-def test_pending_state_reads_through_the_vault(pending: HyperCorePendingReader):
-    state = pending.pending_state().call()
+def test_pending_state_reads_through_the_vault(
+    ctx: Web3Context, pending: HyperCorePendingReader
+):
+    state = pending.pending_state().call(ctx)
     assert state.l1_block_available and state.current_l1_block > 0
     assert state.current_timestamp > 0
-    assert state.pending == pending.is_pending().call()
+    assert state.pending == pending.is_pending().call(ctx)
     assert state.pending or state.settled
 
 
 def test_precompiles_batch_through_multicall3(ctx: Web3Context):
-    reader = HyperCoreReader(ctx)
+    reader = HyperCoreReader()
     nvda = read_index_of(XYZ_NVDA)
     reads = cast(
         list[Call[Any]],
@@ -203,8 +205,8 @@ def _dry_run(ctx: Web3Context, call: Call) -> int:
     return ctx.web3.eth.estimate_gas(tx, block_identifier=ctx.default_block)
 
 
-def _skip_if_pending(pending: HyperCorePendingReader) -> None:
-    if pending.is_pending().call():
+def _skip_if_pending(ctx: Web3Context, pending: HyperCorePendingReader) -> None:
+    if pending.is_pending().call(ctx):
         pytest.skip("the vault has a pending HyperCore action (state, not the SDK)")
 
 
@@ -212,7 +214,7 @@ ActionBuilder = Callable[[PlasmaVault, Web3Context], Call]
 
 
 def _deposit_evm_to_core(vault: PlasmaVault, ctx: Web3Context) -> Call:
-    idle = ERC20(ctx, USDC).balance_of(VAULT).call()
+    idle = ERC20(USDC).balance_of(VAULT).call(ctx)
     if idle == 0:
         pytest.skip("the vault holds no EVM USDC to bridge")
     return vault.execute([deposit_fuse.enter(token_index=0, amount=min(idle, 1_000))])
@@ -285,7 +287,7 @@ CYCLE_ACTIONS: dict[str, ActionBuilder] = {
 def test_cycle_actions_evm_preflight_from_the_signer(
     name: str, ctx: Web3Context, vault: PlasmaVault, pending: HyperCorePendingReader
 ):
-    _skip_if_pending(pending)
+    _skip_if_pending(ctx, pending)
     gas = _dry_run(ctx, CYCLE_ACTIONS[name](vault, ctx))
     assert 100_000 < gas < 1_000_000
 
@@ -294,9 +296,9 @@ def test_redeem_pays_only_from_evm_usdc(ctx: Web3Context, vault: PlasmaVault):
     """Market 55 has no instant-withdraw fuse: a redeem worth more than the
     vault's EVM USDC reverts in the ERC-20 transfer, however much sits on
     Core. The spoke unwinds Core before anyone redeems."""
-    shares = vault.balance_of(SIGNER).call()
-    idle = ERC20(ctx, USDC).balance_of(VAULT).call()
-    if shares == 0 or vault.convert_to_assets(shares).call() <= idle:
+    shares = vault.balance_of(SIGNER).call(ctx)
+    idle = ERC20(USDC).balance_of(VAULT).call(ctx)
+    if shares == 0 or vault.convert_to_assets(shares).call(ctx) <= idle:
         pytest.skip("the signer's position is covered by the vault's EVM USDC")
     with pytest.raises(ContractLogicError, match="exceeds balance"):
         _dry_run(ctx, vault.redeem(shares, SIGNER, SIGNER))

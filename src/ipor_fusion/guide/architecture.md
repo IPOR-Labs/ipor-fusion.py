@@ -52,7 +52,7 @@ per-chain `IporFusionFactoryProxy` creates the vault together with its access
 manager, fee manager, rewards manager, withdraw manager, context manager and
 price manager in one transaction. The component factories deploy with CREATE,
 so code that broadcasts a clone must get the created addresses from
-`factory.decode_clone_receipt(receipt)`, not from an earlier `.call()` preview.
+`factory.decode_clone_receipt(receipt)`, not from an earlier `.call(ctx)` preview.
 `clone_supervised` has the same shape but is gated by a maintenance role; use
 `clone` unless you were told otherwise.
 
@@ -68,10 +68,10 @@ registry is `AaveV3SupplyFuse` in Python).
 Inspection tools (vault info, oracle mapping, role holders, market data) are
 read-only and need no key. Anything that changes state — cloning, granting
 roles, configuring markets, depositing, executing — goes through the Python SDK
-with a `Web3Context` that carries a private key. `.call()` runs a read-only
+with a `Web3Context` that carries a private key. `.call(ctx)` runs a read-only
 `eth_call` on a view and raises on a write-only call, so most governance setters
-cannot be previewed with it; `.build_transaction()` returns an unsigned
-transaction and needs the signer address but no key; `.send()` signs locally and
+cannot be previewed with it; `.build_transaction(ctx)` returns an unsigned
+transaction and needs the signer address but no key; `.send(ctx)` signs locally and
 needs one.
 
 ## The wider index

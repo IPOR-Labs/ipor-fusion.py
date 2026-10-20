@@ -518,32 +518,32 @@ class TestCallPreviewDelegation:
     def test_estimate_gas_delegates_to_ctx(self):
         ctx = MagicMock(spec=Web3Context)
         ctx.estimate_gas.return_value = 12345
-        call = Call(to=TO_ADDR, data=b"\x01\x02", ctx=ctx)
+        call = Call(to=TO_ADDR, data=b"\x01\x02")
 
-        assert call.estimate_gas() == 12345
+        assert call.estimate_gas(ctx) == 12345
         ctx.estimate_gas.assert_called_once_with(TO_ADDR, b"\x01\x02", block="latest")
 
     def test_estimate_gas_forwards_the_pinned_block(self):
         ctx = MagicMock(spec=Web3Context)
-        call = Call(to=TO_ADDR, data=b"\x01\x02", ctx=ctx)
+        call = Call(to=TO_ADDR, data=b"\x01\x02")
 
-        call.estimate_gas(block=77)
+        call.estimate_gas(ctx, block=77)
         ctx.estimate_gas.assert_called_once_with(TO_ADDR, b"\x01\x02", block=77)
 
     def test_build_transaction_delegates_to_ctx(self):
         ctx = MagicMock(spec=Web3Context)
         sentinel = {"gas": 1}
         ctx.build_transaction.return_value = sentinel
-        call = Call(to=TO_ADDR, data=b"\x03", ctx=ctx)
+        call = Call(to=TO_ADDR, data=b"\x03")
 
-        assert call.build_transaction() is sentinel
+        assert call.build_transaction(ctx) is sentinel
         ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03", block="latest")
 
     def test_build_transaction_forwards_the_pinned_block(self):
         ctx = MagicMock(spec=Web3Context)
-        call = Call(to=TO_ADDR, data=b"\x03", ctx=ctx)
+        call = Call(to=TO_ADDR, data=b"\x03")
 
-        call.build_transaction(block=77)
+        call.build_transaction(ctx, block=77)
         ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03", block=77)
 
 
@@ -629,9 +629,9 @@ class TestPinnedContext:
     def test_call_pins_one_read_and_keeps_the_two_argument_default(self):
         ctx = MagicMock()
         ctx.call.return_value = encode(["uint256"], [7])
-        call = Call(to=ADDR, data=b"\x01", output_types=["uint256"], ctx=ctx)
+        call = Call(to=ADDR, data=b"\x01", output_types=["uint256"])
 
-        assert call.call() == 7
+        assert call.call(ctx) == 7
         assert ctx.call.call_args.args == (ADDR, b"\x01")
-        call.call(block=55)
+        call.call(ctx, block=55)
         assert ctx.call.call_args.args == (ADDR, b"\x01", 55)

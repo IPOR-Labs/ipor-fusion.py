@@ -54,10 +54,10 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
     block = web3_base.eth.block_number
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
     ctx.default_block = block
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # Predict the deterministic clone addresses.
-    preview = factory.clone(**clone_args()).call()
+    preview = factory.clone(**clone_args()).call(ctx)
     vault_address = preview.plasma_vault
     access_manager_address = preview.access_manager
 
@@ -97,9 +97,7 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
             )
         ]
     )
-    sim.observe(
-        "debt_after_borrow", evault_debt_of(ctx, EVAULT_WETH, plan.euler_account)
-    )
+    sim.observe("debt_after_borrow", evault_debt_of(EVAULT_WETH, plan.euler_account))
 
     # Repay the full debt.
     sim.execute(
@@ -111,9 +109,7 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
             )
         ]
     )
-    sim.observe(
-        "debt_after_repay", evault_debt_of(ctx, EVAULT_WETH, plan.euler_account)
-    )
+    sim.observe("debt_after_repay", evault_debt_of(EVAULT_WETH, plan.euler_account))
 
     # Tear down the credit position (controller first, then collateral).
     sim.execute(

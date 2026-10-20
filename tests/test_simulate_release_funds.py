@@ -40,13 +40,11 @@ def test_simulate_release_funds(web3_arb):
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
-    plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    withdraw_manager = WithdrawManager(ctx, plasma_vault.withdraw_manager_address())
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    owner = access_manager.owner()
+    plasma_vault = PlasmaVault(VAULT_ADDRESS)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    withdraw_manager = WithdrawManager(plasma_vault.read_withdraw_manager_address(ctx))
+    usdc = ERC20(ARBITRUM_USDC)
+    owner = access_manager.read_owner(ctx)
     baseline_timestamp = int(web3_arb.eth.get_block(PINNED_BLOCK)["timestamp"])
 
     log.info(
@@ -157,18 +155,16 @@ def test_simulate_release_funds_shares(web3_arb):
     ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
     ctx.default_block = PINNED_BLOCK_2
 
-    plasma_vault = PlasmaVault(ctx, VAULT2_ADDRESS)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    withdraw_manager = WithdrawManager(ctx, plasma_vault.withdraw_manager_address())
-    usdc = ERC20(ctx, ARBITRUM_USDC)
-    owner = access_manager.owner()
+    plasma_vault = PlasmaVault(VAULT2_ADDRESS)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    withdraw_manager = WithdrawManager(plasma_vault.read_withdraw_manager_address(ctx))
+    usdc = ERC20(ARBITRUM_USDC)
+    owner = access_manager.read_owner(ctx)
     baseline_timestamp = int(web3_arb.eth.get_block(PINNED_BLOCK_2)["timestamp"])
 
     # Pre-compute exact shares for the deposit at the pinned block. The vault's
     # share/assets ratio on this block determines convert_to_shares deterministically.
-    shares = plasma_vault.convert_to_shares(DEPOSIT_AMOUNT).call()
+    shares = plasma_vault.convert_to_shares(DEPOSIT_AMOUNT).call(ctx)
     log.info("baseline_ts=%s shares_for_1k_USDC=%s", baseline_timestamp, shares)
 
     sim = VaultSimulator(

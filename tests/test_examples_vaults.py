@@ -276,11 +276,11 @@ class TestAdvancedEulerV2CreditMarketBase(_ExampleOfflineChecks):
         )
 
     def test_evault_debt_of_encodes_debtof_call(self) -> None:
-        # _evault_debt_of builds calldata with no chain access (ctx may be None),
+        # _evault_debt_of builds calldata with no chain access,
         # so guard its encoding here rather than only inside the RPC-gated sim: a
         # swapped account/vault or a signature typo would otherwise be invisible.
         account = self.mod.OWNER
-        call = self.mod._evault_debt_of(None, self.mod.EVAULT_WETH, account)
+        call = self.mod._evault_debt_of(self.mod.EVAULT_WETH, account)
         assert call.to == self.mod.EVAULT_WETH
         assert call.data[:4] == function_signature_to_4byte_selector("debtOf(address)")
         # debtOf returns underlying units; a wrong/dropped return type would

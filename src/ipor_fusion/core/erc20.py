@@ -7,7 +7,7 @@ from ipor_fusion.types import Amount, Decimals
 class ERC20(ContractWrapper):
     """Standard ERC-20 token interface wrapper.
 
-    Each method returns a `Call[T]`. Chain `.call()` for reads, `.send()` for
+    Each method returns a `Call[T]`. Chain `.call(ctx)` for reads, `.send(ctx)` for
     writes, or hand the `Call` to `VaultSimulator`.
     """
 

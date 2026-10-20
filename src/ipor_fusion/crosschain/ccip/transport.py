@@ -8,7 +8,6 @@ from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
 
-from ipor_fusion.core.context import Web3Context
 from ipor_fusion.crosschain.ccip.codec import (
     CCIP_MESSAGE_SENT_TOPIC,
     Any2EVMMessage,
@@ -91,15 +90,11 @@ class CcipTransport(CrosschainTransport):
         chain = self._chains[chain_id]
         return () if chain.token_source else (chain.token,)
 
-    def executor(
-        self, ctx: Web3Context, address: ChecksumAddress
-    ) -> CcipCrosschainExecutor:
-        return CcipCrosschainExecutor(ctx, address)
+    def executor(self, address: ChecksumAddress) -> CcipCrosschainExecutor:
+        return CcipCrosschainExecutor(address)
 
-    def dispatcher(
-        self, ctx: Web3Context, address: ChecksumAddress
-    ) -> CcipCrosschainDispatcher:
-        return CcipCrosschainDispatcher(ctx, address)
+    def dispatcher(self, address: ChecksumAddress) -> CcipCrosschainDispatcher:
+        return CcipCrosschainDispatcher(address)
 
     def outbound_messages(
         self, src_chain_id: ChainId, logs: Iterable[Mapping]

@@ -119,14 +119,14 @@ def _ctx(responses: dict[str, Response]) -> MagicMock:
 
 
 def _vault(ctx: MagicMock) -> PlasmaVault:
-    return PlasmaVault(ctx, VAULT)
+    return PlasmaVault(VAULT)
 
 
 def _market_reads(responses: dict[str, Response]):
     ctx = _ctx(responses)
     pv = _vault(ctx)
     fuses = [BalanceFuse(MarketId(1), FUSE), BalanceFuse(MarketId(2), FUSE)]
-    with patch.object(PlasmaVault, "get_balance_fuses", return_value=fuses):
+    with patch.object(PlasmaVault, "read_balance_fuses", return_value=fuses):
         return _fetch_market_reads(ctx, pv, with_aave_pools=False)
 
 

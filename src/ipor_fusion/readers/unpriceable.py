@@ -72,23 +72,21 @@ class MiddlewarePricedToken:
     price_source: ChecksumAddress | None = None
 
 
-def _address_call(ctx: Web3Context, to: ChecksumAddress, selector: bytes) -> Call:
+def _address_call(to: ChecksumAddress, selector: bytes) -> Call:
     return Call(
         to=to,
         data=selector,
         output_types=["address"],
         decoder=Web3.to_checksum_address,
-        ctx=ctx,
     )
 
 
-def _silos_call(ctx: Web3Context, config: ChecksumAddress) -> Call:
+def _silos_call(config: ChecksumAddress) -> Call:
     return Call(
         to=config,
         data=_GET_SILOS_SELECTOR,
         output_types=["address", "address"],
         decoder=lambda silos: [Web3.to_checksum_address(s) for s in silos],
-        ctx=ctx,
     )
 
 
@@ -194,7 +192,7 @@ def _vault_asset_tokens(
 
     multicall = Multicall3(ctx)
     if configs:
-        silo_pairs = multicall.try_aggregate([_silos_call(ctx, c) for c in configs])
+        silo_pairs = multicall.try_aggregate([_silos_call(c) for c in configs])
         vaults += [
             (
                 IporFusionMarkets.SILO_V2,
@@ -208,7 +206,7 @@ def _vault_asset_tokens(
     if not vaults:
         return []
     assets = multicall.try_aggregate(
-        [_address_call(ctx, vault, _ASSET_SELECTOR) for _, vault, _ in vaults]
+        [_address_call(vault, _ASSET_SELECTOR) for _, vault, _ in vaults]
     )
     return [
         MiddlewarePricedToken(

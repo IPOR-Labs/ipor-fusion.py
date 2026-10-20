@@ -58,10 +58,10 @@ class PriceOracleMiddleware(ContractWrapper):
         deployed before the August 2024 audit has this getter."""
         return self._view("BASE_CURRENCY_DECIMALS()", output_types=["uint256"])
 
-    # ── Compound method: event replay ──────────────────────────────────────
+    # ── Composite read on ``ctx``: event replay ────────────────────────────
 
-    def get_assets_price_sources(self) -> list[AssetPriceSource]:
-        events = self._get_asset_price_source_updated_events()
+    def read_assets_price_sources(self, ctx: Web3Context) -> list[AssetPriceSource]:
+        events = self._get_asset_price_source_updated_events(ctx)
         sources = []
         for event in events:
             (asset, source) = decode(["address", "address"], event["data"])
@@ -73,14 +73,14 @@ class PriceOracleMiddleware(ContractWrapper):
             )
         return sources
 
-    def _get_asset_price_source_updated_events(self) -> list[LogReceipt]:
+    def _get_asset_price_source_updated_events(
+        self, ctx: Web3Context
+    ) -> list[LogReceipt]:
         event_signature_hash = HexBytes(
             Web3.keccak(text="AssetPriceSourceUpdated(address,address)")
         ).to_0x_hex()
         return list(
-            self._require_ctx().get_logs(
-                contract_address=self._address, topics=[event_signature_hash]
-            )
+            ctx.get_logs(contract_address=self._address, topics=[event_signature_hash])
         )
 
 
@@ -91,11 +91,10 @@ class LegacyPriceOracleMiddleware(PriceOracleMiddleware):
 
     def __init__(
         self,
-        ctx: Web3Context | None,
         address: ChecksumAddress,
         base_currency_decimals: Decimals,
     ):
-        super().__init__(ctx, address)
+        super().__init__(address)
         self._base_currency_decimals = base_currency_decimals
 
     def get_asset_price(self, asset_address: ChecksumAddress) -> Call[Price]:
@@ -116,13 +115,17 @@ def price_oracle_middleware(
 ) -> PriceOracleMiddleware:
     """Wrapper for the price oracle at ``address`` that decodes its
     ``getAssetPrice``: the legacy one when the oracle answers
-    ``BASE_CURRENCY_DECIMALS()`` at ``ctx.default_block``."""
-    oracle = PriceOracleMiddleware(ctx, address)
+    ``BASE_CURRENCY_DECIMALS()`` at ``ctx.default_block``.
+
+    An eager resolver: it probes on ``ctx`` and returns a context-free wrapper
+    that carries the ABI it found. That ABI holds for this chain and block;
+    resolve again for another chain or an earlier snapshot."""
+    oracle = PriceOracleMiddleware(address)
     try:
-        decimals = oracle.base_currency_decimals().call()
+        decimals = oracle.base_currency_decimals().call(ctx)
     except (EmptyCallResultError, ContractLogicError):
         return oracle
-    return LegacyPriceOracleMiddleware(ctx, address, Decimals(decimals))
+    return LegacyPriceOracleMiddleware(address, Decimals(decimals))
 
 
 class PriceOracleMiddlewareManager(ContractWrapper):

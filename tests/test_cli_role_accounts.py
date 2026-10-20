@@ -1,7 +1,7 @@
 """Tests for the `vault role-accounts` CLI command."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 import requests
@@ -45,8 +45,8 @@ def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:
 def _mock_manager(accounts: list[RoleAccount]) -> MagicMock:
     manager = MagicMock()
     manager.address = MANAGER
-    manager.get_all_role_accounts.return_value = accounts
-    manager.get_accounts_with_role.return_value = accounts
+    manager.read_all_role_accounts.return_value = accounts
+    manager.read_accounts_with_role.return_value = accounts
     return manager
 
 
@@ -107,8 +107,8 @@ class TestRoleAccounts:
         )
 
         assert result.exit_code == 0
-        manager.get_accounts_with_role.assert_called_once_with(100)
-        manager.get_all_role_accounts.assert_not_called()
+        manager.read_accounts_with_role.assert_called_once_with(ANY, 100)
+        manager.read_all_role_accounts.assert_not_called()
         assert json.loads(result.output)["role_filter"] == "ATOMIST_ROLE"
 
     def test_unknown_role_is_usage_error_before_rpc(
@@ -157,7 +157,7 @@ class TestRoleAccounts:
 
     def test_scan_rejection_is_friendly_error(self, _ctx, mock_resolve, tmp_config):
         manager = _mock_manager([])
-        manager.get_all_role_accounts.side_effect = Web3RPCError(
+        manager.read_all_role_accounts.side_effect = Web3RPCError(
             "query returned more than 10000 results"
         )
         mock_resolve.return_value = manager
@@ -172,7 +172,7 @@ class TestRoleAccounts:
 
     def test_incomplete_scan_is_friendly_error(self, _ctx, mock_resolve, tmp_config):
         manager = _mock_manager([])
-        manager.get_all_role_accounts.side_effect = LogScanError(
+        manager.read_all_role_accounts.side_effect = LogScanError(
             "eth_getLogs scan incomplete", address=MANAGER, from_block=1, to_block=2
         )
         mock_resolve.return_value = manager
@@ -189,7 +189,7 @@ class TestRoleAccounts:
         self, _ctx, mock_resolve, tmp_config
     ):
         manager = _mock_manager([])
-        manager.get_all_role_accounts.side_effect = requests.exceptions.ReadTimeout(
+        manager.read_all_role_accounts.side_effect = requests.exceptions.ReadTimeout(
             "provider timed out"
         )
         mock_resolve.return_value = manager
@@ -219,7 +219,7 @@ class TestFetchRoleAccounts:
             result = _fetch_role_accounts(MagicMock(), self._vault())
 
         assert result == [_role_account(1, ALICE), _role_account(100, BOB)]
-        assert manager_cls.call_args.args[1] == MANAGER
+        assert manager_cls.call_args.args[0] == MANAGER
 
     def test_transport_failure_degrades_to_none(self):
         ctx = MagicMock()

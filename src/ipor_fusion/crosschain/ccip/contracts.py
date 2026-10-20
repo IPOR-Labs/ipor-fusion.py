@@ -243,7 +243,7 @@ class CcipCrosschainExecutor(CrosschainExecutor):
     def propose_balance(self, observation: BalanceObservation) -> Call[ProposalId]:
         """``BALANCE_PROPOSER`` only; ``settled_balance`` in local decimals.
 
-        A write: ``.send()`` it, or ``.call()`` inside a simulation to preview
+        A write: ``.send(ctx)`` it, or ``.call(ctx)`` inside a simulation to preview
         the proposal id.
         """
         return self._view(
@@ -582,8 +582,8 @@ class CcipCrosschainFactory(CrosschainFactory):
         The executor's manager must send this call. The source factory pays
         the quoted CCIP fee from its native balance. The ticket carries the
         factory's :meth:`dispatcher_deployment_gas_limit` for ``dst_chain_id``,
-        or the route's ``messageGasLimit`` when that is 0. A write: ``.send()`` it,
-        or ``.call()`` inside a simulation to preview the CCIP message id.
+        or the route's ``messageGasLimit`` when that is 0. A write: ``.send(ctx)`` it,
+        or ``.call(ctx)`` inside a simulation to preview the CCIP message id.
         """
         return self._view(
             "requestDispatcher(address,uint256,address[],uint256)",

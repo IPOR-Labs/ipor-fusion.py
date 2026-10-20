@@ -294,7 +294,7 @@ def _open(web3_arb: Web3, web3_hype: Web3) -> _Flow:
     )
     # The executor refuses a new approval sooner than this after the previous
     # one; every attestation after the first waits it out.
-    min_update_interval = int(lane.executor.min_update_interval().call())
+    min_update_interval = int(lane.executor.min_update_interval().call(hub_ctx))
 
     simulator = CrosschainSimulator(transport())
     hub = simulator.add_chain(
@@ -328,9 +328,9 @@ def _open(web3_arb: Web3, web3_hype: Web3) -> _Flow:
         simulator=simulator,
         hub=hub,
         spoke=spoke,
-        hub_vault=PlasmaVault(hub_ctx, HUB_VAULT),
-        spoke_vault=PlasmaVault(spoke_ctx, SPOKE_VAULT),
-        hub_usdc=ERC20(hub_ctx, ARBITRUM_USDC),
+        hub_vault=PlasmaVault(HUB_VAULT),
+        spoke_vault=PlasmaVault(SPOKE_VAULT),
+        hub_usdc=ERC20(ARBITRUM_USDC),
         min_update_interval=min_update_interval,
         numbers={},
     )

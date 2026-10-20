@@ -62,13 +62,13 @@ def _auto_save_vault(
     cfg: FusionConfig,
     vault_address: PlasmaVaultAddress,
     chain_id: ChainId,
-    plasma_vault: PlasmaVault,
+    ctx: Web3Context,
 ) -> None:
     """Save vault to config if not already present and it looks like a Plasma Vault."""
     if any(v.address.lower() == vault_address.lower() for v in cfg.vaults):
         return
     try:
-        label = plasma_vault.name().call()
+        label = PlasmaVault(vault_address).name().call(ctx)
     except Exception:
         return
     cfg.vaults.append(VaultEntry(address=vault_address, label=label, chain_id=chain_id))
@@ -112,7 +112,7 @@ def add(
         ctx = Web3Context.from_url(provider_url)
         checksum = address
         try:
-            label = PlasmaVault(ctx, checksum).name().call()
+            label = PlasmaVault(checksum).name().call(ctx)
         except Exception:
             label = checksum
 
@@ -214,7 +214,7 @@ def info(
     except (ContractNotFoundError, NotPlasmaVaultError) as exc:
         raise click.UsageError(str(exc)) from exc
 
-    _auto_save_vault(cfg, vault_address, chain_id, PlasmaVault(ctx, vault_address))
+    _auto_save_vault(cfg, vault_address, chain_id, ctx)
 
     try:
         data = fetch_vault_data(ctx, vault_address, block=block_number)
@@ -348,9 +348,9 @@ def role_accounts(
 
     try:
         accounts = (
-            manager.get_all_role_accounts()
+            manager.read_all_role_accounts(ctx)
             if role_id is None
-            else manager.get_accounts_with_role(role_id)
+            else manager.read_accounts_with_role(ctx, role_id)
         )
     except _ROLE_SCAN_ERRORS as exc:
         raise click.ClickException(

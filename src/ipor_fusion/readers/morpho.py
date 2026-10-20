@@ -178,8 +178,8 @@ class MorphoReader(ContractWrapper):
             decoder=_position_decoder,
         )
 
-    def position_breakdown(
-        self, market_id: MorphoBlueMarketId, user: ChecksumAddress
+    def read_position_breakdown(
+        self, ctx: Web3Context, market_id: MorphoBlueMarketId, user: ChecksumAddress
     ) -> MorphoPositionBreakdown:
         """Return the user's position with shares converted to asset amounts.
 
@@ -191,7 +191,7 @@ class MorphoReader(ContractWrapper):
             self.market(market_id),
             self.market_params(market_id),
         ]
-        pos, market, params = Multicall3(self._require_ctx()).aggregate(calls)
+        pos, market, params = Multicall3(ctx).aggregate(calls)
         if market.total_borrow_shares > 0:
             borrow_assets = math.ceil(
                 pos.borrow_shares
@@ -225,8 +225,8 @@ class MorphoReader(ContractWrapper):
             decoder=_market_params_decoder,
         )
 
-    def require_market(
-        self, market_id: MorphoBlueMarketId
+    def read_existing_market(
+        self, ctx: Web3Context, market_id: MorphoBlueMarketId
     ) -> tuple[MorphoMarketParams, MorphoMarket]:
         """Read `idToMarketParams` + `market`, rejecting IDs never created here.
 
@@ -235,30 +235,33 @@ class MorphoReader(ContractWrapper):
         first downstream use (e.g. calling the zero-address IRM) fails with an
         unrelated decode error.
         """
-        params = self.market_params(market_id).call()
-        market = self.market(market_id).call()
+        params = self.market_params(market_id).call(ctx)
+        market = self.market(market_id).call(ctx)
         if market.last_update == 0:
             raise MorphoMarketNotFoundError(
                 f"Morpho Blue market {market_id} does not exist on chain "
-                f"{self._require_ctx().chain_id} (Morpho at {self.address})"
+                f"{ctx.chain_id} (Morpho at {self.address})"
             )
         return params, market
 
-    def rates(self, market_id: MorphoBlueMarketId) -> MorphoMarketRates:
+    def read_rates(
+        self, ctx: Web3Context, market_id: MorphoBlueMarketId
+    ) -> MorphoMarketRates:
         """Read the IRM and derive supply/borrow APYs for the market.
 
         Calls `borrowRateView(marketParams, market)` on the market's IRM contract.
         APY is continuously compounded using `SECONDS_PER_YEAR = 365 * 86400`,
         matching how the Morpho frontend displays rates.
         """
-        market = self.market(market_id).call()
-        params = self.market_params(market_id).call()
-        return self.rates_from(market, params)
+        market = self.market(market_id).call(ctx)
+        params = self.market_params(market_id).call(ctx)
+        return self.read_rates_from(ctx, market, params)
 
-    def rates_from(
-        self, market: MorphoMarket, params: MorphoMarketParams
+    def read_rates_from(
+        self, ctx: Web3Context, market: MorphoMarket, params: MorphoMarketParams
     ) -> MorphoMarketRates:
-        """Compute APYs given pre-fetched market state and params.
+        """Compute APYs given pre-fetched market state and params; reads the
+        market's IRM (`borrowRateView`) on ``ctx`` unless it is the zero address.
 
         Use this when the caller has already read `market()` and `market_params()`
         to avoid two redundant RPC roundtrips.
@@ -268,7 +271,7 @@ class MorphoReader(ContractWrapper):
             # markets): no interest accrues, so every rate is zero.
             rate_wad = 0
         else:
-            rate_wad = _irm_borrow_rate_view(self._require_ctx(), params, market)
+            rate_wad = _irm_borrow_rate_view(ctx, params, market)
         rate = rate_wad / WAD
         borrow_apy = math.expm1(rate * SECONDS_PER_YEAR)
         if market.total_supply_assets > 0:
@@ -322,6 +325,6 @@ def _irm_borrow_rate_view(
         ],
     )
     call: Call[int] = Call(
-        to=params.irm, data=selector + payload, output_types=["uint256"], ctx=ctx
+        to=params.irm, data=selector + payload, output_types=["uint256"]
     )
-    return call.call()
+    return call.call(ctx)

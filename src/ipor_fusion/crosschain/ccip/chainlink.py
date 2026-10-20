@@ -122,32 +122,30 @@ def ccip_token_lane(
     exist towards ``chain_selector``. Seven reads at most. Raises
     ``UnsupportedContractVersionError`` before reading static config when the
     OnRamp version has an unverified layout."""
-    router_wrapper = CcipRouter(ctx, router)
-    if not router_wrapper.is_chain_supported(chain_selector).call():
+    router_wrapper = CcipRouter(router)
+    if not router_wrapper.is_chain_supported(chain_selector).call(ctx):
         return CcipTokenLane(chain_selector, message_lane=False)
-    on_ramp = router_wrapper.get_on_ramp(chain_selector).call()
-    on_ramp_wrapper = CcipOnRamp(ctx, on_ramp)
-    on_ramp_version = on_ramp_wrapper.type_and_version().call()
+    on_ramp = router_wrapper.get_on_ramp(chain_selector).call(ctx)
+    on_ramp_wrapper = CcipOnRamp(on_ramp)
+    on_ramp_version = on_ramp_wrapper.type_and_version().call(ctx)
     if on_ramp_version not in _SUPPORTED_ON_RAMP_VERSIONS:
         raise UnsupportedContractVersionError(
             f"unsupported CCIP OnRamp version {on_ramp_version!r} at {on_ramp}; "
             "ccip_token_lane supports OnRamp 2.0.0"
         )
-    registry = CcipTokenAdminRegistry(
-        ctx, on_ramp_wrapper.token_admin_registry().call()
-    )
-    pool = registry.get_pool(token).call()
+    registry = CcipTokenAdminRegistry(on_ramp_wrapper.token_admin_registry().call(ctx))
+    pool = registry.get_pool(token).call(ctx)
     if pool == ZERO_ADDRESS:
         return CcipTokenLane(chain_selector, True, on_ramp, on_ramp_version)
-    pool_wrapper = CcipTokenPool(ctx, pool)
+    pool_wrapper = CcipTokenPool(pool)
     return CcipTokenLane(
         chain_selector,
         True,
         on_ramp,
         on_ramp_version,
         pool,
-        pool_wrapper.type_and_version().call(),
-        pool_wrapper.is_supported_chain(chain_selector).call(),
+        pool_wrapper.type_and_version().call(ctx),
+        pool_wrapper.is_supported_chain(chain_selector).call(ctx),
     )
 
 

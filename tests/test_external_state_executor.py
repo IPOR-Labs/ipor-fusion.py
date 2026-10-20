@@ -1,9 +1,11 @@
 """Unit tests for the ExternalStateExecutor wrapper: mock ctx, no RPC."""
 
+import inspect
 from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import multicall_aware
 from _simulate import simulate_response
 from eth_abi import decode, encode
 from eth_abi.exceptions import ValueOutOfBounds
@@ -17,6 +19,7 @@ from ipor_fusion.core.external_state_executor import (
     ExternalStateExecutor,
     NavMark,
 )
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.simulation import VaultSimulator
 from ipor_fusion.errors import ExternalStateError
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -56,7 +59,7 @@ def _make_executor(address=EXECUTOR_ADDR):
     # Explicit: `int()` on a bare MagicMock is 1, so the hash would be built
     # for chain 1 and every fixture hash would fail on an unrelated mismatch.
     ctx.chain_id = EVENT_CHAIN
-    return ExternalStateExecutor(ctx, address), ctx
+    return ExternalStateExecutor(address), ctx
 
 
 def _observed(call, return_data: bytes):
@@ -178,7 +181,7 @@ class TestBalances:
         executor, ctx = _make_executor()
         ctx.call.return_value = encode(["uint256"], [1_234_567])
 
-        assert executor.balances(BALANCE_ACCOUNT).call() == Amount(1_234_567)
+        assert executor.balances(BALANCE_ACCOUNT).call(ctx) == Amount(1_234_567)
 
 
 class TestLastUpdated:
@@ -201,7 +204,7 @@ class TestLastUpdated:
         executor, ctx = _make_executor()
         ctx.call.return_value = encode(["uint256"], [1_700_000_123])
 
-        assert executor.last_updated(BALANCE_ACCOUNT).call() == 1_700_000_123
+        assert executor.last_updated(BALANCE_ACCOUNT).call(ctx) == 1_700_000_123
 
     def test_zero_stays_zero(self):
         # "never confirmed" is a legitimate timestamp, not a missing value:
@@ -209,7 +212,7 @@ class TestLastUpdated:
         executor, ctx = _make_executor()
         ctx.call.return_value = encode(["uint256"], [0])
 
-        assert executor.last_updated(BALANCE_ACCOUNT).call() == 0
+        assert executor.last_updated(BALANCE_ACCOUNT).call(ctx) == 0
 
 
 class TestNonce:
@@ -217,7 +220,7 @@ class TestNonce:
         executor, ctx = _make_executor()
         ctx.call.return_value = encode(["uint256"], [42])
 
-        assert executor.nonce().call() == 42
+        assert executor.nonce().call(ctx) == 42
 
         to, data = ctx.call.call_args.args
         assert to == EXECUTOR_ADDR
@@ -267,12 +270,12 @@ class TestPendingProposals:
 
     def _executor_with_slot(self, **kwargs):
         ctx = self._slot_ctx(**kwargs)
-        return ExternalStateExecutor(ctx, EXECUTOR_ADDR), ctx
+        return ExternalStateExecutor(EXECUTOR_ADDR), ctx
 
     def test_encodes_selector_and_account(self):
-        executor, _ = self._executor_with_slot()
+        executor, ctx = self._executor_with_slot()
 
-        call = executor.pending_proposals(BALANCE_ACCOUNT)
+        call = executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN)
 
         assert call.to == EXECUTOR_ADDR
         assert call.data[:4] == Web3.keccak(text="pendingProposals(address)")[:4]
@@ -281,9 +284,11 @@ class TestPendingProposals:
         assert call.output_types == ["uint256", "address", "uint64", "uint256"]
 
     def test_decodes_slot_into_proposal(self):
-        executor, _ = self._executor_with_slot()
+        executor, ctx = self._executor_with_slot()
 
-        proposal = executor.pending_proposals(BALANCE_ACCOUNT).call()
+        proposal = executor.pending_proposals(
+            BALANCE_ACCOUNT, chain_id=self.CHAIN
+        ).call(ctx)
 
         assert proposal == BalanceProposal(
             # Not in the getter's return -- carried over from the argument.
@@ -297,8 +302,10 @@ class TestPendingProposals:
 
     def test_hash_is_what_confirm_balance_expects(self):
         # The state route's whole point: feed the hash straight to confirm.
-        executor, _ = self._executor_with_slot()
-        proposal = executor.pending_proposals(BALANCE_ACCOUNT).call()
+        executor, ctx = self._executor_with_slot()
+        proposal = executor.pending_proposals(
+            BALANCE_ACCOUNT, chain_id=self.CHAIN
+        ).call(ctx)
 
         assert proposal is not None
         call = executor.confirm_balance(BALANCE_ACCOUNT, proposal.proposal_hash)
@@ -312,9 +319,14 @@ class TestPendingProposals:
     def test_returns_none_for_deleted_slot(self):
         # confirmBalance deletes the slot, so zeros are the NORMAL post-confirm
         # state -- never a zeroed dataclass carrying a hash computed over zeros.
-        executor, _ = self._executor_with_slot(proposer=ZERO_ADDRESS, value=0, nonce=0)
+        executor, ctx = self._executor_with_slot(
+            proposer=ZERO_ADDRESS, value=0, nonce=0
+        )
 
-        assert executor.pending_proposals(BALANCE_ACCOUNT).call() is None
+        assert (
+            executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN).call(ctx)
+            is None
+        )
 
     def test_observe_cannot_distinguish_empty_from_failure(self):
         # Pins the docstring's caveat against the real simulator: observe turns
@@ -325,90 +337,94 @@ class TestPendingProposals:
             [self.VALUE, PROPOSER, self.PROPOSED_AT, self.NONCE],
         )
         empty = encode(self.SLOT_TYPES, [0, ZERO_ADDRESS, 0, 0])
-        executor, _ = self._executor_with_slot()
+        executor, ctx = self._executor_with_slot()
 
         # Positive control first: without it every assertion below is `is None`
         # and an observe path that always returned None would pass vacuously.
-        observed = _observed(executor.pending_proposals(BALANCE_ACCOUNT), populated)
+        observed = _observed(
+            executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN), populated
+        )
         assert observed is not None
         assert observed.value == Amount(self.VALUE)
 
         # A genuinely empty slot.
-        assert _observed(executor.pending_proposals(BALANCE_ACCOUNT), empty) is None
-        # A decode that raised: no ctx, so the chain-bound hash cannot be built.
-        ctxless = ExternalStateExecutor(None, EXECUTOR_ADDR)
-        assert _observed(ctxless.pending_proposals(BALANCE_ACCOUNT), populated) is None
+        assert (
+            _observed(
+                executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN), empty
+            )
+            is None
+        )
+        # A decode that raised: return data too short for the slot.
+        assert (
+            _observed(
+                executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN),
+                populated[:32],
+            )
+            is None
+        )
 
     def test_none_depends_only_on_the_proposer(self):
         # The sentinel is the zero proposer alone -- a non-zero value and nonce
         # alongside it must not make the slot look occupied.
-        executor, _ = self._executor_with_slot(proposer=ZERO_ADDRESS)
+        executor, ctx = self._executor_with_slot(proposer=ZERO_ADDRESS)
 
-        assert executor.pending_proposals(BALANCE_ACCOUNT).call() is None
+        assert (
+            executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN).call(ctx)
+            is None
+        )
 
     def test_a_zero_value_proposal_is_real(self):
         # `proposeBalance(account, 0)` is legal on-chain -- a wind-down mark --
         # and `confirmBalance` gates on the proposer alone. A zero value must
         # decode into a proposal, not read as an empty slot.
-        executor, _ = self._executor_with_slot(value=0)
+        executor, ctx = self._executor_with_slot(value=0)
 
-        proposal = executor.pending_proposals(BALANCE_ACCOUNT).call()
+        proposal = executor.pending_proposals(
+            BALANCE_ACCOUNT, chain_id=self.CHAIN
+        ).call(ctx)
 
         assert proposal is not None
         assert proposal.value == Amount(0)
 
-    def test_ctxless_instance_still_builds_calldata(self):
-        # A ctx-less wrapper promises calldata from any builder; the chain-bound hash is
-        # resolved lazily so this method keeps that promise like its siblings.
-        call = ExternalStateExecutor(None, EXECUTOR_ADDR).pending_proposals(
-            BALANCE_ACCOUNT
-        )
+    def test_chain_id_is_a_required_keyword(self):
+        # The hash is bound to a chain and nothing else supplies one: the
+        # wrapper holds no context, and the decoder never sees the one that
+        # executes the Call.
+        parameter = inspect.signature(
+            ExternalStateExecutor.pending_proposals
+        ).parameters["chain_id"]
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameter.default is inspect.Parameter.empty
 
-        assert call.calldata[:4] == Web3.keccak(text="pendingProposals(address)")[:4]
+    @pytest.mark.parametrize("chain_id", [ChainId(8453), ChainId(1)])
+    def test_the_hash_follows_the_named_chain_on_every_decode_path(self, chain_id):
+        # The same raw bytes, three ways to decode them: `.call(ctx)`, a
+        # Multicall3 batch and a simulation observation. Each stamps the hash
+        # for the chain the caller named, never the executing context's.
+        executor, ctx = self._executor_with_slot()
+        ctx.chain_id = ChainId(42161)
+        raw = ctx.call.return_value
+        call = executor.pending_proposals(BALANCE_ACCOUNT, chain_id=chain_id)
+        expected = self._slot_hash(chain_id)
 
-    def test_ctxless_instance_raises_only_on_decode(self):
-        # ...and without a ctx or an explicit chain_id there is nothing to bind
-        # the hash to, so executing it fails.
-        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
+        direct = call.call(ctx)
+        batch_ctx = MagicMock()
+        batch_ctx.chain_id = ChainId(42161)
+        batch_ctx.call.side_effect = multicall_aware(lambda _to, _data: raw)
+        (batched,) = Multicall3(batch_ctx).aggregate([call])
+        observed = _observed(call, raw)
 
-        with pytest.raises(ValueError, match="Web3Context required"):
-            executor.pending_proposals(BALANCE_ACCOUNT).call(self._slot_ctx())
-
-    def test_explicit_chain_id_overrides_the_wrapper(self):
-        # The hash must follow the chain the caller names, not the one the
-        # wrapper happens to carry -- Call.call(other_ctx) reads elsewhere.
-        executor, _ = self._executor_with_slot()
-        other_chain = ChainId(1)
-
-        proposal = executor.pending_proposals(
-            BALANCE_ACCOUNT, chain_id=other_chain
-        ).call()
-
-        assert proposal is not None
-        assert proposal.proposal_hash == self._slot_hash(other_chain)
-
-    def test_default_chain_id_follows_the_wrapper_not_the_caller(self):
-        # Pins the documented default, which looks like a bug and is not
-        # locally fixable: `Call` hands the decoder only the decoded values,
-        # never the ctx that executed the call, so the wrapper's chain is the
-        # only one available at stamp time. Callers crossing chains pass
-        # `chain_id=` (above). Changing this means changing `Call`.
-        executor, _ = self._executor_with_slot()
-        other_ctx = self._slot_ctx()
-        other_ctx.chain_id = ChainId(1)
-
-        proposal = executor.pending_proposals(BALANCE_ACCOUNT).call(other_ctx)
-
-        assert proposal is not None
-        assert proposal.proposal_hash == self._slot_hash(self.CHAIN)
+        assert direct is not None and batched is not None and observed is not None
+        assert direct.proposal_hash == batched.proposal_hash == expected
+        assert observed.proposal_hash == expected
 
     def test_accepts_a_lowercase_account(self):
         # The account is checksummed before it reaches the hash; every other
         # test here passes one already checksummed, so nothing else covers it.
-        executor, _ = self._executor_with_slot()
+        executor, ctx = self._executor_with_slot()
         lowercase = cast(ChecksumAddress, MIXED_CASE.lower())
 
-        proposal = executor.pending_proposals(lowercase).call()
+        proposal = executor.pending_proposals(lowercase, chain_id=self.CHAIN).call(ctx)
 
         assert proposal is not None
         assert proposal.balance_account == MIXED_CASE
@@ -419,50 +435,26 @@ class TestPendingProposals:
     def test_decodes_max_width_fields(self):
         # uint64 proposedAt and uint256 value/nonce at their maxima: the decode
         # and the re-hash both have to survive the widths the ABI allows.
-        executor, _ = self._executor_with_slot(
+        executor, ctx = self._executor_with_slot(
             value=2**256 - 1, nonce=2**256 - 1, proposed_at=2**64 - 1
         )
 
-        proposal = executor.pending_proposals(BALANCE_ACCOUNT).call()
+        proposal = executor.pending_proposals(
+            BALANCE_ACCOUNT, chain_id=self.CHAIN
+        ).call(ctx)
 
         assert proposal is not None
         assert proposal.value == Amount(2**256 - 1)
         assert proposal.nonce == 2**256 - 1
         assert proposal.proposed_at == 2**64 - 1
 
-    def test_explicit_chain_id_frees_a_ctxless_instance(self):
-        # Given a chain id there is nothing left to need a ctx for, so a
-        # calldata-only wrapper can read through any context.
-        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
-
-        proposal = executor.pending_proposals(
-            BALANCE_ACCOUNT, chain_id=self.CHAIN
-        ).call(self._slot_ctx())
-
-        assert proposal is not None
-        assert proposal.nonce == self.NONCE
-
-    def test_a_zero_address_executor_refuses_to_stamp_a_hash(self):
-        # The zero address as executor would make the hash bind no
-        # contract: a plausible 32 bytes that confirms nothing anywhere. The
-        # chain id gets a raise for the same reason; so does this half.
-        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
+    def test_the_zero_address_refuses_to_stamp_a_hash(self):
+        # The hash would bind no contract: a plausible 32 bytes that confirms
+        # nothing anywhere. Refused when the Call is built, before any read.
+        executor = ExternalStateExecutor(ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
-            executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN).call(
-                self._slot_ctx()
-            )
-
-    def test_an_empty_slot_still_reports_a_missing_chain_id(self):
-        # Both hash inputs resolve before the empty-slot sentinel, so a
-        # misconfigured poller fails on its first read rather than passing
-        # every quiet one and dying on the first proposal that exists.
-        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
-
-        with pytest.raises(ValueError, match="Web3Context required"):
-            executor.pending_proposals(BALANCE_ACCOUNT).call(
-                self._slot_ctx(proposer=ZERO_ADDRESS)
-            )
+            executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN)
 
 
 class TestProposalHash:
@@ -746,12 +738,15 @@ class TestParseBalanceProposed:
         executor, _ = _make_executor()
         log = _proposed_log(as_strings=as_strings)
 
-        assert executor.parse_balance_proposed(log) == _EXPECTED_PROPOSAL
+        assert (
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
+            == _EXPECTED_PROPOSAL
+        )
 
     def test_needs_no_ctx(self):
-        # Decoding indexer rows or a get_logs range must not require an RPC: a
-        # ctx-less wrapper plus an explicit chain id still verifies.
-        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
+        # Decoding indexer rows or a get_logs range must not require an RPC:
+        # the wrapper plus an explicit chain id verifies.
+        executor = ExternalStateExecutor(EXECUTOR_ADDR)
 
         parsed = executor.parse_balance_proposed(
             _proposed_log(as_strings=True), chain_id=EVENT_CHAIN
@@ -759,41 +754,41 @@ class TestParseBalanceProposed:
 
         assert parsed.nonce == _EVENT_NONCE
 
-    def test_a_zero_address_executor_refuses_to_match_an_emitter(self):
+    def test_the_zero_address_refuses_to_match_an_emitter(self):
         # Against the zero address the emitter check would accept a forged
         # row claiming to come from no contract, then verify its hash under
         # executor 0. Refuse before either check runs.
-        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
+        executor = ExternalStateExecutor(ZERO_ADDRESS)
         log = _proposed_log(as_strings=False, address=ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
             executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
-    def test_a_ctxless_wrapper_needs_an_explicit_chain_id(self):
-        # Mirrors pending_proposals: the hash is chain-bound, so a wrapper with
-        # neither a ctx nor a chain_id has nothing to verify against and must
-        # say so rather than skipping the check.
-        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
+    @pytest.mark.parametrize(
+        "method", ["parse_balance_proposed", "find_balance_proposed"]
+    )
+    def test_chain_id_is_a_required_keyword(self, method):
+        # Mirrors pending_proposals: the hash is chain-bound and the wrapper
+        # holds no context, so the caller names the chain.
+        parameter = inspect.signature(
+            getattr(ExternalStateExecutor, method)
+        ).parameters["chain_id"]
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameter.default is inspect.Parameter.empty
 
-        with pytest.raises(ValueError, match="Web3Context required"):
-            executor.parse_balance_proposed(_proposed_log(as_strings=False))
-
-    def test_the_emitter_check_precedes_the_chain_id_lookup(self):
-        # Both conditions hold at once here. The emitter must win: a ctx-less
-        # caller debugging a real emitter mismatch would otherwise be sent
-        # chasing a missing chain id that is not the actual problem.
-        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
+    def test_rejects_a_log_from_another_emitter(self):
+        executor = ExternalStateExecutor(EXECUTOR_ADDR)
         log = _proposed_log(as_strings=False, address=OTHER_EMITTER)
 
         with pytest.raises(ValueError, match="was not emitted by"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     def test_rejects_a_different_event(self):
         executor, _ = _make_executor()
         log = _proposed_log(as_strings=False, topic=Web3.keccak(text="Transfer()"))
 
         with pytest.raises(ValueError, match="not a BalanceProposed event"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     @pytest.mark.parametrize("topics", [[], None], ids=["empty", "missing"])
     def test_rejects_a_log_without_topics(self, topics):
@@ -801,7 +796,7 @@ class TestParseBalanceProposed:
         log = {"address": EXECUTOR_ADDR, "topics": topics, "data": b""}
 
         with pytest.raises(ValueError, match="not a BalanceProposed event"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     def test_rejects_a_log_without_data(self):
         # A right-topic log missing `data` must raise ValueError, not KeyError.
@@ -809,15 +804,14 @@ class TestParseBalanceProposed:
         log = {"address": EXECUTOR_ADDR, "topics": [_BALANCE_PROPOSED_TOPIC]}
 
         with pytest.raises(ExternalStateError, match="carries no data"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     @pytest.mark.parametrize("as_strings", [False, True], ids=["hexbytes", "0x-string"])
     def test_accepts_a_self_consistent_log(self, as_strings):
         # The 0x-string shape is the one verification exists for -- an indexer
         # or get_logs row. The executor is MIXED_CASE because that shape
         # lowercases the address, and only an address with hex letters makes
-        # the passing emitter check normalize anything at all. No chain_id, so
-        # this also pins the default: the wrapper's own ctx.
+        # the passing emitter check normalize anything at all.
         executor, _ = _make_executor(MIXED_CASE)
         log = _proposed_log(
             as_strings=as_strings,
@@ -825,7 +819,7 @@ class TestParseBalanceProposed:
             proposal_hash=_consistent_hash(EVENT_CHAIN, executor=MIXED_CASE),
         )
 
-        parsed = executor.parse_balance_proposed(log)
+        parsed = executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
         assert parsed.value == Amount(_EVENT_VALUE)
 
@@ -840,7 +834,7 @@ class TestParseBalanceProposed:
         log = _proposed_log(as_strings=False, proposal_hash=other_hash)
 
         with pytest.raises(ExternalStateError, match="another proposal's hash"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     def test_rejects_a_log_hashed_for_another_chain(self):
         # The hash binds a chain id, so the executor's own log verified against
@@ -851,17 +845,6 @@ class TestParseBalanceProposed:
             executor.parse_balance_proposed(
                 _proposed_log(as_strings=False), chain_id=ChainId(1)
             )
-
-    def test_rejects_a_log_hashed_for_the_wrappers_other_chain(self):
-        # Same mismatch reached through the default branch rather than the
-        # override: a wrapper bound to one chain, fed rows from another. This is
-        # the misuse the docstring describes, and the override cannot stand in
-        # for it -- there the caller names the wrong chain knowingly.
-        executor, ctx = _make_executor()
-        ctx.chain_id = ChainId(1)
-
-        with pytest.raises(ExternalStateError, match="different executor or chain id"):
-            executor.parse_balance_proposed(_proposed_log(as_strings=False))
 
     def test_rejects_a_self_consistent_forgery(self):
         # proposal_hash is public and pure, so an attacker can build a payload
@@ -875,7 +858,7 @@ class TestParseBalanceProposed:
         )
 
         with pytest.raises(ValueError, match="was not emitted by"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     @pytest.mark.parametrize(
         "address", [None, "not-an-address"], ids=["missing", "unreadable"]
@@ -889,7 +872,7 @@ class TestParseBalanceProposed:
             log["address"] = address
 
         with pytest.raises(ValueError, match="was not emitted by"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     @pytest.mark.parametrize("data", [{}, ["0x00"]], ids=["dict", "list"])
     def test_non_hex_data_raises_external_state_error(self, data):
@@ -902,7 +885,7 @@ class TestParseBalanceProposed:
         }
 
         with pytest.raises(ExternalStateError, match="malformed BalanceProposed"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     @pytest.mark.parametrize("topic", ["0xnothex", {}], ids=["bad-hex", "wrong-type"])
     def test_malformed_topic_reads_as_another_event(self, topic):
@@ -912,7 +895,7 @@ class TestParseBalanceProposed:
         log = {"address": EXECUTOR_ADDR, "topics": [topic], "data": b""}
 
         with pytest.raises(ValueError, match="not a BalanceProposed event"):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
     @pytest.mark.parametrize(
         "data", [b"\x01\x02", "0xnothex", 192], ids=["truncated", "bad-hex", "int"]
@@ -928,7 +911,7 @@ class TestParseBalanceProposed:
         }
 
         with pytest.raises(ValueError):
-            executor.parse_balance_proposed(log)
+            executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
 
 class TestFindBalanceProposed:
@@ -937,7 +920,10 @@ class TestFindBalanceProposed:
         executor, _ = _make_executor()
         logs = [_proposed_log(as_strings=as_strings)]
 
-        assert executor.find_balance_proposed(logs) == _EXPECTED_PROPOSAL
+        assert (
+            executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN)
+            == _EXPECTED_PROPOSAL
+        )
 
     def test_skips_same_event_from_another_contract(self):
         # A foreign emitter AHEAD of ours must not stop the scan.
@@ -947,7 +933,7 @@ class TestFindBalanceProposed:
             _proposed_log(as_strings=False),
         ]
 
-        found = executor.find_balance_proposed(logs)
+        found = executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN)
 
         assert found == _EXPECTED_PROPOSAL
 
@@ -956,20 +942,20 @@ class TestFindBalanceProposed:
         logs = [_proposed_log(as_strings=False, topic=Web3.keccak(text="Transfer()"))]
 
         with pytest.raises(ValueError, match="no BalanceProposed log"):
-            executor.find_balance_proposed(logs)
+            executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN)
 
     def test_raises_when_only_foreign_emitters_match(self):
         executor, _ = _make_executor()
         logs = [_proposed_log(as_strings=True, address=OTHER_EMITTER)]
 
         with pytest.raises(ValueError, match="no BalanceProposed log"):
-            executor.find_balance_proposed(logs)
+            executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN)
 
     def test_raises_on_empty_logs(self):
         executor, _ = _make_executor()
 
         with pytest.raises(ValueError, match="no BalanceProposed log"):
-            executor.find_balance_proposed([])
+            executor.find_balance_proposed([], chain_id=EVENT_CHAIN)
 
     def test_skips_logs_without_an_address(self):
         executor, _ = _make_executor()
@@ -977,7 +963,7 @@ class TestFindBalanceProposed:
         del log["address"]
 
         with pytest.raises(ValueError, match="no BalanceProposed log"):
-            executor.find_balance_proposed([log])
+            executor.find_balance_proposed([log], chain_id=EVENT_CHAIN)
 
     def test_filters_by_balance_account(self):
         # Over a get_logs range the executor's other accounts show up first;
@@ -988,11 +974,13 @@ class TestFindBalanceProposed:
             _proposed_log(as_strings=False),
         ]
 
-        assert executor.find_balance_proposed(logs, BALANCE_ACCOUNT) == (
-            _EXPECTED_PROPOSAL
-        )
+        assert executor.find_balance_proposed(
+            logs, BALANCE_ACCOUNT, chain_id=EVENT_CHAIN
+        ) == (_EXPECTED_PROPOSAL)
         assert (
-            executor.find_balance_proposed(logs, OTHER_ACCOUNT).balance_account
+            executor.find_balance_proposed(
+                logs, OTHER_ACCOUNT, chain_id=EVENT_CHAIN
+            ).balance_account
             == OTHER_ACCOUNT
         )
 
@@ -1005,7 +993,10 @@ class TestFindBalanceProposed:
             _proposed_log(as_strings=False, balance_account=OTHER_ACCOUNT),
         ]
 
-        assert executor.find_balance_proposed(logs).balance_account == OTHER_ACCOUNT
+        assert (
+            executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN).balance_account
+            == OTHER_ACCOUNT
+        )
 
     def test_skips_our_log_with_an_unreadable_topic(self):
         # An unreadable topic0 cannot be this event, so the scan passes over it
@@ -1016,7 +1007,10 @@ class TestFindBalanceProposed:
             _proposed_log(as_strings=False),
         ]
 
-        assert executor.find_balance_proposed(logs) == _EXPECTED_PROPOSAL
+        assert (
+            executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN)
+            == _EXPECTED_PROPOSAL
+        )
 
     def test_filter_accepts_a_lowercase_account(self):
         # The filter checksums its argument before comparing; addresses reach a
@@ -1028,7 +1022,7 @@ class TestFindBalanceProposed:
         # normalization under test and the assertion would prove nothing.
         lowercase = cast(ChecksumAddress, MIXED_CASE.lower())
 
-        found = executor.find_balance_proposed(logs, lowercase)
+        found = executor.find_balance_proposed(logs, lowercase, chain_id=EVENT_CHAIN)
 
         assert found.balance_account == MIXED_CASE
 
@@ -1039,7 +1033,9 @@ class TestFindBalanceProposed:
         # The message names the account, so "emitted nothing" and "emitted only
         # for others" are distinguishable when triaging.
         with pytest.raises(ValueError, match=f"for account {absent}"):
-            executor.find_balance_proposed([_proposed_log(as_strings=False)], absent)
+            executor.find_balance_proposed(
+                [_proposed_log(as_strings=False)], absent, chain_id=EVENT_CHAIN
+            )
 
     def test_returns_the_last_proposal_for_one_account(self):
         # proposeBalance overwrites the pending slot, so among several proposals
@@ -1054,9 +1050,14 @@ class TestFindBalanceProposed:
             _proposed_log(as_strings=False, nonce=_EVENT_NONCE + 1),
         ]
 
-        assert executor.find_balance_proposed(logs).proposal_hash == newest_hash
         assert (
-            executor.find_balance_proposed(logs, BALANCE_ACCOUNT).proposal_hash
+            executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN).proposal_hash
+            == newest_hash
+        )
+        assert (
+            executor.find_balance_proposed(
+                logs, BALANCE_ACCOUNT, chain_id=EVENT_CHAIN
+            ).proposal_hash
             == newest_hash
         )
 
@@ -1071,7 +1072,10 @@ class TestFindBalanceProposed:
         bad["address"] = address
         ours = _proposed_log(as_strings=False)
 
-        assert executor.find_balance_proposed([bad, ours]) == _EXPECTED_PROPOSAL
+        assert (
+            executor.find_balance_proposed([bad, ours], chain_id=EVENT_CHAIN)
+            == _EXPECTED_PROPOSAL
+        )
 
     def test_raises_when_only_malformed_addresses_match(self):
         executor, _ = _make_executor()
@@ -1079,7 +1083,7 @@ class TestFindBalanceProposed:
         bad["address"] = "not-an-address"
 
         with pytest.raises(ValueError, match="no BalanceProposed log"):
-            executor.find_balance_proposed([bad])
+            executor.find_balance_proposed([bad], chain_id=EVENT_CHAIN)
 
     @pytest.mark.parametrize("data", [{}, ["0x00"]], ids=["dict", "list"])
     def test_non_hex_data_on_our_log_raises_external_state_error(self, data):
@@ -1090,7 +1094,7 @@ class TestFindBalanceProposed:
         log["data"] = data
 
         with pytest.raises(ExternalStateError, match="malformed BalanceProposed"):
-            executor.find_balance_proposed([log])
+            executor.find_balance_proposed([log], chain_id=EVENT_CHAIN)
 
     def test_a_malformed_log_aborts_even_a_filtered_scan(self):
         # Decoding happens before the account filter, so a bad payload from this
@@ -1101,7 +1105,9 @@ class TestFindBalanceProposed:
 
         with pytest.raises(ExternalStateError, match="malformed BalanceProposed data"):
             executor.find_balance_proposed(
-                [bad, _proposed_log(as_strings=False)], BALANCE_ACCOUNT
+                [bad, _proposed_log(as_strings=False)],
+                BALANCE_ACCOUNT,
+                chain_id=EVENT_CHAIN,
             )
 
     def test_raises_on_our_own_malformed_log(self):
@@ -1112,15 +1118,17 @@ class TestFindBalanceProposed:
         log["data"] = HexBytes(b"\x01\x02")
 
         with pytest.raises(ExternalStateError, match="malformed BalanceProposed data"):
-            executor.find_balance_proposed([log])
+            executor.find_balance_proposed([log], chain_id=EVENT_CHAIN)
 
-    def test_a_zero_address_executor_refuses_to_scan(self):
+    def test_the_zero_address_refuses_to_scan(self):
         # Same guard as the single-log reader: the zero address matches only
         # a row claiming no emitter, which is never a real one.
-        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
+        executor = ExternalStateExecutor(ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
-            executor.find_balance_proposed([_proposed_log(as_strings=False)])
+            executor.find_balance_proposed(
+                [_proposed_log(as_strings=False)], chain_id=EVENT_CHAIN
+            )
 
     def test_rejects_a_match_whose_hash_is_not_its_own(self):
         # Same check `parse_balance_proposed` applies. Unreachable on chain --
@@ -1134,7 +1142,7 @@ class TestFindBalanceProposed:
         )
 
         with pytest.raises(ExternalStateError, match="another proposal's hash"):
-            executor.find_balance_proposed([log])
+            executor.find_balance_proposed([log], chain_id=EVENT_CHAIN)
 
     def test_a_bad_hash_on_another_account_does_not_abort_the_scan(self):
         # Only the match is verified. A log for an account you did not ask
@@ -1148,26 +1156,22 @@ class TestFindBalanceProposed:
         )
 
         found = executor.find_balance_proposed(
-            [other, _proposed_log(as_strings=False)], BALANCE_ACCOUNT
+            [other, _proposed_log(as_strings=False)],
+            BALANCE_ACCOUNT,
+            chain_id=EVENT_CHAIN,
         )
 
         assert found == _EXPECTED_PROPOSAL
 
-    def test_scans_through_a_ctxless_wrapper_given_a_chain_id(self):
-        # The hash check needs a chain; an explicit one frees a calldata-only
-        # wrapper, exactly as it does for the other two readers.
-        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
+    def test_scans_given_a_chain_id(self):
+        # The hash check needs a chain; the caller names it, exactly as for
+        # the other two readers.
+        executor = ExternalStateExecutor(EXECUTOR_ADDR)
         logs = [_proposed_log(as_strings=True)]
 
         assert executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN) == (
             _EXPECTED_PROPOSAL
         )
-
-    def test_a_ctxless_wrapper_needs_an_explicit_chain_id(self):
-        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
-
-        with pytest.raises(ValueError, match="Web3Context required"):
-            executor.find_balance_proposed([_proposed_log(as_strings=False)])
 
 
 class TestMarkNav:
@@ -1200,7 +1204,7 @@ class TestMarkNav:
         }
 
     def _setup(self, *, proposal_hash=None):
-        executor = ExternalStateExecutor(MagicMock(), EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(EXECUTOR_ADDR)
 
         proposer_ctx = MagicMock()
         proposer_ctx.signer = PROPOSER
@@ -1395,7 +1399,7 @@ class TestMarkNav:
         _, proposer_ctx, confirmer_ctx = self._setup()
         wrapper_ctx = MagicMock()
         wrapper_ctx.chain_id = ChainId(1)
-        executor = ExternalStateExecutor(wrapper_ctx, EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(EXECUTOR_ADDR)
 
         result = executor.mark_nav(
             value=Amount(self.VALUE),
@@ -1669,7 +1673,7 @@ class TestExecutorViews:
         ],
     )
     def test_uint256_views(self, method, signature):
-        executor = ExternalStateExecutor(MagicMock(), EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(EXECUTOR_ADDR)
         call = getattr(executor, method)()
         assert bytes(call.data)[:4] == Web3.keccak(text=signature)[:4]
         assert call.output_types == ["uint256"]
@@ -1677,7 +1681,7 @@ class TestExecutorViews:
     def test_balance_fuse_snapshot_decodes_to_the_dataclass(self):
         from ipor_fusion import BalanceFuseSnapshot
 
-        executor = ExternalStateExecutor(MagicMock(), EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(EXECUTOR_ADDR)
         call = executor.get_balance_fuse_snapshot()
         assert bytes(call.data)[:4] == Web3.keccak(text="getBalanceFuseSnapshot()")[:4]
         assert call.output_types == ["uint256", "uint256", "uint256"]

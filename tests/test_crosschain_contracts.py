@@ -36,10 +36,11 @@ ASSET_ID = b"\xd6" + b"\x00" * 31
 
 
 def _wrapper(cls, return_types: list[str] | None = None, values: tuple | None = None):
+    """The wrapper at ``ADDR`` and a context answering ``values``."""
     ctx = MagicMock()
     if return_types is not None:
         ctx.call.return_value = encode(return_types, list(values or ()))
-    return cls(ctx, ADDR)
+    return cls(ADDR), ctx
 
 
 def _selector(call, signature: str) -> None:
@@ -1033,39 +1034,39 @@ _VIEWS = [
 def test_views_encode_selector_and_decode_return(
     cls, method, args, signature, types, raw, expected
 ):
-    wrapper = _wrapper(cls, types, raw)
+    wrapper, ctx = _wrapper(cls, types, raw)
     call = getattr(wrapper, method)(*args)
     _selector(call, signature)
-    assert call.call() == expected
+    assert call.call(ctx) == expected
 
 
 def test_struct_views():
-    executor = _wrapper(
+    executor, ctx = _wrapper(
         StargateCrosschainExecutor,
         ["bool", "bool", "bool", "uint8", "bytes32", "uint64", "uint64"],
         (True, False, False, 1, ASSET_ID, 4, 0),
     )
     call = executor.active_command(8453)
     _selector(call, "activeCommand(uint256)")
-    assert call.call() == ActiveCommand(
+    assert call.call(ctx) == ActiveCommand(
         True, False, False, CommandStatus.PENDING, ASSET_ID, 4, 0
     )
 
-    dispatcher = _wrapper(
+    dispatcher, ctx = _wrapper(
         StargateCrosschainDispatcher,
         ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
         ((999_414, [VAULT.lower()], [999_414], 5, 1, ASSET_ID),),
     )
     call = dispatcher.observation()
     _selector(call, "observation()")
-    assert call.call() == Observation(999_414, [VAULT], [999_414], 5, 1, ASSET_ID)
+    assert call.call(ctx) == Observation(999_414, [VAULT], [999_414], 5, 1, ASSET_ID)
 
-    ccip = _wrapper(
+    ccip, ctx = _wrapper(
         CcipCrosschainDispatcher,
         ["(uint256,uint256,uint256,uint64,uint64,bytes32)"],
         ((3, 1, 2, 4, 1, ASSET_ID),),
     )
-    assert ccip.observation().call() == CcipObservation(3, 1, 2, 4, 1, ASSET_ID)
+    assert ccip.observation().call(ctx) == CcipObservation(3, 1, 2, 4, 1, ASSET_ID)
 
     route_raw = (
         15971525489660198786,
@@ -1081,29 +1082,29 @@ def test_struct_views():
         CcipCrosschainDispatcher,
         CcipCrosschainFactory,
     ):
-        wrapper = _wrapper(
+        wrapper, ctx = _wrapper(
             cls, ["(uint64,address,address,uint96,uint96,uint256,bool)"], (route_raw,)
         )
         call = wrapper.ccip_route(8453)
         _selector(call, "ccipRoute(uint256)")
-        assert call.call() == CcipRouteConfig(
+        assert call.call(ctx) == CcipRouteConfig(
             15971525489660198786, ADDR, POOL, 1_200_000, 1_000_000, 10**16, True
         )
 
-    stargate_factory = _wrapper(
+    stargate_factory, ctx = _wrapper(
         StargateCrosschainFactory,
         ["address", "address", "bool"],
         (POOL.lower(), ADDR.lower(), True),
     )
-    assert stargate_factory.asset_config(ASSET_ID).call() == (POOL, ADDR, True)
-    ccip_factory = _wrapper(
+    assert stargate_factory.asset_config(ASSET_ID).call(ctx) == (POOL, ADDR, True)
+    ccip_factory, ctx = _wrapper(
         CcipCrosschainFactory, ["address", "uint8", "bool"], (POOL.lower(), 6, True)
     )
-    assert ccip_factory.asset_config(ASSET_ID).call() == (POOL, 6, True)
+    assert ccip_factory.asset_config(ASSET_ID).call(ctx) == (POOL, 6, True)
 
 
 def test_ccip_factory_governance_writes_encode_arguments():
-    factory = _wrapper(CcipCrosschainFactory)
+    factory, ctx = _wrapper(CcipCrosschainFactory)
     _selector(factory.set_creation_restricted(True), "setCreationRestricted(bool)")
     call = factory.set_creator_allowed(POOL, False)
     _selector(call, "setCreatorAllowed(address,bool)")
@@ -1163,11 +1164,11 @@ def test_ccip_factory_governance_writes_encode_arguments():
 
 
 def test_ccip_factory_dispatcher_deployment_gas_limit():
-    factory = _wrapper(CcipCrosschainFactory, ["uint96"], (6_000_000,))
+    factory, ctx = _wrapper(CcipCrosschainFactory, ["uint96"], (6_000_000,))
     call = factory.dispatcher_deployment_gas_limit(999)
     _selector(call, "dispatcherDeploymentGasLimit(uint256)")
     assert decode(["uint256"], call.data[4:]) == (999,)
-    assert call.call() == 6_000_000
+    assert call.call(ctx) == 6_000_000
 
     for method, signature in (
         (
@@ -1200,7 +1201,7 @@ def test_ccip_factory_dispatcher_deployment_gas_limit():
 
 
 def test_writes_encode_arguments():
-    executor = _wrapper(StargateCrosschainExecutor)
+    executor, ctx = _wrapper(StargateCrosschainExecutor)
     observation = BalanceObservation(
         8453, 999_414, 6, 51_700_000, 1_790_000_000, 1_790_001_800, ASSET_ID
     )
@@ -1219,7 +1220,7 @@ def test_writes_encode_arguments():
         executor.cancel_stale_return_request(8453), "cancelStaleReturnRequest(uint256)"
     )
 
-    ccip = _wrapper(CcipCrosschainExecutor, ["uint256"], (42,))
+    ccip, ctx = _wrapper(CcipCrosschainExecutor, ["uint256"], (42,))
     call = ccip.propose_balance(observation)
     _selector(
         call, "proposeBalance(uint256,uint256,uint64,uint64,uint64,uint64,bytes32)"
@@ -1232,14 +1233,14 @@ def test_writes_encode_arguments():
         == observation.as_tuple()
     )
     assert call.output_types == ["uint256"]
-    assert call.call() == 42
+    assert call.call(ctx) == 42
     _selector(ccip.reject_balance_and_block(1), "rejectBalanceAndBlock(uint256)")
     _selector(
         ccip.cancel_stale_pending_return(8453), "cancelStalePendingReturn(uint256)"
     )
-    _selector(_wrapper(CcipCrosschainDispatcher).flush_response(), "flushResponse()")
+    _selector(_wrapper(CcipCrosschainDispatcher)[0].flush_response(), "flushResponse()")
 
-    factory = _wrapper(StargateCrosschainFactory, ["address"], (POOL.lower(),))
+    factory, ctx = _wrapper(StargateCrosschainFactory, ["address"], (POOL.lower(),))
     params = ExecutorInitParams(
         ASSET_ID, VAULT, ADDR, POOL, 86400, ADDR, POOL, 3600, 1000, 60, 86400, 3600
     )
@@ -1248,10 +1249,10 @@ def test_writes_encode_arguments():
         call,
         "createExecutor(bytes32,(bytes32,address,address,address,uint256,address,address,uint256,uint256,uint256,uint256,uint256))",
     )
-    assert call.call() == POOL
+    assert call.call(ctx) == POOL
     _selector(factory.cancel_pending_deployment(1), "cancelPendingDeployment(uint256)")
 
-    ccip_factory = _wrapper(CcipCrosschainFactory, ["address"], (POOL.lower(),))
+    ccip_factory, ctx = _wrapper(CcipCrosschainFactory, ["address"], (POOL.lower(),))
     safety = SafetyConfig(ADDR, POOL, ADDR, POOL, 86400, 3600, 1000, 60, 3600)
     call = ccip_factory.create_executor(b"\x01" * 32, ASSET_ID, VAULT, safety)
     _selector(
@@ -1293,7 +1294,7 @@ def test_writes_encode_arguments():
     )
     with pytest.raises(ValueError, match="route peer"):
         ccip_factory.register_executor_route(POOL, 8453, route)
-    ccip_factory = _wrapper(CcipCrosschainFactory, ["bytes32"], (ASSET_ID,))
+    ccip_factory, ctx = _wrapper(CcipCrosschainFactory, ["bytes32"], (ASSET_ID,))
     call = ccip_factory.request_dispatcher(ADDR, 8453, [VAULT], 10**16)
     _selector(call, "requestDispatcher(address,uint256,address[],uint256)")
     assert decode(["address", "uint256", "address[]", "uint256"], call.data[4:]) == (
@@ -1302,7 +1303,7 @@ def test_writes_encode_arguments():
         (VAULT.lower(),),
         10**16,
     )
-    assert call.call() == ASSET_ID
+    assert call.call(ctx) == ASSET_ID
     _selector(
         ccip_factory.sync_ccip_route_policy(ADDR, 8453),
         "syncCcipRoutePolicy(address,uint256)",

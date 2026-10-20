@@ -207,9 +207,6 @@ class HyperCoreReader:
     offset), never the action asset itself.
     """
 
-    def __init__(self, ctx: Web3Context | None = None):
-        self._ctx = ctx
-
     def _read(
         self,
         precompile: ChecksumAddress,
@@ -223,7 +220,6 @@ class HyperCoreReader:
             data=encode(list(input_types), list(values)) if input_types else b"",
             output_types=output_types,
             decoder=decoder,
-            ctx=self._ctx,
         )
 
     def core_user_exists(self, user: ChecksumAddress) -> Call[bool]:
@@ -593,8 +589,8 @@ def read_hypercore_nav(
     library reverts on (no price, overflow, a failed precompile) raise
     :class:`~ipor_fusion.errors.HyperCoreValuationError`.
     """
-    vault = PlasmaVault(ctx, vault_address)
-    reader = HyperCoreReader(ctx)
+    vault = PlasmaVault(vault_address)
+    reader = HyperCoreReader()
     multicall = Multicall3(ctx)
     substrates, oracle_address, exists, native = multicall.aggregate(
         cast(
@@ -610,7 +606,7 @@ def read_hypercore_nav(
     tokens, bitmap = _market_layout(substrates)
     if not exists:
         return HyperCoreNav(False, bitmap, (), None, (), 0)
-    oracle = PriceOracleMiddleware(ctx, oracle_address)
+    oracle = PriceOracleMiddleware(oracle_address)
     dexes = [dex for dex in HIP3_VALUATION_ORDER if bitmap & (1 << dex)]
     calls: list[Call[Any]] = []
     for index, evm_asset in tokens:
@@ -700,10 +696,10 @@ def read_hypercore_vault_state(
     chain or given) and the granted perp markets with their coin names, all
     at ``ctx.default_block``."""
     nav = read_hypercore_nav(ctx, vault_address, market_id)
-    vault = PlasmaVault(ctx, vault_address)
-    reader = HyperCoreReader(ctx)
+    vault = PlasmaVault(vault_address)
+    reader = HyperCoreReader()
     pending_reader = pending_reader or HYPERCORE_PENDING_READERS.get(ctx.chain_id)
-    granted = _granted_perp_markets(vault.get_market_substrates(market_id).call())
+    granted = _granted_perp_markets(vault.get_market_substrates(market_id).call(ctx))
     calls: list[Call[Any]] = [vault.balance_fuse_value(balance_fuse)]
     if pending_reader is not None:
         calls.append(HyperCorePendingReader(vault, pending_reader).pending_state())

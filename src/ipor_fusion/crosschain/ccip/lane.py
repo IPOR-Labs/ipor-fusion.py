@@ -22,7 +22,7 @@ from ipor_fusion.fuses.crosschain.ccip import (
     CcipCrosschainSupplyFuse,
     CcipSendParams,
 )
-from ipor_fusion.types import Amount, ChainId, ProposalId
+from ipor_fusion.types import Amount, ProposalId
 
 
 class CcipLane(CrosschainLane):
@@ -49,17 +49,19 @@ class CcipLane(CrosschainLane):
     def __init__(
         self,
         *,
+        hub_ctx: Web3Context,
+        spoke_ctx: Web3Context,
         executor: CcipCrosschainExecutor,
         dispatcher: CcipCrosschainDispatcher,
-        spoke_chain_id: ChainId,
         fuses: LaneFuses,
         route: CcipRouteConfig,
         decimal_conversion_rate: int,
     ) -> None:
         super().__init__(
+            hub_ctx=hub_ctx,
+            spoke_ctx=spoke_ctx,
             executor=executor,
             dispatcher=dispatcher,
-            spoke_chain_id=spoke_chain_id,
             fuses=fuses,
         )
         self.route = route
@@ -74,15 +76,17 @@ class CcipLane(CrosschainLane):
         executor: ChecksumAddress,
         fuses: LaneFuses,
     ) -> CcipLane:
-        hub_executor = CcipCrosschainExecutor(hub_ctx, executor)
-        spoke = ChainId(spoke_ctx.chain_id)
+        hub_executor = CcipCrosschainExecutor(executor)
         return cls(
+            hub_ctx=hub_ctx,
+            spoke_ctx=spoke_ctx,
             executor=hub_executor,
-            dispatcher=CcipCrosschainDispatcher(spoke_ctx, executor),
-            spoke_chain_id=spoke,
+            dispatcher=CcipCrosschainDispatcher(executor),
             fuses=fuses,
-            route=hub_executor.ccip_route(spoke).call(),
-            decimal_conversion_rate=hub_executor.decimal_conversion_rate().call(),
+            route=hub_executor.ccip_route(spoke_ctx.chain_id).call(hub_ctx),
+            decimal_conversion_rate=hub_executor.decimal_conversion_rate().call(
+                hub_ctx
+            ),
         )
 
     def staleness_max(self) -> Call[int]:
@@ -115,18 +119,22 @@ class CcipLane(CrosschainLane):
         )
 
     def command_in_flight(self) -> bool:
-        command_id = self.executor.active_command(self.spoke_chain_id).call()
+        command_id = self.executor.active_command(self.spoke_chain_id).call(
+            self.hub_ctx
+        )
         if command_id == bytes(32):
             return False
-        return self.executor.command_status(command_id).call() == CommandStatus.PENDING
+        status = self.executor.command_status(command_id).call(self.hub_ctx)
+        return status == CommandStatus.PENDING
 
     def pending_transfer_count(self) -> Call[int]:
         return self.executor.pending_transfer_count(self.spoke_chain_id)
 
     def transfer_in_flight(self) -> bool:
-        return self.pending_transfer_count().call() != 0 or self.executor.active_return(
-            self.spoke_chain_id
-        ).call() != bytes(32)
+        if self.pending_transfer_count().call(self.hub_ctx) != 0:
+            return True
+        active_return = self.executor.active_return(self.spoke_chain_id)
+        return active_return.call(self.hub_ctx) != bytes(32)
 
     def observation(self) -> Call[LaneObservation]:
         rate = self.decimal_conversion_rate

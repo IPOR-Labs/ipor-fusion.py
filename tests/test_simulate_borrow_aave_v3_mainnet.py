@@ -46,12 +46,10 @@ def test_simulate_borrow_aave_v3(web3_eth):
     ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
     ctx.default_block = PINNED_BLOCK
 
-    plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    wbtc = ERC20(ctx, ETHEREUM_WBTC)
-    weth = ERC20(ctx, ETHEREUM_WETH)
+    plasma_vault = PlasmaVault(VAULT_ADDRESS)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    wbtc = ERC20(ETHEREUM_WBTC)
+    weth = ERC20(ETHEREUM_WETH)
 
     # Original test's exact amounts on the pinned block — wbtc_holder has WBTC
     # there, so we deposit instead of needing stateOverrides.stateDiff.
@@ -169,18 +167,16 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
     ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
     ctx.default_block = PINNED_BLOCK_DEPOSIT
 
-    plasma_vault = PlasmaVault(ctx, VAULT_ADDRESS)
-    access_manager = AccessManager(
-        ctx, plasma_vault.get_access_manager_address().call()
-    )
-    weth_vault = PlasmaVault(ctx, WETH_VAULT_ADDRESS)
-    weth_access = AccessManager(ctx, weth_vault.get_access_manager_address().call())
-    wbtc = ERC20(ctx, ETHEREUM_WBTC)
-    weth = ERC20(ctx, ETHEREUM_WETH)
+    plasma_vault = PlasmaVault(VAULT_ADDRESS)
+    access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+    weth_vault = PlasmaVault(WETH_VAULT_ADDRESS)
+    weth_access = AccessManager(weth_vault.get_access_manager_address().call(ctx))
+    wbtc = ERC20(ETHEREUM_WBTC)
+    weth = ERC20(ETHEREUM_WETH)
 
     # Pre-fetched read: original test caps the WETH vault's supply at cap/4 so
     # this deposit doesn't blow past the existing limit.
-    cap = weth_vault.get_total_supply_cap().call()
+    cap = weth_vault.get_total_supply_cap().call(ctx)
     new_cap = cap // 4
     log.info("weth_vault total_supply_cap=%s -> new=%s", cap, new_cap)
 

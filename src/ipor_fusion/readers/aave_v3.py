@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.multicall import Multicall3
@@ -106,7 +107,7 @@ class AaveV3FuseReader(ContractWrapper):
     Aave V3 Core, Aave V3 Prime (`AAVE_V3_LIDO`) and the SparkLend fork
     (`SPARK_LEND`) — each deployed with that deployment's PoolAddressesProvider.
     The Pool behind a market is therefore a property of its fuse, not of the
-    chain: resolve it with `pool()`.
+    chain: resolve it with `read_pool(ctx)`.
     """
 
     def pool_addresses_provider(self) -> Call[ChecksumAddress]:
@@ -116,11 +117,10 @@ class AaveV3FuseReader(ContractWrapper):
             decoder=Web3.to_checksum_address,
         )
 
-    def pool(self) -> ChecksumAddress:
-        """Return the Aave V3 Pool this fuse operates on (two reads)."""
-        ctx = self._require_ctx()
-        provider = self.pool_addresses_provider().call()
-        return AaveV3PoolAddressesProvider(ctx, provider).get_pool().call()
+    def read_pool(self, ctx: Web3Context) -> ChecksumAddress:
+        """Return the Aave V3 Pool this fuse operates on (two reads on ``ctx``)."""
+        provider = self.pool_addresses_provider().call(ctx)
+        return AaveV3PoolAddressesProvider(provider).get_pool().call(ctx)
 
 
 class AaveV3Reader(ContractWrapper):
@@ -145,8 +145,8 @@ class AaveV3Reader(ContractWrapper):
             decoder=_reserve_tokens_decoder,
         )
 
-    def position_breakdown(
-        self, asset: ChecksumAddress, user: ChecksumAddress
+    def read_position_breakdown(
+        self, ctx: Web3Context, asset: ChecksumAddress, user: ChecksumAddress
     ) -> AaveV3PositionBreakdown:
         """Return the user's position in `asset` as supply / variable / stable amounts.
 
@@ -156,8 +156,7 @@ class AaveV3Reader(ContractWrapper):
         stable debt is zeroed on reserves that dropped it, and every token is
         zero when `asset` is not listed on this Pool.
         """
-        ctx = self._require_ctx()
-        tokens = self.reserve_tokens(asset).call()
+        tokens = self.reserve_tokens(asset).call(ctx)
         reserve_tokens = (
             tokens.a_token,
             tokens.variable_debt_token,
@@ -166,7 +165,7 @@ class AaveV3Reader(ContractWrapper):
         listed = [token for token in reserve_tokens if token.lower() != ZERO_ADDRESS]
         balances = iter(
             Multicall3(ctx).aggregate(
-                [ERC20(ctx, token).balance_of(user) for token in listed]
+                [ERC20(token).balance_of(user) for token in listed]
             )
         )
         supply, variable_debt, stable_debt = (

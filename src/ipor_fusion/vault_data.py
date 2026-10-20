@@ -206,7 +206,7 @@ class VaultData:
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
 
 
-def _fuse_market_id_call(ctx: Web3Context, fuse: ChecksumAddress) -> Call[int]:
+def _fuse_market_id_call(fuse: ChecksumAddress) -> Call[int]:
     """The immutable MARKET_ID() every IPOR Fusion fuse exposes.
 
     Read with `try_aggregate`: a fuse that reverts or lacks the getter (a
@@ -217,7 +217,6 @@ def _fuse_market_id_call(ctx: Web3Context, fuse: ChecksumAddress) -> Call[int]:
         data=_MARKET_ID_SELECTOR,
         output_types=["uint256"],
         decoder=int,
-        ctx=ctx,
     )
 
 
@@ -250,7 +249,7 @@ def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
         return _NO_CONTRACT
 
     try:
-        symbol = ERC20(ctx, checksum).symbol().call()
+        symbol = ERC20(checksum).symbol().call(ctx)
     except Exception:
         symbol = ""
     if symbol:
@@ -271,7 +270,7 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
         return None
 
     try:
-        decimals = ERC20(ctx, checksum).decimals().call()
+        decimals = ERC20(checksum).decimals().call(ctx)
     except Exception:
         return None
     update_contract_cache(key, str(decimals))
@@ -283,6 +282,7 @@ def _block_timestamp(ctx: Web3Context, block: int) -> int:
 
 
 def _resolve_price_oracle(
+    ctx: Web3Context,
     pv: PlasmaVault,
     middleware: ChecksumAddress | None,
     legacy: ChecksumAddress | None,
@@ -292,11 +292,11 @@ def _resolve_price_oracle(
     the August 2024 audit name the getter getPriceOracle(); without either
     getter the vault is too old for the tooling."""
     address = _unless_unimplemented(
-        middleware, pv.get_price_oracle_middleware_address()
+        ctx, middleware, pv.get_price_oracle_middleware_address()
     )
     if address is not None:
         return address
-    address = _unless_unimplemented(legacy, pv.get_price_oracle_address())
+    address = _unless_unimplemented(ctx, legacy, pv.get_price_oracle_address())
     if address is None:
         raise UnsupportedVaultVersionError(
             f"Plasma Vault {pv.address} implements neither "
@@ -353,15 +353,15 @@ def _fetch_vault_reads(
     unimplemented: list[str] = []
     # Vaults deployed before the August 2024 audit have no supply cap, so
     # nothing caps them.
-    supply_cap = _unless_unimplemented(supply_cap, pv.get_total_supply_cap())
+    supply_cap = _unless_unimplemented(ctx, supply_cap, pv.get_total_supply_cap())
     if supply_cap is None:
         unimplemented.append(GET_TOTAL_SUPPLY_CAP)
         supply_cap = _UNCAPPED
     price_oracle_addr = _resolve_price_oracle(
-        pv, middleware_oracle, legacy_oracle, unimplemented
+        ctx, pv, middleware_oracle, legacy_oracle, unimplemented
     )
 
-    asset_erc20 = ERC20(ctx, asset)
+    asset_erc20 = ERC20(asset)
     oracle = price_oracle_middleware(ctx, price_oracle_addr)
     (asset_decimals, underlying_balance), (symbol, price, *fuse_market_ids) = (
         _read_batch(
@@ -373,7 +373,7 @@ def _fetch_vault_reads(
             [
                 asset_erc20.symbol(),
                 oracle.get_asset_price(asset),
-                *(_fuse_market_id_call(ctx, fuse) for fuse in fuses),
+                *(_fuse_market_id_call(fuse) for fuse in fuses),
             ],
         )
     )
@@ -413,8 +413,8 @@ def _fetch_role_accounts(
     small eth_getLogs pages, or the scan runs out of time) or a transport-level
     failure hits the reads."""
     try:
-        manager = AccessManager(ctx, plasma_vault.get_access_manager_address().call())
-        accounts = manager.get_all_role_accounts()
+        manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
+        accounts = manager.read_all_role_accounts(ctx)
     except _ROLE_SCAN_ERRORS:
         return None
     return sorted(accounts, key=role_account_sort_key)
@@ -437,7 +437,7 @@ def _fetch_market_reads(
 ) -> _MarketReads:
     """Balance fuses, then every market's dependency graph and substrates in
     one batch, then (optionally) the Aave V3 Pools behind the markets."""
-    balance_fuses = plasma_vault.get_balance_fuses()
+    balance_fuses = plasma_vault.read_balance_fuses(ctx)
     market_ids = [bf.market_id for bf in balance_fuses]
     substrate_calls = [plasma_vault.get_market_substrates(mid) for mid in market_ids]
     venues = list(dict.fromkeys(market_ids))
@@ -454,7 +454,7 @@ def _fetch_market_reads(
         raise _missing_required_getter(plasma_vault, exc) from exc
     graphs, balances = required[: len(market_ids)], required[len(market_ids) :]
     substrates = [
-        _unless_unimplemented(value, call)
+        _unless_unimplemented(ctx, value, call)
         for value, call in zip(batched_substrates, substrate_calls, strict=True)
     ]
     return _MarketReads(
@@ -547,7 +547,7 @@ def fetch_vault_data(
     resolved_block = ctx.web3.eth.block_number if block is None else block
     is_latest = block is None
     ctx = ctx.at_block(resolved_block)
-    plasma_vault = PlasmaVault(ctx, vault)
+    plasma_vault = PlasmaVault(vault)
     with ThreadPoolExecutor() as pool:
         # Independent pipelines, each a short chain of batched reads; none of
         # them waits on a pool future, so they cannot starve the pool.
@@ -697,8 +697,7 @@ def _token_metadata(
     if not missing_symbols and not missing_decimals:
         return symbols, decimals
     tokens = {
-        a: ERC20(ctx, Web3.to_checksum_address(a))
-        for a in breakdown | substrate_addresses
+        a: ERC20(Web3.to_checksum_address(a)) for a in breakdown | substrate_addresses
     }
     calls: list[Call[Any]] = [tokens[a].symbol() for a in missing_symbols]
     calls += [tokens[a].decimals() for a in missing_decimals]

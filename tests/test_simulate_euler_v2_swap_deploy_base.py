@@ -46,10 +46,10 @@ def test_simulate_euler_v2_swap_deploy_base(web3_base):
     block = web3_base.eth.block_number
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
     ctx.default_block = block
-    factory = FusionFactory(ctx, BASE_FUSION_FACTORY)
+    factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # Predict the deterministic clone addresses.
-    preview = factory.clone(**clone_args()).call()
+    preview = factory.clone(**clone_args()).call(ctx)
     vault_address = preview.plasma_vault
     access_manager_address = preview.access_manager
 
@@ -67,20 +67,20 @@ def test_simulate_euler_v2_swap_deploy_base(web3_base):
     # Deploy the pool (supply collateral then deploy, alpha-driven execute).
     sim.observe(
         "operator_before",
-        evc_is_operator_authorized(ctx, plan.euler_account, plan.predicted_pool),
+        evc_is_operator_authorized(plan.euler_account, plan.predicted_pool),
     )
     sim.execute(plan.supply_actions + [plan.deploy_action])
     sim.observe(
         "operator_after_deploy",
-        evc_is_operator_authorized(ctx, plan.euler_account, plan.predicted_pool),
+        evc_is_operator_authorized(plan.euler_account, plan.predicted_pool),
     )
-    sim.observe("deployed_pools", factory_deployed_pools(ctx, plan.predicted_pool))
+    sim.observe("deployed_pools", factory_deployed_pools(plan.predicted_pool))
 
     # Decommission the pool (remove operator).
     sim.execute([exit_action])
     sim.observe(
         "operator_after_exit",
-        evc_is_operator_authorized(ctx, plan.euler_account, plan.predicted_pool),
+        evc_is_operator_authorized(plan.euler_account, plan.predicted_pool),
     )
 
     result = sim.run()

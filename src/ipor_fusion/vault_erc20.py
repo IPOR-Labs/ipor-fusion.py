@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 
 from eth_typing import ChecksumAddress, HexAddress
 from web3 import Web3
@@ -116,14 +117,17 @@ def _read_tokens(
         futures: list[tuple[HexAddress, Future, Future, Future, Future]] = []
         for address in addresses:
             checksum = Web3.to_checksum_address(address)
-            token = ERC20(ctx, checksum)
+            token = ERC20(checksum)
             futures.append(
                 (
                     address,
                     pool.submit(resolve_symbol, address),
-                    pool.submit(_safe_call, token.decimals().call),
-                    pool.submit(_safe_call, token.balance_of(vault).call),
-                    pool.submit(_safe_call, oracle.get_asset_price(checksum).call),
+                    pool.submit(_safe_call, partial(token.decimals().call, ctx)),
+                    pool.submit(_safe_call, partial(token.balance_of(vault).call, ctx)),
+                    pool.submit(
+                        _safe_call,
+                        partial(oracle.get_asset_price(checksum).call, ctx),
+                    ),
                 )
             )
         reads: list[_TokenRead] = []

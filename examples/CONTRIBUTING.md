@@ -35,7 +35,7 @@ own examples.
 The default (and only) behavior is preview plus `eth_simulateV1` simulation. An example must not
 sign or broadcast a transaction, and must not require a private key to run.
 
-- Show the read-only path with `.call()`, the unsigned-payload path with `.calldata`, and simulate
+- Show the read-only path with `.call(ctx)`, the unsigned-payload path with `.calldata`, and simulate
   the whole flow with `VaultSimulator`.
 - For "how to actually submit this on-chain", point the reader at their signer via `.calldata`, and
   at the deployment/operation repos -- do not add a runnable broadcast path.
