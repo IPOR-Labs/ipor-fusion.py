@@ -449,7 +449,9 @@ def oracle_mapping(
         raise click.UsageError(str(exc)) from exc
 
     try:
-        mapping = build_oracle_mapping(ctx, vault_address, effective_block, max_depth)
+        mapping = build_oracle_mapping(
+            ctx, vault_address, effective_block=effective_block, max_depth=max_depth
+        )
     except UnsupportedVaultVersionError as exc:
         raise click.ClickException(str(exc)) from exc
 

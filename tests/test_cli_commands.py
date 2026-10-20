@@ -442,6 +442,7 @@ class TestVaultInfo:
         mock_ctx = MagicMock()
         mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 12345678
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
         mock_ctx.at_block.return_value = mock_ctx
@@ -567,6 +568,7 @@ class TestVaultInfo:
         mock_ctx = MagicMock()
         mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 12345678
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
         mock_ctx.at_block.return_value = mock_ctx
@@ -643,6 +645,7 @@ class TestVaultInfo:
         mock_ctx = MagicMock()
         mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
         mock_ctx.at_block.return_value = mock_ctx
@@ -707,6 +710,7 @@ class TestVaultInfo:
         mock_ctx = MagicMock()
         mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
         mock_ctx.at_block.return_value = mock_ctx
@@ -783,6 +787,7 @@ class TestVaultInfo:
         mock_ctx = MagicMock()
         mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.web3.eth.get_transaction.return_value = {"blockNumber": 18500000}
         mock_ctx.chain_id = 1
@@ -849,6 +854,7 @@ class TestVaultInfo:
         mock_ctx = MagicMock()
         mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
         mock_ctx.at_block.return_value = mock_ctx
@@ -955,6 +961,7 @@ class TestVaultInfoJson:
         mock_ctx.cache = NullCache()
         mock_ctx.chain_id = 1
         mock_ctx.web3.eth.block_number = 12345678
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
         mock_ctx.at_block.return_value = mock_ctx
@@ -1129,6 +1136,7 @@ class TestVaultInfoJson:
         mock_ctx = MagicMock()
         mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.web3.eth.get_transaction.return_value = {"blockNumber": 18500000}
         mock_ctx.chain_id = 1
@@ -1205,6 +1213,7 @@ class TestVaultInfoJson:
         mock_ctx = MagicMock()
         mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
+        mock_ctx.default_block = "latest"
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
         mock_ctx.at_block.return_value = mock_ctx

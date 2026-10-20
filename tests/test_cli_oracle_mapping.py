@@ -312,7 +312,7 @@ class TestOracleMappingCommand:
 
         assert result.exit_code == 0
         # latest resolved to a number, passed to the SDK, and pinned on the ctx
-        assert mock_build.call_args.args[2] == 777
+        assert mock_build.call_args.kwargs["effective_block"] == 777
         assert mock_build.call_args.args[0].default_block == 777
         assert ctx.default_block == "latest"
 
@@ -338,7 +338,7 @@ class TestOracleMappingCommand:
         )
 
         assert result.exit_code == 0
-        assert mock_build.call_args.args[2] == 500
+        assert mock_build.call_args.kwargs["effective_block"] == 500
         assert mock_build.call_args.args[0].default_block == 500
 
     def test_max_depth_passed_through(
@@ -353,7 +353,7 @@ class TestOracleMappingCommand:
         )
 
         assert result.exit_code == 0
-        assert mock_build.call_args.args[3] == 3
+        assert mock_build.call_args.kwargs["max_depth"] == 3
 
     def test_max_depth_defaults_to_six(
         self, mock_ctx_cls, _resolve, mock_build, tmp_config
@@ -366,7 +366,7 @@ class TestOracleMappingCommand:
         )
 
         assert result.exit_code == 0
-        assert mock_build.call_args.args[3] == 6
+        assert mock_build.call_args.kwargs["max_depth"] == 6
 
     def test_negative_block_rejected_before_rpc(
         self, mock_ctx_cls, _resolve, mock_build, tmp_config

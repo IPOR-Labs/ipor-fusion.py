@@ -24,6 +24,7 @@ from ipor_fusion.types import (
     CommandId,
     DeploymentRequestId,
     LayerZeroEid,
+    Period,
     PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
@@ -111,8 +112,8 @@ class StargateCrosschainExecutor(CrosschainExecutor):
     def local_chain_id(self) -> Call[ChainId]:
         return self._view("LOCAL_CHAIN_ID()", output_types=["uint256"], decoder=ChainId)
 
-    def staleness_max(self) -> Call[int]:
-        return self._view("STALENESS_MAX()", output_types=["uint256"])
+    def staleness_max(self) -> Call[Period]:
+        return self._view("STALENESS_MAX()", output_types=["uint256"], decoder=Period)
 
     def deployment_ttl(self) -> Call[int]:
         return self._view("DEPLOYMENT_TTL()", output_types=["uint256"])

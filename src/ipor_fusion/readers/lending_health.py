@@ -94,7 +94,7 @@ class LendingMarketHealth:
     """Health status of a single lending market position.
 
     `substrate_id` identifies the underlying market within the IPOR market_id:
-    - Morpho: the 64-char hex morpho market id (one row per substrate).
+    - Morpho: the morpho market id (`0x` + 64 lowercase hex) (one row per substrate).
     - Aave V3: None — Aave health is account-level, aggregated across reserves.
     - Aave V4: the Spoke address — account-level per Spoke, across its reserves.
     """

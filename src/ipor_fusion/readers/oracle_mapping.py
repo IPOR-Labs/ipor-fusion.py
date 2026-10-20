@@ -428,6 +428,7 @@ def _enumerate_assets(
 def build_oracle_mapping(
     ctx: Web3Context,
     vault: PlasmaVaultAddress,
+    *,
     effective_block: int,
     max_depth: int = 6,
 ) -> OracleMapping:

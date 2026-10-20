@@ -68,7 +68,7 @@ from typing import Any, NamedTuple
 from eth_abi.abi import encode as abi_encode
 from eth_utils import keccak
 from web3 import Web3
-from web3.types import BlockIdentifier, RPCEndpoint
+from web3.types import BlockIdentifier, RPCEndpoint, Timestamp
 
 from ipor_fusion import (
     ERC20,
@@ -791,7 +791,7 @@ def _attest(flow: _Tail, tag: str, observation_label: str, *, hub_idle: int = 0)
         observation,
         remote_block=flow.spoke.current_block_number,
         remote_timestamp=flow.spoke.current_time,
-        expiry=flow.hub.current_time + PROPOSAL_TTL,
+        expiry=Timestamp(flow.hub.current_time + PROPOSAL_TTL),
     )
     # SIMULATION ONLY: two keyless addresses driven from one process; live
     # they are two signers, which is the point of the two-key design.

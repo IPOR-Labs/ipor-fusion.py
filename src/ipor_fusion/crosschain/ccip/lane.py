@@ -22,7 +22,7 @@ from ipor_fusion.crosschain.fuses.ccip import (
 )
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
 from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
-from ipor_fusion.types import Amount, ProposalId
+from ipor_fusion.types import Amount, Period, ProposalId
 
 
 class CcipLane(CrosschainLane):
@@ -89,7 +89,7 @@ class CcipLane(CrosschainLane):
             ),
         )
 
-    def staleness_max(self) -> Call[int]:
+    def staleness_max(self) -> Call[Period]:
         return self.executor.balance_staleness_max()
 
     def default_send(self, *, token: bool) -> CcipSendParams:
