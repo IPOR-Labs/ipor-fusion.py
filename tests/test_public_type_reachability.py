@@ -116,10 +116,20 @@ def _type_hints(target: Callable[..., object] | type) -> dict[str, object]:
 
 
 def _leaves(hint: object) -> Iterator[object]:
+    """``hint`` and everything inside it: a generic's origin (``Call`` in
+    ``Call[int]``), its arguments, a ``Callable``'s parameter list and a
+    ``NewType``'s supertype."""
+    if isinstance(hint, (list, tuple)):
+        for item in hint:
+            yield from _leaves(item)
+        return
     yield hint
     supertype = getattr(hint, "__supertype__", None)
     if supertype is not None:
         yield from _leaves(supertype)
+    origin = typing.get_origin(hint)
+    if origin is not None:
+        yield from _leaves(origin)
     for arg in typing.get_args(hint):
         yield from _leaves(arg)
 
@@ -189,3 +199,30 @@ def test_the_walk_sees_classes_newtypes_and_aliases() -> None:
     vault_hints = dict(_referenced(ipor_fusion.PlasmaVault.__init__))
     assert vault_hints["PlasmaVaultAddress"] is ipor_fusion.PlasmaVaultAddress
     assert finding_hints["Severity"] == ipor_fusion.Severity
+
+
+class _Hidden:
+    __module__ = "ipor_fusion.hidden"
+
+
+class _HiddenGeneric(typing.Generic[typing.TypeVar("T")]):
+    __module__ = "ipor_fusion.hidden"
+
+
+_HiddenId = typing.NewType("_HiddenId", int)
+_HiddenId.__module__ = "ipor_fusion.hidden"
+
+
+def _uses_hidden(
+    callback: Callable[[_Hidden], None], ids: dict[_HiddenId, int]
+) -> _HiddenGeneric[int]:
+    raise NotImplementedError
+
+
+def test_the_walk_sees_generic_origins_callback_params_and_newtypes() -> None:
+    found = {name for name, _ in _referenced(_uses_hidden)}
+    assert {"_Hidden", "_HiddenGeneric", "_HiddenId"} <= found
+
+
+def test_the_walk_sees_a_generic_return_of_a_public_method() -> None:
+    assert "Call" in dict(_referenced(ipor_fusion.Call.map))
