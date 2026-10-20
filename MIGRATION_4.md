@@ -6,10 +6,11 @@ the details, and each change is described once, in its section.
 
 ## Start here
 
-> **A 3.x program fails when a line runs, not when it is imported.**
-> `PlasmaVault(ctx, address)`, `ERC20(ctx, token)` or any other `Wrapper(ctx, ...)`
-> raises `TypeError` only when that line executes, and so does `call.call()` without
-> a context. A service that wraps its reads in a broad `except Exception` degrades
+> **Most 3.x calls fail only when the line runs.** A removed import
+> (`ipor_fusion.fuses.crosschain`, `NavMark`, the 3.x cache functions) fails at
+> import, but `PlasmaVault(ctx, address)`, `ERC20(ctx, token)` or any other
+> `Wrapper(ctx, ...)` raises `TypeError` only when that line executes, and so does
+> `call.call()` without a context. A service that wraps its reads in a broad `except Exception` degrades
 > silently (empty values, skipped vaults) instead of failing. Before you deploy:
 >
 > - search for wrappers built with a context (`(ctx,`, `(self.ctx,`, `(self._ctx,`)
@@ -189,8 +190,7 @@ The vault read is one pinned snapshot, and the chain is always the context's:
   no longer takes `resolve_symbol`. `metadata=True` names the ERC20 holdings in the
   result and its findings. `validate_vault_state(state)` is pure: a custom
   `VaultState` also provides `vault`, `chain_id`, `market_balances`, `erc20` and the
-  queue's `shares_to_release_assets`. `read_erc20_holdings` is gone: the holdings are
-  `VaultData.erc20`.
+  queue's `shares_to_release_assets`.
 - `build_vault_info_json(data, *, resolve_name=None)` renders from the snapshot and
   reads nothing; the chain and its label come from `data.chain_id`. Without
   `resolve_name` it names no contract (see
@@ -280,7 +280,8 @@ fails at run time:
   zero-address placeholder. `execute()` without `vault` and `alpha` raises
   `ValueError`, as does `execute_call` without `from_` or `alpha`.
 - `fetch_unpriceable_priced_tokens(ctx, *, price_oracle, underlying, balance_fuses,
-  market_substrates, morpho_positions)` takes everything after `ctx` by keyword.
+  market_substrates, morpho_positions)` takes everything after `ctx` by keyword, and
+  its `oracle_address` parameter is renamed `price_oracle`.
 - `get_contract_name(chain_id, address, *, api_key=None, cache=None)` and
   `get_deployment_tx(chain_id, address, *, api_key=None)` take `api_key` by keyword.
 - `build_morpho_blue_market_json(*, market_id, chain_id, params, state, rates,
@@ -346,9 +347,11 @@ is the wrong one.
 - The Morpho API client raises `MorphoApiError` for every answer it cannot use and
   every transport failure, never `KeyError`, `TypeError` or `ValueError`:
   - a required market id or address (market and V1 allocation ids, V1 flow-cap ids,
-    vault/asset/owner/token/oracle/IRM/allocator addresses) that is absent or
-    invalid; an optional address (curator, guardian, fee recipients, ...) that is
-    absent or `""` reads as `None`, and raises only when present and invalid;
+    vault/asset/owner/token/oracle/IRM addresses) that is absent or invalid; an
+    optional address (curator, guardian, fee recipients, ...) that is absent or `""`
+    reads as `None`, and raises only when present and invalid; an allocator or
+    sentinel entry without an address is skipped, and one with an invalid address
+    raises;
   - any other answer it cannot read (a missing key such as a `loanAsset` without
     `address`, a value of the wrong type, a body that is not a JSON object);
   - any `OSError` or `http.client.HTTPException` while fetching (it caught only
