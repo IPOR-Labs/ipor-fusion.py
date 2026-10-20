@@ -10,6 +10,7 @@ from ipor_fusion import (
     AccessManagerAddress,
     Amount,
     CcipCrosschainFactory,
+    ChainId,
     ExternalStateExecutor,
     HyperCorePendingReader,
     Multicall3,
@@ -52,6 +53,15 @@ def eager_reads_take_the_context(ctx: Web3Context, vault: PlasmaVaultAddress) ->
 
 def proposal_hashes_name_their_chain(executor: ExternalStateExecutor) -> None:
     executor.pending_proposals(executor.address)  # pyright: ignore[reportCallIssue]
+    ExternalStateExecutor.proposal_hash(
+        executor=executor.address,
+        chain_id=ChainId(1),
+        balance_account=executor.address,
+        value=Amount(1),
+        proposer=executor.address,
+        proposed_at=1,  # pyright: ignore[reportArgumentType]
+        nonce=1,
+    )
 
 
 def roles_do_not_mix(ctx: Web3Context, vault: PlasmaVaultAddress) -> None:

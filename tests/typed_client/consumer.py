@@ -221,7 +221,17 @@ def proposals_are_chain_bound(
     pending: Call[BalanceProposal | None] = executor.pending_proposals(
         VAULT, chain_id=ctx.chain_id
     )
-    pending.call(ctx)
+    proposal = pending.call(ctx)
+    if proposal is not None:
+        ExternalStateExecutor.proposal_hash(
+            executor=executor.address,
+            chain_id=ctx.chain_id,
+            balance_account=proposal.balance_account,
+            value=proposal.value,
+            proposer=proposal.proposer,
+            proposed_at=proposal.proposed_at,
+            nonce=proposal.nonce,
+        )
 
 
 def lanes_own_their_contexts(lane: CrosschainLane) -> None:

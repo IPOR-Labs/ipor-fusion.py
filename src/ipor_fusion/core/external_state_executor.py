@@ -86,7 +86,7 @@ class BalanceProposal:
     proposer: ChecksumAddress
     value: Amount
     nonce: int
-    proposed_at: int
+    proposed_at: Timestamp
     proposal_hash: ProposalHash
 
 
@@ -149,7 +149,7 @@ class NavMark:
     (propose + confirm only, no cached-NAV refresh).
     """
 
-    proposed_at: int
+    proposed_at: Timestamp
     nonce: int
     proposal_hash: ProposalHash
     propose_receipt: TxReceipt
@@ -487,7 +487,7 @@ class ExternalStateExecutor(ContractWrapper):
                 proposer=proposer,
                 value=Amount(value),
                 nonce=nonce,
-                proposed_at=proposed_at,
+                proposed_at=Timestamp(proposed_at),
                 proposal_hash=ProposalHash(b""),
             )
             return replace(
@@ -568,7 +568,7 @@ class ExternalStateExecutor(ContractWrapper):
         balance_account: ChecksumAddress,
         value: Amount,
         proposer: ChecksumAddress,
-        proposed_at: int,
+        proposed_at: Timestamp,
         nonce: int,
     ) -> ProposalHash:
         """The confirm hash that `confirmBalance` verifies against:
@@ -696,7 +696,7 @@ class ExternalStateExecutor(ContractWrapper):
             proposer=Web3.to_checksum_address(proposer),
             value=Amount(value),
             nonce=nonce,
-            proposed_at=proposed_at,
+            proposed_at=Timestamp(proposed_at),
             proposal_hash=proposal_hash,
         )
 

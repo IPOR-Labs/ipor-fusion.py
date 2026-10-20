@@ -939,7 +939,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # to one custodian by either route, however separate the two keys are -- and
     # that is why a production deployment cannot drive both halves from one
     # process, whatever this example does under simulation.
-    proposed_at = baseline_timestamp + PROPOSE_OFFSET
+    proposed_at = Timestamp(baseline_timestamp + PROPOSE_OFFSET)
     proposal_hash = ExternalStateExecutor.proposal_hash(
         executor=executor_address,
         chain_id=BASE_CHAIN_ID,

@@ -31,6 +31,7 @@ from ipor_fusion import (
     open_lane,
     open_lanes,
 )
+from ipor_fusion.core.multicall import MULTICALL3_ADDRESS
 from ipor_fusion.crosschain import (
     BalanceObservation,
     CcipCrosschainDispatcher,
@@ -935,6 +936,7 @@ class TestContextOwnership:
             _sel(probe.pending_transfer_count()): encode(["uint256"], [2]),
         }
         hub = _chain_ctx(1)
+        hub.default_block = 7
         hub.call.side_effect = multicall_aware(lambda _to, data: answers[data[:4]])
         spoke = self._wrong_chain(SPOKE)
 
@@ -954,6 +956,42 @@ class TestContextOwnership:
         )
         assert hub.call.call_count == 1
         spoke.call.assert_not_called()
+
+    def test_read_hub_state_pins_an_unpinned_hub_once(self):
+        probe = _stargate_lane()
+        answers = {
+            _sel(probe.settled_remote_balance()): encode(["uint256"], [5]),
+            _sel(probe.outbound_in_flight()): encode(["uint256"], [6]),
+            _sel(probe.idle_ledger()): encode(["uint256"], [7]),
+            _sel(probe.is_dispatcher_ready()): encode(["bool"], [True]),
+            _sel(probe.chain_blocked()): encode(["bool"], [False]),
+            _sel(probe.last_approved_observed_at()): encode(["uint64"], [8]),
+            _sel(probe.staleness_max()): encode(["uint256"], [3_600]),
+            _sel(probe.remote_state_version()): encode(["uint64"], [9]),
+            selector("activeCommand(uint256)"): encode(
+                ["bool", "bool", "bool", "uint8", "bytes32", "uint64", "uint64"],
+                [False, False, False, 0, HASH, 0, 0],
+            ),
+            _sel(probe.pending_transfer_count()): encode(["uint256"], [0]),
+        }
+        pinned = _chain_ctx(1)
+        # No Multicall3 on the chain: every read falls back to its own eth_call,
+        # each of which must still land on the pinned copy.
+        pinned.call.side_effect = lambda to, data, block=None: (
+            b"" if to == MULTICALL3_ADDRESS else answers[bytes(data[:4])]
+        )
+        hub = self._wrong_chain(1)
+        hub.default_block = "latest"
+        hub.web3.eth.block_number = 100
+        hub.at_block.return_value = pinned
+
+        state = _stargate_lane(hub_ctx=hub).read_hub_state()
+
+        hub.at_block.assert_called_once_with(100)
+        hub.call.assert_not_called()
+        assert pinned.call.call_count == 1 + len(answers)
+        assert state.settled_remote_balance == 5
+        assert state.has_active_command is False
 
     def test_read_observation_runs_on_the_spoke(self):
         hub = self._wrong_chain(1)

@@ -16,7 +16,7 @@ for an executor address.
 The executor and its dispatcher share one address, so a ``Call`` alone cannot
 tell which chain it belongs to. The lane owns both contexts: ``hub_ctx`` for
 the executor, ``spoke_ctx`` for the dispatcher, and its eager reads pick the
-right one: ``read_hub_state()`` (every executor bucket and counter in one batch)
+right one: ``read_hub_state()`` (every executor bucket and counter at one block)
 and the predicates ``needs_attestation``, ``command_in_flight`` and
 ``transfer_in_flight`` run on ``hub_ctx``, ``read_observation()`` on
 ``spoke_ctx``. The Calls it returns stay unexecuted, for a batch or a
@@ -67,6 +67,10 @@ class LaneObservation:
     state_version: int
     command_config_epoch: int
     tracked_position_set_hash: PositionSetHash
+
+
+# Block tags whose block changes between two reads.
+_MOVING_BLOCK_TAGS = frozenset({"latest", "pending", "safe", "finalized"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,9 +239,14 @@ class CrosschainLane(ABC):
     # ── eager reads: each runs on the context the lane owns for it ────────
 
     def read_hub_state(self) -> LaneHubState:
-        """Every executor read of :class:`LaneHubState` in one `Multicall3`
-        batch on ``hub_ctx``, so the fields share a block."""
-        values = Multicall3(self.hub_ctx).aggregate(
+        """Every executor read of :class:`LaneHubState` on ``hub_ctx``, batched
+        through `Multicall3` and pinned to one block (``hub_ctx``'s own when it
+        is pinned, else the head resolved once), so the fields share a block
+        even where Multicall3 falls back to one call per read."""
+        hub = self.hub_ctx
+        if hub.default_block in _MOVING_BLOCK_TAGS:
+            hub = hub.at_block(hub.web3.eth.block_number)
+        values = Multicall3(hub).aggregate(
             cast(
                 list[Call[Any]],
                 [

@@ -266,8 +266,9 @@ before passing it on.
 takes a `ProposalHash`; `BalanceProposal.proposal_hash` and `NavMark.proposal_hash`
 are `ProposalHash`; `ExternalStateEvent.transaction_hash` is a `TxHash`.
 `ExternalStateVaultState.last_checked_custodian_timestamp`,
-`BalanceFuseSnapshot.last_custodian_update_timestamp`, `last_updated()` and
-`get_oldest_update_timestamp()` are web3's `Timestamp`.
+`BalanceFuseSnapshot.last_custodian_update_timestamp`, `BalanceProposal.proposed_at`,
+`NavMark.proposed_at`, `last_updated()` and `get_oldest_update_timestamp()` are web3's
+`Timestamp`, and `ExternalStateExecutor.proposal_hash(proposed_at=)` takes one.
 
 **Errors and explorer.** `TransactionError(tx_hash=)` takes a `TxHash`,
 `LogScanError(address=)` a `ChecksumAddress`; `get_revert_reason` takes a `TxHash`;
@@ -352,8 +353,11 @@ placeholder wrapper.
   the context yourself: `lane.get_balance().call(lane.hub_ctx)`,
   `lane.observation().call(lane.spoke_ctx)`, or let the lane pick:
   `lane.read_hub_state()` reads every executor bucket and counter
-  (`LaneHubState`) in one batch on `hub_ctx`, `lane.read_observation()` runs the
-  observation on `spoke_ctx`. `CrosschainTransport.executor(address)`
+  (`LaneHubState`) on `hub_ctx` through `Multicall3`, at one block (the context's
+  pinned block, else the head resolved once, so a per-call fallback stays on it);
+  `lane.read_observation()` runs the observation on `spoke_ctx`. Keep
+  `transfer_in_flight()` / `command_in_flight()` for those decisions: the counters
+  do not see a CCIP recall or tell a parked command from a pending one. `CrosschainTransport.executor(address)`
   and `.dispatcher(address)` no longer take a context.
 - Chain-bound decoding takes the chain explicitly:
   `ExternalStateExecutor.pending_proposals(account, *, chain_id)`,
