@@ -417,9 +417,7 @@ def test_compile_and_deploy_crosschain_fuses(web3_arb):
 
 
 def _ctx(web3, chain_id: ChainId, block: int) -> Web3Context:
-    ctx = Web3Context(web3, chain_id=chain_id)
-    ctx.default_block = block
-    return ctx
+    return Web3Context(web3, chain_id=chain_id).at_block(block)
 
 
 def _compile_crosschain_contracts() -> dict[FoundryContract, SolidityArtifact]:

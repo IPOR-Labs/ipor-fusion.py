@@ -27,9 +27,6 @@ PINNED_BLOCK = 22066578  # mirrors anvil.reset_fork(...) in test_morpho_blue.py
 
 
 def test_simulate_supply_and_withdraw_morpho_blue(web3_eth):
-    ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
-
     plasma_vault = PlasmaVault(VAULT)
     usdc = ERC20(ETHEREUM_USDC)
 

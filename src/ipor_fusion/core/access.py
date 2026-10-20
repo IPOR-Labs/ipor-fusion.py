@@ -18,6 +18,7 @@ from ipor_fusion.errors import (
     ContractNotFoundError,
     EmptyCallResultError,
     NotPlasmaVaultError,
+    OwnerNotFoundError,
 )
 from ipor_fusion.types import AccessManagerAddress, Period, PlasmaVaultAddress, RoleId
 
@@ -112,7 +113,14 @@ class AccessManager(ContractWrapper):
     # ── Composite reads on ``ctx``: event replay + batched hasRole reads ───
 
     def read_owner(self, ctx: Web3Context) -> ChecksumAddress:
-        return self.read_owners(ctx)[0]
+        """The first of :meth:`read_owners`; raises `OwnerNotFoundError` when no
+        account holds ``OWNER_ROLE``."""
+        owners = self.read_owners(ctx)
+        if not owners:
+            raise OwnerNotFoundError(
+                f"access manager {self._address} has no account with OWNER_ROLE"
+            )
+        return owners[0]
 
     def read_owners(self, ctx: Web3Context) -> list[ChecksumAddress]:
         return [

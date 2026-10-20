@@ -31,7 +31,7 @@ from ipor_fusion.crosschain.fuses.base import (
     SendParams,
 )
 from ipor_fusion.crosschain.messages import COMMAND_TUPLE_TYPE, EMPTY_COMMAND, Command
-from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId
+from ipor_fusion.types import ZERO_ADDRESS, Amount, CcipChainSelector, ChainId
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +148,7 @@ class CcipCommandType(IntEnum):
 
 
 _EMPTY_ROUTE = CcipRouteConfig(
-    chain_selector=0,
+    chain_selector=CcipChainSelector(0),
     peer=ZERO_ADDRESS,
     fee_token=ZERO_ADDRESS,
     message_gas_limit=0,

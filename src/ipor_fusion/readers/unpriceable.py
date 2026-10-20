@@ -284,7 +284,8 @@ def _unpriceable(
 
 def fetch_unpriceable_priced_tokens(
     ctx: Web3Context,
-    oracle_address: ChecksumAddress,
+    *,
+    price_oracle: ChecksumAddress,
     underlying: ChecksumAddress,
     balance_fuses: list[BalanceFuse],
     market_substrates: dict[MarketId, list[bytes]],
@@ -300,7 +301,7 @@ def fetch_unpriceable_priced_tokens(
     ]
     if not priced:
         return []
-    oracle = price_oracle_middleware(ctx, Web3.to_checksum_address(oracle_address))
+    oracle = price_oracle_middleware(ctx, Web3.to_checksum_address(price_oracle))
     unpriceable = _unpriceable(ctx, oracle, (p.token for p in priced))
     flagged = {
         (p.market_id, p.token, p.via): replace(p, price_source=unpriceable[p.token])

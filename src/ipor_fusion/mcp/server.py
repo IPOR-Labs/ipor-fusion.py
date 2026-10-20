@@ -124,7 +124,7 @@ def _build_ctx(
     ctx = Web3Context.from_url(provider_url)
     effective_block = block_number if block_number else None
     if effective_block is not None:
-        ctx.default_block = effective_block
+        ctx = ctx.at_block(effective_block)
     return ctx, effective_block
 
 
@@ -394,7 +394,7 @@ def vault_oracle_mapping(
     # The event-replay fallback and the output both need a concrete block
     # number, so resolve "latest" up front and pin the context to it.
     effective_block = block_number if block_number else ctx.web3.eth.block_number
-    ctx.default_block = effective_block
+    ctx = ctx.at_block(effective_block)
 
     resolve_access_manager(ctx, checksum)
 
@@ -591,7 +591,14 @@ def market_morpho_blue(
 
     public_allocator = PUBLIC_ALLOCATOR_ADDRESSES.get(chain_id)
     payload = build_morpho_blue_market_json(
-        mid, chain_id, params, state, rates, api_market, api_error, public_allocator
+        market_id=mid,
+        chain_id=chain_id,
+        params=params,
+        state=state,
+        rates=rates,
+        api_market=api_market,
+        api_error=api_error,
+        public_allocator=public_allocator,
     )
     return MorphoBlueMarketResponse.model_validate(payload)
 

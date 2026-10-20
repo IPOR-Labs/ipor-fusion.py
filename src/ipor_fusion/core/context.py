@@ -140,11 +140,9 @@ class Web3Context:
 
     @property
     def default_block(self) -> BlockIdentifier:
+        """The block reads default to: ``"latest"`` unless this context came
+        from `at_block`. Read-only; pin a copy with `at_block` instead."""
         return self._default_block
-
-    @default_block.setter
-    def default_block(self, value: BlockIdentifier) -> None:
-        self._default_block = value
 
     def at_block(self, block: BlockIdentifier) -> Web3Context:
         """A copy of this context whose reads default to ``block``: same

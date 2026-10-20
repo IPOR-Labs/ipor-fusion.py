@@ -17,7 +17,7 @@ Identifiers (HyperCoreLib.sol): the spot "dex" is :data:`SPOT_DEX` and the
 native perp dex is 0. A HIP-3 builder-deployed market is addressed by its
 action asset ``100_000 + dex * 10_000 + index_in_dex`` in orders, cancels and
 the PerpMarket substrate; the read precompiles take ``dex * 10_000 +
-index_in_dex`` instead (:func:`read_index_of`). Amounts are Core integers:
+index_in_dex`` instead (:func:`precompile_index_of`). Amounts are Core integers:
 ``limit_px`` and ``sz`` carry 8 implied decimals, ``usd6`` 6, and
 ``amount_wei`` is Core wei (8 decimals for USDC).
 
@@ -163,7 +163,7 @@ def perp_dex_of(asset: HyperCoreAsset) -> int:
     raise ValueError(f"asset {asset} is neither a native nor a HIP-3 perp asset")
 
 
-def read_index_of(asset: HyperCoreAsset) -> int:
+def precompile_index_of(asset: HyperCoreAsset) -> int:
     """``HyperCoreLib.readIndexOf``: the index the read precompiles take --
     native assets unchanged, HIP-3 assets without the 100 000 offset; raises
     for any other value."""

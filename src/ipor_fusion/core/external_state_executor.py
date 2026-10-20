@@ -26,7 +26,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import BlockIdentifier
+from web3.types import BlockIdentifier, Timestamp
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
@@ -79,7 +79,7 @@ class BalanceProposal:
     proposer: ChecksumAddress
     value: Amount
     nonce: int
-    proposed_at: int
+    proposed_at: Timestamp
     proposal_hash: ProposalHash
 
 
@@ -147,7 +147,7 @@ class ExternalStateVaultState:
 
     executor: ChecksumAddress | None
     last_total_balance: Amount
-    last_checked_custodian_timestamp: int
+    last_checked_custodian_timestamp: Timestamp
     paused: bool
     block: int
 
@@ -160,7 +160,7 @@ class BalanceFuseSnapshot:
 
     total_balance: Amount
     big_change_bps: int
-    last_custodian_update_timestamp: int
+    last_custodian_update_timestamp: Timestamp
 
 
 def _storage_word(raw: bytes) -> int:
@@ -232,7 +232,7 @@ def read_external_state(
     return ExternalStateVaultState(
         executor=Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None,
         last_total_balance=Amount(words[1]),
-        last_checked_custodian_timestamp=words[2],
+        last_checked_custodian_timestamp=Timestamp(words[2]),
         paused=words[3] == 1,
         block=block,
     )
@@ -327,7 +327,7 @@ class ExternalStateExecutor(ContractWrapper):
             decoder=Amount,
         )
 
-    def last_updated(self, balance_account: ChecksumAddress) -> Call[int]:
+    def last_updated(self, balance_account: ChecksumAddress) -> Call[Timestamp]:
         """Block timestamp of the last confirmed custodian update for
         `balance_account`, or 0 if there has never been one.
 
@@ -342,7 +342,10 @@ class ExternalStateExecutor(ContractWrapper):
         which it can only do once that account's balance is already zero. A
         sync that keeps an account does NOT reset its timestamp."""
         return self._view(
-            "lastUpdated(address)", balance_account, output_types=["uint256"]
+            "lastUpdated(address)",
+            balance_account,
+            output_types=["uint256"],
+            decoder=Timestamp,
         )
 
     def get_balance_fuse_snapshot(self) -> Call[BalanceFuseSnapshot]:
@@ -355,16 +358,18 @@ class ExternalStateExecutor(ContractWrapper):
             output_types=["uint256", "uint256", "uint256"],
         ).map(
             lambda values: BalanceFuseSnapshot(
-                Amount(values[0]), int(values[1]), int(values[2])
+                Amount(values[0]), int(values[1]), Timestamp(values[2])
             )
         )
 
-    def get_oldest_update_timestamp(self) -> Call[int]:
+    def get_oldest_update_timestamp(self) -> Call[Timestamp]:
         """The pre-hook's staleness clock: the oldest non-zero `lastUpdated`
         across the balance accounts, 0 when no account was ever updated. The
         hook blocks when it is non-zero and older than `staleness_max` by more
         than the limit (strictly)."""
-        return self._view("getOldestUpdateTimestamp()", output_types=["uint256"])
+        return self._view(
+            "getOldestUpdateTimestamp()", output_types=["uint256"], decoder=Timestamp
+        )
 
     def staleness_max(self) -> Call[int]:
         """Seconds after which a custodian report counts as stale: the pre-hook
@@ -448,7 +453,7 @@ class ExternalStateExecutor(ContractWrapper):
                 proposer=proposer,
                 value=Amount(value),
                 nonce=nonce,
-                proposed_at=proposed_at,
+                proposed_at=Timestamp(proposed_at),
                 proposal_hash=ProposalHash(b""),
             )
             return replace(
@@ -530,7 +535,7 @@ class ExternalStateExecutor(ContractWrapper):
         balance_account: ChecksumAddress,
         value: Amount,
         proposer: ChecksumAddress,
-        proposed_at: int,
+        proposed_at: Timestamp,
         nonce: int,
     ) -> ProposalHash:
         """The confirm hash that `confirmBalance` verifies against:
@@ -658,7 +663,7 @@ class ExternalStateExecutor(ContractWrapper):
             proposer=Web3.to_checksum_address(proposer),
             value=Amount(value),
             nonce=nonce,
-            proposed_at=proposed_at,
+            proposed_at=Timestamp(proposed_at),
             proposal_hash=proposal_hash,
         )
 

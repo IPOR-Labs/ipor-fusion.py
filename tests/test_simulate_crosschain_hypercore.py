@@ -147,8 +147,7 @@ def _wire(run: Run, web3_hyperevm) -> PlasmaVault:
             )
         ]
     )
-    spoke_ctx = Web3Context(web3_hyperevm, chain_id=ChainId(999))
-    spoke_ctx.default_block = SPOKE_BLOCK
+    spoke_ctx = Web3Context(web3_hyperevm, chain_id=ChainId(999)).at_block(SPOKE_BLOCK)
     hypercore_vault = PlasmaVault(HYPERCORE_VAULT)
     access = AccessManager(hypercore_vault.get_access_manager_address().call(spoke_ctx))
     run.spoke_sim.add_call(

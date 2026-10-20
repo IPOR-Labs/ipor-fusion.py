@@ -103,9 +103,7 @@ def _pinned_context(ctx: Web3Context) -> tuple[Web3Context, int]:
     block = ctx.default_block
     if not isinstance(block, int):
         block = ctx.web3.eth.block_number
-    pinned = Web3Context(ctx.web3, ctx.chain_id)
-    pinned.default_block = block
-    return pinned, block
+    return ctx.at_block(block), block
 
 
 def read_hypercore_transfer_snapshot(
@@ -128,7 +126,6 @@ def read_hypercore_transfer_snapshot(
         raise UnsupportedChainError(
             f"no HyperCorePendingReader known for chain {ctx.chain_id}"
         )
-    pv = PlasmaVault(vault)
     reader = HyperCoreReader()
     calls = cast(
         list[Call[Any]],
@@ -136,7 +133,7 @@ def read_hypercore_transfer_snapshot(
             reader.core_user_exists(vault),
             reader.spot_balance(vault, token_index),
             ERC20(evm_token).balance_of(vault),
-            HyperCorePendingReader(pv, pending_reader).pending_state(),
+            HyperCorePendingReader(vault, pending_reader).pending_state(),
         ],
     )
     exists, spot, evm_balance, pending = Multicall3(pinned).aggregate(calls)

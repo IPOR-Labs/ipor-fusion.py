@@ -129,7 +129,6 @@ def test_snapshots_must_track_one_action_and_one_vault() -> None:
 
 
 def test_snapshot_on_a_chain_without_a_pending_reader_is_unsupported() -> None:
-    ctx = Web3Context(MagicMock(), ChainId(1))
-    ctx.default_block = 100
+    ctx = Web3Context(MagicMock(), ChainId(1)).at_block(100)
     with pytest.raises(UnsupportedChainError, match="no HyperCorePendingReader"):
         read_hypercore_transfer_snapshot(ctx, VAULT, USDC)

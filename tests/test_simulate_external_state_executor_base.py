@@ -78,8 +78,9 @@ def test_create_executor_caches_grants_and_sync_refreshes_custodians(
     only as confusing failures further down.
     """
     mod = load_example("external_state_margin_leg_base.py")
-    ctx = Web3Context(web3=web3_base, chain_id=mod.BASE_CHAIN_ID, signer=mod.OWNER)
-    ctx.default_block = mod.PINNED_BLOCK
+    ctx = Web3Context(
+        web3=web3_base, chain_id=mod.BASE_CHAIN_ID, signer=mod.OWNER
+    ).at_block(mod.PINNED_BLOCK)
 
     factory = FusionFactory(mod.BASE_FUSION_FACTORY)
     preview = factory.clone(**mod.clone_args()).call(ctx)

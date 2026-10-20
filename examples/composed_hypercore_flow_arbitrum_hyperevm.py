@@ -76,6 +76,7 @@ from ipor_fusion import (
     USDC_SYSTEM_ADDRESS,
     USDC_TOKEN_INDEX,
     CcipChain,
+    CcipChainSelector,
     CcipCrosschainExecutor,
     CcipTransport,
     Command,
@@ -94,10 +95,10 @@ from ipor_fusion import (
     open_lane,
     parse_fuse_address,
     parse_plasma_vault_address,
+    precompile_index_of,
     quote_ccip_native_fee,
     read_hypercore_evm_exit_ceiling,
     read_hypercore_vault_state,
-    read_index_of,
     register_custom_errors,
 )
 from ipor_fusion.fuses import (
@@ -133,8 +134,8 @@ register_custom_errors(HYPERCORE_SEND_FUSE_ERRORS)
 ARBITRUM_CHAIN_ID = ChainId(42161)
 HYPEREVM_CHAIN_ID = ChainId(999)
 # Chainlink CCIP routers and chain selectors (docs.chain.link -> CCIP -> Directory).
-ARBITRUM_CCIP_SELECTOR = 4949039107694359620
-HYPEREVM_CCIP_SELECTOR = 2442541497099098535
+ARBITRUM_CCIP_SELECTOR = CcipChainSelector(4949039107694359620)
+HYPEREVM_CCIP_SELECTOR = CcipChainSelector(2442541497099098535)
 ARBITRUM_CCIP_ROUTER = Web3.to_checksum_address(
     "0x141fa059441E0ca23ce184B6A78bafD2A517DdE8"
 )
@@ -428,7 +429,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     xyz_equity_usd6 = int(
         reader.account_margin_summary(XYZ_DEX, HYPERCORE_VAULT).call(ctx).account_value
     )
-    read_index = read_index_of(XYZ_NVDA_ASSET)
+    read_index = precompile_index_of(XYZ_NVDA_ASSET)
     # The precompile quotes a perp price with ``6 - szDecimals`` decimals; the
     # order fuse takes 8 implied decimals. Read szDecimals, then rescale.
     sz_decimals = int(reader.perp_asset_info(read_index).call(ctx).sz_decimals)
@@ -662,9 +663,7 @@ def _transport() -> CcipTransport:
 
 
 def _pinned(web3: Web3, chain_id: ChainId, block: int) -> Web3Context:
-    ctx = Web3Context(web3, chain_id=chain_id)
-    ctx.default_block = block
-    return ctx
+    return Web3Context(web3, chain_id=chain_id).at_block(block)
 
 
 class _Tail(NamedTuple):
@@ -889,8 +888,8 @@ def recall_attest_claim(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
 
     # Where the live cycle stood: the settled bucket carries attestation 8, the
     # dispatcher holds the redeemed idle and the residual shares.
-    settled_before = int(lane.settled_remote_balance().call(hub_ctx))
-    observation_before = lane.observation().call(spoke_ctx)
+    settled_before = int(lane.read_hub_state().settled_remote_balance)
+    observation_before = lane.read_observation()
     remote_idle = Amount(int(observation_before.tracked_idle))
     residual_shares = int(
         PlasmaVault(HYPERCORE_VAULT).balance_of(EXECUTOR).call(spoke_ctx)

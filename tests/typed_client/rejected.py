@@ -9,11 +9,15 @@ from ipor_fusion import (
     AccessManager,
     AccessManagerAddress,
     Amount,
+    CcipCrosschainFactory,
+    ChainId,
     ExternalStateExecutor,
+    HyperCorePendingReader,
     Multicall3,
     PlasmaVault,
     PlasmaVaultAddress,
     Web3Context,
+    fetch_unpriceable_priced_tokens,
 )
 
 
@@ -49,3 +53,27 @@ def eager_reads_take_the_context(ctx: Web3Context, vault: PlasmaVaultAddress) ->
 
 def proposal_hashes_name_their_chain(executor: ExternalStateExecutor) -> None:
     executor.pending_proposals(executor.address)  # pyright: ignore[reportCallIssue]
+    ExternalStateExecutor.proposal_hash(
+        executor=executor.address,
+        chain_id=ChainId(1),
+        balance_account=executor.address,
+        value=Amount(1),
+        proposer=executor.address,
+        proposed_at=1,  # pyright: ignore[reportArgumentType]
+        nonce=1,
+    )
+
+
+def roles_do_not_mix(ctx: Web3Context, vault: PlasmaVaultAddress) -> None:
+    pv = PlasmaVault(vault)
+    pv.configure_instant_withdrawal_fuses([(pv.address, [])])  # pyright: ignore[reportArgumentType]
+    HyperCorePendingReader(pv, pv.address)  # pyright: ignore[reportArgumentType]
+
+
+def selectors_are_not_chain_ids(factory: CcipCrosschainFactory) -> None:
+    factory.chain_id_of_selector(42161)  # pyright: ignore[reportArgumentType]
+
+
+def options_are_keyword_only(ctx: Web3Context, oracle: ChecksumAddress) -> None:
+    Multicall3(ctx, oracle)  # pyright: ignore[reportCallIssue]
+    fetch_unpriceable_priced_tokens(ctx, oracle, oracle, [], {}, None)  # pyright: ignore[reportCallIssue]

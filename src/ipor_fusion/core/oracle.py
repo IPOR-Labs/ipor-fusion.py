@@ -53,10 +53,12 @@ class PriceOracleMiddleware(ContractWrapper):
             decoder=partial(_price_decoder, asset_address),
         )
 
-    def base_currency_decimals(self) -> Call[int]:
+    def base_currency_decimals(self) -> Call[Decimals]:
         """Decimals of every ``getAssetPrice`` answer. Only the middleware
         deployed before the August 2024 audit has this getter."""
-        return self._view("BASE_CURRENCY_DECIMALS()", output_types=["uint256"])
+        return self._view(
+            "BASE_CURRENCY_DECIMALS()", output_types=["uint256"], decoder=Decimals
+        )
 
     # ── Composite read on ``ctx``: event replay ────────────────────────────
 
@@ -125,7 +127,7 @@ def price_oracle_middleware(
         decimals = oracle.base_currency_decimals().call(ctx)
     except (EmptyCallResultError, ContractLogicError):
         return oracle
-    return LegacyPriceOracleMiddleware(address, Decimals(decimals))
+    return LegacyPriceOracleMiddleware(address, decimals)
 
 
 class PriceOracleMiddlewareManager(ContractWrapper):

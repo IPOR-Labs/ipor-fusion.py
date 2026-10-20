@@ -123,7 +123,7 @@ def _build_ctx(
     provider_url = _resolve_provider(cfg, chain_id)
     ctx = Web3Context.from_url(provider_url)
     if block_number is not None:
-        ctx.default_block = block_number
+        ctx = ctx.at_block(block_number)
     return chain_id, ctx
 
 

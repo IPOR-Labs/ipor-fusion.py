@@ -52,8 +52,9 @@ BORROW_AMOUNT = Amount(1 * 10**18)  # 1 WETH against ~10 cbETH collateral (92% L
 def test_simulate_euler_v2_credit_market_base(web3_base):
     # Pin the latest block for the run so every read/sim call sees one consistent state.
     block = web3_base.eth.block_number
-    ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER)
-    ctx.default_block = block
+    ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER).at_block(
+        block
+    )
     factory = FusionFactory(BASE_FUSION_FACTORY)
 
     # Predict the deterministic clone addresses.

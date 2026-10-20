@@ -43,8 +43,9 @@ PINNED_BLOCK = (
 
 def test_simulate_borrow_aave_v3(web3_eth):
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     plasma_vault = PlasmaVault(VAULT_ADDRESS)
     access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
@@ -164,8 +165,9 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
     deposit/withdraw delay — modelled here as `next_block(time_shift_seconds=60)`.
     """
     block_hex = hex(PINNED_BLOCK_DEPOSIT)
-    ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK_DEPOSIT
+    ctx = Web3Context(web3=web3_eth, chain_id=ChainId(web3_eth.eth.chain_id)).at_block(
+        PINNED_BLOCK_DEPOSIT
+    )
 
     plasma_vault = PlasmaVault(VAULT_ADDRESS)
     access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))

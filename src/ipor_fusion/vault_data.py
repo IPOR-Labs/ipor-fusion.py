@@ -661,11 +661,11 @@ def _derived_reads(
             partial(
                 fetch_unpriceable_priced_tokens,
                 ctx,
-                vault_reads["price_oracle"],
-                vault_reads["asset"],
-                markets.balance_fuses,
-                markets.market_substrates,
-                lending.morpho_positions,
+                price_oracle=vault_reads["price_oracle"],
+                underlying=vault_reads["asset"],
+                balance_fuses=markets.balance_fuses,
+                market_substrates=markets.market_substrates,
+                morpho_positions=lending.morpho_positions,
             )
         )
     if metadata:
@@ -797,7 +797,7 @@ def fetch_deployment_info(
     if block is not None and stamp is not None:
         return block, Timestamp(stamp), None
 
-    tx_hash, error = get_deployment_tx(chain_id, vault, api_key)
+    tx_hash, error = get_deployment_tx(chain_id, vault, api_key=api_key)
     if not tx_hash:
         return None, None, error
 

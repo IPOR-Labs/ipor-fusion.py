@@ -33,7 +33,7 @@ values; they do not validate byte widths or address spelling.
 | `MorphoBlueMarketId` | `parse_morpho_market_id(value)`: 32 bytes or hex in any spelling, always `0x` + 64 lowercase digits |
 | `TxHash` | `parse_tx_hash(value)` (32 bytes or `0x`/`0X`-prefixed hex in any case) |
 | `PlasmaVaultAddress`, `FuseAddress`, `AccessManagerAddress` | from the SDK (`PlasmaVault.address`, `get_fuses()`, `get_access_manager_address()`, `FusionInstance`, discovery), or `parse_plasma_vault_address` / `parse_fuse_address` / `parse_access_manager_address(value)` for a raw address; they label the role and check nothing on chain |
-| crosschain ids | `CommandId(b)`, `MessageId(b)`, `AssetId(b)`, `OperationId(b)`, `TransferId(b)`, `ReturnRequestId(b)`, `PositionSetHash(b)` (bytes32); `ProposalId(n)`, `DeploymentRequestId(n)`, `StargateAssetId(n)` (int) |
+| crosschain ids | `CommandId(b)`, `MessageId(b)`, `AssetId(b)`, `OperationId(b)`, `TransferId(b)`, `ReturnRequestId(b)`, `PositionSetHash(b)` (bytes32); `ProposalId(n)`, `DeploymentRequestId(n)`, `StargateAssetId(n)`, `LayerZeroEid(n)`, `CcipChainSelector(n)` (int) |
 | HyperCore ids | `HyperCoreTokenIndex(n)` (or `USDC_TOKEN_INDEX`), `HyperCoreAsset(n)` (or `hip3_action_asset(dex, index)`), `HyperCoreOrderId(n)`, `HyperCoreClientOrderId(n)`, `MarginTableId(n)`, `HyperCoreActionId(n)`, `PayloadHash(b)` |
 | external state | `ProposalHash(b)` |
 | `BlockIdentifier` | a block number, `"latest"` / `"pending"` / ..., or a block hash |
@@ -92,6 +92,9 @@ chain is always the context's:
   `Call.call(ctx, *, block=None)` (see [Context-free wrappers](#context-free-wrappers)). `Web3Context.get_logs(to_block=None)` ends at
   the context's default block and `Web3Context.get_block(block=None)` returns it,
   both instead of ``"latest"``.
+- `Web3Context.default_block` is read-only: `ctx.default_block = n` raises
+  `AttributeError`. Pin a copy instead, `ctx = ctx.at_block(n)`; the old setter
+  changed the block under every thread sharing the context.
 
 Snapshot fields carry their units: `VaultData.total_assets`,
 `underlying_balance_on_vault` and `market_balances` values are `Amount`;
@@ -122,15 +125,21 @@ context built with it shares the same `n` slots. A context built from your own
 `limit.install(web3)` (innermost, as `from_url` does) or
 `web3.middleware_onion.inject(limit.middleware, layer=0)`.
 
-`ensure_supported_chain` takes `ChainId`. `fetch_unpriceable_priced_tokens` takes the oracle and
-underlying as `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,
+`ensure_supported_chain` takes `ChainId`. `fetch_unpriceable_priced_tokens(ctx, *,
+price_oracle, underlying, balance_fuses, market_substrates, morpho_positions)` takes
+everything after `ctx` by keyword, the oracle and underlying as `ChecksumAddress`.
+`resolve_token_symbol`, `resolve_token_decimals`,
 `get_contract_name` and `get_deployment_tx` take `HexAddress` (a checksum address
-fits), and the `resolve_name` / `resolve_symbol` callbacks receive one (a callback
+fits) and `api_key` by keyword only (`get_contract_name(chain_id, address, *,
+api_key=None, cache=None)`, `get_deployment_tx(chain_id, address, *, api_key=None)`),
+and the `resolve_name` / `resolve_symbol` callbacks receive one (a callback
 typed for `str` still fits). Market-keyed data is keyed by `MarketId`:
 `VaultData.market_substrates`, `dependency_graph`, `morpho_positions`,
 `aave_positions`, `market_balances`; the `VaultState` protocol, `fetch_vault_lending_health`, `fetch_unpriceable_priced_tokens`
 and the `dependency_graph` helpers (`compute_update_reach`, `compute_update_groups`,
 `find_orphan_fuse_markets`, `find_markets_missing_erc20_dependency`).
+`find_orphan_fuse_markets` returns `dict[MarketId, list[FuseAddress]]`, so its
+fuses go into `PlasmaVault.remove_fuses` as they are.
 
 `VaultData.price_oracle_addr` is renamed `price_oracle`, like its sibling
 address fields (a custom `VaultState` renames it too).
@@ -148,7 +157,8 @@ The Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` 
 `LendingMarketHealth.market_id` and `MiddlewarePricedToken.market_id` are
 `MarketId`; `Erc20Holding.address` is `HexAddress`, and `SubstrateInfo.address` is
 `HexAddress | None` (`None`, no longer `""`, when a substrate carries no address).
-`LegacyPriceOracleMiddleware` takes `base_currency_decimals: Decimals`.
+`LegacyPriceOracleMiddleware` takes `base_currency_decimals: Decimals`, and
+`PriceOracleMiddleware.base_currency_decimals()` returns `Call[Decimals]`.
 `get_logs_adaptive(chain_id=)` and `LogSource.get_logs` take `ChainId`;
 `quote_ccip_native_fee(block=)` and `OracleMappingReader.asset_source_events` take a
 `BlockIdentifier`.
@@ -167,7 +177,9 @@ the async command helpers `Command.request_shares` / `redeem_from_request`,
 Every fuse constructor, `FuseAction.fuse`, `BalanceFuse.fuse`,
 `PlasmaVault.add_fuses` / `remove_fuses` / `add_balance_fuse` / `remove_balance_fuse`
 / `balance_fuse_value`, `RewardsManager.add_reward_fuses` / `is_reward_fuse_supported`,
-`LaneFuses` and the HyperCore balance-fuse argument take a `FuseAddress`, and
+`LaneFuses`, the HyperCore balance-fuse argument and the
+`PlasmaVault.configure_instant_withdrawal_fuses` configs
+(`Sequence[tuple[FuseAddress, Sequence[bytes]]]`) take a `FuseAddress`, and
 `get_fuses()`, `get_instant_withdrawal_fuses()`, `get_rewards_fuses()` and
 `VaultData.fuses` / `instant_fuses` / `fuse_markets` keys return it.
 `AccessManager(address)` takes an `AccessManagerAddress`;
@@ -196,7 +208,13 @@ from_=...)` needs neither, so drop a zero-address placeholder. `execute()` witho
 the fee fields are `Wei`). LayerZero endpoint ids are `LayerZeroEid`:
 `StargateChain.eid`, `Packet.src_eid` / `dst_eid`, `EnforcedOptionParam.eid`,
 `executor_eid()` and `eid_of()` return it and `chain_id_of`, `peers`, `lz_receive_calldata(src_eid=)`
-and the Stargate fuse's `eid=` take it (`LayerZeroEid(30101)`).
+and the Stargate fuse's `eid=` take it (`LayerZeroEid(30101)`). CCIP chain
+selectors are `CcipChainSelector`: `CcipChain.chain_selector`,
+`CcipRouteConfig.chain_selector`, `CcipTokenLane.chain_selector`, the `MessageV1`,
+`CcipMessageSent` and `Any2EVMMessage` selectors and `CcipRouter.get_off_ramps()`
+carry it, and `chain_id_of_selector`, `CcipRouter.is_chain_supported` /
+`get_on_ramp`, `CcipTokenPool.is_supported_chain` and `ccip_token_lane` take it
+(`CcipChainSelector(4949039107694359620)`).
 `encode_oft_compose_msg(*, nonce=, src_eid=, amount_ld=, compose_msg=)` takes
 keyword arguments only. `ZERO_ADDRESS` is a `ChecksumAddress` (same value).
 
@@ -229,7 +247,10 @@ gone: use `morpho_blue_address(chain_id)`.
 `MorphoPositionBreakdown.market_id` (as read from substrates) and the keys of
 `VaultV1Info.public_allocator_flow_caps` are canonical. `fetch_market`, `fetch_vault`,
 `morpho_blue_address`, `build_*_json` take `ChainId`; `fetch_vault` takes a
-`ChecksumAddress`. Every address on the `morpho_api` records is `ChecksumAddress`;
+`ChecksumAddress`. `build_morpho_blue_market_json(*, market_id, chain_id, params,
+state, rates, api_market=None, api_error=None, public_allocator=None)` takes every
+argument by keyword, `public_allocator` as `ChecksumAddress | None`.
+Every address on the `morpho_api` records is `ChecksumAddress`;
 optional ones (`curator`, `guardian`, `fee_recipient`, `performance_fee_recipient`,
 `management_fee_recipient`, `inner_vault`, `VaultFlowCap.admin`, the `VaultV2Cap`
 market params) are `ChecksumAddress | None`.
@@ -249,14 +270,21 @@ on CCIP, `active_return` → `OperationId`, `asset_id`, `tracked_position_set_ha
 before passing it on.
 
 **HyperCore (preview).** The fuses, `HyperCoreSubstrates`, `HyperCoreReader`,
-`read_hypercore_transfer_snapshot` and the helpers `system_address`, `read_index_of`,
+`read_hypercore_transfer_snapshot` and the helpers `system_address`, `precompile_index_of`
+(3.x `read_index_of`, renamed: it reads nothing),
 `perp_dex_of`, `is_native_perp_asset`, `is_hip3_asset` take the HyperCore ids;
 `HyperCorePerpAssetInfo`, `HyperCorePerpMarket`, `HyperCoreSpotLeg`,
 `HyperCorePendingState` and `HyperCoreTransferSnapshot` carry them.
+`HyperCorePendingReader(vault, reader)` takes the vault's `PlasmaVaultAddress`, not a
+`PlasmaVault` wrapper.
 
 **External state.** `ExternalStateExecutor.proposal_hash` returns and `confirm_balance`
 takes a `ProposalHash`; `BalanceProposal.proposal_hash` is a `ProposalHash`;
 `ExternalStateEvent.transaction_hash` is a `TxHash`.
+`ExternalStateVaultState.last_checked_custodian_timestamp`,
+`BalanceFuseSnapshot.last_custodian_update_timestamp`, `BalanceProposal.proposed_at`,
+`last_updated()` and `get_oldest_update_timestamp()` are web3's `Timestamp`, and
+`ExternalStateExecutor.proposal_hash(proposed_at=)` takes one.
 `ExternalStateExecutor.mark_nav` and `NavMark` are gone: send `propose_balance` and
 `confirm_balance` from separate custodians, then
 `PlasmaVault.update_markets_balances([IporFusionMarkets.EXTERNAL_STATE])`.
@@ -327,7 +355,8 @@ placeholder wrapper.
   `.decode(raw)` and `.map(f)` need no context. `Call(...)` no longer takes `ctx=`.
 - A wrapper method that executes to answer (storage, log scans, dependent reads) is
   named `read_*` and takes the context first (table below).
-- Executors and orchestrators keep their contexts: `Multicall3(ctx)` (every batch,
+- Executors and orchestrators keep their contexts: `Multicall3(ctx, *, address=,
+  batch_size=)` (options by keyword; every batch,
   every re-run of a failed sub-call and the per-call fallback run on its `ctx`, so a
   pinned context keeps them all at its block; it is no longer a `ContractWrapper`,
   `aggregate3(calls)` still returns the raw `Call`), `VaultSimulator`,
@@ -342,7 +371,14 @@ placeholder wrapper.
   `command_in_flight` and `transfer_in_flight` read on `hub_ctx`. The Calls a lane
   returns are unexecuted, and the executor and dispatcher share one address, so pick
   the context yourself: `lane.get_balance().call(lane.hub_ctx)`,
-  `lane.observation().call(lane.spoke_ctx)`. `CrosschainTransport.executor(address)`
+  `lane.observation().call(lane.spoke_ctx)`, or let the lane pick:
+  `lane.read_hub_state()` reads every executor bucket and counter
+  (`LaneHubState`) on `hub_ctx` through `Multicall3`, at one block (a `latest`, `safe` or
+  `finalized` default block resolved to its number once, so a per-call fallback
+  stays on it; a number or hash as is);
+  `lane.read_observation()` runs the observation on `spoke_ctx`. Keep
+  `transfer_in_flight()` / `command_in_flight()` for those decisions: the counters
+  do not see a CCIP recall or tell a parked command from a pending one. `CrosschainTransport.executor(address)`
   and `.dispatcher(address)` no longer take a context.
 - Chain-bound decoding takes the chain explicitly:
   `ExternalStateExecutor.pending_proposals(account, *, chain_id)`,
@@ -380,6 +416,10 @@ placeholder wrapper.
 | `MorphoReader.rates_from(market, params)` | `MorphoReader.read_rates_from(ctx, market, params)` (it reads the IRM) |
 | `AaveV3Reader.position_breakdown(asset, user)` | `AaveV3Reader.read_position_breakdown(ctx, asset, user)` |
 | `AaveV3FuseReader.pool()` | `AaveV3FuseReader.read_pool(ctx)` |
+| `PlasmaVault.read(target, data)` / `read_as(target, data, ...)` | `PlasmaVault.universal_read(target, data)` / `universal_read_decoded(target, data, ...)` (they build a Call; `read_*` names only methods that execute) |
+| `read_index_of(asset)` | `precompile_index_of(asset)` |
+| `ctx.default_block = n` | `ctx = ctx.at_block(n)` |
+| `Multicall3(ctx, address)` | `Multicall3(ctx, address=address)` |
 | `executor.pending_proposals(account)` | `executor.pending_proposals(account, chain_id=ctx.chain_id)` |
 | `executor.parse_balance_proposed(log)` / `find_balance_proposed(logs)` | `...(log, chain_id=...)` / `...(logs, chain_id=...)` |
 | `CcipLane(executor=, dispatcher=, spoke_chain_id=, ...)` | `CcipLane(hub_ctx=, spoke_ctx=, executor=, dispatcher=, ...)` (same for `StargateLane`) |
@@ -512,8 +552,12 @@ is the wrong one.
 - `MorphoApiError` (still a `RuntimeError`), `ExternalStateEventDecodeError` (still a
   `ValueError`) and `VerifierResultUnavailable` (still a `LookupError`) now derive
   from `IporFusionError`, so an `except IporFusionError` placed before their own
-  handlers catches them first. `MorphoApiError` lives in `ipor_fusion.errors` and is
-  exported from `ipor_fusion`; `ipor_fusion.morpho_api.MorphoApiError` still works.
+  handlers catches them first. All three live in `ipor_fusion.errors`, like every
+  other SDK exception, and are exported from `ipor_fusion`; the modules that raise
+  them (`ipor_fusion.morpho_api`, `ipor_fusion.fuses.external_state_events`,
+  `ipor_fusion.crosschain.ccip.indexer`) still import the same classes.
+- `AccessManager.read_owner(ctx)` raises the new `OwnerNotFoundError` (a
+  `LookupError`) when no account holds `OWNER_ROLE`, instead of an `IndexError`.
 - `EmptyCallResultError` is no longer an eth_abi `InsufficientDataBytes` (nor a
   `DecodingError`). Code that caught either around `.call()` to tolerate a missing
   contract or getter must catch `EmptyCallResultError`; return data that is present

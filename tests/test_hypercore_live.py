@@ -43,7 +43,11 @@ from ipor_fusion.cli.main import cli
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
-from ipor_fusion.fuses.hypercore import SPOT_DEX, USDC_SYSTEM_ADDRESS, read_index_of
+from ipor_fusion.fuses.hypercore import (
+    SPOT_DEX,
+    USDC_SYSTEM_ADDRESS,
+    precompile_index_of,
+)
 from ipor_fusion.mcp import server
 from ipor_fusion.types import MarketId
 
@@ -76,9 +80,7 @@ def ctx() -> Web3Context:
     w3 = Web3(Web3.HTTPProvider(url, request_kwargs={"timeout": 30}))
     if not w3.is_connected() or w3.eth.chain_id != 999:
         pytest.skip("HYPEREVM_PROVIDER_URL is not a reachable HyperEVM node")
-    context = Web3Context(w3, 999, signer=SIGNER)
-    context.default_block = w3.eth.block_number
-    return context
+    return Web3Context(w3, 999, signer=SIGNER).at_block(w3.eth.block_number)
 
 
 @pytest.fixture(scope="module")
@@ -88,7 +90,7 @@ def vault() -> PlasmaVault:
 
 @pytest.fixture(scope="module")
 def pending(vault: PlasmaVault) -> HyperCorePendingReader:
-    return HyperCorePendingReader(vault, CREATED["HyperCorePendingReader"])
+    return HyperCorePendingReader(vault.address, CREATED["HyperCorePendingReader"])
 
 
 def test_nav_identity_matches_the_balance_fuse(ctx: Web3Context, vault: PlasmaVault):
@@ -127,7 +129,7 @@ def test_pending_state_reads_through_the_vault(
 
 def test_precompiles_batch_through_multicall3(ctx: Web3Context):
     reader = HyperCoreReader()
-    nvda = read_index_of(XYZ_NVDA)
+    nvda = precompile_index_of(XYZ_NVDA)
     reads = cast(
         list[Call[Any]],
         [

@@ -74,9 +74,7 @@ def connect_readiness(chain: Chain) -> Web3Context:
             f"{env_name} serves chain {actual_chain_id}, expected {chain.chain_id}",
             pytrace=False,
         )
-    ctx = Web3Context(web3=web3, chain_id=chain.chain_id)
-    ctx.default_block = block
-    return ctx
+    return Web3Context(web3=web3, chain_id=chain.chain_id).at_block(block)
 
 
 # LayerZero V2 endpoint on Ethereum, Base and Arbitrum; newer chains such as

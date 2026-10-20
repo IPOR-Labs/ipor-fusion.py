@@ -37,8 +37,9 @@ PINNED_BLOCK = 285000000  # mirrors anvil.reset_fork(...) in the original test
 
 def test_simulate_release_funds(web3_arb):
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     plasma_vault = PlasmaVault(VAULT_ADDRESS)
     access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))
@@ -152,8 +153,9 @@ PINNED_BLOCK_2 = 315570373  # mirrors anvil.reset_fork(...) in the original test
 def test_simulate_release_funds_shares(web3_arb):
     """Shares-based withdrawal: request_shares → release_funds(ts, shares) → redeem_from_request."""
     block_hex = hex(PINNED_BLOCK_2)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK_2
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK_2
+    )
 
     plasma_vault = PlasmaVault(VAULT2_ADDRESS)
     access_manager = AccessManager(plasma_vault.get_access_manager_address().call(ctx))

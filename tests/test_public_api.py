@@ -63,6 +63,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "CacheKey",
             "Call",
             "CcipChain",
+            "CcipChainSelector",
             "CcipCommandType",
             "CcipCommitteeVerifier",
             "CcipCrosschainCommandFuse",
@@ -216,6 +217,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "IporFusionMarkets",
             "LANES",
             "LaneFuses",
+            "LaneHubState",
             "LaneObservation",
             "LayerZeroEid",
             "LegacyPriceOracleMiddleware",
@@ -264,6 +266,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "OracleNode",
             "OraclePrice",
             "OutboundMessage",
+            "OwnerNotFoundError",
             "PACKET_SENT_TOPIC",
             "PREVIEW_FEATURES",
             "PREVIEW_STATEMENT",
@@ -457,7 +460,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "read_hypercore_transfer_outcome",
             "read_hypercore_transfer_snapshot",
             "read_hypercore_vault_state",
-            "read_index_of",
+            "precompile_index_of",
             "register_custom_errors",
             "repository_url",
             "resolve_access_manager",
@@ -571,6 +574,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "INSUFFICIENT_NATIVE_FEE_SELECTOR",
             "LANES",
             "LaneFuses",
+            "LaneHubState",
             "LaneObservation",
             "MessageExecutionState",
             "MessageV1",
@@ -783,7 +787,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "is_hip3_asset",
             "is_native_perp_asset",
             "perp_dex_of",
-            "read_index_of",
+            "precompile_index_of",
             "system_address",
         }
     ),
@@ -915,6 +919,9 @@ _MODULE_PATH_SNAPSHOT: dict[str, frozenset[str]] = {
     ),
     "ipor_fusion.errors": frozenset(
         {
+            "ExternalStateEventDecodeError",
+            "OwnerNotFoundError",
+            "VerifierResultUnavailable",
             "BalanceSlotNotFoundError",
             "CUSTOM_ERRORS",
             "ContractNotFoundError",
@@ -987,6 +994,7 @@ _MODULE_PATH_SNAPSHOT: dict[str, frozenset[str]] = {
     ),
     "ipor_fusion.types": frozenset(
         {
+            "CcipChainSelector",
             "AccessManagerAddress",
             "Amount",
             "AssetId",

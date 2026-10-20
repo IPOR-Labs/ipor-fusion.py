@@ -618,7 +618,7 @@ class TestVaultInfo:
         )
         assert result.exit_code == 0, result.output
         assert "99999" in result.output
-        assert mock_ctx.default_block == 99999
+        mock_ctx.at_block.assert_called_with(99999)
 
     @patch("ipor_fusion.cli.vault_info_view.get_contract_name", return_value="SomeFuse")
     @patch("ipor_fusion.vault_data.price_oracle_middleware")

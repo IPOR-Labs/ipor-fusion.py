@@ -191,10 +191,12 @@ def assert_reverted(call: SimulatedCallResult, error_signature: str) -> None:
 def prepare_deployed_run(
     web3_hub, web3_spoke, dep: Deployment, spoke: Spoke, transport_kind
 ) -> Run:
-    hub_ctx = Web3Context(web3=web3_hub, chain_id=dep.hub.chain_id)
-    hub_ctx.default_block = dep.hub.block
-    spoke_ctx = Web3Context(web3=web3_spoke, chain_id=spoke.chain_id)
-    spoke_ctx.default_block = spoke.chain.block
+    hub_ctx = Web3Context(web3=web3_hub, chain_id=dep.hub.chain_id).at_block(
+        dep.hub.block
+    )
+    spoke_ctx = Web3Context(web3=web3_spoke, chain_id=spoke.chain_id).at_block(
+        spoke.chain.block
+    )
     remote_vault = spoke.remote_vault
     assert remote_vault is not None
 

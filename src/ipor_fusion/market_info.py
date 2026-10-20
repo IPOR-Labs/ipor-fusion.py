@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from eth_typing import ChecksumAddress
+
 from ipor_fusion.morpho_api import (
     MorphoApiMarket,
     VaultAllocation,
@@ -21,14 +23,15 @@ from ipor_fusion.types import ChainId, MorphoBlueMarketId
 
 
 def build_morpho_blue_market_json(
+    *,
     market_id: MorphoBlueMarketId,
     chain_id: ChainId,
     params: MorphoMarketParams,
     state: MorphoMarket,
     rates: MorphoMarketRates,
-    api_market: MorphoApiMarket | None,
-    api_error: str | None,
-    public_allocator: str | None,
+    api_market: MorphoApiMarket | None = None,
+    api_error: str | None = None,
+    public_allocator: ChecksumAddress | None = None,
 ) -> dict[str, Any]:
     """The ``fusion market morpho-blue --json`` document: a Morpho Blue
     market's parameters, state and rates (from `MorphoReader`), plus the

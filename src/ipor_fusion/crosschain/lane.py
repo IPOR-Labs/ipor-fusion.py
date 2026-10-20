@@ -15,10 +15,13 @@ for an executor address.
 
 The executor and its dispatcher share one address, so a ``Call`` alone cannot
 tell which chain it belongs to. The lane owns both contexts: ``hub_ctx`` for
-the executor, ``spoke_ctx`` for the dispatcher. Its eager predicates
-(``needs_attestation``, ``command_in_flight``, ``transfer_in_flight``) read on
-``hub_ctx``; the Calls it returns stay unexecuted, so the caller runs them on
-the matching context: ``lane.get_balance().call(lane.hub_ctx)``,
+the executor, ``spoke_ctx`` for the dispatcher, and its eager reads pick the
+right one: ``read_hub_state()`` (every executor bucket and counter at one block)
+and the predicates ``needs_attestation``, ``command_in_flight`` and
+``transfer_in_flight`` run on ``hub_ctx``, ``read_observation()`` on
+``spoke_ctx``. The Calls it returns stay unexecuted, for a batch or a
+simulation of the caller's own; the caller then runs them on the matching
+context: ``lane.get_balance().call(lane.hub_ctx)``,
 ``lane.observation().call(lane.spoke_ctx)``.
 """
 
@@ -27,7 +30,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
@@ -35,6 +38,7 @@ from eth_typing import ChecksumAddress
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fuse_action import FuseAction
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.crosschain.contracts import (
     BalanceObservation,
     CrosschainDispatcher,
@@ -63,6 +67,30 @@ class LaneObservation:
     state_version: int
     command_config_epoch: int
     tracked_position_set_hash: PositionSetHash
+
+
+# Block tags that name a block number which moves between two reads; a read
+# set pinned to the number the tag resolves to once keeps the tag's meaning.
+# "pending" names no mined block and is left as is.
+_MOVING_BLOCK_TAGS = frozenset({"latest", "safe", "finalized"})
+
+
+@dataclass(frozen=True, slots=True)
+class LaneHubState:
+    """The lane's executor buckets and counters on the hub, read at one block
+    (`CrosschainLane.read_hub_state`). Each field is the lane method of the
+    same name; ``dispatcher_ready`` is ``is_dispatcher_ready``."""
+
+    settled_remote_balance: Amount
+    outbound_in_flight: Amount
+    idle_ledger: Amount
+    dispatcher_ready: bool
+    chain_blocked: bool
+    last_approved_observed_at: int
+    staleness_max: int
+    remote_state_version: int
+    has_active_command: bool
+    pending_transfer_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +237,40 @@ class CrosschainLane(ABC):
         """Remote timestamp of the approved observation NAV freshness is
         measured from; 0 before the first attestation."""
         return self.executor.last_approved_observed_at(self.spoke_chain_id)
+
+    # ── eager reads: each runs on the context the lane owns for it ────────
+
+    def read_hub_state(self) -> LaneHubState:
+        """Every executor read of :class:`LaneHubState` on ``hub_ctx``, batched
+        through `Multicall3` at one block, so the fields share it even where
+        Multicall3 falls back to one call per read: a ``latest``, ``safe`` or
+        ``finalized`` default block is resolved to its number once; a number or
+        hash is used as is (and ``pending`` too, which names no block)."""
+        hub = self.hub_ctx
+        if hub.default_block in _MOVING_BLOCK_TAGS:
+            hub = hub.at_block(hub.web3.eth.get_block(hub.default_block)["number"])
+        values = Multicall3(hub).aggregate(
+            cast(
+                list[Call[Any]],
+                [
+                    self.settled_remote_balance(),
+                    self.outbound_in_flight(),
+                    self.idle_ledger(),
+                    self.is_dispatcher_ready(),
+                    self.chain_blocked(),
+                    self.last_approved_observed_at(),
+                    self.staleness_max(),
+                    self.remote_state_version(),
+                    self.has_active_command(),
+                    self.pending_transfer_count(),
+                ],
+            )
+        )
+        return LaneHubState(*values)
+
+    def read_observation(self) -> LaneObservation:
+        """:meth:`observation` run on ``spoke_ctx``."""
+        return self.observation().call(self.spoke_ctx)
 
     # ── attestation ───────────────────────────────────────────────────────
 

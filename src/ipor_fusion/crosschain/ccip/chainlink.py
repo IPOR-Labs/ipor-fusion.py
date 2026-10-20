@@ -17,7 +17,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.contracts import _address
 from ipor_fusion.errors import UnsupportedContractVersionError
-from ipor_fusion.types import ZERO_ADDRESS, MessageId
+from ipor_fusion.types import ZERO_ADDRESS, CcipChainSelector, MessageId
 
 
 class CcipRouter(ContractWrapper):
@@ -26,13 +26,13 @@ class CcipRouter(ContractWrapper):
     def type_and_version(self) -> Call[str]:
         return self._view("typeAndVersion()", output_types=["string"])
 
-    def is_chain_supported(self, chain_selector: int) -> Call[bool]:
+    def is_chain_supported(self, chain_selector: CcipChainSelector) -> Call[bool]:
         """Whether a lane towards ``chain_selector`` is configured."""
         return self._view(
             "isChainSupported(uint64)", chain_selector, output_types=["bool"]
         )
 
-    def get_on_ramp(self, chain_selector: int) -> Call[ChecksumAddress]:
+    def get_on_ramp(self, chain_selector: CcipChainSelector) -> Call[ChecksumAddress]:
         return self._view(
             "getOnRamp(uint64)",
             chain_selector,
@@ -40,7 +40,7 @@ class CcipRouter(ContractWrapper):
             decoder=_address,
         )
 
-    def get_off_ramps(self) -> Call[list[tuple[int, ChecksumAddress]]]:
+    def get_off_ramps(self) -> Call[list[tuple[CcipChainSelector, ChecksumAddress]]]:
         """Every ``(source chain selector, OffRamp)`` the router accepts
         deliveries from. A source can have several (one per CCIP version
         still draining); tell them apart with the OffRamp's
@@ -49,7 +49,8 @@ class CcipRouter(ContractWrapper):
             "getOffRamps()",
             output_types=["(uint64,address)[]"],
             decoder=lambda ramps: [
-                (int(selector), _address(ramp)) for selector, ramp in ramps
+                (CcipChainSelector(selector), _address(ramp))
+                for selector, ramp in ramps
             ],
         )
 
@@ -87,7 +88,7 @@ class CcipTokenPool(ContractWrapper):
     def type_and_version(self) -> Call[str]:
         return self._view("typeAndVersion()", output_types=["string"])
 
-    def is_supported_chain(self, chain_selector: int) -> Call[bool]:
+    def is_supported_chain(self, chain_selector: CcipChainSelector) -> Call[bool]:
         """Whether the pool releases or mints on ``chain_selector``."""
         return self._view(
             "isSupportedChain(uint64)", chain_selector, output_types=["bool"]
@@ -100,7 +101,7 @@ class CcipTokenLane:
     towards ``chain_selector``: ``message_lane`` is the Router's answer,
     ``token_lane`` the token pool's (``False`` when the token has no pool)."""
 
-    chain_selector: int
+    chain_selector: CcipChainSelector
     message_lane: bool
     on_ramp: ChecksumAddress | None = None
     on_ramp_version: str | None = None
@@ -116,7 +117,7 @@ def ccip_token_lane(
     ctx: Web3Context,
     router: ChecksumAddress,
     token: ChecksumAddress,
-    chain_selector: int,
+    chain_selector: CcipChainSelector,
 ) -> CcipTokenLane:
     """Read, on ``router``'s chain, whether a message lane and a ``token`` lane
     exist towards ``chain_selector``. Seven reads at most. Raises

@@ -53,7 +53,7 @@ from ipor_fusion.fuses.hypercore import (
     is_native_perp_asset,
     is_supported_perp_dex,
     perp_dex_of,
-    read_index_of,
+    precompile_index_of,
     system_address,
 )
 from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
@@ -2203,14 +2203,14 @@ class TestHyperCoreFuses:
         assert not is_hip3_asset(109_999) and not is_hip3_asset(100_000_000)
         assert is_native_perp_asset(9_999) and not is_native_perp_asset(10_000)
         assert perp_dex_of(110_002) == 1 and perp_dex_of(7) == 0
-        assert read_index_of(110_002) == 10_002 and read_index_of(7) == 7
+        assert precompile_index_of(110_002) == 10_002 and precompile_index_of(7) == 7
         assert is_supported_perp_dex(0) and is_supported_perp_dex(1)
         assert not is_supported_perp_dex(2) and not is_supported_perp_dex(240)
         for bad in (10_000, 100_000, 109_999, 100_000_000):
             with pytest.raises(ValueError, match="neither"):
                 perp_dex_of(bad)
             with pytest.raises(ValueError, match="neither"):
-                read_index_of(bad)
+                precompile_index_of(bad)
         with pytest.raises(ValueError, match="uint32"):
             is_hip3_asset(1 << 32)
         with pytest.raises(ValueError, match="index_in_dex"):

@@ -62,6 +62,7 @@ class Multicall3:
     def __init__(
         self,
         ctx: Web3Context,
+        *,
         address: ChecksumAddress = MULTICALL3_ADDRESS,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ):

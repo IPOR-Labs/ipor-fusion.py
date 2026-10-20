@@ -40,7 +40,7 @@ _ERC20_DEP_NOT_REQUIRED: frozenset[MarketId] = frozenset(
 def find_orphan_fuse_markets(
     fuse_markets: Mapping[FuseAddress, MarketId],
     balance_fuse_market_ids: Set[MarketId],
-) -> dict[MarketId, list[str]]:
+) -> dict[MarketId, list[FuseAddress]]:
     """Return markets claimed by action fuses but lacking a balance fuse.
 
     Such a configuration means positions opened via the action fuse will not
@@ -58,7 +58,7 @@ def find_orphan_fuse_markets(
         Mapping ``market_id -> [fuse_address, ...]`` for orphans, sorted by
         market_id. Empty dict when configuration is healthy.
     """
-    orphans: dict[MarketId, list[str]] = {}
+    orphans: dict[MarketId, list[FuseAddress]] = {}
     for fuse_addr, market_id in fuse_markets.items():
         if market_id in balance_fuse_market_ids:
             continue

@@ -137,8 +137,7 @@ def test_new_vault_deployment(hyper_web3: Web3) -> None:
     assert _read_address(hyper_web3, fuse, "REPORTER()", block) == reporter
     assert _read_address(hyper_web3, hook, "settlementReporter()", block) == reporter
 
-    ctx = Web3Context(hyper_web3, FIXTURE["chain_id"])
-    ctx.default_block = block
+    ctx = Web3Context(hyper_web3, FIXTURE["chain_id"]).at_block(block)
     vault = PlasmaVault(vault_address)
     assert vault.underlying_asset_address().call(ctx) == deployment["underlying"]
     fuses = set(vault.get_fuses().call(ctx))

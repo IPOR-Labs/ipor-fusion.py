@@ -13,6 +13,7 @@ from ipor_fusion import (
     AccessManager,
     ContractNotFoundError,
     NotPlasmaVaultError,
+    OwnerNotFoundError,
     RoleAccount,
     resolve_access_manager,
     role_account_sort_key,
@@ -138,6 +139,19 @@ class TestGetAccountsWithRole:
         manager, ctx = _manager_with([_grant_event(100, BOB), _grant_event(100, BOB)])
 
         assert len(manager.read_accounts_with_role(ctx, 100)) == 1
+
+
+class TestReadOwner:
+    def test_returns_the_first_owner(self):
+        manager, ctx = _manager_with([_grant_event(1, ALICE), _grant_event(1, BOB)])
+
+        assert manager.read_owner(ctx) == ALICE
+
+    def test_raises_when_no_account_holds_the_owner_role(self):
+        manager, ctx = _manager_with([_grant_event(1, ALICE)], is_member=False)
+
+        with pytest.raises(OwnerNotFoundError, match="OWNER_ROLE"):
+            manager.read_owner(ctx)
 
 
 class TestRoleAccountHelpers:

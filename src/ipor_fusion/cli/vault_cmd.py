@@ -441,7 +441,7 @@ def oracle_mapping(
     effective_block = (
         block_number if block_number is not None else ctx.web3.eth.block_number
     )
-    ctx.default_block = effective_block
+    ctx = ctx.at_block(effective_block)
 
     try:
         resolve_access_manager(ctx, vault_address)

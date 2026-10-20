@@ -141,10 +141,12 @@ def _mapping(nodes: list[OracleNode]) -> OracleMapping:
     )
 
 
-def _fake_ctx(latest_block: int = 12345) -> MagicMock:
+def _fake_ctx(latest_block: int = 12345, block: object = "latest") -> MagicMock:
+    """A context whose `at_block` returns a pinned copy, as the real one does."""
     ctx = MagicMock()
     ctx.web3.eth.block_number = latest_block
-    ctx.default_block = "latest"
+    ctx.default_block = block
+    ctx.at_block.side_effect = lambda pinned: _fake_ctx(latest_block, pinned)
     return ctx
 
 
@@ -311,7 +313,8 @@ class TestOracleMappingCommand:
         assert result.exit_code == 0
         # latest resolved to a number, passed to the SDK, and pinned on the ctx
         assert mock_build.call_args.args[2] == 777
-        assert ctx.default_block == 777
+        assert mock_build.call_args.args[0].default_block == 777
+        assert ctx.default_block == "latest"
 
     def test_explicit_block_passed_through(
         self, mock_ctx_cls, _resolve, mock_build, tmp_config
@@ -336,7 +339,7 @@ class TestOracleMappingCommand:
 
         assert result.exit_code == 0
         assert mock_build.call_args.args[2] == 500
-        assert ctx.default_block == 500
+        assert mock_build.call_args.args[0].default_block == 500
 
     def test_max_depth_passed_through(
         self, mock_ctx_cls, _resolve, mock_build, tmp_config

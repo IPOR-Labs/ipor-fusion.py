@@ -52,7 +52,6 @@ from ipor_fusion.crosschain.ccip.events import (
 from ipor_fusion.crosschain.ccip.indexer import (
     INDEXER_URLS,
     VerifierResult,
-    VerifierResultUnavailable,
     fetch_verifier_result,
     manual_execution,
 )
@@ -100,7 +99,12 @@ from ipor_fusion.crosschain.fuses.stargate import (
     StargateCrosschainSupplyFuse,
     StargateSendParams,
 )
-from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
+from ipor_fusion.crosschain.lane import (
+    CrosschainLane,
+    LaneFuses,
+    LaneHubState,
+    LaneObservation,
+)
 from ipor_fusion.crosschain.logs import log_bytes
 from ipor_fusion.crosschain.messages import (
     CCIP_VERSION,
@@ -147,6 +151,7 @@ from ipor_fusion.crosschain.transport import (
     DeliveryCall,
     OutboundMessage,
 )
+from ipor_fusion.errors import VerifierResultUnavailable
 
 __all__ = [
     "CrosschainClaimFuse",
@@ -176,6 +181,7 @@ __all__ = [
     "CrosschainLane",
     "log_bytes",
     "LaneFuses",
+    "LaneHubState",
     "LaneObservation",
     "CrosschainSimulator",
     "SYNTHETIC_TOKEN_SOURCE",

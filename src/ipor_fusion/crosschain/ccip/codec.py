@@ -21,7 +21,7 @@ from web3 import Web3
 
 from ipor_fusion.core.contract import _encode_calldata
 from ipor_fusion.crosschain.logs import log_bytes
-from ipor_fusion.types import MessageId
+from ipor_fusion.types import CcipChainSelector, MessageId
 
 #: topic0 of ``OnRamp 2.0.0``'s ``CCIPMessageSent``; ``destChainSelector``,
 #: ``sender`` and ``messageId`` are indexed.
@@ -102,8 +102,8 @@ class MessageV1:
     encodes them.
     """
 
-    source_chain_selector: int
-    dest_chain_selector: int
+    source_chain_selector: CcipChainSelector
+    dest_chain_selector: CcipChainSelector
     message_number: int
     execution_gas_limit: int
     ccip_receive_gas_limit: int
@@ -124,8 +124,8 @@ class MessageV1:
         if reader.uint(1) != _MESSAGE_VERSION:
             raise ValueError("unsupported CCIP message version")
         header = (
-            reader.uint(8),
-            reader.uint(8),
+            CcipChainSelector(reader.uint(8)),
+            CcipChainSelector(reader.uint(8)),
             reader.uint(8),
             reader.uint(4),
             reader.uint(4),
@@ -178,7 +178,7 @@ class CcipMessageSent:
     """One ``CCIPMessageSent`` log: the Router-assigned id plus the decoded message."""
 
     message_id: MessageId
-    dest_chain_selector: int
+    dest_chain_selector: CcipChainSelector
     sender: ChecksumAddress
     message: MessageV1
     #: The MessageV1 bytes as sent; what ``OffRamp.execute`` takes on the
@@ -195,7 +195,7 @@ class CcipMessageSent:
         )
         return cls(
             message_id=MessageId(bytes(topics[3])),
-            dest_chain_selector=int.from_bytes(topics[1], "big"),
+            dest_chain_selector=CcipChainSelector(int.from_bytes(topics[1], "big")),
             sender=Web3.to_checksum_address(topics[2][12:]),
             message=MessageV1.decode(bytes(encoded)),
             encoded_message=bytes(encoded),
@@ -217,7 +217,7 @@ class Any2EVMMessage:
     which is how the receivers decode it."""
 
     message_id: MessageId
-    source_chain_selector: int
+    source_chain_selector: CcipChainSelector
     sender: ChecksumAddress
     data: bytes
     dest_token_amounts: tuple[EVMTokenAmount, ...] = ()

@@ -71,8 +71,9 @@ GEARBOX_FARMD_TOKEN = Web3.to_checksum_address(
 def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
     """Cleanup Fluid stake, supply on Aave V3, withdraw — all in one batch."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -177,8 +178,9 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
 def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
     """Cleanup Fluid stake, supply on Compound V3, withdraw — single batch."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -241,8 +243,9 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
 def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
     """Cleanup Fluid stake, then re-supply + re-stake into Fluid — round trip."""
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
@@ -305,8 +308,9 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
     Same effect via a `plasma_vault.grant_market_substrates(...)` impersonated call.
     """
     block_hex = hex(PINNED_BLOCK)
-    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id))
-    ctx.default_block = PINNED_BLOCK
+    ctx = Web3Context(web3=web3_arb, chain_id=ChainId(web3_arb.eth.chain_id)).at_block(
+        PINNED_BLOCK
+    )
 
     vault_address = ARBITRUM_PILOT_V3_PLASMA_VAULT
     plasma_vault = PlasmaVault(vault_address)
