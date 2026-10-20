@@ -335,16 +335,23 @@ release; adding one does not.
 - **Public modules** stay importable for the top-level names they define:
   `about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`, `field_docs`,
   `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`, `validation`,
-  `vault_data` and `vault_info` (all under `ipor_fusion.`).
+  `vault_data` and `vault_info` (all under `ipor_fusion.`). A name that moved out of
+  one of them keeps its old path there (`vault_data.FeeData`,
+  `vault_data.WithdrawManagerData`, `validation.Erc20Holding`,
+  `validation.Erc20Holdings`, `morpho_api.MorphoApiError`).
 - **Internal:** `ipor_fusion.cli`, `ipor_fusion.mcp`, every other module (e.g.
-  `vault_reads`, the submodules of the public subpackages), underscore
-  names, and names in no `__all__`. They change without notice; the CLI and the
-  MCP server are stable as commands and tools, not as Python modules.
+  `vault_reads`) and every submodule of a public subpackage (e.g.
+  `ipor_fusion.core.contract`, `ipor_fusion.fuses.base`; import their names from
+  the subpackage or `ipor_fusion`), underscore names, and names in no `__all__`.
+  They change without notice; the CLI and the MCP server are stable as commands
+  and tools, not as Python modules.
 - **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`: crosschain,
   HyperCore) are exported like the rest but may change in a minor release.
 
-`tests/test_public_api.py` snapshots every `__all__`, so a change to the surface
-is a deliberate, reviewed edit.
+`tests/test_public_api.py` snapshots every `__all__` and the names each public
+module keeps by path, so a change to the surface is a deliberate, reviewed edit.
+`tests/test_public_type_reachability.py` fails when a public signature or field
+uses a project type that no `__all__` exports.
 
 ## Architecture
 

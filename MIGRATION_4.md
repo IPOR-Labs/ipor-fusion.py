@@ -56,7 +56,11 @@ a `bytes32` return (recall) request is `ReturnRequestId`.
 names earlier reachable only by module path (`FusionFactory`, `FusionInstance`,
 `fetch_market`, `resolve_token_symbol`, the crosschain codecs, ...). Import from
 `ipor_fusion`: a module path outside the README's list (*Public API and stability*)
-still works but is internal.
+still works but is internal. Every project type a public signature or field uses is
+exported too, among them `AaveV3PositionBreakdown`, `AaveV3ReserveTokens`,
+`AccountRequest`, `StateOverrideProvider`, `TransferDirection` and the validation
+vocabulary `Severity`, `Verdict` and `Check`. Also new: `InFlightLimit` (below) and
+`log_bytes`, the hex-or-bytes log field helper the crosschain decoders use.
 
 **Vault reads and validation.** The vault read is one pinned snapshot, and the
 chain is always the context's:
@@ -110,8 +114,13 @@ now shown in share decimals labelled `shares` (``fusion vault info``) and its JS
 `Web3Context.from_url(..., max_concurrent_requests=8)` bounds the RPC requests in
 flight across every thread using the context (``None`` lifts the bound); the vault
 reads fan out on nested thread pools, and the bound is what a rate-limited provider
-sees. A context built from your own `Web3` object is not bounded unless you add the
-same middleware.
+sees. An `int` bounds one context. To bound several contexts on one provider (a
+service that builds a context per request or per scan), create one
+`InFlightLimit(n)` per provider and pass it as `max_concurrent_requests=`: every
+context built with it shares the same `n` slots. A context built from your own
+`Web3` object is not bounded unless you add the limit to it:
+`limit.install(web3)` (innermost, as `from_url` does) or
+`web3.middleware_onion.inject(limit.middleware, layer=0)`.
 
 `ensure_supported_chain` takes `ChainId`. `fetch_unpriceable_priced_tokens` takes the oracle and
 underlying as `ChecksumAddress`. `resolve_token_symbol`, `resolve_token_decimals`,
@@ -197,7 +206,13 @@ keyword arguments only. `ZERO_ADDRESS` is a `ChecksumAddress` (same value).
 `HYPERCORE_PENDING_READERS` are keyed by `ChainId` (`HYPEREVM_CHAIN_ID` is one) and
 `explorer.SUPPORTED_CHAINS` is a `frozenset[ChainId]`, so
 `ensure_supported_chain(CHAIN_NAME_TO_ID["ethereum"])` type-checks;
-`PUBLIC_ALLOCATOR_ADDRESSES` values are `ChecksumAddress`. `IporFusionMarkets.RWA`
+`PUBLIC_ALLOCATOR_ADDRESSES` values are `ChecksumAddress`. Import `CHAIN_NAMES`,
+`CHAIN_NAME_TO_ID`, `SUPPORTED_CHAIN_IDS`, `GET_LOGS_RANGE_HINTS`,
+`PUBLIC_ALLOCATOR_ADDRESSES`, `HYPERCORE_PENDING_READERS`, `HYPEREVM_CHAIN_ID` and
+`HYPERCORE_MARKET` from `ipor_fusion` (the HyperCore ones also from
+`ipor_fusion.readers`). `BLOCK_EXPLORER_URLS`, `MORPHO_BLUE_ADDRESSES`,
+`AAVE_V3_POOL` and `explorer.SUPPORTED_CHAINS` are internal: use
+`morpho_blue_address(chain_id)` for Morpho Blue. `IporFusionMarkets.RWA`
 is gone: market 50 is `IporFusionMarkets.EXTERNAL_STATE`. `MORPHO_BLUE_ADDRESS` is
 gone: use `morpho_blue_address(chain_id)`.
 
@@ -253,8 +268,10 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 `MarketId`. Calling an MCP tool function directly from Python takes `ChainId`.
 
 **Fuse base.** `Fuse`, `StakeFuse` and the shared validators and substrate packers
-live in `ipor_fusion.core.fuse`; `ipor_fusion.fuses.base`, `ipor_fusion.fuses` and
-`ipor_fusion` re-export them, so existing imports keep working. Fuse equality and
+moved to `ipor_fusion.core.fuse`. Import `Fuse` and `StakeFuse` from `ipor_fusion`
+or `ipor_fusion.fuses`. `ipor_fusion.fuses.base` still re-exports them in 4.0, but
+it is a submodule of a public subpackage and therefore internal (see the README,
+*Public API and stability*); so are the underscore validators and packers. Fuse equality and
 hash now cover every attribute a fuse stores, not only its class and address (see
 [Behavior changes](#behavior-changes)).
 
@@ -267,9 +284,7 @@ unchanged.
 | 3.x import | 4.0 import |
 |---|---|
 | `ipor_fusion.fuses.crosschain` | `ipor_fusion.crosschain.fuses` (or `ipor_fusion.crosschain`) |
-| `ipor_fusion.fuses.crosschain.base` | `ipor_fusion.crosschain.fuses.base` |
-| `ipor_fusion.fuses.crosschain.ccip` | `ipor_fusion.crosschain.fuses.ccip` |
-| `ipor_fusion.fuses.crosschain.stargate` | `ipor_fusion.crosschain.fuses.stargate` |
+| `ipor_fusion.fuses.crosschain.base`, `.ccip`, `.stargate` | `ipor_fusion.crosschain.fuses` (its submodules `base`, `ccip` and `stargate` exist but are internal) |
 | `from ipor_fusion.fuses import CcipCrosschainSupplyFuse` (and the other crosschain encoders, `SendParams`, `CrosschainSubstrate*`, `crosschain_market_id`) | `from ipor_fusion.crosschain import ...` or `from ipor_fusion import ...` |
 
 `ipor_fusion.crosschain` now exports the whole crosschain surface: besides the
@@ -280,8 +295,9 @@ the transports and chains, `discover_deployment`, `open_lane(s)`, `LANES` and
 and wrappers.
 
 **Moved, still importable.** `FuseAction` lives in `ipor_fusion.core.fuse_action` and
-`ZERO_ADDRESS` in `ipor_fusion.types`; both are re-exported from
-`ipor_fusion.fuses.base` and `FuseAction` from `ipor_fusion`. The CLI's internal
+`ZERO_ADDRESS` in `ipor_fusion.types`; import both from `ipor_fusion` (`FuseAction`
+also from `ipor_fusion.fuses`, `ZERO_ADDRESS` from the public module
+`ipor_fusion.types`). The internal `ipor_fusion.fuses.base` still re-exports them. The CLI's internal
 `ipor_fusion.cli.vault_cmd` was split into `options`, `vault_info_view`,
 `vault_markets_view` and `oracle_mapping_view` (private names, not API).
 
