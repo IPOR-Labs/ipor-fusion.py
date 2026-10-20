@@ -214,6 +214,12 @@ are `ProposalHash`; `ExternalStateEvent.transaction_hash` is a `TxHash`.
 except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 `MarketId`. Calling an MCP tool function directly from Python takes `ChainId`.
 
+**Fuse base.** `Fuse`, `StakeFuse` and the shared validators and substrate packers
+live in `ipor_fusion.core.fuse`; `ipor_fusion.fuses.base`, `ipor_fusion.fuses` and
+`ipor_fusion` re-export them, so existing imports keep working. Fuse equality and
+hash now cover every attribute a fuse stores, not only its class and address (see
+[Behavior changes](#behavior-changes)).
+
 **Moved, still importable.** `FuseAction` lives in `ipor_fusion.core.fuse_action` and
 `ZERO_ADDRESS` in `ipor_fusion.types`; both are re-exported from
 `ipor_fusion.fuses.base` and `FuseAction` from `ipor_fusion`. The CLI's internal
@@ -222,6 +228,12 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 
 ## Behavior changes
 
+- Two fuses are equal (and hash alike) only when they have the same class and the
+  same stored state. `StakeFuse` subclasses (`GearboxStakeFuse`,
+  `FluidInstadappStakingFuse`) with the same fuse address but different
+  `staking_address` were equal and collapsed in a set or dict key; they are now
+  distinct. A custom `Fuse` subclass is compared on its instance attributes, which
+  must be hashable; drop an `__eq__` / `__hash__` override that only added them.
 - The MCP `vault_info` document reports the vault address checksummed (the CLI
   already did).
 - `SubstrateInfo.address` is `None` instead of `""` for a substrate without an

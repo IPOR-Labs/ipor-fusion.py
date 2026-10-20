@@ -221,12 +221,14 @@ the lifecycle matrix follows that.
   `simulation` (`VaultSimulator`, eth_simulateV1, `erc20_balance_slot` and ERC-20 balance
   overrides), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`, `fuse_action`
-  (`FuseAction`), `address` (`_validate_not_zero_address`). `core` imports neither
+  (`FuseAction`), `fuse` (the `Fuse` base, `StakeFuse`, the shared validators and
+  substrate packers), `address` (`_validate_not_zero_address`). `core` imports neither
   `fuses` nor `crosschain` (`tests/test_sdk_layering.py`)
 - `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3, crosschain/,
   erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
-  uniswap_v3, universal, `events.py`); `base.py` holds `Fuse` and the
-  shared validators and re-exports `FuseAction` and `ZERO_ADDRESS` (from `types`)
+  uniswap_v3, universal, `events.py`); `base.py` re-exports the `core/fuse.py` base and validators,
+  `FuseAction` and `ZERO_ADDRESS` (from `types`). A fuse is a value: equality and
+  hash cover its class and every attribute it stores
 - `crosschain/` — crosschain Plasma Vaults (executor on the hub chain, dispatcher at
   the same address on each spoke chain), split like the contracts: shared `messages`
   (`Command`, `MsgType`, envelopes), `contracts` (wrapper bases), `transport`

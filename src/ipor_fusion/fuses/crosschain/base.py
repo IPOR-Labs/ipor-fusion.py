@@ -31,13 +31,10 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from web3 import Web3
 
+from ipor_fusion.core.address import _validate_not_zero_address
+from ipor_fusion.core.fuse import Fuse, _substrate_address_bytes
+from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.crosschain.messages import Command
-from ipor_fusion.fuses.base import (
-    Fuse,
-    FuseAction,
-    _substrate_address_bytes,
-    _validate_not_zero_address,
-)
 from ipor_fusion.types import Amount, ChainId, MarketId
 
 _NO_CHAIN = ChainId(0)
