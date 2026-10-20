@@ -313,6 +313,61 @@ argument (`chain_id=`) for another chain. An external signer still needs the rea
 target address (`call.to`) and builds the chain-qualified transaction itself, or
 gets it from `call.build_transaction(ctx)`.
 
+## Contract cache
+
+Contract names, token symbols and decimals and deployment blocks are cached in a
+`ContractCache`, injected instead of always written to `~/.cache`:
+
+- `Web3Context(..., cache=...)` and `Web3Context.from_url(..., cache=...)` take one
+  (keyword-only); `ctx.cache` returns it, and `ctx.at_block(...)` keeps it. The
+  default (`None`) is `default_contract_cache()`, a `FileContractCache` at
+  `$XDG_CACHE_HOME/ipor-fusion/contract_cache.json` (`~/.cache/...` when unset),
+  resolved when used rather than at import. `NullCache()` keeps nothing;
+  `FileContractCache(path)` moves the file; any object with `get(keys)` and
+  `put(entries)` over `CacheKey(chain_id, address, field)` → `str` fits the
+  protocol (for example a shared store in a service).
+- `resolve_token_symbol`, `resolve_token_decimals`, the snapshot's token metadata
+  (`fetch_vault_data(metadata=True)`) and `fetch_deployment_info` use `ctx.cache`.
+  `get_contract_name(chain_id, address, api_key=None, *, cache=None)` takes the cache
+  explicitly (default: the file cache); pass `cache=ctx.cache` to share the
+  context's policy. `build_vault_info_json` without `resolve_name` still names
+  contracts from the default file cache; pass `resolve_name` to avoid it.
+- `ipor_fusion.cache` is a public module now and exports `ContractCache`,
+  `FileContractCache`, `NullCache`, `CacheKey`, `CacheField`, `cache_key` and
+  `default_contract_cache` (also from `ipor_fusion`). Its 3.x functions and constants
+  are gone: `load_contract_cache`, `save_contract_cache`, `update_contract_cache`,
+  `load_deployment_cache`, `update_deployment_cache`, `CACHE_DIR`, `CACHE_FILE` and
+  `DEPLOYMENT_CACHE_FILE`. `cache_key(chain_id, address, field)` returns a `CacheKey`
+  and raises `ValueError` for an address that is not 20 bytes of hex, so
+  `get_contract_name` does too.
+
+**File format.** One file, keys `<chain_id>:<lowercase address>:<field>` (`name`,
+`symbol`, `decimals`, `deployment_block`, `deployment_timestamp`), string values. On
+load, a 3.x contract name (`<chain_id>:<address>`) is kept as that chain's `name`;
+3.x token entries (`symbol:<address>`, `decimals:<address>`) name no chain and are
+discarded, so symbols and decimals are read again once per chain. `deployment_cache.json`
+is no longer read: a vault's deployment block is resolved again (it needs an
+Etherscan key) and the old file can be deleted.
+
+**Behavior.**
+
+- The same address on two chains has two entries: a token's symbol or decimals read
+  on one chain is never served for another.
+- Absence is not cached: `resolve_token_symbol` still returns `"no contract"` for an
+  address without code, but no longer stores it, so a token deployed later (or seen at
+  a later block) resolves.
+- A write merges with the file as it is on disk and replaces it atomically (a
+  temporary file in the same directory, then `os.replace`), so a crash or two CLI/MCP
+  processes writing at once never leave a torn file; one of two concurrent writers may
+  lose its newest entry, which is read again later.
+- A cache never fails a read: a corrupt or unreadable file reads as empty (logged
+  warning from `ipor_fusion.cache`) and is rewritten by the next write; an unwritable
+  directory (read-only file system) keeps the entries in memory for the process; a
+  custom cache that raises is treated as a miss.
+- `fetch_deployment_info` returns `rpc-fetch-failed` only when the creation
+  transaction or its block cannot be read; a cache failure is no longer reported as
+  one (the deployment block is returned).
+
 ## Behavior changes
 
 - Two fuses are equal (and hash alike) only when they have the same class and the
@@ -350,9 +405,8 @@ gets it from `call.build_transaction(ctx)`.
 - `TransactionError.tx_hash` is `0x`-prefixed.
 - Saved config entries are checksummed when loaded; the MCP `vault_add` tool rejects
   a value that is not an address.
-- The on-disk caches (`~/.cache/ipor-fusion/`) key addresses lowercased; older entries
-  are rekeyed on load, so a contract name cached for one spelling now also resolves
-  for the other.
+- The contract cache keys every entry by chain and lowercase address and no longer
+  caches an absence (see [Contract cache](#contract-cache)).
 
 ## Errors
 

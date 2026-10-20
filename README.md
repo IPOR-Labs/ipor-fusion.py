@@ -333,11 +333,11 @@ release; adding one does not.
   `crosschain`, `crosschain.ccip` and `crosschain.stargate`. `ipor_fusion.guide`
   (the packaged docs) keeps its names in its own namespace.
 - **Public modules** stay importable for the top-level names they define:
-  `about`, `chains`, `dependency_graph`, `errors`, `explorer`, `field_docs`,
+  `about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`, `field_docs`,
   `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`, `validation`,
   `vault_data` and `vault_info` (all under `ipor_fusion.`).
 - **Internal:** `ipor_fusion.cli`, `ipor_fusion.mcp`, every other module (e.g.
-  `cache`, `vault_reads`, the submodules of the public subpackages), underscore
+  `vault_reads`, the submodules of the public subpackages), underscore
   names, and names in no `__all__`. They change without notice; the CLI and the
   MCP server are stable as commands and tools, not as Python modules.
 - **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`: crosschain,
@@ -446,6 +446,14 @@ Unichain and Plasma, an old contract needs thousands of requests: past
 fields as unavailable (`null`) rather than partial. A `LogSource` on the context, such as
 a service that caches an explorer's log API, answers those scans instead
 (`Web3Context(log_source=…)`); when it raises `LogSourceUnavailable` the RPC scan runs.
+
+Immutable contract facts (token symbols and decimals, contract names, deployment blocks)
+are cached per chain and address in the context's `ContractCache`. The default,
+`FileContractCache`, is `$XDG_CACHE_HOME/ipor-fusion/contract_cache.json`
+(`~/.cache/...`), written atomically and ignored when corrupt or unwritable. A service
+passes `Web3Context(..., cache=NullCache())` to keep nothing, `FileContractCache(path)`
+to move it, or its own `get` / `put` implementation; `get_contract_name(..., cache=)`
+takes the same object.
 
 ## Development
 

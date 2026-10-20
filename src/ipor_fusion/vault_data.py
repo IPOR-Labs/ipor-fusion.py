@@ -3,8 +3,8 @@ trips: `fetch_vault_data` returns a `VaultData` snapshot (vault and asset,
 fees, WithdrawManager, markets, substrates, lending positions, role holders),
 and `fetch_deployment_info` resolves the vault's deployment block.
 
-Token symbols, decimals and deployment blocks are cached on disk
-(`ipor_fusion.cache`).
+Token symbols, decimals and deployment blocks are cached per chain in the
+context's `ContractCache` (``ctx.cache``).
 """
 
 from __future__ import annotations
@@ -20,13 +20,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import ChecksumAddress
 
-from ipor_fusion.cache import (
-    cache_key,
-    load_contract_cache,
-    load_deployment_cache,
-    update_contract_cache,
-    update_deployment_cache,
-)
+from ipor_fusion.cache import CacheKey, cache_get, cache_key, cache_put
 from ipor_fusion.chains import ensure_supported_chain
 from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sort_key
 from ipor_fusion.core.context import Web3Context
@@ -198,7 +192,8 @@ class VaultData:
     # Symbols (lowercase address keys) of the substrate and breakdown tokens,
     # and decimals of the breakdown tokens; empty when fetched with
     # metadata=False. "" / None: not a token, or unreadable. Token metadata
-    # is cached on disk per address, so a cached value may postdate the block.
+    # is cached per chain and address (ctx.cache), so a cached value may
+    # postdate the block.
     token_symbols: dict[HexAddress, str] = field(default_factory=dict)
     token_decimals: dict[HexAddress, int | None] = field(default_factory=dict)
 
@@ -235,17 +230,17 @@ def _missing_required_getter(
 
 
 def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
-    """ERC-20 symbol, cached; ``"no contract"`` when nothing is deployed at
-    ``address`` and ``""`` when the symbol cannot be read."""
-    cache = load_contract_cache()
-    key = cache_key("symbol", address)
-    if cached := cache.get(key):
+    """ERC-20 symbol on ``ctx``'s chain, cached in ``ctx.cache``;
+    ``"no contract"`` when nothing is deployed at ``address`` (at the context's
+    block) and ``""`` when the symbol cannot be read. Neither is cached: the
+    address can be deployed later."""
+    key = cache_key(ctx.chain_id, address, "symbol")
+    if cached := cache_get(ctx.cache, [key]).get(key):
         return cached
 
     checksum = Web3.to_checksum_address(address)
     code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
-    if not code or code == b"":
-        update_contract_cache(key, _NO_CONTRACT)
+    if not code:
         return _NO_CONTRACT
 
     try:
@@ -253,27 +248,33 @@ def resolve_token_symbol(ctx: Web3Context, address: HexAddress) -> str:
     except Exception:
         symbol = ""
     if symbol:
-        update_contract_cache(key, symbol)
+        cache_put(ctx.cache, {key: symbol})
     return symbol
 
 
+def _cached_decimals(cached: dict[CacheKey, str], key: CacheKey) -> int | None:
+    value = cached.get(key)
+    return int(value) if value is not None and value.isdigit() else None
+
+
 def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> int | None:
-    """Resolve ERC-20 decimals, cached. Returns None if address is not a contract."""
-    cache = load_contract_cache()
-    key = cache_key("decimals", address)
-    if cached := cache.get(key):
-        return int(cached)
+    """ERC-20 decimals on ``ctx``'s chain, cached in ``ctx.cache``; ``None``
+    (not cached) when ``address`` has no code at the context's block or does
+    not answer."""
+    key = cache_key(ctx.chain_id, address, "decimals")
+    if (cached := _cached_decimals(cache_get(ctx.cache, [key]), key)) is not None:
+        return cached
 
     checksum = Web3.to_checksum_address(address)
     code = ctx.web3.eth.get_code(checksum, block_identifier=ctx.default_block)
-    if not code or code == b"":
+    if not code:
         return None
 
     try:
         decimals = ERC20(checksum).decimals().call(ctx)
     except Exception:
         return None
-    update_contract_cache(key, str(decimals))
+    cache_put(ctx.cache, {key: str(decimals)})
     return decimals
 
 
@@ -683,15 +684,20 @@ def _token_metadata(
         for sub in subs
         if (info := decode_substrate(sub, market_id=market_id)).address
     }
-    cache = load_contract_cache()
-    symbols: dict[HexAddress, str] = {}
-    decimals: dict[HexAddress, int | None] = {}
-    for address in breakdown | substrate_addresses:
-        if cached := cache.get(cache_key("symbol", address)):
-            symbols[address] = cached
-    for address in breakdown:
-        if cached := cache.get(cache_key("decimals", address)):
-            decimals[address] = int(cached)
+    chain_id = ctx.chain_id
+    symbol_keys = {
+        a: cache_key(chain_id, a, "symbol") for a in breakdown | substrate_addresses
+    }
+    decimals_keys = {a: cache_key(chain_id, a, "decimals") for a in breakdown}
+    cached = cache_get(ctx.cache, [*symbol_keys.values(), *decimals_keys.values()])
+    symbols: dict[HexAddress, str] = {
+        a: cached[k] for a, k in symbol_keys.items() if cached.get(k)
+    }
+    decimals: dict[HexAddress, int | None] = {
+        a: value
+        for a, k in decimals_keys.items()
+        if (value := _cached_decimals(cached, k)) is not None
+    }
     missing_symbols = sorted((breakdown | substrate_addresses) - symbols.keys())
     missing_decimals = sorted(breakdown - decimals.keys())
     if not missing_symbols and not missing_decimals:
@@ -702,16 +708,18 @@ def _token_metadata(
     calls: list[Call[Any]] = [tokens[a].symbol() for a in missing_symbols]
     calls += [tokens[a].decimals() for a in missing_decimals]
     results = Multicall3(ctx).try_aggregate(calls)
+    found: dict[CacheKey, str] = {}
     for address, symbol in zip(missing_symbols, results, strict=False):
         symbols[address] = symbol or ""
         if symbol:
-            update_contract_cache(cache_key("symbol", address), symbol)
+            found[symbol_keys[address]] = symbol
     for address, value in zip(
         missing_decimals, results[len(missing_symbols) :], strict=True
     ):
         decimals[address] = value
         if value is not None:
-            update_contract_cache(cache_key("decimals", address), str(value))
+            found[decimals_keys[address]] = str(value)
+    cache_put(ctx.cache, found)
     return symbols, decimals
 
 
@@ -749,18 +757,24 @@ def fetch_deployment_info(
     *,
     api_key: str | None = None,
 ) -> tuple[int | None, int | None, str | None]:
-    """Return ``(block, timestamp, error)`` for the vault deployment, using cache.
+    """Return ``(block, timestamp, error)`` for the vault deployment, cached in
+    ``ctx.cache``.
 
     ``error`` is a short machine-readable code surfaced to the caller when the
     lookup fails for a known reason (e.g. ``etherscan-paid-tier-required`` for
-    Base/Optimism on the free Etherscan tier). ``None`` means either success or
-    a benign empty response.
+    Base/Optimism on the free Etherscan tier, ``rpc-fetch-failed`` when the
+    creation transaction or its block cannot be read). ``None`` means either
+    success or a benign empty response. The cache never causes an error: one
+    that cannot be read or written is skipped.
     """
     chain_id = ctx.chain_id
-    key = cache_key(chain_id, vault_address)
-    cache = load_deployment_cache()
-    if entry := cache.get(key):
-        return entry["block"], entry["timestamp"], None
+    block_key = cache_key(chain_id, vault_address, "deployment_block")
+    time_key = cache_key(chain_id, vault_address, "deployment_timestamp")
+    cached = cache_get(ctx.cache, [block_key, time_key])
+    if (block := cached.get(block_key, "")).isdigit() and (
+        stamp := cached.get(time_key, "")
+    ).isdigit():
+        return int(block), int(stamp), None
 
     tx_hash, error = get_deployment_tx(chain_id, vault_address, api_key)
     if not tx_hash:
@@ -769,9 +783,8 @@ def fetch_deployment_info(
     try:
         tx = ctx.web3.eth.get_transaction(tx_hash)
         block_number: int = tx["blockNumber"]
-        block_info = ctx.web3.eth.get_block(block_number)
-        timestamp: int = block_info["timestamp"]
-        update_deployment_cache(key, block_number, timestamp)
-        return block_number, timestamp, None
+        timestamp: int = ctx.web3.eth.get_block(block_number)["timestamp"]
     except Exception:
         return None, None, "rpc-fetch-failed"
+    cache_put(ctx.cache, {block_key: str(block_number), time_key: str(timestamp)})
+    return block_number, timestamp, None

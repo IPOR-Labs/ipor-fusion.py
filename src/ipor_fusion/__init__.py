@@ -7,6 +7,15 @@ from ipor_fusion.about import (
     read_changelog,
     repository_url,
 )
+from ipor_fusion.cache import (
+    CacheField,
+    CacheKey,
+    ContractCache,
+    FileContractCache,
+    NullCache,
+    cache_key,
+    default_contract_cache,
+)
 from ipor_fusion.chains import (
     CHAIN_NAME_TO_ID,
     CHAIN_NAMES,
@@ -741,6 +750,13 @@ __all__ = [
     "decode_custom_error",
     "get_revert_reason",
     "register_custom_errors",
+    "CacheField",
+    "CacheKey",
+    "ContractCache",
+    "FileContractCache",
+    "NullCache",
+    "cache_key",
+    "default_contract_cache",
     "get_contract_name",
     "get_deployment_tx",
     "CHAIN_NAMES",

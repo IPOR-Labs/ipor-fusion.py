@@ -6,7 +6,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from ipor_fusion import cache
+from ipor_fusion.cache import NullCache
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, VaultEntry, save_config
 from ipor_fusion.cli.main import cli, main
@@ -120,13 +120,10 @@ def tmp_config(tmp_path, monkeypatch):
     config_dir = tmp_path / ".fusion"
     cache_dir = tmp_path / ".cache"
     config_file = config_dir / "config.json"
-    cache_file = cache_dir / "contract_cache.json"
-    deployment_cache_file = cache_dir / "deployment_cache.json"
+    cache_file = cache_dir / "ipor-fusion" / "contract_cache.json"
     monkeypatch.setattr(config_store, "CONFIG_DIR", config_dir)
     monkeypatch.setattr(config_store, "CONFIG_FILE", config_file)
-    monkeypatch.setattr(cache, "CACHE_DIR", cache_dir)
-    monkeypatch.setattr(cache, "CACHE_FILE", cache_file)
-    monkeypatch.setattr(cache, "DEPLOYMENT_CACHE_FILE", deployment_cache_file)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_dir))
     return config_dir, config_file, cache_file
 
 
@@ -445,6 +442,7 @@ class TestVaultInfo:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 12345678
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
@@ -571,6 +569,7 @@ class TestVaultInfo:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 12345678
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
@@ -648,6 +647,7 @@ class TestVaultInfo:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
@@ -713,6 +713,7 @@ class TestVaultInfo:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
@@ -790,6 +791,7 @@ class TestVaultInfo:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.web3.eth.get_transaction.return_value = {"blockNumber": 18500000}
@@ -857,6 +859,7 @@ class TestVaultInfo:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1
@@ -961,6 +964,7 @@ class TestVaultInfoJson:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.chain_id = 1
         mock_ctx.web3.eth.block_number = 12345678
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
@@ -1135,6 +1139,7 @@ class TestVaultInfoJson:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.web3.eth.get_transaction.return_value = {"blockNumber": 18500000}
@@ -1210,6 +1215,7 @@ class TestVaultInfoJson:
         save_config(cfg)
 
         mock_ctx = MagicMock()
+        mock_ctx.cache = NullCache()
         mock_ctx.web3.eth.block_number = 100
         mock_ctx.web3.eth.get_block.return_value = {"timestamp": 1700000000}
         mock_ctx.chain_id = 1

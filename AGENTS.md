@@ -204,7 +204,13 @@ the lifecycle matrix follows that.
   document rendered from the snapshot alone (contract names via an injected
   `resolve_name`),
   and `health_check_lists`; `explorer.py` Etherscan V2 (single endpoint, needs API key);
-  `cache.py` the on-disk contract and deployment caches (`~/.cache/ipor-fusion/`).
+  `cache.py` the `ContractCache` protocol (`get`/`put` of immutable facts keyed
+  `CacheKey(chain_id, address, field)`), `FileContractCache` (one JSON file, atomic
+  replace, corrupt/unwritable degrades to memory) and `NullCache`; every SDK use goes
+  through `cache_get`/`cache_put` (a failing cache is a miss, never an error) on
+  `ctx.cache` (`Web3Context(cache=...)`, default `default_contract_cache()` under
+  `$XDG_CACHE_HOME/ipor-fusion/`) or `get_contract_name(cache=...)`. Never cache an
+  absence (no code, no answer): it can change at a later block.
   `morpho_api.py` the Morpho public GraphQL API client (`fetch_market`, `fetch_vault`,
   `PUBLIC_ALLOCATOR_ADDRESSES`); `market_info.py` — `build_morpho_blue_market_json`,
   `build_meta_morpho_json`, the `fusion market` JSON documents.
@@ -383,8 +389,11 @@ byte, e.g. Ebisu ZAPPER/REGISTRY).
 role-accounts, oracle-mapping). `vault info` runs independent fetch pipelines
 (vault/asset, fees, WithdrawManager, markets, roles) concurrently on a
 `ThreadPoolExecutor`, each a short chain of `Multicall3` batches; keep new
-reads inside a batch rather than adding per-call round trips. Contract names
-and token symbols are cached in `~/.cache/ipor-fusion/contract_cache.json`.
+reads inside a batch rather than adding per-call round trips. Contract names,
+token symbols and decimals and deployment blocks are cached per chain in
+`$XDG_CACHE_HOME/ipor-fusion/contract_cache.json` (`<chain>:<address>:<field>`
+keys); tests redirect it with `monkeypatch.setenv("XDG_CACHE_HOME", ...)` or
+inject a cache.
 
 Every CLI command has an MCP tool (`fusion changelog` maps to `server_info`;
 the rest share names). Read-only: `vault_info`, `vault_validate`,
