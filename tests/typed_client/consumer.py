@@ -23,7 +23,9 @@ from ipor_fusion import (
     CrosschainDispatcher,
     CrosschainExecutor,
     CrosschainFactory,
+    Decimals,
     IporFusionMarkets,
+    LegacyPriceOracleMiddleware,
     MarketId,
     Period,
     PlasmaVault,
@@ -131,6 +133,12 @@ def roles_flow_from_getters_into_writes(ctx: Web3Context) -> None:
     vault.remove_fuses(fuses)
     for balance_fuse in vault.get_balance_fuses():
         vault.balance_fuse_value(balance_fuse.fuse)
+
+
+def offline_calldata(account: ChecksumAddress) -> bytes:
+    vault = PlasmaVault(None, VAULT)
+    LegacyPriceOracleMiddleware(None, account, Decimals(8)).get_asset_price(account)
+    return vault.convert_to_public_vault().calldata
 
 
 def reward_fuses_flow(manager: RewardsManager) -> None:

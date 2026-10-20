@@ -102,3 +102,16 @@ def test_leaf_namespace_stays_fuse_free(name: str):
         or (imported.startswith("ipor_fusion.crosschain") and imported not in LEAF)
     ]
     assert not offenders, f"{name} imports {offenders}"
+
+
+@pytest.mark.parametrize("path", sorted(FUSES.rglob("*.py")), ids=_module_name)
+def test_crosschain_encoders_build_on_the_core_fuse_base(path: Path):
+    """The fuse base lives in ``ipor_fusion.core.fuse``; the crosschain
+    encoders import it from there, not through the other encoders' modules."""
+    offenders = [
+        name
+        for name in _imported(path)
+        if name.startswith("ipor_fusion.fuses")
+        and not name.startswith("ipor_fusion.fuses.crosschain")
+    ]
+    assert not offenders, f"{_module_name(path)} imports {offenders}"

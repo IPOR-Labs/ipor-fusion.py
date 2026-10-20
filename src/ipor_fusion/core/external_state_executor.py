@@ -31,6 +31,7 @@ from web3.types import BlockIdentifier, TxReceipt
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.errors import ExternalStateError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import (
     ZERO_ADDRESS,
@@ -107,6 +108,17 @@ def _hash_of(
     )
 
 
+def _no_balance_proposed(
+    executor: ChecksumAddress, balance_account: ChecksumAddress | None
+) -> str:
+    for_account = (
+        f" for account {Web3.to_checksum_address(balance_account)}"
+        if balance_account is not None
+        else ""
+    )
+    return f"no BalanceProposed log from executor {executor}{for_account}"
+
+
 def _require_matching_hash(
     proposal: BalanceProposal, *, executor: ChecksumAddress, chain_id: ChainId
 ) -> None:
@@ -122,7 +134,7 @@ def _require_matching_hash(
     if proposal.proposal_hash != _hash_of(
         proposal, executor=executor, chain_id=chain_id
     ):
-        raise ValueError(
+        raise ExternalStateError(
             "proposal hash does not match its own fields: it pairs this value "
             "with another proposal's hash, or it was computed for a different "
             "executor or chain id"
@@ -191,7 +203,9 @@ def _storage_word(raw: bytes) -> int:
     never a value an EVM slot can hold."""
     data = bytes(raw)
     if len(data) > 32:
-        raise ValueError(f"storage word of {len(data)} bytes, more than a 32-byte slot")
+        raise ExternalStateError(
+            f"storage word of {len(data)} bytes, more than a 32-byte slot"
+        )
     return int.from_bytes(data.rjust(32, b"\x00"), "big")
 
 
@@ -230,9 +244,10 @@ def read_external_state(
     hash by identity; ``pending`` is rejected), so the four values never mix
     blocks; the block number is returned so executor reads can be pinned to
     it. Decoding is canonical: a word longer than 32 bytes, an executor word
-    with bits above the address, or a pause word other than 0 or 1, raises ``ValueError`` rather than passing as
-    a plausible value; a zero executor word is ``None`` (no executor deployed),
-    which is a state, while an RPC or decoding failure raises.
+    with bits above the address, or a pause word other than 0 or 1, raises
+    ``ExternalStateError`` rather than passing as a plausible value; a zero
+    executor word is ``None`` (no executor deployed), which is a state, while
+    an RPC or decoding failure raises.
     """
     vault = Web3.to_checksum_address(vault_address)
     read_at, block = _snapshot_block(ctx)
@@ -241,11 +256,11 @@ def read_external_state(
         _storage_word(ctx.get_storage_at(vault, base + i, read_at)) for i in range(4)
     ]
     if words[0] >> 160:
-        raise ValueError(
+        raise ExternalStateError(
             f"malformed executor word in the external-state storage of {vault}"
         )
     if words[3] not in (0, 1):
-        raise ValueError(
+        raise ExternalStateError(
             f"malformed pause flag in the external-state storage of {vault}"
         )
     return ExternalStateVaultState(
@@ -309,24 +324,26 @@ class ExternalStateExecutor(ContractWrapper):
     ) -> ExternalStateExecutor:
         """Resolve the per-vault executor from vault storage and wrap it.
 
-        Raises `ValueError` when no executor is deployed yet (the slot reads
-        zero) rather than returning a wrapper around the zero address, and lets
-        `decode` reject a slot whose high 12 bytes are non-zero (a wrong or
-        corrupt slot, not an address-in-slot).
+        Raises `ExternalStateError` when no executor is deployed yet (the slot
+        reads zero) rather than returning a wrapper around the zero address, and
+        when the slot is not an address (its high 12 bytes are non-zero: a wrong
+        or corrupt slot) or is longer than 32 bytes.
         """
-        # Left-pad so an RPC that strips leading zero bytes still decodes; the
-        # address is the slot's low 20 bytes, `decode` verifies the rest is zero.
-        raw = bytes(
+        word = _storage_word(
             ctx.get_storage_at(
                 Web3.to_checksum_address(vault_address), cls._EXECUTOR_STORAGE_SLOT
             )
-        ).rjust(32, b"\x00")
-        executor = Web3.to_checksum_address(decode(["address"], raw)[0])
-        if executor == ZERO_ADDRESS:
-            raise ValueError(
+        )
+        if word >> 160:
+            raise ExternalStateError(
+                f"malformed executor word in the external-state storage of "
+                f"{vault_address}"
+            )
+        if word == 0:
+            raise ExternalStateError(
                 f"no ExternalStateExecutor deployed for vault {vault_address}"
             )
-        return cls(ctx, executor)
+        return cls(ctx, Web3.to_checksum_address(f"0x{word:040x}"))
 
     def balances(self, balance_account: ChecksumAddress) -> Call[Amount]:
         """Underlying-unit balance the executor tracks for `balance_account`.
@@ -446,13 +463,13 @@ class ExternalStateExecutor(ContractWrapper):
         The hash is bound to a chain. `chain_id` defaults to this wrapper's
         context; pass it explicitly when the context that executes the call is
         not the one the wrapper was built with (`Call.call(other_ctx)`), or to
-        read through a ctx-less `encoder()` instance.
+        read through a wrapper built with `ctx=None`.
         """
         account = Web3.to_checksum_address(balance_account)
 
         def to_proposal(values: tuple[int, str, int, int]) -> BalanceProposal | None:
             # Both hash inputs first, before the empty-slot return. Resolved
-            # inside the decoder so a calldata-only `encoder()` wrapper keeps
+            # inside the decoder so a calldata-only (`ctx=None`) wrapper keeps
             # working like every sibling, but ahead of the sentinel so a
             # misconfigured poller fails on its first read rather than on the
             # first read that happens to find a proposal.
@@ -487,29 +504,28 @@ class ExternalStateExecutor(ContractWrapper):
         )
 
     def _require_address(self) -> ChecksumAddress:
-        """This executor's address, or a clear error on an address-less
-        `encoder()`.
+        """This executor's address, or a clear error for the zero address.
 
-        The other half of the hash's binding, and the placeholder zero address
-        is not a usable stand-in for it: it stamps a hash bound to no contract,
+        The other half of the hash's binding, and the zero address is not a
+        usable stand-in for it: it stamps a hash bound to no contract,
         and it matches only a log claiming to come from none."""
         if self._address == ZERO_ADDRESS:
             raise ValueError(
                 "executor address required: the proposal hash binds it and the "
                 "event readers match it against a log's emitter, so build this "
-                "wrapper with an address rather than a bare encoder()."
+                "wrapper with the executor's address, not the zero address."
             )
         return self._address
 
     def _require_chain_id(self, override: ChainId | None = None) -> ChainId:
         """`override` if the caller named one, else the wrapper's chain, else a
-        clear error on a ctx-less `encoder()`."""
+        clear error on a wrapper built with `ctx=None`."""
         if override is not None:
             return override
         if self._ctx is None:
             raise ValueError(
                 "Web3Context required: the proposal hash is bound to a chain id, "
-                "so build this wrapper with a ctx rather than via encoder(), "
+                "so build this wrapper with a ctx rather than ctx=None, "
                 "or pass chain_id= to this method."
             )
         return self._ctx.chain_id
@@ -634,11 +650,10 @@ class ExternalStateExecutor(ContractWrapper):
         Accepts receipt-shaped logs (HexBytes) and JSON-RPC / `eth_simulateV1`
         -shaped logs (`0x`-hex strings) alike, so it also decodes rows from an
         event index. Needs no chain access. Raises `ValueError` for a log that
-        is not this event, was not emitted by this executor, carries a hash that
-        is not the hash of its own fields, or whose data is malformed -- and for
-        a call with no chain id available at all; `TypeError` for `data` that is
-        not hex at all, which is the one field whose shape it cannot rule out
-        first.
+        is not this event or was not emitted by this executor, and for a call
+        with no chain id available at all; `ExternalStateError` (also a
+        `ValueError`) for one of ours that carries a hash that is not the hash
+        of its own fields, or whose data is missing or malformed.
 
         Security: two checks, and both are needed. This executor must have
         emitted the log, and `proposal_hash` must be the hash of the log's own
@@ -657,7 +672,7 @@ class ExternalStateExecutor(ContractWrapper):
 
         The hash is bound to a chain. `chain_id` defaults to this wrapper's
         context; a caller with no context -- decoding indexer or `get_logs`
-        rows -- reaches this through `encoder(address)` and passes `chain_id`
+        rows -- builds it with `ExternalStateExecutor(None, address)` and passes `chain_id`
         explicitly. Either way the whole path is pure, with no RPC.
 
         `find_balance_proposed` applies the same emitter check while scanning.
@@ -682,7 +697,7 @@ class ExternalStateExecutor(ContractWrapper):
         """Decode a log whose topic0 is already known to be this event."""
         data = log.get("data")
         if data is None:
-            raise ValueError("BalanceProposed log carries no data")
+            raise ExternalStateError("BalanceProposed log carries no data")
         try:
             # Unpacked in the order `BalanceProposed` declares them; all six
             # are unindexed, so topics carries topic0 alone.
@@ -690,8 +705,8 @@ class ExternalStateExecutor(ContractWrapper):
                 cls._BALANCE_PROPOSED_TYPES,
                 HexBytes(data),
             )
-        except (DecodingError, ValueError) as exc:
-            raise ValueError(f"malformed BalanceProposed data: {exc}") from exc
+        except (DecodingError, ValueError, TypeError) as exc:
+            raise ExternalStateError(f"malformed BalanceProposed data: {exc}") from exc
         return BalanceProposal(
             balance_account=Web3.to_checksum_address(account),
             proposer=Web3.to_checksum_address(proposer),
@@ -739,7 +754,7 @@ class ExternalStateExecutor(ContractWrapper):
 
         The hash is bound to a chain. `chain_id` defaults to this wrapper's
         context; pass it explicitly to verify against a different chain, or to
-        scan through a ctx-less `encoder()` instance.
+        scan through a wrapper built with `ctx=None`.
 
         Over a `get_logs` range this still answers a different question than
         `pending_proposals`: a proposal may have been confirmed since, which
@@ -750,7 +765,19 @@ class ExternalStateExecutor(ContractWrapper):
         silently skips, and over a range you filtered yourself a foreign log
         means the filter is wrong, not that the row is uninteresting.
         """
-        expected_emitter = self._require_address()
+        found = self._last_balance_proposed(logs, balance_account, chain_id)
+        if found is not None:
+            return found
+        raise ValueError(_no_balance_proposed(self._address, balance_account))
+
+    def _last_balance_proposed(
+        self,
+        logs: Iterable[RawLog],
+        balance_account: ChecksumAddress | None,
+        chain_id: ChainId | None,
+    ) -> BalanceProposal | None:
+        """`find_balance_proposed` without the raise when nothing matches."""
+        self._require_address()
         wanted = (
             Web3.to_checksum_address(balance_account)
             if balance_account is not None
@@ -773,11 +800,7 @@ class ExternalStateExecutor(ContractWrapper):
                 executor=self._address,
                 chain_id=self._require_chain_id(chain_id),
             )
-            return found
-        for_account = f" for account {wanted}" if wanted is not None else ""
-        raise ValueError(
-            f"no BalanceProposed log from executor {expected_emitter}{for_account}"
-        )
+        return found
 
     def mark_nav(
         self,
@@ -840,19 +863,24 @@ class ExternalStateExecutor(ContractWrapper):
         )
         # Verified against the CONFIRMER's chain, which is the one the confirm
         # will be checked on; the wrapper's own ctx may be a third context.
-        proposal = self.find_balance_proposed(
-            propose_receipt["logs"], balance_account, chain_id=confirmer_ctx.chain_id
+        proposal = self._last_balance_proposed(
+            propose_receipt["logs"], balance_account, confirmer_ctx.chain_id
         )
+        if proposal is None:
+            raise ExternalStateError(
+                "the propose receipt records "
+                + _no_balance_proposed(self._address, balance_account)
+            )
         # The receipt is data from the node, so confirm only what we asked for:
         # signing off on a proposal that differs from the one just sent would
         # attest a value this call never chose.
         if proposal.value != value:
-            raise ValueError(
+            raise ExternalStateError(
                 f"proposed {value} but the receipt records {proposal.value}; "
                 "refusing to confirm"
             )
         if proposal.proposer != proposer_address:
-            raise ValueError(
+            raise ExternalStateError(
                 f"proposal was made by {proposal.proposer}, not {proposer_address}; "
                 "refusing to confirm"
             )

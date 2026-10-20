@@ -11,10 +11,13 @@ from eth_abi.exceptions import DecodingError
 
 import ipor_fusion
 from ipor_fusion import (
+    BalanceSlotNotFoundError,
     ContractNotFoundError,
     CrosschainDiscoveryError,
     EmptyCallResultError,
+    ExternalStateError,
     ExternalStateEventDecodeError,
+    HyperCoreValuationError,
     IporFusionError,
     LogScanError,
     LogSourceUnavailable,
@@ -25,6 +28,7 @@ from ipor_fusion import (
     SimulationRunError,
     TransactionError,
     UnsupportedChainError,
+    UnsupportedContractVersionError,
     UnsupportedVaultVersionError,
     VerifierResultUnavailable,
 )
@@ -78,6 +82,10 @@ def test_every_sdk_exception_is_exported():
         (UnsupportedVaultVersionError, ValueError),
         (MorphoMarketNotFoundError, ValueError),
         (ExternalStateEventDecodeError, ValueError),
+        (ExternalStateError, ValueError),
+        (HyperCoreValuationError, ValueError),
+        (BalanceSlotNotFoundError, ValueError),
+        (UnsupportedContractVersionError, ValueError),
         (MorphoApiError, RuntimeError),
         (SimulationRunError, RuntimeError),
         (VerifierResultUnavailable, LookupError),

@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Self
 
 from eth_abi import decode
 from eth_abi.exceptions import InsufficientDataBytes
@@ -68,16 +67,12 @@ def _role_status_decoder(values: tuple) -> RoleStatus:
 class AccessManager(ContractWrapper):
     """Manages role-based access control for PlasmaVault operations."""
 
-    def __init__(self, ctx: Web3Context, address: AccessManagerAddress):
+    def __init__(self, ctx: Web3Context | None, address: AccessManagerAddress):
         super().__init__(ctx, address)
 
     @property
     def address(self) -> AccessManagerAddress:
         return AccessManagerAddress(self._address)
-
-    @classmethod
-    def encoder(cls, address: AccessManagerAddress | None = None) -> Self:  # type: ignore[override]
-        return super().encoder(address)
 
     def grant_role(
         self, role_id: RoleId | Roles, account: ChecksumAddress, execution_delay: Period
@@ -161,7 +156,7 @@ class AccessManager(ContractWrapper):
             if predicate(role_id, account):
                 candidates[(role_id, account)] = None
 
-        statuses = Multicall3(self._ctx).aggregate(
+        statuses = Multicall3(self._require_ctx()).aggregate(
             [self.has_role(role_id, account) for role_id, account in candidates]
         )
         return [
@@ -180,7 +175,7 @@ class AccessManager(ContractWrapper):
             Web3.keccak(text="RoleGranted(uint64,address,uint32,uint48,bool)")
         ).to_0x_hex()
         return list(
-            self._ctx.get_logs(
+            self._require_ctx().get_logs(
                 contract_address=self._address, topics=[event_signature_hash]
             )
         )

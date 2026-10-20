@@ -261,12 +261,12 @@ def clone_args() -> dict:
 def unsigned_clone_calldata() -> bytes:
     """Unsigned creation calldata (selector + ABI-encoded args) for the deploy.
 
-    Built with a ctx-less encoder, so it needs no provider. Hand these bytes to
+    Built on a wrapper with ctx=None, so it needs no provider. Hand these bytes to
     an external signer / multisig instead of calling ``.send()``. NOTE: the owner
     encoded here is the simulation ``OWNER`` (a throwaway EOA) -- set your real
     owner in ``clone_args()`` before deploying, or the vault is owned by it.
     """
-    return FusionFactory.encoder(BASE_FUSION_FACTORY).clone(**clone_args()).calldata
+    return FusionFactory(None, BASE_FUSION_FACTORY).clone(**clone_args()).calldata
 
 
 def market_substrates() -> list[bytes]:

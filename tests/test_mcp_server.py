@@ -1068,9 +1068,5 @@ class TestMarketMetaMorpho:
         side_effect=MorphoApiError("not found"),
     )
     def test_unknown_vault_errors(self, _fetch):
-        try:
+        with pytest.raises(MorphoApiError, match="not found"):
             market_meta_morpho(vault_address=_VAULT, chain_id=1)
-        except ValueError as exc:
-            assert "not found" in str(exc)
-        else:
-            raise AssertionError("expected ValueError")

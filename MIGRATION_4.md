@@ -113,7 +113,7 @@ The Uniswap V3 / Ramses V2 position events' `version`, `sender` and `recipient` 
 `quote_ccip_native_fee(block=)` and `OracleMappingReader.asset_source_events` take a
 `BlockIdentifier`.
 
-**Address roles.** `PlasmaVault(ctx, address)`, `PlasmaVault.encoder(address)`,
+**Address roles.** `PlasmaVault(ctx, address)` (`ctx` may be `None`, see below),
 `validate_vault`, `fetch_deployment_info`, the HyperCore, lending-health and
 oracle-mapping readers, `read_external_state`, `VaultSimulator(vault=)`,
 `CrosschainSimulator`, crosschain discovery, the hub-manager inputs
@@ -214,6 +214,35 @@ are `ProposalHash`; `ExternalStateEvent.transaction_hash` is a `TxHash`.
 except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 `MarketId`. Calling an MCP tool function directly from Python takes `ChainId`.
 
+**Offline wrappers.** `ContractWrapper.encoder()` (and the `PlasmaVault` /
+`AccessManager` overrides) is gone. Every wrapper constructor takes
+`ctx: Web3Context | None`, so build an offline wrapper with the normal
+constructor and an address: `PlasmaVault(None, vault)`, `ERC20(None, token)`,
+`FusionFactory(None, factory)`, `LegacyPriceOracleMiddleware(None, oracle,
+Decimals(8))`. The address is required (there is no zero-address placeholder) and
+subclass parameters stay required, so the wrapper is fully initialized:
+`.encoder()` skipped the constructor, and a legacy oracle built that way failed to
+decode `get_asset_price`. `.calldata` still needs no context; `.call()`, `.send()`,
+`.build_transaction()` and `.estimate_gas()` raise `ValueError` until one is passed
+to them, and a method that reads the chain itself (log scans such as
+`get_balance_fuses` or `get_pending_requests`, `withdraw_manager_address`,
+`Multicall3.aggregate` / `try_aggregate`, the Aave V3 and Morpho position reads)
+raises `ValueError("Web3Context required: <wrapper> at <address> ...")` instead of
+an `AttributeError` on `None`. `ExternalStateExecutor` still refuses the zero
+address for its hash and event readers.
+
+| 3.x | 4.0 |
+|---|---|
+| `PlasmaVault.encoder(vault)` | `PlasmaVault(None, vault)` |
+| `ERC20.encoder()` (no address) | `ERC20(None, token)`: pass the real address |
+| `Cls.__new__(Cls)` + `_ctx` / `_address` | `Cls(None, address)` |
+
+**Fuse base.** `Fuse`, `StakeFuse` and the shared validators and substrate packers
+live in `ipor_fusion.core.fuse`; `ipor_fusion.fuses.base`, `ipor_fusion.fuses` and
+`ipor_fusion` re-export them, so existing imports keep working. Fuse equality and
+hash now cover every attribute a fuse stores, not only its class and address (see
+[Behavior changes](#behavior-changes)).
+
 **Moved, still importable.** `FuseAction` lives in `ipor_fusion.core.fuse_action` and
 `ZERO_ADDRESS` in `ipor_fusion.types`; both are re-exported from
 `ipor_fusion.fuses.base` and `FuseAction` from `ipor_fusion`. The CLI's internal
@@ -222,6 +251,12 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 
 ## Behavior changes
 
+- Two fuses are equal (and hash alike) only when they have the same class and the
+  same stored state. `StakeFuse` subclasses (`GearboxStakeFuse`,
+  `FluidInstadappStakingFuse`) with the same fuse address but different
+  `staking_address` were equal and collapsed in a set or dict key; they are now
+  distinct. A custom `Fuse` subclass is compared on its instance attributes, which
+  must be hashable; drop an `__eq__` / `__hash__` override that only added them.
 - The MCP `vault_info` document reports the vault address checksummed (the CLI
   already did).
 - `SubstrateInfo.address` is `None` instead of `""` for a substrate without an
@@ -258,15 +293,20 @@ except below): `chain_id` fields are `ChainId`, `role_id` `RoleId`, `market_id`
 ## Errors
 
 Every exception class the SDK defines now derives from `IporFusionError` and is
-importable from `ipor_fusion`; the builtin bases they had are kept. The rule the
-changes below apply is: a caller's mistake (a bad argument, or an operation the
-object was not built for) raises a plain `ValueError`; a chain, provider or remote
-API answering something the SDK cannot use raises an `IporFusionError` subclass.
-4.0 applies it to the paths listed here, not yet everywhere: the HyperCore NAV
-reader (`read_hypercore_nav`) still raises `ValueError` for a failed precompile read,
-a missing oracle price or an unsupported dex configuration,
-`fetch_verifier_result` can still raise `KeyError` or `ValueError` on a malformed
-indexer answer, and `erc20_balance_slot` raises `ValueError` when no slot answers.
+importable from `ipor_fusion`; the builtin bases they had are kept. One rule holds
+across the whole SDK: a caller's mistake (a bad argument, or an operation the object
+was not built for) raises a plain `ValueError` (`TypeError` for an argument of the
+wrong type, `KeyError` for an unknown name in a mapping-style lookup such as
+`ipor_fusion.guide.guide_text`); a chain, provider or remote API answering something the
+SDK cannot use raises an `IporFusionError` subclass. Except for
+`CrosschainDiscoveryError` (discovery) and `SimulationError` (`quote_ccip_native_fee`),
+every subclass that replaces a `ValueError` raise also derives from `ValueError`, so
+`except ValueError` keeps catching it; catch the subclass to tell a chain fact from a
+bad argument. Receipts,
+logs and transports passed in that do not contain what the call needs (a clone
+receipt without its events, logs without the lane's `BalanceProposed`, a CCIP
+message to a chain the transport does not configure) stay `ValueError`: the input
+is the wrong one.
 
 - `MorphoApiError` (still a `RuntimeError`), `ExternalStateEventDecodeError` (still a
   `ValueError`) and `VerifierResultUnavailable` (still a `LookupError`) now derive
@@ -294,3 +334,40 @@ indexer answer, and `erc20_balance_slot` raises `ValueError` when no slot answer
 - The Morpho API client raises `MorphoApiError` for every response it cannot read and
   for any `OSError` or `http.client.HTTPException` while fetching (it caught only
   `URLError` and `TimeoutError` before).
+- The MCP `market_meta_morpho` tool lets `MorphoApiError` propagate instead of
+  re-raising it as `ValueError`. MCP clients see the same tool error message; only a
+  direct Python call of the tool function sees the new type.
+- `read_hypercore_nav` (and `read_hypercore_vault_state`, which calls it) raises the new
+  `HyperCoreValuationError` (still a `ValueError`) for a failed `spotBalance`,
+  `tokenInfo` or `accountMarginSummary` precompile read, a granted spot token the
+  oracle does not price, a price overflow and an unsupported HIP-3 dex bitmap;
+  `HyperCoreNav.balance_wad` raises it for a negative NAV.
+- `read_hypercore_transfer_snapshot` raises `UnsupportedChainError` (still a
+  `ValueError`) on a chain with no known `HyperCorePendingReader` when none is passed.
+- `fetch_verifier_result` no longer leaks `KeyError`, `TypeError` or `ValueError` from
+  an indexer answer it cannot read (not JSON, a missing or mistyped field, invalid hex
+  or address, an empty or non-array CCV list, or a result for a different message id,
+  both now checked): that
+  indexer is skipped like an unreachable one, and when none serves a readable result
+  it raises `VerifierResultUnavailable` naming each indexer's reason. A `message_id`
+  that is not 32 bytes is still a `ValueError`.
+- `erc20_balance_slot` raises the new `BalanceSlotNotFoundError` (still a
+  `ValueError`) when no slot up to `max_slot` answers as the balances mapping; a
+  negative `max_slot` is a `ValueError` with its own message.
+- The external-state market raises the new `ExternalStateError` (still a
+  `ValueError`): `read_external_state` for a storage word longer than 32 bytes, an
+  executor word with bits above the address or a pause word other than 0 or 1;
+  `ExternalStateExecutor.for_vault` when no executor is deployed and, instead of
+  eth_abi's `NonEmptyPaddingBytes`, for a slot that is not an address;
+  `parse_balance_proposed` / `find_balance_proposed` for one of the executor's own
+  `BalanceProposed` logs whose data is missing or malformed (including data that is
+  not hex at all, which raised `TypeError`) or whose hash is not the hash of its own
+  fields; and `mark_nav` when the propose receipt it fetched has no such log or
+  records another value or proposer. A log that is not the event or not from the
+  executor, and `find_balance_proposed` over logs that hold no match, are still
+  `ValueError`.
+- `ccip_token_lane` raises the new `UnsupportedContractVersionError` (still a
+  `ValueError`) for an OnRamp version whose layout is not verified.
+- `quote_ccip_native_fee` raises `SimulationError` (label `"quote"`, with
+  `revert_reason`) instead of `ValueError` when the call reverts before the CCIP fee
+  check. A call that succeeds without sending a message is still a `ValueError`.

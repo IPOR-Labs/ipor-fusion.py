@@ -40,6 +40,7 @@ from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
+from ipor_fusion.errors import HyperCoreValuationError
 from ipor_fusion.fuses.hypercore import (
     NATIVE_PERP_DEX,
     SUPPORTED_HIP3_DEXES,
@@ -480,7 +481,9 @@ class HyperCoreNav:
     def balance_wad(self) -> int:
         """What ``HyperCoreBalanceFuse.balanceOf()`` returns."""
         if self.value_wad < 0:
-            raise ValueError(f"HyperCore NAV is negative: {self.value_wad}")
+            raise HyperCoreValuationError(
+                f"HyperCore NAV is negative: {self.value_wad}"
+            )
         return self.value_wad
 
 
@@ -511,7 +514,7 @@ def _market_layout(
         elif info.type_label == "CONFIG" and info.extra.get("key") == "PerpDexIds":
             bitmap = int(info.extra["value"])
     if bitmap & ~_supported_hip3_mask():
-        raise ValueError(f"unsupported HIP-3 perp dex bitmap {bitmap:#x}")
+        raise HyperCoreValuationError(f"unsupported HIP-3 perp dex bitmap {bitmap:#x}")
     return tokens, bitmap
 
 
@@ -523,7 +526,9 @@ def _spot_leg(
     price: Price | None,
 ) -> HyperCoreSpotLeg:
     if balance is None:
-        raise ValueError(f"spotBalance precompile failed for token {token_index}")
+        raise HyperCoreValuationError(
+            f"spotBalance precompile failed for token {token_index}"
+        )
     if balance.total == 0:
         return HyperCoreSpotLeg(
             token_index,
@@ -535,11 +540,15 @@ def _spot_leg(
             0,
         )
     if token is None:
-        raise ValueError(f"tokenInfo precompile failed for token {token_index}")
+        raise HyperCoreValuationError(
+            f"tokenInfo precompile failed for token {token_index}"
+        )
     if price is None or price.amount == 0:
-        raise ValueError(f"the oracle prices no {evm_asset} (token {token_index})")
+        raise HyperCoreValuationError(
+            f"the oracle prices no {evm_asset} (token {token_index})"
+        )
     if price.amount > _INT256_MAX // balance.total:
-        raise ValueError(f"price overflow for token {token_index}")
+        raise HyperCoreValuationError(f"price overflow for token {token_index}")
     value = convert_to_wad_int(
         balance.total * price.amount, token.wei_decimals + price.decimals
     )
@@ -558,7 +567,9 @@ def _perp_leg(
     dex: int, summary: HyperCoreAccountMarginSummary | None
 ) -> HyperCorePerpLeg:
     if summary is None:
-        raise ValueError(f"accountMarginSummary precompile failed for dex {dex}")
+        raise HyperCoreValuationError(
+            f"accountMarginSummary precompile failed for dex {dex}"
+        )
     return HyperCorePerpLeg(
         dex,
         summary.account_value,
@@ -580,7 +591,7 @@ def read_hypercore_nav(
     validated first, a vault without a Core account values at 0, a spot token
     with no balance is neither priced nor looked up, and the conditions the
     library reverts on (no price, overflow, a failed precompile) raise
-    ``ValueError``.
+    :class:`~ipor_fusion.errors.HyperCoreValuationError`.
     """
     vault = PlasmaVault(ctx, vault_address)
     reader = HyperCoreReader(ctx)

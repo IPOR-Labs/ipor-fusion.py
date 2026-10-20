@@ -138,18 +138,19 @@ class Call(Generic[T]):
         return actual
 
 
-_ENCODER_PLACEHOLDER_ADDRESS: ChecksumAddress = cast(
-    ChecksumAddress, "0x0000000000000000000000000000000000000000"
-)
-
-
 class ContractWrapper:
     """Base wrapper. Subclasses expose one method per Solidity function that
     returns a `Call[T]` — never executing eagerly. Callers chain `.call()` for
     reads, `.send()` for writes, or hand the `Call` to `VaultSimulator`.
+
+    `ctx` may be ``None`` for offline use, e.g. external-signer flows (HTTP
+    signing service, multisig) that only need `Call.calldata`: every builder
+    works, and `.call()` / `.send()` on its Calls raise until a context is
+    passed to them. Methods that read the chain themselves (log scans, storage
+    reads, batched reads) raise `ValueError` on such a wrapper.
     """
 
-    def __init__(self, ctx: Web3Context, address: ChecksumAddress):
+    def __init__(self, ctx: Web3Context | None, address: ChecksumAddress):
         self._ctx = ctx
         self._address = Web3.to_checksum_address(address)
 
@@ -157,30 +158,13 @@ class ContractWrapper:
     def address(self) -> ChecksumAddress:
         return self._address
 
-    @classmethod
-    def encoder(cls, address: ChecksumAddress | None = None):
-        """Build a ctx-less wrapper: every builder method, no Web3Context.
-
-        Named for its first use, external-signer flows (HTTP signing service,
-        multisig), which only need `Call.calldata` — the actual `to` and `ctx`
-        are filled in by the signer. It serves any builder that needs no chain
-        access, decoders included. Calling `.call()` or `.send()` on a Call
-        produced this way raises (no ctx).
-
-        Pass `address` unless `.calldata` really is the only consumer. The
-        encoding ignores it, but a builder that reads `self._address`
-        semantically — matching it against a log's emitter, say, or folding it
-        into a hash — runs against the placeholder zero address without one,
-        and so rejects input that is genuinely the caller's.
-        """
-        instance = cls.__new__(cls)
-        instance._ctx = None
-        instance._address = (
-            Web3.to_checksum_address(address)
-            if address is not None
-            else _ENCODER_PLACEHOLDER_ADDRESS
-        )
-        return instance
+    def _require_ctx(self) -> Web3Context:
+        if self._ctx is None:
+            raise ValueError(
+                f"Web3Context required: {type(self).__name__} at {self._address} "
+                "was built without one (ctx=None), which only builds calldata."
+            )
+        return self._ctx
 
     def _view(
         self,

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from _simulate import simulate_response
 from eth_abi import decode, encode
-from eth_abi.exceptions import NonEmptyPaddingBytes, ValueOutOfBounds
+from eth_abi.exceptions import ValueOutOfBounds
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
@@ -18,6 +18,7 @@ from ipor_fusion.core.external_state_executor import (
     NavMark,
 )
 from ipor_fusion.core.simulation import VaultSimulator
+from ipor_fusion.errors import ExternalStateError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ZERO_ADDRESS, Amount, ChainId, MarketId
 
@@ -132,7 +133,9 @@ class TestForVault:
         ctx = MagicMock()
         ctx.get_storage_at.return_value = HexBytes(b"\x00" * 32)
 
-        with pytest.raises(ValueError, match="no ExternalStateExecutor deployed"):
+        with pytest.raises(
+            ExternalStateError, match="no ExternalStateExecutor deployed"
+        ):
             ExternalStateExecutor.for_vault(ctx, VAULT_ADDR)
 
     @pytest.mark.parametrize("empty", ["0x00", "0x"])
@@ -141,18 +144,20 @@ class TestForVault:
         ctx = MagicMock()
         ctx.get_storage_at.return_value = HexBytes(empty)
 
-        with pytest.raises(ValueError, match="no ExternalStateExecutor deployed"):
+        with pytest.raises(
+            ExternalStateError, match="no ExternalStateExecutor deployed"
+        ):
             ExternalStateExecutor.for_vault(ctx, VAULT_ADDR)
 
     def test_raises_on_nonzero_high_bytes(self):
         # Non-zero high 12 bytes are not a clean address-in-slot (wrong/corrupt
-        # slot); `decode` rejects it rather than masking the low 20 bytes.
+        # slot); rejected rather than masking the low 20 bytes.
         ctx = MagicMock()
         ctx.get_storage_at.return_value = HexBytes(
             bytes(range(1, 13)) + bytes.fromhex(EXECUTOR_ADDR[2:])
         )
 
-        with pytest.raises(NonEmptyPaddingBytes):
+        with pytest.raises(ExternalStateError, match="malformed executor word"):
             ExternalStateExecutor.for_vault(ctx, VAULT_ADDR)
 
 
@@ -331,7 +336,7 @@ class TestPendingProposals:
         # A genuinely empty slot.
         assert _observed(executor.pending_proposals(BALANCE_ACCOUNT), empty) is None
         # A decode that raised: no ctx, so the chain-bound hash cannot be built.
-        ctxless = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        ctxless = ExternalStateExecutor(None, EXECUTOR_ADDR)
         assert _observed(ctxless.pending_proposals(BALANCE_ACCOUNT), populated) is None
 
     def test_none_depends_only_on_the_proposer(self):
@@ -352,19 +357,19 @@ class TestPendingProposals:
         assert proposal is not None
         assert proposal.value == Amount(0)
 
-    def test_encoder_instance_still_builds_calldata(self):
-        # encoder() promises calldata from any builder; the chain-bound hash is
+    def test_ctxless_instance_still_builds_calldata(self):
+        # A ctx-less wrapper promises calldata from any builder; the chain-bound hash is
         # resolved lazily so this method keeps that promise like its siblings.
-        call = ExternalStateExecutor.encoder(EXECUTOR_ADDR).pending_proposals(
+        call = ExternalStateExecutor(None, EXECUTOR_ADDR).pending_proposals(
             BALANCE_ACCOUNT
         )
 
         assert call.calldata[:4] == Web3.keccak(text="pendingProposals(address)")[:4]
 
-    def test_encoder_instance_raises_only_on_decode(self):
+    def test_ctxless_instance_raises_only_on_decode(self):
         # ...and without a ctx or an explicit chain_id there is nothing to bind
         # the hash to, so executing it fails.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         with pytest.raises(ValueError, match="Web3Context required"):
             executor.pending_proposals(BALANCE_ACCOUNT).call(self._slot_ctx())
@@ -425,10 +430,10 @@ class TestPendingProposals:
         assert proposal.nonce == 2**256 - 1
         assert proposal.proposed_at == 2**64 - 1
 
-    def test_explicit_chain_id_frees_an_encoder_instance(self):
+    def test_explicit_chain_id_frees_a_ctxless_instance(self):
         # Given a chain id there is nothing left to need a ctx for, so a
         # calldata-only wrapper can read through any context.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         proposal = executor.pending_proposals(
             BALANCE_ACCOUNT, chain_id=self.CHAIN
@@ -437,11 +442,11 @@ class TestPendingProposals:
         assert proposal is not None
         assert proposal.nonce == self.NONCE
 
-    def test_an_addressless_encoder_refuses_to_stamp_a_hash(self):
-        # The placeholder is the zero address, so the hash would bind no
+    def test_a_zero_address_executor_refuses_to_stamp_a_hash(self):
+        # The zero address as executor would make the hash bind no
         # contract: a plausible 32 bytes that confirms nothing anywhere. The
         # chain id gets a raise for the same reason; so does this half.
-        executor = ExternalStateExecutor.encoder()
+        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
             executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN).call(
@@ -452,7 +457,7 @@ class TestPendingProposals:
         # Both hash inputs resolve before the empty-slot sentinel, so a
         # misconfigured poller fails on its first read rather than passing
         # every quiet one and dying on the first proposal that exists.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         with pytest.raises(ValueError, match="Web3Context required"):
             executor.pending_proposals(BALANCE_ACCOUNT).call(
@@ -745,8 +750,8 @@ class TestParseBalanceProposed:
 
     def test_needs_no_ctx(self):
         # Decoding indexer rows or a get_logs range must not require an RPC: a
-        # ctx-less encoder() wrapper plus an explicit chain id still verifies.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        # ctx-less wrapper plus an explicit chain id still verifies.
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         parsed = executor.parse_balance_proposed(
             _proposed_log(as_strings=True), chain_id=EVENT_CHAIN
@@ -754,21 +759,21 @@ class TestParseBalanceProposed:
 
         assert parsed.nonce == _EVENT_NONCE
 
-    def test_an_addressless_encoder_refuses_to_match_an_emitter(self):
-        # Against the zero placeholder the emitter check would accept a forged
+    def test_a_zero_address_executor_refuses_to_match_an_emitter(self):
+        # Against the zero address the emitter check would accept a forged
         # row claiming to come from no contract, then verify its hash under
         # executor 0. Refuse before either check runs.
-        executor = ExternalStateExecutor.encoder()
+        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
         log = _proposed_log(as_strings=False, address=ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
             executor.parse_balance_proposed(log, chain_id=EVENT_CHAIN)
 
-    def test_a_ctxless_encoder_needs_an_explicit_chain_id(self):
+    def test_a_ctxless_wrapper_needs_an_explicit_chain_id(self):
         # Mirrors pending_proposals: the hash is chain-bound, so a wrapper with
         # neither a ctx nor a chain_id has nothing to verify against and must
         # say so rather than skipping the check.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         with pytest.raises(ValueError, match="Web3Context required"):
             executor.parse_balance_proposed(_proposed_log(as_strings=False))
@@ -777,7 +782,7 @@ class TestParseBalanceProposed:
         # Both conditions hold at once here. The emitter must win: a ctx-less
         # caller debugging a real emitter mismatch would otherwise be sent
         # chasing a missing chain id that is not the actual problem.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
         log = _proposed_log(as_strings=False, address=OTHER_EMITTER)
 
         with pytest.raises(ValueError, match="was not emitted by"):
@@ -803,7 +808,7 @@ class TestParseBalanceProposed:
         executor, _ = _make_executor()
         log = {"address": EXECUTOR_ADDR, "topics": [_BALANCE_PROPOSED_TOPIC]}
 
-        with pytest.raises(ValueError, match="carries no data"):
+        with pytest.raises(ExternalStateError, match="carries no data"):
             executor.parse_balance_proposed(log)
 
     @pytest.mark.parametrize("as_strings", [False, True], ids=["hexbytes", "0x-string"])
@@ -834,7 +839,7 @@ class TestParseBalanceProposed:
         other_hash = _consistent_hash(EVENT_CHAIN, value=999_000_000_000)
         log = _proposed_log(as_strings=False, proposal_hash=other_hash)
 
-        with pytest.raises(ValueError, match="another proposal's hash"):
+        with pytest.raises(ExternalStateError, match="another proposal's hash"):
             executor.parse_balance_proposed(log)
 
     def test_rejects_a_log_hashed_for_another_chain(self):
@@ -842,7 +847,7 @@ class TestParseBalanceProposed:
         # the wrong chain must not pass -- otherwise chain_id is decoration.
         executor, _ = _make_executor()
 
-        with pytest.raises(ValueError, match="different executor or chain id"):
+        with pytest.raises(ExternalStateError, match="different executor or chain id"):
             executor.parse_balance_proposed(
                 _proposed_log(as_strings=False), chain_id=ChainId(1)
             )
@@ -855,7 +860,7 @@ class TestParseBalanceProposed:
         executor, ctx = _make_executor()
         ctx.chain_id = ChainId(1)
 
-        with pytest.raises(ValueError, match="different executor or chain id"):
+        with pytest.raises(ExternalStateError, match="different executor or chain id"):
             executor.parse_balance_proposed(_proposed_log(as_strings=False))
 
     def test_rejects_a_self_consistent_forgery(self):
@@ -887,8 +892,8 @@ class TestParseBalanceProposed:
             executor.parse_balance_proposed(log)
 
     @pytest.mark.parametrize("data", [{}, ["0x00"]], ids=["dict", "list"])
-    def test_non_hex_data_raises_type_error(self, data):
-        # The docstring promises TypeError for a field that is not hex at all.
+    def test_non_hex_data_raises_external_state_error(self, data):
+        # A field that is not hex at all is malformed data like any other.
         executor, _ = _make_executor()
         log = {
             "address": EXECUTOR_ADDR,
@@ -896,7 +901,7 @@ class TestParseBalanceProposed:
             "data": data,
         }
 
-        with pytest.raises(TypeError):
+        with pytest.raises(ExternalStateError, match="malformed BalanceProposed"):
             executor.parse_balance_proposed(log)
 
     @pytest.mark.parametrize("topic", ["0xnothex", {}], ids=["bad-hex", "wrong-type"])
@@ -1077,15 +1082,14 @@ class TestFindBalanceProposed:
             executor.find_balance_proposed([bad])
 
     @pytest.mark.parametrize("data", [{}, ["0x00"]], ids=["dict", "list"])
-    def test_non_hex_data_on_our_log_raises_type_error(self, data):
-        # `_decode_balance_proposed` catches DecodingError and ValueError, so a
-        # field that is not hex at all surfaces as TypeError here too, matching
-        # what `parse_balance_proposed` documents.
+    def test_non_hex_data_on_our_log_raises_external_state_error(self, data):
+        # A field that is not hex at all on one of our logs aborts the scan as
+        # malformed data, as `parse_balance_proposed` documents.
         executor, _ = _make_executor()
         log = dict(_proposed_log(as_strings=False))
         log["data"] = data
 
-        with pytest.raises(TypeError):
+        with pytest.raises(ExternalStateError, match="malformed BalanceProposed"):
             executor.find_balance_proposed([log])
 
     def test_a_malformed_log_aborts_even_a_filtered_scan(self):
@@ -1095,7 +1099,7 @@ class TestFindBalanceProposed:
         bad = dict(_proposed_log(as_strings=False, balance_account=OTHER_ACCOUNT))
         bad["data"] = HexBytes(b"\x01\x02")
 
-        with pytest.raises(ValueError, match="malformed BalanceProposed data"):
+        with pytest.raises(ExternalStateError, match="malformed BalanceProposed data"):
             executor.find_balance_proposed(
                 [bad, _proposed_log(as_strings=False)], BALANCE_ACCOUNT
             )
@@ -1107,13 +1111,13 @@ class TestFindBalanceProposed:
         log = dict(_proposed_log(as_strings=False))
         log["data"] = HexBytes(b"\x01\x02")
 
-        with pytest.raises(ValueError, match="malformed BalanceProposed data"):
+        with pytest.raises(ExternalStateError, match="malformed BalanceProposed data"):
             executor.find_balance_proposed([log])
 
-    def test_an_addressless_encoder_refuses_to_scan(self):
-        # Same guard as the single-log reader: a zero placeholder matches only
+    def test_a_zero_address_executor_refuses_to_scan(self):
+        # Same guard as the single-log reader: the zero address matches only
         # a row claiming no emitter, which is never a real one.
-        executor = ExternalStateExecutor.encoder()
+        executor = ExternalStateExecutor(None, ZERO_ADDRESS)
 
         with pytest.raises(ValueError, match="executor address required"):
             executor.find_balance_proposed([_proposed_log(as_strings=False)])
@@ -1129,7 +1133,7 @@ class TestFindBalanceProposed:
             proposal_hash=_consistent_hash(EVENT_CHAIN, value=999_000_000_000),
         )
 
-        with pytest.raises(ValueError, match="another proposal's hash"):
+        with pytest.raises(ExternalStateError, match="another proposal's hash"):
             executor.find_balance_proposed([log])
 
     def test_a_bad_hash_on_another_account_does_not_abort_the_scan(self):
@@ -1149,18 +1153,18 @@ class TestFindBalanceProposed:
 
         assert found == _EXPECTED_PROPOSAL
 
-    def test_scans_through_a_ctxless_encoder_given_a_chain_id(self):
+    def test_scans_through_a_ctxless_wrapper_given_a_chain_id(self):
         # The hash check needs a chain; an explicit one frees a calldata-only
         # wrapper, exactly as it does for the other two readers.
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
         logs = [_proposed_log(as_strings=True)]
 
         assert executor.find_balance_proposed(logs, chain_id=EVENT_CHAIN) == (
             _EXPECTED_PROPOSAL
         )
 
-    def test_a_ctxless_encoder_needs_an_explicit_chain_id(self):
-        executor = ExternalStateExecutor.encoder(EXECUTOR_ADDR)
+    def test_a_ctxless_wrapper_needs_an_explicit_chain_id(self):
+        executor = ExternalStateExecutor(None, EXECUTOR_ADDR)
 
         with pytest.raises(ValueError, match="Web3Context required"):
             executor.find_balance_proposed([_proposed_log(as_strings=False)])
@@ -1327,7 +1331,7 @@ class TestMarkNav:
             "logs": [_proposed_log(as_strings=False, value=self.VALUE + 1)],
         }
 
-        with pytest.raises(ValueError, match="refusing to confirm"):
+        with pytest.raises(ExternalStateError, match="refusing to confirm"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1343,7 +1347,7 @@ class TestMarkNav:
             "logs": [_proposed_log(as_strings=False, proposer=CONFIRMER)],
         }
 
-        with pytest.raises(ValueError, match="refusing to confirm"):
+        with pytest.raises(ExternalStateError, match="refusing to confirm"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1359,7 +1363,7 @@ class TestMarkNav:
         lifted = _consistent_hash(self.CHAIN, value=999_000_000_000)
         executor, proposer_ctx, confirmer_ctx = self._setup(proposal_hash=lifted)
 
-        with pytest.raises(ValueError, match="another proposal's hash"):
+        with pytest.raises(ExternalStateError, match="another proposal's hash"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1435,7 +1439,7 @@ class TestMarkNav:
         executor, proposer_ctx, confirmer_ctx = self._setup()
         proposer_ctx.send.return_value = self._propose_receipt(address=OTHER_EMITTER)
 
-        with pytest.raises(ValueError, match="no BalanceProposed log"):
+        with pytest.raises(ExternalStateError, match="no BalanceProposed log"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1448,7 +1452,7 @@ class TestMarkNav:
         executor, proposer_ctx, confirmer_ctx = self._setup()
         proposer_ctx.send.return_value = {"blockNumber": self.BLOCK, "logs": []}
 
-        with pytest.raises(ValueError, match="no BalanceProposed log"):
+        with pytest.raises(ExternalStateError, match="no BalanceProposed log"):
             executor.mark_nav(
                 value=Amount(self.VALUE),
                 balance_account=BALANCE_ACCOUNT,
@@ -1591,7 +1595,7 @@ class TestReadExternalState:
             words = {self.BASE + i: HexBytes(b"") for i in range(4)}
             words[self.BASE + slot] = HexBytes(b"\x01" + b"\x00" * 32)
             ctx.get_storage_at.side_effect = lambda v, s, b=None, w=words: w[s]
-            with pytest.raises(ValueError, match="more than a 32-byte slot"):
+            with pytest.raises(ExternalStateError, match="more than a 32-byte slot"):
                 read_external_state(ctx, VAULT_ADDR)
 
         top = read_external_state(
@@ -1639,9 +1643,9 @@ class TestReadExternalState:
     def test_malformed_words_raise_instead_of_passing_as_values(self):
         from ipor_fusion import read_external_state
 
-        with pytest.raises(ValueError, match="malformed executor word"):
+        with pytest.raises(ExternalStateError, match="malformed executor word"):
             read_external_state(self._ctx([1 << 161, 0, 0, 0]), VAULT_ADDR)
-        with pytest.raises(ValueError, match="malformed pause flag"):
+        with pytest.raises(ExternalStateError, match="malformed pause flag"):
             read_external_state(self._ctx([0, 0, 0, 2]), VAULT_ADDR)
 
     def test_an_rpc_failure_propagates(self):
