@@ -72,6 +72,8 @@ from ipor_fusion.core.plasma_vault import (
 )
 from ipor_fusion.core.rewards_manager import RewardsManager, VestingData
 from ipor_fusion.core.simulation import (
+    AccountOverride,
+    BlockOverrides,
     SimulatedCallResult,
     SimulationObservation,
     SimulationResult,
@@ -649,6 +651,8 @@ __all__ = [
     "MULTICALL3_ADDRESS",
     "VaultSimulator",
     "StateOverrideProvider",
+    "AccountOverride",
+    "BlockOverrides",
     "SimulationObservation",
     "SimulationResult",
     "SimulatedCallResult",

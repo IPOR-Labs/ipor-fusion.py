@@ -192,24 +192,24 @@ class TestVaultReads:
 
         reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
 
-        assert reads["supply_cap"] == UINT256_MAX
-        assert reads["price_oracle"] == LEGACY_ORACLE
-        assert reads["unimplemented_getters"] == [
+        assert reads.supply_cap == UINT256_MAX
+        assert reads.price_oracle == LEGACY_ORACLE
+        assert reads.unimplemented_getters == [
             GET_TOTAL_SUPPLY_CAP,
             GET_PRICE_ORACLE_MIDDLEWARE,
         ]
-        assert reads["total_assets"] == 1_000
-        assert reads["asset_price_usd"] == 1.0
+        assert reads.total_assets == 1_000
+        assert reads.asset_price_usd == 1.0
 
     def test_current_vault_reports_no_unimplemented_getter(self):
         ctx = _ctx(CURRENT)
 
         reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
 
-        assert reads["supply_cap"] == 10**12
-        assert reads["price_oracle"] == ORACLE
-        assert reads["unimplemented_getters"] == []
-        assert reads["asset_price_usd"] == 1.0
+        assert reads.supply_cap == 10**12
+        assert reads.price_oracle == ORACLE
+        assert reads.unimplemented_getters == []
+        assert reads.asset_price_usd == 1.0
 
     def test_vault_without_any_oracle_getter_raises_typed_error(self):
         ctx = _ctx({**PRE_AUDIT, "getPriceOracle()": b""})

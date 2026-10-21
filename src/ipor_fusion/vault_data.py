@@ -13,7 +13,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from eth_typing import HexAddress
 from eth_utils import function_signature_to_4byte_selector
@@ -321,9 +321,32 @@ def _resolve_price_oracle(
     return address
 
 
+@dataclass
+class _VaultReads:
+    """The vault and underlying-asset fields of `VaultData`."""
+
+    share_decimals: Decimals
+    total_assets: Amount
+    total_supply: Shares
+    supply_cap: Shares
+    asset: ChecksumAddress
+    access_manager: AccessManagerAddress
+    price_oracle: ChecksumAddress
+    fuses: list[FuseAddress]
+    instant_fuses: list[FuseAddress]
+    vault_name: str
+    rewards_manager: ChecksumAddress | None
+    asset_decimals: Decimals
+    underlying_balance_on_vault: Amount
+    asset_symbol: str
+    asset_price_usd: float | None
+    fuse_markets: dict[FuseAddress, MarketId] | None
+    unimplemented_getters: list[str]
+
+
 def _fetch_vault_reads(
     ctx: Web3Context, plasma_vault: PlasmaVault
-) -> tuple[dict[str, Any], PriceOracleMiddleware]:
+) -> tuple[_VaultReads, PriceOracleMiddleware]:
     """Vault and underlying-asset state, as `VaultData` fields, and the price
     oracle wrapper resolved for them (reused, so its ABI is probed once).
 
@@ -382,25 +405,25 @@ def _fetch_vault_reads(
         fuse: mid.value for fuse, mid in fuse_market_ids if mid.value is not None
     }
     asset_price = price.value
-    return {
-        "share_decimals": share_decimals.value,
-        "total_assets": total_assets.value,
-        "total_supply": total_supply.value,
-        "supply_cap": supply_cap,
-        "asset": asset,
-        "access_manager": access_manager.value,
-        "price_oracle": price_oracle,
-        "fuses": fuses,
-        "instant_fuses": instant_fuses.value,
-        "vault_name": vault_name.value or "",
-        "rewards_manager": rewards_manager.value,
-        "asset_decimals": asset_decimals.value,
-        "underlying_balance_on_vault": underlying_balance.value,
-        "asset_symbol": symbol.value or "?",
-        "asset_price_usd": asset_price.readable() if asset_price else None,
-        "fuse_markets": fuse_markets or None,
-        "unimplemented_getters": unimplemented,
-    }, oracle
+    return _VaultReads(
+        share_decimals=share_decimals.value,
+        total_assets=total_assets.value,
+        total_supply=total_supply.value,
+        supply_cap=supply_cap,
+        asset=asset,
+        access_manager=access_manager.value,
+        price_oracle=price_oracle,
+        fuses=fuses,
+        instant_fuses=instant_fuses.value,
+        vault_name=vault_name.value or "",
+        rewards_manager=rewards_manager.value,
+        asset_decimals=asset_decimals.value,
+        underlying_balance_on_vault=underlying_balance.value,
+        asset_symbol=symbol.value or "?",
+        asset_price_usd=asset_price.readable() if asset_price else None,
+        fuse_markets=fuse_markets or None,
+        unimplemented_getters=unimplemented,
+    ), oracle
 
 
 def _fetch_role_accounts(
@@ -586,48 +609,112 @@ def fetch_vault_data(
             lending_reads if lending else None,
             metadata=metadata,
         )
-        withdraw_manager, withdraw_manager_data = f_withdraw.result()
         if not markets.substrates_available:
-            vault_reads["unimplemented_getters"].append(GET_MARKET_SUBSTRATES)
-
-        return VaultData(
-            **vault_reads,
-            vault=vault,
-            chain_id=ctx.chain_id,
-            block_number=resolved_block,
-            is_latest=is_latest,
-            block_timestamp=f_timestamp.result(),
-            withdraw_manager=withdraw_manager,
-            withdraw_manager_data=withdraw_manager_data,
+            vault_reads.unimplemented_getters.append(GET_MARKET_SUBSTRATES)
+        return _snapshot(
+            vault,
+            _BlockRef(ctx.chain_id, resolved_block, is_latest, f_timestamp.result()),
+            vault_reads,
+            markets,
+            lending_reads,
+            derived,
+            withdraw=f_withdraw.result(),
             fee_data=f_fees.result(),
-            balance_fuses=markets.balance_fuses,
-            dependency_graph=markets.dependency_graph or None,
-            market_substrates=markets.market_substrates or None,
-            lending_health=lending_reads.lending_health,
-            morpho_positions=lending_reads.morpho_positions,
-            aave_positions=lending_reads.aave_positions,
             role_accounts=f_roles.result(),
             hypercore=f_hypercore.result(),
-            market_balances=markets.market_balances,
-            **derived,
         )
+
+
+@dataclass(frozen=True)
+class _BlockRef:
+    chain_id: ChainId
+    number: int
+    is_latest: bool
+    timestamp: Timestamp
+
+
+def _snapshot(
+    vault: PlasmaVaultAddress,
+    block: _BlockRef,
+    reads: _VaultReads,
+    markets: _MarketReads,
+    lending: _LendingReads,
+    derived: _DerivedReads,
+    *,
+    withdraw: tuple[ChecksumAddress | None, WithdrawManagerData | None],
+    fee_data: FeeData | None,
+    role_accounts: list[RoleAccount] | None,
+    hypercore: HyperCoreVaultState | None,
+) -> VaultData:
+    """`VaultData` from the pipelines' results."""
+    return VaultData(
+        vault=vault,
+        chain_id=block.chain_id,
+        block_number=block.number,
+        is_latest=block.is_latest,
+        block_timestamp=block.timestamp,
+        share_decimals=reads.share_decimals,
+        total_assets=reads.total_assets,
+        total_supply=reads.total_supply,
+        supply_cap=reads.supply_cap,
+        asset=reads.asset,
+        access_manager=reads.access_manager,
+        price_oracle=reads.price_oracle,
+        fuses=reads.fuses,
+        instant_fuses=reads.instant_fuses,
+        vault_name=reads.vault_name,
+        rewards_manager=reads.rewards_manager,
+        asset_decimals=reads.asset_decimals,
+        underlying_balance_on_vault=reads.underlying_balance_on_vault,
+        asset_symbol=reads.asset_symbol,
+        asset_price_usd=reads.asset_price_usd,
+        fuse_markets=reads.fuse_markets,
+        unimplemented_getters=reads.unimplemented_getters,
+        withdraw_manager=withdraw[0],
+        withdraw_manager_data=withdraw[1],
+        fee_data=fee_data,
+        balance_fuses=markets.balance_fuses,
+        dependency_graph=markets.dependency_graph or None,
+        market_substrates=markets.market_substrates or None,
+        lending_health=lending.lending_health,
+        morpho_positions=lending.morpho_positions,
+        aave_positions=lending.aave_positions,
+        role_accounts=role_accounts,
+        hypercore=hypercore,
+        market_balances=markets.market_balances,
+        token_prices_usd=derived.token_prices_usd,
+        unpriceable_priced_tokens=derived.unpriceable_priced_tokens,
+        erc20=derived.erc20,
+        token_symbols=derived.token_symbols,
+        token_decimals=derived.token_decimals,
+    )
+
+
+@dataclass
+class _DerivedReads:
+    """The `VaultData` fields read on top of the vault and market reads."""
+
+    erc20: Erc20Holdings
+    token_prices_usd: dict[HexAddress, float] | None = None
+    unpriceable_priced_tokens: list[MiddlewarePricedToken] | None = None
+    token_symbols: dict[HexAddress, str] = field(default_factory=dict)
+    token_decimals: dict[HexAddress, Decimals | None] = field(default_factory=dict)
 
 
 def _derived_reads(
     ctx: Web3Context,
     pool: ThreadPoolExecutor,
     vault: PlasmaVaultAddress,
-    vault_reads: dict[str, Any],
+    vault_reads: _VaultReads,
     oracle: PriceOracleMiddleware,
     markets: _MarketReads,
     lending: _LendingReads | None,
     *,
     metadata: bool,
-) -> dict[str, Any]:
-    """The `VaultData` fields read on top of the vault and market reads: the
-    ERC20 holdings, and (with ``lending``) the breakdown token prices and the
-    unpriceable-token check, and (with ``metadata``) the token metadata, which
-    also names the ERC20 holdings."""
+) -> _DerivedReads:
+    """The ERC20 holdings, and (with ``lending``) the breakdown token prices
+    and the unpriceable-token check, and (with ``metadata``) the token
+    metadata, which also names the ERC20 holdings."""
     f_erc20 = pool.submit(
         _read_erc20_market,
         ctx,
@@ -637,40 +724,47 @@ def _derived_reads(
         market_balances=markets.market_balances,
         oracle=oracle,
     )
-    fields: dict[str, Any] = {}
+    token_prices_usd: dict[HexAddress, float] | None = None
+    unpriceable: list[MiddlewarePricedToken] | None = None
     if lending is not None:
-        fields["token_prices_usd"] = _fetch_breakdown_token_prices(
+        token_prices_usd = _fetch_breakdown_token_prices(
             ctx,
             oracle,
             _collect_breakdown_token_addresses(
                 lending.morpho_positions, lending.aave_positions
             ),
         )
-        fields["unpriceable_priced_tokens"] = _safe_call(
+        unpriceable = _safe_call(
             partial(
                 fetch_unpriceable_priced_tokens,
                 ctx,
-                price_oracle=vault_reads["price_oracle"],
-                underlying=vault_reads["asset"],
+                price_oracle=vault_reads.price_oracle,
+                underlying=vault_reads.asset,
                 balance_fuses=markets.balance_fuses,
                 market_substrates=markets.market_substrates,
                 morpho_positions=lending.morpho_positions,
             )
         )
+    symbols: dict[HexAddress, str] = {}
+    decimals: dict[HexAddress, Decimals | None] = {}
     if metadata:
-        fields["token_symbols"], fields["token_decimals"] = _token_metadata(
-            ctx, markets, lending or _LendingReads()
-        )
-    fields["erc20"] = _erc20_holdings(
+        symbols, decimals = _token_metadata(ctx, markets, lending or _LendingReads())
+    erc20 = _erc20_holdings(
         _Asset(
-            address=vault_reads["asset"],
-            decimals=vault_reads["asset_decimals"],
-            price_usd=vault_reads["asset_price_usd"],
+            address=vault_reads.asset,
+            decimals=vault_reads.asset_decimals,
+            price_usd=vault_reads.asset_price_usd,
         ),
         f_erc20.result(),
-        fields.get("token_symbols", {}),
+        symbols,
     )
-    return fields
+    return _DerivedReads(
+        erc20=erc20,
+        token_prices_usd=token_prices_usd,
+        unpriceable_priced_tokens=unpriceable,
+        token_symbols=symbols,
+        token_decimals=decimals,
+    )
 
 
 def _token_metadata(

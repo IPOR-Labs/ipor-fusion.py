@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import TypeVar, cast
 
 from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
@@ -91,19 +91,21 @@ def _market_id_list_decoder(value: list) -> list[MarketId]:
 _BALANCE_OF_SELECTOR = function_signature_to_4byte_selector("balanceOf()")
 
 
-def _universal_read_decoder(
-    output_types: list[str] | None, decoder: Callable[..., Any] | None
-) -> Callable[[tuple], Any]:
-    """Unwrap ``ReadResult.data`` and, given ``output_types``, decode it the way
-    `Call.decode` decodes a view's return data."""
+def _read_result_data(result: tuple[bytes]) -> bytes:
+    """``ReadResult.data``, undecoded."""
+    return bytes(result[0])
 
-    def _decode(result: tuple) -> Any:
-        payload = bytes(result[0])
-        if output_types is None:
-            return payload
-        values = tuple(decode(output_types, payload))
-        single: Any = values[0] if len(values) == 1 else values
-        return decoder(single) if decoder is not None else single
+
+def _universal_read_decoder(
+    output_types: list[str], decoder: Callable[..., T] | None
+) -> Callable[[tuple[bytes]], T]:
+    """Unwrap ``ReadResult.data`` and decode it the way `Call.decode` decodes a
+    view's return data."""
+
+    def _decode(result: tuple[bytes]) -> T:
+        values = tuple(decode(output_types, _read_result_data(result)))
+        single: object = values[0] if len(values) == 1 else values
+        return decoder(single) if decoder is not None else cast(T, single)
 
     return _decode
 
@@ -265,7 +267,7 @@ class PlasmaVault(ContractWrapper):
             target,
             data,
             output_types=["(bytes)"],
-            decoder=_universal_read_decoder(None, None),
+            decoder=_read_result_data,
         )
 
     def universal_read_decoded(

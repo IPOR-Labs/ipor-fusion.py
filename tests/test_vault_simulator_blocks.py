@@ -5,12 +5,14 @@ time shift) folds into the next block that is sent: an address funded before
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from web3 import Web3
 
-from ipor_fusion import SimulationRunError, VaultSimulator
+from ipor_fusion import FuseAction, SimulationRunError, VaultSimulator
 from ipor_fusion.core.contract import Call
 
 VAULT = Web3.to_checksum_address("0x" + "11" * 20)
@@ -594,3 +596,62 @@ def test_a_simulator_without_vault_or_alpha_observes_but_cannot_execute():
         sim.execute_call(call)
     sim.execute_call(call, from_=PAYER)
     assert sim.has_calls
+
+
+_REQUEST_FIXTURE = Path(__file__).parent / "fixtures" / "simulate_v1_request.json"
+
+
+def test_a_rich_run_sends_the_pinned_request_bytes():
+    """Every queuing and override path, serialized: the eth_simulateV1 request
+    is pinned byte for byte, key order included."""
+    token = Web3.to_checksum_address("0x" + "44" * 20)
+    slot_1, slot_2, word = "0x" + "01" * 32, "0x" + "02" * 32, "0x" + "ff" * 32
+    web3 = MagicMock()
+    web3.provider = RecordingProvider()
+    web3.eth.get_block.return_value = {"timestamp": BASELINE}
+    sim = VaultSimulator(web3, vault=VAULT, alpha=ALPHA, block=100, validation=True)
+    read = Call(to=VAULT, data=b"\x01\x02\x03\x04", output_types=["uint256"])
+    sim.with_state_override(PAYER, balance=hex(10**18), nonce=hex(7))
+    sim.with_state_override(token, state={slot_1: word})
+    sim.with_state_override(token, stateDiff={slot_2: word}, code="0x6000")
+    sim.with_erc20_balance(token, PAYER, 5, slot=9)
+    sim.with_block_override(
+        gasLimit=30_000_000, feeRecipient=ALPHA, baseFeePerGas="0x7"
+    )
+    sim.with_state_override_provider(
+        lambda n: {PAYER: {"code": f"0x60{n:02x}", "balance": hex(1)}}
+    )
+    sim.execute([FuseAction(token, b"\xaa\xbb")])
+    sim.add_call(Call(to=token, data=b"\x09"), from_=PAYER, label="setup", gas=90_000)
+    sim.deploy_contract(b"\x60\x00", from_=PAYER, nonce=7, value=3, gas=1_000_000)
+    sim.observe(read, label="r0")
+    sim.add_transaction(
+        _built_transaction(
+            maxPriorityFeePerGas="0x3e8",
+            value=0,
+            type=2,
+            accessList=[
+                {"address": VAULT.lower(), "storageKeys": [bytes.fromhex("ab" * 32)]}
+            ],
+        ),
+        label="tx",
+    )
+    sim.next_block(time_shift_seconds=60)
+    sim.with_state_override(PAYER, balance=hex(2))
+    sim.next_block(time_shift_seconds=5)
+    sim.with_block_override(number=200)
+    sim.observe(read)
+    sim.next_block()
+    sim.with_block_time_shift(1000)
+    sim.add_transaction({"from": ALPHA, "to": VAULT, "input": "0x", "nonce": "0x8"})
+
+    sim.run()
+
+    sent = json.dumps(web3.provider.payloads[0])
+    assert sent == _REQUEST_FIXTURE.read_text().strip()
+
+
+def test_a_block_override_must_be_an_int_or_a_string():
+    sim, _ = _simulator()
+    with pytest.raises(TypeError, match="block override gasLimit"):
+        sim.with_block_override(gasLimit=1.5)  # pyright: ignore[reportArgumentType]

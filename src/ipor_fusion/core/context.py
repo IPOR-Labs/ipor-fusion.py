@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import logging
 import threading
-from typing import Any
 
 from eth_account import Account
 from eth_typing import ChecksumAddress, HexStr
@@ -453,7 +452,7 @@ class InFlightLimit:
 def _slot_middleware(slots: threading.BoundedSemaphore) -> type[Web3Middleware]:
     class InFlightLimitMiddleware(Web3Middleware):
         def wrap_make_request(self, make_request: MakeRequestFn) -> MakeRequestFn:
-            def limited(method: RPCEndpoint, params: Any) -> RPCResponse:
+            def limited(method: RPCEndpoint, params: object) -> RPCResponse:
                 with slots:
                     return make_request(method, params)
 
@@ -463,7 +462,7 @@ def _slot_middleware(slots: threading.BoundedSemaphore) -> type[Web3Middleware]:
             self, make_batch_request: MakeBatchRequestFn
         ) -> MakeBatchRequestFn:
             def limited(
-                requests_info: list[tuple[RPCEndpoint, Any]],
+                requests_info: list[tuple[RPCEndpoint, object]],
             ) -> list[RPCResponse] | RPCResponse:
                 with slots:
                     return make_batch_request(requests_info)

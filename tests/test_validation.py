@@ -36,7 +36,7 @@ from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId
 from ipor_fusion.validation import GET_MARKET_SUBSTRATES, Reconciliation
-from ipor_fusion.vault_data import VaultData, _MarketReads
+from ipor_fusion.vault_data import VaultData, _MarketReads, _VaultReads
 from ipor_fusion.vault_erc20 import _Asset, _erc20_holdings, _read_erc20_market
 
 
@@ -460,25 +460,25 @@ class TestSnapshotTokenMetadata:
             aave_pools={},
             market_balances=chain.market_balances,  # type: ignore[arg-type]
         )
-        vault_reads = {
-            "share_decimals": 18,
-            "total_assets": state.total_assets,
-            "total_supply": state.total_assets,
-            "supply_cap": state.total_assets,
-            "asset": ASSET,
-            "access_manager": _addr("ac"),
-            "price_oracle": ORACLE,
-            "fuses": [FUSE],
-            "instant_fuses": [],
-            "vault_name": "Vault",
-            "rewards_manager": None,
-            "asset_decimals": state.asset_decimals,
-            "underlying_balance_on_vault": state.underlying_balance_on_vault,
-            "asset_symbol": "USDC",
-            "asset_price_usd": state.asset_price_usd,
-            "fuse_markets": None,
-            "unimplemented_getters": [],
-        }
+        vault_reads = _VaultReads(
+            share_decimals=18,
+            total_assets=state.total_assets,
+            total_supply=state.total_assets,
+            supply_cap=state.total_assets,
+            asset=ASSET,
+            access_manager=_addr("ac"),
+            price_oracle=ORACLE,
+            fuses=[FUSE],
+            instant_fuses=[],
+            vault_name="Vault",
+            rewards_manager=None,
+            asset_decimals=state.asset_decimals,
+            underlying_balance_on_vault=state.underlying_balance_on_vault,
+            asset_symbol="USDC",
+            asset_price_usd=state.asset_price_usd,
+            fuse_markets=None,
+            unimplemented_getters=[],
+        )
         oracle = price_oracle_middleware(ctx, ORACLE)  # type: ignore[arg-type]
         with (
             patch.object(vault_data, "_block_timestamp", return_value=1),

@@ -741,6 +741,28 @@ fuse's `eid=` take it (`LayerZeroEid(30101)`). CCIP chain selectors are
 (`CcipChainSelector(4949039107694359620)`). `ZERO_ADDRESS` is a `ChecksumAddress`
 (same value).
 
+**Simulation.** The `VaultSimulator` override methods name the keys `eth_simulateV1`
+accepts instead of taking `**Any`; the keys and the request they produce are
+unchanged. `with_state_override(address, **overrides)` takes `AccountOverride` keys
+(`balance`, `nonce`, `code`, `movePrecompileToAddress`: `0x` hex strings; `state`,
+`stateDiff`: `0x` slot to `0x` word), and a `StateOverrideProvider` returns
+`Mapping[str, AccountOverride]`. `with_block_override(**fields)` takes
+`BlockOverrides` keys (`number`, `time`, `gasLimit`, `baseFeePerGas`, `blobBaseFee`:
+an `int`, sent as hex, or a hex string; `feeRecipient`, `prevRandao`: strings) and
+raises `TypeError` for any other value type (`withdrawals` is not supported).
+Both TypedDicts are exported from `ipor_fusion`. A misspelled key or an `int` balance
+now fails type checking instead of reaching the node:
+
+```python
+sim.with_state_override(holder, balance=hex(10**18), nonce=hex(0))
+sim.with_block_override(gasLimit=30_000_000)
+sim.with_state_override_provider(lambda n: {oracle: {"code": code_hex}})
+```
+
+`add_transaction(transaction)` takes web3's `TxParams`, the shape
+`Call.build_transaction` returns; a node-shaped dict carrying `input` instead of `data`
+is still accepted at run time.
+
 **HyperCore (preview).** The fuses, `HyperCoreSubstrates`, `HyperCoreReader`,
 `read_hypercore_transfer_snapshot` and the helpers `system_address`,
 `precompile_index_of`, `perp_dex_of`, `is_native_perp_asset`, `is_hip3_asset` take the
@@ -774,6 +796,11 @@ except as listed under [Behavior changes](#behavior-changes)): `chain_id` fields
 string). Calling an MCP tool function
 directly from Python takes `ChainId`. Their amount, decimals and time fields stay
 `int`: they are JSON output models, and the SDK values above fit them unchanged.
+The nested blocks that were `dict[str, Any]` are models now (`deployment`,
+`share_price`, `links`, `dependency_graph`, a balance fuse's `position_breakdown`, an
+oracle node's `source_detail`, the Morpho `asset`, `adapters`, `caps`,
+`liquidity_adapter`, `public_allocator` and `allocations`): read them by attribute
+(`result.caps[0].loan_token`, not `["loan_token"]`).
 
 ## Typed JSON documents
 
@@ -837,6 +864,21 @@ that only some entries carry is `NotRequired` (a balance fuse's `pct_of_total` a
 
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
+
+- **MCP `outputSchema` describes every nested block.** The tool output is
+  byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,
+  `market_morpho_blue` and `market_meta_morpho` replace each free-form object with
+  the block's own definition: `links` (`VaultLinks`), `deployment`
+  (`DeploymentModel` or `DeploymentErrorModel`), `share_price` (`SharePriceModel`),
+  `dependency_graph` (`DependencyGraphModel`), `position_breakdown` (a list of
+  `MorphoBreakdownEntry` or of `AaveBreakdownEntry`, amounts `BreakdownAmount`),
+  substrate entries (string or boolean values), `source_detail` (`ChainlinkDetail`,
+  `DualXrefDetail`, `Erc4626Detail`, `MorphoFeedDetail` or
+  `MiddlewareFallbackDetail`), a supplying vault's `asset` (`MorphoVaultAssetModel`)
+  and the MetaMorpho `asset`, `liquidity_adapter` / `adapters`, `caps`,
+  `public_allocator` (with `flow_caps`) and `allocations`. Their keys are now required
+  and closed (`additionalProperties: false`) as the documents always wrote them; a
+  client validating against the schema rejects a document that departs from them.
 
 - **Vault reads are pinned to one block**: every read of `fetch_vault_data`, log
   scans included, runs at the resolved block; see

@@ -11,9 +11,15 @@ Design notes:
   Heavier SDK types appear only under TYPE_CHECKING (or deferred inside
   methods), and on-chain addresses are plain `str`, not eth_typing NewTypes.
   Enforced by test_mcp_models.py::TestModelsImportGraph.
-- Truly dynamic sections (substrates keyed by market label, per-protocol
-  position breakdowns) use dict[str, Any] / list[dict[str, Any]] — modelling
-  every variant would be brittle without meaningful LLM-side benefit.
+- Every block is a model, one per shape of the SDK's TypedDict documents (a
+  block with several shapes, such as an oracle node's source_detail, is a
+  union of them). The one open-keyed block is a substrate entry,
+  dict[str, str | bool]: each decoder adds its own keys, some named after a
+  unit, and ``error`` is True on a raw substrate but a message from a decoder.
+- A block whose keys the producer omits when it has no value (a breakdown
+  amount without token metadata, a share price without a USD price) is a
+  `_Sparse` model: it dumps only the fields it was given, so the published
+  JSON keeps the key absent rather than null.
 - Models use extra="forbid": any new field added to build_vault_info_json that
   is not declared here will fail VaultInfoResponse.model_validate(). The SDK
   types its documents as TypedDicts (`VaultInfoJson`, `MorphoBlueMarketJson`,
@@ -29,9 +35,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    model_serializer,
+)
 
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.types import (
@@ -66,6 +79,18 @@ if TYPE_CHECKING:
 
 class _Base(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class _Sparse(_Base):
+    """A block whose optional keys are absent, not null, when unset: it dumps
+    only the fields it was given."""
+
+    @model_serializer(mode="wrap")
+    def _given_fields_only(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        dumped: dict[str, object] = handler(self)
+        return {k: v for k, v in dumped.items() if k in self.model_fields_set}
 
 
 # ---------------------------------------------------------------------------
@@ -308,13 +333,42 @@ class FuseEntry(_Base):
     )
 
 
-class BalanceFuseEntry(_Base):
-    """A balance fuse entry with optional protocol-specific breakdown.
+class BreakdownAmount(_Sparse):
+    """One position amount; symbol, decimals and formatted are absent without
+    the token's metadata, usd also without its oracle price."""
 
-    `position_breakdown` shape depends on the protocol (Morpho per-market or
-    Aave V3 per-asset) and is intentionally untyped here — it is rendered
-    verbatim from build_vault_info_json.
-    """
+    raw: int
+    token: str
+    symbol: str | None = None
+    decimals: int | None = None
+    formatted: str | None = None
+    usd: float | None = None
+
+
+class MorphoBreakdownEntry(_Base):
+    """One Morpho Blue market of a balance fuse."""
+
+    morpho_market_id: str
+    collateral_symbol: str | None
+    loan_symbol: str | None
+    collateral: BreakdownAmount
+    borrow: BreakdownAmount
+    supply: BreakdownAmount
+
+
+class AaveBreakdownEntry(_Base):
+    """One Aave V3 reserve of a balance fuse."""
+
+    asset: str
+    asset_symbol: str | None
+    supply: BreakdownAmount
+    variable_debt: BreakdownAmount
+    stable_debt: BreakdownAmount
+
+
+class BalanceFuseEntry(_Base):
+    """A balance fuse entry with an optional protocol-specific breakdown:
+    Morpho per market or Aave V3 per reserve."""
 
     market: str
     market_id: MarketId
@@ -323,7 +377,9 @@ class BalanceFuseEntry(_Base):
     contract: str
     pct_of_total: float | None = Field(default=None)
     depends_on: list[str] | None = Field(default=None)
-    position_breakdown: list[dict[str, Any]] | None = Field(default=None)
+    position_breakdown: list[MorphoBreakdownEntry] | list[AaveBreakdownEntry] | None = (
+        Field(default=None)
+    )
 
 
 class ERC20Entry(_Base):
@@ -487,6 +543,77 @@ class OraclePriceModel(_Base):
     )
 
 
+class _AggregatorDetail(_Base):
+    """One aggregator-compatible feed read; every key is null when the round
+    could not be read, description when the feed lacks it."""
+
+    description: str | None
+    round_id: str | None
+    answer: str | None
+    decimals: int | None
+    started_at: int | None
+    started_at_utc: str | None
+    updated_at: int | None
+    updated_at_utc: str | None
+    answered_in_round: str | None
+
+
+class ChainlinkDetail(_AggregatorDetail):
+    """ChainlinkAggregator / chainlink_style leaves, with the proxy evidence
+    (null when unanswered)."""
+
+    aggregator: str | None
+    phase_id: int | None
+
+
+class _FeedAddress(_Base):
+    address: str
+
+
+# _FeedAddress comes last so its field comes first, as the producer writes it.
+class AggregatorFeedDetail(_AggregatorDetail, _FeedAddress):
+    """A DualCrossReferencePriceFeed component feed."""
+
+
+class DualXrefDetail(_Base):
+    asset_x: str
+    asset_x_asset_y_feed: AggregatorFeedDetail
+    asset_y_usd_feed: AggregatorFeedDetail
+    derived_price_wad: str | None
+
+
+class Erc4626Detail(_Base):
+    vault: str
+    underlying: str
+    share_decimals: int | None
+    rate: str | None
+
+
+class MorphoFeedDetail(_Base):
+    morpho_oracle: str
+    collateral_token: str | None
+    loan_token: str
+    morpho_price: str | None
+
+
+class MiddlewareFallbackDetail(_Base):
+    """delegated_to names the global middleware a manager delegates to;
+    otherwise chainlink_feed_registry the middleware's own fallback."""
+
+    delegated_to: str | None
+    chainlink_feed_registry: str | None
+
+
+SourceDetail = (
+    ChainlinkDetail
+    | DualXrefDetail
+    | Erc4626Detail
+    | MorphoFeedDetail
+    | MiddlewareFallbackDetail
+)
+_SOURCE_DETAIL: TypeAdapter[SourceDetail | None] = TypeAdapter(SourceDetail | None)
+
+
 class OracleNodeModel(_Base):
     """One asset's resolved price feed (recursive for derived feeds)."""
 
@@ -521,7 +648,7 @@ class OracleNodeModel(_Base):
     reason: str | None = Field(
         default=None, description="Why the node is partial; null otherwise."
     )
-    source_detail: dict[str, Any] | None = Field(
+    source_detail: SourceDetail | None = Field(
         default=None,
         description="Type-specific raw reads; null when no probe ran. "
         "Aggregator-compatible reads (Chainlink-tier leaves, dual-xref "
@@ -556,9 +683,7 @@ class OracleNodeModel(_Base):
             path=node.path,
             status=node.status,
             reason=node.reason,
-            source_detail=(
-                dict(node.source_detail) if node.source_detail is not None else None
-            ),
+            source_detail=_SOURCE_DETAIL.validate_python(node.source_detail),
             dependencies=[cls.from_node(dep) for dep in node.dependencies],
         )
 
@@ -889,11 +1014,16 @@ class MorphoVaultPublicAllocatorConfig(_Base):
     admin: str | None = None
 
 
+class MorphoVaultAssetModel(_Base):
+    symbol: str
+    decimals: int
+
+
 class MorphoSupplyingVault(_Base):
     address: str
     name: str
     symbol: str
-    asset: dict[str, Any]
+    asset: MorphoVaultAssetModel
     total_assets: str
     supply_assets: str
     supply_cap: str
@@ -916,16 +1046,66 @@ class MorphoBlueMarketResponse(_Base):
     vaults: list[MorphoSupplyingVault] | None = None
 
 
+class MetaMorphoAdapterModel(_Base):
+    address: str
+    type: str
+    assets: str
+    inner_vault: str | None
+
+
+class MetaMorphoCapModel(_Base):
+    """A Vault V2 cap; the market fields are null unless type is MarketV1."""
+
+    cap_id: str
+    type: str
+    id_data: str
+    absolute_cap: str
+    relative_cap_wad: str
+    allocation: str
+    room: str
+    market_id: str | None
+    loan_token: str | None
+    collateral_token: str | None
+    oracle: str | None
+    irm: str | None
+    lltv: str | None
+
+
+class MetaMorphoFlowCapModel(_Base):
+    max_in: str
+    max_out: str
+
+
+class MetaMorphoPublicAllocatorModel(_Base):
+    fee_wei: str
+    admin: str | None
+    flow_caps: dict[str, MetaMorphoFlowCapModel] = Field(
+        description="PublicAllocator flow caps keyed by Morpho Blue market id."
+    )
+
+
+class MetaMorphoAllocationModel(_Base):
+    market_id: str
+    lltv: str
+    loan_symbol: str
+    loan_decimals: int
+    collateral_symbol: str
+    supply_assets: str
+    supply_cap: str
+    cap_room: str
+    market_supply_apy: float
+
+
 class MetaMorphoVaultResponse(_Base):
-    """Discriminated by `version` ('v1' or 'v2'). Shape varies between versions
-    — kept loosely typed to avoid duplicating the Morpho API surface."""
+    """Discriminated by `version` ('v1' or 'v2'): the fields of the other
+    version are null."""
 
     version: str
     chain_id: ChainId
     address: str
     name: str
     symbol: str
-    asset: dict[str, Any]
+    asset: MorphoLoanAssetModel
     total_assets: str
     # v2-only fields
     idle_assets: str | None = None
@@ -937,15 +1117,15 @@ class MetaMorphoVaultResponse(_Base):
     management_fee: float | None = None
     management_fee_recipient: str | None = None
     sentinels: list[str] | None = None
-    liquidity_adapter: dict[str, Any] | None = None
-    adapters: list[dict[str, Any]] | None = None
-    caps: list[dict[str, Any]] | None = None
+    liquidity_adapter: MetaMorphoAdapterModel | None = None
+    adapters: list[MetaMorphoAdapterModel] | None = None
+    caps: list[MetaMorphoCapModel] | None = None
     # v1-only fields
     fee_wad: str | None = None
     guardian: str | None = None
     fee_recipient: str | None = None
-    public_allocator: dict[str, Any] | None = None
-    allocations: list[dict[str, Any]] | None = None
+    public_allocator: MetaMorphoPublicAllocatorModel | None = None
+    allocations: list[MetaMorphoAllocationModel] | None = None
     # shared
     owner: str
     curator: str | None = None
@@ -1056,20 +1236,47 @@ class HyperCoreSection(_Base):
     pending_note: str
 
 
-class VaultInfoResponse(_Base):
-    """Full on-chain state of a Plasma Vault.
+class VaultLinks(_Sparse):
+    ipor_app: str
+    etherscan: str | None = Field(
+        default=None, description="Absent on a chain without a known explorer."
+    )
 
-    Top-level fields are typed; deeply nested protocol-specific blocks
-    (substrates, position breakdowns inside balance_fuses, dependency_graph,
-    deployment, share_price) keep dict[str, Any] typing because their shape
-    is conditional on which protocols and managers a given vault uses.
-    """
+
+class DeploymentModel(_Base):
+    block: int
+    timestamp: int
+    timestamp_utc: str
+    age_days: int
+
+
+class DeploymentErrorModel(_Base):
+    """Why the deployment block could not be found."""
+
+    error: str
+
+
+class SharePriceModel(_Sparse):
+    """Assets per whole share; usd is absent when the asset has no price."""
+
+    asset: float
+    usd: float | None = None
+
+
+class DependencyGraphModel(_Base):
+    """The balance dependency graph by market label."""
+
+    edges: dict[str, list[str]]
+    update_reach: dict[str, list[str]]
+    update_groups: list[list[str]]
+
+
+class VaultInfoResponse(_Base):
+    """Full on-chain state of a Plasma Vault."""
 
     vault: str
     name: str | None = None
-    links: dict[str, str] = Field(
-        description="External URLs (ipor_app, etherscan if known)."
-    )
+    links: VaultLinks = Field(description="External URLs.")
     chain: str
     chain_id: ChainId
     block: int
@@ -1080,12 +1287,12 @@ class VaultInfoResponse(_Base):
     )
     block_timestamp: int
     block_timestamp_utc: str
-    deployment: dict[str, Any] | None = None
+    deployment: DeploymentModel | DeploymentErrorModel | None = None
     asset: AssetInfo
     share_decimals: int
     total_assets: Amount
     total_supply: Amount
-    share_price: dict[str, Any] | None = None
+    share_price: SharePriceModel | None = None
     supply_cap: Amount
     managers: Managers
     role_accounts: list[RoleAccountEntry] | None = Field(
@@ -1105,10 +1312,13 @@ class VaultInfoResponse(_Base):
         "Kept separate from balance_fuses so they are not counted as markets.",
     )
     instant_withdrawal_fuses: list[FuseEntry]
-    substrates: dict[str, list[dict[str, Any]]] = Field(
-        description="Per-market substrate entries; outer keys are human-readable market labels."
+    substrates: dict[str, list[dict[str, str | bool]]] = Field(
+        description="Per-market substrate entries; outer keys are human-readable "
+        "market labels. An entry carries address (with symbol and contract when "
+        "known) or raw (with error: true when undecodable), substrate_type, and "
+        "the decoder's own string fields."
     )
-    dependency_graph: dict[str, Any] | None = None
+    dependency_graph: DependencyGraphModel | None = None
     erc20_balances: list[ERC20Entry]
     reconciliation: Reconciliation
     lending_health: LendingHealth | None = None
