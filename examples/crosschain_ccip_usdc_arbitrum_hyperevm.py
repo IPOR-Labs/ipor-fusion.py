@@ -86,7 +86,7 @@ from ipor_fusion import (
     parse_plasma_vault_address,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, ChainId, Decimals, MarketId, Period, Shares
+from ipor_fusion.types import Amount, ChainId, Decimals, Period, Shares
 
 log = logging.getLogger("crosschain_ccip_usdc_arbitrum_hyperevm")
 
@@ -123,7 +123,7 @@ EXECUTOR = Web3.to_checksum_address("0xcb83A78BD8e8c284d5704B62945EF2C454266dB0"
 SPOKE_VAULT = parse_plasma_vault_address("0xA342eBA00bD725799828A34EA55D25a55958f643")
 # ``IporFusionMarkets.CROSSCHAIN``: the market the four crosschain fuses are
 # registered under on the hub vault.
-CROSSCHAIN_MARKET = MarketId(int(IporFusionMarkets.CROSSCHAIN))
+CROSSCHAIN_MARKET = IporFusionMarkets.CROSSCHAIN
 
 # ── Actors ───────────────────────────────────────────────────────────────────
 # Role separation: the alpha is an online, least-privilege key that can only

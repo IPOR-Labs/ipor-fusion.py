@@ -34,7 +34,7 @@ from ipor_fusion import (
 from ipor_fusion.cache import NullCache
 from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import ChainId, MarketId
+from ipor_fusion.types import ChainId
 from ipor_fusion.validation import GET_MARKET_SUBSTRATES, Reconciliation
 from ipor_fusion.vault_data import VaultData, _MarketReads
 from ipor_fusion.vault_erc20 import _Asset, _erc20_holdings, _read_erc20_market
@@ -51,9 +51,9 @@ TOKEN = _addr("b1")
 OTHER = _addr("b2")
 FUSE = _addr("f1")
 ORPHAN_FUSE = _addr("f5")
-AAVE = MarketId(IporFusionMarkets.AAVE_V3)
-MORPHO = MarketId(IporFusionMarkets.MORPHO)
-ERC20_MARKET = MarketId(IporFusionMarkets.ERC20_VAULT_BALANCE)
+AAVE = IporFusionMarkets.AAVE_V3
+MORPHO = IporFusionMarkets.MORPHO
+ERC20_MARKET = IporFusionMarkets.ERC20_VAULT_BALANCE
 WAD = 10**18
 
 

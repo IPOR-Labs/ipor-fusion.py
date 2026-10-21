@@ -40,7 +40,7 @@ from ipor_fusion import (
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.fuses import AaveV3SupplyFuse
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, ChainId, MarketId
+from ipor_fusion.types import Amount, ChainId
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ BASE_FUSION_FACTORY = Web3.to_checksum_address(
 # works since validation=False lets us impersonate it.
 OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
-AAVE_MARKET = MarketId(IporFusionMarkets.AAVE_V3)
+AAVE_MARKET = IporFusionMarkets.AAVE_V3
 ONE_YEAR_SECONDS = 365 * 24 * 3600
 
 # --- deployment-specific values (BASE mainnet) ------------------------------

@@ -68,7 +68,7 @@ from ipor_fusion.types import (
 T = TypeVar("T")
 
 #: New HyperCore vaults use market 55; the abandoned pilot still keys 54.
-HYPERCORE_MARKET = MarketId(IporFusionMarkets.HYPERCORE)
+HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
 #: The only chain with the HyperCore precompiles.
 HYPEREVM_CHAIN_ID = ChainId(999)
 #: Known ``HyperCorePendingReader`` deployments per chain. The reader is a

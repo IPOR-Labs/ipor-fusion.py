@@ -1859,7 +1859,7 @@ class TestFetchAavePools:
         ctx = MagicMock()
         morpho_only = [
             BalanceFuse(
-                market_id=MarketId(IporFusionMarkets.MORPHO),
+                market_id=IporFusionMarkets.MORPHO,
                 fuse=self._FUSES[IporFusionMarkets.MORPHO],
             )
         ]
