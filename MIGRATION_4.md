@@ -876,9 +876,10 @@ are listed with a link.
   `DualXrefDetail`, `Erc4626Detail`, `MorphoFeedDetail` or
   `MiddlewareFallbackDetail`), a supplying vault's `asset` (`MorphoVaultAssetModel`)
   and the MetaMorpho `asset`, `liquidity_adapter` / `adapters`, `caps`,
-  `public_allocator` (with `flow_caps`) and `allocations`. Their keys are now required
-  and closed (`additionalProperties: false`) as the documents always wrote them; a
-  client validating against the schema rejects a document that departs from them.
+  `public_allocator` (with `flow_caps`) and `allocations`. Fixed-shape blocks now declare their
+  required and optional fields and reject unknown keys (`additionalProperties:
+  false`), as the documents always wrote them; substrate entries and keyed maps
+  (`flow_caps`, `edges`, `update_reach`) stay open with typed values.
 
 - **Vault reads are pinned to one block**: every read of `fetch_vault_data`, log
   scans included, runs at the resolved block; see
