@@ -847,15 +847,31 @@ that only some entries carry is `NotRequired` (a balance fuse's `pct_of_total` a
   `ipor_fusion` and `ipor_fusion.readers`). Narrow by a key before reading a
   kind-specific one: `if detail is not None and "aggregator" in detail:
   detail["description"]`.
-- Event `args` are typed per event kind: `ExternalStateEvent.args` is
-  `ExternalStateEventArgs` and `HyperCoreEvent.args` is `HyperCoreEventArgs`, a union
-  of one TypedDict per event (`ExternalStateUnpausedArgs`,
-  `HyperCoreDepositFuseEnterArgs`, ...; `EXTERNAL_STATE_EVENT_ARGS` /
-  `HYPERCORE_EVENT_ARGS` map an event name to its shape). Values carry nominal types
-  (`Amount`, `MarketId`, `FuseAddress`, `HyperCoreTokenIndex`, `PayloadHash`, web3's
-  `Timestamp`, ...). `event.args["signer"]` no longer type-checks on its own: narrow
-  with a key test (`if "signer" in event.args:`). `HyperCoreEvent.fuse` is a
-  `FuseAddress | None`.
+- Decoded events are discriminated unions. `ExternalStateEvent` and `HyperCoreEvent`
+  are type aliases over one frozen dataclass per event (`ExternalStateUnpausedEvent`,
+  `HyperCoreDepositFuseEnterEvent`, ...), each with `name: Literal["<event>"]` and
+  `args` typed as that event's TypedDict (`ExternalStateUnpausedArgs`, ...). Comparing
+  `name` narrows the event and its `args`, with no key test:
+
+  ```python
+  for event in external_state_events(receipt):
+      if event.name == "ExternalStateUnpaused":
+          event.args["signer"]  # ChecksumAddress
+  match hc_event:
+      case HyperCoreDepositFuseEnterEvent(args=args):
+          args["evmAsset"]
+  ```
+
+  Without that comparison `event.args["signer"]` does not type-check.
+  `isinstance(x, ExternalStateEvent)` still works (the alias is a union); the events
+  are no longer built positionally (`ExternalStateEvent(...)` is not a class: build
+  the event's own class with keywords, its `name` is preset).
+  `EXTERNAL_STATE_EVENT_CLASSES` / `HYPERCORE_EVENT_CLASSES` map an event name to its
+  class; they replace `EXTERNAL_STATE_EVENT_ARGS` / `HYPERCORE_EVENT_ARGS`, which are
+  removed. An event's args TypedDict is its class's `args` annotation:
+  `typing.get_type_hints(EXTERNAL_STATE_EVENT_CLASSES[name])["args"]`. Values carry nominal types (`Amount`, `MarketId`, `FuseAddress`,
+  `HyperCoreTokenIndex`, `PayloadHash`, web3's `Timestamp`, ...), and
+  `HyperCoreEvent.fuse` is a `FuseAddress | None` on every event.
 - `RawLog` (the log shape `ExternalStateExecutor.parse_balance_proposed` /
   `find_balance_proposed` accept) is `Mapping[str, object]`, not `Mapping[str, Any]`;
   a web3 `LogReceipt` still fits it.
