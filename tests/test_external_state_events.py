@@ -5,13 +5,13 @@ decoder's identity, strictness and unknown-topic behavior."""
 import re
 
 import pytest
-from _event_args import assert_args_mirror_spec
+from _event_args import assert_event_class_mirrors_spec
 from eth_abi import encode
 from test_solidity_mirrors import _solidity_source
 from web3 import Web3
 
 from ipor_fusion import (
-    EXTERNAL_STATE_EVENT_ARGS,
+    EXTERNAL_STATE_EVENT_CLASSES,
     EXTERNAL_STATE_EVENT_SPECS,
     EXTERNAL_STATE_TOPICS,
     ExternalStateEventDecodeError,
@@ -244,12 +244,14 @@ def test_a_valid_unlisted_hex_topic_is_none():
 
 
 @pytest.mark.parametrize("spec", EXTERNAL_STATE_EVENT_SPECS, ids=lambda spec: spec.name)
-def test_args_shape_mirrors_the_spec(spec):
-    assert_args_mirror_spec(EXTERNAL_STATE_EVENT_ARGS[spec.name], spec.params)
+def test_event_class_mirrors_the_spec(spec):
+    assert_event_class_mirrors_spec(
+        EXTERNAL_STATE_EVENT_CLASSES[spec.name], spec.name, spec.params
+    )
 
 
-def test_every_spec_has_an_args_shape():
-    assert set(EXTERNAL_STATE_EVENT_ARGS) == {
+def test_every_spec_has_an_event_class():
+    assert set(EXTERNAL_STATE_EVENT_CLASSES) == {
         spec.name for spec in EXTERNAL_STATE_EVENT_SPECS
     }
 

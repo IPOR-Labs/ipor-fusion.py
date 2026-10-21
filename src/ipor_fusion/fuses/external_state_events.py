@@ -22,9 +22,9 @@ raises ``ExternalStateEventDecodeError``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TypeAlias, TypedDict, cast
+from typing import Literal, TypeAlias, TypedDict, cast
 
 from eth_abi import decode
 from eth_abi.exceptions import DecodingError
@@ -165,8 +165,7 @@ class ExternalStateOperationArgs(TypedDict):
     actionsCount: int
 
 
-#: The parameters of one ExternalState event, by its Solidity names; tell the
-#: shapes apart by ``ExternalStateEvent.name`` or a key (``"signer" in args``).
+#: The parameters of one ExternalState event, by its Solidity names.
 ExternalStateEventArgs: TypeAlias = (
     ExternalStateBigChangeDetectedArgs
     | ExternalStateCustodianTimestampUpdatedArgs
@@ -176,23 +175,6 @@ ExternalStateEventArgs: TypeAlias = (
     | ExternalStateExecutorArgs
     | ExternalStateOperationArgs
 )
-
-#: Event name -> the TypedDict its ``args`` is.
-EXTERNAL_STATE_EVENT_ARGS: dict[str, type] = {
-    "ExternalStateBigChangeDetected": ExternalStateBigChangeDetectedArgs,
-    "ExternalStateBalanceFuseLastCustodianTimestampUpdated": (
-        ExternalStateCustodianTimestampUpdatedArgs
-    ),
-    "ExternalStateBalanceFuseLastTotalBalanceUpdated": (
-        ExternalStateTotalBalanceUpdatedArgs
-    ),
-    "ExternalStateUnpaused": ExternalStateUnpausedArgs,
-    "ExternalStateAssetRescued": ExternalStateAssetRescuedArgs,
-    "ExecutorCreated": ExternalStateExecutorArgs,
-    "ExternalStateOperationFuseEnter": ExternalStateOperationArgs,
-    "ExternalStateOperationFuseExit": ExternalStateOperationArgs,
-    "ExternalStateExecutorDeployed": ExternalStateExecutorArgs,
-}
 
 #: topic0 -> spec, for every ExternalState event the vault emits.
 EXTERNAL_STATE_EVENTS: dict[bytes, ExternalStateEventSpec] = {
@@ -204,9 +186,10 @@ EXTERNAL_STATE_TOPICS: tuple[str, ...] = tuple(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class ExternalStateEvent:
-    """One decoded ExternalState log with its raw identity."""
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _ExternalStateEventBase:
+    """One decoded ExternalState log with its raw identity; each event is a
+    subclass that pins ``name`` to a literal and ``args`` to its shape."""
 
     name: str
     emitter: ChecksumAddress
@@ -214,6 +197,94 @@ class ExternalStateEvent:
     block_number: int | None = None
     transaction_hash: TxHash | None = None
     log_index: int | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateBigChangeDetectedEvent(_ExternalStateEventBase):
+    name: Literal["ExternalStateBigChangeDetected"] = "ExternalStateBigChangeDetected"
+    args: ExternalStateBigChangeDetectedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent(
+    _ExternalStateEventBase
+):
+    name: Literal["ExternalStateBalanceFuseLastCustodianTimestampUpdated"] = (
+        "ExternalStateBalanceFuseLastCustodianTimestampUpdated"
+    )
+    args: ExternalStateCustodianTimestampUpdatedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent(_ExternalStateEventBase):
+    name: Literal["ExternalStateBalanceFuseLastTotalBalanceUpdated"] = (
+        "ExternalStateBalanceFuseLastTotalBalanceUpdated"
+    )
+    args: ExternalStateTotalBalanceUpdatedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateUnpausedEvent(_ExternalStateEventBase):
+    name: Literal["ExternalStateUnpaused"] = "ExternalStateUnpaused"
+    args: ExternalStateUnpausedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateAssetRescuedEvent(_ExternalStateEventBase):
+    name: Literal["ExternalStateAssetRescued"] = "ExternalStateAssetRescued"
+    args: ExternalStateAssetRescuedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateExecutorCreatedEvent(_ExternalStateEventBase):
+    name: Literal["ExecutorCreated"] = "ExecutorCreated"
+    args: ExternalStateExecutorArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateOperationFuseEnterEvent(_ExternalStateEventBase):
+    name: Literal["ExternalStateOperationFuseEnter"] = "ExternalStateOperationFuseEnter"
+    args: ExternalStateOperationArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateOperationFuseExitEvent(_ExternalStateEventBase):
+    name: Literal["ExternalStateOperationFuseExit"] = "ExternalStateOperationFuseExit"
+    args: ExternalStateOperationArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateExecutorDeployedEvent(_ExternalStateEventBase):
+    name: Literal["ExternalStateExecutorDeployed"] = "ExternalStateExecutorDeployed"
+    args: ExternalStateExecutorArgs
+
+
+#: One decoded ExternalState event; ``event.name == "..."`` narrows it, and
+#: its ``args``, to that event's class.
+ExternalStateEvent: TypeAlias = (
+    ExternalStateBigChangeDetectedEvent
+    | ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent
+    | ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent
+    | ExternalStateUnpausedEvent
+    | ExternalStateAssetRescuedEvent
+    | ExternalStateExecutorCreatedEvent
+    | ExternalStateOperationFuseEnterEvent
+    | ExternalStateOperationFuseExitEvent
+    | ExternalStateExecutorDeployedEvent
+)
+
+#: Event name -> its event class (``args`` annotation: its TypedDict).
+EXTERNAL_STATE_EVENT_CLASSES: dict[str, type[ExternalStateEvent]] = {
+    "ExternalStateBigChangeDetected": ExternalStateBigChangeDetectedEvent,
+    "ExternalStateBalanceFuseLastCustodianTimestampUpdated": ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent,
+    "ExternalStateBalanceFuseLastTotalBalanceUpdated": ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent,
+    "ExternalStateUnpaused": ExternalStateUnpausedEvent,
+    "ExternalStateAssetRescued": ExternalStateAssetRescuedEvent,
+    "ExecutorCreated": ExternalStateExecutorCreatedEvent,
+    "ExternalStateOperationFuseEnter": ExternalStateOperationFuseEnterEvent,
+    "ExternalStateOperationFuseExit": ExternalStateOperationFuseExitEvent,
+    "ExternalStateExecutorDeployed": ExternalStateExecutorDeployedEvent,
+}
 
 
 def _as_bytes(value: object, what: str) -> bytes:
@@ -310,15 +381,11 @@ def decode_external_state_event(  # proctor: ignore[primitives-untyped-dict]
         values = decode([abi_type for abi_type, _ in spec.params], raw)
     except DecodingError as exc:
         raise ExternalStateEventDecodeError(f"{spec.name}: {exc}") from exc
-    # Each value is narrowed to its ABI type; the key set is the spec's, which
-    # EXTERNAL_STATE_EVENT_ARGS mirrors (pinned by the tests).
-    args = cast(
-        ExternalStateEventArgs,
-        {
-            name: abi_value(abi_type, value)
-            for (abi_type, name), value in zip(spec.params, values, strict=True)
-        },
-    )
+    # Each value is narrowed to its ABI type.
+    args = {
+        name: abi_value(abi_type, value)
+        for (abi_type, name), value in zip(spec.params, values, strict=True)
+    }
     address = log.get("address")
     if not isinstance(address, str | bytes):
         raise ExternalStateEventDecodeError(f"{spec.name}: emitter")
@@ -326,8 +393,12 @@ def decode_external_state_event(  # proctor: ignore[primitives-untyped-dict]
         emitter = Web3.to_checksum_address(address)
     except ValueError as exc:
         raise ExternalStateEventDecodeError(f"{spec.name}: emitter") from exc
-    return ExternalStateEvent(
-        name=spec.name,
+    # The class's args TypedDict is the spec's shape (pinned by the tests), so
+    # the decoded dict is that class's args.
+    event_class = cast(
+        Callable[..., ExternalStateEvent], EXTERNAL_STATE_EVENT_CLASSES[spec.name]
+    )
+    return event_class(
         emitter=emitter,
         args=args,
         block_number=_as_quantity(log.get("blockNumber"), "blockNumber"),

@@ -37,9 +37,15 @@ from ipor_fusion import (
     CrosschainLane,
     Decimals,
     ExternalStateExecutor,
+    ExternalStateOperationArgs,
+    ExternalStateUnpausedArgs,
+    ExternalStateUnpausedEvent,
     FileContractCache,
     FuseAddress,
+    HyperCoreActionEnqueuedArgs,
     HyperCoreActionId,
+    HyperCoreDepositFuseEnterArgs,
+    HyperCoreDepositFuseEnterEvent,
     HyperCorePendingReader,
     IporFusionMarkets,
     LaneObservation,
@@ -353,17 +359,29 @@ def meta_morpho_document(document: MetaMorphoV1Json | MetaMorphoV2Json) -> None:
 
 
 def event_args(receipt: TxReceipt) -> None:
-    """An event's ``args`` is one TypedDict per event kind: a key test
-    narrows the union to the kinds that carry it."""
+    """An event is a union of one class per event: comparing ``name`` with a
+    literal narrows the event, and its ``args``, to that event's class."""
     for event in external_state_events(receipt):
-        if "signer" in event.args:
+        if event.name == "ExternalStateUnpaused":
+            assert_type(event, ExternalStateUnpausedEvent)
+            assert_type(event.args, ExternalStateUnpausedArgs)
             signer: ChecksumAddress = event.args["signer"]
             balance: Amount = event.args["confirmedTotalBalance"]
-            print(signer, balance)
+            print(signer, balance, event.block_number, event.transaction_hash)
+        elif event.name == "ExternalStateOperationFuseEnter":
+            assert_type(event.args, ExternalStateOperationArgs)
+            print(event.args["valueInUnderlying"], event.log_index)
     for hc_event in hypercore_events(receipt):
-        if "payloadHash" in hc_event.args and "cachedValueWad" in hc_event.args:
+        if hc_event.name == "HyperCoreActionEnqueued":
+            assert_type(hc_event.args, HyperCoreActionEnqueuedArgs)
             action: HyperCoreActionId = hc_event.args["actionId"]
-            print(action, hc_event.fuse)
+            print(action, hc_event.args["actionClass"], hc_event.fuse)
+        match hc_event:
+            case HyperCoreDepositFuseEnterEvent(args=deposit):
+                assert_type(deposit, HyperCoreDepositFuseEnterArgs)
+                print(deposit["evmAsset"], hc_event.emitter)
+            case _:
+                pass
 
 
 def oracle_mapping_document(mapping: OracleMapping) -> None:

@@ -14,8 +14,9 @@ Status: preview, not production. The contracts behind it are under active develo
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeAlias, TypedDict, cast
+from typing import Literal, TypeAlias, TypedDict, cast
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
@@ -287,8 +288,7 @@ class HyperCoreRecoveryExecutedArgs(TypedDict):
     reasonHash: bytes
 
 
-#: The parameters of one HyperCore event; tell the shapes apart by
-#: ``HyperCoreEvent.name`` or a key (``"evmAsset" in args``).
+#: The parameters of one HyperCore event.
 HyperCoreEventArgs: TypeAlias = (
     HyperCoreDepositFuseEnterArgs
     | HyperCoreMarginFuseEnterArgs
@@ -308,26 +308,6 @@ HyperCoreEventArgs: TypeAlias = (
     | HyperCoreRecoveryExecutedArgs
 )
 
-#: Event name -> the TypedDict its ``args`` is.
-HYPERCORE_EVENT_ARGS: dict[str, type] = {
-    "HyperCoreDepositFuseEnter": HyperCoreDepositFuseEnterArgs,
-    "HyperCoreMarginFuseEnter": HyperCoreMarginFuseEnterArgs,
-    "HyperCoreSendFuseSpotSend": HyperCoreSendFuseSpotSendArgs,
-    "HyperCoreSendFuseSendAsset": HyperCoreSendFuseSendAssetArgs,
-    "HyperCoreOrderFuseEnter": HyperCoreOrderFuseEnterArgs,
-    "HyperCoreCancelFuseCancelByOid": HyperCoreCancelByOidArgs,
-    "HyperCoreCancelFuseCancelByCloid": HyperCoreCancelByCloidArgs,
-    "HyperCoreBuilderFeeFuseEnter": HyperCoreBuilderFeeFuseEnterArgs,
-    "HyperCoreActionEnqueued": HyperCoreActionEnqueuedArgs,
-    "HyperCoreActionSettled": HyperCoreActionSettledArgs,
-    "HyperCoreReportedActionSettled": HyperCoreReportedActionSettledArgs,
-    "ReportSubmitted": HyperCoreReportSubmittedArgs,
-    "ObserverSetProposed": HyperCoreObserverSetProposedArgs,
-    "ObserverSetChanged": HyperCoreObserverSetChangedArgs,
-    "RecoveryProposed": HyperCoreRecoveryProposedArgs,
-    "RecoveryExecuted": HyperCoreRecoveryExecutedArgs,
-}
-
 #: topic0 -> spec, for every HyperCore event.
 HYPERCORE_EVENTS: dict[bytes, HyperCoreEventSpec] = {
     spec.topic: spec for spec in HYPERCORE_EVENT_SPECS
@@ -340,9 +320,10 @@ HYPERCORE_FUSE_EVENTS = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class HyperCoreEvent:
-    """One decoded HyperCore log."""
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _HyperCoreEventBase:
+    """One decoded HyperCore log; each event is a subclass that pins ``name``
+    to a literal and ``args`` to its shape."""
 
     name: str
     emitter: ChecksumAddress
@@ -355,6 +336,146 @@ class HyperCoreEvent:
         if self.name not in HYPERCORE_FUSE_EVENTS or "version" not in self.args:
             return None
         return self.args["version"]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreDepositFuseEnterEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreDepositFuseEnter"] = "HyperCoreDepositFuseEnter"
+    args: HyperCoreDepositFuseEnterArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreMarginFuseEnterEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreMarginFuseEnter"] = "HyperCoreMarginFuseEnter"
+    args: HyperCoreMarginFuseEnterArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreSendFuseSpotSendEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreSendFuseSpotSend"] = "HyperCoreSendFuseSpotSend"
+    args: HyperCoreSendFuseSpotSendArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreSendFuseSendAssetEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreSendFuseSendAsset"] = "HyperCoreSendFuseSendAsset"
+    args: HyperCoreSendFuseSendAssetArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreOrderFuseEnterEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreOrderFuseEnter"] = "HyperCoreOrderFuseEnter"
+    args: HyperCoreOrderFuseEnterArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreCancelFuseCancelByOidEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreCancelFuseCancelByOid"] = "HyperCoreCancelFuseCancelByOid"
+    args: HyperCoreCancelByOidArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreCancelFuseCancelByCloidEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreCancelFuseCancelByCloid"] = (
+        "HyperCoreCancelFuseCancelByCloid"
+    )
+    args: HyperCoreCancelByCloidArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreBuilderFeeFuseEnterEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreBuilderFeeFuseEnter"] = "HyperCoreBuilderFeeFuseEnter"
+    args: HyperCoreBuilderFeeFuseEnterArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreActionEnqueuedEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreActionEnqueued"] = "HyperCoreActionEnqueued"
+    args: HyperCoreActionEnqueuedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreActionSettledEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreActionSettled"] = "HyperCoreActionSettled"
+    args: HyperCoreActionSettledArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreReportedActionSettledEvent(_HyperCoreEventBase):
+    name: Literal["HyperCoreReportedActionSettled"] = "HyperCoreReportedActionSettled"
+    args: HyperCoreReportedActionSettledArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreReportSubmittedEvent(_HyperCoreEventBase):
+    name: Literal["ReportSubmitted"] = "ReportSubmitted"
+    args: HyperCoreReportSubmittedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreObserverSetProposedEvent(_HyperCoreEventBase):
+    name: Literal["ObserverSetProposed"] = "ObserverSetProposed"
+    args: HyperCoreObserverSetProposedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreObserverSetChangedEvent(_HyperCoreEventBase):
+    name: Literal["ObserverSetChanged"] = "ObserverSetChanged"
+    args: HyperCoreObserverSetChangedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreRecoveryProposedEvent(_HyperCoreEventBase):
+    name: Literal["RecoveryProposed"] = "RecoveryProposed"
+    args: HyperCoreRecoveryProposedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCoreRecoveryExecutedEvent(_HyperCoreEventBase):
+    name: Literal["RecoveryExecuted"] = "RecoveryExecuted"
+    args: HyperCoreRecoveryExecutedArgs
+
+
+#: One decoded HyperCore event; ``event.name == "..."`` narrows it, and its
+#: ``args``, to that event's class.
+HyperCoreEvent: TypeAlias = (
+    HyperCoreDepositFuseEnterEvent
+    | HyperCoreMarginFuseEnterEvent
+    | HyperCoreSendFuseSpotSendEvent
+    | HyperCoreSendFuseSendAssetEvent
+    | HyperCoreOrderFuseEnterEvent
+    | HyperCoreCancelFuseCancelByOidEvent
+    | HyperCoreCancelFuseCancelByCloidEvent
+    | HyperCoreBuilderFeeFuseEnterEvent
+    | HyperCoreActionEnqueuedEvent
+    | HyperCoreActionSettledEvent
+    | HyperCoreReportedActionSettledEvent
+    | HyperCoreReportSubmittedEvent
+    | HyperCoreObserverSetProposedEvent
+    | HyperCoreObserverSetChangedEvent
+    | HyperCoreRecoveryProposedEvent
+    | HyperCoreRecoveryExecutedEvent
+)
+
+#: Event name -> its event class (``args`` annotation: its TypedDict).
+HYPERCORE_EVENT_CLASSES: dict[str, type[HyperCoreEvent]] = {
+    "HyperCoreDepositFuseEnter": HyperCoreDepositFuseEnterEvent,
+    "HyperCoreMarginFuseEnter": HyperCoreMarginFuseEnterEvent,
+    "HyperCoreSendFuseSpotSend": HyperCoreSendFuseSpotSendEvent,
+    "HyperCoreSendFuseSendAsset": HyperCoreSendFuseSendAssetEvent,
+    "HyperCoreOrderFuseEnter": HyperCoreOrderFuseEnterEvent,
+    "HyperCoreCancelFuseCancelByOid": HyperCoreCancelFuseCancelByOidEvent,
+    "HyperCoreCancelFuseCancelByCloid": HyperCoreCancelFuseCancelByCloidEvent,
+    "HyperCoreBuilderFeeFuseEnter": HyperCoreBuilderFeeFuseEnterEvent,
+    "HyperCoreActionEnqueued": HyperCoreActionEnqueuedEvent,
+    "HyperCoreActionSettled": HyperCoreActionSettledEvent,
+    "HyperCoreReportedActionSettled": HyperCoreReportedActionSettledEvent,
+    "ReportSubmitted": HyperCoreReportSubmittedEvent,
+    "ObserverSetProposed": HyperCoreObserverSetProposedEvent,
+    "ObserverSetChanged": HyperCoreObserverSetChangedEvent,
+    "RecoveryProposed": HyperCoreRecoveryProposedEvent,
+    "RecoveryExecuted": HyperCoreRecoveryExecutedEvent,
+}
 
 
 def hypercore_event_name(topic: bytes | str) -> str | None:
@@ -377,17 +498,17 @@ def decode_hypercore_event(log: LogReceipt) -> HyperCoreEvent | None:
     if spec is None:
         return None
     values = decode([abi_type for abi_type, _ in spec.params], bytes(log["data"]))
-    # Each value is narrowed to its ABI type; the key set is the spec's, which
-    # HYPERCORE_EVENT_ARGS mirrors (pinned by the tests).
-    args = cast(
-        HyperCoreEventArgs,
-        {
-            name: abi_value(abi_type, value)
-            for (abi_type, name), value in zip(spec.params, values, strict=True)
-        },
+    # Each value is narrowed to its ABI type.
+    args = {
+        name: abi_value(abi_type, value)
+        for (abi_type, name), value in zip(spec.params, values, strict=True)
+    }
+    # The class's args TypedDict is the spec's shape (pinned by the tests), so
+    # the decoded dict is that class's args.
+    event_class = cast(
+        Callable[..., HyperCoreEvent], HYPERCORE_EVENT_CLASSES[spec.name]
     )
-    return HyperCoreEvent(
-        name=spec.name,
+    return event_class(
         emitter=Web3.to_checksum_address(log["address"]),
         args=args,
         log_index=log.get("logIndex"),

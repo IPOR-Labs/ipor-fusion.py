@@ -120,3 +120,7 @@ def documents_are_typed(document: VaultInfoJson, market: MorphoBlueMarketJson) -
 def event_args_need_narrowing(event: ExternalStateEvent, hc: HyperCoreEvent) -> None:
     print(event.args["signer"])  # pyright: ignore[reportGeneralTypeIssues]
     print(hc.args["evmAsset"])  # pyright: ignore[reportGeneralTypeIssues]
+    if event.name == "ExternalStateUnpaused":
+        print(event.args["asset"])  # pyright: ignore[reportGeneralTypeIssues]
+    if hc.name == "HyperCoreActionSettled":
+        print(hc.args["payloadHash"])  # pyright: ignore[reportGeneralTypeIssues]
