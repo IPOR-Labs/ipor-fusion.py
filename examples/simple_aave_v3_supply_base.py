@@ -159,9 +159,7 @@ def _assert_all_success(result: SimulationResult) -> None:
     if result.all_success:
         return
     failed = [(c.label, c.error) for c in result.failed_calls]
-    raise AssertionError(
-        f"simulation calls failed: {failed} (reason={result.revert_reason})"
-    )
+    raise AssertionError(f"simulation calls failed: {failed}")
 
 
 def _connected_web3() -> Web3:

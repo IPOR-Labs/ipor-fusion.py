@@ -951,5 +951,16 @@ are listed with a link.
   decoder cannot read raises the decoder's error. 3.x left it out of
   `result.observations` (so `result.get(label)` raised `KeyError`) or reported an
   undecodable read as `None`, indistinguishable from a read that returns `None`.
+- **Check `success`; `error` is always set on failure.** A failed
+  `SimulatedCallResult` always carries a non-empty `error`: the node's message joined
+  with the decoded revert (`"execution reverted: NotAllowed"`), the decoded revert
+  alone when the node sent no message, else `"reverted without a reason"` (with the
+  return data's hex when it is too short to decode). 3.x could report `success=False`
+  with `error=None`, and `error` was the node's message only. A successful call's
+  `error` is `None`, and constructing one with an `error` raises `ValueError`.
+  `revert_reason` is `None` exactly when the call succeeded. The messages of
+  `SimulationResult.raise_for_failure` and `SimulationObservation.value`'s
+  `SimulationError` are `failed: {error}`; drop any `call.error or "reverted"`
+  fallback and match on `revert_reason`, not on the text of `error`.
 - Saved config entries are checksummed when loaded; the MCP `vault_add` tool rejects
   a value that is not an address.
