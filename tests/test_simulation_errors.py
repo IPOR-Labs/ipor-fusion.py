@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Hashable
+from dataclasses import FrozenInstanceError, replace
 from unittest.mock import MagicMock
 
 import pytest
@@ -198,6 +200,28 @@ def test_construction_is_idempotent() -> None:
         first = _call(success=False, error=error, data=data)
         again = _call(success=False, error=first.error, data=data)
         assert again.error == first.error
+
+
+def test_records_are_frozen() -> None:
+    call = _call(success=False, error=None)
+    with pytest.raises(FrozenInstanceError):
+        call.error = None  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        call.success = True  # type: ignore[misc]
+    result = SimulationResult(
+        success=False,
+        all_success=False,
+        revert_reason=call.revert_reason,
+        gas_used=0,
+        execute_logs=[],
+        calls=[call],
+        failed_calls=[call],
+    )
+    with pytest.raises(FrozenInstanceError):
+        result.success = True  # type: ignore[misc]
+    assert replace(call, label="d").error == call.error
+    assert not isinstance(call, Hashable)
+    assert not isinstance(result, Hashable)
 
 
 def test_construction_rejects_an_error_on_success() -> None:

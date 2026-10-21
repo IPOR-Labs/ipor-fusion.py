@@ -142,7 +142,7 @@ class _Block:
     override_provider: StateOverrideProvider | None = None
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SimulatedCallResult:
     """One simulated call. ``error`` is set exactly when ``success`` is False:
     check ``success``, then read ``error`` for a non-empty, human-readable
@@ -150,7 +150,8 @@ class SimulatedCallResult:
     ``"reverted without a reason"`` plus any undecodable return data).
     Construction enforces it: a failed call's ``error`` is completed from its
     return data, and a successful call given an ``error`` raises
-    ``ValueError``."""
+    ``ValueError``. The record is frozen, so the invariant holds afterwards;
+    build a changed copy with `dataclasses.replace`."""
 
     label: str | None
     success: bool
@@ -159,6 +160,8 @@ class SimulatedCallResult:
     error: str | None
     logs: list[dict]
     predicted_address: ChecksumAddress | None = None
+    # Frozen would add a __hash__ that fails on the logs list; stay unhashable.
+    __hash__ = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.success:
@@ -167,7 +170,10 @@ class SimulatedCallResult:
                     f"successful simulated call {self.label!r} carries an error"
                 )
         else:
-            self.error = _failure_message(self.error, self.return_data)
+            # The record is frozen; completing the error is part of building it.
+            object.__setattr__(
+                self, "error", _failure_message(self.error, self.return_data)
+            )
 
     @property
     def revert_reason(self) -> str | None:
@@ -180,7 +186,7 @@ class SimulatedCallResult:
         return _decode_revert(self.return_data, self.error)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SimulationResult:
     success: bool
     all_success: bool
@@ -189,6 +195,7 @@ class SimulationResult:
     execute_logs: list[dict]
     calls: list[SimulatedCallResult] = field(default_factory=list)
     failed_calls: list[SimulatedCallResult] = field(default_factory=list)
+    __hash__ = None  # type: ignore[assignment]
 
     def raise_for_failure(self) -> None:
         """Raise :class:`SimulationError` naming the first failed call (label,

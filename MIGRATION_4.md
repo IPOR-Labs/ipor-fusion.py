@@ -962,5 +962,11 @@ are listed with a link.
   `SimulationResult.raise_for_failure` and `SimulationObservation.value`'s
   `SimulationError` are `failed: {error}`; drop any `call.error or "reverted"`
   fallback and match on `revert_reason`, not on the text of `error`.
+- **`SimulatedCallResult` and `SimulationResult` are frozen**, so the rule above
+  holds after construction too: assigning a field raises
+  `dataclasses.FrozenInstanceError`. Build a changed copy with
+  `dataclasses.replace(result, ...)` (a failed call's `error` is completed again).
+  Both stay unhashable (`__hash__` is `None`, as before). The freeze is shallow:
+  the `logs` / `calls` lists themselves can still be mutated.
 - Saved config entries are checksummed when loaded; the MCP `vault_add` tool rejects
   a value that is not an address.
