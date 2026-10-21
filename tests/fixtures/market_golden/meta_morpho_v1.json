@@ -1,0 +1,99 @@
+{
+  "version": "v1",
+  "chain_id": 1,
+  "address": "0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB",
+  "name": "Steakhouse USDC",
+  "symbol": "steakUSDC",
+  "asset": {
+    "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "symbol": "USDC",
+    "decimals": 6
+  },
+  "total_assets": "65265705175364",
+  "fee_wad": "0",
+  "owner": "0x0A0e559bc3b0950a7e448F0d4894db195b9cf8DD",
+  "curator": "0x827e86072B06674a077f592A531dcE4590aDeCdB",
+  "guardian": "0xaa0500198B4425DfC4E272FbE42C8E64E21fc03d",
+  "fee_recipient": "0x255c7705e8BB334DfCae438197f7C4297988085a",
+  "allocators": [
+    "0xBEEF5F9f39e684CF39e0770fa57a43Fa46a3BEef",
+    "0x7a175FDD0727228C66A985928C9b27104b964E8d",
+    "0xfC580f2a77e85f1F47b60F096D36fDc97cE2d827",
+    "0x0000aeB716a0DF7A9A1AAd119b772644Bc089dA8",
+    "0x9E9110cFd24cd851ea5bc73a27975B33E308f9e1",
+    "0xfeed46c11F57B7126a773EeC6ae9cA7aE1C03C9a",
+    "0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D"
+  ],
+  "public_allocator": {
+    "fee_wei": "0",
+    "admin": "0xBEEF5F9f39e684CF39e0770fa57a43Fa46a3BEef",
+    "flow_caps": {
+      "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49": {
+        "max_in": "0",
+        "max_out": "1000000000000000"
+      },
+      "0x7e585a933ffe8443c371b4f8cfeb4430f5f6a14c2f32a898c26662c67a1cb8b8": {
+        "max_in": "97224076574866",
+        "max_out": "1002775923425134"
+      },
+      "0x85252bb8485c99bba46fe149c7dd2aad83672640f53c630890673cf1848ba16e": {
+        "max_in": "6536373232073",
+        "max_out": "1000000000000000"
+      },
+      "0xfb8d92086861bae6fb778917afd1de5dbbc4ec70edfb636fed48238e225e7e3d": {
+        "max_in": "1000000000000",
+        "max_out": "1000000000000000"
+      },
+      "0x09dc9e7eb5d8fc54b2bc41d1135fd4e99057a580f680321faeb90c7a21e631c1": {
+        "max_in": "96996280373979",
+        "max_out": "1003003719626021"
+      }
+    }
+  },
+  "allocations": [
+    {
+      "market_id": "0x85252bb8485c99bba46fe149c7dd2aad83672640f53c630890673cf1848ba16e",
+      "lltv": "860000000000000000",
+      "loan_symbol": "USDC",
+      "loan_decimals": 6,
+      "collateral_symbol": "weETH",
+      "supply_assets": "10088661000416",
+      "supply_cap": "100000000000000",
+      "cap_room": "89911338999584",
+      "market_supply_apy": 0.04574297952469062
+    },
+    {
+      "market_id": "0xfb8d92086861bae6fb778917afd1de5dbbc4ec70edfb636fed48238e225e7e3d",
+      "lltv": "860000000000000000",
+      "loan_symbol": "USDC",
+      "loan_decimals": 6,
+      "collateral_symbol": "FLHYon",
+      "supply_assets": "50206040",
+      "supply_cap": "10000000000000",
+      "cap_room": "9999949793960",
+      "market_supply_apy": 0.04574424761668724
+    },
+    {
+      "market_id": "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49",
+      "lltv": "860000000000000000",
+      "loan_symbol": "USDC",
+      "loan_decimals": 6,
+      "collateral_symbol": "WBTC",
+      "supply_assets": "9105185693304",
+      "supply_cap": "200000000000000",
+      "cap_room": "190894814306696",
+      "market_supply_apy": 0.04475757314297996
+    },
+    {
+      "market_id": "0x7e585a933ffe8443c371b4f8cfeb4430f5f6a14c2f32a898c26662c67a1cb8b8",
+      "lltv": "860000000000000000",
+      "loan_symbol": "USDC",
+      "loan_decimals": 6,
+      "collateral_symbol": "wstETH",
+      "supply_assets": "975636344542",
+      "supply_cap": "200000000000000",
+      "cap_room": "199024363655458",
+      "market_supply_apy": 0.04469556355248774
+    }
+  ]
+}

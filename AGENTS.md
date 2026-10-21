@@ -32,8 +32,18 @@ uv run pytest -m "cli or mcp" --no-cov                        # fast offline sub
 uv run pytest --run-readiness -m readiness --no-cov -rA       # opt-in live Ethereum-hub POC checks
 uv run python scripts/crosschain_readiness.py --output /tmp/crosschain-readiness.json # live Arbitrum/HyperEVM report
 uv run pytest tests/test_fuse_encoding.py -k aave --no-cov    # single file / test
+UPDATE_GOLDEN=1 uv run pytest -k golden --no-cov              # rewrite pinned CLI/MCP output (tests/fixtures/*_golden/)
 uv lock --check                                               # uv.lock in sync with pyproject.toml
 ```
+
+**Golden output.** The exact text of `fusion vault info` (text and `--json`),
+`fusion market morpho-blue|meta-morpho --json`, `fusion vault oracle-mapping
+--json` and the matching MCP tools (`vault_info`, `market_morpho_blue`,
+`market_meta_morpho`, `vault_oracle_mapping`, called through the server) is pinned
+in `tests/fixtures/*_golden/` (`tests/_golden.py`, the `*_golden.py` tests), from
+recorded inputs and no network. A change to any of them fails those tests;
+regenerate with `UPDATE_GOLDEN=1` only when the change is intended and review the
+fixture diff. Without it the tests only compare.
 
 Run format, check, pyright and pytest after every code change; that is exactly
 the sequence in `.github/workflows/python-build.yml`. When ruff `C901` trips,

@@ -1,30 +1,34 @@
-"""`fusion vault info` output pinned byte for byte on recorded fixtures.
+"""`fusion vault info` and the MCP `vault_info` tool pinned byte for byte on
+recorded fixtures.
 
 Each scenario builds a fully fetched vault snapshot and answers every
 eth_call the rendering makes from a fixed table, so the text (ANSI colors
-included) and `--json` output are deterministic. The expected bytes live in
-`tests/fixtures/vault_info_golden/`; regenerate them with
+included), the `--json` output and the MCP tool's text are deterministic. The
+expected bytes live in `tests/fixtures/vault_info_golden/` (`<scenario>.txt`,
+`<scenario>.json`, `<scenario>.mcp.json`); regenerate them with
 `UPDATE_GOLDEN=1 uv run pytest tests/test_cli_vault_info_golden.py` only when
-an output change is intended.
+an output change is intended (see `tests/_golden.py`).
 """
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _golden import FIXTURES as GOLDEN_FIXTURES
+from _golden import FrozenDatetime, assert_golden, mcp_tool_text
 from _multicall import multicall_aware
 from click.testing import CliRunner
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
+from web3.types import Timestamp
 
-from ipor_fusion import vault_data, vault_erc20
+from ipor_fusion import vault_data, vault_erc20, vault_info
 from ipor_fusion.cache import (
     ContractCache,
     FileContractCache,
@@ -32,26 +36,56 @@ from ipor_fusion.cache import (
     cache_key,
     default_contract_cache,
 )
-from ipor_fusion.cli import config_store
+from ipor_fusion.cli import config_store, vault_rendering
 from ipor_fusion.cli.config_store import FusionConfig
 from ipor_fusion.cli.vault_info_view import (
     _print_vault_info,
 )
+from ipor_fusion.config.roles import Roles
+from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
+from ipor_fusion.core.withdraw_manager import AccountRequest
 from ipor_fusion.market_ids import IporFusionMarkets
+from ipor_fusion.mcp.models import VaultInfoResponse
+from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
+from ipor_fusion.readers.hypercore import (
+    HyperCoreActionClass,
+    HyperCoreNav,
+    HyperCorePendingState,
+    HyperCorePerpLeg,
+    HyperCorePerpMarket,
+    HyperCoreReportedResult,
+    HyperCoreSpotLeg,
+    HyperCoreVaultState,
+)
 from ipor_fusion.readers.lending_health import LendingMarketHealth, VaultLendingHealth
+from ipor_fusion.readers.morpho import MorphoPositionBreakdown
 from ipor_fusion.readers.unpriceable import MiddlewarePricedToken
-from ipor_fusion.types import ChainId, Shares
+from ipor_fusion.types import (
+    Amount,
+    ChainId,
+    Decimals,
+    Fee,
+    MarketId,
+    Period,
+    Price,
+    RoleId,
+    Shares,
+    parse_hex_address,
+    parse_morpho_market_id,
+)
 from ipor_fusion.vault_data import (
     GET_TOTAL_SUPPLY_CAP,
+    FeeData,
     VaultData,
     WithdrawManagerData,
 )
 from ipor_fusion.vault_info import build_vault_info_json
 
-FIXTURES = Path(__file__).parent / "fixtures" / "vault_info_golden"
+FIXTURES = GOLDEN_FIXTURES / "vault_info_golden"
 
 
 def _addr(suffix: str) -> str:
@@ -73,6 +107,16 @@ FUSE_ERC20 = _addr("f3")
 FUSE_AAVE_DUP = _addr("f4")
 FUSE_ORPHAN = _addr("f5")
 PRICE_SOURCE = _addr("5e")
+FUSE_HYPERCORE = _addr("f6")
+A_TOKEN = _addr("a7")
+VARIABLE_DEBT_TOKEN = _addr("a8")
+STABLE_DEBT_TOKEN = _addr("a9")
+FEE_MANAGER = _addr("fe")
+DAO = _addr("da0")
+ALPHA = _addr("a1fa")
+ATOMIST = _addr("a70")
+USER_READY = _addr("e1")
+USER_WAITING = _addr("e2")
 
 AAVE = IporFusionMarkets.AAVE_V3
 MORPHO = IporFusionMarkets.MORPHO
@@ -305,7 +349,174 @@ def _clean_vault() -> tuple[VaultData, _Chain]:
     return data, _Chain(market_balances={AAVE: 0})
 
 
-SCENARIOS = {"rich": _rich_vault, "clean": _clean_vault}
+def _hypercore() -> HyperCoreVaultState:
+    nav = HyperCoreNav(
+        core_user_exists=True,
+        perp_dex_bitmap=2,
+        spot=(
+            HyperCoreSpotLeg(
+                0,
+                ASSET,
+                824_500,
+                0,
+                8,
+                Price(ASSET, Amount(10**8), Decimals(8)),
+                8_245_000_000_000_000,
+            ),
+        ),
+        native_perp=HyperCorePerpLeg(0, 0, 0),
+        hip3=(HyperCorePerpLeg(1, -5, -5 * 10**12),),
+        value_wad=8_245_000_000_000_000 - 5 * 10**12,
+    )
+    return HyperCoreVaultState(
+        market_id=MarketId(55),
+        balance_fuse=FUSE_HYPERCORE,  # type: ignore[arg-type]
+        nav=nav,
+        balance_fuse_value_wad=nav.value_wad,
+        pending=HyperCorePendingState(
+            pending_until=1_790_609_642,
+            enqueued_l1_block=1_164_341_828,
+            enqueued_evm_block=47_125_670,
+            action_class=HyperCoreActionClass.TRANSFER,
+            settlement_mode=None,
+            reported_result=HyperCoreReportedResult.NONE,
+            result_l1_block=0,
+            action_id=13,
+            payload_hash=b"\x30" * 32,
+            refreshing=False,
+            cached_value_wad=10**16,
+            action_nonce=32,
+            pending=False,
+            settled=True,
+            current_l1_block=1_168_823_034,
+            current_timestamp=1_790_931_001,
+            l1_block_available=True,
+        ),
+        perp_markets=(
+            HyperCorePerpMarket(110_002, 1, 10_002, "xyz:NVDA", 15_000_000, False),
+        ),
+    )
+
+
+def _full_vault() -> tuple[VaultData, _Chain]:
+    """The rich vault with every optional block filled: position breakdowns
+    with USD prices, pending withdrawal requests, both exit fees, the fee
+    manager, HyperCore, role accounts and a found deployment."""
+    data, chain = _rich_vault()
+    data.morpho_positions = {
+        MORPHO: [
+            MorphoPositionBreakdown(
+                market_id=parse_morpho_market_id("0x" + "ab" * 32),
+                loan_token=ASSET,
+                collateral_token=TOKEN_STALE,
+                collateral=Amount(3 * WAD),
+                borrow_assets=Amount(1_000 * USDC),
+                supply_assets=Amount(0),
+            ),
+            MorphoPositionBreakdown(
+                market_id=parse_morpho_market_id("0x" + "ef" * 32),
+                loan_token=ASSET,
+                collateral_token=TOKEN_EMPTY,
+                collateral=Amount(0),
+                borrow_assets=Amount(0),
+                supply_assets=Amount(2_000 * USDC),
+            ),
+        ]
+    }
+    data.aave_positions = {
+        AAVE: [
+            AaveV3PositionBreakdown(
+                asset=ASSET,
+                a_token=A_TOKEN,
+                variable_debt_token=VARIABLE_DEBT_TOKEN,
+                stable_debt_token=STABLE_DEBT_TOKEN,
+                supply=Amount(1_750 * USDC),
+                variable_debt=Amount(750 * USDC),
+                stable_debt=Amount(0),
+            )
+        ]
+    }
+    data.token_prices_usd = {
+        parse_hex_address(ASSET): 1.0,
+        parse_hex_address(TOKEN_STALE): 2.0,
+    }
+    data.withdraw_manager_data = WithdrawManagerData(
+        withdraw_window=Period(86_400),
+        request_fee=Fee(10**15),
+        withdraw_fee=Fee(2 * 10**15),
+        shares_to_release=Shares(40 * 10**8),
+        last_release_funds_timestamp=Timestamp(1_729_900_000),
+        pending_requests=[
+            AccountRequest(
+                account=USER_READY,  # type: ignore[arg-type]
+                shares=Shares(25 * 10**8),
+                end_withdraw_window_timestamp=Timestamp(1_730_050_000),
+                can_withdraw=True,
+            ),
+            AccountRequest(
+                account=USER_WAITING,  # type: ignore[arg-type]
+                shares=Shares(15 * 10**8),
+                end_withdraw_window_timestamp=Timestamp(1_730_090_000),
+                can_withdraw=False,
+            ),
+        ],
+    )
+    data.fee_data = FeeData(
+        performance_fee_vault_bps=Fee(1_000),
+        management_fee_vault_bps=Fee(100),
+        management_fee_last_update=Timestamp(1_729_990_000),
+        unrealized_management_fee=Amount(12 * USDC),
+        fee_manager=FEE_MANAGER,  # type: ignore[arg-type]
+        ipor_dao_fee_recipient=DAO,  # type: ignore[arg-type]
+        deposit_fee_wad=Fee(5 * 10**15),
+        performance_fee_manager_bps=Fee(1_000),
+        management_fee_manager_bps=Fee(90),
+        performance_fee_recipients=[
+            RecipientFee(recipient=DAO, fee_value=Fee(200)),  # type: ignore[arg-type]
+            RecipientFee(recipient=ATOMIST, fee_value=Fee(800)),  # type: ignore[arg-type]
+        ],
+        management_fee_recipients=[
+            RecipientFee(recipient=ATOMIST, fee_value=Fee(90)),  # type: ignore[arg-type]
+        ],
+        high_water_mark=HighWaterMarkPerformanceFee(
+            high_water_mark=1_020_000,
+            last_update=Timestamp(1_729_000_000),
+            update_interval=Period(604_800),
+        ),
+    )
+    data.hypercore = _hypercore()
+    data.role_accounts = [
+        RoleAccount(
+            account=ATOMIST,  # type: ignore[arg-type]
+            role_id=RoleId(Roles.ATOMIST_ROLE),
+            is_member=True,
+            execution_delay=Period(0),
+        ),
+        RoleAccount(
+            account=ALPHA,  # type: ignore[arg-type]
+            role_id=RoleId(Roles.ALPHA_ROLE),
+            is_member=True,
+            execution_delay=Period(3_600),
+        ),
+    ]
+    data.deployment_block = 20_500_000
+    data.deployment_timestamp = Timestamp(1_723_000_000)
+    return data, chain
+
+
+def _deployment_error_vault() -> tuple[VaultData, _Chain]:
+    """The clean vault whose deployment lookup failed."""
+    data, chain = _clean_vault()
+    data.deployment_error = "rpc-fetch-failed"
+    return data, chain
+
+
+SCENARIOS = {
+    "rich": _rich_vault,
+    "clean": _clean_vault,
+    "full": _full_vault,
+    "deployment_error": _deployment_error_vault,
+}
 
 NAMES = {
     FUSE_AAVE: "AaveV3BalanceFuse",
@@ -313,6 +524,7 @@ NAMES = {
     FUSE_ERC20: "ERC20BalanceFuse",
     FUSE_AAVE_DUP: "AaveV3BalanceFuse",
     FUSE_ORPHAN: "CompoundV3SupplyFuse",
+    FUSE_HYPERCORE: "HyperCoreBalanceFuse",
     ASSET: "FiatTokenProxy",
 }
 
@@ -327,6 +539,13 @@ _SYMBOLS = {
 _CACHED = {cache_key(ChainId(1), a, "name"): n for a, n in NAMES.items()} | {
     cache_key(ChainId(1), a, "symbol"): s for a, s in _SYMBOLS.items()
 }
+
+
+@pytest.fixture(autouse=True)
+def frozen_clock(monkeypatch):
+    """Ages in the output are relative to `FROZEN_NOW`, not the wall clock."""
+    monkeypatch.setattr(vault_info, "datetime", FrozenDatetime)
+    monkeypatch.setattr(vault_rendering, "datetime", FrozenDatetime)
 
 
 @pytest.fixture
@@ -382,6 +601,11 @@ def _snapshot(
     return ctx, data
 
 
+def _deployment(data: VaultData) -> tuple[int | None, Timestamp | None, str | None]:
+    """What `fetch_deployment_info` answers for the scenario."""
+    return data.deployment_block, data.deployment_timestamp, data.deployment_error
+
+
 def _render(
     scenario: str, json_output: bool, cache: ContractCache | None = None
 ) -> str:
@@ -390,7 +614,7 @@ def _render(
     with (
         patch(
             "ipor_fusion.cli.vault_info_view.fetch_deployment_info",
-            return_value=(None, None, None),
+            return_value=_deployment(data),
         ),
         runner.isolation(color=True) as (out, _err, _in),
     ):
@@ -403,13 +627,37 @@ def _render(
 @pytest.mark.parametrize("json_output", [False, True], ids=["text", "json"])
 def test_vault_info_output_matches_fixture(scenario: str, json_output: bool) -> None:
     rendered = _render(scenario, json_output)
-    path = FIXTURES / f"{scenario}.{'json' if json_output else 'txt'}"
-    if os.environ.get("UPDATE_GOLDEN"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(rendered, encoding="utf-8")
-    assert rendered == path.read_text(encoding="utf-8")
+    assert_golden(FIXTURES / f"{scenario}.{'json' if json_output else 'txt'}", rendered)
     if json_output:
         json.loads(rendered)
+
+
+@pytest.mark.usefixtures("isolated_cache")
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+def test_mcp_vault_info_matches_fixture(scenario: str) -> None:
+    """The MCP `vault_info` tool, called through the server, emits the pinned
+    text for the same snapshot: the CLI document with the response model's
+    defaults filled in."""
+    ctx, data = _snapshot(scenario)
+    with (
+        patch("ipor_fusion.mcp.server._build_ctx", return_value=(ctx, None)),
+        patch("ipor_fusion.mcp.server.resolve_access_manager"),
+        patch("ipor_fusion.mcp.server.fetch_vault_data", return_value=data),
+        patch(
+            "ipor_fusion.mcp.server.fetch_deployment_info",
+            return_value=_deployment(data),
+        ),
+    ):
+        text = mcp_tool_text(
+            "vault_info",
+            {"vault_address": VAULT, "chain_id": 1},
+            VaultInfoResponse,
+        )
+    assert_golden(FIXTURES / f"{scenario}.mcp.json", text)
+    cli_document = json.loads((FIXTURES / f"{scenario}.json").read_text("utf-8"))
+    assert VaultInfoResponse.model_validate(cli_document).model_dump_json(indent=2) == (
+        FIXTURES / f"{scenario}.mcp.json"
+    ).read_text("utf-8")
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIOS))

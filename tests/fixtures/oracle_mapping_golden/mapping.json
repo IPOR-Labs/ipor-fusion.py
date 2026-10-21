@@ -1,0 +1,573 @@
+{
+  "vault": "0x00000000000000000000000000000000000000AA",
+  "vault_name": "Golden",
+  "asset": {
+    "address": "0x0000000000000000000000000000000000000001",
+    "symbol": "USDC",
+    "decimals": 6
+  },
+  "price_oracle": "0x0000000000000000000000000000000000000099",
+  "block_number": 21000000,
+  "asset_source": "getConfiguredAssets",
+  "status": "partially_resolved",
+  "configured_assets": [
+    {
+      "asset": "0x0000000000000000000000000000000000000001",
+      "symbol": "USDC",
+      "decimals": 6,
+      "source": "0x0000000000000000000000000000000000000011",
+      "price": {
+        "raw": "99980000",
+        "decimals": 8,
+        "normalized_wad": "999800000000000000"
+      },
+      "source_type": "ChainlinkAggregator",
+      "path": [
+        "USDC",
+        "Chainlink feed"
+      ],
+      "status": "resolved",
+      "reason": null,
+      "source_detail": {
+        "description": "USDC / USD",
+        "round_id": "110680464442257309738",
+        "answer": "99980000",
+        "decimals": 8,
+        "started_at": 1699999000,
+        "started_at_utc": "2023-11-14T21:56:40Z",
+        "updated_at": 1700000000,
+        "updated_at_utc": "2023-11-14T22:13:20Z",
+        "answered_in_round": "110680464442257309738",
+        "aggregator": "0x0000000000000000000000000000000000000071",
+        "phase_id": 6
+      },
+      "dependencies": []
+    },
+    {
+      "asset": "0x0000000000000000000000000000000000000002",
+      "symbol": "DAI",
+      "decimals": 18,
+      "source": "0x0000000000000000000000000000000000000012",
+      "price": {
+        "raw": "100010000",
+        "decimals": 8,
+        "normalized_wad": "1000100000000000000"
+      },
+      "source_type": "chainlink_style",
+      "path": [
+        "DAI",
+        "Chainlink-style feed"
+      ],
+      "status": "resolved",
+      "reason": null,
+      "source_detail": {
+        "description": "",
+        "round_id": "0",
+        "answer": "100010000",
+        "decimals": 8,
+        "started_at": 0,
+        "started_at_utc": null,
+        "updated_at": 0,
+        "updated_at_utc": null,
+        "answered_in_round": "0",
+        "aggregator": null,
+        "phase_id": null
+      },
+      "dependencies": []
+    },
+    {
+      "asset": "0x0000000000000000000000000000000000000003",
+      "symbol": "wstETH",
+      "decimals": 18,
+      "source": "0x0000000000000000000000000000000000000013",
+      "price": {
+        "raw": "260000000000",
+        "decimals": 8,
+        "normalized_wad": "2600000000000000000000"
+      },
+      "source_type": "DualCrossReferencePriceFeed",
+      "path": [
+        "wstETH",
+        "DualCrossReferencePriceFeed",
+        "ASSET_X/ASSET_Y feed",
+        "ASSET_Y/USD feed"
+      ],
+      "status": "resolved",
+      "reason": null,
+      "source_detail": {
+        "asset_x": "0x0000000000000000000000000000000000000003",
+        "asset_x_asset_y_feed": {
+          "address": "0x0000000000000000000000000000000000000014",
+          "description": "wstETH / stETH",
+          "round_id": "7",
+          "answer": "1300000000000000000",
+          "decimals": 18,
+          "started_at": 1699990000,
+          "started_at_utc": "2023-11-14T19:26:40Z",
+          "updated_at": 1700000000,
+          "updated_at_utc": "2023-11-14T22:13:20Z",
+          "answered_in_round": "7"
+        },
+        "asset_y_usd_feed": {
+          "address": "0x0000000000000000000000000000000000000015",
+          "description": "ETH / USD",
+          "round_id": "9",
+          "answer": "200000000000",
+          "decimals": 8,
+          "started_at": 1699990000,
+          "started_at_utc": "2023-11-14T19:26:40Z",
+          "updated_at": 1700000000,
+          "updated_at_utc": "2023-11-14T22:13:20Z",
+          "answered_in_round": "9"
+        },
+        "derived_price_wad": "2600000000000000000000"
+      },
+      "dependencies": []
+    },
+    {
+      "asset": "0x0000000000000000000000000000000000000008",
+      "symbol": "xETH",
+      "decimals": 18,
+      "source": "0x0000000000000000000000000000000000000016",
+      "price": {
+        "raw": "200000000000",
+        "decimals": 8,
+        "normalized_wad": "2000000000000000000000"
+      },
+      "source_type": "DualCrossReferencePriceFeed",
+      "path": [
+        "xETH",
+        "DualCrossReferencePriceFeed",
+        "ASSET_X/ASSET_Y feed",
+        "ASSET_Y/USD feed"
+      ],
+      "status": "partial",
+      "reason": "dual_xref_component_unreadable",
+      "source_detail": {
+        "asset_x": "0x0000000000000000000000000000000000000008",
+        "asset_x_asset_y_feed": {
+          "address": "0x0000000000000000000000000000000000000014",
+          "description": "wstETH / stETH",
+          "round_id": "7",
+          "answer": "1300000000000000000",
+          "decimals": 18,
+          "started_at": 1699990000,
+          "started_at_utc": "2023-11-14T19:26:40Z",
+          "updated_at": 1700000000,
+          "updated_at_utc": "2023-11-14T22:13:20Z",
+          "answered_in_round": "7"
+        },
+        "asset_y_usd_feed": {
+          "address": "0x0000000000000000000000000000000000000017",
+          "description": null,
+          "round_id": null,
+          "answer": null,
+          "decimals": null,
+          "started_at": null,
+          "started_at_utc": null,
+          "updated_at": null,
+          "updated_at_utc": null,
+          "answered_in_round": null
+        },
+        "derived_price_wad": null
+      },
+      "dependencies": []
+    },
+    {
+      "asset": "0x0000000000000000000000000000000000000004",
+      "symbol": "wsrUSD",
+      "decimals": 18,
+      "source": "0x0000000000000000000000000000000000000018",
+      "price": {
+        "raw": "1040000000000000000",
+        "decimals": 18,
+        "normalized_wad": "1040000000000000000"
+      },
+      "source_type": "ERC4626PriceFeed",
+      "path": [
+        "wsrUSD",
+        "convertToAssets(1 share)",
+        "rUSD",
+        "Chainlink feed"
+      ],
+      "status": "resolved",
+      "reason": null,
+      "source_detail": {
+        "vault": "0x0000000000000000000000000000000000000021",
+        "underlying": "0x0000000000000000000000000000000000000005",
+        "share_decimals": 18,
+        "rate": "1040000000000000000"
+      },
+      "dependencies": [
+        {
+          "asset": "0x0000000000000000000000000000000000000005",
+          "symbol": "rUSD",
+          "decimals": 6,
+          "source": "0x0000000000000000000000000000000000000019",
+          "price": {
+            "raw": "99980000",
+            "decimals": 8,
+            "normalized_wad": "999800000000000000"
+          },
+          "source_type": "ChainlinkAggregator",
+          "path": [
+            "rUSD",
+            "Chainlink feed"
+          ],
+          "status": "resolved",
+          "reason": null,
+          "source_detail": {
+            "description": "rUSD / USD",
+            "round_id": "1",
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 0,
+            "started_at_utc": null,
+            "updated_at": 1700000000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
+            "answered_in_round": "1",
+            "aggregator": null,
+            "phase_id": null
+          },
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "asset": "0x0000000000000000000000000000000000000009",
+      "symbol": "sWAT",
+      "decimals": 18,
+      "source": "0x000000000000000000000000000000000000001a",
+      "price": {
+        "raw": "1000000000000000000",
+        "decimals": 18,
+        "normalized_wad": "1000000000000000000"
+      },
+      "source_type": "ERC4626PriceFeed",
+      "path": [
+        "sWAT",
+        "convertToAssets(1 share)",
+        "uWAT",
+        "custom feed (unresolved)"
+      ],
+      "status": "partially_resolved",
+      "reason": null,
+      "source_detail": {
+        "vault": "0x0000000000000000000000000000000000000022",
+        "underlying": "0x000000000000000000000000000000000000000C",
+        "share_decimals": 18,
+        "rate": "1000000000000000000"
+      },
+      "dependencies": [
+        {
+          "asset": "0x000000000000000000000000000000000000000C",
+          "symbol": "uWAT",
+          "decimals": 18,
+          "source": "0x000000000000000000000000000000000000001B",
+          "price": null,
+          "source_type": "custom_unknown",
+          "path": [
+            "uWAT",
+            "custom feed (unresolved)"
+          ],
+          "status": "partial",
+          "reason": "unsupported_custom_feed",
+          "source_detail": null,
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "asset": "0x0000000000000000000000000000000000000006",
+      "symbol": "PT-USDe",
+      "decimals": 18,
+      "source": "0x000000000000000000000000000000000000001c",
+      "price": {
+        "raw": "97000000",
+        "decimals": 8,
+        "normalized_wad": "970000000000000000"
+      },
+      "source_type": "CollateralTokenOnMorphoMarketPriceFeed",
+      "path": [
+        "PT-USDe",
+        "Morpho collateral/loan oracle",
+        "USDC",
+        "Chainlink feed"
+      ],
+      "status": "resolved",
+      "reason": null,
+      "source_detail": {
+        "morpho_oracle": "0x0000000000000000000000000000000000000031",
+        "collateral_token": "0x0000000000000000000000000000000000000006",
+        "loan_token": "0x0000000000000000000000000000000000000001",
+        "morpho_price": "970000000000000000000000"
+      },
+      "dependencies": [
+        {
+          "asset": "0x0000000000000000000000000000000000000001",
+          "symbol": "USDC",
+          "decimals": 6,
+          "source": "0x0000000000000000000000000000000000000011",
+          "price": {
+            "raw": "99980000",
+            "decimals": 8,
+            "normalized_wad": "999800000000000000"
+          },
+          "source_type": "ChainlinkAggregator",
+          "path": [
+            "USDC",
+            "Chainlink feed"
+          ],
+          "status": "resolved",
+          "reason": null,
+          "source_detail": {
+            "description": "USDC / USD",
+            "round_id": "110680464442257309738",
+            "answer": "99980000",
+            "decimals": 8,
+            "started_at": 1699999000,
+            "started_at_utc": "2023-11-14T21:56:40Z",
+            "updated_at": 1700000000,
+            "updated_at_utc": "2023-11-14T22:13:20Z",
+            "answered_in_round": "110680464442257309738",
+            "aggregator": "0x0000000000000000000000000000000000000071",
+            "phase_id": 6
+          },
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "asset": "0x000000000000000000000000000000000000000A",
+      "symbol": "WAT",
+      "decimals": 18,
+      "source": "0x000000000000000000000000000000000000001D",
+      "price": null,
+      "source_type": "custom_unknown",
+      "path": [
+        "WAT",
+        "custom feed (unresolved)"
+      ],
+      "status": "partial",
+      "reason": "unsupported_custom_feed",
+      "source_detail": null,
+      "dependencies": []
+    },
+    {
+      "asset": "0x0000000000000000000000000000000000000007",
+      "symbol": "WETH",
+      "decimals": 18,
+      "source": "0x0000000000000000000000000000000000000000",
+      "price": {
+        "raw": "2000000000000000000000",
+        "decimals": 18,
+        "normalized_wad": "2000000000000000000000"
+      },
+      "source_type": "middleware_fallback",
+      "path": [
+        "WETH",
+        "middleware fallback",
+        "middleware fallback"
+      ],
+      "status": "resolved",
+      "reason": null,
+      "source_detail": {
+        "delegated_to": "0x0000000000000000000000000000000000000051",
+        "chainlink_feed_registry": null
+      },
+      "dependencies": [
+        {
+          "asset": "0x0000000000000000000000000000000000000007",
+          "symbol": "WETH",
+          "decimals": 18,
+          "source": null,
+          "price": {
+            "raw": "200000000000",
+            "decimals": 8,
+            "normalized_wad": "2000000000000000000000"
+          },
+          "source_type": "middleware_fallback",
+          "path": [
+            "WETH",
+            "middleware fallback"
+          ],
+          "status": "resolved",
+          "reason": null,
+          "source_detail": {
+            "delegated_to": null,
+            "chainlink_feed_registry": "0x0000000000000000000000000000000000000061"
+          },
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "asset": "0x000000000000000000000000000000000000000b",
+      "symbol": "LOST",
+      "decimals": 18,
+      "source": null,
+      "price": null,
+      "source_type": "middleware_fallback",
+      "path": [
+        "LOST",
+        "middleware fallback"
+      ],
+      "status": "partial",
+      "reason": "manager_price_unreadable",
+      "source_detail": {
+        "delegated_to": "0x0000000000000000000000000000000000000051",
+        "chainlink_feed_registry": null
+      },
+      "dependencies": [
+        {
+          "asset": "0x000000000000000000000000000000000000000b",
+          "symbol": "LOST",
+          "decimals": 18,
+          "source": null,
+          "price": null,
+          "source_type": "custom_unknown",
+          "path": [
+            "LOST"
+          ],
+          "status": "partial",
+          "reason": "no_source_configured",
+          "source_detail": null,
+          "dependencies": []
+        }
+      ]
+    }
+  ],
+  "unresolved": [
+    {
+      "asset": "0x000000000000000000000000000000000000000b",
+      "symbol": "LOST",
+      "decimals": 18,
+      "source": null,
+      "price": null,
+      "source_type": "middleware_fallback",
+      "path": [
+        "LOST",
+        "middleware fallback"
+      ],
+      "status": "partial",
+      "reason": "manager_price_unreadable",
+      "source_detail": {
+        "delegated_to": "0x0000000000000000000000000000000000000051",
+        "chainlink_feed_registry": null
+      },
+      "dependencies": [
+        {
+          "asset": "0x000000000000000000000000000000000000000b",
+          "symbol": "LOST",
+          "decimals": 18,
+          "source": null,
+          "price": null,
+          "source_type": "custom_unknown",
+          "path": [
+            "LOST"
+          ],
+          "status": "partial",
+          "reason": "no_source_configured",
+          "source_detail": null,
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "asset": "0x000000000000000000000000000000000000000b",
+      "symbol": "LOST",
+      "decimals": 18,
+      "source": null,
+      "price": null,
+      "source_type": "custom_unknown",
+      "path": [
+        "LOST"
+      ],
+      "status": "partial",
+      "reason": "no_source_configured",
+      "source_detail": null,
+      "dependencies": []
+    },
+    {
+      "asset": "0x000000000000000000000000000000000000000A",
+      "symbol": "WAT",
+      "decimals": 18,
+      "source": "0x000000000000000000000000000000000000001D",
+      "price": null,
+      "source_type": "custom_unknown",
+      "path": [
+        "WAT",
+        "custom feed (unresolved)"
+      ],
+      "status": "partial",
+      "reason": "unsupported_custom_feed",
+      "source_detail": null,
+      "dependencies": []
+    },
+    {
+      "asset": "0x000000000000000000000000000000000000000C",
+      "symbol": "uWAT",
+      "decimals": 18,
+      "source": "0x000000000000000000000000000000000000001B",
+      "price": null,
+      "source_type": "custom_unknown",
+      "path": [
+        "uWAT",
+        "custom feed (unresolved)"
+      ],
+      "status": "partial",
+      "reason": "unsupported_custom_feed",
+      "source_detail": null,
+      "dependencies": []
+    },
+    {
+      "asset": "0x0000000000000000000000000000000000000008",
+      "symbol": "xETH",
+      "decimals": 18,
+      "source": "0x0000000000000000000000000000000000000016",
+      "price": {
+        "raw": "200000000000",
+        "decimals": 8,
+        "normalized_wad": "2000000000000000000000"
+      },
+      "source_type": "DualCrossReferencePriceFeed",
+      "path": [
+        "xETH",
+        "DualCrossReferencePriceFeed",
+        "ASSET_X/ASSET_Y feed",
+        "ASSET_Y/USD feed"
+      ],
+      "status": "partial",
+      "reason": "dual_xref_component_unreadable",
+      "source_detail": {
+        "asset_x": "0x0000000000000000000000000000000000000008",
+        "asset_x_asset_y_feed": {
+          "address": "0x0000000000000000000000000000000000000014",
+          "description": "wstETH / stETH",
+          "round_id": "7",
+          "answer": "1300000000000000000",
+          "decimals": 18,
+          "started_at": 1699990000,
+          "started_at_utc": "2023-11-14T19:26:40Z",
+          "updated_at": 1700000000,
+          "updated_at_utc": "2023-11-14T22:13:20Z",
+          "answered_in_round": "7"
+        },
+        "asset_y_usd_feed": {
+          "address": "0x0000000000000000000000000000000000000017",
+          "description": null,
+          "round_id": null,
+          "answer": null,
+          "decimals": null,
+          "started_at": null,
+          "started_at_utc": null,
+          "updated_at": null,
+          "updated_at_utc": null,
+          "answered_in_round": null
+        },
+        "derived_price_wad": null
+      },
+      "dependencies": []
+    }
+  ]
+}

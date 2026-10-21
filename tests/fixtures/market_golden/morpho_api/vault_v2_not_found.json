@@ -1,0 +1,12 @@
+{
+  "errors": [
+    {
+      "message": "No results matching given parameters",
+      "status": "NOT_FOUND",
+      "extensions": {
+        "description": "cannot find vault v2 config for chainId=1 vaultAddress=0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB"
+      }
+    }
+  ],
+  "data": null
+}

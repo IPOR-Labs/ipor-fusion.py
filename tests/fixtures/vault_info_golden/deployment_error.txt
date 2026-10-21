@@ -1,0 +1,54 @@
+Vault:            0x0000000000000000000000000000000000001111
+Etherscan:        https://etherscan.io/address/0x0000000000000000000000000000000000001111
+IPOR app:         https://app.ipor.io/fusion/ethereum/0x0000000000000000000000000000000000001111
+Chain:            ethereum (chain-id=1)
+Block:            100 (latest)
+Block time:       1700000000 (2023-11-14T22:13:20Z)
+Deployed at:      N/A (rpc-fetch-failed)
+Asset:            0x00000000000000000000000000000000000000A1 (USDC)
+Asset decimals:   6
+Share decimals:   6
+Asset price:      N/A
+Total Assets:     0.0 USDC
+Total Supply:     0.0 shares
+Supply Cap:       1,000,000.0 shares
+Access Manager:   0x00000000000000000000000000000000000000AC
+Price Oracle:     0x000000000000000000000000000000000000000C
+Rewards Manager:  N/A
+Withdraw Manager: N/A
+
+
+Role Accounts:
+  (unavailable — the RoleGranted log scan did not complete)
+
+Fuses (1 unique):
+  #  Address                                     Contract           Market       Substrates
+  -  ------------------------------------------  -----------------  -----------  ----------
+  1  0x00000000000000000000000000000000000000f1  AaveV3BalanceFuse  AAVE_V3 (1)  1         
+
+Instant Withdrawal Fuses (0 unique):
+  (none)
+
+Balance Fuses (1):
+  #  Market       Balance            Fuse                                        Contract         
+  -  -----------  -----------------  ------------------------------------------  -----------------
+  1  AAVE_V3 (1)  0.0 USDC (cached)  0x00000000000000000000000000000000000000f1  AaveV3BalanceFuse
+
+Substrates per Market:
+  AAVE_V3 (1):
+    0x00000000000000000000000000000000000000a1 (symbol=USDC, contract=FiatTokenProxy)
+
+ERC20 Balances (vault holdings):
+  (no ERC20_VAULT_BALANCE market)
+
+Balance Reconciliation:
+  Balance fuses total:  0.0 USDC   [sum balance fuses, cached]
+  Underlying on vault:  0.0 USDC   [USDC held directly]
+  Sum:                  0.0 USDC
+  On-chain totalAssets: 0.0 USDC
+  Delta:                +0.0 USDC   (0.00%)
+
+Position Breakdown: (no lending positions)
+
+Health Check:
+[32m  All checks passed[0m

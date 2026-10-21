@@ -1,0 +1,107 @@
+{
+  "market_id": "0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc",
+  "chain_id": 1,
+  "public_allocator": "0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D",
+  "market_params": {
+    "loan_token": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "collateral_token": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+    "oracle": "0x48F7E36EB6B826B2dF4B2E630B62Cd25e89E40e2",
+    "irm": "0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC",
+    "lltv": "860000000000000000"
+  },
+  "state": {
+    "total_supply_assets": "32599187714224",
+    "total_supply_shares": "31412838216773190381",
+    "total_borrow_assets": "29365507783557",
+    "total_borrow_shares": "27812093005448210559",
+    "liquidity_assets": "3233679930667",
+    "fee_wad": "0",
+    "last_update": 1792584383
+  },
+  "rates": {
+    "rate_per_second_wad": "1540542212",
+    "utilization": 0.9008048924711075,
+    "borrow_apy": 0.04978201640981145,
+    "supply_apy": 0.04484388393903511
+  },
+  "loan_asset": {
+    "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "symbol": "USDC",
+    "decimals": 6
+  },
+  "collateral_asset": {
+    "address": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+    "symbol": "wstETH",
+    "decimals": 18
+  },
+  "vaults": [
+    {
+      "address": "0x4Ff4186188f8406917293A9e01A1ca16d3cf9E59",
+      "name": "SwissBorg Morpho USDC",
+      "symbol": "sbMorphoUSDC",
+      "asset": {
+        "symbol": "USDC",
+        "decimals": 6
+      },
+      "total_assets": "8676455873909",
+      "supply_assets": "1301479972366",
+      "supply_cap": "50000000000000",
+      "allocators": [
+        "0xFbA64167e4f091Ca625FA79aa6f83665856f8Bf2",
+        "0xe8CB86aF43B439D454701cE13c8457bdB420A98D"
+      ],
+      "public_allocator_config": null
+    },
+    {
+      "address": "0x68Aea7b82Df6CcdF76235D46445Ed83f85F845A3",
+      "name": "Yearn USDC",
+      "symbol": "oevUSDC",
+      "asset": {
+        "symbol": "USDC",
+        "decimals": 6
+      },
+      "total_assets": "6186038214264",
+      "supply_assets": "312043821403",
+      "supply_cap": "100000000000000",
+      "allocators": [
+        "0xfFb824d00fd6f9513259fc6e79674A0065570862",
+        "0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D",
+        "0x75a1253432356f90611546a487b5350CEF08780D",
+        "0x50B75d586929Ab2F75dC15f07E1B921b7C4Ba8fA"
+      ],
+      "public_allocator_config": {
+        "fee_wei": "0",
+        "max_in": "15981621921875",
+        "max_out": "34018378078125",
+        "admin": "0x75a1253432356f90611546a487b5350CEF08780D"
+      }
+    },
+    {
+      "address": "0xBEefb9f61CC44895d8AEc381373555a64191A9c4",
+      "name": "Vault Bridge USDC",
+      "symbol": "vbshUSDC",
+      "asset": {
+        "symbol": "USDC",
+        "decimals": 6
+      },
+      "total_assets": "8886532086629",
+      "supply_assets": "163065198714",
+      "supply_cap": "200000000000000",
+      "allocators": [
+        "0xBEEF5F9f39e684CF39e0770fa57a43Fa46a3BEef",
+        "0x7a175FDD0727228C66A985928C9b27104b964E8d",
+        "0xfC580f2a77e85f1F47b60F096D36fDc97cE2d827",
+        "0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D",
+        "0x0000aeB716a0DF7A9A1AAd119b772644Bc089dA8",
+        "0x9E9110cFd24cd851ea5bc73a27975B33E308f9e1",
+        "0xfeed46c11F57B7126a773EeC6ae9cA7aE1C03C9a"
+      ],
+      "public_allocator_config": {
+        "fee_wei": "300000000000000",
+        "max_in": "0",
+        "max_out": "1000000000000000",
+        "admin": "0xBEEF5F9f39e684CF39e0770fa57a43Fa46a3BEef"
+      }
+    }
+  ]
+}
