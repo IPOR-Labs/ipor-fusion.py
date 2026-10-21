@@ -186,7 +186,7 @@ the lifecycle matrix follows that.
 | Python 3.12 runtime, 3.11 floor | `.python-version` + CI `python-version` default; `requires-python`, ruff `target-version`, pyright `pythonVersion` |
 | `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors An id sourced from a contracts feature branch ahead of the pinned ref goes in the test's `_AHEAD_OF_UPSTREAM` allowlist and is removed when the ref catches up |
 | substrate decoders | `substrates.py` registry mirrors each market's `contracts/fuses/<protocol>/*SubstrateLib.sol` or `*FuseLib.sol` |
-| `vault_info` JSON shape | `build_vault_info_json` in `vault_info.py`, models in `mcp/models.py` (`extra="forbid"`), `_full_vault_info_dict` fixture in `test_mcp_models.py` |
+| `vault_info` / `fusion market` JSON shapes | the builders and their TypedDicts (`VaultInfoJson`, `MorphoBlueMarketJson`, `MetaMorphoV1Json` / `MetaMorphoV2Json`) in `vault_info.py` / `market_info.py`, models in `mcp/models.py` (`extra="forbid"`, the published schema), the `VaultInfoJson`-typed `_full_vault_info_dict` fixture in `test_mcp_models.py` |
 | CLI command set | every CLI command has a matching tool in `mcp/server.py` (`changelog` maps to `server_info`) |
 
 ## Layout (`src/ipor_fusion/`)
@@ -213,8 +213,8 @@ the lifecycle matrix follows that.
   prices) and `vault_erc20.py` (the ERC20_VAULT_BALANCE holdings);
   `vault_info.py` — `build_vault_info_json(data)`, the `fusion vault info --json`
   document rendered from the snapshot alone (contract names via an injected
-  `resolve_name`),
-  and `health_check_lists`; `explorer.py` Etherscan V2 (single endpoint, needs API key);
+  `resolve_name`) and typed block by block (`VaultInfoJson` and its nested
+  TypedDicts), and `health_check_lists`; `explorer.py` Etherscan V2 (single endpoint, needs API key);
   `cache.py` the `ContractCache` protocol (`get`/`put` of immutable facts keyed
   `CacheKey(chain_id, address, field)`), `FileContractCache` (one JSON file, atomic
   replace, corrupt/unwritable degrades to memory) and `NullCache`; every SDK use goes
@@ -223,8 +223,14 @@ the lifecycle matrix follows that.
   `$XDG_CACHE_HOME/ipor-fusion/`) or `get_contract_name(cache=...)`. Never cache an
   absence (no code, no answer): it can change at a later block.
   `morpho_api.py` the Morpho public GraphQL API client (`fetch_market`, `fetch_vault`,
-  `PUBLIC_ALLOCATOR_ADDRESSES`); `market_info.py` — `build_morpho_blue_market_json`,
-  `build_meta_morpho_json`, the `fusion market` JSON documents.
+  `PUBLIC_ALLOCATOR_ADDRESSES`; it narrows the GraphQL body from `object`);
+  `market_info.py` — `build_morpho_blue_market_json`, `build_meta_morpho_json`, the
+  `fusion market` JSON documents (`MorphoBlueMarketJson`, `MetaMorphoV1Json` /
+  `MetaMorphoV2Json`). A JSON document is a TypedDict (`NotRequired` for a key only
+  some entries carry), never `dict[str, Any]`; JSON parsed from the network or a
+  caller enters as `object` / `Mapping[str, object]` and is narrowed with
+  `isinstance`. These two modules skip `from __future__ import annotations`, so a
+  TypedDict's `__optional_keys__` is right at run time.
   None of them imports `cli/` (`tests/test_sdk_layering.py`)
 - `config/roles.py` — `Roles` IntEnum
 - `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
@@ -438,12 +444,16 @@ value sets are `Literal` enums. The docstring keeps only what has no
 structured home: a one-line summary, behavioral notes, cost warnings. Do not
 repeat schema content as prose; it drifts.
 
-`mcp/models.py` forbids extra keys. Adding a top-level field to
-`build_vault_info_json` requires adding it to the matching model (with a default
-for back-compat) and to the `_full_vault_info_dict` fixture; `test_mcp_models.py`
-enforces the mirror. Conditionally shaped blocks (`withdraw_manager_details`,
-`substrates`, `dependency_graph`) are `dict[str, Any]`, so their inner keys
-are not validated.
+`mcp/models.py` forbids extra keys and stays the source of the published JSON
+schema. Adding a field to `build_vault_info_json` (or a `fusion market` document)
+means adding it to its TypedDict, to the matching model (with a default for
+back-compat) and to the `_full_vault_info_dict` fixture;
+`TestTypedDocumentsMirrorModels` in `test_mcp_models.py` holds every TypedDict to
+its model block by block. The model keeps `dict[str, Any]` where the schema is
+deliberately loose (`substrates`, `deployment`, `share_price`, `dependency_graph`,
+`position_breakdown`): the SDK types those blocks, the schema does not validate
+their inner keys. The substrate entries stay open-ended on both sides
+(`SubstrateEntryJson`, `dict[str, str | bool]`): each decoder adds its own fields.
 
 ## Domain rules (verified against the contracts)
 

@@ -21,7 +21,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
@@ -50,7 +50,7 @@ class OutboundMessage:
     receiver: ChecksumAddress
     payload: bytes
     token_amount: Amount = Amount(0)
-    raw: Any = None
+    raw: object = None
 
 
 @dataclass(frozen=True, slots=True)

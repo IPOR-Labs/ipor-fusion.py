@@ -54,6 +54,7 @@ from ipor_fusion import (
     CrosschainSubstrateLib,
     CrosschainTransportKind,
     LaneFuses,
+    MessageV1,
     OutboundMessage,
     PlasmaVault,
     PriceOracleMiddlewareManager,
@@ -419,6 +420,11 @@ def test_compile_and_deploy_crosschain_fuses(web3_arb):
         assert market_ids[contract].value == market_id
         if contract.name != "CrosschainBalanceFuse":
             assert versions[contract].value == deployed[contract]
+
+
+def _ccip_message(message: OutboundMessage) -> MessageV1:
+    assert isinstance(message.raw, MessageV1)
+    return message.raw
 
 
 def _ctx(web3, chain_id: ChainId, block: int) -> Web3Context:
@@ -1101,24 +1107,27 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
     assert [message.src_chain_id for message in transfers] == [ARBITRUM, HYPEREVM]
     for message in transfers:
         assert (
-            message.raw.token_transfer[0].amount - message.token_amount == fee_raw_units
+            _ccip_message(message).token_transfer[0].amount - message.token_amount
+            == fee_raw_units
         )
     hub = run.csim.results[ARBITRUM]
     assert (
         required(run.outbound_after_send).value
-        == transfers[0].raw.token_transfer[0].amount
+        == _ccip_message(transfers[0]).token_transfer[0].amount
     )
     assert required(run.settled_after_settle).value == transfers[0].token_amount
     assert required(run.idle_ledger).value == transfers[1].token_amount
     # What left the spoke is the credit less the management fee accrued over
     # the 7-day gap (5 bps a year), re-attested before the recall.
-    accrued_fee = transfers[0].token_amount - transfers[1].raw.token_transfer[0].amount
+    accrued_fee = (
+        transfers[0].token_amount - _ccip_message(transfers[1]).token_transfer[0].amount
+    )
     assert 0 < accrued_fee <= transfers[0].token_amount // 10_000
     residue = required(run.settled_after_return).value
     assert residue == 0
     _assert_return_finalized(
         hub,
-        sent=transfers[1].raw.token_transfer[0].amount,
+        sent=_ccip_message(transfers[1]).token_transfer[0].amount,
         received=transfers[1].token_amount,
     )
     below_minimum_topic = Web3.keccak(
@@ -1138,7 +1147,7 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
         )
         assert chain_id == HYPEREVM
         assert received == transfers[1].token_amount
-        assert minimum == transfers[1].raw.token_transfer[0].amount
+        assert minimum == _ccip_message(transfers[1]).token_transfer[0].amount
 
     run.advance(run.staleness_max + 1)
     nav_after_residue = run.hub.observe(run.lane.get_balance())
@@ -1712,8 +1721,8 @@ def test_simulate_executor_and_dispatcher_deployment(web3_arb, web3_hyperevm):
         result.raise_for_failure()
     ticket, ack = simulator.delivered
     assert (ticket.dst_chain_id, ack.dst_chain_id) == (HYPEREVM, ARBITRUM)
-    assert ticket.raw.ccip_receive_gas_limit == V3.ticket_gas_limit
-    assert ack.raw.ccip_receive_gas_limit == V3.message_gas_limit
+    assert _ccip_message(ticket).ccip_receive_gas_limit == V3.ticket_gas_limit
+    assert _ccip_message(ack).ccip_receive_gas_limit == V3.message_gas_limit
     for message, limit in ((ticket, V3.ticket_gas_limit), (ack, V3.message_gas_limit)):
         label = f"ccip_receive:{message.message_id.hex()[:8]}"
         delivery = next(

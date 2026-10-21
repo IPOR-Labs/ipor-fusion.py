@@ -9,11 +9,10 @@ to inspect a vault's roles, caps, and allocations. Supports both MetaMorpho V1
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.client import HTTPException
-from typing import Any
 from urllib.request import Request, urlopen
 
 from eth_abi import decode, encode
@@ -188,13 +187,44 @@ def _response_shape() -> Iterator[None]:
         ) from exc
 
 
+def _object(value: object) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"expected a JSON object, got {type(value).__name__}")
+    return value
+
+
+def _array(value: object) -> list[object]:
+    if not isinstance(value, list):
+        raise TypeError(f"expected a JSON array, got {type(value).__name__}")
+    return value
+
+
+def _text(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"expected a JSON string, got {type(value).__name__}")
+    return value
+
+
+def _integer(value: object) -> int:
+    """A JSON number or the decimal string the API serves big integers as."""
+    if not isinstance(value, int | float | str):
+        raise TypeError(f"expected a JSON number, got {type(value).__name__}")
+    return int(value)
+
+
+def _number(value: object) -> float:
+    if not isinstance(value, int | float | str):
+        raise TypeError(f"expected a JSON number, got {type(value).__name__}")
+    return float(value)
+
+
 def _post_query(
     query: str,
-    variables: dict[str, Any],
+    variables: Mapping[str, object],
     timeout: float,
     *,
     tolerate_not_found: bool = True,
-) -> dict[str, Any]:
+) -> Mapping[str, object]:
     """POST a GraphQL query and return the decoded JSON object. GraphQL errors
     raise, except NOT_FOUND ones when ``tolerate_not_found``: those come back
     with ``data: null`` and the caller decides."""
@@ -211,20 +241,20 @@ def _post_query(
     except (OSError, HTTPException) as exc:
         raise MorphoApiError(f"Morpho API unreachable: {exc}") from exc
     try:
-        body = json.loads(raw)
+        body: object = json.loads(raw)
     except ValueError as exc:
         raise MorphoApiError(f"Morpho API returned invalid JSON: {exc}") from exc
     if not isinstance(body, dict):
         raise MorphoApiError(
             f"Morpho API returned {type(body).__name__}, not a JSON object"
         )
+    answer = _object(body)
     with _response_shape():
-        if errors := body.get("errors"):
-            if not tolerate_not_found or {e.get("status") for e in errors} - {
-                "NOT_FOUND"
-            }:
+        if errors := answer.get("errors"):
+            statuses = {_object(e).get("status") for e in _array(errors)}
+            if not tolerate_not_found or statuses - {"NOT_FOUND"}:
                 raise MorphoApiError(f"Morpho API error: {errors}")
-    return body
+    return answer
 
 
 def fetch_market(
@@ -243,37 +273,42 @@ def fetch_market(
         tolerate_not_found=False,
     )
     with _response_shape():
-        market = (body.get("data") or {}).get("marketById")
+        market = _object(body.get("data") or {}).get("marketById")
         if not market:
             raise MorphoApiError(
                 f"Market {market_id} not found on chain {chain_id} in Morpho index."
             )
-        return _parse_market(market)
+        return _parse_market(_object(market))
 
 
-def _parse_market(raw: dict) -> MorphoApiMarket:
-    state = raw.get("state") or {}
+def _parse_market(raw: Mapping[str, object]) -> MorphoApiMarket:
+    state = _object(raw.get("state") or {})
+    loan = _object(raw["loanAsset"])
+    collateral = _object(raw["collateralAsset"])
     market_id = _api_market_id(raw.get("marketId"))
     return MorphoApiMarket(
         market_id=market_id,
-        lltv=int(raw["lltv"]),
-        loan_token=_api_address(raw["loanAsset"]["address"]),
-        loan_symbol=raw["loanAsset"]["symbol"],
-        loan_decimals=Decimals(int(raw["loanAsset"]["decimals"])),
-        collateral_token=_api_address(raw["collateralAsset"]["address"]),
-        collateral_symbol=raw["collateralAsset"]["symbol"],
-        collateral_decimals=Decimals(int(raw["collateralAsset"]["decimals"])),
-        oracle=_api_address(raw["oracle"]["address"]),
+        lltv=_integer(raw["lltv"]),
+        loan_token=_api_address(loan["address"]),
+        loan_symbol=_text(loan["symbol"]),
+        loan_decimals=Decimals(_integer(loan["decimals"])),
+        collateral_token=_api_address(collateral["address"]),
+        collateral_symbol=_text(collateral["symbol"]),
+        collateral_decimals=Decimals(_integer(collateral["decimals"])),
+        oracle=_api_address(_object(raw["oracle"])["address"]),
         irm=_api_address(raw["irmAddress"]),
-        supply_assets=Amount(int(state.get("supplyAssets") or 0)),
-        borrow_assets=Amount(int(state.get("borrowAssets") or 0)),
-        liquidity_assets=Amount(int(state.get("liquidityAssets") or 0)),
-        utilization=float(state.get("utilization") or 0.0),
-        supply_apy=float(state.get("supplyApy") or 0.0),
-        borrow_apy=float(state.get("borrowApy") or 0.0),
-        fee_wad=int(state.get("fee") or 0),
-        timestamp=Timestamp(int(state.get("timestamp") or 0)),
-        vaults=[_parse_vault(v, market_id) for v in raw.get("supplyingVaults") or []],
+        supply_assets=Amount(_integer(state.get("supplyAssets") or 0)),
+        borrow_assets=Amount(_integer(state.get("borrowAssets") or 0)),
+        liquidity_assets=Amount(_integer(state.get("liquidityAssets") or 0)),
+        utilization=_number(state.get("utilization") or 0.0),
+        supply_apy=_number(state.get("supplyApy") or 0.0),
+        borrow_apy=_number(state.get("borrowApy") or 0.0),
+        fee_wad=_integer(state.get("fee") or 0),
+        timestamp=Timestamp(_integer(state.get("timestamp") or 0)),
+        vaults=[
+            _parse_vault(_object(v), market_id)
+            for v in _array(raw.get("supplyingVaults") or [])
+        ],
     )
 
 
@@ -463,78 +498,87 @@ def fetch_vault(
         _VAULT_V2_QUERY, {"address": address, "chainId": chain_id}, timeout
     )
     with _response_shape():
-        v2 = (v2_body.get("data") or {}).get("vaultV2ByAddress")
+        v2 = _object(v2_body.get("data") or {}).get("vaultV2ByAddress")
         if v2:
-            return _parse_vault_v2(v2)
+            return _parse_vault_v2(_object(v2))
     v1_body = _post_query(
         _VAULT_V1_QUERY, {"address": address, "chainId": chain_id}, timeout
     )
     with _response_shape():
-        v1 = (v1_body.get("data") or {}).get("vaultByAddress")
+        v1 = _object(v1_body.get("data") or {}).get("vaultByAddress")
         if v1:
-            return _parse_vault_v1(v1)
+            return _parse_vault_v1(_object(v1))
     raise MorphoApiError(
         f"Vault {address} not found on chain {chain_id} (neither V1 nor V2)."
     )
 
 
-def _parse_vault_v2(raw: dict) -> VaultV2Info:
-    asset = raw.get("asset") or {}
-    liq_adapter = raw.get("liquidityAdapter") or {}
+def _role_addresses(raw: object, role: str) -> list[ChecksumAddress]:
+    """The addresses of ``[{role: {address}}]`` entries, skipping empty ones."""
+    addresses = []
+    for entry in _array(raw or []):
+        if address := _object(_object(entry).get(role) or {}).get("address"):
+            addresses.append(_api_address(address))
+    return addresses
+
+
+def _parse_vault_v2(raw: Mapping[str, object]) -> VaultV2Info:
+    asset = _object(raw.get("asset") or {})
+    liq_adapter = _object(raw.get("liquidityAdapter") or {})
     adapters = [
-        _parse_v2_adapter(a) for a in (raw.get("adapters") or {}).get("items", []) if a
+        _parse_v2_adapter(_object(a))
+        for a in _array(_object(raw.get("adapters") or {}).get("items", []))
+        if a
     ]
-    caps = [_parse_v2_cap(c) for c in (raw.get("caps") or {}).get("items", []) if c]
+    caps = [
+        _parse_v2_cap(_object(c))
+        for c in _array(_object(raw.get("caps") or {}).get("items", []))
+        if c
+    ]
     return VaultV2Info(
         address=_api_address(raw.get("address")),
-        name=raw.get("name") or "",
-        symbol=raw.get("symbol") or "",
+        name=_text(raw.get("name") or ""),
+        symbol=_text(raw.get("symbol") or ""),
         asset_address=_api_address(asset.get("address")),
-        asset_symbol=asset.get("symbol") or "",
-        asset_decimals=Decimals(int(asset.get("decimals") or 0)),
-        total_assets=Amount(int(raw.get("totalAssets") or 0)),
-        idle_assets=Amount(int(raw.get("idleAssets") or 0)),
-        liquidity=Amount(int(raw.get("liquidity") or 0)),
-        share_price=float(raw.get("sharePrice") or 0.0),
-        max_apy=float(raw.get("maxApy") or 0.0),
-        performance_fee=float(raw.get("performanceFee") or 0.0),
+        asset_symbol=_text(asset.get("symbol") or ""),
+        asset_decimals=Decimals(_integer(asset.get("decimals") or 0)),
+        total_assets=Amount(_integer(raw.get("totalAssets") or 0)),
+        idle_assets=Amount(_integer(raw.get("idleAssets") or 0)),
+        liquidity=Amount(_integer(raw.get("liquidity") or 0)),
+        share_price=_number(raw.get("sharePrice") or 0.0),
+        max_apy=_number(raw.get("maxApy") or 0.0),
+        performance_fee=_number(raw.get("performanceFee") or 0.0),
         performance_fee_recipient=_api_optional_address(
             raw.get("performanceFeeRecipient")
         ),
-        management_fee=float(raw.get("managementFee") or 0.0),
+        management_fee=_number(raw.get("managementFee") or 0.0),
         management_fee_recipient=_api_optional_address(
             raw.get("managementFeeRecipient")
         ),
-        owner=_api_address((raw.get("owner") or {}).get("address")),
-        curator=_api_optional_address((raw.get("curator") or {}).get("address")),
-        allocators=[
-            _api_address(a["allocator"]["address"])
-            for a in raw.get("allocators") or []
-            if (a.get("allocator") or {}).get("address")
-        ],
-        sentinels=[
-            _api_address(s["sentinel"]["address"])
-            for s in raw.get("sentinels") or []
-            if (s.get("sentinel") or {}).get("address")
-        ],
+        owner=_api_address(_object(raw.get("owner") or {}).get("address")),
+        curator=_api_optional_address(_object(raw.get("curator") or {}).get("address")),
+        allocators=_role_addresses(raw.get("allocators"), "allocator"),
+        sentinels=_role_addresses(raw.get("sentinels"), "sentinel"),
         liquidity_adapter=_parse_v2_adapter(liq_adapter) if liq_adapter else None,
         adapters=adapters,
         caps=caps,
     )
 
 
-def _parse_v2_adapter(raw: dict) -> VaultV2Adapter:
+def _parse_v2_adapter(raw: Mapping[str, object]) -> VaultV2Adapter:
     return VaultV2Adapter(
         address=_api_address(raw.get("address")),
-        adapter_type=raw.get("type") or raw.get("__typename") or "",
-        assets=Amount(int(raw.get("assets") or 0)),
-        inner_vault=_api_optional_address((raw.get("metaMorpho") or {}).get("address")),
+        adapter_type=_text(raw.get("type") or raw.get("__typename") or ""),
+        assets=Amount(_integer(raw.get("assets") or 0)),
+        inner_vault=_api_optional_address(
+            _object(raw.get("metaMorpho") or {}).get("address")
+        ),
     )
 
 
-def _parse_v2_cap(raw: dict) -> VaultV2Cap:
-    cap_type = raw.get("type") or "Unknown"
-    id_data = raw.get("idData") or "0x"
+def _parse_v2_cap(raw: Mapping[str, object]) -> VaultV2Cap:
+    cap_type = _text(raw.get("type") or "Unknown")
+    id_data = _text(raw.get("idData") or "0x")
     market_id, loan, collat, oracle, irm, lltv = (None, None, None, None, None, None)
     if cap_type == "MarketV1":
         decoded = _decode_market_v1_id_data(id_data)
@@ -542,12 +586,12 @@ def _parse_v2_cap(raw: dict) -> VaultV2Cap:
             loan, collat, oracle, irm, lltv = decoded
             market_id = _morpho_blue_market_id(loan, collat, oracle, irm, lltv)
     return VaultV2Cap(
-        cap_id=raw.get("id") or "",
+        cap_id=_text(raw.get("id") or ""),
         cap_type=cap_type,
         id_data=id_data,
-        absolute_cap=Amount(int(raw.get("absoluteCap") or 0)),
-        relative_cap_wad=int(raw.get("relativeCap") or 0),
-        allocation=Amount(int(raw.get("allocation") or 0)),
+        absolute_cap=Amount(_integer(raw.get("absoluteCap") or 0)),
+        relative_cap_wad=_integer(raw.get("relativeCap") or 0),
+        allocation=Amount(_integer(raw.get("allocation") or 0)),
         market_id=market_id,
         loan_token=loan,
         collateral_token=collat,
@@ -644,27 +688,28 @@ def _morpho_blue_market_id(
     return parse_morpho_market_id(keccak(encoded))
 
 
-def _parse_vault_v1(raw: dict) -> VaultV1Info:
-    asset = raw.get("asset") or {}
-    state = raw.get("state") or {}
+def _parse_vault_v1(raw: Mapping[str, object]) -> VaultV1Info:
+    asset = _object(raw.get("asset") or {})
+    state = _object(raw.get("state") or {})
     allocations = []
-    for entry in state.get("allocation") or []:
-        market = entry.get("market") or {}
-        m_state = market.get("state") or {}
-        loan_asset = market.get("loanAsset") or {}
-        collat_asset = market.get("collateralAsset") or {}
+    for item in _array(state.get("allocation") or []):
+        entry = _object(item)
+        market = _object(entry.get("market") or {})
+        m_state = _object(market.get("state") or {})
+        loan_asset = _object(market.get("loanAsset") or {})
+        collat_asset = _object(market.get("collateralAsset") or {})
         allocations.append(
             VaultV1MarketAllocation(
                 market_id=_api_market_id(market.get("marketId")),
-                lltv=int(market.get("lltv") or 0),
-                loan_symbol=loan_asset.get("symbol") or "",
-                loan_decimals=Decimals(int(loan_asset.get("decimals") or 0)),
-                collateral_symbol=collat_asset.get("symbol") or "",
-                market_supply_assets=Amount(int(m_state.get("supplyAssets") or 0)),
-                market_borrow_assets=Amount(int(m_state.get("borrowAssets") or 0)),
-                market_supply_apy=float(m_state.get("supplyApy") or 0.0),
-                supply_assets=Amount(int(entry.get("supplyAssets") or 0)),
-                supply_cap=Amount(int(entry.get("supplyCap") or 0)),
+                lltv=_integer(market.get("lltv") or 0),
+                loan_symbol=_text(loan_asset.get("symbol") or ""),
+                loan_decimals=Decimals(_integer(loan_asset.get("decimals") or 0)),
+                collateral_symbol=_text(collat_asset.get("symbol") or ""),
+                market_supply_assets=Amount(_integer(m_state.get("supplyAssets") or 0)),
+                market_borrow_assets=Amount(_integer(m_state.get("borrowAssets") or 0)),
+                market_supply_apy=_number(m_state.get("supplyApy") or 0.0),
+                supply_assets=Amount(_integer(entry.get("supplyAssets") or 0)),
+                supply_cap=Amount(_integer(entry.get("supplyCap") or 0)),
             )
         )
 
@@ -672,88 +717,103 @@ def _parse_vault_v1(raw: dict) -> VaultV1Info:
     flow_cap_summary: VaultFlowCap | None = None
     flow_caps: dict[MorphoBlueMarketId, tuple[int, int]] = {}
     if pac:
+        pac = _object(pac)
         flow_cap_summary = VaultFlowCap(
-            fee_wei=int(pac.get("fee") or 0),
+            fee_wei=_integer(pac.get("fee") or 0),
             max_in=Amount(0),
             max_out=Amount(0),
             admin=_api_optional_address(pac.get("admin")),
         )
-        for fc in pac.get("flowCaps") or []:
-            if raw_mid := (fc.get("market") or {}).get("marketId"):
+        for item in _array(pac.get("flowCaps") or []):
+            fc = _object(item)
+            if raw_mid := _object(fc.get("market") or {}).get("marketId"):
                 flow_caps[_api_market_id(raw_mid)] = (
-                    int(fc.get("maxIn") or 0),
-                    int(fc.get("maxOut") or 0),
+                    _integer(fc.get("maxIn") or 0),
+                    _integer(fc.get("maxOut") or 0),
                 )
 
     return VaultV1Info(
         address=_api_address(raw.get("address")),
-        name=raw.get("name") or "",
-        symbol=raw.get("symbol") or "",
+        name=_text(raw.get("name") or ""),
+        symbol=_text(raw.get("symbol") or ""),
         asset_address=_api_address(asset.get("address")),
-        asset_symbol=asset.get("symbol") or "",
-        asset_decimals=Decimals(int(asset.get("decimals") or 0)),
-        total_assets=Amount(int(state.get("totalAssets") or 0)),
-        fee_wad=int(state.get("fee") or 0),
+        asset_symbol=_text(asset.get("symbol") or ""),
+        asset_decimals=Decimals(_integer(asset.get("decimals") or 0)),
+        total_assets=Amount(_integer(state.get("totalAssets") or 0)),
+        fee_wad=_integer(state.get("fee") or 0),
         owner=_api_address(state.get("owner")),
         curator=_api_optional_address(state.get("curator")),
         guardian=_api_optional_address(state.get("guardian")),
         fee_recipient=_api_optional_address(state.get("feeRecipient")),
-        allocators=[
-            _api_address(a["address"])
-            for a in raw.get("allocators") or []
-            if a.get("address")
-        ],
+        allocators=_allocator_addresses(raw.get("allocators")),
         allocations=allocations,
         public_allocator=flow_cap_summary,
         public_allocator_flow_caps=flow_caps,
     )
 
 
-def _is_market(entry: dict, market_id: MorphoBlueMarketId) -> bool:
+def _allocator_addresses(raw: object) -> list[ChecksumAddress]:
+    """The addresses of ``[{address}]`` entries, skipping empty ones."""
+    addresses = []
+    for entry in _array(raw or []):
+        if address := _object(entry).get("address"):
+            addresses.append(_api_address(address))
+    return addresses
+
+
+def _is_market(entry: object, market_id: MorphoBlueMarketId) -> bool:
     """Whether an allocation or flow-cap ``entry`` names ``market_id``, in any
     spelling the API returns."""
-    raw = (entry.get("market") or {}).get("marketId")
+    raw = _object(_object(entry).get("market") or {}).get("marketId")
     try:
         return parse_morpho_market_id(str(raw or "")) == market_id
     except ValueError:
         return False
 
 
-def _parse_vault(raw: dict, market_id: MorphoBlueMarketId) -> VaultAllocation:
-    asset = raw.get("asset") or {}
-    state = raw.get("state") or {}
-    allocation_for_market: dict = next(
-        (a for a in (state.get("allocation") or []) if _is_market(a, market_id)),
-        {},
+def _parse_vault(
+    raw: Mapping[str, object], market_id: MorphoBlueMarketId
+) -> VaultAllocation:
+    asset = _object(raw.get("asset") or {})
+    state = _object(raw.get("state") or {})
+    allocation_for_market = _object(
+        next(
+            (
+                a
+                for a in _array(state.get("allocation") or [])
+                if _is_market(a, market_id)
+            ),
+            {},
+        )
     )
     pac = raw.get("publicAllocatorConfig")
     flow_cap: VaultFlowCap | None = None
     if pac:
+        pac = _object(pac)
         flow_for_market = next(
-            (fc for fc in (pac.get("flowCaps") or []) if _is_market(fc, market_id)),
+            (
+                _object(fc)
+                for fc in _array(pac.get("flowCaps") or [])
+                if _is_market(fc, market_id)
+            ),
             None,
         )
         if flow_for_market:
             flow_cap = VaultFlowCap(
-                fee_wei=int(pac.get("fee") or 0),
-                max_in=Amount(int(flow_for_market.get("maxIn") or 0)),
-                max_out=Amount(int(flow_for_market.get("maxOut") or 0)),
+                fee_wei=_integer(pac.get("fee") or 0),
+                max_in=Amount(_integer(flow_for_market.get("maxIn") or 0)),
+                max_out=Amount(_integer(flow_for_market.get("maxOut") or 0)),
                 admin=_api_optional_address(pac.get("admin")),
             )
-    allocators = [
-        _api_address(a["address"])
-        for a in (raw.get("allocators") or [])
-        if a.get("address")
-    ]
     return VaultAllocation(
         vault_address=_api_address(raw["address"]),
-        vault_name=raw.get("name") or "",
-        vault_symbol=raw.get("symbol") or "",
-        asset_symbol=asset.get("symbol") or "",
-        asset_decimals=Decimals(int(asset.get("decimals") or 0)),
-        total_assets=Amount(int(state.get("totalAssets") or 0)),
-        supply_assets=Amount(int(allocation_for_market.get("supplyAssets") or 0)),
-        supply_cap=Amount(int(allocation_for_market.get("supplyCap") or 0)),
-        allocators=allocators,
+        vault_name=_text(raw.get("name") or ""),
+        vault_symbol=_text(raw.get("symbol") or ""),
+        asset_symbol=_text(asset.get("symbol") or ""),
+        asset_decimals=Decimals(_integer(asset.get("decimals") or 0)),
+        total_assets=Amount(_integer(state.get("totalAssets") or 0)),
+        supply_assets=Amount(_integer(allocation_for_market.get("supplyAssets") or 0)),
+        supply_cap=Amount(_integer(allocation_for_market.get("supplyCap") or 0)),
+        allocators=_allocator_addresses(raw.get("allocators")),
         flow_cap=flow_cap,
     )

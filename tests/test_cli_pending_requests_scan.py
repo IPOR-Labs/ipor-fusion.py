@@ -103,7 +103,9 @@ def test_json_keeps_an_empty_queue_distinct():
 
     assert result is not None
     assert result["pending_requests"] == []
-    assert result["total_pending_shares"]["raw"] == 0
+    total = result["total_pending_shares"]
+    assert total is not None
+    assert total["raw"] == 0
 
 
 def test_text_output_says_unavailable():

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
 
 import requests
 from eth_typing import ChecksumAddress
@@ -46,7 +45,7 @@ class VerifierResult:
     #: The executor the sender paid on the source chain.
     executor: ChecksumAddress
     #: The decoded MessageV1 fields as the indexer reports them.
-    message: Mapping[str, Any]
+    message: Mapping[str, object]
     indexer: str
 
 
@@ -90,38 +89,48 @@ def fetch_verifier_result(
     )
 
 
-def _hex_bytes(value: Any) -> bytes:
+def _hex_bytes(value: object) -> bytes:
     if not isinstance(value, str) or not value.startswith("0x"):
         raise ValueError(f"not 0x-prefixed hex: {value!r}")
     return bytes.fromhex(value[2:])
 
 
+def _object(value: object, what: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{what} is not an object")
+    return value
+
+
+def _address(value: object) -> ChecksumAddress:
+    if not isinstance(value, str):
+        raise TypeError(f"not an address: {value!r}")
+    return Web3.to_checksum_address(value)
+
+
 def _parse_answer(
-    body: Any, message_id: MessageId, indexer: str
+    body: object, message_id: MessageId, indexer: str
 ) -> VerifierResult | None:
     """The first result of an indexer's JSON answer; ``None`` when it has none.
     Anything else it cannot read raises a builtin error, reported by the caller
     as a malformed answer."""
-    if not isinstance(body, Mapping):
-        raise TypeError("answer is not a JSON object")
-    results = body.get("results")
+    results = _object(body, "answer").get("results")
     if not results:
         return None
-    result = results[0]["verifierResult"]
+    if not isinstance(results, list):
+        raise TypeError("results is not an array")
+    result = _object(_object(results[0], "result")["verifierResult"], "verifierResult")
     served_id = _hex_bytes(result["message_id"])
     if served_id != message_id:
         raise ValueError(f"result is for message 0x{served_id.hex()}")
-    message = result["message"]
-    if not isinstance(message, Mapping):
-        raise TypeError("message is not an object")
+    message = _object(result["message"], "message")
     ccvs = result["message_ccv_addresses"]
     if not isinstance(ccvs, list) or not ccvs:
         raise ValueError("message_ccv_addresses is not a non-empty array")
     return VerifierResult(
         message_id=MessageId(served_id),
-        ccv_addresses=tuple(Web3.to_checksum_address(a) for a in ccvs),
+        ccv_addresses=tuple(_address(a) for a in ccvs),
         ccv_data=_hex_bytes(result["ccv_data"]),
-        executor=Web3.to_checksum_address(result["message_executor_address"]),
+        executor=_address(result["message_executor_address"]),
         message=message,
         indexer=indexer,
     )

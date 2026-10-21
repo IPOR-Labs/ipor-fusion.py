@@ -111,7 +111,8 @@ executionEnvironments = [
   { root = "examples", reportArgumentType = "error" },
   # A negative case is a line that must fail to type-check, marked with
   # `# pyright: ignore[rule]`; an ignore that suppresses nothing is an error.
-  { root = "tests/typed_client", reportArgumentType = "error", reportUnnecessaryTypeIgnoreComment = "error" },
+  # A client reads the SDK's NotRequired document keys with .get().
+  { root = "tests/typed_client", reportArgumentType = "error", reportUnnecessaryTypeIgnoreComment = "error", reportTypedDictNotRequiredAccess = "error" },
 ]
 
 [tool.coverage.run]

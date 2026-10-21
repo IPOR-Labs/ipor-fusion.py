@@ -1,4 +1,9 @@
-from ipor_fusion.core.access import AccessManager, RoleAccount, RoleStatus
+from ipor_fusion.core.access import (
+    AccessManager,
+    RoleAccount,
+    RoleAccountJson,
+    RoleStatus,
+)
 from ipor_fusion.core.context import InFlightLimit, Web3Context
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.fee_manager import (
@@ -44,6 +49,7 @@ __all__ = [
     "PlasmaVault",
     "AccessManager",
     "RoleAccount",
+    "RoleAccountJson",
     "RoleStatus",
     "RewardsManager",
     "VestingData",

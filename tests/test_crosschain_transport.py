@@ -90,6 +90,21 @@ def _taxi(amount_sd: int, envelope: bytes) -> bytes:
 
 
 class TestStargateTransport:
+    @pytest.mark.parametrize("raw", [None, b"packet", (b"packet", b"taxi")])
+    def test_delivery_needs_a_stargate_frame(self, raw):
+        message = OutboundMessage(
+            CrosschainTransportKind.STARGATE_LAYERZERO,
+            GUID,
+            ETHEREUM,
+            BASE,
+            STARGATE_EXECUTOR,
+            STARGATE_EXECUTOR,
+            b"",
+            raw=raw,
+        )
+        with pytest.raises(TypeError, match="not a Stargate message"):
+            stargate_transport().delivery_calls(message)
+
     def test_plain_message_and_delivery(self):
         transport = stargate_transport()
         message = _envelope(9)

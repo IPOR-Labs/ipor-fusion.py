@@ -136,7 +136,7 @@ class ExternalStateEvent:
     log_index: int | None = None
 
 
-def _as_bytes(value: Any, what: str) -> bytes:
+def _as_bytes(value: object, what: str) -> bytes:
     """Raw log bytes from what a node or an indexer serves: bytes-like
     (bytes, bytearray, HexBytes) or ``0x``-prefixed hex text. Anything else —
     an int (``bytes(32)`` would invent 32 zero bytes), unprefixed or invalid
@@ -155,7 +155,7 @@ def _as_bytes(value: Any, what: str) -> bytes:
     )
 
 
-def _as_quantity(value: Any, what: str) -> int | None:
+def _as_quantity(value: object, what: str) -> int | None:
     """A block number or log index: int, or a JSON-RPC ``0x`` quantity;
     None stays None (optional identity); anything else raises."""
     if value is None:
@@ -172,7 +172,7 @@ def _as_quantity(value: Any, what: str) -> int | None:
     raise ExternalStateEventDecodeError(f"{what}: unsupported quantity {value!r}")
 
 
-def _topic_key(topic: Any) -> bytes | None:
+def _topic_key(topic: object) -> bytes | None:
     """topic0 as 32 bytes, or None when it cannot be a topic at all (then the
     log is simply not one of ours)."""
     try:
@@ -189,7 +189,7 @@ def external_state_event_name(topic: bytes | str) -> str | None:
     return spec.name if spec else None
 
 
-def _hex(value: Any) -> TxHash | None:
+def _hex(value: object) -> TxHash | None:
     if value is None:
         return None
     raw = _as_bytes(value, "transactionHash")
@@ -200,14 +200,16 @@ def _hex(value: Any) -> TxHash | None:
     return parse_tx_hash(raw)
 
 
-def decode_external_state_event(log: Mapping[str, Any]) -> ExternalStateEvent | None:
+def decode_external_state_event(  # proctor: ignore[primitives-untyped-dict]
+    log: Mapping[str, object],
+) -> ExternalStateEvent | None:
     """Decode one log — a web3 receipt log or the raw JSON-RPC / indexer
     mapping (hex text topics, data, hashes and quantities). None when its
     topic is not an ExternalState event; once the topic is recognized, any
     malformed part (data, topic count, identity) raises
     ``ExternalStateEventDecodeError``."""
-    topics = log.get("topics") or []
-    if not topics:
+    topics = log.get("topics")
+    if not isinstance(topics, list | tuple) or not topics:
         return None
     key = _topic_key(topics[0])
     spec = EXTERNAL_STATE_EVENTS.get(key) if key is not None else None
@@ -232,9 +234,12 @@ def decode_external_state_event(log: Mapping[str, Any]) -> ExternalStateEvent | 
         name: Web3.to_checksum_address(value) if abi_type == "address" else value
         for (abi_type, name), value in zip(spec.params, values, strict=True)
     }
+    address = log.get("address")
+    if not isinstance(address, str | bytes):
+        raise ExternalStateEventDecodeError(f"{spec.name}: emitter")
     try:
-        emitter = Web3.to_checksum_address(log["address"])
-    except (KeyError, TypeError, ValueError) as exc:
+        emitter = Web3.to_checksum_address(address)
+    except ValueError as exc:
         raise ExternalStateEventDecodeError(f"{spec.name}: emitter") from exc
     return ExternalStateEvent(
         name=spec.name,

@@ -2325,10 +2325,14 @@ class TestBuildFeesJson:
             )
         )
         assert fees is not None
-        named = sum(r["fee_percent"] for r in fees["performance_fee_recipients"])
+        recipients = fees["performance_fee_recipients"]
+        assert recipients is not None
+        named = sum(r["fee_percent"] for r in recipients)
         assert named == 8.0
-        assert fees["performance_fee_manager_percent"] == 10.0
-        assert named < fees["performance_fee_manager_percent"]
+        total = fees["performance_fee_manager_percent"]
+        assert total is not None
+        assert total == 10.0
+        assert named < total
 
     def test_unrealized_fee_gets_usd_when_price_known(self):
         fees = _build_fees_json(
@@ -2338,7 +2342,9 @@ class TestBuildFeesJson:
             )
         )
         assert fees is not None
-        assert fees["unrealized_management_fee"]["usd"] == 6.0
+        unrealized = fees["unrealized_management_fee"]
+        assert unrealized is not None
+        assert unrealized.get("usd") == 6.0
 
 
 class TestPrintFees:

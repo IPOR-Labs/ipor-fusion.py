@@ -9,12 +9,37 @@ from __future__ import annotations
 
 import re
 import sys
+import typing
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from eth_typing import ChecksumAddress, HexAddress, HexStr
+from pydantic import BaseModel, ValidationError
+from web3.types import Timestamp
 
-from ipor_fusion import DOCS, PREVIEW_FEATURES
+from ipor_fusion import (
+    DOCS,
+    PREVIEW_FEATURES,
+    AccessManagerAddress,
+    AmountJson,
+    ChainId,
+    Decimals,
+    Fee,
+    FuseAddress,
+    HyperCoreActionId,
+    HyperCoreAsset,
+    HyperCoreTokenIndex,
+    MarketId,
+    MetaMorphoV1Json,
+    MetaMorphoV2Json,
+    MorphoBlueMarketId,
+    MorphoBlueMarketJson,
+    PlasmaVaultAddress,
+    PricedAmountJson,
+    UsdAmountJson,
+    VaultInfoJson,
+)
 from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.mcp import models as mcp_models
 from ipor_fusion.mcp.models import (
@@ -42,7 +67,15 @@ from ipor_fusion.readers.oracle_mapping import (
 from ipor_fusion.types import Period, RoleId
 
 
-def _amount(raw: int = 0, formatted: str = "0", usd: float | None = None) -> dict:
+def _amount(raw: int = 0, formatted: str = "0") -> AmountJson:
+    return {"raw": raw, "formatted": formatted}
+
+
+def _usd_amount(raw: int, formatted: str, usd: float | None) -> UsdAmountJson:
+    return {"raw": raw, "formatted": formatted, "usd": usd}
+
+
+def _priced_amount(raw: int, formatted: str, usd: float) -> PricedAmountJson:
     return {"raw": raw, "formatted": formatted, "usd": usd}
 
 
@@ -51,127 +84,132 @@ _FEE_NOTES = DOCS["fees"]
 _WM_NOTES = DOCS["withdraw_manager_details"]
 _HC_NOTES = DOCS["hypercore"]
 
+_USDC = ChecksumAddress(HexAddress(HexStr("0xUSDC")))
+_RECIPIENT = ChecksumAddress(HexAddress(HexStr("0xRECIPIENT")))
 
-def _full_vault_info_dict() -> dict:
-    """Mirror of vault_info.py::build_vault_info_json with every optional
-    block populated (lending positions, withdraw manager, substrates with
-    address+symbol+contract, fuses with optional market info, balance fuses
-    with both Morpho and Aave position breakdowns, ERC20 with full token
-    detail). Keep in sync with the dict literal at the bottom of
-    build_vault_info_json — the sync itself is enforced by the producer contract
-    check in test_cli_commands.py::TestVaultInfoJson::test_json_output."""
+
+def _full_vault_info_dict() -> VaultInfoJson:
+    """A `VaultInfoJson` with every optional block populated (lending
+    positions, withdraw manager, substrates with address+symbol+contract,
+    fuses with optional market info, balance fuses with both Morpho and Aave
+    position breakdowns, ERC20 with full token detail). pyright holds it to
+    the TypedDict; the producer contract check in
+    test_cli_commands.py::TestVaultInfoJson::test_json_output holds the real
+    build_vault_info_json output to the model."""
     return {
-        "vault": "0xVAULT",
+        "vault": PlasmaVaultAddress(ChecksumAddress(HexAddress(HexStr("0xVAULT")))),
         "name": "Test Vault",
         "links": {
             "ipor_app": "https://app.ipor.io/ethereum/0xVAULT",
             "etherscan": "https://etherscan.io/address/0xVAULT",
         },
         "chain": "ethereum",
-        "chain_id": 1,
+        "chain_id": ChainId(1),
         "block": 12345,
         "is_latest": True,
-        "block_timestamp": 1700000000,
+        "block_timestamp": Timestamp(1700000000),
         "block_timestamp_utc": "2023-11-14T22:13:20Z",
         "deployment": {
-            "deployer": "0xDEPLOYER",
-            "deploy_block": 1000,
-            "deploy_timestamp": 1600000000,
-            "vault_age": "100d",
+            "block": 1000,
+            "timestamp": Timestamp(1600000000),
+            "timestamp_utc": "2020-09-13T12:26:40Z",
+            "age_days": 1157,
         },
         "asset": {
-            "address": "0xUSDC",
+            "address": _USDC,
             "symbol": "USDC",
-            "decimals": 6,
+            "decimals": Decimals(6),
             "price_usd": 1.0,
         },
-        "share_decimals": 18,
-        "total_assets": _amount(1_000_000_000, "1000.0", 1000.0),
-        "total_supply": _amount(1_000_000_000_000_000_000_000, "1000.0", None),
-        "share_price": {"raw": 10**18, "formatted": "1.0"},
-        "supply_cap": _amount(2**256 - 1, "unlimited", None),
+        "share_decimals": Decimals(18),
+        "total_assets": _usd_amount(1_000_000_000, "1000.0", 1000.0),
+        "total_supply": _amount(1_000_000_000_000_000_000_000, "1000.0"),
+        "share_price": {"asset": 1.0, "usd": 1.0},
+        "supply_cap": _amount(2**256 - 1, "unlimited"),
         "managers": {
-            "access": "0xACCESS",
-            "price_oracle": "0xORACLE",
-            "rewards": "0xREWARDS",
-            "withdraw": "0xWITHDRAW",
-            "fee": "0xFEEMANAGER",
+            "access": AccessManagerAddress(
+                ChecksumAddress(HexAddress(HexStr("0xACCESS")))
+            ),
+            "price_oracle": ChecksumAddress(HexAddress(HexStr("0xORACLE"))),
+            "rewards": ChecksumAddress(HexAddress(HexStr("0xREWARDS"))),
+            "withdraw": ChecksumAddress(HexAddress(HexStr("0xWITHDRAW"))),
+            "fee": ChecksumAddress(HexAddress(HexStr("0xFEEMANAGER"))),
         },
         "fees": {
-            "fee_manager": "0xFEEMANAGER",
+            "fee_manager": ChecksumAddress(HexAddress(HexStr("0xFEEMANAGER"))),
             "fee_manager_note": _FEE_NOTES["fee_manager"],
-            "ipor_dao_fee_recipient": "0xDAO",
+            "ipor_dao_fee_recipient": ChecksumAddress(HexAddress(HexStr("0xDAO"))),
             "ipor_dao_fee_recipient_note": _FEE_NOTES["ipor_dao_fee_recipient"],
             "deposit_fee_percent": 1.0,
-            "deposit_fee_wad": 10**16,
+            "deposit_fee_wad": Fee(10**16),
             "deposit_fee_percent_note": _FEE_NOTES["deposit_fee_percent"],
             "request_fee_percent": 0.1,
-            "request_fee_wad": 10**15,
+            "request_fee_wad": Fee(10**15),
             "request_fee_percent_note": _FEE_NOTES["request_fee_percent"],
             "withdraw_fee_percent": 0.2,
-            "withdraw_fee_wad": 2 * 10**15,
+            "withdraw_fee_wad": Fee(2 * 10**15),
             "withdraw_fee_percent_note": _FEE_NOTES["withdraw_fee_percent"],
             "performance_fee_percent": 10.0,
-            "performance_fee_bps": 1000,
+            "performance_fee_bps": Fee(1000),
             "performance_fee_percent_note": _FEE_NOTES["performance_fee_percent"],
             "performance_fee_manager_percent": 10.0,
             "performance_fee_manager_percent_note": _FEE_NOTES[
                 "performance_fee_manager_percent"
             ],
             "performance_fee_recipients": [
-                {"recipient": "0xRECIPIENT", "fee_percent": 8.0, "fee_bps": 800}
+                {"recipient": _RECIPIENT, "fee_percent": 8.0, "fee_bps": Fee(800)}
             ],
             "performance_fee_recipients_note": _FEE_NOTES["performance_fee_recipients"],
             "high_water_mark": {
                 # Asset units per whole share: 6 decimals here, not the 18
                 # share decimals this fixture's vault has.
                 "high_water_mark": 10**6,
-                "last_update_timestamp": 1700000000,
+                "last_update_timestamp": Timestamp(1700000000),
                 "last_update_utc": "2023-11-14T22:13:20Z",
-                "update_interval_seconds": 86400,
+                "update_interval_seconds": Period(86400),
             },
             "high_water_mark_note": _FEE_NOTES["high_water_mark"],
             "management_fee_percent": 1.0,
-            "management_fee_bps": 100,
+            "management_fee_bps": Fee(100),
             "management_fee_percent_note": _FEE_NOTES["management_fee_percent"],
             "management_fee_manager_percent": 1.0,
             "management_fee_manager_percent_note": _FEE_NOTES[
                 "management_fee_manager_percent"
             ],
             "management_fee_recipients": [
-                {"recipient": "0xRECIPIENT", "fee_percent": 0.8, "fee_bps": 80}
+                {"recipient": _RECIPIENT, "fee_percent": 0.8, "fee_bps": Fee(80)}
             ],
             "management_fee_recipients_note": _FEE_NOTES["management_fee_recipients"],
-            "management_fee_last_update_timestamp": 1699999000,
+            "management_fee_last_update_timestamp": Timestamp(1699999000),
             "management_fee_last_update_utc": "2023-11-14T21:56:40Z",
             "management_fee_last_update_timestamp_note": _FEE_NOTES[
                 "management_fee_last_update_timestamp"
             ],
-            "unrealized_management_fee": _amount(5 * 10**6, "5.0", 5.0),
+            "unrealized_management_fee": _priced_amount(5 * 10**6, "5.0", 5.0),
             "unrealized_management_fee_note": _FEE_NOTES["unrealized_management_fee"],
         },
         # Exit fees moved to the top-level `fees` object; they must not
         # reappear here.
         "withdraw_manager_details": {
-            "withdraw_window_seconds": 86400,
+            "withdraw_window_seconds": Period(86400),
             "withdraw_window_seconds_note": _WM_NOTES["withdraw_window_seconds"],
             "fees_note": _WM_NOTES["fees"],
             "shares_to_release": _amount(0, "0"),
             "shares_to_release_note": _WM_NOTES["shares_to_release"],
-            "last_release_funds_timestamp": 1700000000,
+            "last_release_funds_timestamp": Timestamp(1700000000),
             "last_release_funds_utc": "2023-11-14T22:13:20Z",
             "last_release_funds_timestamp_note": _WM_NOTES[
                 "last_release_funds_timestamp"
             ],
             "pending_requests": [
                 {
-                    "account": "0xREQUESTER",
-                    "shares": {"raw": 100 * 10**18, "formatted": "100.0"},
-                    "end_withdraw_window_timestamp": 1700086400,
+                    "account": ChecksumAddress(HexAddress(HexStr("0xREQUESTER"))),
+                    "shares": _amount(100 * 10**18, "100.0"),
+                    "end_withdraw_window_timestamp": Timestamp(1700086400),
                     "end_withdraw_window_utc": "2023-11-15T22:13:20Z",
                     "remaining_seconds": 86400,
                     "can_withdraw": False,
-                    "assets": _amount(111 * 10**6, "111.0", 111.0),
+                    "assets": _priced_amount(111 * 10**6, "111.0", 111.0),
                 }
             ],
             "total_pending_shares": _amount(100 * 10**18, "100.0"),
@@ -179,55 +217,58 @@ def _full_vault_info_dict() -> dict:
         },
         "fuses": [
             {
-                "address": "0xFUSE1",
+                "address": FuseAddress(ChecksumAddress(HexAddress(HexStr("0xFUSE1")))),
                 "contract": "MorphoSupplyFuse",
-                "market_id": 1,
+                "market_id": MarketId(1),
                 "market": "MORPHO",
             },
             # market_id/market are omitted (not None) for market-less fuses.
-            {"address": "0xFUSE2", "contract": "UniversalTokenSwapperFuse"},
+            {
+                "address": FuseAddress(ChecksumAddress(HexAddress(HexStr("0xFUSE2")))),
+                "contract": "UniversalTokenSwapperFuse",
+            },
         ],
         "balance_fuses": [
             {
                 "market": "MORPHO (1)",
-                "market_id": 1,
-                "balance": _amount(500_000_000, "500.0", 500.0),
-                "fuse": "0xBF1",
+                "market_id": MarketId(1),
+                "balance": _amount(500_000_000, "500.0"),
+                "fuse": FuseAddress(ChecksumAddress(HexAddress(HexStr("0xBF1")))),
                 "contract": "MorphoBalanceFuse",
                 "pct_of_total": 50.0,
                 "depends_on": ["AAVE_V3 (2)"],
                 "position_breakdown": [
                     {
-                        "morpho_market_id": "0xMID",
+                        "morpho_market_id": MorphoBlueMarketId("0xMID"),
                         "collateral_symbol": "WETH",
                         "loan_symbol": "USDC",
                         "collateral": {
                             "raw": 1,
-                            "token": "0xWETH",
+                            "token": HexAddress(HexStr("0xWETH")),
                             "symbol": "WETH",
-                            "decimals": 18,
+                            "decimals": Decimals(18),
                             "formatted": "0.000000000000000001",
                             "usd": 0.0,
                         },
-                        "borrow": {"raw": 0, "token": "0xUSDC"},
-                        "supply": {"raw": 0, "token": "0xUSDC"},
+                        "borrow": {"raw": 0, "token": _USDC},
+                        "supply": {"raw": 0, "token": _USDC},
                     }
                 ],
             },
             {
                 "market": "AAVE_V3 (2)",
-                "market_id": 2,
-                "balance": _amount(300_000_000, "300.0", 300.0),
-                "fuse": "0xBF2",
+                "market_id": MarketId(2),
+                "balance": _amount(300_000_000, "300.0"),
+                "fuse": FuseAddress(ChecksumAddress(HexAddress(HexStr("0xBF2")))),
                 "contract": "AaveV3BalanceFuse",
                 "pct_of_total": 30.0,
                 "position_breakdown": [
                     {
-                        "asset": "0xUSDC",
+                        "asset": _USDC,
                         "asset_symbol": "USDC",
-                        "supply": {"raw": 100, "token": "0xUSDC"},
-                        "variable_debt": {"raw": 0, "token": "0xUSDC"},
-                        "stable_debt": {"raw": 0, "token": "0xUSDC"},
+                        "supply": {"raw": 100, "token": _USDC},
+                        "variable_debt": {"raw": 0, "token": _USDC},
+                        "stable_debt": {"raw": 0, "token": _USDC},
                     }
                 ],
             },
@@ -235,18 +276,18 @@ def _full_vault_info_dict() -> dict:
         "zero_balance_fuses": [
             {
                 "market": "UNIVERSAL_TOKEN_SWAPPER (12)",
-                "market_id": 12,
-                "balance": _amount(0, "0.0", 0.0),
-                "fuse": "0xZBF1",
+                "market_id": MarketId(12),
+                "balance": _amount(0, "0.0"),
+                "fuse": FuseAddress(ChecksumAddress(HexAddress(HexStr("0xZBF1")))),
                 "contract": "ZeroBalanceFuse",
                 "pct_of_total": 0.0,
             },
         ],
         "instant_withdrawal_fuses": [
             {
-                "address": "0xIW1",
+                "address": FuseAddress(ChecksumAddress(HexAddress(HexStr("0xIW1")))),
                 "contract": "ERC4626SupplyFuse",
-                "market_id": 5,
+                "market_id": MarketId(5),
                 "market": "ERC4626",
             },
         ],
@@ -260,34 +301,38 @@ def _full_vault_info_dict() -> dict:
                 }
             ],
         },
-        "dependency_graph": {"1": [2]},
+        "dependency_graph": {
+            "edges": {"MORPHO (1)": ["AAVE_V3 (2)"]},
+            "update_reach": {"MORPHO (1)": ["AAVE_V3 (2)"]},
+            "update_groups": [["AAVE_V3 (2)", "MORPHO (1)"]],
+        },
         "erc20_balances": [
             {
-                "address": "0xUSDC",
+                "address": HexAddress(HexStr("0xUSDC")),
                 "symbol": "USDC",
-                "decimals": 6,
-                "balance": _amount(100, "0.0001", 0.0001),
+                "decimals": Decimals(6),
+                "balance": _amount(100, "0.0001"),
                 "price_usd": 1.0,
                 "usd_value": 0.0001,
                 "note": "ok",
             }
         ],
         "reconciliation": {
-            "balance_fuses_total": _amount(800_000_000, "800.0", 800.0),
-            "underlying_on_vault": _amount(100, "0.0001", 0.0001),
-            "erc20_direct_total": _amount(100, "0.0001", 0.0001),
-            "sum": _amount(800_000_100, "800.0001", 800.0001),
-            "on_chain_total_assets": _amount(800_000_100, "800.0001", 800.0001),
+            "balance_fuses_total": _usd_amount(800_000_000, "800.0", 800.0),
+            "underlying_on_vault": _usd_amount(100, "0.0001", 0.0001),
+            "erc20_direct_total": _usd_amount(100, "0.0001", 0.0001),
+            "sum": _usd_amount(800_000_100, "800.0001", 800.0001),
+            "on_chain_total_assets": _usd_amount(800_000_100, "800.0001", 800.0001),
             "delta": {"raw": 0, "formatted": "0.0", "usd": 0.0, "percent": 0.0},
-            "pending_withdrawals": _amount(0, "0", 0.0),
-            "implied_market_total": {"raw": 800_000_000, "formatted": "800.0"},
+            "pending_withdrawals": _usd_amount(0, "0", 0.0),
+            "implied_market_total": _amount(800_000_000, "800.0"),
             "market_storage_divergence": 0,
         },
         "lending_health": {
             "markets": [
                 {
                     "protocol": "morpho",
-                    "market_id": "0xMID",
+                    "market_id": MarketId(1),
                     "market_name": "WETH/USDC",
                     "substrate_id": "0xMID",
                     "current_ltv": 0.5,
@@ -304,27 +349,19 @@ def _full_vault_info_dict() -> dict:
         },
         "role_accounts": [
             {
-                "account": "0xOWNER",
-                "role_id": 1,
+                "account": ChecksumAddress(HexAddress(HexStr("0xOWNER"))),
+                "role_id": RoleId(1),
                 "role_name": "OWNER_ROLE",
                 "is_member": True,
-                "execution_delay": 0,
+                "execution_delay": Period(0),
             }
         ],
         "hypercore": {
-            "market_id": 55,
-            "core_user_exists_note": _HC_NOTES["core_user_exists"],
-            "perp_dex_bitmap_note": _HC_NOTES["perp_dex_bitmap"],
-            "nav_wad_note": _HC_NOTES["nav_wad"],
-            "balance_fuse_value_wad_note": _HC_NOTES["balance_fuse_value_wad"],
-            "nav_matches_balance_fuse_note": _HC_NOTES["nav_matches_balance_fuse"],
-            "spot_note": _HC_NOTES["spot"],
-            "native_perp_note": _HC_NOTES["native_perp"],
-            "hip3_note": _HC_NOTES["hip3"],
-            "perp_markets_note": _HC_NOTES["perp_markets"],
-            "pending_note": _HC_NOTES["pending"],
+            "market_id": MarketId(55),
             "market": "HYPERCORE",
-            "balance_fuse": "0xBALANCEFUSE",
+            "balance_fuse": FuseAddress(
+                ChecksumAddress(HexAddress(HexStr("0xBALANCEFUSE")))
+            ),
             "core_user_exists": True,
             "perp_dex_bitmap": 2,
             "nav_wad": 8_245_000_000_000_000,
@@ -333,11 +370,11 @@ def _full_vault_info_dict() -> dict:
             "nav_matches_balance_fuse": True,
             "spot": [
                 {
-                    "token_index": 0,
-                    "evm_asset": "0xUSDC",
+                    "token_index": HyperCoreTokenIndex(0),
+                    "evm_asset": _USDC,
                     "total_wei": 824_500,
                     "hold_wei": 0,
-                    "wei_decimals": 8,
+                    "wei_decimals": Decimals(8),
                     "price_usd": 1.0,
                     "value_usd": 0.008245,
                 }
@@ -346,7 +383,7 @@ def _full_vault_info_dict() -> dict:
             "hip3": [{"dex": 1, "account_value_usd6": 0, "value_usd": 0.0}],
             "perp_markets": [
                 {
-                    "asset": 110_002,
+                    "asset": HyperCoreAsset(110_002),
                     "dex": 1,
                     "read_index": 10_002,
                     "coin": "xyz:NVDA",
@@ -361,17 +398,27 @@ def _full_vault_info_dict() -> dict:
                 "action_class": "TRANSFER",
                 "settlement_mode": None,
                 "reported_result": "NONE",
-                "action_id": 13,
+                "action_id": HyperCoreActionId(13),
                 "action_nonce": 32,
-                "pending_until": 1_790_609_642,
+                "pending_until": Timestamp(1_790_609_642),
                 "pending_until_utc": "2026-09-28T15:34:02Z",
                 "enqueued_l1_block": 1_164_341_828,
                 "enqueued_evm_block": 47_125_670,
                 "cached_value_wad": 10**16,
                 "current_l1_block": 1_168_823_034,
-                "current_timestamp": 1_790_931_001,
+                "current_timestamp": Timestamp(1_790_931_001),
                 "l1_block_available": True,
             },
+            "core_user_exists_note": _HC_NOTES["core_user_exists"],
+            "perp_dex_bitmap_note": _HC_NOTES["perp_dex_bitmap"],
+            "nav_wad_note": _HC_NOTES["nav_wad"],
+            "balance_fuse_value_wad_note": _HC_NOTES["balance_fuse_value_wad"],
+            "nav_matches_balance_fuse_note": _HC_NOTES["nav_matches_balance_fuse"],
+            "spot_note": _HC_NOTES["spot"],
+            "native_perp_note": _HC_NOTES["native_perp"],
+            "hip3_note": _HC_NOTES["hip3"],
+            "perp_markets_note": _HC_NOTES["perp_markets"],
+            "pending_note": _HC_NOTES["pending"],
         },
         # `ok` is a list of passing-check lines, not a boolean.
         "health_check": {
@@ -417,22 +464,81 @@ class TestVaultInfoResponseContract:
 
     def test_unknown_top_level_key_rejected(self):
         d = _full_vault_info_dict()
-        d["unexpected_field"] = "drift"
+        untyped: dict[str, object] = dict(d)
+        untyped["unexpected_field"] = "drift"
         with pytest.raises(ValidationError):
-            VaultInfoResponse.model_validate(d)
+            VaultInfoResponse.model_validate(untyped)
 
     def test_unknown_amount_field_rejected(self):
         d = _full_vault_info_dict()
-        d["total_assets"]["new_metric"] = 42
+        untyped: dict[str, object] = dict(d)
+        untyped["total_assets"] = {**d["total_assets"], "new_metric": 42}
         with pytest.raises(ValidationError):
-            VaultInfoResponse.model_validate(d)
+            VaultInfoResponse.model_validate(untyped)
 
     def test_round_trip_preserves_shape(self):
         original = _full_vault_info_dict()
         model = VaultInfoResponse.model_validate(original)
         round_tripped = model.model_dump(mode="json")
-        assert round_tripped["balance_fuses"][0]["balance"]["usd"] == 500.0
+        assert round_tripped["balance_fuses"][0]["balance"]["formatted"] == "500.0"
         assert round_tripped["reconciliation"]["delta"]["percent"] == 0.0
+
+
+def _nested(hint: object, accept: Callable[[object], bool]) -> object | None:
+    """The one class inside ``hint`` (through unions, lists, dicts) that
+    ``accept`` matches; None when there is none or several."""
+    found = {leaf for leaf in _leaves(hint) if accept(leaf)}
+    return found.pop() if len(found) == 1 else None
+
+
+def _leaves(hint: object) -> Iterator[object]:
+    yield hint
+    for arg in typing.get_args(hint):
+        yield from _leaves(arg)
+
+
+def _is_model(leaf: object) -> bool:
+    return isinstance(leaf, type) and issubclass(leaf, BaseModel)
+
+
+def _assert_mirrors(document: type, model: type[BaseModel], path: str) -> None:
+    """Every key of ``document`` (a TypedDict) is a ``model`` field, a key it
+    may omit has a default there, so has a field it never writes (a shared
+    model such as `Amount` declares more), and every nested model is
+    mirrored by a nested TypedDict the same way."""
+    keys = document.__required_keys__ | document.__optional_keys__  # type: ignore[attr-defined]
+    fields = model.model_fields
+    assert keys <= set(fields), f"{path}: {sorted(keys - set(fields))}"
+    for key in document.__optional_keys__ | (set(fields) - keys):  # type: ignore[attr-defined]
+        assert not fields[key].is_required(), f"{path}.{key}"
+    hints = typing.get_type_hints(document)
+    for key in sorted(keys):
+        nested_model = _nested(fields[key].annotation, _is_model)
+        if nested_model is None:
+            continue
+        nested_document = _nested(hints[key], typing.is_typeddict)
+        assert isinstance(nested_document, type), f"{path}.{key}"
+        assert isinstance(nested_model, type) and issubclass(nested_model, BaseModel)
+        _assert_mirrors(nested_document, nested_model, f"{path}.{key}")
+
+
+class TestTypedDocumentsMirrorModels:
+    """The SDK's TypedDict documents and the MCP models publishing their
+    schema describe the same keys, block by block."""
+
+    def test_vault_info(self):
+        _assert_mirrors(VaultInfoJson, VaultInfoResponse, "vault_info")
+
+    def test_morpho_blue_market(self):
+        _assert_mirrors(MorphoBlueMarketJson, MorphoBlueMarketResponse, "market")
+
+    def test_meta_morpho_versions_share_one_model(self):
+        v1 = MetaMorphoV1Json.__required_keys__
+        v2 = MetaMorphoV2Json.__required_keys__
+        fields = MetaMorphoVaultResponse.model_fields
+        assert v1 | v2 == set(fields)
+        for key in v1 ^ v2:
+            assert not fields[key].is_required(), key
 
 
 # The model publishing each documented block. Tests parametrize over DOCS

@@ -2,6 +2,8 @@
 violates; ``reportUnnecessaryTypeIgnoreComment`` (``pyproject.toml``) fails
 the check if one of them starts to type-check. Never executed."""
 
+from typing import Any
+
 from eth_typing import ChecksumAddress
 
 from ipor_fusion import (
@@ -13,9 +15,11 @@ from ipor_fusion import (
     ChainId,
     ExternalStateExecutor,
     HyperCorePendingReader,
+    MorphoBlueMarketJson,
     Multicall3,
     PlasmaVault,
     PlasmaVaultAddress,
+    VaultInfoJson,
     VaultSimulator,
     Web3Context,
     fetch_unpriceable_priced_tokens,
@@ -90,3 +94,12 @@ def batch_values_keep_their_types(
 def options_are_keyword_only(ctx: Web3Context, oracle: ChecksumAddress) -> None:
     Multicall3(ctx, oracle)  # pyright: ignore[reportCallIssue]
     fetch_unpriceable_priced_tokens(ctx, oracle, oracle, [], {}, None)  # pyright: ignore[reportCallIssue]
+
+
+def documents_are_typed(document: VaultInfoJson, market: MorphoBlueMarketJson) -> None:
+    print(document["total_asset"])  # pyright: ignore[reportGeneralTypeIssues]
+    print(document["fees"]["management_fee_percent"])  # pyright: ignore[reportOptionalSubscript]
+    print(market["vaults"])  # pyright: ignore[reportTypedDictNotRequiredAccess]
+    print(document["balance_fuses"][0]["pct_of_total"])  # pyright: ignore[reportTypedDictNotRequiredAccess]
+    legacy: dict[str, Any] = document  # pyright: ignore[reportAssignmentType]
+    print(legacy)

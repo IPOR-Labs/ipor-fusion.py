@@ -8,6 +8,7 @@ Public inputs take the nominal types: ``ChainId(...)``, ``MarketId`` (every
 executed.
 """
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import assert_type
 
@@ -42,12 +43,15 @@ from ipor_fusion import (
     LaneObservation,
     LegacyPriceOracleMiddleware,
     MarketId,
+    MetaMorphoV1Json,
+    MetaMorphoV2Json,
     MorphoReader,
     Multicall3,
     Multicall3Batch,
     NullCache,
     Period,
     PlasmaVault,
+    PlasmaVaultAddress,
     Price,
     PriceOracleMiddleware,
     ProposalId,
@@ -60,8 +64,10 @@ from ipor_fusion import (
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
     TransactionError,
+    VaultInfoJson,
     VaultSimulator,
     Web3Context,
+    build_meta_morpho_json,
     build_morpho_blue_market_json,
     build_vault_info_json,
     decode_substrate,
@@ -102,7 +108,7 @@ def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     ensure_supported_chain(ETHEREUM)
     data = fetch_vault_data(ctx, vault.address, block=1, lending=False)
     fetch_deployment_info(ctx, VAULT, api_key=None)
-    build_vault_info_json(data)
+    vault_info_document(build_vault_info_json(data))
     validate_vault_state(data)
     validate_vault(ctx.at_block(1), VAULT)
     vault.get_fuses().call(ctx, block=1)
@@ -132,7 +138,7 @@ def lookups() -> None:
     get_contract_name(ETHEREUM, VAULT, cache=NullCache())
     TransactionError("reverted", tx_hash=parse_tx_hash("0x" + "ab" * 32))
     morpho_blue_address(ETHEREUM)
-    fetch_vault(VAULT, ETHEREUM)
+    meta_morpho_document(build_meta_morpho_json(fetch_vault(VAULT, ETHEREUM), ETHEREUM))
     fetch_market(parse_morpho_market_id("0x" + "ab" * 32), ETHEREUM)
 
 
@@ -296,7 +302,7 @@ def morpho_market_document(ctx: Web3Context) -> None:
     market_id = parse_morpho_market_id("0x" + "ab" * 32)
     reader = MorphoReader(morpho_blue_address(ETHEREUM))
     params, state = reader.read_existing_market(ctx, market_id)
-    build_morpho_blue_market_json(
+    document = build_morpho_blue_market_json(
         market_id=market_id,
         chain_id=ETHEREUM,
         params=params,
@@ -304,3 +310,34 @@ def morpho_market_document(ctx: Web3Context) -> None:
         rates=reader.read_rates_from(ctx, state, params),
         public_allocator=PUBLIC_ALLOCATOR_ADDRESSES.get(ETHEREUM),
     )
+    lltv_wad: str = document["market_params"]["lltv"]
+    supply_apy: float = document["rates"]["supply_apy"]
+    for supplier in document.get("vaults", []):
+        allocators: list[ChecksumAddress] = supplier["allocators"]
+        print(lltv_wad, supply_apy, allocators)
+
+
+def vault_info_document(document: VaultInfoJson) -> None:
+    """The ``vault info`` document is typed block by block: optional blocks
+    are ``None``-checked, keys absent from some entries read with ``.get``."""
+    vault: PlasmaVaultAddress = document["vault"]
+    fees = document["fees"]
+    if fees is not None:
+        management_fee: float | None = fees["management_fee_percent"]
+        print(vault, management_fee)
+    for entry in document["balance_fuses"]:
+        market_id: MarketId = entry["market_id"]
+        share: float | None = entry.get("pct_of_total")
+        print(market_id, share, entry["balance"]["raw"])
+    for market, substrates in document["substrates"].items():
+        print(market, [substrate.get("address") for substrate in substrates])
+    print(document["reconciliation"]["delta"]["percent"])
+    untyped: Mapping[str, object] = document
+    print(untyped)
+
+
+def meta_morpho_document(document: MetaMorphoV1Json | MetaMorphoV2Json) -> None:
+    if document["version"] == "v2":
+        print([cap["room"] for cap in document["caps"]])
+    else:
+        print([allocation["cap_room"] for allocation in document["allocations"]])
