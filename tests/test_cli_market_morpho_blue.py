@@ -845,6 +845,10 @@ class TestMorphoApiResponseShape:
             {"state": {"supplyAssets": float("inf")}},
             {"supplyingVaults": [{"name": "no address"}]},
             {"state": ["not an object"]},
+            {"supplyingVaults": "not an array"},
+            {"loanAsset": {"address": LOAN_TOKEN, "symbol": 7, "decimals": 6}},
+            {"lltv": [915]},
+            {"state": {"utilization": {"value": 0.5}}},
         ],
         ids=[
             "missing-key",
@@ -854,6 +858,10 @@ class TestMorphoApiResponseShape:
             "state-overflow",
             "vault-missing-key",
             "list",
+            "not-an-array",
+            "symbol-not-text",
+            "int-not-a-number",
+            "float-not-a-number",
         ],
     )
     def test_malformed_market_is_an_api_error(self, monkeypatch, overrides):

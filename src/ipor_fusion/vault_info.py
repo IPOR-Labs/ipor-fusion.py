@@ -1,18 +1,22 @@
 """The ``fusion vault info --json`` document: `build_vault_info_json` renders a
-fetched `VaultData` (with its validation) as one JSON-serializable dict."""
+fetched `VaultData` (with its validation) as one `VaultInfoJson`."""
 
-from __future__ import annotations
+# No ``from __future__ import annotations``: a TypedDict records its
+# ``NotRequired`` keys in ``__optional_keys__`` only from evaluated annotations.
 
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
-from typing import Any
+from typing import NotRequired, TypeAlias, TypedDict
 
-from eth_typing import HexAddress
+from eth_typing import ChecksumAddress, HexAddress
+from web3.types import Timestamp
 
 from ipor_fusion.chains import CHAIN_NAMES
+from ipor_fusion.core.access import RoleAccountJson
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.core.plasma_vault import BalanceFuse
+from ipor_fusion.dependency_graph import compute_update_groups, compute_update_reach
 from ipor_fusion.field_docs import DOCS
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.hypercore import HyperCorePendingState, HyperCorePerpLeg
@@ -25,9 +29,17 @@ from ipor_fusion.substrates import (
     market_name,
 )
 from ipor_fusion.types import (
+    AccessManagerAddress,
     ChainId,
+    Decimals,
+    Fee,
     FuseAddress,
+    HyperCoreActionId,
+    HyperCoreAsset,
+    HyperCoreTokenIndex,
     MarketId,
+    MorphoBlueMarketId,
+    Period,
     PlasmaVaultAddress,
     parse_hex_address,
 )
@@ -68,6 +80,388 @@ UINT256_MAX = 2**256 - 1
 _CAPABILITY_BALANCE_FUSES: frozenset[str] = frozenset({"ZeroBalanceFuse"})
 
 
+class AmountJson(TypedDict):
+    """A raw on-chain integer and its decimal-shifted string."""
+
+    raw: int
+    formatted: str
+
+
+class UsdAmountJson(AmountJson):
+    """An amount with its USD value, null when the asset has no oracle price."""
+
+    usd: float | None
+
+
+class PricedAmountJson(AmountJson):
+    """An amount whose ``usd`` key is present only when the asset is priced."""
+
+    usd: NotRequired[float]
+
+
+class DeltaJson(UsdAmountJson):
+    """The reconciliation delta; ``formatted`` is its absolute value."""
+
+    percent: float
+
+
+class VaultLinksJson(TypedDict):
+    ipor_app: str
+    etherscan: NotRequired[str]
+
+
+class DeploymentJson(TypedDict):
+    block: int
+    timestamp: Timestamp
+    timestamp_utc: str
+    age_days: int
+
+
+class DeploymentErrorJson(TypedDict):
+    """Why the deployment block could not be found."""
+
+    error: str
+
+
+class VaultAssetJson(TypedDict):
+    address: ChecksumAddress
+    symbol: str
+    decimals: Decimals
+    price_usd: float | None
+
+
+class SharePriceJson(TypedDict):
+    """Assets per whole share, and its USD value when the asset is priced."""
+
+    asset: float
+    usd: NotRequired[float]
+
+
+class ManagersJson(TypedDict):
+    access: AccessManagerAddress
+    price_oracle: ChecksumAddress
+    rewards: ChecksumAddress | None
+    withdraw: ChecksumAddress | None
+    fee: ChecksumAddress | None
+
+
+class RecipientFeeJson(TypedDict):
+    recipient: ChecksumAddress
+    fee_percent: float
+    fee_bps: Fee
+
+
+class HighWaterMarkJson(TypedDict):
+    high_water_mark: int
+    last_update_timestamp: Timestamp
+    last_update_utc: str | None
+    update_interval_seconds: Period
+
+
+class FeesJson(TypedDict):
+    """Every fee the vault can charge; null means "not known", never "free".
+    Each ``*_note`` carries its sibling's `ipor_fusion.field_docs.DOCS` text."""
+
+    fee_manager: ChecksumAddress | None
+    fee_manager_note: str
+    ipor_dao_fee_recipient: ChecksumAddress | None
+    ipor_dao_fee_recipient_note: str
+    deposit_fee_percent: float | None
+    deposit_fee_wad: Fee | None
+    deposit_fee_percent_note: str
+    request_fee_percent: float | None
+    request_fee_wad: Fee | None
+    request_fee_percent_note: str
+    withdraw_fee_percent: float | None
+    withdraw_fee_wad: Fee | None
+    withdraw_fee_percent_note: str
+    performance_fee_percent: float | None
+    performance_fee_bps: Fee | None
+    performance_fee_percent_note: str
+    performance_fee_manager_percent: float | None
+    performance_fee_manager_percent_note: str
+    performance_fee_recipients: list[RecipientFeeJson] | None
+    performance_fee_recipients_note: str
+    high_water_mark: HighWaterMarkJson | None
+    high_water_mark_note: str
+    management_fee_percent: float | None
+    management_fee_bps: Fee | None
+    management_fee_percent_note: str
+    management_fee_manager_percent: float | None
+    management_fee_manager_percent_note: str
+    management_fee_recipients: list[RecipientFeeJson] | None
+    management_fee_recipients_note: str
+    management_fee_last_update_timestamp: Timestamp | None
+    management_fee_last_update_utc: str | None
+    management_fee_last_update_timestamp_note: str
+    unrealized_management_fee: PricedAmountJson | None
+    unrealized_management_fee_note: str
+
+
+class PendingRequestJson(TypedDict):
+    """One scheduled withdrawal; ``assets`` is absent when its conversion
+    read failed."""
+
+    account: ChecksumAddress
+    shares: AmountJson
+    end_withdraw_window_timestamp: Timestamp
+    end_withdraw_window_utc: str
+    remaining_seconds: int
+    can_withdraw: bool
+    assets: NotRequired[PricedAmountJson]
+
+
+class WithdrawManagerJson(TypedDict):
+    """Scheduled-withdrawal state; the exit fees are in `FeesJson`."""
+
+    withdraw_window_seconds: Period
+    withdraw_window_seconds_note: str
+    fees_note: str
+    shares_to_release: AmountJson
+    shares_to_release_note: str
+    last_release_funds_timestamp: Timestamp
+    last_release_funds_utc: str | None
+    last_release_funds_timestamp_note: str
+    pending_requests: list[PendingRequestJson] | None
+    total_pending_shares: AmountJson | None
+    total_pending_shares_note: str
+
+
+class FuseJson(TypedDict):
+    """A registered fuse; the market keys are absent when it serves none."""
+
+    address: FuseAddress
+    contract: str
+    market_id: NotRequired[MarketId]
+    market: NotRequired[str]
+
+
+class BreakdownAmountJson(TypedDict):
+    """One position amount; symbol, decimals and ``formatted`` need the
+    token's metadata, ``usd`` also its price."""
+
+    raw: int
+    token: HexAddress
+    symbol: NotRequired[str]
+    decimals: NotRequired[Decimals]
+    formatted: NotRequired[str]
+    usd: NotRequired[float]
+
+
+class MorphoBreakdownJson(TypedDict):
+    morpho_market_id: MorphoBlueMarketId
+    collateral_symbol: str | None
+    loan_symbol: str | None
+    collateral: BreakdownAmountJson
+    borrow: BreakdownAmountJson
+    supply: BreakdownAmountJson
+
+
+class AaveBreakdownJson(TypedDict):
+    asset: ChecksumAddress
+    asset_symbol: str | None
+    supply: BreakdownAmountJson
+    variable_debt: BreakdownAmountJson
+    stable_debt: BreakdownAmountJson
+
+
+class BalanceFuseJson(TypedDict):
+    market: str
+    market_id: MarketId
+    balance: AmountJson
+    fuse: FuseAddress
+    contract: str
+    pct_of_total: NotRequired[float]
+    depends_on: NotRequired[list[str]]
+    position_breakdown: NotRequired[list[MorphoBreakdownJson] | list[AaveBreakdownJson]]
+
+
+# Open-ended: each substrate decoder flattens its own fields (selector,
+# chain_id, slippage, ...) next to address or raw, symbol, contract and error.
+SubstrateEntryJson: TypeAlias = dict[str, str | bool]
+
+
+class DependencyGraphJson(TypedDict):
+    """The balance dependency graph by market label."""
+
+    edges: dict[str, list[str]]
+    update_reach: dict[str, list[str]]
+    update_groups: list[list[str]]
+
+
+class Erc20BalanceJson(TypedDict):
+    """An ERC20_VAULT_BALANCE token; the balance keys are absent when the
+    token could not be read."""
+
+    address: HexAddress
+    symbol: str
+    decimals: NotRequired[Decimals]
+    balance: NotRequired[AmountJson]
+    price_usd: NotRequired[float | None]
+    usd_value: NotRequired[float | None]
+    note: str
+
+
+class ReconciliationJson(TypedDict):
+    balance_fuses_total: UsdAmountJson
+    underlying_on_vault: UsdAmountJson
+    erc20_direct_total: UsdAmountJson
+    sum: UsdAmountJson
+    on_chain_total_assets: UsdAmountJson
+    delta: DeltaJson
+    pending_withdrawals: UsdAmountJson
+    implied_market_total: AmountJson
+    market_storage_divergence: int
+
+
+class LendingMarketJson(TypedDict):
+    protocol: str
+    market_id: MarketId
+    market_name: str
+    substrate_id: str | None
+    current_ltv: float | None
+    max_ltv: float
+    health_factor: float | None
+    total_collateral_usd: float | None
+    total_debt_usd: float | None
+    ltv_usage_percent: float | None
+    is_warning: bool
+    is_critical: bool
+
+
+class LendingHealthJson(TypedDict):
+    markets: list[LendingMarketJson]
+    worst_ltv_usage_percent: float | None
+
+
+class HyperCoreSpotLegJson(TypedDict):
+    token_index: HyperCoreTokenIndex
+    evm_asset: ChecksumAddress
+    total_wei: int
+    hold_wei: int
+    wei_decimals: Decimals | None
+    price_usd: float | None
+    value_usd: float
+
+
+class HyperCorePerpLegJson(TypedDict):
+    dex: int
+    account_value_usd6: int
+    value_usd: float
+
+
+class HyperCorePerpMarketJson(TypedDict):
+    asset: HyperCoreAsset
+    dex: int
+    read_index: int
+    coin: str | None
+    max_notional_usd6: int
+    reduce_only_required: bool
+
+
+class HyperCorePendingJson(TypedDict):
+    """`HyperCorePendingState`, its enums by member name."""
+
+    pending: bool
+    settled: bool
+    refreshing: bool
+    action_class: str
+    settlement_mode: str | None
+    reported_result: str
+    action_id: HyperCoreActionId
+    action_nonce: int
+    pending_until: Timestamp
+    pending_until_utc: str
+    enqueued_l1_block: int
+    enqueued_evm_block: int
+    cached_value_wad: int
+    current_l1_block: int
+    current_timestamp: Timestamp
+    l1_block_available: bool
+
+
+class HyperCoreJson(TypedDict):
+    """HyperCore (market 55) live state. Each ``*_note`` carries its
+    sibling's `ipor_fusion.field_docs.DOCS` text."""
+
+    market_id: MarketId
+    market: str
+    balance_fuse: FuseAddress
+    core_user_exists: bool
+    perp_dex_bitmap: int
+    nav_wad: int
+    nav_usd: float
+    balance_fuse_value_wad: int | None
+    nav_matches_balance_fuse: bool | None
+    spot: list[HyperCoreSpotLegJson]
+    native_perp: HyperCorePerpLegJson | None
+    hip3: list[HyperCorePerpLegJson]
+    perp_markets: list[HyperCorePerpMarketJson]
+    pending: HyperCorePendingJson | None
+    core_user_exists_note: str
+    perp_dex_bitmap_note: str
+    nav_wad_note: str
+    balance_fuse_value_wad_note: str
+    nav_matches_balance_fuse_note: str
+    spot_note: str
+    native_perp_note: str
+    hip3_note: str
+    perp_markets_note: str
+    pending_note: str
+
+
+class HealthCheckJson(TypedDict):
+    """`health_check_lists` of the snapshot's validation."""
+
+    ok: list[str]
+    warnings: list[str]
+    criticals: list[str]
+
+
+class VaultInfoJson(TypedDict):
+    """The ``fusion vault info --json`` document (`build_vault_info_json`)."""
+
+    vault: PlasmaVaultAddress
+    name: str | None
+    links: VaultLinksJson
+    chain: str
+    chain_id: ChainId
+    block: int
+    is_latest: bool
+    block_timestamp: Timestamp
+    block_timestamp_utc: str
+    deployment: DeploymentJson | DeploymentErrorJson | None
+    asset: VaultAssetJson
+    share_decimals: Decimals
+    total_assets: UsdAmountJson
+    total_supply: AmountJson
+    share_price: SharePriceJson | None
+    supply_cap: AmountJson
+    managers: ManagersJson
+    role_accounts: list[RoleAccountJson] | None
+    fees: FeesJson | None
+    withdraw_manager_details: WithdrawManagerJson | None
+    fuses: list[FuseJson]
+    balance_fuses: list[BalanceFuseJson]
+    zero_balance_fuses: list[BalanceFuseJson]
+    instant_withdrawal_fuses: list[FuseJson]
+    substrates: dict[str, list[SubstrateEntryJson]]
+    dependency_graph: DependencyGraphJson | None
+    erc20_balances: list[Erc20BalanceJson]
+    reconciliation: ReconciliationJson
+    lending_health: LendingHealthJson | None
+    hypercore: HyperCoreJson | None
+    health_check: HealthCheckJson
+
+
+class _MarketBlocksJson(TypedDict):
+    fuses: list[FuseJson]
+    balance_fuses: list[BalanceFuseJson]
+    zero_balance_fuses: list[BalanceFuseJson]
+    instant_withdrawal_fuses: list[FuseJson]
+    substrates: dict[str, list[SubstrateEntryJson]]
+
+
 def _unix_to_iso(timestamp: int) -> str:
     """Unix seconds as the ISO-8601 UTC string every `*_utc` key carries.
 
@@ -77,7 +471,9 @@ def _unix_to_iso(timestamp: int) -> str:
     return datetime.fromtimestamp(timestamp, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _partition_balance_fuses(entries: list[dict]) -> tuple[list[dict], list[dict]]:
+def _partition_balance_fuses(
+    entries: list[BalanceFuseJson],
+) -> tuple[list[BalanceFuseJson], list[BalanceFuseJson]]:
     """Split balance-fuse entries into ``(venues, zero_balance)``.
 
     Venues are real ``*BalanceFuse`` markets where assets can sit. Zero-balance
@@ -86,26 +482,24 @@ def _partition_balance_fuses(entries: list[dict]) -> tuple[list[dict], list[dict
     Splitting keeps both visible while letting a consumer count only venues as
     markets.
     """
-    venues = [e for e in entries if e.get("contract") not in _CAPABILITY_BALANCE_FUSES]
-    zero_balance = [
-        e for e in entries if e.get("contract") in _CAPABILITY_BALANCE_FUSES
-    ]
+    venues = [e for e in entries if e["contract"] not in _CAPABILITY_BALANCE_FUSES]
+    zero_balance = [e for e in entries if e["contract"] in _CAPABILITY_BALANCE_FUSES]
     return venues, zero_balance
 
 
-def _role_accounts_json(data: VaultData) -> list[dict[str, Any]] | None:
+def _role_accounts_json(data: VaultData) -> list[RoleAccountJson] | None:
     if data.role_accounts is None:
         return None
     return [ra.to_dict() for ra in data.role_accounts]
 
 
-def _build_share_price_json(data: VaultData) -> dict | None:
+def _build_share_price_json(data: VaultData) -> SharePriceJson | None:
     if data.total_supply == 0:
         return None
     price = (data.total_assets / 10**data.asset_decimals) / (
         data.total_supply / 10**data.share_decimals
     )
-    result: dict = {
+    result: SharePriceJson = {
         "asset": round(price, 10),
     }
     if data.asset_price_usd is not None:
@@ -113,7 +507,9 @@ def _build_share_price_json(data: VaultData) -> dict | None:
     return result
 
 
-def _build_deployment_json(data: VaultData) -> dict | None:
+def _build_deployment_json(
+    data: VaultData,
+) -> DeploymentJson | DeploymentErrorJson | None:
     if data.deployment_block is None or data.deployment_timestamp is None:
         if data.deployment_error:
             return {"error": data.deployment_error}
@@ -146,20 +542,22 @@ def _bps_to_percent(value: int | None) -> float | None:
 
 def _build_recipient_fees_json(
     recipients: list[RecipientFee] | None,
-) -> list[dict] | None:
+) -> list[RecipientFeeJson] | None:
     if recipients is None:
         return None
     return [
         {
             "recipient": rf.recipient,
-            "fee_percent": _bps_to_percent(rf.fee_value),
+            "fee_percent": rf.fee_value / 100,
             "fee_bps": rf.fee_value,
         }
         for rf in recipients
     ]
 
 
-def _build_high_water_mark_json(hwm: HighWaterMarkPerformanceFee | None) -> dict | None:
+def _build_high_water_mark_json(
+    hwm: HighWaterMarkPerformanceFee | None,
+) -> HighWaterMarkJson | None:
     if hwm is None:
         return None
     return {
@@ -172,7 +570,16 @@ def _build_high_water_mark_json(hwm: HighWaterMarkPerformanceFee | None) -> dict
     }
 
 
-def _build_fees_json(data: VaultData) -> dict | None:
+def _priced_amount_json(
+    raw: int, decimals: int, price_usd: float | None
+) -> PricedAmountJson:
+    amount: PricedAmountJson = {"raw": raw, "formatted": _format_amount(raw, decimals)}
+    if price_usd is not None:
+        amount["usd"] = round((raw / 10**decimals) * price_usd, 2)
+    return amount
+
+
+def _build_fees_json(data: VaultData) -> FeesJson | None:
     """Every fee the vault can charge, entry and exit sides included.
 
     Exit fees live here rather than in `withdraw_manager_details` so that a
@@ -188,20 +595,13 @@ def _build_fees_json(data: VaultData) -> dict | None:
     request_fee = wmd.request_fee if wmd else None
     withdraw_fee = wmd.withdraw_fee if wmd else None
 
-    unrealized: dict | None = None
-    if fees.unrealized_management_fee is not None:
-        unrealized = {
-            "raw": fees.unrealized_management_fee,
-            "formatted": _format_amount(
-                fees.unrealized_management_fee, data.asset_decimals
-            ),
-        }
-        if data.asset_price_usd is not None:
-            unrealized["usd"] = round(
-                (fees.unrealized_management_fee / 10**data.asset_decimals)
-                * data.asset_price_usd,
-                2,
-            )
+    unrealized = (
+        None
+        if fees.unrealized_management_fee is None
+        else _priced_amount_json(
+            fees.unrealized_management_fee, data.asset_decimals, data.asset_price_usd
+        )
+    )
 
     return {
         "fee_manager": fees.fee_manager,
@@ -261,7 +661,7 @@ def _build_fees_json(data: VaultData) -> dict | None:
     }
 
 
-def _build_withdraw_manager_json(data: VaultData) -> dict | None:
+def _build_withdraw_manager_json(data: VaultData) -> WithdrawManagerJson | None:
     if data.withdraw_manager_data is None:
         return None
     wmd = data.withdraw_manager_data
@@ -271,10 +671,10 @@ def _build_withdraw_manager_json(data: VaultData) -> dict | None:
     pending = wmd.pending_requests
     total_pending_shares = sum((r.shares for r in pending or []), 0)
 
-    requests_json = []
+    requests_json: list[PendingRequestJson] = []
     for req in pending or []:
         assets = wmd.pending_request_assets.get(req.account)
-        entry: dict = {
+        entry: PendingRequestJson = {
             "account": req.account,
             "shares": {
                 "raw": req.shares,
@@ -288,17 +688,10 @@ def _build_withdraw_manager_json(data: VaultData) -> dict | None:
             "can_withdraw": req.can_withdraw,
         }
         if assets is not None:
-            entry["assets"] = {
-                "raw": assets,
-                "formatted": _format_amount(assets, adec),
-            }
-            if data.asset_price_usd is not None:
-                entry["assets"]["usd"] = round(
-                    (assets / 10**adec) * data.asset_price_usd, 2
-                )
+            entry["assets"] = _priced_amount_json(assets, adec, data.asset_price_usd)
         requests_json.append(entry)
 
-    result: dict = {
+    return {
         "withdraw_window_seconds": wmd.withdraw_window,
         "withdraw_window_seconds_note": _WM_DOCS["withdraw_window_seconds"],
         "fees_note": _WM_DOCS["fees"],
@@ -323,19 +716,18 @@ def _build_withdraw_manager_json(data: VaultData) -> dict | None:
         },
         "total_pending_shares_note": _WM_DOCS["total_pending_shares"],
     }
-    return result
 
 
 def _build_breakdown_amount_json(
     data: VaultData, raw: int, token_address: HexAddress
-) -> dict[str, Any]:
+) -> BreakdownAmountJson:
     """Build the JSON entry for one breakdown amount (collateral/borrow/supply/debt).
 
     Always includes raw + token. When ERC-20 metadata is resolvable, adds
     symbol, decimals, and `formatted` (decimal-shifted human string). When the
     oracle has a USD price for the token, adds `usd` (rounded to 2 decimals).
     """
-    entry: dict[str, Any] = {"raw": raw, "token": token_address}
+    entry: BreakdownAmountJson = {"raw": raw, "token": token_address}
     key = parse_hex_address(token_address)
     if symbol := data.token_symbols.get(key):
         entry["symbol"] = symbol
@@ -349,14 +741,9 @@ def _build_breakdown_amount_json(
     return entry
 
 
-def _build_dependency_graph_json(data: VaultData) -> dict | None:
+def _build_dependency_graph_json(data: VaultData) -> DependencyGraphJson | None:
     if not data.dependency_graph:
         return None
-
-    from ipor_fusion.dependency_graph import (
-        compute_update_groups,
-        compute_update_reach,
-    )
 
     edges = {
         format_market_label(mid): [format_market_label(d) for d in deps]
@@ -386,28 +773,36 @@ def _lending_substrate_ref(substrate_id: str | None) -> str | None:
     return substrate_id if substrate_id.startswith("0x") else f"0x{substrate_id}"
 
 
-def _erc20_balances_json(validation: VaultValidation) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
+def _erc20_balances_json(validation: VaultValidation) -> list[Erc20BalanceJson]:
+    entries: list[Erc20BalanceJson] = []
     for token in validation.erc20.tokens:
-        entry: dict[str, Any] = {"address": token.address, "symbol": token.symbol}
-        if token.decimals is not None and token.balance is not None:
-            entry["decimals"] = token.decimals
-            entry["balance"] = {
-                "raw": token.balance,
-                "formatted": _format_amount(token.balance, token.decimals),
+        if token.decimals is None or token.balance is None:
+            entries.append(
+                {"address": token.address, "symbol": token.symbol, "note": token.note}
+            )
+            continue
+        entries.append(
+            {
+                "address": token.address,
+                "symbol": token.symbol,
+                "decimals": token.decimals,
+                "balance": {
+                    "raw": token.balance,
+                    "formatted": _format_amount(token.balance, token.decimals),
+                },
+                "price_usd": token.price_usd,
+                "usd_value": token.usd_value,
+                "note": token.note,
             }
-            entry["price_usd"] = token.price_usd
-            entry["usd_value"] = token.usd_value
-        entry["note"] = token.note
-        entries.append(entry)
+        )
     return entries
 
 
-def _amount_json(raw: int, decimals: int, usd: float | None) -> dict[str, Any]:
+def _amount_json(raw: int, decimals: int, usd: float | None) -> UsdAmountJson:
     return {"raw": raw, "formatted": _format_amount(raw, decimals), "usd": usd}
 
 
-def _reconciliation_json(recon: Reconciliation, decimals: int) -> dict[str, Any]:
+def _reconciliation_json(recon: Reconciliation, decimals: int) -> ReconciliationJson:
     return {
         "balance_fuses_total": _amount_json(
             recon.balance_fuses_total, decimals, recon.balance_fuses_total_usd
@@ -439,7 +834,7 @@ def _reconciliation_json(recon: Reconciliation, decimals: int) -> dict[str, Any]
     }
 
 
-def _lending_health_json(health: VaultLendingHealth | None) -> dict[str, Any] | None:
+def _lending_health_json(health: VaultLendingHealth | None) -> LendingHealthJson | None:
     if not health or not health.has_lending_positions:
         return None
     return {
@@ -486,8 +881,8 @@ def _fuse_entry(
     addr: FuseAddress,
     contract: str | None,
     fuse_markets: dict[FuseAddress, MarketId],
-) -> dict[str, Any]:
-    entry: dict[str, Any] = {"address": addr, "contract": contract or "?"}
+) -> FuseJson:
+    entry: FuseJson = {"address": addr, "contract": contract or "?"}
     if (mid := fuse_markets.get(addr)) is not None:
         entry["market_id"] = mid
         label = market_name(mid)
@@ -501,7 +896,7 @@ def _symbol(data: VaultData, token: HexAddress) -> str | None:
 
 def _morpho_breakdown_json(
     data: VaultData, positions: list[MorphoPositionBreakdown]
-) -> list[dict[str, Any]]:
+) -> list[MorphoBreakdownJson]:
     return [
         {
             "morpho_market_id": pb.market_id,
@@ -523,7 +918,7 @@ def _morpho_breakdown_json(
 
 def _aave_breakdown_json(
     data: VaultData, positions: list[AaveV3PositionBreakdown]
-) -> list[dict[str, Any]]:
+) -> list[AaveBreakdownJson]:
     return [
         {
             "asset": pb.asset,
@@ -545,9 +940,9 @@ def _balance_fuse_entry(
     bf: BalanceFuse,
     assets_in_market: int,
     contract_name: str,
-) -> dict[str, Any]:
+) -> BalanceFuseJson:
     market_label = market_name(bf.market_id)
-    entry: dict[str, Any] = {
+    entry: BalanceFuseJson = {
         "market": market_label if market_label != "UNKNOWN" else str(bf.market_id),
         "market_id": bf.market_id,
         "balance": {
@@ -577,8 +972,8 @@ def _substrate_entry(
     data: VaultData,
     sub_info: SubstrateInfo,
     contract_futs: dict[HexAddress, Future[str]],
-) -> dict[str, Any]:
-    entry: dict[str, Any]
+) -> SubstrateEntryJson:
+    entry: SubstrateEntryJson
     if sub_info.address:
         entry = {"address": sub_info.address}
         if symbol := data.token_symbols.get(sub_info.address):
@@ -600,7 +995,7 @@ def _substrates_json(
     pool: ThreadPoolExecutor,
     data: VaultData,
     resolve_name: Callable[[HexAddress], str],
-) -> dict[str, list[dict[str, Any]]]:
+) -> dict[str, list[SubstrateEntryJson]]:
     """Decoded substrates per balance-fuse market, with the snapshot's symbols
     and contract names resolved concurrently for every substrate address."""
     market_substrates = data.market_substrates or {}
@@ -621,14 +1016,16 @@ def _substrates_json(
 
 def _links_json(
     chain_id: ChainId, chain_label: str, vault_address: PlasmaVaultAddress
-) -> dict[str, str]:
-    links = {"ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}"}
+) -> VaultLinksJson:
+    links: VaultLinksJson = {
+        "ipor_app": f"{IPOR_APP_URL}/{chain_label}/{vault_address}"
+    }
     if explorer_base := BLOCK_EXPLORER_URLS.get(chain_id):
         links["etherscan"] = f"{explorer_base}/address/{vault_address}"
     return links
 
 
-def _total_assets_json(data: VaultData) -> dict[str, Any]:
+def _total_assets_json(data: VaultData) -> UsdAmountJson:
     usd: float | None = None
     if data.asset_price_usd is not None:
         usd = (data.total_assets / 10**data.asset_decimals) * data.asset_price_usd
@@ -639,7 +1036,7 @@ def _total_assets_json(data: VaultData) -> dict[str, Any]:
     }
 
 
-def _supply_cap_json(data: VaultData) -> dict[str, Any]:
+def _supply_cap_json(data: VaultData) -> AmountJson:
     return {
         "raw": data.supply_cap,
         "formatted": (
@@ -650,7 +1047,7 @@ def _supply_cap_json(data: VaultData) -> dict[str, Any]:
     }
 
 
-def _managers_json(data: VaultData) -> dict[str, Any]:
+def _managers_json(data: VaultData) -> ManagersJson:
     return {
         "access": data.access_manager,
         "price_oracle": data.price_oracle,
@@ -662,7 +1059,7 @@ def _managers_json(data: VaultData) -> dict[str, Any]:
 
 def _markets_json(
     data: VaultData, resolve_name: Callable[[HexAddress], str]
-) -> dict[str, Any]:
+) -> _MarketBlocksJson:
     """The fuse, balance-fuse and substrate blocks, in document order, with
     the contract names looked up concurrently."""
     with ThreadPoolExecutor() as pool:
@@ -687,7 +1084,7 @@ def _markets_json(
                 )
             ]
         )
-        markets = {
+        markets: _MarketBlocksJson = {
             "fuses": [
                 _fuse_entry(addr, fuse_name_futs[addr].result(), fuse_markets)
                 for addr in data.fuses
@@ -711,7 +1108,7 @@ def build_vault_info_json(
     data: VaultData,
     *,
     resolve_name: Callable[[HexAddress], str] | None = None,
-) -> dict[str, Any]:
+) -> VaultInfoJson:
     """Everything known about the vault as one JSON-serializable dict: the
     ``fusion vault info --json`` document, computed from the snapshot alone.
 
@@ -760,7 +1157,11 @@ def build_vault_info_json(
         "role_accounts": _role_accounts_json(data),
         "fees": _build_fees_json(data),
         "withdraw_manager_details": _build_withdraw_manager_json(data),
-        **markets,
+        "fuses": markets["fuses"],
+        "balance_fuses": markets["balance_fuses"],
+        "zero_balance_fuses": markets["zero_balance_fuses"],
+        "instant_withdrawal_fuses": markets["instant_withdrawal_fuses"],
+        "substrates": markets["substrates"],
         "dependency_graph": _build_dependency_graph_json(data),
         "erc20_balances": _erc20_balances_json(validation),
         "reconciliation": _reconciliation_json(
@@ -776,7 +1177,7 @@ def _wad_to_usd(wad: int) -> float:
     return wad / 10**18
 
 
-def _hypercore_pending_json(pending: HyperCorePendingState) -> dict[str, Any]:
+def _hypercore_pending_json(pending: HyperCorePendingState) -> HyperCorePendingJson:
     return {
         "pending": pending.pending,
         "settled": pending.settled,
@@ -799,7 +1200,7 @@ def _hypercore_pending_json(pending: HyperCorePendingState) -> dict[str, Any]:
     }
 
 
-def _perp_leg_json(leg: HyperCorePerpLeg) -> dict[str, Any]:
+def _perp_leg_json(leg: HyperCorePerpLeg) -> HyperCorePerpLegJson:
     return {
         "dex": leg.dex,
         "account_value_usd6": leg.account_value,
@@ -807,13 +1208,13 @@ def _perp_leg_json(leg: HyperCorePerpLeg) -> dict[str, Any]:
     }
 
 
-def _build_hypercore_json(data: VaultData) -> dict[str, Any] | None:
+def _build_hypercore_json(data: VaultData) -> HyperCoreJson | None:
     state = data.hypercore
     if state is None:
         return None
     nav = state.nav
     return {
-        "market_id": int(state.market_id),
+        "market_id": MarketId(int(state.market_id)),
         "market": market_name(state.market_id),
         "balance_fuse": state.balance_fuse,
         "core_user_exists": nav.core_user_exists,
@@ -848,5 +1249,14 @@ def _build_hypercore_json(data: VaultData) -> dict[str, Any] | None:
             for pm in state.perp_markets
         ],
         "pending": _hypercore_pending_json(state.pending) if state.pending else None,
-        **{f"{key}_note": text for key, text in _HYPERCORE_DOCS.items()},
+        "core_user_exists_note": _HYPERCORE_DOCS["core_user_exists"],
+        "perp_dex_bitmap_note": _HYPERCORE_DOCS["perp_dex_bitmap"],
+        "nav_wad_note": _HYPERCORE_DOCS["nav_wad"],
+        "balance_fuse_value_wad_note": _HYPERCORE_DOCS["balance_fuse_value_wad"],
+        "nav_matches_balance_fuse_note": _HYPERCORE_DOCS["nav_matches_balance_fuse"],
+        "spot_note": _HYPERCORE_DOCS["spot"],
+        "native_perp_note": _HYPERCORE_DOCS["native_perp"],
+        "hip3_note": _HYPERCORE_DOCS["hip3"],
+        "perp_markets_note": _HYPERCORE_DOCS["perp_markets"],
+        "pending_note": _HYPERCORE_DOCS["pending"],
     }

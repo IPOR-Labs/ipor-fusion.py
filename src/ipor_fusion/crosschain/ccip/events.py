@@ -19,7 +19,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
@@ -401,12 +400,16 @@ CCIP_EVENT_TOPICS: dict[bytes, CcipEventSpec] = {
 }
 
 
-def _python_value(abi_type: str, value: Any) -> object:
+def _python_value(abi_type: str, value: object) -> object:
     """Checksum an address, also inside a struct; ``int``, ``bool`` and
     ``bytes32`` values already decode to the Python type."""
     if abi_type == "address":
+        if not isinstance(value, str):
+            raise TypeError(f"address decoded as {type(value).__name__}")
         return Web3.to_checksum_address(value)
     if abi_type.startswith("("):
+        if not isinstance(value, tuple):
+            raise TypeError(f"struct decoded as {type(value).__name__}")
         # Flat split: no CCIP event nests a struct inside a struct.
         return tuple(map(_python_value, abi_type[1:-1].split(","), value))
     return value

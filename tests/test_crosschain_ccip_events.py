@@ -30,6 +30,7 @@ from ipor_fusion import (
     decode_ccip_event,
     find_ccip_events,
 )
+from ipor_fusion.crosschain.ccip.events import _python_value
 
 ADDR = Web3.to_checksum_address("0x1d5c9d44f8d556ec7f557ae992401cc770937e6e")
 PEER = Web3.to_checksum_address("0x0Aa75BfD30Ae2d4061FF8261453b933Ab5959991")
@@ -367,3 +368,13 @@ def test_event_registry_mirrors_the_contracts_checkout():
     declared = _declared_events(_ccip_sources())
     registered = {s.signature: s.fields for s in CCIP_EVENTS}
     assert registered == declared
+
+
+@pytest.mark.parametrize(
+    ("abi_type", "value"),
+    [("address", 5), (ROUTE, [1, ADDR])],
+    ids=["address", "struct"],
+)
+def test_a_value_of_the_wrong_python_type_is_rejected(abi_type, value):
+    with pytest.raises(TypeError, match="decoded as"):
+        _python_value(abi_type, value)

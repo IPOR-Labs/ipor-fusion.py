@@ -22,9 +22,8 @@ For external-signer flows, grab the bytes directly:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from typing import Any
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
 
 from eth_abi import decode as abi_decode
 from eth_typing import ChecksumAddress
@@ -80,59 +79,58 @@ class FusionInstance:
     price_manager: ChecksumAddress
 
     @classmethod
-    def from_dict(
-        cls, data: Mapping[str, Any]
-    ) -> FusionInstance:  # proctor: ignore[primitives-untyped-dict]
+    def from_dict(  # proctor: ignore[primitives-untyped-dict]
+        cls, data: Mapping[str, object]
+    ) -> FusionInstance:
         """Rebuild an instance from its JSON form (``dataclasses.asdict``),
         parsing every field: role addresses through their parsers, the rest
         checksummed, integers and strings type-checked. Raises ``ValueError``
         on a missing, extra or malformed field."""
-        missing = _INSTANCE_FIELDS.keys() - data.keys()
-        extra = data.keys() - _INSTANCE_FIELDS.keys()
+        names = {f.name for f in fields(cls)}
+        missing = names - data.keys()
+        extra = data.keys() - names
         if missing or extra:
             raise ValueError(
                 f"FusionInstance fields: missing {sorted(missing)}, extra {sorted(extra)}"
             )
         return cls(
-            **{name: parse(data[name]) for name, parse in _INSTANCE_FIELDS.items()}
+            index=_integer(data["index"]),
+            version=_integer(data["version"]),
+            asset_name=_text(data["asset_name"]),
+            asset_symbol=_text(data["asset_symbol"]),
+            asset_decimals=Decimals(_integer(data["asset_decimals"])),
+            underlying_token=_address(data["underlying_token"]),
+            underlying_token_symbol=_text(data["underlying_token_symbol"]),
+            underlying_token_decimals=Decimals(
+                _integer(data["underlying_token_decimals"])
+            ),
+            initial_owner=_address(data["initial_owner"]),
+            plasma_vault=parse_plasma_vault_address(_text(data["plasma_vault"])),
+            plasma_vault_base=_address(data["plasma_vault_base"]),
+            access_manager=parse_access_manager_address(_text(data["access_manager"])),
+            fee_manager=_address(data["fee_manager"]),
+            rewards_manager=_address(data["rewards_manager"]),
+            withdraw_manager=_address(data["withdraw_manager"]),
+            context_manager=_address(data["context_manager"]),
+            price_manager=_address(data["price_manager"]),
         )
 
 
-def _integer(value: Any) -> int:
-    if type(value) is not int:
-        raise ValueError(f"expected an integer: {value!r}")
-    return value
+def _integer(value: object) -> int:
+    # Exactly int: a bool or an IntEnum is not a JSON integer field.
+    if type(value) is int:
+        return value
+    raise ValueError(f"expected an integer: {value!r}")
 
 
-def _text(value: Any) -> str:
+def _text(value: object) -> str:
     if not isinstance(value, str):
         raise ValueError(f"expected a string: {value!r}")
     return value
 
 
-def _address(value: Any) -> ChecksumAddress:
+def _address(value: object) -> ChecksumAddress:
     return Web3.to_checksum_address(_text(value))
-
-
-_INSTANCE_FIELDS: dict[str, Callable[[Any], Any]] = {
-    "index": _integer,
-    "version": _integer,
-    "asset_name": _text,
-    "asset_symbol": _text,
-    "asset_decimals": lambda value: Decimals(_integer(value)),
-    "underlying_token": _address,
-    "underlying_token_symbol": _text,
-    "underlying_token_decimals": lambda value: Decimals(_integer(value)),
-    "initial_owner": _address,
-    "plasma_vault": lambda value: parse_plasma_vault_address(_text(value)),
-    "plasma_vault_base": _address,
-    "access_manager": lambda value: parse_access_manager_address(_text(value)),
-    "fee_manager": _address,
-    "rewards_manager": _address,
-    "withdraw_manager": _address,
-    "context_manager": _address,
-    "price_manager": _address,
-}
 
 
 _FUSION_INSTANCE_OUTPUT_TYPES: list[str] = [

@@ -146,6 +146,15 @@ def test_a_recognized_topic_with_malformed_parts_raises_the_declared_error(
         decode_external_state_event(log)
 
 
+@pytest.mark.parametrize(
+    "address", [None, 12345, "0xnot-an-address"], ids=["missing", "int", "invalid"]
+)
+def test_a_recognized_topic_needs_an_emitter_address(address):
+    log = dict(_log("ExternalStateAssetRescued", (SIGNER,)), address=address)
+    with pytest.raises(ExternalStateEventDecodeError, match="emitter"):
+        decode_external_state_event(log)
+
+
 def test_missing_data_on_a_recognized_topic_raises():
     log = _log("ExternalStateAssetRescued", (SIGNER,))
     del log["data"]

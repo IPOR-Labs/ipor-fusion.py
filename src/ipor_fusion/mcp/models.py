@@ -15,12 +15,14 @@ Design notes:
   position breakdowns) use dict[str, Any] / list[dict[str, Any]] — modelling
   every variant would be brittle without meaningful LLM-side benefit.
 - Models use extra="forbid": any new field added to build_vault_info_json that
-  is not declared here will fail VaultInfoResponse.model_validate(). Drift
-  is caught at test time by the producer contract check in
-  test_cli_commands.py::TestVaultInfoJson::test_json_output, which validates
-  the real build_vault_info_json dict against this model. The samples in
-  test_mcp_models.py document the expected shape but are hand-maintained —
-  on their own they cannot detect producer drift.
+  is not declared here will fail VaultInfoResponse.model_validate(). The SDK
+  types its documents as TypedDicts (`VaultInfoJson`, `MorphoBlueMarketJson`,
+  `MetaMorphoV1Json` / `MetaMorphoV2Json`); these models stay the source of
+  the published JSON schema. test_mcp_models.py::TestTypedDocumentsMirrorModels
+  holds each TypedDict to its model block by block, its pyright-checked
+  `_full_vault_info_dict` fixture is a `VaultInfoJson`, and the producer
+  contract check in test_cli_commands.py::TestVaultInfoJson::test_json_output
+  validates the real build_vault_info_json output against this model.
 """
 
 from __future__ import annotations

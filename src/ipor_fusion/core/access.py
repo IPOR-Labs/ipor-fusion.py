@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypedDict
 
 from eth_abi import decode
 from eth_abi.exceptions import InsufficientDataBytes
@@ -23,6 +24,16 @@ from ipor_fusion.errors import (
 from ipor_fusion.types import AccessManagerAddress, Period, PlasmaVaultAddress, RoleId
 
 
+class RoleAccountJson(TypedDict):
+    """`RoleAccount.to_dict`: one role membership as JSON."""
+
+    account: ChecksumAddress
+    role_id: RoleId
+    role_name: str
+    is_member: bool
+    execution_delay: Period
+
+
 @dataclass(slots=True)
 class RoleStatus:
     """Result of a role membership check for an account."""
@@ -44,7 +55,7 @@ class RoleAccount:
     def role_name(self) -> str:
         return Roles.get_name(self.role_id)
 
-    def to_dict(self) -> dict[str, str | int | bool]:
+    def to_dict(self) -> RoleAccountJson:
         """Canonical JSON-ready row shape, shared by the CLI surfaces."""
         return {
             "account": self.account,

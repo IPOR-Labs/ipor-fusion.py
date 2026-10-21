@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from functools import partial
-from typing import Any
 
 import click
 
@@ -23,6 +23,7 @@ from ipor_fusion.cli.vault_rendering import (
     _format_usd,
     _print_table,
 )
+from ipor_fusion.core.access import RoleAccountJson
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import RecipientFee
 from ipor_fusion.explorer import get_contract_name
@@ -48,7 +49,7 @@ from ipor_fusion.vault_info import (
 )
 
 
-def _print_role_accounts_table(role_accounts: list[dict[str, Any]]) -> None:
+def _print_role_accounts_table(role_accounts: Sequence[RoleAccountJson]) -> None:
     _print_table(
         ("Account", "Role", "Role ID", "Delay (s)"),
         [
@@ -63,7 +64,7 @@ def _print_role_accounts_table(role_accounts: list[dict[str, Any]]) -> None:
     )
 
 
-def _print_role_accounts(role_accounts: list[dict[str, Any]] | None) -> None:
+def _print_role_accounts(role_accounts: Sequence[RoleAccountJson] | None) -> None:
     click.echo("Role Accounts:")
     if role_accounts is None:
         click.echo("  (unavailable — the RoleGranted log scan did not complete)")
