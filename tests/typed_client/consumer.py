@@ -249,6 +249,9 @@ def mixed_batches_keep_their_types(
     assert_type(name.value, str | None)
 
     sim = VaultSimulator(web3, vault=VAULT)
+    sim.with_state_override(token, balance=hex(10**18), stateDiff={"0x01": "0x02"})
+    sim.with_block_override(gasLimit=30_000_000, feeRecipient=token)
+    sim.with_state_override_provider(lambda n: {token: {"nonce": hex(n)}})
     before = sim.observe(vault.total_assets())
     decimals = sim.observe(ERC20(token).decimals(), label="decimals")
     sim.run()

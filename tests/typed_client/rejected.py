@@ -93,6 +93,16 @@ def batch_values_keep_their_types(
     del required, assets
 
 
+def simulator_overrides_name_wire_keys(
+    sim: VaultSimulator, account: ChecksumAddress
+) -> None:
+    sim.with_state_override(account, balanse="0x1")  # pyright: ignore[reportCallIssue]
+    sim.with_state_override(account, balance=1)  # pyright: ignore[reportArgumentType]
+    sim.with_block_override(gas_limit=30_000_000)  # pyright: ignore[reportCallIssue]
+    sim.with_state_override_provider(lambda n: {account: {"nonse": "0x1"}})  # pyright: ignore[reportArgumentType]
+    sim.add_transaction({"from": account, "to": account, "gas": "0x1"})  # pyright: ignore[reportArgumentType]
+
+
 def options_are_keyword_only(ctx: Web3Context, oracle: ChecksumAddress) -> None:
     Multicall3(ctx, oracle)  # pyright: ignore[reportCallIssue]
     fetch_unpriceable_priced_tokens(ctx, oracle, oracle, [], {}, None)  # pyright: ignore[reportCallIssue]

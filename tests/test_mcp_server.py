@@ -1052,7 +1052,7 @@ class TestMarketMetaMorpho:
         assert result.version == "v2"
         assert result.name == "Yearn OG USDC"
         assert result.caps is not None and len(result.caps) == 1
-        assert result.caps[0]["loan_token"] == _LOAN
+        assert result.caps[0].loan_token == _LOAN
         # v1-only fields should be None
         assert result.fee_wad is None
         assert result.allocations is None

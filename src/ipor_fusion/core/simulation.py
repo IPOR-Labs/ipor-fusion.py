@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeVar
+from typing import Final, Generic, NotRequired, TypedDict, TypeVar, Unpack
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -10,7 +10,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
-from web3.types import BlockIdentifier, Nonce, RPCEndpoint, Timestamp
+from web3.types import BlockIdentifier, Nonce, RPCEndpoint, Timestamp, TxParams
 from web3.utils.address import get_create_address
 
 from ipor_fusion.core.contract import Call, _encode_calldata
@@ -27,12 +27,78 @@ from ipor_fusion.types import PlasmaVaultAddress
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
 
+
+class AccountOverride(TypedDict, total=False):
+    """One account's ``eth_simulateV1`` state override, sent as given:
+    quantities and code are ``0x`` hex strings, storage maps a ``0x`` slot to a
+    ``0x`` word. ``state`` replaces the account's storage, ``stateDiff``
+    patches it."""
+
+    balance: str
+    nonce: str
+    code: str
+    state: Mapping[str, str]
+    stateDiff: Mapping[str, str]
+    movePrecompileToAddress: str
+
+
+class BlockOverrides(TypedDict, total=False):
+    """``eth_simulateV1`` block overrides; an ``int`` is sent as ``0x`` hex."""
+
+    number: int | str
+    time: int | str
+    gasLimit: int | str
+    feeRecipient: str
+    prevRandao: str
+    baseFeePerGas: int | str
+    blobBaseFee: int | str
+
+
 #: ``n`` (the sent block's index in the run) -> account overrides for it.
-StateOverrideProvider = Callable[[int], Mapping[str, Mapping[str, Any]]]
+StateOverrideProvider = Callable[[int], Mapping[str, AccountOverride]]
+
+
+class _AccessListEntry(TypedDict):
+    address: ChecksumAddress
+    storageKeys: list[str]
+
+
+# One entry of a block's ``calls``; functional syntax because ``from`` is a
+# keyword. ``to`` is absent for a contract creation.
+_SimulatedCall = TypedDict(
+    "_SimulatedCall",
+    {
+        "from": NotRequired[ChecksumAddress],
+        "to": NotRequired[ChecksumAddress],
+        "input": str,
+        "nonce": NotRequired[str],
+        "gas": NotRequired[str],
+        "value": NotRequired[str],
+        "chainId": NotRequired[str],
+        "type": NotRequired[str],
+        "gasPrice": NotRequired[str],
+        "maxFeePerGas": NotRequired[str],
+        "maxPriorityFeePerGas": NotRequired[str],
+        "accessList": NotRequired[list[_AccessListEntry]],
+    },
+)
+
+
+class _BlockStateCall(TypedDict):
+    calls: list[_SimulatedCall]
+    blockOverrides: dict[str, str]
+    stateOverrides: NotRequired[dict[str, AccountOverride]]
+
+
+class _SimulateRequest(TypedDict):
+    blockStateCalls: list[_BlockStateCall]
+    validation: bool
+    traceTransfers: bool
+
 
 DEFAULT_BLOCK_TIME_INCREMENT = 12
 
-_TRANSACTION_QUANTITIES = (
+_TRANSACTION_QUANTITIES: Final = (
     "nonce",
     "gas",
     "value",
@@ -64,15 +130,15 @@ class _Call:
     gas: int | None = None
     predicted_address: ChecksumAddress | None = None
     # A complete serialized transaction (`add_transaction`), sent as is.
-    transaction: dict[str, Any] | None = None
+    transaction: _SimulatedCall | None = None
     observation: SimulationObservation[object] | None = None
 
 
 @dataclass(slots=True)
 class _Block:
     calls: list[_Call] = field(default_factory=list)
-    block_overrides: dict[str, Any] = field(default_factory=dict)
-    state_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    block_overrides: dict[str, str] = field(default_factory=dict)
+    state_overrides: dict[str, AccountOverride] = field(default_factory=dict)
     override_provider: StateOverrideProvider | None = None
 
 
@@ -297,15 +363,21 @@ class VaultSimulator:
         self._current.block_overrides["time"] = hex(self._baseline() + int(seconds))
         return self
 
-    def with_block_override(self, **fields: Any) -> VaultSimulator:
+    def with_block_override(self, **fields: Unpack[BlockOverrides]) -> VaultSimulator:
+        """Set block overrides on the current block, in the order given."""
         for key, value in fields.items():
-            self._current.block_overrides[key] = (
-                hex(value) if isinstance(value, int) else value
-            )
+            if isinstance(value, int):
+                value = hex(value)
+            elif not isinstance(value, str):
+                raise TypeError(
+                    f"block override {key} must be an int or a hex string, "
+                    f"got {type(value).__name__}"
+                )
+            self._current.block_overrides[key] = value
         return self
 
     def with_state_override(
-        self, address: ChecksumAddress, **overrides: Any
+        self, address: ChecksumAddress, **overrides: Unpack[AccountOverride]
     ) -> VaultSimulator:
         """Merge an account override into the current block.
 
@@ -313,9 +385,9 @@ class VaultSimulator:
         a later ``stateDiff`` patches it. One call cannot contain both forms.
         """
         checksum_address = Web3.to_checksum_address(address)
-        current = self._current.state_overrides.get(checksum_address, {})
+        current = self._current.state_overrides.get(checksum_address)
         self._current.state_overrides[checksum_address] = _compose_account_overrides(
-            current, overrides
+            current or AccountOverride(), overrides
         )
         return self
 
@@ -455,7 +527,7 @@ class VaultSimulator:
         return self
 
     def add_transaction(
-        self, transaction: Mapping[str, Any], label: str | None = None
+        self, transaction: TxParams, label: str | None = None
     ) -> VaultSimulator:
         """Queue a complete transaction dict exactly as a signer would receive it,
         e.g. the output of `Call.build_transaction` or `Web3Context.build_transaction`.
@@ -465,7 +537,8 @@ class VaultSimulator:
         signed rather than a call rebuilt from its calldata. With
         ``validation=True`` the node also checks nonce, fees and balance. The
         result counts toward ``success`` and ``gas_used`` like `execute`. An
-        unknown key raises instead of being dropped.
+        unknown key raises instead of being dropped. The calldata may come as
+        ``input`` instead of ``data``.
         """
         unknown = set(transaction) - _TRANSACTION_KEYS
         if unknown:
@@ -474,7 +547,7 @@ class VaultSimulator:
             raise ValueError("transaction cannot carry both data and input")
         if not transaction.get("from") or not transaction.get("to"):
             raise ValueError("transaction requires from and to")
-        data = HexBytes(transaction.get("data", transaction.get("input", b"")))
+        data = HexBytes(_transaction_data(transaction))
         serialized = _serialize_transaction(transaction, data)
         self._current.calls.append(
             _Call(
@@ -562,12 +635,12 @@ class VaultSimulator:
         if not non_empty_blocks:
             raise ValueError("No calls buffered — call execute() or observe() first")
 
-        block_state_calls: list[dict[str, Any]] = []
+        block_state_calls: list[_BlockStateCall] = []
         # A block with no calls is not sent, but its overrides still apply to
         # everything after it (state carries between blocks), so they fold
         # into the next block that is sent; that block's own values win.
-        block_overrides: dict[str, Any] = {}
-        state_overrides: dict[str, dict[str, Any]] = {}
+        block_overrides: dict[str, str] = {}
+        state_overrides: dict[str, AccountOverride] = {}
         modeled_time = self._baseline()
         previous_sent_time = modeled_time
         provider: StateOverrideProvider | None = None
@@ -591,21 +664,22 @@ class VaultSimulator:
             if modeled_time <= previous_sent_time:
                 raise ValueError("simulated block times must be strictly increasing")
             previous_sent_time = modeled_time
-            entry: dict[str, Any] = {
-                "calls": [self._serialize_call(c) for c in block.calls]
+            entry: _BlockStateCall = {
+                "calls": [self._serialize_call(c) for c in block.calls],
+                "blockOverrides": block_overrides,
             }
-            entry["blockOverrides"] = block_overrides
             if state_overrides:
                 entry["stateOverrides"] = state_overrides
             block_state_calls.append(entry)
             block_overrides, state_overrides = {}, {}
 
+        request: _SimulateRequest = {
+            "blockStateCalls": block_state_calls,
+            "validation": self._validation,
+            "traceTransfers": self._trace_transfers,
+        }
         payload = [
-            {
-                "blockStateCalls": block_state_calls,
-                "validation": self._validation,
-                "traceTransfers": self._trace_transfers,
-            },
+            request,
             self._block if isinstance(self._block, str) else hex(int(self._block)),
         ]
 
@@ -618,10 +692,10 @@ class VaultSimulator:
 
         return self._parse_response(response["result"])
 
-    def _serialize_call(self, call: _Call) -> dict[str, Any]:
+    def _serialize_call(self, call: _Call) -> _SimulatedCall:
         if call.transaction is not None:
-            return dict(call.transaction)
-        out: dict[str, Any] = {"input": "0x" + call.data.hex()}
+            return call.transaction.copy()
+        out: _SimulatedCall = {"input": "0x" + call.data.hex()}
         if call.to is not None:
             out["to"] = call.to
         if call.from_:
@@ -699,10 +773,20 @@ class VaultSimulator:
         )
 
 
-def _serialize_transaction(
-    transaction: Mapping[str, Any], data: HexBytes
-) -> dict[str, Any]:
-    out: dict[str, Any] = {
+def _transaction_data(transaction: TxParams) -> bytes | bytearray | str:
+    """The calldata under ``data``, or under ``input``, which `TxParams` does
+    not name but a node-shaped transaction carries."""
+    if "data" in transaction:
+        return transaction["data"]
+    fields: Mapping[str, object] = transaction
+    data = fields.get("input", b"")
+    if not isinstance(data, bytes | bytearray | str):
+        raise TypeError(f"transaction input must be bytes or hex, got {data!r}")
+    return data
+
+
+def _serialize_transaction(transaction: TxParams, data: HexBytes) -> _SimulatedCall:
+    out: _SimulatedCall = {
         "from": Web3.to_checksum_address(transaction["from"]),
         "to": Web3.to_checksum_address(transaction["to"]),
         "input": data.to_0x_hex(),
@@ -723,7 +807,7 @@ def _serialize_transaction(
 
 
 def _apply_override_provider(
-    overrides: dict[str, dict[str, Any]],
+    overrides: dict[str, AccountOverride],
     provider: StateOverrideProvider | None,
     sent_block: int,
 ) -> None:
@@ -732,18 +816,18 @@ def _apply_override_provider(
         return
     for address, fields in provider(sent_block).items():
         overrides[address] = _compose_account_overrides(
-            dict(fields), overrides.get(address, {})
+            AccountOverride(**fields), overrides.get(address) or AccountOverride()
         )
 
 
 def _compose_account_overrides(
-    earlier: dict[str, Any], later: dict[str, Any]
-) -> dict[str, Any]:
+    earlier: AccountOverride, later: AccountOverride
+) -> AccountOverride:
     for fields in (earlier, later):
         if "state" in fields and "stateDiff" in fields:
             raise ValueError("account override cannot contain both state and stateDiff")
 
-    merged = {**earlier, **later}
+    merged: AccountOverride = {**earlier, **later}
     if "state" in later:
         merged["state"] = dict(later["state"])
         merged.pop("stateDiff", None)

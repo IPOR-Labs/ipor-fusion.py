@@ -449,11 +449,13 @@ schema. Adding a field to `build_vault_info_json` (or a `fusion market` document
 means adding it to its TypedDict, to the matching model (with a default for
 back-compat) and to the `_full_vault_info_dict` fixture;
 `TestTypedDocumentsMirrorModels` in `test_mcp_models.py` holds every TypedDict to
-its model block by block. The model keeps `dict[str, Any]` where the schema is
-deliberately loose (`substrates`, `deployment`, `share_price`, `dependency_graph`,
-`position_breakdown`): the SDK types those blocks, the schema does not validate
-their inner keys. The substrate entries stay open-ended on both sides
-(`SubstrateEntryJson`, `dict[str, str | bool]`): each decoder adds its own fields.
+its model block by block, a union block (`deployment`, `position_breakdown`,
+`source_detail`) shape by shape. Every block is a model; a block whose optional keys
+the producer omits is a `_Sparse` model, which dumps only the fields it was given,
+so the key stays absent rather than null. `TestNestedBlocksDumpVerbatim` pins that
+the typed blocks dump exactly what the producer wrote. The substrate entries stay
+open-ended on both sides (`SubstrateEntryJson`, `dict[str, str | bool]`): each
+decoder adds its own fields.
 
 ## Domain rules (verified against the contracts)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar, cast
+from typing import Generic, TypeVar, cast
 
 from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
@@ -60,7 +60,7 @@ class Call(Generic[T_co]):
             raise ValueError("cannot map a write-only Call without output types")
         decoder = self.decoder
 
-        def mapped(value: Any) -> U:
+        def mapped(value: object) -> U:
             decoded = decoder(value) if decoder is not None else cast(T_co, value)
             return transform(decoded)
 
@@ -101,7 +101,7 @@ class Call(Generic[T_co]):
         if not self.output_types:
             raise ValueError("Call.decode() on a write-only Call.")
         values = tuple(decode(self.output_types, bytes(raw)))
-        single: Any = values[0] if len(values) == 1 else values
+        single: object = values[0] if len(values) == 1 else values
         if self.decoder is not None:
             return self.decoder(single)
         return cast(T_co, single)
@@ -148,7 +148,7 @@ class ContractWrapper:
     def _view(
         self,
         signature: str,
-        *args: Any,
+        *args: object,
         output_types: list[str],
         decoder: Callable[..., T] | None = None,
     ) -> Call[T]:
@@ -159,11 +159,11 @@ class ContractWrapper:
             decoder=decoder,
         )
 
-    def _write(self, signature: str, *args: Any) -> Call[None]:
+    def _write(self, signature: str, *args: object) -> Call[None]:
         return Call(to=self._address, data=_encode_calldata(signature, *args))
 
 
-def _encode_calldata(signature: str, *args: Any) -> bytes:
+def _encode_calldata(signature: str, *args: object) -> bytes:
     selector = function_signature_to_4byte_selector(signature)
     types = _parse_param_types(signature)
     return selector + encode(types, list(args)) if types else selector

@@ -7,6 +7,7 @@ there, this test will fail until the model is updated. That is the point.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 import typing
@@ -485,11 +486,34 @@ class TestVaultInfoResponseContract:
         assert round_tripped["reconciliation"]["delta"]["percent"] == 0.0
 
 
-def _nested(hint: object, accept: Callable[[object], bool]) -> object | None:
-    """The one class inside ``hint`` (through unions, lists, dicts) that
-    ``accept`` matches; None when there is none or several."""
-    found = {leaf for leaf in _leaves(hint) if accept(leaf)}
-    return found.pop() if len(found) == 1 else None
+def _nested(hint: object, accept: Callable[[object], bool]) -> list[type]:
+    """The classes inside ``hint`` (through unions, lists, dicts) that
+    ``accept`` matches."""
+    return list({leaf for leaf in _leaves(hint) if accept(leaf)})  # type: ignore[misc]
+
+
+def _keys(document: type) -> frozenset[str]:
+    return document.__required_keys__ | document.__optional_keys__  # type: ignore[attr-defined]
+
+
+def _pair(
+    documents: list[type], models: list[type[BaseModel]], path: str
+) -> list[tuple[type, type[BaseModel]]]:
+    """Each TypedDict of a block matched to the one model of the block whose
+    fields hold its keys and whose required fields it carries."""
+    pairs = []
+    for document in documents:
+        keys = _keys(document)
+        matches = [
+            model
+            for model in models
+            if keys <= set(model.model_fields)
+            and {n for n, f in model.model_fields.items() if f.is_required()} <= keys
+        ]
+        assert len(matches) == 1, f"{path}: {document.__name__} -> {matches}"
+        pairs.append((document, matches[0]))
+    assert {model for _, model in pairs} == set(models), f"{path}: unpaired models"
+    return pairs
 
 
 def _leaves(hint: object) -> Iterator[object]:
@@ -515,20 +539,118 @@ def _assert_mirrors(
     if (document, model) in seen:
         return
     seen = seen | {(document, model)}
-    keys = document.__required_keys__ | document.__optional_keys__  # type: ignore[attr-defined]
+    keys = _keys(document)
     fields = model.model_fields
     assert keys <= set(fields), f"{path}: {sorted(keys - set(fields))}"
     for key in document.__optional_keys__ | (set(fields) - keys):  # type: ignore[attr-defined]
         assert not fields[key].is_required(), f"{path}.{key}"
     hints = typing.get_type_hints(document)
     for key in sorted(keys):
-        nested_model = _nested(fields[key].annotation, _is_model)
-        if nested_model is None:
-            continue
-        nested_document = _nested(hints[key], typing.is_typeddict)
-        assert isinstance(nested_document, type), f"{path}.{key}"
-        assert isinstance(nested_model, type) and issubclass(nested_model, BaseModel)
-        _assert_mirrors(nested_document, nested_model, f"{path}.{key}", seen)
+        nested_models = _nested(fields[key].annotation, _is_model)
+        nested_documents = _nested(hints[key], typing.is_typeddict)
+        assert bool(nested_models) == bool(nested_documents), f"{path}.{key}"
+        for nested_document, nested_model in _pair(
+            nested_documents, nested_models, f"{path}.{key}"
+        ):
+            _assert_mirrors(nested_document, nested_model, f"{path}.{key}", seen)
+
+
+_GOLDEN = Path(__file__).parent / "fixtures" / "vault_info_golden"
+
+
+def _sparse_vault_info_dict() -> dict:
+    """The full document with every optional nested key dropped and the
+    deployment lookup failed."""
+    d = json.loads(json.dumps(_full_vault_info_dict()))
+    d["links"].pop("etherscan")
+    d["share_price"].pop("usd")
+    d["deployment"] = {"error": "etherscan-paid-tier-required"}
+    for bf in d["balance_fuses"]:
+        for entry in bf.get("position_breakdown", []):
+            for amount in entry.values():
+                if isinstance(amount, dict):
+                    for key in ("symbol", "decimals", "formatted", "usd"):
+                        amount.pop(key, None)
+    return d
+
+
+def _vault_info_documents() -> list[dict]:
+    golden = [json.loads(p.read_text()) for p in sorted(_GOLDEN.glob("*.json"))]
+    return [*golden, dict(_full_vault_info_dict()), _sparse_vault_info_dict()]
+
+
+class TestNestedBlocksDumpVerbatim:
+    """The typed nested blocks dump exactly what the producer wrote: same keys,
+    same order, an absent optional key stays absent rather than null."""
+
+    @pytest.mark.parametrize("document", _vault_info_documents())
+    def test_vault_info_blocks(self, document):
+        dumped = VaultInfoResponse.model_validate(document).model_dump(mode="json")
+        for key in ("links", "deployment", "share_price", "substrates"):
+            assert json.dumps(dumped[key]) == json.dumps(document[key]), key
+        assert json.dumps(dumped.get("dependency_graph")) == json.dumps(
+            document.get("dependency_graph")
+        )
+        for got, sent in zip(
+            dumped["balance_fuses"], document["balance_fuses"], strict=True
+        ):
+            assert json.dumps(got["position_breakdown"]) == json.dumps(
+                sent.get("position_breakdown")
+            )
+
+    def test_meta_morpho_blocks(self):
+        cap = {
+            "cap_id": "0x01",
+            "type": "MarketV1",
+            "id_data": "0x02",
+            "absolute_cap": "10",
+            "relative_cap_wad": "1",
+            "allocation": "3",
+            "room": "7",
+            "market_id": "0x" + "ab" * 32,
+            "loan_token": "0xL",
+            "collateral_token": None,
+            "oracle": "0xO",
+            "irm": "0xI",
+            "lltv": "1",
+        }
+        adapter = {
+            "address": "0xA",
+            "type": "MorphoMarketV1",
+            "assets": "3",
+            "inner_vault": None,
+        }
+        public_allocator = {
+            "fee_wei": "0",
+            "admin": None,
+            "flow_caps": {"0x" + "ab" * 32: {"max_in": "1", "max_out": "2"}},
+        }
+        document = {
+            "version": "v2",
+            "chain_id": 1,
+            "address": "0xVAULT",
+            "name": "v",
+            "symbol": "v",
+            "asset": {"address": "0xL", "symbol": "USDC", "decimals": 6},
+            "total_assets": "1",
+            "owner": "0xOWNER",
+            "allocators": [],
+            "liquidity_adapter": adapter,
+            "adapters": [adapter],
+            "caps": [cap],
+            "public_allocator": public_allocator,
+        }
+        dumped = MetaMorphoVaultResponse.model_validate(document).model_dump(
+            mode="json"
+        )
+        for key in (
+            "asset",
+            "liquidity_adapter",
+            "adapters",
+            "caps",
+            "public_allocator",
+        ):
+            assert json.dumps(dumped[key]) == json.dumps(document[key]), key
 
 
 class TestTypedDocumentsMirrorModels:
@@ -551,6 +673,8 @@ class TestTypedDocumentsMirrorModels:
         assert v1 | v2 == set(fields)
         for key in v1 ^ v2:
             assert not fields[key].is_required(), key
+        _assert_mirrors(MetaMorphoV1Json, MetaMorphoVaultResponse, "meta_morpho_v1")
+        _assert_mirrors(MetaMorphoV2Json, MetaMorphoVaultResponse, "meta_morpho_v2")
 
 
 # The model publishing each documented block. Tests parametrize over DOCS
@@ -971,7 +1095,12 @@ def _erc4626_node() -> OracleNode:
         source_type="ERC4626PriceFeed",
         path=["wsrUSD", "convertToAssets(1 share)", "USDC", "Chainlink feed"],
         status="resolved",
-        source_detail={"vault": "0xV", "underlying": "0xUSDC"},
+        source_detail={
+            "vault": "0xV",  # type: ignore[typeddict-item]
+            "underlying": "0xUSDC",  # type: ignore[typeddict-item]
+            "share_decimals": 18,
+            "rate": str(10**18),
+        },
         dependencies=[_chainlink_node()],
     )
 
@@ -1025,7 +1154,8 @@ class TestOracleMappingResponse:
         assert node.price.normalized_wad == str(10**18)
         dep = node.dependencies[0]
         assert dep.symbol == "USDC"
-        assert dep.source_detail == {
+        assert dep.source_detail is not None
+        assert dep.source_detail.model_dump() == {
             "description": "USDC / USD",
             "round_id": "1",
             "answer": "99980000",

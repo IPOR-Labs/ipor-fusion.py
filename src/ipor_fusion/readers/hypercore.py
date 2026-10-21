@@ -28,7 +28,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
@@ -213,7 +213,7 @@ class HyperCoreReader:
         self,
         precompile: ChecksumAddress,
         input_types: Sequence[str],
-        values: Sequence[Any],
+        values: Sequence[object],
         output_types: list[str],
         decoder: Callable[..., T] | None = None,
     ) -> Call[T]:
