@@ -113,7 +113,6 @@ from ipor_fusion.types import (
     Decimals,
     HyperCoreAsset,
     HyperCoreClientOrderId,
-    MarketId,
     Period,
     Shares,
 )
@@ -162,7 +161,7 @@ HYPERCORE_BALANCE_FUSE = parse_fuse_address(
     "0xaC7404Ec2Bc3F2d3c0853633e0c3edfA25DC50F9"
 )
 HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
-CROSSCHAIN_MARKET = MarketId(int(IporFusionMarkets.CROSSCHAIN))
+CROSSCHAIN_MARKET = IporFusionMarkets.CROSSCHAIN
 
 # ── Actors ───────────────────────────────────────────────────────────────────
 # One EOA holds the alpha role on both vaults in this test deployment; the two

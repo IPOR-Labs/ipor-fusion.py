@@ -72,7 +72,7 @@ from ipor_fusion.fuses import (
     euler_substrate,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import MAX_UINT256, Amount, ChainId, MarketId, Period
+from ipor_fusion.types import MAX_UINT256, Amount, ChainId, Period
 
 log = logging.getLogger("advanced_euler_v2_credit_market_base")
 
@@ -83,7 +83,7 @@ log = logging.getLogger("advanced_euler_v2_credit_market_base")
 # deployments -- see their note below.
 
 BASE_CHAIN_ID = ChainId(8453)
-EULER_MARKET = MarketId(IporFusionMarkets.EULER_V2)
+EULER_MARKET = IporFusionMarkets.EULER_V2
 
 # IporFusionFactoryProxy on Base. Its clone(...) takes the six args in clone_args().
 BASE_FUSION_FACTORY = Web3.to_checksum_address(

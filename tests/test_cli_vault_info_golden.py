@@ -43,7 +43,7 @@ from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import LendingMarketHealth, VaultLendingHealth
 from ipor_fusion.readers.unpriceable import MiddlewarePricedToken
-from ipor_fusion.types import ChainId, MarketId, Shares
+from ipor_fusion.types import ChainId, Shares
 from ipor_fusion.vault_data import (
     GET_TOTAL_SUPPLY_CAP,
     VaultData,
@@ -74,10 +74,10 @@ FUSE_AAVE_DUP = _addr("f4")
 FUSE_ORPHAN = _addr("f5")
 PRICE_SOURCE = _addr("5e")
 
-AAVE = MarketId(IporFusionMarkets.AAVE_V3)
-MORPHO = MarketId(IporFusionMarkets.MORPHO)
-ERC20_MARKET = MarketId(IporFusionMarkets.ERC20_VAULT_BALANCE)
-ORPHAN_MARKET = MarketId(IporFusionMarkets.COMPOUND_V3_USDC)
+AAVE = IporFusionMarkets.AAVE_V3
+MORPHO = IporFusionMarkets.MORPHO
+ERC20_MARKET = IporFusionMarkets.ERC20_VAULT_BALANCE
+ORPHAN_MARKET = IporFusionMarkets.COMPOUND_V3_USDC
 
 USDC = 10**6
 WAD = 10**18

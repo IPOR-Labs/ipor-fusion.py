@@ -61,7 +61,7 @@ from ipor_fusion.fuses import (
     euler_substrate,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, ChainId, MarketId, Period
+from ipor_fusion.types import Amount, ChainId, Period
 
 log = logging.getLogger("advanced_euler_v2_looping_arbitrum")
 
@@ -71,9 +71,9 @@ log = logging.getLogger("advanced_euler_v2_looping_arbitrum")
 # mainnet-arbitrum-fusion/addresses.json
 
 ARBITRUM_CHAIN_ID = ChainId(42161)
-EULER_MARKET = MarketId(IporFusionMarkets.EULER_V2)
-SWAPPER_MARKET = MarketId(IporFusionMarkets.UNIVERSAL_TOKEN_SWAPPER_V2)
-MORPHO_FLASH_MARKET = MarketId(IporFusionMarkets.MORPHO_FLASH_LOAN)
+EULER_MARKET = IporFusionMarkets.EULER_V2
+SWAPPER_MARKET = IporFusionMarkets.UNIVERSAL_TOKEN_SWAPPER_V2
+MORPHO_FLASH_MARKET = IporFusionMarkets.MORPHO_FLASH_LOAN
 
 ARBITRUM_FUSION_FACTORY = Web3.to_checksum_address(
     "0x134fCAce7a2C7Ef3dF2479B62f03ddabAEa922d5"

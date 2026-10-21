@@ -53,7 +53,7 @@ from ipor_fusion import (
 )
 from ipor_fusion.fuses import AaveV3SupplyFuse
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, ChainId, MarketId, Period
+from ipor_fusion.types import Amount, ChainId, Period
 
 log = logging.getLogger("simple_aave_v3_supply_base")
 
@@ -75,7 +75,7 @@ BASE_FUSION_FACTORY = Web3.to_checksum_address(
 BASE_USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
 
 # Aave V3 market (IporFusionMarkets.AAVE_V3).
-AAVE_MARKET = MarketId(IporFusionMarkets.AAVE_V3)
+AAVE_MARKET = IporFusionMarkets.AAVE_V3
 
 # Aave V3 *supply* fuse (registry name SupplyFuseAaveV3) -- the functional fuse
 # that encodes supply/withdraw.

@@ -36,7 +36,7 @@ from ipor_fusion.fuses import (
     euler_substrate,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import Amount, MarketId, Period
+from ipor_fusion.types import Amount, Period
 
 ZERO_ADDRESS = Web3.to_checksum_address("0x0000000000000000000000000000000000000000")
 
@@ -98,7 +98,7 @@ SUPPLY_AMOUNT = Amount(10 * 10**18)
 OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
 SUB_ACCOUNT = 0x01
-EULER_MARKET = MarketId(IporFusionMarkets.EULER_V2)
+EULER_MARKET = IporFusionMarkets.EULER_V2
 
 # Uniswap-v4 hook-flag constraint on the pool address (EulerSwap v2):
 # low 14 bits must equal exactly beforeInitialize|beforeAddLiquidity|beforeSwap|

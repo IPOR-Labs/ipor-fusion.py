@@ -46,7 +46,7 @@ from ipor_fusion import (
 from ipor_fusion.crosschain import CrosschainTransportKind
 from ipor_fusion.crosschain.fuses import crosschain_market_id
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, MarketId
 
 ETHEREUM = ChainId(1)
 BASE = ChainId(8453)
@@ -292,7 +292,7 @@ class Deployment:
     owner: str  # holds ATOMIST, ALPHA, FUSE_MANAGER and UPDATE_MARKETS_BALANCES
     balance_proposer: str
     balance_approver: str
-    market_id: int
+    market_id: MarketId
     transports: dict[CrosschainTransportKind, TransportDeployment]
     claim_fuse: str
     spokes: tuple[Spoke, ...]
@@ -407,7 +407,7 @@ CANARY = Deployment(
     balance_approver=Web3.to_checksum_address(
         "0x64D345FE416EE6b841B544F27277d9B61b61A02a"
     ),
-    market_id=int(IporFusionMarkets.CROSSCHAIN),
+    market_id=IporFusionMarkets.CROSSCHAIN,
     transports={
         CrosschainTransportKind.CHAINLINK_CCIP: TransportDeployment(
             executor=Web3.to_checksum_address(

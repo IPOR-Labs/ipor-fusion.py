@@ -13,7 +13,6 @@ from ipor_fusion.readers.unpriceable import (
     MiddlewarePricedToken,
     fetch_unpriceable_priced_tokens,
 )
-from ipor_fusion.types import MarketId
 from ipor_fusion.validation import _unpriceable_token_findings
 
 
@@ -244,15 +243,13 @@ class TestFetch:
     def test_aave_v3_only_the_middleware_variant(self, chain, code, flagged):
         chain.ctx.web3.eth.get_code.return_value = code
         chain.answers.update(_oracle_answers({UNPRICED: ZERO}, priced=set()))
-        market = MarketId(IporFusionMarkets.AAVE_V3)
+        market = IporFusionMarkets.AAVE_V3
         result = _fetch(
             chain,
             {market: [_plain(UNPRICED)]},
             balance_fuses=[
                 BalanceFuse(market_id=market, fuse=AAVE_FUSE),
-                BalanceFuse(
-                    market_id=MarketId(IporFusionMarkets.MORPHO), fuse=AAVE_FUSE
-                ),
+                BalanceFuse(market_id=IporFusionMarkets.MORPHO, fuse=AAVE_FUSE),
             ],
         )
         assert bool(result) is flagged
