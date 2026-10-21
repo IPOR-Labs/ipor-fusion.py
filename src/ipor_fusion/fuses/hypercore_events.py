@@ -15,12 +15,24 @@ Status: preview, not production. The contracts behind it are under active develo
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TypeAlias, TypedDict, cast
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.types import LogReceipt, TxReceipt
+from web3.types import LogReceipt, Timestamp, TxReceipt
+
+from ipor_fusion.fuses.events import abi_value
+from ipor_fusion.types import (
+    Amount,
+    FuseAddress,
+    HyperCoreActionId,
+    HyperCoreAsset,
+    HyperCoreClientOrderId,
+    HyperCoreOrderId,
+    HyperCoreTokenIndex,
+    PayloadHash,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +170,164 @@ HYPERCORE_EVENT_SPECS: tuple[HyperCoreEventSpec, ...] = (
     ),
 )
 
+# Event parameters by their Solidity names; ``version`` is the emitting fuse.
+
+
+class HyperCoreDepositFuseEnterArgs(TypedDict):
+    version: FuseAddress
+    tokenIndex: HyperCoreTokenIndex
+    evmAsset: ChecksumAddress
+    amount: Amount
+    coreWei: int
+
+
+class HyperCoreMarginFuseEnterArgs(TypedDict):
+    version: FuseAddress
+    usd6: int
+    toPerp: bool
+
+
+class HyperCoreSendFuseSpotSendArgs(TypedDict):
+    version: FuseAddress
+    destination: ChecksumAddress
+    tokenIndex: HyperCoreTokenIndex
+    amountWei: int
+
+
+class HyperCoreSendFuseSendAssetArgs(TypedDict):
+    version: FuseAddress
+    destination: ChecksumAddress
+    sourceDex: int
+    destinationDex: int
+    tokenIndex: HyperCoreTokenIndex
+    amountWei: int
+
+
+class HyperCoreOrderFuseEnterArgs(TypedDict):
+    version: FuseAddress
+    asset: HyperCoreAsset
+    isBuy: bool
+    limitPx: int
+    sz: int
+    reduceOnly: bool
+    tif: int
+    cloid: HyperCoreClientOrderId
+
+
+class HyperCoreCancelByOidArgs(TypedDict):
+    version: FuseAddress
+    asset: HyperCoreAsset
+    oid: HyperCoreOrderId
+
+
+class HyperCoreCancelByCloidArgs(TypedDict):
+    version: FuseAddress
+    asset: HyperCoreAsset
+    cloid: HyperCoreClientOrderId
+
+
+class HyperCoreBuilderFeeFuseEnterArgs(TypedDict):
+    version: FuseAddress
+    builder: ChecksumAddress
+    maxFeeRateDecibps: int
+
+
+class HyperCoreActionEnqueuedArgs(TypedDict):
+    nonce: int
+    actionClass: int
+    settlementMode: int
+    pendingUntil: Timestamp
+    cachedValueWad: int
+    enqueuedL1Block: int
+    enqueuedEvmBlock: int
+    actionId: HyperCoreActionId
+    payloadHash: PayloadHash
+
+
+class HyperCoreActionSettledArgs(TypedDict):
+    nonce: int
+
+
+class HyperCoreReportedActionSettledArgs(TypedDict):
+    nonce: int
+    actionId: HyperCoreActionId
+    payloadHash: PayloadHash
+    outcome: int
+    resultL1Block: int
+    evidenceHash: bytes
+    reasonHash: bytes
+
+
+class HyperCoreReportSubmittedArgs(TypedDict):
+    digest: bytes
+    nonce: int
+    outcome: int
+
+
+class HyperCoreObserverSetProposedArgs(TypedDict):
+    executeAfter: Timestamp
+
+
+class HyperCoreObserverSetChangedArgs(TypedDict):
+    observer0: ChecksumAddress
+    observer1: ChecksumAddress
+    observer2: ChecksumAddress
+
+
+class HyperCoreRecoveryProposedArgs(TypedDict):
+    digest: bytes
+    evidenceHash: bytes
+    reasonHash: bytes
+    executeAfter: Timestamp
+
+
+class HyperCoreRecoveryExecutedArgs(TypedDict):
+    digest: bytes
+    evidenceHash: bytes
+    reasonHash: bytes
+
+
+#: The parameters of one HyperCore event; tell the shapes apart by
+#: ``HyperCoreEvent.name`` or a key (``"evmAsset" in args``).
+HyperCoreEventArgs: TypeAlias = (
+    HyperCoreDepositFuseEnterArgs
+    | HyperCoreMarginFuseEnterArgs
+    | HyperCoreSendFuseSpotSendArgs
+    | HyperCoreSendFuseSendAssetArgs
+    | HyperCoreOrderFuseEnterArgs
+    | HyperCoreCancelByOidArgs
+    | HyperCoreCancelByCloidArgs
+    | HyperCoreBuilderFeeFuseEnterArgs
+    | HyperCoreActionEnqueuedArgs
+    | HyperCoreActionSettledArgs
+    | HyperCoreReportedActionSettledArgs
+    | HyperCoreReportSubmittedArgs
+    | HyperCoreObserverSetProposedArgs
+    | HyperCoreObserverSetChangedArgs
+    | HyperCoreRecoveryProposedArgs
+    | HyperCoreRecoveryExecutedArgs
+)
+
+#: Event name -> the TypedDict its ``args`` is.
+HYPERCORE_EVENT_ARGS: dict[str, type] = {
+    "HyperCoreDepositFuseEnter": HyperCoreDepositFuseEnterArgs,
+    "HyperCoreMarginFuseEnter": HyperCoreMarginFuseEnterArgs,
+    "HyperCoreSendFuseSpotSend": HyperCoreSendFuseSpotSendArgs,
+    "HyperCoreSendFuseSendAsset": HyperCoreSendFuseSendAssetArgs,
+    "HyperCoreOrderFuseEnter": HyperCoreOrderFuseEnterArgs,
+    "HyperCoreCancelFuseCancelByOid": HyperCoreCancelByOidArgs,
+    "HyperCoreCancelFuseCancelByCloid": HyperCoreCancelByCloidArgs,
+    "HyperCoreBuilderFeeFuseEnter": HyperCoreBuilderFeeFuseEnterArgs,
+    "HyperCoreActionEnqueued": HyperCoreActionEnqueuedArgs,
+    "HyperCoreActionSettled": HyperCoreActionSettledArgs,
+    "HyperCoreReportedActionSettled": HyperCoreReportedActionSettledArgs,
+    "ReportSubmitted": HyperCoreReportSubmittedArgs,
+    "ObserverSetProposed": HyperCoreObserverSetProposedArgs,
+    "ObserverSetChanged": HyperCoreObserverSetChangedArgs,
+    "RecoveryProposed": HyperCoreRecoveryProposedArgs,
+    "RecoveryExecuted": HyperCoreRecoveryExecutedArgs,
+}
+
 #: topic0 -> spec, for every HyperCore event.
 HYPERCORE_EVENTS: dict[bytes, HyperCoreEventSpec] = {
     spec.topic: spec for spec in HYPERCORE_EVENT_SPECS
@@ -176,15 +346,15 @@ class HyperCoreEvent:
 
     name: str
     emitter: ChecksumAddress
-    args: dict[str, Any]
+    args: HyperCoreEventArgs
     log_index: int | None = None
 
     @property
-    def fuse(self) -> ChecksumAddress | None:
+    def fuse(self) -> FuseAddress | None:
         """The fuse that emitted a fuse event (its ``version``), else None."""
-        if self.name not in HYPERCORE_FUSE_EVENTS:
+        if self.name not in HYPERCORE_FUSE_EVENTS or "version" not in self.args:
             return None
-        return Web3.to_checksum_address(self.args["version"])
+        return self.args["version"]
 
 
 def hypercore_event_name(topic: bytes | str) -> str | None:
@@ -207,10 +377,15 @@ def decode_hypercore_event(log: LogReceipt) -> HyperCoreEvent | None:
     if spec is None:
         return None
     values = decode([abi_type for abi_type, _ in spec.params], bytes(log["data"]))
-    args = {
-        name: Web3.to_checksum_address(value) if abi_type == "address" else value
-        for (abi_type, name), value in zip(spec.params, values, strict=True)
-    }
+    # Each value is narrowed to its ABI type; the key set is the spec's, which
+    # HYPERCORE_EVENT_ARGS mirrors (pinned by the tests).
+    args = cast(
+        HyperCoreEventArgs,
+        {
+            name: abi_value(abi_type, value)
+            for (abi_type, name), value in zip(spec.params, values, strict=True)
+        },
+    )
     return HyperCoreEvent(
         name=spec.name,
         emitter=Web3.to_checksum_address(log["address"]),

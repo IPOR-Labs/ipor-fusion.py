@@ -5,11 +5,13 @@ decoder's identity, strictness and unknown-topic behavior."""
 import re
 
 import pytest
+from _event_args import assert_args_mirror_spec
 from eth_abi import encode
 from test_solidity_mirrors import _solidity_source
 from web3 import Web3
 
 from ipor_fusion import (
+    EXTERNAL_STATE_EVENT_ARGS,
     EXTERNAL_STATE_EVENT_SPECS,
     EXTERNAL_STATE_TOPICS,
     ExternalStateEventDecodeError,
@@ -17,6 +19,7 @@ from ipor_fusion import (
     external_state_event_name,
     external_state_events,
 )
+from ipor_fusion.fuses.events import abi_value
 
 _SOURCES = (
     "contracts/fuses/external_state/ExternalStateBalanceFuse.sol",
@@ -238,3 +241,23 @@ def test_a_full_raw_json_rpc_log_decodes_to_typed_identity():
 def test_a_valid_unlisted_hex_topic_is_none():
     raw = {"address": VAULT, "topics": ["0x" + "11" * 32], "data": "0x"}
     assert decode_external_state_event(raw) is None
+
+
+@pytest.mark.parametrize("spec", EXTERNAL_STATE_EVENT_SPECS, ids=lambda spec: spec.name)
+def test_args_shape_mirrors_the_spec(spec):
+    assert_args_mirror_spec(EXTERNAL_STATE_EVENT_ARGS[spec.name], spec.params)
+
+
+def test_every_spec_has_an_args_shape():
+    assert set(EXTERNAL_STATE_EVENT_ARGS) == {
+        spec.name for spec in EXTERNAL_STATE_EVENT_SPECS
+    }
+
+
+@pytest.mark.parametrize(
+    ("abi_type", "value"),
+    [("address", 1), ("bool", 1), ("uint256", True), ("bytes32", "0x00")],
+)
+def test_a_value_of_the_wrong_python_type_is_rejected(abi_type, value):
+    with pytest.raises(TypeError, match="decoded as"):
+        abi_value(abi_type, value)

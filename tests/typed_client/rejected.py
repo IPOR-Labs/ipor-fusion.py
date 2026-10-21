@@ -13,7 +13,9 @@ from ipor_fusion import (
     Amount,
     CcipCrosschainFactory,
     ChainId,
+    ExternalStateEvent,
     ExternalStateExecutor,
+    HyperCoreEvent,
     HyperCorePendingReader,
     MorphoBlueMarketJson,
     Multicall3,
@@ -103,3 +105,8 @@ def documents_are_typed(document: VaultInfoJson, market: MorphoBlueMarketJson) -
     print(document["balance_fuses"][0]["pct_of_total"])  # pyright: ignore[reportTypedDictNotRequiredAccess]
     legacy: dict[str, Any] = document  # pyright: ignore[reportAssignmentType]
     print(legacy)
+
+
+def event_args_need_narrowing(event: ExternalStateEvent, hc: HyperCoreEvent) -> None:
+    print(event.args["signer"])  # pyright: ignore[reportGeneralTypeIssues]
+    print(hc.args["evmAsset"])  # pyright: ignore[reportGeneralTypeIssues]
