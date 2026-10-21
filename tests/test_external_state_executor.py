@@ -727,6 +727,18 @@ _EXPECTED_PROPOSAL = BalanceProposal(
 
 
 class TestParseBalanceProposed:
+    @pytest.mark.parametrize("field", ["topics", "data"])
+    def test_bytearray_fields_decode(self, field):
+        log = _proposed_log(as_strings=False)
+        if field == "topics":
+            log["topics"] = [bytearray(log["topics"][0])]
+        else:
+            log["data"] = bytearray(log["data"])
+        parsed = ExternalStateExecutor(EXECUTOR_ADDR).parse_balance_proposed(
+            log, chain_id=EVENT_CHAIN
+        )
+        assert parsed == _EXPECTED_PROPOSAL
+
     @pytest.mark.parametrize("as_strings", [False, True], ids=["hexbytes", "0x-string"])
     def test_decodes_both_log_shapes(self, as_strings):
         # Full-object equality pins every field AND their order.

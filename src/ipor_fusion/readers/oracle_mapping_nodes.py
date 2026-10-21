@@ -6,9 +6,10 @@ and dual-cross-reference feeds)."""
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass, field
+from copy import deepcopy
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypeAlias, TypedDict
 
 from eth_typing import ChecksumAddress
 
@@ -38,6 +39,118 @@ TYPE_UNKNOWN = "custom_unknown"
 WAD_DECIMALS = 18
 
 
+class AggregatorDetailJson(TypedDict):
+    """One aggregator-compatible feed read: raw values, timestamps with their
+    ISO-8601 UTC twins (null for a synthetic epoch 0); every key is null when
+    the round could not be read, ``description`` when the feed lacks it."""
+
+    description: str | None
+    round_id: str | None
+    answer: str | None
+    decimals: Decimals | None
+    started_at: int | None
+    started_at_utc: str | None
+    updated_at: int | None
+    updated_at_utc: str | None
+    answered_in_round: str | None
+
+
+class ChainlinkDetailJson(AggregatorDetailJson):
+    """``ChainlinkAggregator`` / ``chainlink_style`` leaves, with the proxy
+    evidence (null when unanswered)."""
+
+    aggregator: ChecksumAddress | None
+    phase_id: int | None
+
+
+class AggregatorFeedDetailJson(AggregatorDetailJson):
+    """A dual cross-reference component feed."""
+
+    address: ChecksumAddress
+
+
+class DualXrefDetailJson(TypedDict):
+    asset_x: ChecksumAddress
+    asset_x_asset_y_feed: AggregatorFeedDetailJson
+    asset_y_usd_feed: AggregatorFeedDetailJson
+    derived_price_wad: str | None
+
+
+class Erc4626DetailJson(TypedDict):
+    vault: ChecksumAddress
+    underlying: ChecksumAddress
+    share_decimals: Decimals | None
+    rate: str | None
+
+
+class MorphoFeedDetailJson(TypedDict):
+    morpho_oracle: ChecksumAddress
+    collateral_token: ChecksumAddress | None
+    loan_token: ChecksumAddress
+    morpho_price: str | None
+
+
+class MiddlewareFallbackDetailJson(TypedDict):
+    """``delegated_to`` names the global middleware a manager delegates to;
+    otherwise ``chainlink_feed_registry`` the middleware's own fallback."""
+
+    delegated_to: ChecksumAddress | None
+    chainlink_feed_registry: ChecksumAddress | None
+
+
+#: ``OracleNode.source_detail``, one shape per ``source_type``.
+SourceDetailJson: TypeAlias = (
+    ChainlinkDetailJson
+    | DualXrefDetailJson
+    | Erc4626DetailJson
+    | MorphoFeedDetailJson
+    | MiddlewareFallbackDetailJson
+)
+
+
+class OraclePriceJson(TypedDict):
+    raw: str
+    decimals: Decimals
+    normalized_wad: str
+
+
+class OracleNodeJson(TypedDict):
+    """`OracleNode.to_dict`: every key always present."""
+
+    asset: ChecksumAddress
+    symbol: str | None
+    decimals: Decimals | None
+    source: ChecksumAddress | None
+    price: OraclePriceJson | None
+    source_type: str
+    path: list[str]
+    status: NodeStatus
+    reason: str | None
+    source_detail: SourceDetailJson | None
+    dependencies: list[OracleNodeJson]
+
+
+class OracleAssetJson(TypedDict):
+    address: ChecksumAddress
+    symbol: str | None
+    decimals: Decimals | None
+
+
+class OracleMappingJson(TypedDict):
+    """`OracleMapping.to_dict`: the ``fusion vault oracle-mapping --json``
+    document."""
+
+    vault: PlasmaVaultAddress
+    vault_name: str | None
+    asset: OracleAssetJson
+    price_oracle: ChecksumAddress
+    block_number: int
+    asset_source: AssetSource
+    status: MappingStatus
+    configured_assets: list[OracleNodeJson]
+    unresolved: list[OracleNodeJson]
+
+
 @dataclass(slots=True)
 class OraclePrice:
     """Price block: raw oracle answer plus its 18-decimal rescale.
@@ -49,6 +162,13 @@ class OraclePrice:
     raw: str
     decimals: Decimals
     normalized_wad: str
+
+    def to_dict(self) -> OraclePriceJson:
+        return {
+            "raw": self.raw,
+            "decimals": self.decimals,
+            "normalized_wad": self.normalized_wad,
+        }
 
 
 @dataclass(slots=True)
@@ -70,14 +190,25 @@ class OracleNode:
     path: list[str] = field(default_factory=list)
     status: NodeStatus = "partial"
     reason: str | None = None
-    # Deliberately untyped: the payload differs per source_type. Universal
-    # fixed blocks (price) get dataclasses; this is the one dynamic section.
-    source_detail: dict[str, Any] | None = None
+    # The payload differs per source_type; see SourceDetailJson.
+    source_detail: SourceDetailJson | None = None
     dependencies: list[OracleNode] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> OracleNodeJson:
         """JSON-ready shape; every key always present (null/empty when unused)."""
-        return asdict(self)
+        return {
+            "asset": self.asset,
+            "symbol": self.symbol,
+            "decimals": self.decimals,
+            "source": self.source,
+            "price": self.price.to_dict() if self.price is not None else None,
+            "source_type": self.source_type,
+            "path": list(self.path),
+            "status": self.status,
+            "reason": self.reason,
+            "source_detail": deepcopy(self.source_detail),
+            "dependencies": [dep.to_dict() for dep in self.dependencies],
+        }
 
 
 @dataclass(slots=True)
@@ -87,6 +218,13 @@ class OracleAsset:
     address: ChecksumAddress
     symbol: str | None
     decimals: Decimals | None
+
+    def to_dict(self) -> OracleAssetJson:
+        return {
+            "address": self.address,
+            "symbol": self.symbol,
+            "decimals": self.decimals,
+        }
 
 
 @dataclass(slots=True)
@@ -111,8 +249,18 @@ class OracleMapping:
     configured_assets: list[OracleNode]
     unresolved: list[OracleNode]
 
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    def to_dict(self) -> OracleMappingJson:
+        return {
+            "vault": self.vault,
+            "vault_name": self.vault_name,
+            "asset": self.asset.to_dict(),
+            "price_oracle": self.price_oracle,
+            "block_number": self.block_number,
+            "asset_source": self.asset_source,
+            "status": self.status,
+            "configured_assets": [node.to_dict() for node in self.configured_assets],
+            "unresolved": [node.to_dict() for node in self.unresolved],
+        }
 
 
 def collapse_sources(
@@ -194,7 +342,7 @@ def _aggregator_detail(
     description: str | None,
     rnd: tuple[int, int, int, int, int] | None,
     feed_decimals: Decimals | None,
-) -> dict[str, Any]:
+) -> AggregatorDetailJson:
     """Uniform metadata block for one aggregator-compatible feed read.
 
     Raw values only — timestamps are echoed as-is with no staleness judgment

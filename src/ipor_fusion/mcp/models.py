@@ -556,7 +556,9 @@ class OracleNodeModel(_Base):
             path=node.path,
             status=node.status,
             reason=node.reason,
-            source_detail=node.source_detail,
+            source_detail=(
+                dict(node.source_detail) if node.source_detail is not None else None
+            ),
             dependencies=[cls.from_node(dep) for dep in node.dependencies],
         )
 

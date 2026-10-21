@@ -67,6 +67,20 @@ from ipor_fusion.readers.oracle_mapping import (
     OraclePrice,
     build_oracle_mapping,
 )
+from ipor_fusion.readers.oracle_mapping_nodes import (
+    AggregatorDetailJson,
+    AggregatorFeedDetailJson,
+    ChainlinkDetailJson,
+    DualXrefDetailJson,
+    Erc4626DetailJson,
+    MiddlewareFallbackDetailJson,
+    MorphoFeedDetailJson,
+    OracleAssetJson,
+    OracleMappingJson,
+    OracleNodeJson,
+    OraclePriceJson,
+    SourceDetailJson,
+)
 from ipor_fusion.readers.oracle_mapping_reader import OracleMappingReader
 from ipor_fusion.readers.position_manager import PositionData
 from ipor_fusion.readers.ramses_v2 import RamsesV2Position, RamsesV2Reader
@@ -130,6 +144,18 @@ __all__ = [
     "OracleAsset",
     "OracleMapping",
     "OracleNode",
+    "AggregatorDetailJson",
+    "AggregatorFeedDetailJson",
+    "ChainlinkDetailJson",
+    "DualXrefDetailJson",
+    "Erc4626DetailJson",
+    "MiddlewareFallbackDetailJson",
+    "MorphoFeedDetailJson",
+    "OracleAssetJson",
+    "OracleMappingJson",
+    "OracleNodeJson",
+    "OraclePriceJson",
+    "SourceDetailJson",
     "OraclePrice",
     "build_oracle_mapping",
     "OracleMappingReader",

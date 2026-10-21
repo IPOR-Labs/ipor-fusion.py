@@ -737,6 +737,7 @@ untyped code needs none of this section.
 | `build_morpho_blue_market_json` | `MorphoBlueMarketJson` |
 | `build_meta_morpho_json` | `MetaMorphoV1Json \| MetaMorphoV2Json`, told apart by `doc["version"]` |
 | `RoleAccount.to_dict` | `RoleAccountJson` |
+| `OracleMapping.to_dict` / `OracleNode.to_dict` | `OracleMappingJson` / `OracleNodeJson` |
 
 Every nested block has its own TypedDict (`FeesJson`, `WithdrawManagerJson`,
 `BalanceFuseJson`, `ReconciliationJson`, `HyperCoreJson`, `MorphoSupplyingVaultJson`,
@@ -763,6 +764,24 @@ that only some entries carry is `NotRequired` (a balance fuse's `pct_of_total` a
   age) or `DeploymentErrorJson` (`{"error": ...}`) or `None`; `share_price` is
   `SharePriceJson` (`asset`, and `usd` when the asset is priced); `dependency_graph`
   is `DependencyGraphJson` (`edges`, `update_reach`, `update_groups`).
+- `OracleNode.source_detail` is `SourceDetailJson`, one TypedDict per feed kind
+  (`ChainlinkDetailJson`, `DualXrefDetailJson`, `Erc4626DetailJson`,
+  `MorphoFeedDetailJson`, `MiddlewareFallbackDetailJson`; importable from
+  `ipor_fusion` and `ipor_fusion.readers`). Narrow by a key before reading a
+  kind-specific one: `if detail is not None and "aggregator" in detail:
+  detail["description"]`.
+- Event `args` are typed per event kind: `ExternalStateEvent.args` is
+  `ExternalStateEventArgs` and `HyperCoreEvent.args` is `HyperCoreEventArgs`, a union
+  of one TypedDict per event (`ExternalStateUnpausedArgs`,
+  `HyperCoreDepositFuseEnterArgs`, ...; `EXTERNAL_STATE_EVENT_ARGS` /
+  `HYPERCORE_EVENT_ARGS` map an event name to its shape). Values carry nominal types
+  (`Amount`, `MarketId`, `FuseAddress`, `HyperCoreTokenIndex`, `PayloadHash`, web3's
+  `Timestamp`, ...). `event.args["signer"]` no longer type-checks on its own: narrow
+  with a key test (`if "signer" in event.args:`). `HyperCoreEvent.fuse` is a
+  `FuseAddress | None`.
+- `RawLog` (the log shape `ExternalStateExecutor.parse_balance_proposed` /
+  `find_balance_proposed` accept) is `Mapping[str, object]`, not `Mapping[str, Any]`;
+  a web3 `LogReceipt` still fits it.
 
 ## Behavior changes
 

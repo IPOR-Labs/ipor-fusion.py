@@ -24,21 +24,25 @@ def _format_wad_price(price: OraclePrice | None) -> str:
 
 def _print_feed_line(node: OracleNode) -> None:
     """The feed's self-declared units — key for confirming what a value means."""
-    detail = node.source_detail or {}
+    detail = node.source_detail
     if node.source_type in (TYPE_CHAINLINK, TYPE_CHAINLINK_STYLE):
-        if detail.get("description"):
+        if detail is not None and "aggregator" in detail and detail["description"]:
             click.echo(f"    Feed:   {detail['description']}")
         else:
             # only chainlink_style can land here — the confirmed tier
             # requires a non-empty description
             click.secho("    Feed:   (no description)", fg="yellow")
-    elif node.source_type == TYPE_DUAL_XREF:
+    elif (
+        node.source_type == TYPE_DUAL_XREF
+        and detail is not None
+        and "asset_x" in detail
+    ):
         rendered = [
             # quoted — the descriptions themselves contain " / "
             f'"{d}"' if d else click.style("(no description)", fg="yellow")
             for d in (
-                (detail.get(key) or {}).get("description")
-                for key in ("asset_x_asset_y_feed", "asset_y_usd_feed")
+                detail["asset_x_asset_y_feed"]["description"],
+                detail["asset_y_usd_feed"]["description"],
             )
         ]
         click.echo(f"    Feed:   {' × '.join(rendered)}")

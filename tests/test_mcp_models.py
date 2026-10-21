@@ -35,6 +35,7 @@ from ipor_fusion import (
     MetaMorphoV2Json,
     MorphoBlueMarketId,
     MorphoBlueMarketJson,
+    OracleMappingJson,
     PlasmaVaultAddress,
     PricedAmountJson,
     UsdAmountJson,
@@ -501,11 +502,19 @@ def _is_model(leaf: object) -> bool:
     return isinstance(leaf, type) and issubclass(leaf, BaseModel)
 
 
-def _assert_mirrors(document: type, model: type[BaseModel], path: str) -> None:
+def _assert_mirrors(
+    document: type,
+    model: type[BaseModel],
+    path: str,
+    seen: frozenset[tuple[type, type]] = frozenset(),
+) -> None:
     """Every key of ``document`` (a TypedDict) is a ``model`` field, a key it
     may omit has a default there, so has a field it never writes (a shared
     model such as `Amount` declares more), and every nested model is
-    mirrored by a nested TypedDict the same way."""
+    mirrored by a nested TypedDict the same way (a recursive pair once)."""
+    if (document, model) in seen:
+        return
+    seen = seen | {(document, model)}
     keys = document.__required_keys__ | document.__optional_keys__  # type: ignore[attr-defined]
     fields = model.model_fields
     assert keys <= set(fields), f"{path}: {sorted(keys - set(fields))}"
@@ -519,7 +528,7 @@ def _assert_mirrors(document: type, model: type[BaseModel], path: str) -> None:
         nested_document = _nested(hints[key], typing.is_typeddict)
         assert isinstance(nested_document, type), f"{path}.{key}"
         assert isinstance(nested_model, type) and issubclass(nested_model, BaseModel)
-        _assert_mirrors(nested_document, nested_model, f"{path}.{key}")
+        _assert_mirrors(nested_document, nested_model, f"{path}.{key}", seen)
 
 
 class TestTypedDocumentsMirrorModels:
@@ -528,6 +537,9 @@ class TestTypedDocumentsMirrorModels:
 
     def test_vault_info(self):
         _assert_mirrors(VaultInfoJson, VaultInfoResponse, "vault_info")
+
+    def test_oracle_mapping(self):
+        _assert_mirrors(OracleMappingJson, OracleMappingResponse, "oracle_mapping")
 
     def test_morpho_blue_market(self):
         _assert_mirrors(MorphoBlueMarketJson, MorphoBlueMarketResponse, "market")

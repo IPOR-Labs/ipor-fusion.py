@@ -13,6 +13,7 @@ from pathlib import Path
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
+from web3.types import TxReceipt
 
 from ipor_fusion import (
     ERC20,
@@ -35,6 +36,7 @@ from ipor_fusion import (
     Decimals,
     ExternalStateExecutor,
     FileContractCache,
+    HyperCoreActionId,
     HyperCorePendingReader,
     IporFusionMarkets,
     LaneObservation,
@@ -45,6 +47,8 @@ from ipor_fusion import (
     MorphoReader,
     Multicall3,
     NullCache,
+    OracleMapping,
+    OracleMappingJson,
     Period,
     PlasmaVault,
     PlasmaVaultAddress,
@@ -65,6 +69,7 @@ from ipor_fusion import (
     build_vault_info_json,
     decode_substrate,
     ensure_supported_chain,
+    external_state_events,
     fetch_deployment_info,
     fetch_market,
     fetch_unpriceable_priced_tokens,
@@ -73,6 +78,7 @@ from ipor_fusion import (
     find_orphan_fuse_markets,
     format_market_label,
     get_contract_name,
+    hypercore_events,
     market_name,
     morpho_blue_address,
     parse_hex_address,
@@ -310,3 +316,25 @@ def meta_morpho_document(document: MetaMorphoV1Json | MetaMorphoV2Json) -> None:
         print([cap["room"] for cap in document["caps"]])
     else:
         print([allocation["cap_room"] for allocation in document["allocations"]])
+
+
+def event_args(receipt: TxReceipt) -> None:
+    """An event's ``args`` is one TypedDict per event kind: a key test
+    narrows the union to the kinds that carry it."""
+    for event in external_state_events(receipt):
+        if "signer" in event.args:
+            signer: ChecksumAddress = event.args["signer"]
+            balance: Amount = event.args["confirmedTotalBalance"]
+            print(signer, balance)
+    for hc_event in hypercore_events(receipt):
+        if "payloadHash" in hc_event.args and "cachedValueWad" in hc_event.args:
+            action: HyperCoreActionId = hc_event.args["actionId"]
+            print(action, hc_event.fuse)
+
+
+def oracle_mapping_document(mapping: OracleMapping) -> None:
+    document: OracleMappingJson = mapping.to_dict()
+    for node in document["configured_assets"]:
+        detail = node["source_detail"]
+        if detail is not None and "aggregator" in detail:
+            print(detail["description"], detail["phase_id"])

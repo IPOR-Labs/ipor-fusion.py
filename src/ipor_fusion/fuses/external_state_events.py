@@ -24,16 +24,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TypeAlias, TypedDict, cast
 
 from eth_abi import decode
 from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.types import TxReceipt
+from web3.types import Timestamp, TxReceipt
 
 from ipor_fusion.errors import ExternalStateEventDecodeError
-from ipor_fusion.types import TxHash, parse_tx_hash
+from ipor_fusion.fuses.events import abi_value
+from ipor_fusion.types import Amount, FuseAddress, MarketId, TxHash, parse_tx_hash
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +115,85 @@ EXTERNAL_STATE_EVENT_SPECS: tuple[ExternalStateEventSpec, ...] = (
     ),
 )
 
+
+class ExternalStateBigChangeDetectedArgs(TypedDict):
+    previousTotal: Amount
+    newTotal: Amount
+    thresholdBps: int
+
+
+class ExternalStateCustodianTimestampUpdatedArgs(TypedDict):
+    """``ExternalStateBalanceFuseLastCustodianTimestampUpdated``."""
+
+    oldTimestamp: Timestamp
+    newTimestamp: Timestamp
+
+
+class ExternalStateTotalBalanceUpdatedArgs(TypedDict):
+    """``ExternalStateBalanceFuseLastTotalBalanceUpdated``."""
+
+    oldTotalBalance: Amount
+    newTotalBalance: Amount
+
+
+class ExternalStateUnpausedArgs(TypedDict):
+    signer: ChecksumAddress
+    confirmedTotalBalance: Amount
+    nonce: int
+
+
+class ExternalStateAssetRescuedArgs(TypedDict):
+    asset: ChecksumAddress
+
+
+class ExternalStateExecutorArgs(TypedDict):
+    """``ExecutorCreated`` and ``ExternalStateExecutorDeployed``."""
+
+    executor: ChecksumAddress
+    marketId: MarketId
+
+
+class ExternalStateOperationArgs(TypedDict):
+    """``ExternalStateOperationFuseEnter`` and ``ExternalStateOperationFuseExit``;
+    ``version`` is the operation fuse's address."""
+
+    version: FuseAddress
+    asset: ChecksumAddress
+    amount: Amount
+    balanceAccount: ChecksumAddress
+    valueInUnderlying: Amount
+    actionsCount: int
+
+
+#: The parameters of one ExternalState event, by its Solidity names; tell the
+#: shapes apart by ``ExternalStateEvent.name`` or a key (``"signer" in args``).
+ExternalStateEventArgs: TypeAlias = (
+    ExternalStateBigChangeDetectedArgs
+    | ExternalStateCustodianTimestampUpdatedArgs
+    | ExternalStateTotalBalanceUpdatedArgs
+    | ExternalStateUnpausedArgs
+    | ExternalStateAssetRescuedArgs
+    | ExternalStateExecutorArgs
+    | ExternalStateOperationArgs
+)
+
+#: Event name -> the TypedDict its ``args`` is.
+EXTERNAL_STATE_EVENT_ARGS: dict[str, type] = {
+    "ExternalStateBigChangeDetected": ExternalStateBigChangeDetectedArgs,
+    "ExternalStateBalanceFuseLastCustodianTimestampUpdated": (
+        ExternalStateCustodianTimestampUpdatedArgs
+    ),
+    "ExternalStateBalanceFuseLastTotalBalanceUpdated": (
+        ExternalStateTotalBalanceUpdatedArgs
+    ),
+    "ExternalStateUnpaused": ExternalStateUnpausedArgs,
+    "ExternalStateAssetRescued": ExternalStateAssetRescuedArgs,
+    "ExecutorCreated": ExternalStateExecutorArgs,
+    "ExternalStateOperationFuseEnter": ExternalStateOperationArgs,
+    "ExternalStateOperationFuseExit": ExternalStateOperationArgs,
+    "ExternalStateExecutorDeployed": ExternalStateExecutorArgs,
+}
+
 #: topic0 -> spec, for every ExternalState event the vault emits.
 EXTERNAL_STATE_EVENTS: dict[bytes, ExternalStateEventSpec] = {
     spec.topic: spec for spec in EXTERNAL_STATE_EVENT_SPECS
@@ -130,7 +210,7 @@ class ExternalStateEvent:
 
     name: str
     emitter: ChecksumAddress
-    args: dict[str, Any]
+    args: ExternalStateEventArgs
     block_number: int | None = None
     transaction_hash: TxHash | None = None
     log_index: int | None = None
@@ -230,10 +310,15 @@ def decode_external_state_event(  # proctor: ignore[primitives-untyped-dict]
         values = decode([abi_type for abi_type, _ in spec.params], raw)
     except DecodingError as exc:
         raise ExternalStateEventDecodeError(f"{spec.name}: {exc}") from exc
-    args = {
-        name: Web3.to_checksum_address(value) if abi_type == "address" else value
-        for (abi_type, name), value in zip(spec.params, values, strict=True)
-    }
+    # Each value is narrowed to its ABI type; the key set is the spec's, which
+    # EXTERNAL_STATE_EVENT_ARGS mirrors (pinned by the tests).
+    args = cast(
+        ExternalStateEventArgs,
+        {
+            name: abi_value(abi_type, value)
+            for (abi_type, name), value in zip(spec.params, values, strict=True)
+        },
+    )
     address = log.get("address")
     if not isinstance(address, str | bytes):
         raise ExternalStateEventDecodeError(f"{spec.name}: emitter")

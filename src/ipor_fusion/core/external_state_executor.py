@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TypeAlias
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -44,8 +44,9 @@ from ipor_fusion.types import (
 # (HexBytes fields, checksummed address), and a raw JSON-RPC or
 # `eth_simulateV1` row (0x-hex strings, lowercase address). Looser than
 # `web3.types.LogReceipt`, which the rest of `core/` uses, because those rows
-# carry neither its field types nor all of its required keys.
-RawLog = Mapping[str, Any]
+# carry neither its field types nor all of its required keys. Every field is
+# read as `object` and narrowed; a `LogReceipt` is one of these mappings.
+RawLog: TypeAlias = Mapping[str, object]
 
 
 def _log_emitter(log: RawLog) -> ChecksumAddress | None:
@@ -55,7 +56,7 @@ def _log_emitter(log: RawLog) -> ChecksumAddress | None:
     matched against an expected emitter, and a caller scanning foreign rows
     should skip such a log rather than have the scan abort on it."""
     emitter = log.get("address")
-    if emitter is None:
+    if not isinstance(emitter, str | bytes):
         return None
     try:
         return Web3.to_checksum_address(emitter)
@@ -591,11 +592,14 @@ class ExternalStateExecutor(ContractWrapper):
         event -- the rule `_log_emitter` already applies to an unreadable
         address, and it keeps a raise meaning "ours, but the payload is broken".
         """
-        topics = log.get("topics") or ()
-        if not topics:
+        topics = log.get("topics")
+        if not isinstance(topics, list | tuple) or not topics:
+            return False
+        topic = topics[0]
+        if not isinstance(topic, str | bytes | bytearray):
             return False
         try:
-            return HexBytes(topics[0]) == cls._BALANCE_PROPOSED_TOPIC
+            return HexBytes(topic) == cls._BALANCE_PROPOSED_TOPIC
         except (ValueError, TypeError):
             return False
 
@@ -653,6 +657,10 @@ class ExternalStateExecutor(ContractWrapper):
         data = log.get("data")
         if data is None:
             raise ExternalStateError("BalanceProposed log carries no data")
+        if not isinstance(data, str | bytes | bytearray):
+            raise ExternalStateError(
+                f"malformed BalanceProposed data: {type(data).__name__}"
+            )
         try:
             # Unpacked in the order `BalanceProposed` declares them; all six
             # are unindexed, so topics carries topic0 alone.

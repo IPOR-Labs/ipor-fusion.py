@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
+from web3 import Web3
 
 from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
@@ -190,8 +191,9 @@ class TestOracleMappingCommand:
         node = _resolved_node()
         node.source_type = "chainlink_style"
         node.path = ["USDC", "Chainlink-style feed"]
-        assert node.source_detail is not None
-        node.source_detail["description"] = None
+        detail = node.source_detail
+        assert detail is not None and "aggregator" in detail
+        detail["description"] = None
         mock_build.return_value = _mapping([node])
 
         result = CliRunner().invoke(
@@ -211,7 +213,12 @@ class TestOracleMappingCommand:
         node = _resolved_node()
         node.source_type = "ERC4626PriceFeed"
         node.path = ["wsrUSD", "convertToAssets(1 share)", "USDC", "Chainlink feed"]
-        node.source_detail = {"vault": FEED, "underlying": USDC}
+        node.source_detail = {
+            "vault": Web3.to_checksum_address(FEED),
+            "underlying": Web3.to_checksum_address(USDC),
+            "share_decimals": None,
+            "rate": None,
+        }
         mock_build.return_value = _mapping([node])
 
         result = CliRunner().invoke(
@@ -241,8 +248,9 @@ class TestOracleMappingCommand:
     ):
         mock_ctx_cls.from_url.return_value = _fake_ctx()
         node = _dual_xref_node()
-        assert node.source_detail is not None
-        node.source_detail["asset_x_asset_y_feed"]["description"] = None
+        detail = node.source_detail
+        assert detail is not None and "asset_x" in detail
+        detail["asset_x_asset_y_feed"]["description"] = None
         mock_build.return_value = _mapping([node])
 
         result = CliRunner().invoke(

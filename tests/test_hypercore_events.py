@@ -7,11 +7,14 @@ import json
 from pathlib import Path
 
 import pytest
+from _event_args import assert_args_mirror_spec
 from eth_abi import encode
 from hexbytes import HexBytes
 from web3 import Web3
 
 from ipor_fusion import (
+    HYPERCORE_EVENT_ARGS,
+    HYPERCORE_EVENT_SPECS,
     HYPERCORE_EVENTS,
     HyperCoreEvent,
     decode_hypercore_event,
@@ -135,14 +138,15 @@ def test_decodes_fuse_and_library_events_from_data_alone():
     deposit_event, enqueued_event = events
     assert isinstance(deposit_event, HyperCoreEvent)
     assert deposit_event.fuse == fuse and deposit_event.emitter == VAULT
-    assert deposit_event.args["evmAsset"] == usdc
-    assert (deposit_event.args["amount"], deposit_event.args["coreWei"]) == (
-        15_000_000,
-        1_500_000_000,
-    )
+    deposit = deposit_event.args
+    assert "evmAsset" in deposit
+    assert deposit["evmAsset"] == usdc
+    assert (deposit["amount"], deposit["coreWei"]) == (15_000_000, 1_500_000_000)
     assert enqueued_event.fuse is None
-    assert enqueued_event.args["nonce"] == 7 and enqueued_event.args["actionId"] == 13
-    assert enqueued_event.args["payloadHash"] == b"\x42" * 32
+    enqueued = enqueued_event.args
+    assert "payloadHash" in enqueued and "cachedValueWad" in enqueued
+    assert enqueued["nonce"] == 7 and enqueued["actionId"] == 13
+    assert enqueued["payloadHash"] == b"\x42" * 32
     assert enqueued_event.log_index == 2
     assert find_hypercore_events(receipt, "HyperCoreActionEnqueued") == [enqueued_event]  # type: ignore[arg-type]
     assert decode_hypercore_event(receipt["logs"][0]) is None  # type: ignore[arg-type]
@@ -152,3 +156,12 @@ def test_decodes_fuse_and_library_events_from_data_alone():
 
 def test_every_spec_has_a_distinct_topic():
     assert len(HYPERCORE_EVENTS) == 16
+
+
+@pytest.mark.parametrize("spec", HYPERCORE_EVENT_SPECS, ids=lambda spec: spec.name)
+def test_args_shape_mirrors_the_spec(spec):
+    assert_args_mirror_spec(HYPERCORE_EVENT_ARGS[spec.name], spec.params)
+
+
+def test_every_spec_has_an_args_shape():
+    assert set(HYPERCORE_EVENT_ARGS) == {spec.name for spec in HYPERCORE_EVENT_SPECS}

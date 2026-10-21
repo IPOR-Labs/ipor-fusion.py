@@ -249,9 +249,10 @@ class TestResolve:
         assert node.status == "resolved"
         assert node.source_type == om.TYPE_CHAINLINK_STYLE
         assert node.reason is None
-        assert node.source_detail is not None
-        assert node.source_detail["description"] is None
-        assert node.source_detail["answer"] == "99980000"
+        detail = node.source_detail
+        assert detail is not None and "aggregator" in detail
+        assert detail["description"] is None
+        assert detail["answer"] == "99980000"
 
     def test_chainlink_missing_version_demoted_to_style(self):
         # version() is the last gate probe — without it the full
@@ -283,8 +284,9 @@ class TestResolve:
         assert node.source_type == om.TYPE_CHAINLINK_STYLE
         assert node.status == "resolved"
         assert node.reason is None
-        assert node.source_detail is not None
-        assert node.source_detail["decimals"] is None
+        detail = node.source_detail
+        assert detail is not None and "aggregator" in detail
+        assert detail["decimals"] is None
 
     def test_chainlink_degenerate_round_demoted_to_style(self):
         # zero roundId / updatedAt are synthetic values wrapper feeds return;
@@ -313,8 +315,9 @@ class TestResolve:
 
         assert node.source_type == om.TYPE_CHAINLINK_STYLE
         assert node.status == "resolved"
-        assert node.source_detail is not None
-        assert node.source_detail["description"] == ""
+        detail = node.source_detail
+        assert detail is not None and "aggregator" in detail
+        assert detail["description"] == ""
 
     def test_chainlink_proxy_evidence_recorded(self):
         # aggregator()/phaseId() answering is evidence, not a gate — recorded
@@ -329,9 +332,10 @@ class TestResolve:
         node = om.resolve_asset(r, usdc, max_depth=6)
 
         assert node.source_type == om.TYPE_CHAINLINK
-        assert node.source_detail is not None
-        assert node.source_detail["aggregator"] == aggregator
-        assert node.source_detail["phase_id"] == 3
+        detail = node.source_detail
+        assert detail is not None and "aggregator" in detail
+        assert detail["aggregator"] == aggregator
+        assert detail["phase_id"] == 3
 
     def test_negative_answer_serialized_as_string(self):
         # int256 answers can be negative; serialization must keep the sign
@@ -344,8 +348,9 @@ class TestResolve:
         node = om.resolve_asset(r, usdc, max_depth=6)
 
         assert node.source_type == om.TYPE_CHAINLINK
-        assert node.source_detail is not None
-        assert node.source_detail["answer"] == "-5"
+        detail = node.source_detail
+        assert detail is not None and "aggregator" in detail
+        assert detail["answer"] == "-5"
 
     def test_erc4626_recurses_to_underlying(self):
         r = FakeReader()
@@ -364,9 +369,10 @@ class TestResolve:
 
         assert node.status == "resolved"
         assert node.source_type == om.TYPE_ERC4626
-        assert node.source_detail is not None
-        assert node.source_detail["underlying"] == rusd
-        assert node.source_detail["rate"] == "1040000"
+        detail = node.source_detail
+        assert detail is not None and "underlying" in detail
+        assert detail["underlying"] == rusd
+        assert detail["rate"] == "1040000"
         assert [d.asset for d in node.dependencies] == [rusd]
         assert node.path == [
             "wsrUSD",
@@ -392,9 +398,10 @@ class TestResolve:
 
         assert node.status == "resolved"
         assert node.source_type == om.TYPE_MORPHO
-        assert node.source_detail is not None
-        assert node.source_detail["loan_token"] == loan
-        assert node.source_detail["morpho_price"] == "1030000"
+        detail = node.source_detail
+        assert detail is not None and "loan_token" in detail
+        assert detail["loan_token"] == loan
+        assert detail["morpho_price"] == "1030000"
         assert [d.asset for d in node.dependencies] == [loan]
         assert node.path[:2] == ["COLL", "Morpho collateral/loan oracle"]
 
@@ -442,9 +449,10 @@ class TestResolve:
             "ASSET_X/ASSET_Y feed",
             "ASSET_Y/USD feed",
         ]
-        assert node.source_detail is not None
-        assert node.source_detail["asset_x"] == wsteth
-        assert node.source_detail["asset_x_asset_y_feed"] == {
+        detail = node.source_detail
+        assert detail is not None and "asset_x" in detail
+        assert detail["asset_x"] == wsteth
+        assert detail["asset_x_asset_y_feed"] == {
             "address": xy_feed,
             "description": "wstETH / stETH",
             "round_id": "7",
@@ -456,7 +464,7 @@ class TestResolve:
             "updated_at_utc": "2023-11-14T22:13:20Z",
             "answered_in_round": "7",
         }
-        assert node.source_detail["asset_y_usd_feed"] == {
+        assert detail["asset_y_usd_feed"] == {
             "address": y_usd_feed,
             "description": "ETH / USD",
             "round_id": "9",
@@ -469,7 +477,7 @@ class TestResolve:
             "answered_in_round": "9",
         }
         # 1.3 X/Y × 2000 Y/USD = 2600 USD, rescaled to 18 decimals
-        assert node.source_detail["derived_price_wad"] == str(2_600 * 10**18)
+        assert detail["derived_price_wad"] == str(2_600 * 10**18)
         assert node.dependencies == []
 
     def test_dual_xref_component_without_description_reports_null(self):
@@ -501,9 +509,10 @@ class TestResolve:
         node = om.resolve_asset(r, wsteth, max_depth=6)
 
         assert node.status == "resolved"
-        assert node.source_detail is not None
-        assert node.source_detail["asset_x_asset_y_feed"]["description"] is None
-        assert node.source_detail["asset_y_usd_feed"]["description"] == "ETH / USD"
+        detail = node.source_detail
+        assert detail is not None and "asset_x" in detail
+        assert detail["asset_x_asset_y_feed"]["description"] is None
+        assert detail["asset_y_usd_feed"]["description"] == "ETH / USD"
 
     def test_dual_xref_component_unreadable_is_partial(self):
         r = FakeReader()
@@ -529,11 +538,12 @@ class TestResolve:
         assert node.source_type == om.TYPE_DUAL_XREF
         assert node.status == "partial"
         assert node.reason == "dual_xref_component_unreadable"
-        assert node.source_detail is not None
+        detail = node.source_detail
+        assert detail is not None and "asset_x" in detail
         # the readable component is still reported
-        assert node.source_detail["asset_x_asset_y_feed"]["answer"] == str(13 * 10**17)
-        assert node.source_detail["asset_y_usd_feed"]["answer"] is None
-        assert node.source_detail["derived_price_wad"] is None
+        assert detail["asset_x_asset_y_feed"]["answer"] == str(13 * 10**17)
+        assert detail["asset_y_usd_feed"]["answer"] is None
+        assert detail["derived_price_wad"] is None
         # the authoritative middleware price is carried regardless
         assert node.price is not None
         assert node.price.raw == str(2_600 * 10**8)
@@ -562,10 +572,11 @@ class TestResolve:
         assert node.source_type == om.TYPE_DUAL_XREF
         assert node.status == "partial"
         assert node.reason == "dual_xref_component_unreadable"
-        assert node.source_detail is not None
-        assert node.source_detail["asset_x_asset_y_feed"]["answer"] is None
-        assert node.source_detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
-        assert node.source_detail["derived_price_wad"] is None
+        detail = node.source_detail
+        assert detail is not None and "asset_x" in detail
+        assert detail["asset_x_asset_y_feed"]["answer"] is None
+        assert detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
+        assert detail["derived_price_wad"] is None
 
     def test_dual_xref_missing_component_decimals_is_partial(self):
         r = FakeReader()
@@ -593,10 +604,11 @@ class TestResolve:
         assert node.source_type == om.TYPE_DUAL_XREF
         assert node.status == "partial"
         assert node.reason == "dual_xref_component_unreadable"
-        assert node.source_detail is not None
-        assert node.source_detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
-        assert node.source_detail["asset_y_usd_feed"]["decimals"] is None
-        assert node.source_detail["derived_price_wad"] is None
+        detail = node.source_detail
+        assert detail is not None and "asset_x" in detail
+        assert detail["asset_y_usd_feed"]["answer"] == str(2_000 * 10**8)
+        assert detail["asset_y_usd_feed"]["decimals"] is None
+        assert detail["derived_price_wad"] is None
 
     def test_dual_xref_probe_incomplete_falls_through_to_chainlink_style(self):
         r = FakeReader()
@@ -711,8 +723,9 @@ class TestResolve:
         assert node.reason == "manager_price_unreadable"
         assert node.source_type == om.TYPE_MIDDLEWARE_FALLBACK
         assert node.price is None
-        assert node.source_detail is not None
-        assert node.source_detail["delegated_to"] == mw
+        detail = node.source_detail
+        assert detail is not None and "delegated_to" in detail
+        assert detail["delegated_to"] == mw
         dep = node.dependencies[0]
         assert dep.status == "partial"
         assert dep.reason == "no_source_configured"
@@ -948,8 +961,9 @@ class TestResolve:
         assert node.source_type == om.TYPE_ERC4626
         assert node.status == "partial"
         assert node.reason == "erc4626_rate_unreadable"
-        assert node.source_detail is not None
-        assert node.source_detail["rate"] is None
+        detail = node.source_detail
+        assert detail is not None and "underlying" in detail
+        assert detail["rate"] is None
         dep = node.dependencies[0]
         assert dep.asset == rusd
         assert dep.status == "resolved"
@@ -1081,7 +1095,9 @@ class TestToDict:
         }
         assert out["reason"] is None
         assert out["dependencies"] == []
-        assert out["source_detail"]["answer"] == "99980000"
+        detail = out["source_detail"]
+        assert detail is not None and "aggregator" in detail
+        assert detail["answer"] == "99980000"
 
     def test_partial_node_carries_reason_and_null_source_detail(self):
         r = FakeReader()
