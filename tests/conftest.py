@@ -46,7 +46,7 @@ def sequential_multicall():
     """Run the vault fetch's batched reads one `Call` at a time, for tests that
     mock contract wrappers (`.call.return_value`) instead of raw eth_call data."""
     with (
-        patch("ipor_fusion.vault_reads.Multicall3", SequentialMulticall),
+        patch("ipor_fusion.vault_managers.Multicall3", SequentialMulticall),
         patch("ipor_fusion.vault_positions.Multicall3", SequentialMulticall),
         patch("ipor_fusion.vault_data.Multicall3", SequentialMulticall),
         patch("ipor_fusion.vault_erc20.Multicall3", SequentialMulticall),

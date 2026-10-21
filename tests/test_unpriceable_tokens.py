@@ -57,6 +57,15 @@ class _FakeMulticall:
     def try_aggregate(self, calls):
         return [self.answers.get((call.to, bytes(call.data))) for call in calls]
 
+    def batch(self):
+        return self
+
+    def try_add(self, call):
+        return SimpleNamespace(value=self.answers.get((call.to, bytes(call.data))))
+
+    def run(self):
+        pass
+
 
 def _oracle_answers(sources: dict[str, str], priced: set[str]):
     answers: dict[tuple[str, bytes], object] = {}

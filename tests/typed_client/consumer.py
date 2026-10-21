@@ -10,6 +10,7 @@ executed.
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import assert_type
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
@@ -21,6 +22,7 @@ from ipor_fusion import (
     Amount,
     AssetId,
     BalanceProposal,
+    BatchValue,
     Call,
     CcipCrosschainDispatcher,
     CcipCrosschainExecutor,
@@ -35,6 +37,7 @@ from ipor_fusion import (
     Decimals,
     ExternalStateExecutor,
     FileContractCache,
+    FuseAddress,
     HyperCorePendingReader,
     IporFusionMarkets,
     LaneObservation,
@@ -44,6 +47,7 @@ from ipor_fusion import (
     MetaMorphoV2Json,
     MorphoReader,
     Multicall3,
+    Multicall3Batch,
     NullCache,
     Period,
     PlasmaVault,
@@ -54,11 +58,14 @@ from ipor_fusion import (
     RewardsManager,
     RoleId,
     Roles,
+    SimulatedCallResult,
+    SimulationObservation,
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
     TransactionError,
     VaultInfoJson,
+    VaultSimulator,
     Web3Context,
     build_meta_morpho_json,
     build_morpho_blue_market_json,
@@ -219,6 +226,30 @@ def offline_wrappers_and_executors(
     price: Price = legacy.get_asset_price(account).call(ctx)
     price_oracle_middleware(ctx, token).get_asset_price(account).call(ctx)
     del calldata, decimals, price
+
+
+def mixed_batches_keep_their_types(
+    ctx: Web3Context, web3: Web3, token: ChecksumAddress
+) -> None:
+    vault = PlasmaVault(VAULT)
+    batch: Multicall3Batch = Multicall3(ctx).batch()
+    assets = batch.add(vault.total_assets())
+    fuses = batch.add(vault.get_fuses())
+    name = batch.try_add(vault.name())
+    batch.run()
+    assert_type(assets, BatchValue[Amount])
+    assert_type(assets.value, Amount)
+    assert_type(fuses.value, list[FuseAddress])
+    assert_type(name.value, str | None)
+
+    sim = VaultSimulator(web3, vault=VAULT)
+    before = sim.observe(vault.total_assets())
+    decimals = sim.observe(ERC20(token).decimals(), label="decimals")
+    sim.run()
+    assert_type(before, SimulationObservation[Amount])
+    assert_type(before.value, Amount)
+    assert_type(decimals.value, Decimals)
+    assert_type(before.result, SimulatedCallResult)
 
 
 def proposals_are_chain_bound(

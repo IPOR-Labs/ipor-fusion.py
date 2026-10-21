@@ -207,8 +207,8 @@ the lifecycle matrix follows that.
   balance-graph checks
 - `vault_data.py` — public vault read: `fetch_vault_data` → `VaultData` (with `FeeData`,
   `WithdrawManagerData`), `fetch_deployment_info`, cached `resolve_token_symbol` /
-  `resolve_token_decimals`; it composes `vault_reads.py` (the shared Multicall3 batch
-  and degrade-to-``None`` helpers), `vault_managers.py` (fee and WithdrawManager
+  `resolve_token_decimals`; it composes `vault_reads.py` (the degrade-to-``None``
+  helpers), `vault_managers.py` (fee and WithdrawManager
   snapshots), `vault_positions.py` (Morpho/Aave position breakdowns and their token
   prices) and `vault_erc20.py` (the ERC20_VAULT_BALANCE holdings);
   `vault_info.py` — `build_vault_info_json(data)`, the `fusion vault info --json`
@@ -340,10 +340,14 @@ or examples.
   never consults the executing context.
 - Batch independent reads: `Multicall3(ctx).aggregate(calls)` (raises as
   `.call(ctx)` would) or `.try_aggregate(calls)` (``None`` per failed read) runs
-  many `Call`s in one `eth_call` at one block; every batch, re-run and
-  no-Multicall fallback runs on its `ctx`. A loop of `.call(ctx)`s, or a
-  thread pool of them, costs one round trip each; RPC latency, not decoding,
-  is what makes the vault tooling slow.
+  many `Call`s of one type in one `eth_call` at one block. Reads of different
+  types go through `batch = Multicall3(ctx).batch()`: `batch.add(call)` returns a
+  `BatchValue[T]` (raises from `batch.run()` as `.call(ctx)` would),
+  `batch.try_add(call)` a `BatchValue[T | None]`, and after one `batch.run()`
+  each `.value` keeps its type; never collect mixed reads in a `list[Call[Any]]`
+  or unpack an `aggregate` of them. Every batch, re-run and no-Multicall fallback
+  runs on its `ctx`. A loop of `.call(ctx)`s, or a thread pool of them, costs one
+  round trip each; RPC latency, not decoding, is what makes the vault tooling slow.
 - Fuses (`fuses/`) are stateless encoders: a method returns an immutable
   `FuseAction(fuse_address, calldata)` and touches no chain. `Fuse` builds it
   via `self._action_raw(solidity_signature, values)`; the shared `_validate_*`
@@ -354,8 +358,11 @@ or examples.
   pins one read.
 - Simulate before sending: `VaultSimulator(web3, vault=, alpha=)` batches
   `execute` and `observe` calls into one `eth_simulateV1` round trip, across
-  blocks via `next_block`. Integration tests and examples use it instead of a
-  local node.
+  blocks via `next_block`. `observe(call, label=)` returns a
+  `SimulationObservation[T]`; after `run()` its `.value` is the typed read (it
+  raises when the read reverted), from the latest run, so a crosschain relay
+  round re-resolves it. Labels only name calls in `result.calls` and failures.
+  Integration tests and examples use it instead of a local node.
 - Amounts are raw on-chain integers; `types.py` `NewType`s (`Amount`, `Shares`,
   `MarketId`, ...) name the unit, and nothing scales by decimals.
 - Three address roles are nominal: `PlasmaVaultAddress`, `FuseAddress` and

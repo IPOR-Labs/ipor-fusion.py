@@ -8,7 +8,7 @@ import pytest
 from _multicall import multicall_aware
 from _simulate import simulate_response
 from eth_abi import decode, encode
-from eth_abi.exceptions import ValueOutOfBounds
+from eth_abi.exceptions import DecodingError, ValueOutOfBounds
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
@@ -64,11 +64,11 @@ def _observed(call, return_data: bytes):
     """Run `call` through the real `VaultSimulator` decode path.
 
     Feeds a synthetic `eth_simulateV1` response to `_parse_response`, so the
-    result is whatever `observe` would actually report -- including its handling
-    of a decoder that raises."""
+    result is whatever an observation's ``value`` reports -- including a
+    decoder that raises."""
     sim = VaultSimulator(MagicMock())
-    sim.observe("slot", call)
-    result = sim._parse_response(
+    slot = sim.observe(call)
+    sim._parse_response(
         simulate_response(
             returnData=HexBytes(return_data).to_0x_hex(),
             status="0x1",
@@ -76,7 +76,7 @@ def _observed(call, return_data: bytes):
             logs=[],
         )
     )
-    return result.get("slot")
+    return slot.value
 
 
 def _erc7201_base_slot(namespace: str) -> int:
@@ -325,40 +325,33 @@ class TestPendingProposals:
             is None
         )
 
-    def test_observe_cannot_distinguish_empty_from_failure(self):
-        # Pins the docstring's caveat against the real simulator: observe turns
-        # a decoder exception into None (simulation.py), the same value an empty
-        # slot legitimately produces, so the two are indistinguishable there.
+    def test_observe_distinguishes_empty_from_a_failed_decode(self):
+        # Pins the docstring against the real simulator: an empty slot reads as
+        # None, while return data the decoder cannot read raises.
         populated = encode(
             self.SLOT_TYPES,
             [self.VALUE, PROPOSER, self.PROPOSED_AT, self.NONCE],
         )
         empty = encode(self.SLOT_TYPES, [0, ZERO_ADDRESS, 0, 0])
-        executor, ctx = self._executor_with_slot()
+        executor, _ = self._executor_with_slot()
 
-        # Positive control first: without it every assertion below is `is None`
-        # and an observe path that always returned None would pass vacuously.
         observed = _observed(
             executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN), populated
         )
         assert observed is not None
         assert observed.value == Amount(self.VALUE)
 
-        # A genuinely empty slot.
         assert (
             _observed(
                 executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN), empty
             )
             is None
         )
-        # A decode that raised: return data too short for the slot.
-        assert (
+        with pytest.raises(DecodingError):
             _observed(
                 executor.pending_proposals(BALANCE_ACCOUNT, chain_id=self.CHAIN),
                 populated[:32],
             )
-            is None
-        )
 
     def test_none_depends_only_on_the_proposer(self):
         # The sentinel is the zero proposer alone -- a non-zero value and nonce

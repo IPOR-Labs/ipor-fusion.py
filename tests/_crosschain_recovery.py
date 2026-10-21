@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from _crosschain import assert_relay_success
 from _crosschain_lifecycle import (
@@ -12,16 +12,29 @@ from _crosschain_lifecycle import (
     call,
     claim,
     redeem_and_recall,
+    required,
     supply,
 )
 from web3 import Web3
 
-from ipor_fusion import AccessManager, CcipCommandType, CcipLane, Command, Roles
+from ipor_fusion import (
+    AccessManager,
+    AccessManagerAddress,
+    Amount,
+    CcipCommandType,
+    CcipLane,
+    CcipObservation,
+    Command,
+    CommandId,
+    CommandStatus,
+    OperationId,
+    Roles,
+    Shares,
+)
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.crosschain.messages import (
     EMPTY_COMMAND,
     CcipMsgType,
-    CommandStatus,
     decode_ccip_envelope,
 )
 
@@ -35,40 +48,93 @@ def _lane(run: Run) -> CcipLane:
     return run.lane
 
 
-def _snapshot(run: Run, tag: str, command_id: bytes = bytes(32)) -> dict:
+@dataclass(frozen=True)
+class _Snapshot:
+    """The executor's command and accounting state, then the dispatcher's."""
+
+    active: CommandId
+    status: CommandStatus
+    sequence: int
+    epoch: int
+    settled: Amount
+    idle: Amount
+    active_return: OperationId
+    version: int
+    pending_outbound: int
+    remote_status: CommandStatus
+    remote_sequence: int
+    remote_epoch: int
+    observation: CcipObservation
+    shares: Shares
+    access: AccessManagerAddress
+    head: int
+    tail: int
+
+
+def _snapshot(run: Run, tag: str, command_id: bytes = bytes(32)) -> _Snapshot:
     lane = _lane(run)
-    reads = {
-        "active": lane.executor.active_command(run.spoke_chain_id),
-        "status": lane.executor.command_status(command_id),
-        "sequence": lane.executor.next_command_sequence(run.spoke_chain_id),
-        "epoch": lane.executor.command_config_epoch(run.spoke_chain_id),
-        "settled": lane.settled_remote_balance(),
-        "idle": lane.idle_ledger(),
-        "return": lane.executor.active_return(run.spoke_chain_id),
-        "version": lane.remote_state_version(),
-        "pending_outbound": lane.pending_transfer_count(),
-    }
-    remote_reads = {
-        "remote_status": lane.dispatcher.command_status(command_id),
-        "remote_sequence": lane.dispatcher.next_command_sequence(),
-        "remote_epoch": lane.dispatcher.command_config_epoch(),
-        "observation": lane.dispatcher.observation(),
-        "shares": run.remote_vault.balance_of(lane.executor_address),
-        "access": run.remote_vault.get_access_manager_address(),
-        "head": lane.dispatcher.response_queue_head(),
-        "tail": lane.dispatcher.response_queue_tail(),
-    }
-    for key, read in reads.items():
-        run.hub.observe(f"{tag}_{key}", read)
-    for key, read in remote_reads.items():
-        run.spoke_sim.observe(f"{tag}_{key}", read)
-    results = run.relay()
-    return {
-        **{key: results[run.hub_chain_id].get(f"{tag}_{key}") for key in reads},
-        **{
-            key: results[run.spoke_chain_id].get(f"{tag}_{key}") for key in remote_reads
-        },
-    }
+    hub, spoke = run.hub, run.spoke_sim
+    active = hub.observe(
+        lane.executor.active_command(run.spoke_chain_id), label=f"{tag}_active"
+    )
+    status = hub.observe(
+        lane.executor.command_status(command_id), label=f"{tag}_status"
+    )
+    sequence = hub.observe(
+        lane.executor.next_command_sequence(run.spoke_chain_id), label=f"{tag}_sequence"
+    )
+    epoch = hub.observe(
+        lane.executor.command_config_epoch(run.spoke_chain_id), label=f"{tag}_epoch"
+    )
+    settled = hub.observe(lane.settled_remote_balance(), label=f"{tag}_settled")
+    idle = hub.observe(lane.idle_ledger(), label=f"{tag}_idle")
+    active_return = hub.observe(
+        lane.executor.active_return(run.spoke_chain_id), label=f"{tag}_return"
+    )
+    version = hub.observe(lane.remote_state_version(), label=f"{tag}_version")
+    pending_outbound = hub.observe(
+        lane.pending_transfer_count(), label=f"{tag}_pending_outbound"
+    )
+    remote_status = spoke.observe(
+        lane.dispatcher.command_status(command_id), label=f"{tag}_remote_status"
+    )
+    remote_sequence = spoke.observe(
+        lane.dispatcher.next_command_sequence(), label=f"{tag}_remote_sequence"
+    )
+    remote_epoch = spoke.observe(
+        lane.dispatcher.command_config_epoch(), label=f"{tag}_remote_epoch"
+    )
+    observation = spoke.observe(
+        lane.dispatcher.observation(), label=f"{tag}_observation"
+    )
+    shares = spoke.observe(
+        run.remote_vault.balance_of(lane.executor_address), label=f"{tag}_shares"
+    )
+    access = spoke.observe(
+        run.remote_vault.get_access_manager_address(), label=f"{tag}_access"
+    )
+    head = spoke.observe(lane.dispatcher.response_queue_head(), label=f"{tag}_head")
+    tail = spoke.observe(lane.dispatcher.response_queue_tail(), label=f"{tag}_tail")
+    run.relay()
+    return _Snapshot(
+        active=active.value,
+        status=status.value,
+        sequence=sequence.value,
+        epoch=epoch.value,
+        settled=settled.value,
+        idle=idle.value,
+        active_return=active_return.value,
+        version=version.value,
+        pending_outbound=pending_outbound.value,
+        remote_status=remote_status.value,
+        remote_sequence=remote_sequence.value,
+        remote_epoch=remote_epoch.value,
+        observation=observation.value,
+        shares=shares.value,
+        access=access.value,
+        head=head.value,
+        tail=tail.value,
+    )
 
 
 def _recovery_action(run: Run, command_id: bytes, *, cancel: bool) -> FuseAction:
@@ -96,7 +162,7 @@ def _recover_command(run: Run, command_id: bytes, *, cancel: bool) -> None:
         )
         run.expected_failures.add("retry_during_cancel")
     else:
-        run.hub.observe("retry_pending", lane.executor.command_status(command_id))
+        retry_pending = run.hub.observe(lane.executor.command_status(command_id))
     results = run.relay()
     if cancel:
         assert_reverted(
@@ -104,12 +170,14 @@ def _recover_command(run: Run, command_id: bytes, *, cancel: bool) -> None:
             "CancelInFlight(uint256,bytes32)",
         )
     else:
-        assert results[run.hub_chain_id].get("retry_pending") == CommandStatus.PENDING
+        assert retry_pending.value == CommandStatus.PENDING
 
 
-def _assert_failed_unchanged(before: dict, after: dict, command_id: bytes) -> None:
-    assert after["active"] == command_id
-    assert after["status"] == after["remote_status"] == CommandStatus.FAILED
+def _assert_failed_unchanged(
+    before: _Snapshot, after: _Snapshot, command_id: bytes
+) -> None:
+    assert after.active == command_id
+    assert after.status == after.remote_status == CommandStatus.FAILED
     for key in (
         "sequence",
         "remote_sequence",
@@ -119,15 +187,15 @@ def _assert_failed_unchanged(before: dict, after: dict, command_id: bytes) -> No
         "settled",
         "version",
     ):
-        assert after[key] == before[key], key
-    assert after["observation"] == before["observation"]
+        assert getattr(after, key) == getattr(before, key), key
+    assert after.observation == before.observation
 
 
 def run_failed_deposit_recovery(run: Run, *, cancel: bool) -> None:
     """Recover a role failure by retry, or an impossible minimum by cancel."""
     lane = _lane(run)
     credited = supply(run)
-    attest(run, tag="initial", observation_label="observation_after_settle")
+    attest(run, tag="initial", observed=required(run.observation_after_settle))
     before = _snapshot(run, "before_failure")
     delivered_before = len(run.csim.delivered)
     deposit = lane.send_command(
@@ -136,11 +204,11 @@ def run_failed_deposit_recovery(run: Run, *, cancel: bool) -> None:
         )
     )
     run.hub.execute([deposit])
-    run.hub.observe(
-        "failed_command_id", lane.executor.active_command(run.spoke_chain_id)
+    failed_command_id = run.hub.observe(
+        lane.executor.active_command(run.spoke_chain_id)
     )
     results = run.relay()
-    command_id = results[run.hub_chain_id].get("failed_command_id")
+    command_id = failed_command_id.value
     assert command_id != bytes(32)
     assert [
         decode_ccip_envelope(m.payload)[0]
@@ -167,14 +235,14 @@ def run_failed_deposit_recovery(run: Run, *, cancel: bool) -> None:
     _assert_failed_unchanged(before, repeated, command_id)
 
     run.advance(3600)
-    run.spoke_sim.observe("observation_parked", lane.observation())
+    parked = run.spoke_sim.observe(lane.observation())
     run.relay()
-    attest(run, tag="parked", observation_label="observation_parked")
+    attest(run, tag="parked", observed=parked)
 
     run.advance(1)
     if not cancel:
         run.spoke_sim.add_call(
-            AccessManager(failed["access"]).grant_role(
+            AccessManager(failed.access).grant_role(
                 Roles.WHITELIST_ROLE, lane.executor_address, 0
             ),
             from_=run.owner,
@@ -183,41 +251,36 @@ def run_failed_deposit_recovery(run: Run, *, cancel: bool) -> None:
     _recover_command(run, command_id, cancel=cancel)
     recovered = _snapshot(run, "recovered", command_id)
     status = CommandStatus.CANCELLED if cancel else CommandStatus.SUCCEEDED
-    assert recovered["status"] == recovered["remote_status"] == status
-    assert recovered["active"] == bytes(32)
-    assert (
-        recovered["sequence"] == recovered["remote_sequence"] == before["sequence"] + 1
-    )
-    assert recovered["epoch"] == recovered["remote_epoch"] == before["epoch"]
-    assert recovered["version"] == before["version"] + 1
-    assert (
-        recovered["observation"].state_version
-        == before["observation"].state_version + 1
-    )
+    assert recovered.status == recovered.remote_status == status
+    assert recovered.active == bytes(32)
+    assert recovered.sequence == recovered.remote_sequence == before.sequence + 1
+    assert recovered.epoch == recovered.remote_epoch == before.epoch
+    assert recovered.version == before.version + 1
+    assert recovered.observation.state_version == before.observation.state_version + 1
     run.advance(3600)
-    run.spoke_sim.observe("observation_recovered", lane.observation())
+    observation_recovered = run.spoke_sim.observe(lane.observation())
     run.relay()
     attest(
         run,
         tag="recovered",
-        observation_label="observation_recovered",
-        old_version=before["version"],
+        observed=observation_recovered,
+        old_version=before.version,
     )
     if cancel:
-        assert recovered["shares"] == 0
-        assert recovered["observation"].tracked_idle == credited
+        assert recovered.shares == 0
+        assert recovered.observation.tracked_idle == credited
         run.hub.execute([lane.recall(amount=credited, min_return=credited)])
         run.relay()
         returned = _snapshot(run, "returned", command_id)
-        assert returned["idle"] == credited
-        assert returned["settled"] == 0
-        assert returned["return"] == bytes(32)
-        assert returned["observation"].accounted_balance == 0
+        assert returned.idle == credited
+        assert returned.settled == 0
+        assert returned.active_return == bytes(32)
+        assert returned.observation.accounted_balance == 0
         claim(run, credited)
     else:
-        assert recovered["shares"] > 0
-        assert recovered["observation"].tracked_idle == 0
-        idle = redeem_and_recall(run, recovered["shares"], credited=credited)
+        assert recovered.shares > 0
+        assert recovered.observation.tracked_idle == 0
+        idle = redeem_and_recall(run, recovered.shares, credited=credited)
         claim(run, idle)
 
 
@@ -225,7 +288,7 @@ def run_unfunded_return_recovery(run: Run) -> None:
     """A return remains accounted while HYPE fees are missing; flush it once."""
     lane = _lane(run)
     credited = supply(run)
-    attest(run, tag="initial", observation_label="observation_after_settle")
+    attest(run, tag="initial", observed=required(run.observation_after_settle))
     run.advance(1)
     run.csim.fund_native(run.spoke_chain_id, lane.executor_address, 0)
     delivered_before = len(run.csim.delivered)
@@ -233,20 +296,20 @@ def run_unfunded_return_recovery(run: Run) -> None:
     run.relay()
     queued = _snapshot(run, "queued_return")
     assert len(run.csim.delivered) == delivered_before + 1
-    assert queued["head"] != 0 and queued["head"] == queued["tail"]
-    assert queued["observation"].tracked_idle == 0
-    assert queued["observation"].queued_token_amount == credited
-    assert queued["observation"].accounted_balance == credited
-    assert queued["settled"] == credited and queued["idle"] == 0
-    assert queued["return"] != bytes(32)
-    assert queued["pending_outbound"] == 0
+    assert queued.head != 0 and queued.head == queued.tail
+    assert queued.observation.tracked_idle == 0
+    assert queued.observation.queued_token_amount == credited
+    assert queued.observation.accounted_balance == credited
+    assert queued.settled == credited and queued.idle == 0
+    assert queued.active_return != bytes(32)
+    assert queued.pending_outbound == 0
 
-    run.hub.observe("nav_queued", lane.get_balance())
-    run.hub.observe("transfer_staleness", lane.executor.transfer_staleness_max())
+    nav_queued = run.hub.observe(lane.get_balance())
+    transfer_staleness = run.hub.observe(lane.executor.transfer_staleness_max())
     results = run.relay()
-    assert results[run.hub_chain_id].get("nav_queued") == credited
-    run.advance(results[run.hub_chain_id].get("transfer_staleness") + 1)
-    run.hub.observe("nav_stale_return", lane.get_balance())
+    assert nav_queued.value == credited
+    run.advance(transfer_staleness.value + 1)
+    run.hub.observe(lane.get_balance(), label="nav_stale_return")
     run.expected_failures.add("nav_stale_return")
     results = run.relay()
     assert_reverted(
@@ -266,12 +329,12 @@ def run_unfunded_return_recovery(run: Run) -> None:
     run.relay()
     returned = _snapshot(run, "flushed_return")
     assert len(run.csim.delivered) == delivered_before + 2
-    assert returned["head"] == 0
-    assert returned["observation"].queued_token_amount == 0
-    assert returned["observation"].accounted_balance == 0
-    assert returned["settled"] == 0 and returned["idle"] == credited
-    assert returned["return"] == bytes(32)
-    assert returned["pending_outbound"] == 0
+    assert returned.head == 0
+    assert returned.observation.queued_token_amount == 0
+    assert returned.observation.accounted_balance == 0
+    assert returned.settled == 0 and returned.idle == credited
+    assert returned.active_return == bytes(32)
+    assert returned.pending_outbound == 0
     claim(run, credited)
     messages_after_claim = len(run.csim.delivered)
     run.relay()

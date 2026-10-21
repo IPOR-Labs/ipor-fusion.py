@@ -1,6 +1,5 @@
 import math
 from dataclasses import dataclass
-from typing import Any
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
@@ -186,12 +185,12 @@ class MorphoReader(ContractWrapper):
         Combines `position()`, `market()`, and `market_params()` reads in one
         Multicall3 round trip.
         """
-        calls: list[Call[Any]] = [
-            self.position(market_id, user),
-            self.market(market_id),
-            self.market_params(market_id),
-        ]
-        pos, market, params = Multicall3(ctx).aggregate(calls)
+        batch = Multicall3(ctx).batch()
+        pos_read = batch.add(self.position(market_id, user))
+        market_read = batch.add(self.market(market_id))
+        params_read = batch.add(self.market_params(market_id))
+        batch.run()
+        pos, market, params = pos_read.value, market_read.value, params_read.value
         if market.total_borrow_shares > 0:
             borrow_assets = math.ceil(
                 pos.borrow_shares

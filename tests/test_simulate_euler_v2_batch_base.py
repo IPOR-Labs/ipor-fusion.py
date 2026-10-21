@@ -165,20 +165,19 @@ def test_simulate_euler_v2_batch_base(web3_base):
         from_=OWNER,
     )
 
-    sim.observe("weth_before", weth.balance_of(vault_address))
+    weth_before = sim.observe(weth.balance_of(vault_address))
     sim.execute([batch_action])
-    sim.observe("weth_after", weth.balance_of(vault_address))
+    weth_after = sim.observe(weth.balance_of(vault_address))
 
     result = sim.run()
     log.info(
-        "all_success=%s gas=%s reason=%s obs=%s",
+        "all_success=%s gas=%s reason=%s",
         result.all_success,
         result.gas_used,
         result.revert_reason,
-        result.observations,
     )
     assert_all_success(result)
 
     # The flash-borrowed WETH is repaid within the batch — the vault nets to zero.
-    assert result.get("weth_before") == 0
-    assert result.get("weth_after") == 0
+    assert weth_before.value == 0
+    assert weth_after.value == 0

@@ -90,27 +90,25 @@ def test_simulate_deposit(web3_arb):
         call=usdc.approve(vault_address, amount),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_before", plasma_vault.total_assets())
-    sim.observe("user_shares_before", plasma_vault.balance_of(ANVIL_WALLET))
+    total_assets_before = sim.observe(plasma_vault.total_assets())
+    user_shares_before = sim.observe(plasma_vault.balance_of(ANVIL_WALLET))
     sim.add_call(
         call=plasma_vault.deposit(amount, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_after", plasma_vault.total_assets())
-    sim.observe("user_shares_after", plasma_vault.balance_of(ANVIL_WALLET))
-    sim.observe(
-        "aave_total",
+    total_assets_after = sim.observe(plasma_vault.total_assets())
+    user_shares_after = sim.observe(plasma_vault.balance_of(ANVIL_WALLET))
+    aave_total = sim.observe(
         plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3),
     )
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
-    assets_diff = result.get("total_assets_after") - result.get("total_assets_before")
-    shares_diff = result.get("user_shares_after") - result.get("user_shares_before")
+    assets_diff = total_assets_after.value - total_assets_before.value
+    shares_diff = user_shares_after.value - user_shares_before.value
     assert 100_000000 < assets_diff < 100_100000
     assert 100_00000000 < shares_diff < 100_10000000
-    assert result.get("aave_total") == 0
+    assert aave_total.value == 0
 
 
 def test_simulate_mint(web3_arb):
@@ -138,38 +136,36 @@ def test_simulate_mint(web3_arb):
         call=usdc.approve(vault_address, amount),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_before", plasma_vault.total_assets())
-    sim.observe("user_shares_before", plasma_vault.balance_of(ANVIL_WALLET))
-    sim.observe("vault_usdc_before", usdc.balance_of(vault_address))
+    total_assets_before_obs = sim.observe(plasma_vault.total_assets())
+    user_shares_before = sim.observe(plasma_vault.balance_of(ANVIL_WALLET))
+    vault_usdc_before = sim.observe(usdc.balance_of(vault_address))
     sim.add_call(
         call=plasma_vault.mint(shares_amount, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_after", plasma_vault.total_assets())
-    sim.observe("user_shares_after", plasma_vault.balance_of(ANVIL_WALLET))
-    sim.observe("user_underlying_after", plasma_vault.max_withdraw(ANVIL_WALLET))
-    sim.observe("vault_usdc_after", usdc.balance_of(vault_address))
-    sim.observe(
-        "aave_total",
+    total_assets_after_obs = sim.observe(plasma_vault.total_assets())
+    user_shares_after = sim.observe(plasma_vault.balance_of(ANVIL_WALLET))
+    user_underlying_after_obs = sim.observe(plasma_vault.max_withdraw(ANVIL_WALLET))
+    vault_usdc_after = sim.observe(usdc.balance_of(vault_address))
+    aave_total = sim.observe(
         plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3),
     )
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
 
-    total_assets_after = result.get("total_assets_after")
-    total_assets_before = result.get("total_assets_before")
-    user_underlying_after = result.get("user_underlying_after")
+    total_assets_after = total_assets_after_obs.value
+    total_assets_before = total_assets_before_obs.value
+    user_underlying_after = user_underlying_after_obs.value
     assert (
         abs(total_assets_after - (total_assets_before + user_underlying_after))
         < 100_000
     )
-    shares_diff = result.get("user_shares_after") - result.get("user_shares_before")
+    shares_diff = user_shares_after.value - user_shares_before.value
     assert abs(shares_diff - shares_amount) < 5_000
-    vault_usdc_diff = result.get("vault_usdc_after") - result.get("vault_usdc_before")
+    vault_usdc_diff = vault_usdc_after.value - vault_usdc_before.value
     assert abs(vault_usdc_diff - user_underlying_after) < 5_000
-    assert result.get("aave_total") == 0
+    assert aave_total.value == 0
 
 
 def test_simulate_redeem(web3_arb):
@@ -201,9 +197,9 @@ def test_simulate_redeem(web3_arb):
         from_=ANVIL_WALLET,
     )
 
-    sim.observe("total_assets_before", plasma_vault.total_assets())
-    sim.observe("user_shares_before", plasma_vault.balance_of(ANVIL_WALLET))
-    sim.observe("user_usdc_before", usdc.balance_of(ANVIL_WALLET))
+    total_assets_before = sim.observe(plasma_vault.total_assets())
+    user_shares_before = sim.observe(plasma_vault.balance_of(ANVIL_WALLET))
+    user_usdc_before = sim.observe(usdc.balance_of(ANVIL_WALLET))
 
     sim.add_call(
         call=plasma_vault.deposit(amount, ANVIL_WALLET),
@@ -236,21 +232,20 @@ def test_simulate_redeem(web3_arb):
         from_=ANVIL_WALLET,
     )
 
-    sim.observe("total_assets_after", plasma_vault.total_assets())
-    sim.observe("user_shares_after", plasma_vault.balance_of(ANVIL_WALLET))
-    sim.observe("user_usdc_after", usdc.balance_of(ANVIL_WALLET))
+    total_assets_after = sim.observe(plasma_vault.total_assets())
+    user_shares_after = sim.observe(plasma_vault.balance_of(ANVIL_WALLET))
+    user_usdc_after = sim.observe(usdc.balance_of(ANVIL_WALLET))
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
-    assets_after = result.get("total_assets_after")
-    assets_before = result.get("total_assets_before")
+    assets_after = total_assets_after.value
+    assets_before = total_assets_before.value
     assert abs(assets_after - (assets_before + 50_000000)) < 100_000
 
-    shares_diff = result.get("user_shares_after") - result.get("user_shares_before")
+    shares_diff = user_shares_after.value - user_shares_before.value
     assert abs(shares_diff - 50 * 10**decimals) < 10_000_000
 
-    usdc_diff = result.get("user_usdc_after") - result.get("user_usdc_before")
+    usdc_diff = user_usdc_after.value - user_usdc_before.value
     assert abs(usdc_diff - (-50_000000)) < 100_000
 
 
@@ -287,8 +282,8 @@ def test_simulate_withdraw(web3_arb):
         call=plasma_vault.deposit(amount, ANVIL_WALLET),
         from_=ANVIL_WALLET,
     )
-    sim.observe("total_assets_before", plasma_vault.total_assets())
-    sim.observe("user_shares_before", plasma_vault.balance_of(ANVIL_WALLET))
+    total_assets_before = sim.observe(plasma_vault.total_assets())
+    user_shares_before = sim.observe(plasma_vault.balance_of(ANVIL_WALLET))
 
     # +7 hours
     sim.next_block(time_shift_seconds=7 * 60 * 60)
@@ -314,28 +309,24 @@ def test_simulate_withdraw(web3_arb):
         from_=ANVIL_WALLET,
     )
 
-    sim.observe("total_assets_after", plasma_vault.total_assets())
-    sim.observe("user_shares_after", plasma_vault.balance_of(ANVIL_WALLET))
-    sim.observe(
-        "aave_total",
+    total_assets_after = sim.observe(plasma_vault.total_assets())
+    user_shares_after = sim.observe(plasma_vault.balance_of(ANVIL_WALLET))
+    aave_total = sim.observe(
         plasma_vault.total_assets_in_market(IporFusionMarkets.AAVE_V3),
     )
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
 
-    assets_after = result.get("total_assets_after")
-    assets_before = result.get("total_assets_before")
+    assets_after = total_assets_after.value
+    assets_before = total_assets_before.value
     # Withdrew ~99 USDC (kept 1 USDC buffer), so total_assets dropped by withdraw_amount
     assert abs((assets_before - assets_after) - withdraw_amount) < 1_000_000
 
-    user_shares_diff = result.get("user_shares_before") - result.get(
-        "user_shares_after"
-    )
+    user_shares_diff = user_shares_before.value - user_shares_after.value
     # Roughly 99% of the shares — original test allows ±10M shares slack
     assert 0 < user_shares_diff < shares_amount + 10_000_000
-    assert result.get("aave_total") == 0
+    assert aave_total.value == 0
 
 
 def test_simulate_transfer(web3_arb):
@@ -381,12 +372,11 @@ def test_simulate_transfer(web3_arb):
         call=plasma_vault.transfer(user_two, amount),
         from_=user_one,
     )
-    sim.observe("user_two_shares", plasma_vault.balance_of(user_two))
+    user_two_shares = sim.observe(plasma_vault.balance_of(user_two))
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
-    assert result.get("user_two_shares") == amount
+    assert user_two_shares.value == amount
 
 
 def test_simulate_transfer_from(web3_arb):
@@ -433,8 +423,7 @@ def test_simulate_transfer_from(web3_arb):
         call=plasma_vault.transfer_from(user_one, user_two, amount),
         from_=ANVIL_WALLET,
     )
-    sim.observe("user_two_shares", plasma_vault.balance_of(user_two))
+    user_two_shares = sim.observe(plasma_vault.balance_of(user_two))
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
-    assert result.get("user_two_shares") == amount
+    assert user_two_shares.value == amount

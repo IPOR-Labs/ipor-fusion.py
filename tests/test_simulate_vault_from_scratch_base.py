@@ -190,17 +190,17 @@ def test_simulate_vault_from_scratch_supply_aave_v3(
         call=plasma_vault.deposit(DEPOSIT_AMOUNT, ANVIL_WALLET), from_=ANVIL_WALLET
     )
 
-    sim.observe("total_assets_after_deposit", plasma_vault.total_assets())
-    sim.observe("vault_usdc_after_deposit", usdc.balance_of(vault_address))
+    total_assets_after_deposit = sim.observe(plasma_vault.total_assets())
+    vault_usdc_after_deposit = sim.observe(usdc.balance_of(vault_address))
 
     # ── 5. Strategy: supply the deposited USDC to Aave V3 (alpha-driven) ─────
     # 1 USDC buffer below the deposit to avoid dust-rounding reverts.
     supply_amount = Amount(DEPOSIT_AMOUNT - 1_000_000)
     sim.execute([aave.supply(asset=BASE_USDC, amount=supply_amount, e_mode=0)])
 
-    sim.observe("total_assets_after_supply", plasma_vault.total_assets())
-    sim.observe("aave_value_t0", plasma_vault.total_assets_in_market(AAVE_MARKET))
-    sim.observe("vault_usdc_after_supply", usdc.balance_of(vault_address))
+    total_assets_after_supply = sim.observe(plasma_vault.total_assets())
+    aave_value_t0 = sim.observe(plasma_vault.total_assets_in_market(AAVE_MARKET))
+    vault_usdc_after_supply = sim.observe(usdc.balance_of(vault_address))
 
     # ── 6. Fast-forward one year, refresh cached balances, re-read value ─────
     # The Aave aToken accrues interest against block.timestamp; opening a later
@@ -210,31 +210,30 @@ def test_simulate_vault_from_scratch_supply_aave_v3(
     sim.add_call(
         call=plasma_vault.update_markets_balances([AAVE_MARKET]), from_=ANVIL_WALLET
     )
-    sim.observe("aave_value_t1", plasma_vault.total_assets_in_market(AAVE_MARKET))
-    sim.observe("total_assets_t1", plasma_vault.total_assets())
+    aave_value_t1 = sim.observe(plasma_vault.total_assets_in_market(AAVE_MARKET))
+    total_assets_t1 = sim.observe(plasma_vault.total_assets())
 
     # ── 7. Run the whole batch and assert ────────────────────────────────────
     result = sim.run()
     log.info(
-        "all_success=%s gas_used=%s observations=%s",
+        "all_success=%s gas_used=%s",
         result.all_success,
         result.gas_used,
-        result.observations,
     )
     assert_all_success(result)
 
     # Deposit credited the vault with the underlying.
-    assert result.get("total_assets_after_deposit") >= DEPOSIT_AMOUNT
-    assert result.get("vault_usdc_after_deposit") >= DEPOSIT_AMOUNT
+    assert total_assets_after_deposit.value >= DEPOSIT_AMOUNT
+    assert vault_usdc_after_deposit.value >= DEPOSIT_AMOUNT
     # NAV is preserved across the supply (moved USDC -> Aave position, ~1:1).
-    assert result.get("total_assets_after_supply") >= supply_amount
+    assert total_assets_after_supply.value >= supply_amount
     # The position shows up in the Aave market valuation right after supply.
     # `* 99 // 100` is the repo idiom (see test_simulate_pilot_v3.py) for "≈ the
     # supplied amount" — Aave's scaled-balance math rounds down by a dust unit.
-    assert result.get("aave_value_t0") >= supply_amount * 99 // 100
+    assert aave_value_t0.value >= supply_amount * 99 // 100
     # Most raw USDC left the vault into Aave.
-    assert result.get("vault_usdc_after_supply") < DEPOSIT_AMOUNT
+    assert vault_usdc_after_supply.value < DEPOSIT_AMOUNT
     # After a year, the Aave position has appreciated (accrued interest).
-    assert result.get("aave_value_t1") > result.get("aave_value_t0")
+    assert aave_value_t1.value > aave_value_t0.value
     # And total NAV reflects that growth.
-    assert result.get("total_assets_t1") > result.get("total_assets_after_supply")
+    assert total_assets_t1.value > total_assets_after_supply.value

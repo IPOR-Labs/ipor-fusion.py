@@ -4,6 +4,7 @@ pending requests are reported as unknown (null), never as an empty queue."""
 from unittest.mock import MagicMock, patch
 
 import requests
+from _multicall import SequentialMulticall
 from click.testing import CliRunner
 
 from ipor_fusion.cli.vault_info_view import (
@@ -53,17 +54,7 @@ def _fetch(side_effect: BaseException | list[AccountRequest]):
         wm.read_pending_requests.return_value = side_effect
     with (
         patch("ipor_fusion.vault_managers.WithdrawManager", return_value=wm),
-        patch(
-            "ipor_fusion.vault_managers._read_batch",
-            side_effect=[
-                ([], [3600, 0, 0, 0, 0]),
-                (
-                    [],
-                    [0]
-                    * (1 + len(side_effect if isinstance(side_effect, list) else [])),
-                ),
-            ],
-        ),
+        patch("ipor_fusion.vault_managers.Multicall3", SequentialMulticall),
     ):
         return _fetch_withdraw_manager(MagicMock(), vault)
 

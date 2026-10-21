@@ -68,24 +68,25 @@ def _assert_final_gates(run: Run) -> None:
         "market_final": run.vault.total_assets_in_market(run.market_id),
         "executor_asset_final": run.hub_asset.balance_of(lane.executor_address),
     }
-    for label, call in gates.items():
-        run.csim.observe(hub, label, call)
-    run.csim.observe(spoke, "observation_final", lane.observation())
-    run.csim.observe(
-        spoke, "remote_shares_final", run.remote_vault.balance_of(lane.executor_address)
+    reads = {
+        label: run.csim.observe(hub, call, label=label) for label, call in gates.items()
+    }
+    observation_final = run.csim.observe(spoke, lane.observation())
+    remote_shares_final = run.csim.observe(
+        spoke, run.remote_vault.balance_of(lane.executor_address)
     )
-    results = run.relay()
-    observed = {label: results[hub].get(label) for label in gates}
-    observation = results[spoke].get("observation_final")
+    run.relay()
+    observed = {label: read.value for label, read in reads.items()}
+    observation = observation_final.value
     run.log(
         "final gates",
         **observed,
         remote_idle=observation.tracked_idle,
-        remote_shares=results[spoke].get("remote_shares_final"),
+        remote_shares=remote_shares_final.value,
     )
     assert observed == dict.fromkeys(gates, 0) | {"active_final": False}
     assert (observation.tracked_idle, observation.accounted_balance) == (0, 0)
-    assert results[spoke].get("remote_shares_final") == 0
+    assert remote_shares_final.value == 0
 
 
 def _assert_deliveries_within_route_limits(run: Run) -> None:
@@ -99,12 +100,12 @@ def _assert_deliveries_within_route_limits(run: Run) -> None:
     lane = run.lane
     assert isinstance(lane, CcipLane)
     hub, spoke = run.hub_chain_id, run.spoke_chain_id
-    run.csim.observe(hub, "route_hub", lane.executor.ccip_route(spoke))
-    run.csim.observe(spoke, "route_spoke", lane.dispatcher.ccip_route(hub))
+    route_hub = run.csim.observe(hub, lane.executor.ccip_route(spoke))
+    route_spoke = run.csim.observe(spoke, lane.dispatcher.ccip_route(hub))
     results = run.relay()
     routes = {
-        spoke: results[hub].get("route_hub"),
-        hub: results[spoke].get("route_spoke"),
+        spoke: route_hub.value,
+        hub: route_spoke.value,
     }
     assert run.csim.delivered, "no message was delivered"
     for message in run.csim.delivered:

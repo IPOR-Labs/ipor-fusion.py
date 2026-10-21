@@ -67,8 +67,7 @@ def test_simulate_euler_v2_swap_registry_base(web3_base):
 
     # Deploy the pool (supply collateral + deploy).
     sim.execute(plan.supply_actions + [plan.deploy_action])
-    sim.observe(
-        "registered_before",
+    registered_before = sim.observe(
         registry_pool_by_euler_account(plan.euler_account),
     )
 
@@ -76,8 +75,7 @@ def test_simulate_euler_v2_swap_registry_base(web3_base):
     sim.execute(
         [registry_fuse.register(pool=plan.predicted_pool, sub_account=SUB_ACCOUNT)]
     )
-    sim.observe(
-        "registered_after",
+    registered_after = sim.observe(
         registry_pool_by_euler_account(plan.euler_account),
     )
 
@@ -88,22 +86,20 @@ def test_simulate_euler_v2_swap_registry_base(web3_base):
     sim.execute(
         [registry_fuse.unregister(pool=plan.predicted_pool, sub_account=SUB_ACCOUNT)]
     )
-    sim.observe(
-        "registered_after_unregister",
+    registered_after_unregister = sim.observe(
         registry_pool_by_euler_account(plan.euler_account),
     )
 
     result = sim.run()
     log.info(
-        "all_success=%s gas=%s reason=%s obs=%s",
+        "all_success=%s gas=%s reason=%s",
         result.all_success,
         result.gas_used,
         result.revert_reason,
-        result.observations,
     )
     assert_all_success(result)
 
     # No registration before; pool registered after `register`; cleared after `unregister`.
-    assert result.get("registered_before").lower() == ZERO_ADDRESS_LOWER
-    assert result.get("registered_after").lower() == plan.predicted_pool.lower()
-    assert result.get("registered_after_unregister").lower() == ZERO_ADDRESS_LOWER
+    assert registered_before.value.lower() == ZERO_ADDRESS_LOWER
+    assert registered_after.value.lower() == plan.predicted_pool.lower()
+    assert registered_after_unregister.value.lower() == ZERO_ADDRESS_LOWER

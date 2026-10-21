@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
+from typing import TypeVar
 
 from _crosschain import (
     Deployment,
@@ -51,15 +52,18 @@ from ipor_fusion import (
     CrosschainTransportKind,
     LaneObservation,
     PlasmaVault,
+    SimulationObservation,
     VaultSimulator,
     Web3Context,
     discover_deployment,
     open_lane,
 )
 from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
-from ipor_fusion.types import ChainId, MarketId
+from ipor_fusion.types import Amount, ChainId, MarketId
 
 log = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 SUPPLY_AMOUNT = {
     CrosschainTransportKind.STARGATE_LAYERZERO: 1_000_000,  # 1 USDC
@@ -123,6 +127,14 @@ class Run:
     relays: int = 0
     #: Labels of calls that revert on purpose; they stay in the replayed list.
     expected_failures: set[str] = field(default_factory=set)
+    #: Reads one phase queues and a later phase compares against.
+    vault_usdc_before: SimulationObservation[Amount] | None = None
+    outbound_after_send: SimulationObservation[Amount] | None = None
+    settled_after_settle: SimulationObservation[Amount] | None = None
+    observation_after_settle: SimulationObservation[LaneObservation] | None = None
+    idle_ledger: SimulationObservation[Amount] | None = None
+    settled_after_return: SimulationObservation[Amount] | None = None
+    observation_after_return: SimulationObservation[LaneObservation] | None = None
 
     @property
     def hub_now(self) -> int:
@@ -172,6 +184,12 @@ class Run:
             step,
             fields,
         )
+
+
+def required(observation: SimulationObservation[T] | None) -> SimulationObservation[T]:
+    """A read an earlier phase queued on the run."""
+    assert observation is not None, "the phase that queues this read has not run"
+    return observation
 
 
 def call(results, chain_id: ChainId, label: str) -> SimulatedCallResult:
@@ -293,10 +311,8 @@ def supply(run: Run) -> int:
     """Bridge to the spoke; returns the amount credited to the dispatcher."""
     lane = run.lane
     delivered_before = len(run.csim.delivered)
-    run.csim.observe(
-        run.hub_chain_id,
-        "vault_usdc_before",
-        run.hub_asset.balance_of(run.hub_vault_address),
+    run.vault_usdc_before = run.csim.observe(
+        run.hub_chain_id, run.hub_asset.balance_of(run.hub_vault_address)
     )
     run.hub.execute(
         [
@@ -309,10 +325,12 @@ def supply(run: Run) -> int:
             )
         ]
     )
-    run.csim.observe(run.hub_chain_id, "outbound_after_send", lane.outbound_in_flight())
+    run.outbound_after_send = outbound_after_send = run.csim.observe(
+        run.hub_chain_id, lane.outbound_in_flight()
+    )
     # The taxi and its settlement receipt land a couple of minutes after the send.
     run.advance(BRIDGE_LATENCY)
-    results = run.relay()
+    run.relay()
 
     transfer, settled_receipt = run.csim.delivered[delivered_before:]
     credited = transfer.token_amount
@@ -320,7 +338,7 @@ def supply(run: Run) -> int:
         "supply sent",
         amount=run.amount,
         credited=credited,
-        outbound_in_flight=results[run.hub_chain_id].get("outbound_after_send"),
+        outbound_in_flight=outbound_after_send.value,
         messages=len(run.csim.delivered),
     )
     assert (
@@ -330,31 +348,33 @@ def supply(run: Run) -> int:
     assert 0 < credited <= run.amount
     if lane.enforces_min_received:
         assert credited >= run.amount * 99 // 100
-    outbound = results[run.hub_chain_id].get("outbound_after_send")
+    outbound = outbound_after_send.value
     if run.transport_kind == CrosschainTransportKind.CHAINLINK_CCIP:
         assert outbound == run.amount
     else:
         assert outbound == credited
 
-    run.csim.observe(
-        run.hub_chain_id, "settled_after_settle", lane.settled_remote_balance()
+    run.settled_after_settle = settled_after_settle = run.csim.observe(
+        run.hub_chain_id, lane.settled_remote_balance()
     )
-    run.csim.observe(
-        run.hub_chain_id, "outbound_after_settle", lane.outbound_in_flight()
+    outbound_after_settle = run.csim.observe(
+        run.hub_chain_id, lane.outbound_in_flight()
     )
-    run.csim.observe(run.hub_chain_id, "remote_version", lane.remote_state_version())
-    run.csim.observe(run.spoke_chain_id, "observation_after_settle", lane.observation())
-    results = run.relay()
-    assert results[run.hub_chain_id].get("settled_after_settle") == credited
-    assert results[run.hub_chain_id].get("outbound_after_settle") == 0
-    observation = results[run.spoke_chain_id].get("observation_after_settle")
+    remote_version = run.csim.observe(run.hub_chain_id, lane.remote_state_version())
+    run.observation_after_settle = run.csim.observe(
+        run.spoke_chain_id, lane.observation()
+    )
+    run.relay()
+    assert settled_after_settle.value == credited
+    assert outbound_after_settle.value == 0
+    observation = run.observation_after_settle.value
     assert observation.tracked_idle == credited
     assert observation.accounted_balance == credited
-    assert results[run.hub_chain_id].get("remote_version") == observation.state_version
+    assert remote_version.value == observation.state_version
     run.log(
         "supply settled",
-        settled=results[run.hub_chain_id].get("settled_after_settle"),
-        outbound_in_flight=results[run.hub_chain_id].get("outbound_after_settle"),
+        settled=settled_after_settle.value,
+        outbound_in_flight=outbound_after_settle.value,
         remote_idle=observation.tracked_idle,
         state_version=observation.state_version,
     )
@@ -379,18 +399,18 @@ def attest(
     run: Run,
     *,
     tag: str,
-    observation_label: str,
+    observed: SimulationObservation[LaneObservation],
     hub_idle: int = 0,
     old_version: int | None = None,
     approve_error: str | None = None,
 ) -> int:
-    """Two-key attestation of the observation under ``observation_label``,
+    """Two-key attestation of the dispatcher snapshot ``observed`` read,
     approved in a later block, then a market NAV refresh; returns the attested
     value. ``old_version`` also sends a proposal at that stale state version
     first, which must revert. ``approve_error`` names the custom error the
     approval must revert with instead of landing."""
     lane = run.lane
-    observation = run.csim.results[run.spoke_chain_id].get(observation_label)
+    observation = observed.value
     if old_version is not None:
         run.hub.add_call(
             lane.propose_balance(
@@ -443,28 +463,30 @@ def attest(
         run.log(f"attest {tag} refused", proposal_id=proposal_id, error=approve_error)
         return observation.accounted_balance
 
-    run.csim.observe(run.hub_chain_id, f"executor_balance_{tag}", lane.get_balance())
+    executor_balance = run.csim.observe(
+        run.hub_chain_id, lane.get_balance(), label=f"executor_balance_{tag}"
+    )
     run.hub.add_call(
         run.vault.update_markets_balances([run.market_id]),
         from_=run.owner,
         label=f"update_balances_{tag}",
     )
-    run.csim.observe(
+    market_total_read = run.csim.observe(
         run.hub_chain_id,
-        f"market_total_{tag}",
         run.vault.total_assets_in_market(run.market_id),
+        label=f"market_total_{tag}",
     )
-    results = run.relay()
+    run.relay()
     attested = observation.accounted_balance
     expected = attested + hub_idle
-    assert results[run.hub_chain_id].get(f"executor_balance_{tag}") == expected
-    market_total = results[run.hub_chain_id].get(f"market_total_{tag}")
+    assert executor_balance.value == expected
+    market_total = market_total_read.value
     assert abs(market_total - expected) <= expected // 50, (market_total, expected)
     run.log(
         f"attest {tag} approved",
         proposal_id=proposal_id,
         attested=attested,
-        executor_balance=results[run.hub_chain_id].get(f"executor_balance_{tag}"),
+        executor_balance=executor_balance.value,
         market_total=market_total,
     )
     return attested
@@ -473,34 +495,31 @@ def attest(
 def _deposit(run: Run, credited: int) -> int:
     """DEPOSIT the dispatcher's idle into the spoke vault; returns the shares."""
     lane = run.lane
-    before = run.csim.results[run.spoke_chain_id].get("observation_after_settle")
+    before = required(run.observation_after_settle).value
     run.hub.execute(
         [lane.send_command(Command.deposit(run.remote_vault.address, credited))]
     )
     run.relay()
-    run.csim.observe(
-        run.spoke_chain_id, "observation_after_deposit", lane.observation()
-    )
-    run.csim.observe(
+    observation_after_deposit = run.csim.observe(run.spoke_chain_id, lane.observation())
+    remote_shares = run.csim.observe(
         run.spoke_chain_id,
-        "remote_shares",
         run.remote_vault.balance_of(lane.executor_address),
     )
-    run.csim.observe(run.hub_chain_id, "active_after_ack", lane.has_active_command())
-    results = run.relay()
-    after = results[run.spoke_chain_id].get("observation_after_deposit")
-    shares = results[run.spoke_chain_id].get("remote_shares")
+    active_after_ack = run.csim.observe(run.hub_chain_id, lane.has_active_command())
+    run.relay()
+    after = observation_after_deposit.value
+    shares = remote_shares.value
     assert shares > 0
     assert after.tracked_idle == 0
     assert abs(after.accounted_balance - credited) <= credited // 1000
     assert after.state_version == before.state_version + 1
-    assert results[run.hub_chain_id].get("active_after_ack") is False
+    assert active_after_ack.value is False
     run.log(
         "deposit acked",
         shares=shares,
         accounted_balance=after.accounted_balance,
         state_version=after.state_version,
-        active_command=results[run.hub_chain_id].get("active_after_ack"),
+        active_command=active_after_ack.value,
     )
     return shares
 
@@ -510,25 +529,23 @@ def _renew_after_gap(run: Run, credited: int) -> int:
     from a fresh observation at the post-DEPOSIT state version. Returns the
     newly attested settled value."""
     lane = run.lane
-    before = run.csim.results[run.spoke_chain_id].get("observation_after_settle")
+    before = required(run.observation_after_settle).value
     gap = run.staleness_max + PAST_STALENESS
     run.advance(gap)
-    run.csim.observe(run.hub_chain_id, "nav_after_gap", lane.get_balance())
+    run.csim.observe(run.hub_chain_id, lane.get_balance(), label="nav_after_gap")
     run.expected_failures.add("nav_after_gap")
-    run.csim.observe(
-        run.hub_chain_id, "remote_version_after_gap", lane.remote_state_version()
+    remote_version_after_gap = run.csim.observe(
+        run.hub_chain_id, lane.remote_state_version()
     )
-    run.csim.observe(run.spoke_chain_id, "observation_after_gap", lane.observation())
+    observation_after_gap = run.csim.observe(run.spoke_chain_id, lane.observation())
     results = run.relay()
     assert_reverted(
         call(results, run.hub_chain_id, "nav_after_gap"),
         NAV_STALE_ERROR[run.transport_kind],
     )
-    after = results[run.spoke_chain_id].get("observation_after_gap")
+    after = observation_after_gap.value
     assert after.state_version == before.state_version + 1
-    assert results[run.hub_chain_id].get("remote_version_after_gap") == (
-        after.state_version
-    )
+    assert remote_version_after_gap.value == after.state_version
     run.log(
         "gap",
         gap_s=gap,
@@ -539,7 +556,7 @@ def _renew_after_gap(run: Run, credited: int) -> int:
     settled = attest(
         run,
         tag="renewed",
-        observation_label="observation_after_gap",
+        observed=observation_after_gap,
         old_version=before.state_version,
     )
     assert abs(settled - credited) <= credited // 1000
@@ -551,35 +568,29 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int) -> int:
     everything; returns the idle credited home."""
     lane = run.lane
     run.advance(60)
-    run.csim.observe(
+    remote_max_withdraw = run.csim.observe(
         run.spoke_chain_id,
-        "remote_max_withdraw",
         run.remote_vault.max_withdraw(lane.executor_address),
     )
     run.hub.execute(
         [lane.send_command(Command.redeem(run.remote_vault.address, shares))]
     )
-    results = run.relay()
-    assert results[run.spoke_chain_id].get("remote_max_withdraw") > 0
-    run.csim.observe(run.spoke_chain_id, "observation_after_redeem", lane.observation())
-    run.csim.observe(
+    run.relay()
+    assert remote_max_withdraw.value > 0
+    observation_after_redeem = run.csim.observe(run.spoke_chain_id, lane.observation())
+    shares_after_redeem = run.csim.observe(
         run.spoke_chain_id,
-        "shares_after_redeem",
         run.remote_vault.balance_of(lane.executor_address),
     )
-    results = run.relay()
-    remote_idle = (
-        results[run.spoke_chain_id].get("observation_after_redeem").tracked_idle
-    )
-    assert results[run.spoke_chain_id].get("shares_after_redeem") == 0
+    run.relay()
+    remote_idle = observation_after_redeem.value.tracked_idle
+    assert shares_after_redeem.value == 0
     assert 0 < remote_idle <= credited
     run.log(
         "redeem acked",
         shares_redeemed=shares,
         remote_idle=remote_idle,
-        state_version=results[run.spoke_chain_id]
-        .get("observation_after_redeem")
-        .state_version,
+        state_version=observation_after_redeem.value.state_version,
     )
 
     # The dispatcher carries the position at deposit cost and the vault's
@@ -588,7 +599,7 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int) -> int:
     # first (a change inside bigChangeBps), then recall exactly that.
     if run.min_update_interval:
         run.advance(run.min_update_interval)
-    settled = attest(run, tag="redeemed", observation_label="observation_after_redeem")
+    settled = attest(run, tag="redeemed", observed=observation_after_redeem)
     assert settled == remote_idle
 
     run.hub.execute(
@@ -600,33 +611,35 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int) -> int:
         ]
     )
     run.relay()
-    run.csim.observe(run.hub_chain_id, "idle_ledger", lane.idle_ledger())
-    run.csim.observe(
-        run.hub_chain_id, "pending_transfers", lane.pending_transfer_count()
+    run.idle_ledger = idle_ledger = run.csim.observe(
+        run.hub_chain_id, lane.idle_ledger()
     )
-    run.csim.observe(
-        run.hub_chain_id, "settled_after_return", lane.settled_remote_balance()
+    pending_transfers = run.csim.observe(
+        run.hub_chain_id, lane.pending_transfer_count()
     )
-    run.csim.observe(
-        run.hub_chain_id, "remote_version_after_return", lane.remote_state_version()
+    run.settled_after_return = settled_after_return = run.csim.observe(
+        run.hub_chain_id, lane.settled_remote_balance()
     )
-    run.csim.observe(run.spoke_chain_id, "observation_after_return", lane.observation())
-    results = run.relay()
-    idle = results[run.hub_chain_id].get("idle_ledger")
+    remote_version_after_return = run.csim.observe(
+        run.hub_chain_id, lane.remote_state_version()
+    )
+    run.observation_after_return = observation_after_return = run.csim.observe(
+        run.spoke_chain_id, lane.observation()
+    )
+    run.relay()
+    idle = idle_ledger.value
     run.log(
         "recall settled",
         recalled=remote_idle,
         idle_ledger=idle,
-        settled_residue=results[run.hub_chain_id].get("settled_after_return"),
-        pending_transfers=results[run.hub_chain_id].get("pending_transfers"),
-        state_version=results[run.spoke_chain_id]
-        .get("observation_after_return")
-        .state_version,
+        settled_residue=settled_after_return.value,
+        pending_transfers=pending_transfers.value,
+        state_version=observation_after_return.value.state_version,
     )
     assert 0 < idle <= remote_idle
     if run.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO:
         assert idle >= remote_idle * 98 // 100
-    assert results[run.hub_chain_id].get("pending_transfers") == 0
+    assert pending_transfers.value == 0
     # Stargate and the new-accounting CCIP executors debit the amount sent
     # from the spoke; the CCIP pilot debits the amount actually received on
     # the hub after any token-pool fee, which then stays in the settled
@@ -637,14 +650,10 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int) -> int:
         and not run.ccip_debits_sent_amount
         else remote_idle
     )
-    assert results[run.hub_chain_id].get("settled_after_return") == max(
-        remote_idle - debit, 0
-    )
-    after = results[run.spoke_chain_id].get("observation_after_return")
+    assert settled_after_return.value == max(remote_idle - debit, 0)
+    after = observation_after_return.value
     assert after.tracked_idle == 0
-    assert results[run.hub_chain_id].get("remote_version_after_return") == (
-        after.state_version
-    )
+    assert remote_version_after_return.value == after.state_version
     return idle
 
 
@@ -653,7 +662,7 @@ def _attest_residue(run: Run, idle: int) -> None:
     above ``attestation_zero_dust_sd`` cannot be re-marked to zero (the
     relative bound refuses it); at or below the bound the source generation
     resets it, and zero-to-zero is always allowed."""
-    residue = run.csim.results[run.hub_chain_id].get("settled_after_return")
+    residue = required(run.settled_after_return).value
     refused = residue > run.attestation_zero_dust_sd
     run.log(
         "residue",
@@ -668,7 +677,7 @@ def _attest_residue(run: Run, idle: int) -> None:
     attest(
         run,
         tag="residue",
-        observation_label="observation_after_return",
+        observed=required(run.observation_after_return),
         hub_idle=idle,
         approve_error=BIG_CHANGE_EXCEEDED if refused else None,
     )
@@ -677,30 +686,25 @@ def _attest_residue(run: Run, idle: int) -> None:
 def claim(run: Run, idle: int) -> None:
     lane = run.lane
     run.hub.execute([lane.claim(idle)])
-    run.csim.observe(
+    vault_usdc_after = run.csim.observe(
         run.hub_chain_id,
-        "vault_usdc_after",
         run.hub_asset.balance_of(run.hub_vault_address),
     )
-    run.csim.observe(
+    executor_usdc_after = run.csim.observe(
         run.hub_chain_id,
-        "executor_usdc_after",
         run.hub_asset.balance_of(lane.executor_address),
     )
-    run.csim.observe(run.hub_chain_id, "idle_after_claim", lane.idle_ledger())
-    results = run.relay()
-    vault_before = results[run.hub_chain_id].get("vault_usdc_before")
-    assert (
-        results[run.hub_chain_id].get("vault_usdc_after")
-        == vault_before - run.amount + idle
-    )
-    assert results[run.hub_chain_id].get("executor_usdc_after") == 0
-    assert results[run.hub_chain_id].get("idle_after_claim") == 0
+    idle_after_claim = run.csim.observe(run.hub_chain_id, lane.idle_ledger())
+    run.relay()
+    vault_before = required(run.vault_usdc_before).value
+    assert vault_usdc_after.value == vault_before - run.amount + idle
+    assert executor_usdc_after.value == 0
+    assert idle_after_claim.value == 0
     run.log(
         "claim",
         claimed=idle,
         vault_usdc_before=vault_before,
-        vault_usdc_after=results[run.hub_chain_id].get("vault_usdc_after"),
+        vault_usdc_after=vault_usdc_after.value,
         round_trip_cost=run.amount - idle,
     )
 
@@ -708,7 +712,7 @@ def claim(run: Run, idle: int) -> None:
 def run_lifecycle(run: Run) -> None:
     """Execute the transport-independent lifecycle against a prepared lane."""
     credited = supply(run)
-    attest(run, tag="initial", observation_label="observation_after_settle")
+    attest(run, tag="initial", observed=required(run.observation_after_settle))
     shares = _deposit(run, credited)
     _renew_after_gap(run, credited)
     idle = redeem_and_recall(run, shares, credited=credited)

@@ -132,8 +132,8 @@ def test_simulate_open_new_position_ramses_v2(web3_arb):
             )
         ]
     )
-    sim.observe("usdc_after_swap", usdc.balance_of(vault_address))
-    sim.observe("usdt_after_swap", usdt.balance_of(vault_address))
+    usdc_after_swap = sim.observe(usdc.balance_of(vault_address))
+    usdt_after_swap = sim.observe(usdt.balance_of(vault_address))
     sim.execute(
         [
             ramses_new_pos.new_position(
@@ -151,14 +151,13 @@ def test_simulate_open_new_position_ramses_v2(web3_arb):
             )
         ]
     )
-    sim.observe("usdc_after_new", usdc.balance_of(vault_address))
-    sim.observe("usdt_after_new", usdt.balance_of(vault_address))
+    usdc_after_new = sim.observe(usdc.balance_of(vault_address))
+    usdt_after_new = sim.observe(usdt.balance_of(vault_address))
     result = sim.run()
 
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
-    assert result.get("usdc_after_new") - result.get("usdc_after_swap") == -456_205368
-    assert result.get("usdt_after_new") - result.get("usdt_after_swap") == -499_000000
+    assert usdc_after_new.value - usdc_after_swap.value == -456_205368
+    assert usdt_after_new.value - usdt_after_swap.value == -499_000000
 
 
 def _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, amount_desired):
@@ -239,18 +238,17 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
             )
         ]
     )
-    sim2.observe("usdc_before_collect", usdc.balance_of(vault_address))
-    sim2.observe("usdt_before_collect", usdt.balance_of(vault_address))
+    usdc_before_collect = sim2.observe(usdc.balance_of(vault_address))
+    usdt_before_collect = sim2.observe(usdt.balance_of(vault_address))
     sim2.execute([ramses_collect.collect([new_token_id])])
-    sim2.observe("usdc_after_collect", usdc.balance_of(vault_address))
-    sim2.observe("usdt_after_collect", usdt.balance_of(vault_address))
+    usdc_after_collect = sim2.observe(usdc.balance_of(vault_address))
+    usdt_after_collect = sim2.observe(usdt.balance_of(vault_address))
     sim2.execute([ramses_new_pos.close_position([new_token_id])])
     result2 = sim2.run()
 
-    log.info("step2 observations=%s", result2.observations)
     assert_all_success(result2)
-    usdc_change = result2.get("usdc_after_collect") - result2.get("usdc_before_collect")
-    usdt_change = result2.get("usdt_after_collect") - result2.get("usdt_before_collect")
+    usdc_change = usdc_after_collect.value - usdc_before_collect.value
+    usdt_change = usdt_after_collect.value - usdt_before_collect.value
     assert usdc_change == 456205367
     assert usdt_change == 498999999
 
@@ -277,8 +275,8 @@ def test_simulate_increase_liquidity(web3_arb):
     ramses_modify = RamsesV2ModifyPositionFuse(ARBITRUM_RAMSES_V2_MODIFY_POSITION_FUSE)
 
     sim2 = _build_ramses_open_sim(web3_arb, ctx, vault_address, deadline, int(300e6))
-    sim2.observe("usdc_before", usdc.balance_of(vault_address))
-    sim2.observe("usdt_before", usdt.balance_of(vault_address))
+    usdc_before = sim2.observe(usdc.balance_of(vault_address))
+    usdt_before = sim2.observe(usdt.balance_of(vault_address))
     sim2.execute(
         [
             ramses_modify.increase_liquidity(
@@ -293,14 +291,13 @@ def test_simulate_increase_liquidity(web3_arb):
             )
         ]
     )
-    sim2.observe("usdc_after", usdc.balance_of(vault_address))
-    sim2.observe("usdt_after", usdt.balance_of(vault_address))
+    usdc_after = sim2.observe(usdc.balance_of(vault_address))
+    usdt_after = sim2.observe(usdt.balance_of(vault_address))
     result2 = sim2.run()
 
-    log.info("step2 observations=%s", result2.observations)
     assert_all_success(result2)
-    usdc_change = result2.get("usdc_after") - result2.get("usdc_before")
-    usdt_change = result2.get("usdt_after") - result2.get("usdt_before")
+    usdc_change = usdc_after.value - usdc_before.value
+    usdt_change = usdt_after.value - usdt_before.value
     assert usdc_change == -90_509683
     assert usdt_change == -99_000000
 
@@ -352,8 +349,8 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     # +1 month of time accumulation for reward emission
     sim2.next_block(time_shift_seconds=MONTH)
 
-    sim2.observe("ram_before_claim", ram.balance_of(rewards.address))
-    sim2.observe("xram_before_claim", xram.balance_of(rewards.address))
+    ram_before_claim = sim2.observe(ram.balance_of(rewards.address))
+    xram_before_claim = sim2.observe(xram.balance_of(rewards.address))
 
     claim_action = ramses_claim.claim(
         token_ids=[new_token_id],
@@ -361,16 +358,15 @@ def test_simulate_claim_rewards_after_one_month(web3_arb):
     )
     sim2.execute_call(call=rewards.claim_rewards([claim_action]))
 
-    sim2.observe("ram_after_claim", ram.balance_of(rewards.address))
-    sim2.observe("xram_after_claim", xram.balance_of(rewards.address))
+    ram_after_claim = sim2.observe(ram.balance_of(rewards.address))
+    xram_after_claim = sim2.observe(xram.balance_of(rewards.address))
 
     result2 = sim2.run()
-    log.info("claim observations=%s", result2.observations)
     assert_all_success(result2)
 
     # Core invariant: at least one of the reward tokens accrued
-    ram_diff = result2.get("ram_after_claim") - result2.get("ram_before_claim")
-    xram_diff = result2.get("xram_after_claim") - result2.get("xram_before_claim")
+    ram_diff = ram_after_claim.value - ram_before_claim.value
+    xram_diff = xram_after_claim.value - xram_before_claim.value
     log.info("ram_diff=%s xram_diff=%s", ram_diff, xram_diff)
     assert ram_diff > 0 or xram_diff > 0, (
         "claim_rewards moved no RAM and no XRAM into the rewards manager"

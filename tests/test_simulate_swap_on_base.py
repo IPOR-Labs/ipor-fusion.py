@@ -128,24 +128,23 @@ def test_simulate_swap_cbbtc_to_usdc(web3_base):
         from_=user_account,
     )
 
-    sim.observe("cbbtc_before", cbbtc.balance_of(vault_address))
-    sim.observe("usdc_before", usdc.balance_of(vault_address))
+    cbbtc_before = sim.observe(cbbtc.balance_of(vault_address))
+    usdc_before = sim.observe(usdc.balance_of(vault_address))
     sim.execute([swap_action])
-    sim.observe("cbbtc_after", cbbtc.balance_of(vault_address))
-    sim.observe("usdc_after", usdc.balance_of(vault_address))
+    cbbtc_after = sim.observe(cbbtc.balance_of(vault_address))
+    usdc_after = sim.observe(usdc.balance_of(vault_address))
 
     result = sim.run()
 
     log.info("success=%s gas_used=%s", result.success, result.gas_used)
-    log.info("observations=%s", result.observations)
 
     assert_all_success(result)
 
     # Mirror the original test's assertions verbatim
-    assert result.get("cbbtc_before") >= deposit_amount
-    assert result.get("usdc_before") < 1_000000
-    assert result.get("cbbtc_after") >= swap_amount
-    assert result.get("usdc_after") > 45000_000000
+    assert cbbtc_before.value >= deposit_amount
+    assert usdc_before.value < 1_000000
+    assert cbbtc_after.value >= swap_amount
+    assert usdc_after.value > 45000_000000
 
 
 def test_simulate_swap_weth_to_pepe(web3_base):
@@ -179,21 +178,20 @@ def test_simulate_swap_weth_to_pepe(web3_base):
     sim = VaultSimulator(
         web3=web3_base, vault=vault_address, alpha=alpha_address, block=block_hex
     )
-    sim.observe("weth_before", weth.balance_of(vault_address))
-    sim.observe("pepe_before", pepe_token.balance_of(vault_address))
+    weth_before = sim.observe(weth.balance_of(vault_address))
+    pepe_before = sim.observe(pepe_token.balance_of(vault_address))
     sim.execute([swap_action])
-    sim.observe("weth_after", weth.balance_of(vault_address))
-    sim.observe("pepe_after", pepe_token.balance_of(vault_address))
+    weth_after = sim.observe(weth.balance_of(vault_address))
+    pepe_after = sim.observe(pepe_token.balance_of(vault_address))
 
     result = sim.run()
 
     log.info("success=%s gas_used=%s", result.success, result.gas_used)
-    log.info("observations=%s", result.observations)
 
     assert_all_success(result)
 
     # Mirror the original test's assertions verbatim
-    assert result.get("weth_before") == 5000000000000000
-    assert result.get("weth_after") == 0
-    assert result.get("pepe_before") == 0
-    assert result.get("pepe_after") == 174743647_876992680486051295
+    assert weth_before.value == 5000000000000000
+    assert weth_after.value == 0
+    assert pepe_before.value == 0
+    assert pepe_after.value == 174743647_876992680486051295

@@ -91,7 +91,6 @@ from ipor_fusion.vault_positions import (
 )
 from ipor_fusion.vault_reads import (
     _ROLE_SCAN_ERRORS,
-    _read_batch,
     _safe_call,
     _unless_unimplemented,
 )
@@ -209,17 +208,17 @@ class VaultData:
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
 
 
-def _fuse_market_id_call(fuse: ChecksumAddress) -> Call[int]:
+def _fuse_market_id_call(fuse: ChecksumAddress) -> Call[MarketId]:
     """The immutable MARKET_ID() every IPOR Fusion fuse exposes.
 
-    Read with `try_aggregate`: a fuse that reverts or lacks the getter (a
+    Read with `Multicall3Batch.try_add`: a fuse that reverts or lacks the getter (a
     non-fuse address ever found in getFuses()) reads as ``None``.
     """
     return Call(
         to=fuse,
         data=_MARKET_ID_SELECTOR,
         output_types=["uint256"],
-        decoder=int,
+        decoder=MarketId,
     )
 
 
@@ -333,89 +332,72 @@ def _fetch_vault_reads(
     each fuse's MARKET_ID()).
     """
     pv = plasma_vault
+    batch = Multicall3(ctx).batch()
+    share_decimals = batch.add(pv.decimals())
+    total_assets = batch.add(pv.total_assets())
+    total_supply = batch.add(pv.total_supply())
+    asset_read = batch.add(pv.underlying_asset_address())
+    access_manager = batch.add(pv.get_access_manager_address())
+    fuses_read = batch.add(pv.get_fuses())
+    instant_fuses = batch.add(pv.get_instant_withdrawal_fuses())
+    vault_name = batch.try_add(pv.name())
+    rewards_manager = batch.try_add(pv.get_rewards_claim_manager_address())
+    supply_cap_read = batch.try_add(pv.get_total_supply_cap())
+    middleware_oracle = batch.try_add(pv.get_price_oracle_middleware_address())
+    legacy_oracle = batch.try_add(pv.get_price_oracle_address())
     try:
-        (
-            (
-                share_decimals,
-                total_assets,
-                total_supply,
-                asset,
-                access_manager,
-                fuses,
-                instant_fuses,
-            ),
-            (vault_name, rewards_manager, supply_cap, middleware_oracle, legacy_oracle),
-        ) = _read_batch(
-            ctx,
-            [
-                pv.decimals(),
-                pv.total_assets(),
-                pv.total_supply(),
-                pv.underlying_asset_address(),
-                pv.get_access_manager_address(),
-                pv.get_fuses(),
-                pv.get_instant_withdrawal_fuses(),
-            ],
-            [
-                pv.name(),
-                pv.get_rewards_claim_manager_address(),
-                pv.get_total_supply_cap(),
-                pv.get_price_oracle_middleware_address(),
-                pv.get_price_oracle_address(),
-            ],
-        )
+        batch.run()
     except EmptyCallResultError as exc:
         raise _missing_required_getter(pv, exc) from exc
     unimplemented: list[str] = []
     # Vaults deployed before the August 2024 audit have no supply cap, so
     # nothing caps them.
-    supply_cap = _unless_unimplemented(ctx, supply_cap, pv.get_total_supply_cap())
+    supply_cap = _unless_unimplemented(
+        ctx, supply_cap_read.value, pv.get_total_supply_cap()
+    )
     if supply_cap is None:
         unimplemented.append(GET_TOTAL_SUPPLY_CAP)
         supply_cap = _UNCAPPED
     price_oracle = _resolve_price_oracle(
-        ctx, pv, middleware_oracle, legacy_oracle, unimplemented
+        ctx, pv, middleware_oracle.value, legacy_oracle.value, unimplemented
     )
 
+    asset, fuses = asset_read.value, fuses_read.value
     asset_erc20 = ERC20(asset)
     oracle = price_oracle_middleware(ctx, price_oracle)
-    (asset_decimals, underlying_balance), (symbol, price, *fuse_market_ids) = (
-        _read_batch(
-            ctx,
-            [
-                asset_erc20.decimals(),
-                asset_erc20.balance_of(Web3.to_checksum_address(pv.address)),
-            ],
-            [
-                asset_erc20.symbol(),
-                oracle.get_asset_price(asset),
-                *(_fuse_market_id_call(fuse) for fuse in fuses),
-            ],
-        )
+    batch = Multicall3(ctx).batch()
+    asset_decimals = batch.add(asset_erc20.decimals())
+    underlying_balance = batch.add(
+        asset_erc20.balance_of(Web3.to_checksum_address(pv.address))
     )
+    symbol = batch.try_add(asset_erc20.symbol())
+    price = batch.try_add(oracle.get_asset_price(asset))
+    fuse_market_ids = [
+        (fuse, batch.try_add(_fuse_market_id_call(fuse))) for fuse in fuses
+    ]
+    batch.run()
     # Fuses without a readable MARKET_ID() are left out; the rest detect orphan
     # markets (action fuse registered, no balance fuse for its market).
     fuse_markets = {
-        fuse: mid
-        for fuse, mid in zip(fuses, fuse_market_ids, strict=True)
-        if mid is not None
+        fuse: mid.value for fuse, mid in fuse_market_ids if mid.value is not None
     }
+    asset_price = price.value
     return {
-        "share_decimals": share_decimals,
-        "total_assets": total_assets,
-        "total_supply": total_supply,
+        "share_decimals": share_decimals.value,
+        "total_assets": total_assets.value,
+        "total_supply": total_supply.value,
         "supply_cap": supply_cap,
         "asset": asset,
-        "access_manager": access_manager,
+        "access_manager": access_manager.value,
         "price_oracle": price_oracle,
         "fuses": fuses,
-        "instant_fuses": instant_fuses,
-        "vault_name": vault_name or "",
-        "rewards_manager": rewards_manager,
-        "asset_decimals": asset_decimals,
-        "underlying_balance_on_vault": underlying_balance,
-        "asset_symbol": symbol or "?",
-        "asset_price_usd": price.readable() if price else None,
+        "instant_fuses": instant_fuses.value,
+        "vault_name": vault_name.value or "",
+        "rewards_manager": rewards_manager.value,
+        "asset_decimals": asset_decimals.value,
+        "underlying_balance_on_vault": underlying_balance.value,
+        "asset_symbol": symbol.value or "?",
+        "asset_price_usd": asset_price.readable() if asset_price else None,
         "fuse_markets": fuse_markets or None,
         "unimplemented_getters": unimplemented,
     }, oracle
@@ -455,36 +437,33 @@ def _fetch_market_reads(
     one batch, then (optionally) the Aave V3 Pools behind the markets."""
     balance_fuses = plasma_vault.read_balance_fuses(ctx)
     market_ids = [bf.market_id for bf in balance_fuses]
-    substrate_calls = [plasma_vault.get_market_substrates(mid) for mid in market_ids]
     venues = list(dict.fromkeys(market_ids))
+    batch = Multicall3(ctx).batch()
+    graphs = [
+        (mid, batch.add(plasma_vault.get_dependency_balance_graph(mid)))
+        for mid in market_ids
+    ]
+    balances = [
+        (mid, batch.add(plasma_vault.total_assets_in_market(mid))) for mid in venues
+    ]
+    substrate_calls = [plasma_vault.get_market_substrates(mid) for mid in market_ids]
+    batched_substrates = [batch.try_add(call) for call in substrate_calls]
     try:
-        required, batched_substrates = _read_batch(
-            ctx,
-            [
-                *(plasma_vault.get_dependency_balance_graph(mid) for mid in market_ids),
-                *(plasma_vault.total_assets_in_market(mid) for mid in venues),
-            ],
-            substrate_calls,
-        )
+        batch.run()
     except EmptyCallResultError as exc:
         raise _missing_required_getter(plasma_vault, exc) from exc
-    graphs, balances = required[: len(market_ids)], required[len(market_ids) :]
     substrates = [
-        _unless_unimplemented(ctx, value, call)
-        for value, call in zip(batched_substrates, substrate_calls, strict=True)
+        _unless_unimplemented(ctx, read.value, call)
+        for read, call in zip(batched_substrates, substrate_calls, strict=True)
     ]
     return _MarketReads(
         balance_fuses=balance_fuses,
-        dependency_graph={
-            mid: [MarketId(dep) for dep in deps]
-            for mid, deps in zip(market_ids, graphs, strict=True)
-            if deps
-        },
+        dependency_graph={mid: deps.value for mid, deps in graphs if deps.value},
         market_substrates={
             mid: subs for mid, subs in zip(market_ids, substrates, strict=True) if subs
         },
         aave_pools=_fetch_aave_pools(ctx, balance_fuses) if with_aave_pools else {},
-        market_balances=dict(zip(venues, balances, strict=True)),
+        market_balances={mid: balance.value for mid, balance in balances},
         substrates_available=None not in substrates,
     )
 
@@ -736,20 +715,21 @@ def _token_metadata(
     tokens = {
         a: ERC20(Web3.to_checksum_address(a)) for a in breakdown | substrate_addresses
     }
-    calls: list[Call[Any]] = [tokens[a].symbol() for a in missing_symbols]
-    calls += [tokens[a].decimals() for a in missing_decimals]
-    results = Multicall3(ctx).try_aggregate(calls)
+    batch = Multicall3(ctx).batch()
+    symbol_reads = [(a, batch.try_add(tokens[a].symbol())) for a in missing_symbols]
+    decimals_reads = [
+        (a, batch.try_add(tokens[a].decimals())) for a in missing_decimals
+    ]
+    batch.run()
     found: dict[CacheKey, str] = {}
-    for address, symbol in zip(missing_symbols, results, strict=False):
-        symbols[address] = symbol or ""
-        if symbol:
-            found[symbol_keys[address]] = symbol
-    for address, value in zip(
-        missing_decimals, results[len(missing_symbols) :], strict=True
-    ):
-        decimals[address] = value
-        if value is not None:
-            found[decimals_keys[address]] = str(value)
+    for address, read in symbol_reads:
+        symbols[address] = read.value or ""
+        if read.value:
+            found[symbol_keys[address]] = read.value
+    for address, read in decimals_reads:
+        decimals[address] = read.value
+        if read.value is not None:
+            found[decimals_keys[address]] = str(read.value)
     cache_put(ctx.cache, found)
     return symbols, decimals
 

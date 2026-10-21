@@ -83,22 +83,21 @@ def test_simulate_claim_morpho_rewards(web3_eth):
         web3=web3_eth, vault=VAULT_ADDRESS, alpha=ALPHA_ADDRESS, block=block_hex
     )
 
-    sim.observe("rewards_before", rewards_token.balance_of(rewards.address))
+    rewards_before = sim.observe(rewards_token.balance_of(rewards.address))
 
     # alpha invokes RewardsManager.claimRewards([(fuse, calldata)]) — same shape
     # as plasma_vault.execute, but on the rewards manager with a different
     # function signature.
     sim.execute_call(call=rewards.claim_rewards([claim_action]))
 
-    sim.observe("rewards_after", rewards_token.balance_of(rewards.address))
+    rewards_after = sim.observe(rewards_token.balance_of(rewards.address))
 
     result = sim.run()
 
     log.info("success=%s gas_used=%s", result.all_success, result.gas_used)
     log.info("revert_reason=%s", result.revert_reason)
-    log.info("observations=%s", result.observations)
 
     assert_all_success(result)
 
-    diff = result.get("rewards_after") - result.get("rewards_before")
+    diff = rewards_after.value - rewards_before.value
     assert diff > 0, "rewards claim did not increase the rewards manager's balance"

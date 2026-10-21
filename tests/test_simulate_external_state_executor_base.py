@@ -156,7 +156,7 @@ def test_create_executor_caches_grants_and_sync_refreshes_custodians(
         from_=mod.CUSTODIAN_B,
         label="confirm_b",
     )
-    sim.observe("confirmed", executor.balances(mod.VENUE_BALANCE_ACCOUNT))
+    confirmed = sim.observe(executor.balances(mod.VENUE_BALANCE_ACCOUNT))
 
     # grantMarketSubstrates replaces the whole set, so C joins A and B.
     sim.add_call(
@@ -177,11 +177,11 @@ def test_create_executor_caches_grants_and_sync_refreshes_custodians(
         from_=CUSTODIAN_C,
         label="propose_c_after_sync",
     )
-    sim.observe(
-        "pending_from_c",
+    pending_from_c = sim.observe(
         executor.pending_proposals(
             mod.VENUE_BALANCE_ACCOUNT, chain_id=mod.BASE_CHAIN_ID
         ),
+        label="pending_from_c",
     )
 
     # Revoking B: the executor keeps trusting its cache until the next sync.
@@ -197,11 +197,11 @@ def test_create_executor_caches_grants_and_sync_refreshes_custodians(
         from_=mod.CUSTODIAN_B,
         label="propose_b_before_sync",
     )
-    sim.observe(
-        "pending_from_b",
+    pending_from_b = sim.observe(
         executor.pending_proposals(
             mod.VENUE_BALANCE_ACCOUNT, chain_id=mod.BASE_CHAIN_ID
         ),
+        label="pending_from_b",
     )
     sim.add_call(call=executor.sync_substrates(), from_=BYSTANDER, label="resync")
     sim.add_call(
@@ -221,11 +221,11 @@ def test_create_executor_caches_grants_and_sync_refreshes_custodians(
     _assert_unauthorized_custodian(failed["propose_c_before_sync"], CUSTODIAN_C)
     _assert_unauthorized_custodian(failed["propose_b_after_sync"], mod.CUSTODIAN_B)
 
-    assert result.get("confirmed") == ATTESTED_VALUE
-    for label, proposer, value in (
-        ("pending_from_c", CUSTODIAN_C, LATER_VALUE),
-        ("pending_from_b", mod.CUSTODIAN_B, REVOKED_VALUE),
+    assert confirmed.value == ATTESTED_VALUE
+    for observation, proposer, value in (
+        (pending_from_c, CUSTODIAN_C, LATER_VALUE),
+        (pending_from_b, mod.CUSTODIAN_B, REVOKED_VALUE),
     ):
-        pending = result.get(label)
+        pending = observation.value
         assert pending is not None
         assert (pending.proposer, pending.value) == (proposer, value)

@@ -126,17 +126,16 @@ def test_simulate_swap_when_one_hop_uniswap_v3(web3_arb):
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_alpha(sim, access_manager, owner)
-    sim.observe("usdc_before", usdc.balance_of(vault_address))
-    sim.observe("usdt_before", usdt.balance_of(vault_address))
+    usdc_before = sim.observe(usdc.balance_of(vault_address))
+    usdt_before = sim.observe(usdt.balance_of(vault_address))
     sim.execute([swap_action])
-    sim.observe("usdc_after", usdc.balance_of(vault_address))
-    sim.observe("usdt_after", usdt.balance_of(vault_address))
+    usdc_after = sim.observe(usdc.balance_of(vault_address))
+    usdt_after = sim.observe(usdt.balance_of(vault_address))
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
-    assert result.get("usdc_after") - result.get("usdc_before") == -int(100e6)
-    usdt_change = result.get("usdt_after") - result.get("usdt_before")
+    assert usdc_after.value - usdc_before.value == -int(100e6)
+    usdt_change = usdt_after.value - usdt_before.value
     assert int(98e6) < usdt_change < int(100e6)
 
 
@@ -166,17 +165,16 @@ def test_simulate_swap_when_multiple_hop(web3_arb):
         web3=web3_arb, vault=vault_address, alpha=ANVIL_WALLET, block=block_hex
     )
     _setup_alpha(sim, access_manager, owner)
-    sim.observe("usdc_before", usdc.balance_of(vault_address))
-    sim.observe("usdt_before", usdt.balance_of(vault_address))
+    usdc_before = sim.observe(usdc.balance_of(vault_address))
+    usdt_before = sim.observe(usdt.balance_of(vault_address))
     sim.execute([swap_action])
-    sim.observe("usdc_after", usdc.balance_of(vault_address))
-    sim.observe("usdt_after", usdt.balance_of(vault_address))
+    usdc_after = sim.observe(usdc.balance_of(vault_address))
+    usdt_after = sim.observe(usdt.balance_of(vault_address))
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
-    assert result.get("usdc_after") - result.get("usdc_before") == -int(100e6)
-    usdt_change = result.get("usdt_after") - result.get("usdt_before")
+    assert usdc_after.value - usdc_before.value == -int(100e6)
+    usdt_change = usdt_after.value - usdt_before.value
     assert int(98e6) < usdt_change < int(100e6)
 
 
@@ -214,8 +212,8 @@ def test_simulate_open_new_position_uniswap_v3(web3_arb):
             )
         ]
     )
-    sim.observe("usdc_after_swap", usdc.balance_of(vault_address))
-    sim.observe("usdt_after_swap", usdt.balance_of(vault_address))
+    usdc_after_swap = sim.observe(usdc.balance_of(vault_address))
+    usdt_after_swap = sim.observe(usdt.balance_of(vault_address))
     sim.execute(
         [
             uniswap_new_pos.new_position(
@@ -232,14 +230,13 @@ def test_simulate_open_new_position_uniswap_v3(web3_arb):
             )
         ]
     )
-    sim.observe("usdc_after_position", usdc.balance_of(vault_address))
-    sim.observe("usdt_after_position", usdt.balance_of(vault_address))
+    usdc_after_position = sim.observe(usdc.balance_of(vault_address))
+    usdt_after_position = sim.observe(usdt.balance_of(vault_address))
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
-    usdc_change = result.get("usdc_after_position") - result.get("usdc_after_swap")
-    usdt_change = result.get("usdt_after_position") - result.get("usdt_after_swap")
+    usdc_change = usdc_after_position.value - usdc_after_swap.value
+    usdt_change = usdt_after_position.value - usdt_after_swap.value
     assert usdc_change == -int(499e6)
     # Original test asserts == -489_152502 exactly; on Uniswap V3 the consumed
     # amount1 depends on pool state at the block which is deterministic on archive.
@@ -372,18 +369,17 @@ def test_simulate_collect_all_after_decrease_liquidity(web3_arb):
             )
         ]
     )
-    sim2.observe("usdc_before_collect", usdc.balance_of(vault_address))
-    sim2.observe("usdt_before_collect", usdt.balance_of(vault_address))
+    usdc_before_collect = sim2.observe(usdc.balance_of(vault_address))
+    usdt_before_collect = sim2.observe(usdt.balance_of(vault_address))
     sim2.execute([uniswap_collect.collect([new_token_id])])
-    sim2.observe("usdc_after_collect", usdc.balance_of(vault_address))
-    sim2.observe("usdt_after_collect", usdt.balance_of(vault_address))
+    usdc_after_collect = sim2.observe(usdc.balance_of(vault_address))
+    usdt_after_collect = sim2.observe(usdt.balance_of(vault_address))
     sim2.execute([uniswap_new_pos.close_position([new_token_id])])
 
     result2 = sim2.run()
-    log.info("step2 observations=%s", result2.observations)
     assert_all_success(result2)
-    usdc_change = result2.get("usdc_after_collect") - result2.get("usdc_before_collect")
-    usdt_change = result2.get("usdt_after_collect") - result2.get("usdt_before_collect")
+    usdc_change = usdc_after_collect.value - usdc_before_collect.value
+    usdt_change = usdt_after_collect.value - usdt_before_collect.value
     assert 498_000000 < usdc_change < 500_000000
     assert 489_000000 < usdt_change < 500_000000
 
@@ -455,8 +451,8 @@ def test_simulate_increase_liquidity(web3_arb):
 
     # Step 2: replay + increase
     sim2 = _build_setup_sim()
-    sim2.observe("usdc_before", usdc.balance_of(vault_address))
-    sim2.observe("usdt_before", usdt.balance_of(vault_address))
+    usdc_before = sim2.observe(usdc.balance_of(vault_address))
+    usdt_before = sim2.observe(usdt.balance_of(vault_address))
     sim2.execute(
         [
             uniswap_modify.increase_liquidity(
@@ -471,13 +467,12 @@ def test_simulate_increase_liquidity(web3_arb):
             )
         ]
     )
-    sim2.observe("usdc_after", usdc.balance_of(vault_address))
-    sim2.observe("usdt_after", usdt.balance_of(vault_address))
+    usdc_after = sim2.observe(usdc.balance_of(vault_address))
+    usdt_after = sim2.observe(usdt.balance_of(vault_address))
 
     result2 = sim2.run()
-    log.info("step2 observations=%s", result2.observations)
     assert_all_success(result2)
-    usdc_change = result2.get("usdc_after") - result2.get("usdc_before")
-    usdt_change = result2.get("usdt_after") - result2.get("usdt_before")
+    usdc_change = usdc_after.value - usdc_before.value
+    usdt_change = usdt_after.value - usdt_before.value
     assert usdc_change == -int(99e6)
     assert usdt_change == -97_046288
