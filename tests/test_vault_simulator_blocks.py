@@ -48,7 +48,7 @@ def _sent_blocks(provider: RecordingProvider) -> list[dict]:
 
 def test_run_rejects_missing_call_result():
     sim, provider = _simulator()
-    sim.observe("missing", _read())
+    sim.observe(_read())
     provider.make_request = MagicMock(return_value={"result": [{"calls": []}]})
 
     with pytest.raises(
@@ -60,7 +60,7 @@ def test_run_rejects_missing_call_result():
 
 def test_run_reports_a_provider_error_as_a_run_error():
     sim, provider = _simulator()
-    sim.observe("read", _read())
+    sim.observe(_read())
     provider.make_request = MagicMock(return_value={"error": {"code": -32601}})
 
     with pytest.raises(SimulationRunError, match="eth_simulateV1 failed"):
@@ -71,7 +71,7 @@ def test_overrides_on_an_empty_block_fold_into_the_next_sent_block():
     sim, provider = _simulator()
     sim.with_state_override(PAYER, balance=hex(10**18))
     sim.next_block(time_shift_seconds=60)
-    sim.observe("later", _read())
+    sim.observe(_read())
     sim.run()
     (entry,) = _sent_blocks(provider)
     assert entry["stateOverrides"] == {PAYER: {"balance": hex(10**18)}}
@@ -84,7 +84,7 @@ def test_the_sent_block_wins_and_addresses_merge():
     sim.with_block_time_shift(10)
     sim.next_block(time_shift_seconds=60)
     sim.with_state_override(PAYER, balance=hex(2))
-    sim.observe("later", _read())
+    sim.observe(_read())
     sim.run()
     (entry,) = _sent_blocks(provider)
     assert entry["stateOverrides"] == {PAYER: {"balance": hex(2), "nonce": hex(7)}}
@@ -129,7 +129,7 @@ def test_storage_overrides_compose_when_an_empty_block_folds_forward(
     sim.with_state_override(TOKEN, **earlier)
     sim.next_block()
     sim.with_state_override(TOKEN, **later)
-    sim.observe("later", _read())
+    sim.observe(_read())
     sim.run()
     (entry,) = _sent_blocks(provider)
     assert entry["stateOverrides"][TOKEN] == expected
@@ -144,9 +144,9 @@ def test_one_account_override_cannot_mix_state_and_state_diff():
 def test_a_sent_block_does_not_leak_its_overrides_forward():
     sim, provider = _simulator()
     sim.with_state_override(PAYER, balance=hex(1))
-    sim.observe("first", _read())
+    sim.observe(_read())
     sim.next_block()
-    sim.observe("second", _read())
+    sim.observe(_read())
     sim.run()
     first, second = _sent_blocks(provider)
     assert first["stateOverrides"] == {PAYER: {"balance": hex(1)}}
@@ -157,9 +157,9 @@ def test_a_sent_block_does_not_leak_its_overrides_forward():
 
 def test_default_block_times_are_explicit_and_increase_by_twelve_seconds():
     sim, provider = _simulator()
-    sim.observe("first", _read())
+    sim.observe(_read())
     sim.next_block()
-    sim.observe("second", _read())
+    sim.observe(_read())
 
     sim.run()
 
@@ -170,9 +170,9 @@ def test_default_block_times_are_explicit_and_increase_by_twelve_seconds():
 
 def test_explicit_shift_after_default_block_uses_modeled_client_time():
     sim, provider = _simulator()
-    sim.observe("first", _read())
+    sim.observe(_read())
     sim.next_block(time_shift_seconds=1)
-    sim.observe("second", _read())
+    sim.observe(_read())
 
     sim.run()
 
@@ -184,7 +184,7 @@ def test_explicit_shift_after_default_block_uses_modeled_client_time():
 @pytest.mark.parametrize("shift", (0, -1))
 def test_next_block_rejects_non_increasing_time(shift):
     sim, _ = _simulator()
-    sim.observe("first", _read())
+    sim.observe(_read())
 
     with pytest.raises(ValueError, match="strictly increasing"):
         sim.next_block(time_shift_seconds=shift)
@@ -193,9 +193,9 @@ def test_next_block_rejects_non_increasing_time(shift):
 def test_folded_empty_block_does_not_consume_a_default_time_increment():
     sim, provider = _simulator()
     sim.next_block()
-    sim.observe("first", _read())
+    sim.observe(_read())
     sim.next_block()
-    sim.observe("second", _read())
+    sim.observe(_read())
 
     sim.run()
 
@@ -206,9 +206,9 @@ def test_folded_empty_block_does_not_consume_a_default_time_increment():
 
 def test_run_rejects_absolute_time_that_moves_backwards():
     sim, _ = _simulator()
-    sim.with_block_time_shift(60).observe("first", _read())
+    sim.with_block_time_shift(60).observe(_read())
     sim.next_block()
-    sim.with_block_time_shift(5).observe("second", _read())
+    sim.with_block_time_shift(5).observe(_read())
 
     with pytest.raises(ValueError, match="strictly increasing"):
         sim.run()
@@ -219,11 +219,11 @@ def test_current_time_and_block_number_follow_only_sent_blocks():
     assert sim.current_time == BASELINE
     assert sim.current_block_number == 100
     sim.next_block()
-    sim.observe("first", _read())
+    sim.observe(_read())
     assert sim.current_time == BASELINE + 12
     assert sim.current_block_number == 101
     sim.next_block(time_shift_seconds=1)
-    sim.observe("second", _read())
+    sim.observe(_read())
     assert sim.current_time == BASELINE + 13
     assert sim.current_block_number == 102
 
@@ -348,7 +348,7 @@ def test_with_erc20_balance_overrides_the_mapping_entry_and_keeps_other_fields()
     sim.with_state_override(TOKEN, balance=hex(1))
     sim.with_erc20_balance(TOKEN, PAYER, 5, slot=9)
     sim.with_erc20_balance(TOKEN, ALPHA, 7, slot=9)
-    sim.observe("later", _read())
+    sim.observe(_read())
     sim.run()
     (entry,) = _sent_blocks(provider)
     assert entry["stateOverrides"][TOKEN] == {
@@ -368,7 +368,7 @@ def test_same_block_state_overrides_compose_without_mutating_inputs():
     sim.with_state_override(TOKEN, balance=hex(2), code="0x6000")
     assert initial_state == {STORAGE_A: VALUE_A}
     initial_state[STORAGE_B] = VALUE_B
-    sim.observe("later", _read())
+    sim.observe(_read())
     sim.run()
 
     (entry,) = _sent_blocks(provider)
@@ -387,7 +387,7 @@ def test_same_block_state_replaces_an_earlier_state_diff():
     sim, provider = _simulator()
     sim.with_erc20_balance(TOKEN, PAYER, 5, slot=9)
     sim.with_state_override(TOKEN, state={STORAGE_B: VALUE_B})
-    sim.observe("later", _read())
+    sim.observe(_read())
     sim.run()
 
     (entry,) = _sent_blocks(provider)
@@ -428,16 +428,16 @@ def test_override_provider_sees_each_sent_block_and_survives_a_swap():
         return {PAYER: {"balance": hex(100 + n), "nonce": hex(1)}}
 
     sim.with_state_override_provider(first)
-    sim.observe("a", _read())
+    sim.observe(_read())
     # An empty block takes no index; the next sent block is n = 1.
     sim.next_block(time_shift_seconds=10)
     sim.next_block(time_shift_seconds=10)
-    sim.observe("b", _read())
+    sim.observe(_read())
     sim.next_block(time_shift_seconds=10)
     # The block's own override wins over the provider's for the same field.
     sim.with_state_override_provider(lambda n: {PAYER: {"balance": hex(200 + n)}})
     sim.with_state_override(PAYER, balance=hex(7))
-    sim.observe("c", _read())
+    sim.observe(_read())
     sim.run()
     entries = _sent_blocks(provider)
     assert seen == [0, 1]
@@ -479,7 +479,7 @@ def test_add_transaction_sends_every_field_and_counts_as_execute():
         ),
         label="proposal",
     )
-    sim.observe("after", _read())
+    sim.observe(_read())
     provider.make_request = MagicMock(
         wraps=provider.make_request,
         side_effect=lambda method, params: (

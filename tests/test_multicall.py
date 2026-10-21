@@ -212,3 +212,161 @@ class TestPinnedContext:
             Multicall3(ctx).aggregate(calls)
         assert [to for to, _ in seen] == [MULTICALL3_ADDRESS, TOKEN_B]
         assert {block for _, block in seen} == {self.BLOCK}
+
+
+def _str_call(target: str, arg: int) -> Call[str]:
+    return Call(
+        to=target,  # type: ignore[arg-type]
+        data=SELECTOR + encode(["uint256"], [arg]),
+        output_types=["uint256"],
+        decoder=str,
+    )
+
+
+def _reverting_b(to: str, data: bytes) -> bytes:
+    if to == TOKEN_B:
+        raise ContractLogicError("execution reverted: NotAllowed")
+    return _echo(to, data)
+
+
+class TestBatch:
+    """Reads of different types in one round trip, each keeping its type."""
+
+    def test_mixed_types_decode_in_one_round_trip(self):
+        ctx = _ctx()
+        batch = Multicall3(ctx).batch()
+        amount = batch.add(_uint_call(ctx, TOKEN_A, 1))
+        label = batch.add(_str_call(TOKEN_A, 2))
+        optional = batch.try_add(_uint_call(ctx, TOKEN_A, 3))
+
+        assert len(batch) == 3
+        batch.run()
+
+        assert (amount.value, label.value, optional.value) == (2, "4", 6)
+        ctx.call.assert_called_once()
+        (to, data), _ = ctx.call.call_args
+        assert is_aggregate3(to, data)
+
+    def test_a_failed_try_add_is_none_without_an_extra_call(self):
+        ctx = _ctx(_reverting_b)
+        batch = Multicall3(ctx).batch()
+        kept = batch.add(_uint_call(ctx, TOKEN_A, 1))
+        dropped = batch.try_add(_uint_call(ctx, TOKEN_B, 2))
+
+        batch.run()
+
+        assert (kept.value, dropped.value) == (2, None)
+        ctx.call.assert_called_once()
+
+    def test_try_add_maps_empty_and_undecodable_data_to_none(self):
+        def handler(to: str, data: bytes) -> bytes:
+            (arg,) = decode(["uint256"], data[4:])
+            if arg == 1:
+                return b""
+            if arg == 2:
+                return b"\x01"  # too short to decode
+            return _echo(to, data)
+
+        ctx = _ctx(handler)
+        batch = Multicall3(ctx).batch()
+        reads = [batch.try_add(_uint_call(ctx, TOKEN_A, n)) for n in (1, 2, 3)]
+
+        batch.run()
+
+        assert [read.value for read in reads] == [None, None, 6]
+
+    def test_a_failed_add_raises_its_own_revert(self):
+        ctx = _ctx(_reverting_b)
+        batch = Multicall3(ctx).batch()
+        batch.try_add(_uint_call(ctx, TOKEN_A, 1))
+        batch.add(_uint_call(ctx, TOKEN_B, 2))
+
+        with pytest.raises(ContractLogicError, match="NotAllowed"):
+            batch.run()
+
+    def test_a_failed_add_with_empty_data_raises_empty_call_result(self):
+        ctx = _ctx(lambda _to, _data: b"")
+        batch = Multicall3(ctx).batch()
+        batch.add(_uint_call(ctx, TOKEN_A, 1))
+
+        with pytest.raises(EmptyCallResultError):
+            batch.run()
+
+    def test_value_before_run_raises(self):
+        batch = Multicall3(_ctx()).batch()
+        read = batch.add(_uint_call(MagicMock(), TOKEN_A, 1))
+
+        with pytest.raises(RuntimeError, match=r"Multicall3Batch\.run\(\)"):
+            _ = read.value
+
+    def test_a_batch_runs_once(self):
+        ctx = _ctx()
+        batch = Multicall3(ctx).batch()
+        batch.add(_uint_call(ctx, TOKEN_A, 1))
+        batch.run()
+
+        with pytest.raises(RuntimeError, match="already ran"):
+            batch.run()
+        with pytest.raises(RuntimeError, match="already ran"):
+            batch.add(_uint_call(ctx, TOKEN_A, 2))
+        ctx.call.assert_called_once()
+
+    def test_a_failed_run_does_not_run_again(self):
+        ctx = _ctx(_reverting_b)
+        batch = Multicall3(ctx).batch()
+        batch.add(_uint_call(ctx, TOKEN_B, 1))
+        with pytest.raises(ContractLogicError):
+            batch.run()
+
+        with pytest.raises(RuntimeError, match="already ran"):
+            batch.run()
+
+    def test_an_empty_batch_skips_the_rpc(self):
+        ctx = _ctx()
+        Multicall3(ctx).batch().run()
+
+        ctx.call.assert_not_called()
+
+    def test_splits_into_chunks_and_keeps_order(self):
+        ctx = _ctx()
+        batch = Multicall3(ctx, batch_size=2).batch()
+        reads = [batch.add(_uint_call(ctx, TOKEN_A, n)) for n in range(5)]
+
+        batch.run()
+
+        assert [read.value for read in reads] == [0, 2, 4, 6, 8]
+        batch_sizes = [
+            len(decode_aggregate3(c.args[1])) for c in ctx.call.call_args_list
+        ]
+        assert batch_sizes == [2, 2, 1]
+
+    def test_falls_back_to_one_call_per_read_without_multicall3(self):
+        ctx = TestWithoutMulticall3._ctx_without_multicall(_reverting_b)
+        batch = Multicall3(ctx).batch()
+        kept = batch.add(_uint_call(ctx, TOKEN_A, 1))
+        dropped = batch.try_add(_uint_call(ctx, TOKEN_B, 2))
+
+        batch.run()
+
+        assert (kept.value, dropped.value) == (2, None)
+        targets = [c.args[0] for c in ctx.call.call_args_list]
+        assert targets == [MULTICALL3_ADDRESS, TOKEN_A, TOKEN_B]
+
+    def test_a_failed_add_raises_in_the_fallback(self):
+        ctx = TestWithoutMulticall3._ctx_without_multicall(_reverting_b)
+        batch = Multicall3(ctx).batch()
+        batch.add(_uint_call(ctx, TOKEN_B, 1))
+
+        with pytest.raises(ContractLogicError, match="NotAllowed"):
+            batch.run()
+
+    def test_the_rerun_of_a_failed_add_stays_at_the_pinned_block(self):
+        ctx, seen = TestPinnedContext()._pinned(multicall=True, failing=TOKEN_B)
+        batch = Multicall3(ctx).batch()
+        batch.add(_uint_call(ctx, TOKEN_A, 1))
+        batch.add(_uint_call(ctx, TOKEN_B, 2))
+
+        with pytest.raises(ContractLogicError, match="NotAllowed"):
+            batch.run()
+        assert [to for to, _ in seen] == [MULTICALL3_ADDRESS, TOKEN_B]
+        assert {block for _, block in seen} == {TestPinnedContext.BLOCK}

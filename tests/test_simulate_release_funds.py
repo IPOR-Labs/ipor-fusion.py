@@ -88,7 +88,7 @@ def test_simulate_release_funds(web3_arb):
     # get_pending_requests_info() aggregates events and per-account reads — that
     # can't be a single eth_call, so we read the user's request_info instead.
     sim.next_block(time_shift_seconds=Period.HOUR)
-    sim.observe("request_info", withdraw_manager.request_info(USER))
+    sim.observe(withdraw_manager.request_info(USER))
 
     # ── Block 2: +1 minute, alpha (= user) releases funds ─────────────────
     # Original test calls release_funds(timestamp=pending.timestamp) where
@@ -102,9 +102,9 @@ def test_simulate_release_funds(web3_arb):
 
     # ── Block 3: +1 hour, user withdraws and we measure the balance delta ─
     sim.next_block(time_shift_seconds=Period.HOUR)
-    sim.observe("request_after_release", withdraw_manager.request_info(USER))
-    sim.observe("max_withdraw", plasma_vault.max_withdraw(USER))
-    sim.observe("usdc_before", usdc.balance_of(USER))
+    request_after_release = sim.observe(withdraw_manager.request_info(USER))
+    max_withdraw = sim.observe(plasma_vault.max_withdraw(USER))
+    usdc_before = sim.observe(usdc.balance_of(USER))
 
     # The original test calls withdraw(max_withdraw(user)) — exact value known
     # only at runtime. eth_simulateV1 can't thread observed values into later
@@ -116,7 +116,7 @@ def test_simulate_release_funds(web3_arb):
         call=plasma_vault.withdraw(withdraw_amount, USER, USER),
         from_=USER,
     )
-    sim.observe("usdc_after", usdc.balance_of(USER))
+    usdc_after = sim.observe(usdc.balance_of(USER))
 
     result = sim.run()
 
@@ -126,17 +126,16 @@ def test_simulate_release_funds(web3_arb):
         result.gas_used,
         result.revert_reason,
     )
-    log.info("observations=%s", result.observations)
 
     assert_all_success(result)
 
     # Confirm release flipped can_withdraw and that the requested amount survived.
-    request = result.get("request_after_release")
+    request = request_after_release.value
     assert request.shares == DEPOSIT_AMOUNT
     assert request.can_withdraw is True
-    assert result.get("max_withdraw") >= withdraw_amount
+    assert max_withdraw.value >= withdraw_amount
 
-    delta = result.get("usdc_after") - result.get("usdc_before")
+    delta = usdc_after.value - usdc_before.value
     log.info("user balance delta: %s (1e6 = 1 USDC)", delta)
     assert delta == withdraw_amount
 
@@ -210,24 +209,23 @@ def test_simulate_release_funds_shares(web3_arb):
 
     # ── Block 2: +1 hour, user redeems via redeem_from_request ─────────────
     sim.next_block(time_shift_seconds=Period.HOUR)
-    sim.observe("usdc_before", usdc.balance_of(USER))
+    usdc_before = sim.observe(usdc.balance_of(USER))
     sim.add_call(
         call=plasma_vault.redeem_from_request(shares, USER, USER),
         from_=USER,
     )
-    sim.observe("usdc_after", usdc.balance_of(USER))
+    usdc_after = sim.observe(usdc.balance_of(USER))
 
     result = sim.run()
 
     log.info(
-        "all_success=%s gas_used=%s reason=%s observations=%s",
+        "all_success=%s gas_used=%s reason=%s",
         result.all_success,
         result.gas_used,
         result.revert_reason,
-        result.observations,
     )
 
     assert_all_success(result)
-    delta = result.get("usdc_after") - result.get("usdc_before")
+    delta = usdc_after.value - usdc_before.value
     log.info("user balance delta: %s (1e6 = 1 USDC)", delta)
     assert delta > 999_000000  # mirror original test's invariant

@@ -14,11 +14,12 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.errors import EmptyCallResultError
 
 T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
 U = TypeVar("U")
 
 
-@dataclass(slots=True)
-class Call(Generic[T]):
+@dataclass(frozen=True, slots=True)
+class Call(Generic[T_co]):
     """A pre-encoded contract call: target, calldata, and (for views) the ABI
     output types + decoder to a typed Python return.
 
@@ -37,14 +38,14 @@ class Call(Generic[T]):
 
         balance = usdc.balance_of(addr).call(ctx)       # eth_call → Amount
         usdc.transfer(addr, amount).send(ctx)           # tx → TxReceipt
-        sim.observe("after", usdc.balance_of(vault))    # eth_simulateV1
+        after = sim.observe(usdc.balance_of(vault))      # eth_simulateV1
         sim.add_call(call=usdc.approve(spender, amount), from_=user)
     """
 
     to: ChecksumAddress
     data: bytes
     output_types: list[str] | None = None
-    decoder: Callable[..., T] | None = None
+    decoder: Callable[..., T_co] | None = None
 
     @property
     def calldata(self) -> bytes:
@@ -53,14 +54,14 @@ class Call(Generic[T]):
         routing through `.send(ctx)`. Pure data — no ctx required."""
         return self.data
 
-    def map(self, transform: Callable[[T], U]) -> Call[U]:
+    def map(self, transform: Callable[[T_co], U]) -> Call[U]:
         """Return the same call with ``transform`` applied to what ``call()`` returns."""
         if not self.output_types:
             raise ValueError("cannot map a write-only Call without output types")
         decoder = self.decoder
 
         def mapped(value: Any) -> U:
-            decoded = decoder(value) if decoder is not None else cast(T, value)
+            decoded = decoder(value) if decoder is not None else cast(T_co, value)
             return transform(decoded)
 
         return Call(
@@ -70,7 +71,7 @@ class Call(Generic[T]):
             decoder=mapped,
         )
 
-    def call(self, ctx: Web3Context, *, block: BlockIdentifier | None = None) -> T:
+    def call(self, ctx: Web3Context, *, block: BlockIdentifier | None = None) -> T_co:
         """Execute as `eth_call` on ``ctx`` at ``block`` (the context's default
         block when ``None``); decode and convert per `output_types`/`decoder`."""
         if not self.output_types:
@@ -94,7 +95,7 @@ class Call(Generic[T]):
             )
         return self.decode(raw)
 
-    def decode(self, raw: bytes) -> T:
+    def decode(self, raw: bytes) -> T_co:
         """Decode raw return data per `output_types`/`decoder` — the second half
         of `.call(ctx)`, for return data fetched elsewhere (e.g. `Multicall3`)."""
         if not self.output_types:
@@ -103,7 +104,7 @@ class Call(Generic[T]):
         single: Any = values[0] if len(values) == 1 else values
         if self.decoder is not None:
             return self.decoder(single)
-        return cast(T, single)
+        return cast(T_co, single)
 
     def send(self, ctx: Web3Context) -> TxReceipt:
         """Submit as a transaction via ``ctx``'s signer."""

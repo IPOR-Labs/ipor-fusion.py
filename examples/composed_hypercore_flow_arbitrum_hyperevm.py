@@ -83,6 +83,7 @@ from ipor_fusion import (
     CrosschainLane,
     CrosschainSimulator,
     HyperCoreReader,
+    LaneObservation,
     PlasmaVault,
     SimulationResult,
     TimeInForce,
@@ -784,9 +785,14 @@ def redeem_command_preview(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
     }
 
 
-def _attest(flow: _Tail, tag: str, observation_label: str, *, hub_idle: int = 0) -> int:
+def _attest(
+    flow: _Tail,
+    tag: str,
+    observation: LaneObservation,
+    *,
+    hub_idle: int = 0,
+) -> int:
     lane, hub = flow.lane, flow.hub
-    observation = flow.simulator.results[HYPEREVM_CHAIN_ID].get(observation_label)
     proposal = lane.attestation(
         observation,
         remote_block=flow.spoke.current_block_number,
@@ -816,18 +822,14 @@ def _attest(flow: _Tail, tag: str, observation_label: str, *, hub_idle: int = 0)
         from_=ALPHA,
         label=f"refresh_54_{tag}",
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, f"executor_balance_{tag}", lane.get_balance()
+    executor_nav = flow.simulator.observe(ARBITRUM_CHAIN_ID, lane.get_balance())
+    market_nav = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, flow.hub_vault.total_assets_in_market(CROSSCHAIN_MARKET)
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID,
-        f"market_total_{tag}",
-        flow.hub_vault.total_assets_in_market(CROSSCHAIN_MARKET),
-    )
-    results = flow.relay()
+    flow.relay()
     attested = int(observation.accounted_balance)
-    executor_balance = int(results[ARBITRUM_CHAIN_ID].get(f"executor_balance_{tag}"))
-    market_total = int(results[ARBITRUM_CHAIN_ID].get(f"market_total_{tag}"))
+    executor_balance = executor_nav.value
+    market_total = market_nav.value
     _check(
         executor_balance == attested + hub_idle,
         f"{tag}: executor NAV {executor_balance} != attested {attested} + idle {hub_idle}",
@@ -908,23 +910,23 @@ def recall_attest_claim(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
     hub.execute([lane.recall(amount=remote_idle, min_return=remote_idle)])
     flow.advance(BRIDGE_LATENCY)
     flow.relay()
-    simulator.observe(ARBITRUM_CHAIN_ID, "idle_after_return", lane.idle_ledger())
-    simulator.observe(
-        ARBITRUM_CHAIN_ID, "settled_after_return", lane.settled_remote_balance()
+    idle_after_return = simulator.observe(ARBITRUM_CHAIN_ID, lane.idle_ledger())
+    settled_after_return = simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.settled_remote_balance()
     )
-    simulator.observe(
-        ARBITRUM_CHAIN_ID, "pending_after_return", lane.pending_transfer_count()
+    pending_after_return = simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.pending_transfer_count()
     )
-    simulator.observe(HYPEREVM_CHAIN_ID, "observation_after_return", lane.observation())
-    results = flow.relay()
-    idle = int(results[ARBITRUM_CHAIN_ID].get("idle_after_return"))
-    settled = int(results[ARBITRUM_CHAIN_ID].get("settled_after_return"))
+    observation_after_return = simulator.observe(HYPEREVM_CHAIN_ID, lane.observation())
+    flow.relay()
+    idle = idle_after_return.value
+    settled = settled_after_return.value
     _check(
         idle == int(remote_idle),
         f"the hub credited {idle}, the spoke sent {remote_idle} (no token fee on this lane)",
     )
     _check(
-        results[ARBITRUM_CHAIN_ID].get("pending_after_return") == 0,
+        pending_after_return.value == 0,
         "a transfer is still pending",
     )
     # The settled bucket keeps exactly the value of the residual shares; the
@@ -937,7 +939,7 @@ def recall_attest_claim(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
     flow.numbers.update({"recalled": idle, "settled_after_return": settled})
 
     flow.advance(int(lane.executor.min_update_interval().call(hub_ctx)))
-    residual = _attest(flow, "residual", "observation_after_return", hub_idle=idle)
+    residual = _attest(flow, "residual", observation_after_return.value, hub_idle=idle)
     _check(
         residual == settled, f"the residual attestation {residual} != settled {settled}"
     )
@@ -948,32 +950,31 @@ def recall_attest_claim(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
         from_=ALPHA,
         label="refresh_54_final",
     )
-    simulator.observe(
-        ARBITRUM_CHAIN_ID, "vault_usdc_after", flow.hub_usdc.balance_of(HUB_VAULT)
+    vault_usdc_after = simulator.observe(
+        ARBITRUM_CHAIN_ID, flow.hub_usdc.balance_of(HUB_VAULT)
     )
-    simulator.observe(ARBITRUM_CHAIN_ID, "idle_after_claim", lane.idle_ledger())
-    simulator.observe(ARBITRUM_CHAIN_ID, "nav_final", lane.get_balance())
-    simulator.observe(
+    idle_after_claim = simulator.observe(ARBITRUM_CHAIN_ID, lane.idle_ledger())
+    nav_final = simulator.observe(ARBITRUM_CHAIN_ID, lane.get_balance())
+    market_final = simulator.observe(
         ARBITRUM_CHAIN_ID,
-        "market_final",
         flow.hub_vault.total_assets_in_market(CROSSCHAIN_MARKET),
     )
-    results = flow.relay()
-    vault_after = int(results[ARBITRUM_CHAIN_ID].get("vault_usdc_after"))
+    flow.relay()
+    vault_after = vault_usdc_after.value
     _check(
         vault_after == vault_usdc_before + idle,
         f"hub vault USDC {vault_after} != {vault_usdc_before} + {idle}",
     )
     _check(
-        results[ARBITRUM_CHAIN_ID].get("idle_after_claim") == 0,
+        idle_after_claim.value == 0,
         "the idle ledger is not empty after the claim",
     )
     _check(
-        int(results[ARBITRUM_CHAIN_ID].get("nav_final")) == residual,
+        nav_final.value == residual,
         "executor NAV != the residual",
     )
     _check(
-        int(results[ARBITRUM_CHAIN_ID].get("market_final")) == residual,
+        market_final.value == residual,
         "market 54 total != the residual",
     )
     log.info(

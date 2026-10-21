@@ -16,11 +16,12 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
+from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.withdraw_manager import AccountRequest, WithdrawManager
 from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.types import ZERO_ADDRESS, Amount, Fee, Period, Shares
-from ipor_fusion.vault_reads import _read_batch, _safe_call, _scan_or_none
+from ipor_fusion.vault_reads import _safe_call, _scan_or_none
 
 
 @dataclass
@@ -86,38 +87,32 @@ def _fetch_withdraw_manager(
     if not address:
         return None, None
     wm = WithdrawManager(address)
-    _, (window, request_fee, withdraw_fee, shares, last_ts) = _read_batch(
-        ctx,
-        [],
-        [
-            wm.get_withdraw_window(),
-            wm.get_request_fee(),
-            wm.get_withdraw_fee(),
-            wm.get_shares_to_release(),
-            wm.get_last_release_funds_timestamp(),
-        ],
-    )
+    batch = Multicall3(ctx).batch()
+    window = batch.try_add(wm.get_withdraw_window())
+    request_fee = batch.try_add(wm.get_request_fee())
+    withdraw_fee = batch.try_add(wm.get_withdraw_fee())
+    shares = batch.try_add(wm.get_shares_to_release())
+    last_ts = batch.try_add(wm.get_last_release_funds_timestamp())
+    batch.run()
     pending = _scan_or_none(partial(wm.read_pending_requests, ctx))
-    to_release = Shares(shares or 0)
-    _, (release_assets, *request_assets) = _read_batch(
-        ctx,
-        [],
-        [
-            plasma_vault.convert_to_assets(to_release),
-            *(plasma_vault.convert_to_assets(req.shares) for req in pending or []),
-        ],
-    )
+    to_release = shares.value or Shares(0)
+    assets = Multicall3(ctx).batch()
+    release_assets = assets.try_add(plasma_vault.convert_to_assets(to_release))
+    request_assets = [
+        (req.account, assets.try_add(plasma_vault.convert_to_assets(req.shares)))
+        for req in pending or []
+    ]
+    assets.run()
     return address, WithdrawManagerData(
-        withdraw_window=window or Period(0),
-        request_fee=request_fee,
-        withdraw_fee=withdraw_fee,
+        withdraw_window=window.value or Period(0),
+        request_fee=request_fee.value,
+        withdraw_fee=withdraw_fee.value,
         shares_to_release=to_release,
-        last_release_funds_timestamp=last_ts or Timestamp(0),
+        last_release_funds_timestamp=last_ts.value or Timestamp(0),
         pending_requests=pending,
-        shares_to_release_assets=release_assets,
+        shares_to_release_assets=release_assets.value,
         pending_request_assets={
-            req.account: assets
-            for req, assets in zip(pending or [], request_assets, strict=True)
+            account: value.value for account, value in request_assets
         },
     )
 
@@ -148,20 +143,17 @@ def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> FeeData:
     vaults without a fee account and FeeManagers predating the deposit fee or
     high-water mark still produce a usable snapshot.
     """
-    _, (perf, mgmt, unrealized) = _read_batch(
-        ctx,
-        [],
-        [
-            plasma_vault.get_performance_fee_data(),
-            plasma_vault.get_management_fee_data(),
-            plasma_vault.get_unrealized_management_fee(),
-        ],
-    )
+    batch = Multicall3(ctx).batch()
+    perf_read = batch.try_add(plasma_vault.get_performance_fee_data())
+    mgmt_read = batch.try_add(plasma_vault.get_management_fee_data())
+    unrealized = batch.try_add(plasma_vault.get_unrealized_management_fee())
+    batch.run()
+    perf, mgmt = perf_read.value, mgmt_read.value
     result = FeeData(
         performance_fee_vault_bps=perf.fee_in_percentage if perf else None,
         management_fee_vault_bps=mgmt.fee_in_percentage if mgmt else None,
         management_fee_last_update=mgmt.last_update_timestamp if mgmt else None,
-        unrealized_management_fee=unrealized,
+        unrealized_management_fee=unrealized.value,
     )
 
     # A FeeManager deploys two separate escrow accounts (performance and
@@ -184,28 +176,22 @@ def _fetch_fee_data(ctx: Web3Context, plasma_vault: PlasmaVault) -> FeeData:
     result.fee_manager = fee_manager_addr
 
     fee_manager = FeeManager(fee_manager_addr)
-    (
-        _,
-        (
-            result.deposit_fee_wad,
-            result.performance_fee_manager_bps,
-            result.management_fee_manager_bps,
-            result.performance_fee_recipients,
-            result.management_fee_recipients,
-            result.ipor_dao_fee_recipient,
-            result.high_water_mark,
-        ),
-    ) = _read_batch(
-        ctx,
-        [],
-        [
-            fee_manager.get_deposit_fee(),
-            fee_manager.get_total_performance_fee(),
-            fee_manager.get_total_management_fee(),
-            fee_manager.get_performance_fee_recipients(),
-            fee_manager.get_management_fee_recipients(),
-            fee_manager.get_ipor_dao_fee_recipient_address(),
-            fee_manager.get_plasma_vault_high_water_mark_performance_fee(),
-        ],
+    batch = Multicall3(ctx).batch()
+    deposit_fee = batch.try_add(fee_manager.get_deposit_fee())
+    performance_fee = batch.try_add(fee_manager.get_total_performance_fee())
+    management_fee = batch.try_add(fee_manager.get_total_management_fee())
+    performance_recipients = batch.try_add(fee_manager.get_performance_fee_recipients())
+    management_recipients = batch.try_add(fee_manager.get_management_fee_recipients())
+    dao_recipient = batch.try_add(fee_manager.get_ipor_dao_fee_recipient_address())
+    high_water_mark = batch.try_add(
+        fee_manager.get_plasma_vault_high_water_mark_performance_fee()
     )
+    batch.run()
+    result.deposit_fee_wad = deposit_fee.value
+    result.performance_fee_manager_bps = performance_fee.value
+    result.management_fee_manager_bps = management_fee.value
+    result.performance_fee_recipients = performance_recipients.value
+    result.management_fee_recipients = management_recipients.value
+    result.ipor_dao_fee_recipient = dao_recipient.value
+    result.high_water_mark = high_water_mark.value
     return result

@@ -51,7 +51,12 @@ from ipor_fusion.core.fee_manager import (
 )
 from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInstance
 from ipor_fusion.core.logs import LogSource, find_creation_block, get_logs_adaptive
-from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3
+from ipor_fusion.core.multicall import (
+    MULTICALL3_ADDRESS,
+    BatchValue,
+    Multicall3,
+    Multicall3Batch,
+)
 from ipor_fusion.core.oracle import (
     AssetPriceSource,
     LegacyPriceOracleMiddleware,
@@ -68,6 +73,7 @@ from ipor_fusion.core.plasma_vault import (
 from ipor_fusion.core.rewards_manager import RewardsManager, VestingData
 from ipor_fusion.core.simulation import (
     SimulatedCallResult,
+    SimulationObservation,
     SimulationResult,
     StateOverrideProvider,
     VaultSimulator,
@@ -638,9 +644,12 @@ __all__ = [
     "find_creation_block",
     "LogSource",
     "Multicall3",
+    "Multicall3Batch",
+    "BatchValue",
     "MULTICALL3_ADDRESS",
     "VaultSimulator",
     "StateOverrideProvider",
+    "SimulationObservation",
     "SimulationResult",
     "SimulatedCallResult",
     "is_simulate_v1_supported",

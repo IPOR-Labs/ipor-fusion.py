@@ -5,7 +5,7 @@ expose elsewhere."""
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
+from typing import TypeVar
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
@@ -114,6 +114,9 @@ class _Erc4626Vault(ContractWrapper):
         )
 
 
+T = TypeVar("T")
+
+
 class OracleMappingReader:
     """Revert-safe on-chain reads against a fixed ``Web3Context`` (and block)."""
 
@@ -129,7 +132,7 @@ class OracleMappingReader:
         first use, since most readers in a mapping never read a price."""
         return price_oracle_middleware(self._ctx, self._oracle_addr)
 
-    def _safe(self, call: Call[Any]) -> Any:
+    def _safe(self, call: Call[T]) -> T | None:
         try:
             return call.call(self._ctx)
         except Exception:

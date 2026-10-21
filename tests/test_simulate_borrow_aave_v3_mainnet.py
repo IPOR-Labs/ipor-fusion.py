@@ -105,38 +105,37 @@ def test_simulate_borrow_aave_v3(web3_eth):
         from_=WBTC_HOLDER,
     )
 
-    sim.observe("wbtc_initial", wbtc.balance_of(VAULT_ADDRESS))
+    wbtc_initial = sim.observe(wbtc.balance_of(VAULT_ADDRESS))
 
     # 1. Supply WBTC as collateral
     sim.execute([supply_action])
-    sim.observe("wbtc_after_supply", wbtc.balance_of(VAULT_ADDRESS))
+    wbtc_after_supply = sim.observe(wbtc.balance_of(VAULT_ADDRESS))
 
     # 2. Borrow WETH against the collateral
     sim.execute([borrow_action])
-    sim.observe("weth_after_borrow", weth.balance_of(VAULT_ADDRESS))
+    weth_after_borrow = sim.observe(weth.balance_of(VAULT_ADDRESS))
 
     # 3. Repay the WETH loan
     sim.execute([repay_action])
-    sim.observe("weth_after_repay", weth.balance_of(VAULT_ADDRESS))
+    weth_after_repay = sim.observe(weth.balance_of(VAULT_ADDRESS))
 
     # 4. Withdraw most of the WBTC collateral
     sim.execute([withdraw_action])
-    sim.observe("wbtc_after_withdraw", wbtc.balance_of(VAULT_ADDRESS))
+    wbtc_after_withdraw = sim.observe(wbtc.balance_of(VAULT_ADDRESS))
 
     result = sim.run()
 
     log.info("success=%s gas_used=%s", result.all_success, result.gas_used)
     log.info("revert_reason=%s", result.revert_reason)
-    log.info("observations=%s", result.observations)
 
     assert_all_success(result)
 
     # Invariants of the supply→borrow→repay→withdraw cycle:
-    assert result.get("wbtc_initial") == wbtc_collateral_amount
-    assert result.get("wbtc_after_supply") == 0
-    assert result.get("weth_after_borrow") == weth_borrow_amount
-    assert result.get("weth_after_repay") == 0
-    assert result.get("wbtc_after_withdraw") == withdraw_amount
+    assert wbtc_initial.value == wbtc_collateral_amount
+    assert wbtc_after_supply.value == 0
+    assert weth_after_borrow.value == weth_borrow_amount
+    assert weth_after_repay.value == 0
+    assert wbtc_after_withdraw.value == withdraw_amount
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -238,7 +237,7 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
         from_=WBTC_HOLDER,
     )
 
-    sim.observe("wbtc_post_deposit", wbtc.balance_of(VAULT_ADDRESS))
+    wbtc_post_deposit = sim.observe(wbtc.balance_of(VAULT_ADDRESS))
 
     # alpha executes Aave supply, borrow, ERC4626 supply
     sim.execute(
@@ -248,15 +247,15 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
             )
         ]
     )
-    sim.observe("wbtc_post_aave_supply", wbtc.balance_of(VAULT_ADDRESS))
+    wbtc_post_aave_supply = sim.observe(wbtc.balance_of(VAULT_ADDRESS))
 
     sim.execute([aave_borrow.borrow(asset=ETHEREUM_WETH, amount=weth_borrow_amount)])
-    sim.observe("weth_post_borrow", weth.balance_of(VAULT_ADDRESS))
+    weth_post_borrow = sim.observe(weth.balance_of(VAULT_ADDRESS))
 
     sim.execute(
         [erc4626.supply(vault_address=WETH_VAULT_ADDRESS, amount=weth_borrow_amount)]
     )
-    sim.observe("weth_post_erc4626_supply", weth.balance_of(VAULT_ADDRESS))
+    weth_post_erc4626_supply = sim.observe(weth.balance_of(VAULT_ADDRESS))
 
     # ── Block 1: +60 seconds (mirrors anvil.move_time(60) before withdraw)
     sim.next_block(time_shift_seconds=Period.MINUTE)
@@ -264,7 +263,7 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
     sim.execute(
         [erc4626.withdraw(vault_address=WETH_VAULT_ADDRESS, amount=weth_borrow_amount)]
     )
-    sim.observe("weth_post_erc4626_withdraw", weth.balance_of(VAULT_ADDRESS))
+    weth_post_erc4626_withdraw = sim.observe(weth.balance_of(VAULT_ADDRESS))
 
     result = sim.run()
 
@@ -274,13 +273,12 @@ def test_simulate_deposit_to_plasma_vault(web3_eth):
         result.gas_used,
         result.revert_reason,
     )
-    log.info("observations=%s", result.observations)
 
     assert_all_success(result)
 
     # Mirror original test's invariants exactly
-    assert result.get("wbtc_post_deposit") == wbtc_collateral_amount  # 1e8
-    assert result.get("wbtc_post_aave_supply") == 0
-    assert result.get("weth_post_borrow") == weth_borrow_amount  # 20e18
-    assert result.get("weth_post_erc4626_supply") == 0
-    assert result.get("weth_post_erc4626_withdraw") > 0
+    assert wbtc_post_deposit.value == wbtc_collateral_amount  # 1e8
+    assert wbtc_post_aave_supply.value == 0
+    assert weth_post_borrow.value == weth_borrow_amount  # 20e18
+    assert weth_post_erc4626_supply.value == 0
+    assert weth_post_erc4626_withdraw.value > 0

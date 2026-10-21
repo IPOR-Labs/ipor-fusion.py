@@ -93,17 +93,17 @@ def test_market55_vault_flow_with_explicit_hypercore_model() -> None:
     model = _model()
     sim.with_state_override_provider(model.provider())
     balance_fuse = ADDRESSES["HyperCoreBalanceFuse"]
-    sim.observe("balance_before", vault.balance_fuse_value(balance_fuse))
+    balance_before = sim.observe(vault.balance_fuse_value(balance_fuse))
     l1_call = replace(
         HyperCoreReader().l1_block_number(), to=hypercore_shadow_address(0x809)
     )
-    sim.observe("l1_before", l1_call)
+    l1_before = sim.observe(l1_call)
     sim.with_erc20_balance(
         USDC, OPERATOR, 20_000_000, slot=erc20_balance_slot(web3, USDC, block=BLOCK)
     )
     sim.add_call(usdc.approve(VAULT, 15_000_000), from_=OPERATOR, label="approve")
     sim.add_call(vault.deposit(15_000_000, OPERATOR), from_=OPERATOR, label="deposit")
-    sim.observe("after_deposit", vault.total_assets())
+    after_deposit = sim.observe(vault.total_assets())
 
     sim.next_block()
     sim.execute(
@@ -154,15 +154,15 @@ def test_market55_vault_flow_with_explicit_hypercore_model() -> None:
         ]
     )
     sim.next_block(40)
-    sim.observe("balance_after", vault.balance_fuse_value(balance_fuse))
-    sim.observe("l1_after", l1_call)
+    balance_after = sim.observe(vault.balance_fuse_value(balance_fuse))
+    l1_after = sim.observe(l1_call)
     sim.execute_call(vault.update_markets_balances([MarketId(55)]))
 
     result = sim.run()
     assert result.all_success, [call.revert_reason for call in result.failed_calls]
-    assert result.get("after_deposit") == 30_000_000
-    assert result.get("balance_after") > result.get("balance_before")
-    assert result.get("l1_after") == result.get("l1_before") + 4
+    assert after_deposit.value == 30_000_000
+    assert balance_after.value > balance_before.value
+    assert l1_after.value == l1_before.value + 4
     writer_logs = [
         log
         for log in result.execute_logs

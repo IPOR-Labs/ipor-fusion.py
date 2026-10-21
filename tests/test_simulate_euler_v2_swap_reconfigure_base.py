@@ -65,7 +65,7 @@ def test_simulate_euler_v2_swap_reconfigure_base(web3_base):
 
     # Deploy the pool first (supply collateral + deploy).
     sim.execute(plan.supply_actions + [plan.deploy_action])
-    sim.observe("dynamic_before", pool_dynamic_params(plan.predicted_pool))
+    dynamic_before = sim.observe(pool_dynamic_params(plan.predicted_pool))
 
     # Reconfigure: bump both fees to 0.5% and raise the equilibrium reserves.
     reconfigure_fuse = EulerV2SwapReconfigureFuse(EULER_SWAP_RECONFIGURE_FUSE)
@@ -78,20 +78,19 @@ def test_simulate_euler_v2_swap_reconfigure_base(web3_base):
         initial_state=initial_state(reserve=_NEW_EQUILIBRIUM_RESERVE),
     )
     sim.execute([reconfigure_action])
-    sim.observe("dynamic_after", pool_dynamic_params(plan.predicted_pool))
+    dynamic_after = sim.observe(pool_dynamic_params(plan.predicted_pool))
 
     result = sim.run()
     log.info(
-        "all_success=%s gas=%s reason=%s obs=%s",
+        "all_success=%s gas=%s reason=%s",
         result.all_success,
         result.gas_used,
         result.revert_reason,
-        result.observations,
     )
     assert_all_success(result)
 
-    before = result.get("dynamic_before")
-    after = result.get("dynamic_after")
+    before = dynamic_before.value
+    after = dynamic_after.value
     # The deploy set fee 0.3%; reconfigure must move it to 0.5% on both sides and
     # apply the new equilibrium reserve — read straight from the live pool.
     assert before[_FEE0] == _OLD_FEE

@@ -309,8 +309,9 @@ class SimulationRunError(IporFusionError, RuntimeError):
 
 
 class SimulationError(IporFusionError):
-    """A simulated call reverted; raised by ``SimulationResult.raise_for_failure``
-    and by ``quote_ccip_native_fee`` for a revert before the CCIP fee check."""
+    """A simulated call reverted; raised by ``SimulationResult.raise_for_failure``,
+    by ``SimulationObservation.value`` for a reverted read and by
+    ``quote_ccip_native_fee`` for a revert before the CCIP fee check."""
 
     def __init__(
         self,

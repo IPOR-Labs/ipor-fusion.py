@@ -6,13 +6,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
 
 from eth_typing import ChecksumAddress, HexAddress
 from web3 import Web3
 
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
@@ -131,28 +129,29 @@ def _read_tokens(
 ) -> tuple[_TokenRead, ...]:
     """Every token's decimals, the vault's balance and the middleware price in
     one Multicall3 batch (a read that fails is ``None``)."""
-    calls: list[Call[Any]] = []
+    batch = Multicall3(ctx).batch()
+    pending = []
     for address in addresses:
         checksum = Web3.to_checksum_address(address)
         token = ERC20(checksum)
-        calls += [
-            token.decimals(),
-            token.balance_of(vault),
-            oracle.get_asset_price(checksum),
-        ]
-    results = Multicall3(ctx).try_aggregate(calls)
-    reads: list[_TokenRead] = []
-    for index, address in enumerate(addresses):
-        decimals, balance, price = results[3 * index : 3 * index + 3]
-        reads.append(
-            _TokenRead(
-                address=address,
-                decimals=decimals,
-                balance=balance,
-                price_usd=price.readable() if price else None,
+        pending.append(
+            (
+                address,
+                batch.try_add(token.decimals()),
+                batch.try_add(token.balance_of(vault)),
+                batch.try_add(oracle.get_asset_price(checksum)),
             )
         )
-    return tuple(reads)
+    batch.run()
+    return tuple(
+        _TokenRead(
+            address=address,
+            decimals=decimals.value,
+            balance=balance.value,
+            price_usd=price.value.readable() if price.value else None,
+        )
+        for address, decimals, balance, price in pending
+    )
 
 
 def _value_tokens(

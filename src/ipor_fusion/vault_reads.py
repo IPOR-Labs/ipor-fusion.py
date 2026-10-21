@@ -1,19 +1,16 @@
-"""Batched-read helpers shared by the vault fetchers: one Multicall3 round trip
-with required and optional reads, and the error envelopes optional data degrades
-through."""
+"""Error envelopes the vault fetchers' optional data degrades through."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
-from typing import Any, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 import requests
 from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
-from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.errors import EmptyCallResultError, LogScanError
 
 T = TypeVar("T")
@@ -61,21 +58,3 @@ def _unless_unimplemented(ctx: Web3Context, value: T | None, call: Call[T]) -> T
         return call.call(ctx)
     except EmptyCallResultError:
         return None
-
-
-def _read_batch(
-    ctx: Web3Context,
-    required: Sequence[Call[Any]],
-    optional: Sequence[Call[Any]] = (),
-) -> tuple[list[Any], list[Any]]:
-    """Read `required` + `optional` in one Multicall3 round trip.
-
-    A failing optional read is ``None``. A failing required read is re-run on
-    its own on ``ctx``, so it raises exactly what `Call.call(ctx)` would.
-    """
-    results = Multicall3(ctx).try_aggregate([*required, *optional])
-    head = [
-        value if value is not None else call.call(ctx)
-        for value, call in zip(results, required, strict=False)
-    ]
-    return head, results[len(required) :]

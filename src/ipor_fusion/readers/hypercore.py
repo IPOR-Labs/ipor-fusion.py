@@ -28,7 +28,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
@@ -594,40 +594,38 @@ def read_hypercore_nav(
     pv = PlasmaVault(vault)
     reader = HyperCoreReader()
     multicall = Multicall3(ctx)
-    substrates, oracle_address, exists, native = multicall.aggregate(
-        cast(
-            list[Call[Any]],
-            [
-                pv.get_market_substrates(market_id),
-                pv.get_price_oracle_middleware_address(),
-                reader.core_user_exists(vault),
-                reader.account_margin_summary(NATIVE_PERP_DEX, vault),
-            ],
-        )
-    )
-    tokens, bitmap = _market_layout(substrates)
-    if not exists:
+    batch = multicall.batch()
+    substrates = batch.add(pv.get_market_substrates(market_id))
+    oracle_address = batch.add(pv.get_price_oracle_middleware_address())
+    exists = batch.add(reader.core_user_exists(vault))
+    native = batch.add(reader.account_margin_summary(NATIVE_PERP_DEX, vault))
+    batch.run()
+    tokens, bitmap = _market_layout(substrates.value)
+    if not exists.value:
         return HyperCoreNav(False, bitmap, (), None, (), 0)
-    oracle = PriceOracleMiddleware(oracle_address)
+    oracle = PriceOracleMiddleware(oracle_address.value)
     dexes = [dex for dex in HIP3_VALUATION_ORDER if bitmap & (1 << dex)]
-    calls: list[Call[Any]] = []
-    for index, evm_asset in tokens:
-        calls += [
-            reader.spot_balance(vault, index),
-            reader.token_info(index),
-            oracle.get_asset_price(evm_asset),
-        ]
-    calls += [reader.account_margin_summary(dex, vault) for dex in dexes]
-    results = multicall.try_aggregate(calls)
+    batch = multicall.batch()
+    spot_reads = [
+        (
+            index,
+            evm_asset,
+            batch.try_add(reader.spot_balance(vault, index)),
+            batch.try_add(reader.token_info(index)),
+            batch.try_add(oracle.get_asset_price(evm_asset)),
+        )
+        for index, evm_asset in tokens
+    ]
+    summaries = [
+        (dex, batch.try_add(reader.account_margin_summary(dex, vault))) for dex in dexes
+    ]
+    batch.run()
     spot = tuple(
-        _spot_leg(index, evm_asset, *results[3 * i : 3 * i + 3])
-        for i, (index, evm_asset) in enumerate(tokens)
+        _spot_leg(index, evm_asset, balance.value, token.value, price.value)
+        for index, evm_asset, balance, token, price in spot_reads
     )
-    native_leg = _perp_leg(NATIVE_PERP_DEX, native)
-    hip3 = tuple(
-        _perp_leg(dex, summary)
-        for dex, summary in zip(dexes, results[3 * len(tokens) :], strict=True)
-    )
+    native_leg = _perp_leg(NATIVE_PERP_DEX, native.value)
+    hip3 = tuple(_perp_leg(dex, summary.value) for dex, summary in summaries)
     value = sum(leg.value_wad for leg in spot) + native_leg.value_wad
     value += sum(leg.value_wad for leg in hip3)
     return HyperCoreNav(True, bitmap, spot, native_leg, hip3, value)
@@ -702,22 +700,24 @@ def read_hypercore_vault_state(
     reader = HyperCoreReader()
     pending_reader = pending_reader or HYPERCORE_PENDING_READERS.get(ctx.chain_id)
     granted = _granted_perp_markets(pv.get_market_substrates(market_id).call(ctx))
-    calls: list[Call[Any]] = [pv.balance_fuse_value(balance_fuse)]
-    if pending_reader is not None:
-        calls.append(HyperCorePendingReader(vault, pending_reader).pending_state())
-    calls += [
-        reader.perp_asset_info(precompile_index_of(asset)) for asset, _, _ in granted
+    batch = Multicall3(ctx).batch()
+    fuse_value = batch.try_add(pv.balance_fuse_value(balance_fuse))
+    pending = (
+        batch.try_add(HyperCorePendingReader(vault, pending_reader).pending_state())
+        if pending_reader is not None
+        else None
+    )
+    infos = [
+        batch.try_add(reader.perp_asset_info(precompile_index_of(asset)))
+        for asset, _, _ in granted
     ]
-    results = Multicall3(ctx).try_aggregate(calls)
-    fuse_value = results[0]
-    pending = results[1] if pending_reader is not None else None
-    infos = results[len(calls) - len(granted) :]
+    batch.run()
     perp_markets = tuple(
         HyperCorePerpMarket(
             asset=asset,
             dex=perp_dex_of(asset),
             read_index=precompile_index_of(asset),
-            coin=info.coin if info is not None else None,
+            coin=info.value.coin if info.value is not None else None,
             max_notional_usd6=cap,
             reduce_only_required=reduce_only,
         )
@@ -727,7 +727,7 @@ def read_hypercore_vault_state(
         market_id=market_id,
         balance_fuse=balance_fuse,
         nav=nav,
-        balance_fuse_value_wad=fuse_value,
-        pending=pending,
+        balance_fuse_value_wad=fuse_value.value,
+        pending=pending.value if pending is not None else None,
         perp_markets=perp_markets,
     )

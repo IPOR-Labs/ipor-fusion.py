@@ -66,37 +66,33 @@ def test_simulate_euler_v2_swap_deploy_base(web3_base):
     )
 
     # Deploy the pool (supply collateral then deploy, alpha-driven execute).
-    sim.observe(
-        "operator_before",
+    operator_before = sim.observe(
         evc_is_operator_authorized(plan.euler_account, plan.predicted_pool),
     )
     sim.execute(plan.supply_actions + [plan.deploy_action])
-    sim.observe(
-        "operator_after_deploy",
+    operator_after_deploy = sim.observe(
         evc_is_operator_authorized(plan.euler_account, plan.predicted_pool),
     )
-    sim.observe("deployed_pools", factory_deployed_pools(plan.predicted_pool))
+    deployed_pools = sim.observe(factory_deployed_pools(plan.predicted_pool))
 
     # Decommission the pool (remove operator).
     sim.execute([exit_action])
-    sim.observe(
-        "operator_after_exit",
+    operator_after_exit = sim.observe(
         evc_is_operator_authorized(plan.euler_account, plan.predicted_pool),
     )
 
     result = sim.run()
     log.info(
-        "all_success=%s gas=%s reason=%s obs=%s",
+        "all_success=%s gas=%s reason=%s",
         result.all_success,
         result.gas_used,
         result.revert_reason,
-        result.observations,
     )
     assert_all_success(result)
 
     # enter: pool deployed by the factory and installed as the EVC account operator.
-    assert result.get("operator_before") is False
-    assert result.get("operator_after_deploy") is True
-    assert result.get("deployed_pools") is True
+    assert operator_before.value is False
+    assert operator_after_deploy.value is True
+    assert deployed_pools.value is True
     # exit: operator authorization removed (pool decommissioned).
-    assert result.get("operator_after_exit") is False
+    assert operator_after_exit.value is False

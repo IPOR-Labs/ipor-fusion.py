@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import TypeVar, cast
+from collections.abc import Callable, Sequence
+from typing import Generic, TypeVar
 
 from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
@@ -54,6 +54,9 @@ class Multicall3:
     - `try_aggregate` maps a failed or undecodable sub-call to ``None``.
     - `aggregate` re-runs each failed sub-call on its own, so it raises exactly
       what `Call.call(ctx)` would (revert reason, `EmptyCallResultError`).
+    - `batch` collects reads of different types, each keeping its own:
+      ``batch.add`` fails as `aggregate` does, ``batch.try_add`` as
+      `try_aggregate` does, and one ``batch.run()`` executes them all.
 
     Where Multicall3 is not deployed (a chain without it, or a block before
     its deployment) both fall back to one `eth_call` per sub-call.
@@ -82,6 +85,10 @@ class Multicall3:
         """The raw `aggregate3` Call, unexecuted: run it with `.call(ctx)`."""
         return self._contract.aggregate3(calls)
 
+    def batch(self) -> Multicall3Batch:
+        """An empty typed batch that runs on this executor's context."""
+        return Multicall3Batch(self)
+
     def aggregate(self, calls: Sequence[Call[T]]) -> list[T]:
         """Execute all `calls`; raise as `Call.call(ctx)` would on any failure."""
         raw = self._fetch(calls)
@@ -103,18 +110,120 @@ class Multicall3:
             for call, (ok, data) in zip(calls, raw, strict=True)
         ]
 
-    def _fetch(self, calls: Sequence[Call[T]]) -> list[tuple[bool, bytes]] | None:
+    def _fetch(self, calls: Sequence[Call[object]]) -> list[tuple[bool, bytes]] | None:
         """Raw per-call results in order, or ``None`` without Multicall3."""
         results: list[tuple[bool, bytes]] = []
         for start in range(0, len(calls), self._batch_size):
-            chunk = cast(
-                Sequence[Call[object]], calls[start : start + self._batch_size]
-            )
+            chunk = calls[start : start + self._batch_size]
             try:
                 results.extend(self._contract.aggregate3(chunk).call(self._ctx))
             except EmptyCallResultError:
                 return None
         return results
+
+
+class BatchValue(Generic[T]):
+    """One read of a `Multicall3Batch`: its decoded ``value`` once the batch ran."""
+
+    __slots__ = ("_ready", "_value")
+
+    def __init__(self) -> None:
+        self._ready = False
+
+    @property
+    def value(self) -> T:
+        if not self._ready:
+            raise RuntimeError(
+                "BatchValue read before its batch ran: call Multicall3Batch.run() first"
+            )
+        return self._value
+
+    def _resolve(self, value: T) -> None:
+        self._value = value
+        self._ready = True
+
+
+# Settles one read from its raw `aggregate3` result, ``None`` without Multicall3.
+_Settle = Callable[[tuple[bool, bytes] | None], None]
+
+
+class Multicall3Batch:
+    """Reads of any mix of types, executed together by one `run()`.
+
+    ``add(call)`` returns a `BatchValue[T]` for a `Call[T]` and fails the run as
+    `Multicall3.aggregate` would; ``try_add(call)`` returns a
+    `BatchValue[T | None]`, ``None`` when the read fails, as
+    `Multicall3.try_aggregate`. Failure handling is chosen per read, so each
+    value's type says whether it can be ``None``. ``run()`` costs what
+    `aggregate` costs for the same calls: one ``eth_call`` per `batch_size`
+    reads, or one per read without Multicall3. A batch runs once.
+
+        batch = Multicall3(ctx).batch()
+        assets = batch.add(vault.total_assets())      # BatchValue[Amount]
+        name = batch.try_add(vault.name())            # BatchValue[str | None]
+        batch.run()
+        assets.value, name.value
+    """
+
+    def __init__(self, multicall: Multicall3) -> None:
+        self._multicall = multicall
+        self._calls: list[Call[object]] = []
+        self._settles: list[_Settle] = []
+        self._ran = False
+
+    def __len__(self) -> int:
+        return len(self._calls)
+
+    def add(self, call: Call[T]) -> BatchValue[T]:
+        """Queue a read whose failure raises from `run()` exactly as
+        `Call.call(ctx)` would."""
+        handle = BatchValue[T]()
+        ctx = self._multicall._ctx
+
+        def settle(raw: tuple[bool, bytes] | None) -> None:
+            if raw is not None and raw[0] and raw[1]:
+                handle._resolve(call.decode(raw[1]))
+            else:
+                handle._resolve(call.call(ctx))
+
+        return self._queue(call, settle, handle)
+
+    def try_add(self, call: Call[T]) -> BatchValue[T | None]:
+        """Queue a read that is ``None`` when it reverts, returns no data or
+        returns data its `Call` cannot decode."""
+        handle = BatchValue[T | None]()
+        ctx = self._multicall._ctx
+
+        def settle(raw: tuple[bool, bytes] | None) -> None:
+            if raw is None:
+                handle._resolve(_try_call(call, ctx))
+            else:
+                handle._resolve(_try_decode(call, *raw))
+
+        return self._queue(call, settle, handle)
+
+    def _queue(
+        self, call: Call[object], settle: _Settle, handle: BatchValue[T]
+    ) -> BatchValue[T]:
+        if self._ran:
+            raise RuntimeError("Multicall3Batch already ran: start a new batch")
+        self._calls.append(call)
+        self._settles.append(settle)
+        return handle
+
+    def run(self) -> None:
+        """Execute every queued read and resolve its `BatchValue`; raises the
+        first failing ``add`` read's error, in queue order."""
+        if self._ran:
+            raise RuntimeError("Multicall3Batch already ran: start a new batch")
+        self._ran = True
+        raw = self._multicall._fetch(self._calls)
+        if raw is None:
+            for settle in self._settles:
+                settle(None)
+            return
+        for settle, result in zip(self._settles, raw, strict=True):
+            settle(result)
 
 
 def _try_decode(call: Call[T], ok: bool, data: bytes) -> T | None:

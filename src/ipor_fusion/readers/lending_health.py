@@ -10,7 +10,6 @@ import logging
 import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
@@ -18,7 +17,6 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
@@ -163,16 +161,20 @@ def _compute_morpho_market_health(
     market_name: str,
 ) -> LendingMarketHealth | None:
     """Compute LTV health for a single Morpho Blue market position."""
-    calls: list[Call[Any]] = [
-        reader.position(morpho_market_id, vault_address),
-        reader.market(morpho_market_id),
-        reader.market_params(morpho_market_id),
-    ]
+    batch = Multicall3(ctx).batch()
+    position_read = batch.add(reader.position(morpho_market_id, vault_address))
+    market_read = batch.add(reader.market(morpho_market_id))
+    params_read = batch.add(reader.market_params(morpho_market_id))
     try:
-        position, market, params = Multicall3(ctx).aggregate(calls)
+        batch.run()
     except Exception:
         _logger.debug("Failed to read Morpho market data for %s", morpho_market_id)
         return None
+    position, market, params = (
+        position_read.value,
+        market_read.value,
+        params_read.value,
+    )
 
     # No borrow = no liquidation risk
     if position.borrow_shares == 0:

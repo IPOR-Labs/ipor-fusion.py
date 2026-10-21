@@ -179,20 +179,19 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
         from_=WSTETH_HOLDER,
     )
 
-    sim.observe("wsteth_pre_loop", wsteth.balance_of(VAULT_ADDRESS))
+    wsteth_pre_loop = sim.observe(wsteth.balance_of(VAULT_ADDRESS))
 
     sim.execute([flash_loan])
 
-    sim.observe("wsteth_post_loop", wsteth.balance_of(VAULT_ADDRESS))
-    sim.observe("weth_post_loop", weth.balance_of(VAULT_ADDRESS))
-    sim.observe("awsteth_post_loop", awsteth.balance_of(VAULT_ADDRESS))
-    sim.observe("dweth_post_loop", dweth.balance_of(VAULT_ADDRESS))
+    sim.observe(wsteth.balance_of(VAULT_ADDRESS))
+    weth_post_loop = sim.observe(weth.balance_of(VAULT_ADDRESS))
+    awsteth_post_loop = sim.observe(awsteth.balance_of(VAULT_ADDRESS))
+    dweth_post_loop = sim.observe(dweth.balance_of(VAULT_ADDRESS))
 
     result = sim.run()
 
     log.info("success=%s gas_used=%s", result.all_success, result.gas_used)
     log.info("revert_reason=%s", result.revert_reason)
-    log.info("observations=%s", result.observations)
 
     assert_all_success(result)
 
@@ -200,10 +199,10 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     # - pre-loop wsteth = vault_pre + deposit (deterministic at the pinned block)
     # - WETH dust ~0 (full borrow swapped back to repay flash loan)
     # - aWStETH (collateral receipt) ~ wsteth_collateral_amount, dWETH (debt) ~ weth_borrow_amount
-    assert result.get("wsteth_pre_loop") == post_balance
-    assert result.get("weth_post_loop") < int(0.01e18)
-    awsteth_after = result.get("awsteth_post_loop")
-    dweth_after = result.get("dweth_post_loop")
+    assert wsteth_pre_loop.value == post_balance
+    assert weth_post_loop.value < int(0.01e18)
+    awsteth_after = awsteth_post_loop.value
+    dweth_after = dweth_post_loop.value
     # Aave aTokens accrue ratio-style; values match collateral/borrow amounts within
     # rebasing precision (~1 wei per unit).
     assert abs(awsteth_after - wsteth_collateral_amount) <= 10

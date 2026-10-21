@@ -185,33 +185,32 @@ def test_simulate_merkl_wrapper_claim_forwards_unwrapped_token(web3_base):
     setup = _prepared_sim(web3_base)
     sim, rewards, reward_token = setup.sim, setup.rewards, setup.reward_token
 
-    sim.observe("rcm_before", reward_token.balance_of(rewards.address))
-    sim.observe("vault_before", reward_token.balance_of(VAULT_ADDRESS))
+    rcm_before = sim.observe(reward_token.balance_of(rewards.address))
+    vault_before = sim.observe(reward_token.balance_of(VAULT_ADDRESS))
 
     # Alpha drives RewardsManager.claimRewards([(fuse, calldata)]) — the fuse
     # claims the wrapper from the Merkl Distributor, the wrapper self-unwraps
     # into the aToken on the vault, and the fuse forwards the measured delta.
     sim.execute_call(call=rewards.claim_rewards([_claim_action([A_BAS_CB_ETH])]))
 
-    sim.observe("rcm_after", reward_token.balance_of(rewards.address))
-    sim.observe("vault_after", reward_token.balance_of(VAULT_ADDRESS))
+    rcm_after = sim.observe(reward_token.balance_of(rewards.address))
+    vault_after = sim.observe(reward_token.balance_of(VAULT_ADDRESS))
 
     result = sim.run()
     log.info("success=%s gas_used=%s", result.all_success, result.gas_used)
     log.info("revert_reason=%s", result.revert_reason)
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
 
     # KEY regression assertion: the unwrapped aToken must NOT stay on the
     # vault (lingering would inflate share price — it is a market substrate).
-    vault_delta = result.get("vault_after") - result.get("vault_before")
+    vault_delta = vault_after.value - vault_before.value
     assert abs(vault_delta) <= REBASE_TOLERANCE_WEI, (
         f"vault underlying must not grow, delta={vault_delta}"
     )
 
     # The unclaimed remainder (cumulative amount minus what the vault had
     # already claimed at the pinned block) lands on the manager in full.
-    forwarded = result.get("rcm_after") - result.get("rcm_before")
+    forwarded = rcm_after.value - rcm_before.value
     assert abs(forwarded - EXPECTED_FORWARD) <= REBASE_TOLERANCE_WEI, (
         f"forwarded amount mismatch: {forwarded} vs {EXPECTED_FORWARD}"
     )
@@ -262,25 +261,24 @@ def test_simulate_merkl_wrapper_claim_zero_delta_received_token_is_noop(web3_bas
         label="grant_market_substrates",
     )
 
-    sim.observe("rcm_wrapper_before", setup.wrapper_token.balance_of(rewards.address))
-    sim.observe("rcm_reward_before", setup.reward_token.balance_of(rewards.address))
+    rcm_wrapper_before = sim.observe(setup.wrapper_token.balance_of(rewards.address))
+    rcm_reward_before = sim.observe(setup.reward_token.balance_of(rewards.address))
 
     sim.execute_call(
         call=rewards.claim_rewards([_claim_action([A_BAS_CB_ETH, WRAPPER])])
     )
 
-    sim.observe("rcm_wrapper_after", setup.wrapper_token.balance_of(rewards.address))
-    sim.observe("rcm_reward_after", setup.reward_token.balance_of(rewards.address))
+    rcm_wrapper_after = sim.observe(setup.wrapper_token.balance_of(rewards.address))
+    rcm_reward_after = sim.observe(setup.reward_token.balance_of(rewards.address))
 
     result = sim.run()
-    log.info("observations=%s", result.observations)
     assert_all_success(result)
 
     # The zero-delta WRAPPER must not have been forwarded.
-    assert result.get("rcm_wrapper_after") == result.get("rcm_wrapper_before")
+    assert rcm_wrapper_after.value == rcm_wrapper_before.value
 
     # The positive-delta aToken is forwarded as in the happy path.
-    forwarded = result.get("rcm_reward_after") - result.get("rcm_reward_before")
+    forwarded = rcm_reward_after.value - rcm_reward_before.value
     assert abs(forwarded - EXPECTED_FORWARD) <= REBASE_TOLERANCE_WEI
 
     # Only the positive-delta token emits MerklClaimWrapperFuseRewardsClaimed.
