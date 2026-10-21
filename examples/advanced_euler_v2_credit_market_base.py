@@ -396,7 +396,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     #   - sim.add_call(call=X, from_=OWNER) -> X.send(ctx) by the owner/atomist
     #     (or X.calldata to a multisig / timelock).
     #   - sim.execute([action]) -> plasma_vault.execute([action]).send(ctx) by the alpha.
-    #   - sim.observe("key", X) -> X.call(ctx), a plain read.
+    #   - read = sim.observe(X), then read.value -> X.call(ctx), a plain read.
     sim = VaultSimulator(
         web3=web3, vault=preview.plasma_vault, alpha=ALPHA, block=PINNED_BLOCK
     )
@@ -467,14 +467,14 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
 
     # Read the granted substrate set back so we can assert it is EXACTLY our two.
-    sim.observe("granted_substrates", plasma_vault.get_market_substrates(EULER_MARKET))
+    granted_substrates = sim.observe(plasma_vault.get_market_substrates(EULER_MARKET))
     plan.append("read the granted substrate set back")
 
     # Oracle coverage: the vault must be able to price every tracked asset. A fresh
     # vault's price manager delegates to the global middleware for assets without
     # an override, so these read the effective prices.
-    sim.observe("cbeth_price", price_manager.get_asset_price(BASE_CBETH))
-    sim.observe("weth_price", price_manager.get_asset_price(BASE_WETH))
+    cbeth_price_obs = sim.observe(price_manager.get_asset_price(BASE_CBETH))
+    weth_price_obs = sim.observe(price_manager.get_asset_price(BASE_WETH))
     plan.append("verify oracle coverage for cbETH and WETH")
 
     # Fund the vault with cbETH collateral. SIMULATION ONLY: an impersonated
@@ -485,7 +485,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
         call=cbeth.transfer(preview.plasma_vault, COLLATERAL_FUND_AMOUNT),
         from_=BASE_CBETH_WHALE,
     )
-    sim.observe("vault_cbeth_funded", cbeth.balance_of(preview.plasma_vault))
+    vault_cbeth_funded = sim.observe(cbeth.balance_of(preview.plasma_vault))
     plan.append("fund the vault with cbETH collateral")
 
     # ── Credit lifecycle, driven by the alpha via PlasmaVault.execute(...). ──
@@ -500,20 +500,22 @@ def run_simulation(web3: Web3) -> SimulationResult:
 
     # Borrow WETH against the cbETH collateral; debt is now open.
     sim.execute([borrow_action(BORROW_AMOUNT)])
-    sim.observe("debt_after_borrow", _evault_debt_of(EVAULT_WETH, euler_account))
+    debt_after_borrow = sim.observe(_evault_debt_of(EVAULT_WETH, euler_account))
     plan.append("borrow 1 WETH against the cbETH collateral")
 
     # Re-value the market while the position is open so the balance fuse's
     # collateral-minus-debt valuation surfaces into the vault's stored NAV.
     sim.add_call(call=plasma_vault.update_markets_balances([EULER_MARKET]), from_=ALPHA)
-    sim.observe("euler_value_open", plasma_vault.total_assets_in_market(EULER_MARKET))
+    euler_value_open_obs = sim.observe(
+        plasma_vault.total_assets_in_market(EULER_MARKET)
+    )
     plan.append("re-value the open Euler position")
 
     # Repay the full debt. MAX_UINT256 caps at the outstanding amount; with no time
     # advance in this run, interest is negligible and the borrowed WETH covers it.
     # (Advancing time would accrue interest, requiring a small extra WETH buffer.)
     sim.execute([repay_action(Amount(MAX_UINT256))])
-    sim.observe("debt_after_repay", _evault_debt_of(EVAULT_WETH, euler_account))
+    debt_after_repay = sim.observe(_evault_debt_of(EVAULT_WETH, euler_account))
     plan.append("repay the full WETH debt")
 
     # Unwind in reverse of setup: disable the WETH controller, then the cbETH
@@ -529,8 +531,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # to fully exit the position, then re-value the market so the exit surfaces.
     sim.execute([withdraw_collateral_action(Amount(MAX_UINT256))])
     sim.add_call(call=plasma_vault.update_markets_balances([EULER_MARKET]), from_=ALPHA)
-    sim.observe("euler_value_closed", plasma_vault.total_assets_in_market(EULER_MARKET))
-    sim.observe("vault_cbeth_closed", cbeth.balance_of(preview.plasma_vault))
+    euler_value_closed_obs = sim.observe(
+        plasma_vault.total_assets_in_market(EULER_MARKET)
+    )
+    vault_cbeth_closed = sim.observe(cbeth.balance_of(preview.plasma_vault))
     plan.append("withdraw cbETH; the Euler position is fully exited")
 
     log.info("transaction plan:")
@@ -544,29 +548,29 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # is the single eth_simulateV1 call that executed it. From here we read the
     # recorded observations back and verify the outcome, failing loud on any
     # mismatch. ─────────────────────────────────────────────────────────────
-    cbeth_price = result.get("cbeth_price")
-    weth_price = result.get("weth_price")
+    cbeth_price = cbeth_price_obs.value
+    weth_price = weth_price_obs.value
     _check(cbeth_price.amount > 0, "cbETH has no oracle price -- vault cannot value it")
     _check(weth_price.amount > 0, "WETH has no oracle price -- vault cannot value it")
 
     # No unrelated permissions: the granted set is EXACTLY the two substrates we
     # built, and nothing else. Compare as sets (grant order is not guaranteed).
-    granted = {bytes(s) for s in result.get("granted_substrates")}
+    granted = {bytes(s) for s in granted_substrates.value}
     _check(
         granted == {bytes(s) for s in market_substrates()},
         f"unexpected market substrates granted: {sorted(s.hex() for s in granted)}",
     )
 
     _check(
-        result.get("vault_cbeth_funded") >= COLLATERAL_FUND_AMOUNT,
+        vault_cbeth_funded.value >= COLLATERAL_FUND_AMOUNT,
         "vault did not receive the cbETH collateral",
     )
     # borrow opened debt; repay cleared it -- read straight from the eWETH eVault.
-    debt_open = result.get("debt_after_borrow")
+    debt_open = debt_after_borrow.value
     _check(debt_open >= BORROW_AMOUNT, f"borrow did not open debt: {debt_open}")
     _check(
-        result.get("debt_after_repay") == 0,
-        f"repay did not clear debt: {result.get('debt_after_repay')}",
+        debt_after_repay.value == 0,
+        f"repay did not clear debt: {debt_after_repay.value}",
     )
     # The balance fuse nets the debt against the collateral. The open position is
     # worth the supplied cbETH MINUS the WETH debt, in the vault's WETH terms. To
@@ -575,7 +579,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # debt: too narrow a gap means the debt was ignored (a bare "> 0" or "< value"
     # would miss it, since the collateral valuation rounds down), too wide means it
     # was double-counted. The band is +/-50% of one debt to absorb rounding.
-    euler_value_open = result.get("euler_value_open")
+    euler_value_open = euler_value_open_obs.value
     collateral_value = (
         COLLATERAL_SUPPLY_AMOUNT * cbeth_price.amount // weth_price.amount
     )
@@ -589,14 +593,14 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # Fully exited after the withdraw: the Euler market values to dust, and the
     # supplied cbETH is back on the vault (the ~2 cbETH idle buffer plus the ~10
     # withdrawn -> roughly the funded amount, minus ERC4626 round-down dust).
-    euler_value_closed = result.get("euler_value_closed")
+    euler_value_closed = euler_value_closed_obs.value
     _check(
         euler_value_closed <= EULER_EXIT_DUST,
         f"Euler position not fully exited: market value {euler_value_closed}",
     )
     _check(
-        result.get("vault_cbeth_closed") >= COLLATERAL_FUND_AMOUNT - EULER_EXIT_DUST,
-        f"withdrawn cbETH not returned to the vault: {result.get('vault_cbeth_closed')}",
+        vault_cbeth_closed.value >= COLLATERAL_FUND_AMOUNT - EULER_EXIT_DUST,
+        f"withdrawn cbETH not returned to the vault: {vault_cbeth_closed.value}",
     )
 
     log.info(
@@ -605,7 +609,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
         cbeth_price.amount,
         weth_price.amount,
         debt_open,
-        result.get("debt_after_repay"),
+        debt_after_repay.value,
         euler_value_open,
         euler_value_closed,
         result.gas_used,

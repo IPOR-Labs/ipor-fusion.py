@@ -69,6 +69,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from typing import NamedTuple
 
 from eth_abi.abi import decode
 from eth_typing import ChecksumAddress
@@ -85,12 +86,15 @@ from ipor_fusion import (
     FusionFactory,
     FusionInstance,
     PlasmaVault,
+    Price,
     PriceOracleMiddlewareManager,
     Roles,
+    SimulationObservation,
     SimulationResult,
     VaultSimulator,
     Web3Context,
     WithdrawManager,
+    WithdrawRequestInfo,
     is_simulate_v1_supported,
     parse_fuse_address,
 )
@@ -587,6 +591,43 @@ def build_exit_action(amount: Amount) -> FuseAction:
 # ── Simulation (the whole build + lifecycle, no broadcast) ───────────────────
 
 
+class _BootstrapReads(NamedTuple):
+    """The setup sequence's reads, queued by ``_queue_bootstrap``."""
+
+    granted_substrates: SimulationObservation[list[bytes]]
+    total_assets_after_deposit: SimulationObservation[Amount]
+    vault_usdc_after_deposit: SimulationObservation[Amount]
+    requested_shares: SimulationObservation[Shares]
+    venue_usdc_before_enter: SimulationObservation[Amount]
+
+
+class _Reads(NamedTuple):
+    """Every read of the lifecycle batch; each ``.value`` is its decoded
+    result once ``sim.run()`` returned."""
+
+    bootstrap: _BootstrapReads
+    usdc_price: SimulationObservation[Price]
+    total_assets_after_enter: SimulationObservation[Amount]
+    vault_usdc_after_enter: SimulationObservation[Amount]
+    venue_usdc_after_enter: SimulationObservation[Amount]
+    executor_usdc_after_enter: SimulationObservation[Amount]
+    market_value_after_enter: SimulationObservation[Amount]
+    tracked_after_enter: SimulationObservation[Amount]
+    executor_nonce: SimulationObservation[int]
+    tracked_after_confirm: SimulationObservation[Amount]
+    last_updated_after_confirm: SimulationObservation[Timestamp]
+    market_value_after_confirm: SimulationObservation[Amount]
+    total_assets_after_confirm: SimulationObservation[Amount]
+    request_after_filing: SimulationObservation[WithdrawRequestInfo]
+    vault_usdc_after_exit: SimulationObservation[Amount]
+    venue_usdc_after_exit: SimulationObservation[Amount]
+    tracked_after_exit: SimulationObservation[Amount]
+    market_value_after_exit: SimulationObservation[Amount]
+    total_assets_after_exit: SimulationObservation[Amount]
+    request_after_release: SimulationObservation[WithdrawRequestInfo]
+    shares_released: SimulationObservation[Shares]
+
+
 def _queue_bootstrap(
     sim: VaultSimulator,
     factory: FusionFactory,
@@ -594,7 +635,7 @@ def _queue_bootstrap(
     access_manager: AccessManager,
     usdc: ERC20,
     plan: list[str],
-) -> None:
+) -> _BootstrapReads:
     """Queue everything up to and including the alpha's enter.
 
     This setup sequence is queued twice: once by ``_discovery_pass``, then again
@@ -707,8 +748,8 @@ def _queue_bootstrap(
     )
     plan.append("add the external-state operation + balance fuses, grant substrates")
 
-    sim.observe(
-        "granted_substrates", plasma_vault.get_market_substrates(EXTERNAL_STATE_MARKET)
+    granted_substrates = sim.observe(
+        plasma_vault.get_market_substrates(EXTERNAL_STATE_MARKET)
     )
 
     # Fund the depositor, then deposit. SIMULATION ONLY: the whale -> depositor
@@ -722,26 +763,33 @@ def _queue_bootstrap(
     sim.add_call(call=plasma_vault.deposit(DEPOSIT_AMOUNT, DEPOSITOR), from_=DEPOSITOR)
     plan.append("fund the depositor and deposit 1,000 USDC")
 
-    sim.observe("total_assets_after_deposit", plasma_vault.total_assets())
-    sim.observe("vault_usdc_after_deposit", usdc.balance_of(plasma_vault.address))
+    total_assets_after_deposit = sim.observe(plasma_vault.total_assets())
+    vault_usdc_after_deposit = sim.observe(usdc.balance_of(plasma_vault.address))
     # The withdrawal request further down is denominated in shares, so the
     # depositor has to convert first. Reading it rather than assuming a share
     # price keeps the example correct for a vault that has already accrued -- and
     # reading it *here*, inside the setup sequence, is what lets the discovery
     # pass hand the value back before the request is encoded (see
     # _discovery_pass).
-    sim.observe(
-        "requested_shares", plasma_vault.convert_to_shares(WITHDRAW_REQUEST_AMOUNT)
+    requested_shares = sim.observe(
+        plasma_vault.convert_to_shares(WITHDRAW_REQUEST_AMOUNT)
     )
     # The venue's starting balance: a placeholder address on a live chain may
     # already hold the token, so the checks below compare deltas, not totals.
-    sim.observe("venue_usdc_before_enter", usdc.balance_of(VENUE_DEPOSIT_ADDRESS))
+    venue_usdc_before_enter = sim.observe(usdc.balance_of(VENUE_DEPOSIT_ADDRESS))
 
     # The alpha parks the margin at the venue. This single execute() deploys the
     # executor, moves the USDC out through it, and books the amount against the
     # balance account.
     sim.execute([build_enter_action(MARGIN_AMOUNT)])
     plan.append("alpha parks 900 USDC at the venue (enter)")
+    return _BootstrapReads(
+        granted_substrates=granted_substrates,
+        total_assets_after_deposit=total_assets_after_deposit,
+        vault_usdc_after_deposit=vault_usdc_after_deposit,
+        requested_shares=requested_shares,
+        venue_usdc_before_enter=venue_usdc_before_enter,
+    )
 
 
 def _discovery_pass(
@@ -787,12 +835,14 @@ def _discovery_pass(
     )
     # The plan this pass builds is discarded: run_simulation prints the one from
     # its own replay, and two copies would double every line.
-    _queue_bootstrap(sim, factory, plasma_vault, access_manager, usdc, plan=[])
+    bootstrap = _queue_bootstrap(
+        sim, factory, plasma_vault, access_manager, usdc, plan=[]
+    )
     result = sim.run()
     _assert_all_success(result)
     return (
         _executor_from_logs(result.execute_logs, preview.plasma_vault),
-        result.get("requested_shares"),
+        bootstrap.requested_shares.value,
         result,
     )
 
@@ -856,7 +906,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     #   - sim.add_call(call=X, from_=OWNER) -> X.send(ctx) by the owner/atomist
     #     (or X.calldata to a multisig / timelock).
     #   - sim.execute([action]) -> plasma_vault.execute([action]).send(ctx) by the alpha.
-    #   - sim.observe("key", X) -> X.call(ctx), a plain read.
+    #   - read = sim.observe(X), then read.value -> X.call(ctx), a plain read.
     # SIMULATION ONLY (per-call senders): `from_` lets one process act as all five
     # actors, because in simulation they are addresses with no keys. In production
     # they are five separate signers on separate systems, and that separation is
@@ -866,25 +916,24 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     plan: list[str] = []
 
-    _queue_bootstrap(sim, factory, plasma_vault, access_manager, usdc, plan)
+    bootstrap = _queue_bootstrap(sim, factory, plasma_vault, access_manager, usdc, plan)
 
     # Oracle coverage: the market cannot value anything the vault cannot price.
     # The enter converts the parked amount to underlying through this feed, and
     # the balance fuse values the attested figure through it too.
-    sim.observe("usdc_price", price_manager.get_asset_price(BASE_USDC))
-    sim.observe("total_assets_after_enter", plasma_vault.total_assets())
-    sim.observe("vault_usdc_after_enter", usdc.balance_of(preview.plasma_vault))
-    sim.observe("venue_usdc_after_enter", usdc.balance_of(VENUE_DEPOSIT_ADDRESS))
-    sim.observe("executor_usdc_after_enter", usdc.balance_of(executor_address))
-    sim.observe(
-        "market_value_after_enter",
+    usdc_price = sim.observe(price_manager.get_asset_price(BASE_USDC))
+    total_assets_after_enter = sim.observe(plasma_vault.total_assets())
+    vault_usdc_after_enter = sim.observe(usdc.balance_of(preview.plasma_vault))
+    venue_usdc_after_enter = sim.observe(usdc.balance_of(VENUE_DEPOSIT_ADDRESS))
+    executor_usdc_after_enter = sim.observe(usdc.balance_of(executor_address))
+    market_value_after_enter = sim.observe(
         plasma_vault.total_assets_in_market(EXTERNAL_STATE_MARKET),
     )
     # The raw figure the executor tracks for the balance account -- booked by the
     # enter, since no custodian has attested anything yet -- read straight off the
     # executor rather than through the vault's cached market value, so the two
     # can be compared.
-    sim.observe("tracked_after_enter", executor.balances(VENUE_BALANCE_ACCOUNT))
+    tracked_after_enter = sim.observe(executor.balances(VENUE_BALANCE_ACCOUNT))
 
     # ── Custodian A proposes the off-venue value ─────────────────────────────
     # Two calls, from two addresses, is the production shape: custodian A's
@@ -959,19 +1008,18 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.add_call(
         call=plasma_vault.update_markets_balances([EXTERNAL_STATE_MARKET]), from_=ALPHA
     )
-    sim.observe("executor_nonce", executor.nonce())
-    sim.observe("tracked_after_confirm", executor.balances(VENUE_BALANCE_ACCOUNT))
+    executor_nonce = sim.observe(executor.nonce())
+    tracked_after_confirm = sim.observe(executor.balances(VENUE_BALANCE_ACCOUNT))
     # Per-account, and the field MIN_UPDATE_INTERVAL is measured from -- not the
     # executor-wide stamp the balance fuse reads. Observing it is what ties that
     # constant to something this run can check.
-    sim.observe(
-        "last_updated_after_confirm", executor.last_updated(VENUE_BALANCE_ACCOUNT)
+    last_updated_after_confirm = sim.observe(
+        executor.last_updated(VENUE_BALANCE_ACCOUNT)
     )
-    sim.observe(
-        "market_value_after_confirm",
+    market_value_after_confirm = sim.observe(
         plasma_vault.total_assets_in_market(EXTERNAL_STATE_MARKET),
     )
-    sim.observe("total_assets_after_confirm", plasma_vault.total_assets())
+    total_assets_after_confirm = sim.observe(plasma_vault.total_assets())
     plan.append("alpha refreshes the cached market balance")
 
     # ── The user asks for a scheduled withdrawal ─────────────────────────────
@@ -987,7 +1035,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.add_call(
         call=withdraw_manager.request_shares(requested_shares), from_=DEPOSITOR
     )
-    sim.observe("request_after_filing", withdraw_manager.request_info(DEPOSITOR))
+    request_after_filing = sim.observe(withdraw_manager.request_info(DEPOSITOR))
     plan.append("user requests a scheduled withdrawal worth 500 USDC")
 
     # ── The alpha brings the margin back and releases it ─────────────────────
@@ -1003,14 +1051,13 @@ def run_simulation(web3: Web3) -> SimulationResult:
     plan.append("the venue returns the margin to the executor")
 
     sim.execute([build_exit_action(MARGIN_AMOUNT)])
-    sim.observe("vault_usdc_after_exit", usdc.balance_of(preview.plasma_vault))
-    sim.observe("venue_usdc_after_exit", usdc.balance_of(VENUE_DEPOSIT_ADDRESS))
-    sim.observe("tracked_after_exit", executor.balances(VENUE_BALANCE_ACCOUNT))
-    sim.observe(
-        "market_value_after_exit",
+    vault_usdc_after_exit = sim.observe(usdc.balance_of(preview.plasma_vault))
+    venue_usdc_after_exit = sim.observe(usdc.balance_of(VENUE_DEPOSIT_ADDRESS))
+    tracked_after_exit = sim.observe(executor.balances(VENUE_BALANCE_ACCOUNT))
+    market_value_after_exit = sim.observe(
         plasma_vault.total_assets_in_market(EXTERNAL_STATE_MARKET),
     )
-    sim.observe("total_assets_after_exit", plasma_vault.total_assets())
+    total_assets_after_exit = sim.observe(plasma_vault.total_assets())
     plan.append("alpha exits the market (executor -> vault)")
 
     # release_funds marks every request filed up to `timestamp` as withdrawable,
@@ -1026,8 +1073,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
         ),
         from_=ALPHA,
     )
-    sim.observe("request_after_release", withdraw_manager.request_info(DEPOSITOR))
-    sim.observe("shares_released", withdraw_manager.get_shares_to_release())
+    request_after_release = sim.observe(withdraw_manager.request_info(DEPOSITOR))
+    shares_released = sim.observe(withdraw_manager.get_shares_to_release())
     plan.append("alpha releases funds for the request")
 
     # ── Failure case: a confirmation that does not match its proposal ────────
@@ -1055,6 +1102,29 @@ def run_simulation(web3: Web3) -> SimulationResult:
         log.info("  %d. %s", i, step)
 
     result = sim.run()
+    reads = _Reads(
+        bootstrap=bootstrap,
+        usdc_price=usdc_price,
+        total_assets_after_enter=total_assets_after_enter,
+        vault_usdc_after_enter=vault_usdc_after_enter,
+        venue_usdc_after_enter=venue_usdc_after_enter,
+        executor_usdc_after_enter=executor_usdc_after_enter,
+        market_value_after_enter=market_value_after_enter,
+        tracked_after_enter=tracked_after_enter,
+        executor_nonce=executor_nonce,
+        tracked_after_confirm=tracked_after_confirm,
+        last_updated_after_confirm=last_updated_after_confirm,
+        market_value_after_confirm=market_value_after_confirm,
+        total_assets_after_confirm=total_assets_after_confirm,
+        request_after_filing=request_after_filing,
+        vault_usdc_after_exit=vault_usdc_after_exit,
+        venue_usdc_after_exit=venue_usdc_after_exit,
+        tracked_after_exit=tracked_after_exit,
+        market_value_after_exit=market_value_after_exit,
+        total_assets_after_exit=total_assets_after_exit,
+        request_after_release=request_after_release,
+        shares_released=shares_released,
+    )
 
     # ── Simulation done. Everything above only *described* the batch; one
     # eth_simulateV1 call, this sim.run(), executed all of it. (The discovery
@@ -1068,38 +1138,39 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     log.info("confirm rejected as expected: ExternalStateExecutorProposalHashMismatch")
 
-    _assert_configuration(result)
-    _assert_margin_parked(result)
+    _assert_configuration(reads)
+    _assert_margin_parked(reads)
     _assert_attestation(
         result,
+        reads,
         executor,
         proposal_hash,
         proposed_at,
         confirmed_at=baseline_timestamp + CONFIRM_OFFSET,
     )
-    _assert_unwind(result)
+    _assert_unwind(reads)
 
     log.info(
         "OK -- NAV %s -> %s (market 50: %s -> %s -> %s), gas_used=%s",
-        result.get("total_assets_after_deposit"),
-        result.get("total_assets_after_exit"),
-        result.get("market_value_after_enter"),
-        result.get("market_value_after_confirm"),
-        result.get("market_value_after_exit"),
+        reads.bootstrap.total_assets_after_deposit.value,
+        total_assets_after_exit.value,
+        market_value_after_enter.value,
+        market_value_after_confirm.value,
+        market_value_after_exit.value,
         result.gas_used,
     )
     return result
 
 
-def _assert_configuration(result: SimulationResult) -> None:
+def _assert_configuration(reads: _Reads) -> None:
     """The vault can price its underlying, and holds exactly the grants above."""
     _check(
-        result.get("usdc_price").amount > 0,
+        reads.usdc_price.value.amount > 0,
         "USDC has no oracle price -- the market cannot value the parked margin",
     )
     # No unrelated permissions: the granted set is EXACTLY what market_substrates
     # builds. Compare as sets (grant order is not guaranteed).
-    granted = {bytes(s) for s in result.get("granted_substrates")}
+    granted = {bytes(s) for s in reads.bootstrap.granted_substrates.value}
     _check(
         granted == set(market_substrates()),
         f"unexpected market substrates granted: {sorted(s.hex() for s in granted)}",
@@ -1108,24 +1179,25 @@ def _assert_configuration(result: SimulationResult) -> None:
     # here (idle USDC after the enter, the vault balance after the exit) already
     # assumes the deposit is the vault's whole balance.
     _check(
-        result.get("total_assets_after_deposit") == DEPOSIT_AMOUNT,
-        f"deposit not credited to NAV: {result.get('total_assets_after_deposit')}",
+        reads.bootstrap.total_assets_after_deposit.value == DEPOSIT_AMOUNT,
+        f"deposit not credited to NAV: {reads.bootstrap.total_assets_after_deposit.value}",
     )
     _check(
-        result.get("vault_usdc_after_deposit") == DEPOSIT_AMOUNT,
-        f"vault holds {result.get('vault_usdc_after_deposit')} USDC after the deposit",
+        reads.bootstrap.vault_usdc_after_deposit.value == DEPOSIT_AMOUNT,
+        f"vault holds {reads.bootstrap.vault_usdc_after_deposit.value} USDC after the deposit",
     )
 
 
-def _assert_margin_parked(result: SimulationResult) -> None:
+def _assert_margin_parked(reads: _Reads) -> None:
     """The enter moved the margin all the way out and accounted for it."""
     margin = int(MARGIN_AMOUNT)
     _check(
-        result.get("vault_usdc_after_enter") == DEPOSIT_AMOUNT - margin,
-        f"unexpected idle USDC after the enter: {result.get('vault_usdc_after_enter')}",
+        reads.vault_usdc_after_enter.value == DEPOSIT_AMOUNT - margin,
+        f"unexpected idle USDC after the enter: {reads.vault_usdc_after_enter.value}",
     )
-    venue_delta = result.get("venue_usdc_after_enter") - result.get(
-        "venue_usdc_before_enter"
+    venue_delta = (
+        reads.venue_usdc_after_enter.value
+        - reads.bootstrap.venue_usdc_before_enter.value
     )
     _check(
         venue_delta == margin,
@@ -1134,32 +1206,33 @@ def _assert_margin_parked(result: SimulationResult) -> None:
     # Nothing may sit on the executor: propose and confirm both run a dust check
     # against it, so a stranded balance would break the attestation entirely.
     _check(
-        result.get("executor_usdc_after_enter") == 0,
-        f"executor holds {result.get('executor_usdc_after_enter')} USDC after the enter",
+        reads.executor_usdc_after_enter.value == 0,
+        f"executor holds {reads.executor_usdc_after_enter.value} USDC after the enter",
     )
     _check(
-        result.get("tracked_after_enter") == margin,
-        f"executor booked {result.get('tracked_after_enter')}, expected {margin}",
+        reads.tracked_after_enter.value == margin,
+        f"executor booked {reads.tracked_after_enter.value}, expected {margin}",
     )
     _check(
-        result.get("market_value_after_enter") == margin,
-        f"market 50 values the position at {result.get('market_value_after_enter')}",
+        reads.market_value_after_enter.value == margin,
+        f"market 50 values the position at {reads.market_value_after_enter.value}",
     )
     # NAV is preserved across the enter: USDC left the vault and reappeared as
     # market-50 value, 1:1. Compare against the pre-enter NAV, not a lower bound.
     _check(
         abs(
-            result.get("total_assets_after_enter")
-            - result.get("total_assets_after_deposit")
+            reads.total_assets_after_enter.value
+            - reads.bootstrap.total_assets_after_deposit.value
         )
         <= NAV_DUST_TOLERANCE,
-        f"the enter moved NAV: {result.get('total_assets_after_deposit')} -> "
-        f"{result.get('total_assets_after_enter')}",
+        f"the enter moved NAV: {reads.bootstrap.total_assets_after_deposit.value} -> "
+        f"{reads.total_assets_after_enter.value}",
     )
 
 
 def _assert_attestation(
     result: SimulationResult,
+    reads: _Reads,
     executor: ExternalStateExecutor,
     proposal_hash: bytes,
     proposed_at: int,
@@ -1202,72 +1275,73 @@ def _assert_attestation(
         f"0x{logged.proposal_hash.hex()}",
     )
     _check(
-        result.get("executor_nonce") == 1,
-        f"executor nonce is {result.get('executor_nonce')} after one proposal",
+        reads.executor_nonce.value == 1,
+        f"executor nonce is {reads.executor_nonce.value} after one proposal",
     )
     # The stamp moves on the CONFIRM, not the propose.
     _check(
-        result.get("last_updated_after_confirm") == confirmed_at,
+        reads.last_updated_after_confirm.value == confirmed_at,
         f"the account's last update reads "
-        f"{result.get('last_updated_after_confirm')}, expected {confirmed_at}",
+        f"{reads.last_updated_after_confirm.value}, expected {confirmed_at}",
     )
     # The custodians attested exactly what was parked, so the confirmed value
     # does not move NAV. (It also stays inside BIG_CHANGE_BPS, but this vault
     # would not act on a breach -- see the guard-constant note above -- so that
     # is not asserted here.)
     _check(
-        result.get("tracked_after_confirm") == MARGIN_AMOUNT,
-        f"confirmed balance is {result.get('tracked_after_confirm')}",
+        reads.tracked_after_confirm.value == MARGIN_AMOUNT,
+        f"confirmed balance is {reads.tracked_after_confirm.value}",
     )
     _check(
-        result.get("market_value_after_confirm") == MARGIN_AMOUNT,
+        reads.market_value_after_confirm.value == MARGIN_AMOUNT,
         f"market 50 values the attested position at "
-        f"{result.get('market_value_after_confirm')}",
+        f"{reads.market_value_after_confirm.value}",
     )
     _check(
         abs(
-            result.get("total_assets_after_confirm")
-            - result.get("total_assets_after_deposit")
+            reads.total_assets_after_confirm.value
+            - reads.bootstrap.total_assets_after_deposit.value
         )
         <= NAV_DUST_TOLERANCE,
-        f"the attestation moved NAV: {result.get('total_assets_after_deposit')} -> "
-        f"{result.get('total_assets_after_confirm')}",
+        f"the attestation moved NAV: {reads.bootstrap.total_assets_after_deposit.value} -> "
+        f"{reads.total_assets_after_confirm.value}",
     )
 
 
-def _assert_unwind(result: SimulationResult) -> None:
+def _assert_unwind(reads: _Reads) -> None:
     """The margin came home, the market emptied, and the request is releasable."""
     _check(
-        result.get("vault_usdc_after_exit") == DEPOSIT_AMOUNT,
-        f"vault holds {result.get('vault_usdc_after_exit')} USDC after the exit",
+        reads.vault_usdc_after_exit.value == DEPOSIT_AMOUNT,
+        f"vault holds {reads.vault_usdc_after_exit.value} USDC after the exit",
     )
     _check(
-        result.get("venue_usdc_after_exit") == result.get("venue_usdc_before_enter"),
-        f"the venue kept USDC back: {result.get('venue_usdc_before_enter')} -> "
-        f"{result.get('venue_usdc_after_exit')}",
+        reads.venue_usdc_after_exit.value
+        == reads.bootstrap.venue_usdc_before_enter.value,
+        f"the venue kept USDC back: {reads.bootstrap.venue_usdc_before_enter.value} -> "
+        f"{reads.venue_usdc_after_exit.value}",
     )
     _check(
-        result.get("tracked_after_exit") == 0,
-        f"executor still books {result.get('tracked_after_exit')} for the venue",
+        reads.tracked_after_exit.value == 0,
+        f"executor still books {reads.tracked_after_exit.value} for the venue",
     )
     _check(
-        result.get("market_value_after_exit") == 0,
-        f"market 50 still values {result.get('market_value_after_exit')}",
+        reads.market_value_after_exit.value == 0,
+        f"market 50 still values {reads.market_value_after_exit.value}",
     )
     _check(
         abs(
-            result.get("total_assets_after_exit")
-            - result.get("total_assets_after_deposit")
+            reads.total_assets_after_exit.value
+            - reads.bootstrap.total_assets_after_deposit.value
         )
         <= NAV_DUST_TOLERANCE,
-        f"the round trip moved NAV: {result.get('total_assets_after_deposit')} -> "
-        f"{result.get('total_assets_after_exit')}",
+        f"the round trip moved NAV: {reads.bootstrap.total_assets_after_deposit.value} -> "
+        f"{reads.total_assets_after_exit.value}",
     )
     # The request survives the round trip: it is filed before the margin comes
     # home and still carries the same shares after, only now withdrawable. The
     # depositor's own redemption is the next step, and out of scope here.
-    filed = result.get("request_after_filing")
-    released = result.get("request_after_release")
+    filed = reads.request_after_filing.value
+    released = reads.request_after_release.value
     _check(filed.shares > 0, "the withdrawal request registered no shares")
     _check(
         filed.shares == released.shares,
@@ -1282,8 +1356,8 @@ def _assert_unwind(result: SimulationResult) -> None:
         "release_funds did not make the request withdrawable",
     )
     _check(
-        result.get("shares_released") == released.shares,
-        f"released {result.get('shares_released')} shares, requested {released.shares}",
+        reads.shares_released.value == released.shares,
+        f"released {reads.shares_released.value} shares, requested {released.shares}",
     )
 
 

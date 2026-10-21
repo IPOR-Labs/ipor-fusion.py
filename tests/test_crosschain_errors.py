@@ -127,7 +127,6 @@ def _result(*calls: SimulatedCallResult) -> SimulationResult:
         revert_reason=None,
         gas_used=0,
         execute_logs=[],
-        observations={},
         calls=list(calls),
         failed_calls=failed,
     )
@@ -141,7 +140,6 @@ def _call(label: str, *, success: bool, data: bytes = b"") -> SimulatedCallResul
         gas_used=0,
         error=None if success else "execution reverted",
         logs=[],
-        decoded=None,
     )
 
 

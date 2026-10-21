@@ -265,7 +265,10 @@ class TestTokenResolvers:
         cache = FileContractCache(path)
         cache.put({cache_key(ETHEREUM, LOWER, "symbol"): "MAINNET"})
         multicall = MagicMock()
-        multicall.return_value.try_aggregate.return_value = ["BASE", 6]
+        multicall.return_value.batch.return_value.try_add.side_effect = [
+            SimpleNamespace(value="BASE"),
+            SimpleNamespace(value=6),
+        ]
         with (
             patch.object(vault_data, "Multicall3", multicall),
             patch.object(

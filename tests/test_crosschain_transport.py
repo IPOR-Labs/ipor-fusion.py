@@ -702,8 +702,10 @@ class TestCrosschainSimulator:
         sim.add_chain(CHAIN_B, web3_b, block=200)
         sim.fund_native(CHAIN_B, RECEIVER, 10**18)
         chain_a.add_call(Call(to=RECEIVER, data=b"\x00"), from_=SENDER, label="kick")
-        sim.observe(
-            CHAIN_A, "probe", Call(to=RECEIVER, data=b"\x01", output_types=["uint256"])
+        probe = sim.observe(
+            CHAIN_A,
+            Call(to=RECEIVER, data=b"\x01", output_types=["uint256"]),
+            label="probe",
         )
 
         if not settles:
@@ -717,7 +719,7 @@ class TestCrosschainSimulator:
 
         assert set(results) == {CHAIN_A, CHAIN_B}
         assert [m.message_id for m in sim.delivered] == [m1, m2]
-        assert results[CHAIN_A].get("probe") == 32
+        assert probe.value == 32
         labels_b = [c.label for c in results[CHAIN_B].calls]
         assert labels_b == ["deliver:01"]
         labels_a = [c.label for c in results[CHAIN_A].calls]
@@ -882,9 +884,7 @@ class TestSyntheticTokenSource:
         sim = CrosschainSimulator(transport).add_chain(BASE, web3, block=1)
         sim.next_block()
         sim.with_erc20_balance(BASE_USDC, STARGATE_EXECUTOR, 42, slot=0)
-        sim.observe(
-            "anything", Call(to=BASE_USDC, data=b"\x00" * 4, output_types=["uint256"])
-        )
+        sim.observe(Call(to=BASE_USDC, data=b"\x00" * 4, output_types=["uint256"]))
         sim.run()
         entry = web3.provider.payloads[-1][0]["blockStateCalls"][0]
         assert entry["stateOverrides"][BASE_USDC]["stateDiff"] == {

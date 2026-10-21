@@ -15,7 +15,6 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
 
 import pytest
 from click.testing import CliRunner
@@ -130,26 +129,21 @@ def test_pending_state_reads_through_the_vault(
 def test_precompiles_batch_through_multicall3(ctx: Web3Context):
     reader = HyperCoreReader()
     nvda = precompile_index_of(XYZ_NVDA)
-    reads = cast(
-        list[Call[Any]],
-        [
-            reader.l1_block_number(),
-            reader.core_user_exists(VAULT),
-            reader.spot_balance(VAULT, 0),
-            reader.account_margin_summary(XYZ_DEX, VAULT),
-            reader.perp_asset_info(nvda),
-            reader.position(VAULT, nvda),
-            reader.oracle_px(nvda),
-        ],
-    )
-    l1_block, exists, usdc, xyz, nvda_info, position, oracle_px = Multicall3(
-        ctx
-    ).aggregate(reads)
-    assert l1_block > 0 and exists is True
-    assert usdc.total >= usdc.hold
-    assert isinstance(xyz.account_value, int)
-    assert nvda_info.coin.startswith("xyz:") and nvda_info.max_leverage > 0
-    assert isinstance(position.leverage, int) and oracle_px > 0
+    batch = Multicall3(ctx).batch()
+    l1_block = batch.add(reader.l1_block_number())
+    exists = batch.add(reader.core_user_exists(VAULT))
+    usdc = batch.add(reader.spot_balance(VAULT, 0))
+    xyz = batch.add(reader.account_margin_summary(XYZ_DEX, VAULT))
+    nvda_info = batch.add(reader.perp_asset_info(nvda))
+    position = batch.add(reader.position(VAULT, nvda))
+    oracle_px = batch.add(reader.oracle_px(nvda))
+    batch.run()
+    assert l1_block.value > 0 and exists.value is True
+    assert usdc.value.total >= usdc.value.hold
+    assert isinstance(xyz.value.account_value, int)
+    info = nvda_info.value
+    assert info.coin.startswith("xyz:") and info.max_leverage > 0
+    assert isinstance(position.value.leverage, int) and oracle_px.value > 0
 
 
 def test_transfer_snapshot_and_evm_exit_ceiling(ctx: Web3Context):

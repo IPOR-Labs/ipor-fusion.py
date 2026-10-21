@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -17,11 +17,15 @@ from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.errors import (
     BalanceSlotNotFoundError,
+    EmptyCallResultError,
     SimulationError,
     SimulationRunError,
     decode_custom_error,
 )
 from ipor_fusion.types import PlasmaVaultAddress
+
+T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
 
 #: ``n`` (the sent block's index in the run) -> account overrides for it.
 StateOverrideProvider = Callable[[int], Mapping[str, Mapping[str, Any]]]
@@ -53,8 +57,6 @@ class _Call:
     to: ChecksumAddress | None
     data: bytes
     label: str | None
-    decode_types: list[str] | None
-    decoder: Callable[..., Any] | None
     is_execute: bool
     from_: ChecksumAddress | None = None
     nonce: int | None = None
@@ -63,6 +65,7 @@ class _Call:
     predicted_address: ChecksumAddress | None = None
     # A complete serialized transaction (`add_transaction`), sent as is.
     transaction: dict[str, Any] | None = None
+    observation: SimulationObservation[object] | None = None
 
 
 @dataclass(slots=True)
@@ -81,7 +84,6 @@ class SimulatedCallResult:
     gas_used: int
     error: str | None
     logs: list[dict]
-    decoded: Any | None
     predicted_address: ChecksumAddress | None = None
 
     @property
@@ -102,12 +104,8 @@ class SimulationResult:
     revert_reason: str | None
     gas_used: int
     execute_logs: list[dict]
-    observations: dict[str, Any]
     calls: list[SimulatedCallResult] = field(default_factory=list)
     failed_calls: list[SimulatedCallResult] = field(default_factory=list)
-
-    def get(self, label: str) -> Any:
-        return self.observations[label]
 
     def raise_for_failure(self) -> None:
         """Raise :class:`SimulationError` naming the first failed call (label,
@@ -125,6 +123,52 @@ class SimulationResult:
             label=first.label,
             revert_reason=reason,
         )
+
+
+class SimulationObservation(Generic[T_co]):
+    """A read queued by `VaultSimulator.observe`, resolved by each `run()`:
+    ``value`` is the read decoded as its `Call` decodes, from the latest run."""
+
+    __slots__ = ("_call", "_label", "_result")
+
+    def __init__(self, call: Call[T_co], label: str | None) -> None:
+        self._call = call
+        self._label = label
+        self._result: SimulatedCallResult | None = None
+
+    @property
+    def label(self) -> str | None:
+        return self._label
+
+    @property
+    def result(self) -> SimulatedCallResult:
+        """The raw simulated call (success, return data, gas, logs)."""
+        if self._result is None:
+            raise RuntimeError(
+                f"observation {self._label or '<unlabelled>'!r} read before "
+                "VaultSimulator.run()"
+            )
+        return self._result
+
+    @property
+    def value(self) -> T_co:
+        """The decoded read. Raises `SimulationError` when the simulated read
+        reverted and `EmptyCallResultError` when it returned no data."""
+        result = self.result
+        name = self._label or "<unlabelled>"
+        if not result.success:
+            reason = result.revert_reason
+            raise SimulationError(
+                f"observation {name!r} failed: {result.error or 'reverted'}"
+                + (f": {reason}" if reason and reason != result.error else ""),
+                label=self._label,
+                revert_reason=reason,
+            )
+        if not result.return_data:
+            raise EmptyCallResultError(
+                f"observation {name!r} on {self._call.to} returned no data"
+            )
+        return self._call.decode(bytes(result.return_data))
 
 
 def is_simulate_v1_supported(web3: Web3) -> bool:
@@ -177,12 +221,12 @@ class VaultSimulator:
             raise RuntimeError("provider must implement eth_simulateV1")
 
         sim = VaultSimulator(web3, vault=VAULT, alpha=ALPHA, block="latest")
-        sim.observe("ltv_before", aave_pool.get_user_account_data(vault))
+        ltv_before = sim.observe(aave_pool.get_user_account_data(vault))
         sim.execute([flash_loan_action])
-        sim.observe("ltv_after", aave_pool.get_user_account_data(vault))
+        ltv_after = sim.observe(aave_pool.get_user_account_data(vault))
 
         result = sim.run()
-        if result.all_success and is_health_safe(result.get("ltv_after")):
+        if result.all_success and is_health_safe(ltv_after.value):
             vault.execute([flash_loan_action]).send(ctx)  # green-light real execution
 
     Limitations:
@@ -375,8 +419,6 @@ class VaultSimulator:
                 data=data,
                 from_=from_,
                 label=None,
-                decode_types=None,
-                decoder=None,
                 is_execute=True,
             )
         )
@@ -407,8 +449,6 @@ class VaultSimulator:
                 from_=Web3.to_checksum_address(from_) if from_ else None,
                 gas=gas,
                 label=label,
-                decode_types=call.output_types,
-                decoder=call.decoder,
                 is_execute=False,
             )
         )
@@ -442,8 +482,6 @@ class VaultSimulator:
                 data=bytes(data),
                 from_=serialized["from"],
                 label=label,
-                decode_types=None,
-                decoder=None,
                 is_execute=True,
                 transaction=serialized,
             )
@@ -487,36 +525,37 @@ class VaultSimulator:
                 value=value,
                 gas=gas,
                 label=label,
-                decode_types=None,
-                decoder=None,
                 is_execute=False,
                 predicted_address=predicted_address,
             )
         )
         return predicted_address
 
-    def observe(self, label: str, call: Call) -> VaultSimulator:
-        """Queue a view-style read; decoded per the wrapper method's types and
-        decoder so `result.get(label)` returns the typed Python value
-        (`Amount`, `Decimals`, …). Build `call` via a wrapper method, e.g.
-        `usdc.balance_of(addr)` or `plasma_vault.total_assets()`.
+    def observe(
+        self, call: Call[T], *, label: str | None = None
+    ) -> SimulationObservation[T]:
+        """Queue a view-style read at this point of the flow and return its
+        observation: after `run()`, ``observation.value`` is the read decoded
+        as ``call`` decodes it (`Amount`, `Decimals`, …). Build ``call`` via a
+        wrapper method, e.g. `usdc.balance_of(addr)` or
+        `plasma_vault.total_assets()`. ``label`` names it in failures.
         """
         if not call.output_types:
             raise ValueError(
                 f"observe({label!r}): Call must carry output_types — pass a "
                 "view-returning wrapper method (e.g. `usdc.balance_of(addr)`)."
             )
+        observation = SimulationObservation(call, label)
         self._current.calls.append(
             _Call(
                 to=call.to,
                 data=call.data,
                 label=label,
-                decode_types=call.output_types,
-                decoder=call.decoder,
                 is_execute=False,
+                observation=observation,
             )
         )
-        return self
+        return observation
 
     def run(self) -> SimulationResult:
         non_empty_blocks = [b for b in self._blocks if b.calls]
@@ -611,7 +650,6 @@ class VaultSimulator:
         revert_reason: str | None = None
         execute_gas = 0
         execute_logs: list[dict] = []
-        observations: dict[str, Any] = {}
         parsed: list[SimulatedCallResult] = []
 
         for source, raw in zip(sources, raw_calls, strict=True):
@@ -623,31 +661,18 @@ class VaultSimulator:
             error, return_data = _normalize_call_error(raw.get("error"), return_data)
             logs = raw.get("logs", []) or []
 
-            decoded: Any | None = None
-            if success and source.decode_types and return_data:
-                try:
-                    values = tuple(decode(source.decode_types, bytes(return_data)))
-                    raw_value = values[0] if len(values) == 1 else values
-                    decoded = (
-                        source.decoder(raw_value)
-                        if source.decoder is not None
-                        else raw_value
-                    )
-                except (DecodingError, OverflowError, ValueError):
-                    decoded = None
-
-            parsed.append(
-                SimulatedCallResult(
-                    label=source.label,
-                    success=success,
-                    return_data=return_data,
-                    gas_used=gas_used,
-                    error=error,
-                    logs=logs,
-                    decoded=decoded,
-                    predicted_address=(source.predicted_address if success else None),
-                )
+            call_result = SimulatedCallResult(
+                label=source.label,
+                success=success,
+                return_data=return_data,
+                gas_used=gas_used,
+                error=error,
+                logs=logs,
+                predicted_address=(source.predicted_address if success else None),
             )
+            parsed.append(call_result)
+            if source.observation is not None:
+                source.observation._result = call_result
 
             if source.is_execute:
                 execute_success = execute_success and success
@@ -655,8 +680,6 @@ class VaultSimulator:
                 execute_logs.extend(logs)
                 if not success and revert_reason is None:
                     revert_reason = _decode_revert(return_data, error)
-            elif source.label is not None and success:
-                observations[source.label] = decoded
 
         failed_calls = [c for c in parsed if not c.success]
         all_success = not failed_calls
@@ -671,7 +694,6 @@ class VaultSimulator:
             revert_reason=revert_reason,
             gas_used=execute_gas,
             execute_logs=execute_logs,
-            observations=observations,
             calls=parsed,
             failed_calls=failed_calls,
         )
@@ -761,23 +783,26 @@ def erc20_balance_slot(
         raise ValueError(f"max_slot must be non-negative, got {max_slot}")
 
     sim = VaultSimulator(web3, block=block)
+    balances: list[SimulationObservation[int]] = []
     for slot in range(max_slot + 1):
         holder = Web3.to_checksum_address(
             "0x" + keccak(encode(["uint256"], [slot]))[-20:].hex()
         )
         sim.with_erc20_balance(token, holder, probe, slot=slot)
-        sim.observe(
-            f"balance_slot_{slot}",
-            Call(
-                to=token,
-                data=_encode_calldata("balanceOf(address)", holder),
-                output_types=["uint256"],
-            ),
+        balances.append(
+            sim.observe(
+                Call[int](
+                    to=token,
+                    data=_encode_calldata("balanceOf(address)", holder),
+                    output_types=["uint256"],
+                ),
+                label=f"balance_slot_{slot}",
+            )
         )
 
-    result = sim.run()
-    for slot in range(max_slot + 1):
-        if result.get(f"balance_slot_{slot}") == probe:
+    sim.run()
+    for slot, balance in enumerate(balances):
+        if balance.result.success and balance.value == probe:
             return slot
     raise BalanceSlotNotFoundError(
         f"no balances mapping slot found for {token} up to {max_slot}"

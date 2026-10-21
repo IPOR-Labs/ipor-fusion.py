@@ -409,10 +409,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     # update_callback_handler exercises FUSE_MANAGER_ROLE, held by OWNER above.
 
-    sim.observe("wbtc_price", price_manager.get_asset_price(ARBITRUM_WBTC))
-    sim.observe("usdc_price", price_manager.get_asset_price(ARBITRUM_USDC))
-    sim.observe("euler_substrates", vault.get_market_substrates(EULER_MARKET))
-    sim.observe("swapper_substrates", vault.get_market_substrates(SWAPPER_MARKET))
+    wbtc_price = sim.observe(price_manager.get_asset_price(ARBITRUM_WBTC))
+    usdc_price = sim.observe(price_manager.get_asset_price(ARBITRUM_USDC))
+    euler_substrates = sim.observe(vault.get_market_substrates(EULER_MARKET))
+    swapper_substrates = sim.observe(vault.get_market_substrates(SWAPPER_MARKET))
 
     # Simulation-only seed. In production WBTC arrives through normal deposits.
     sim.add_call(
@@ -423,56 +423,54 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.execute([build_loop_action()])
 
     sim.add_call(call=vault.update_markets_balances([EULER_MARKET]), from_=ALPHA)
-    sim.observe(
-        "collateral_shares",
+    collateral_shares = sim.observe(
         ERC20(EVAULT_WBTC).balance_of(euler_account),
     )
-    sim.observe(
-        "usdc_debt",
+    usdc_debt = sim.observe(
         _debt_of(EVAULT_USDC, euler_account),
     )
-    sim.observe("vault_wbtc", wbtc.balance_of(preview.plasma_vault))
-    sim.observe("vault_usdc", usdc.balance_of(preview.plasma_vault))
-    sim.observe("euler_value", vault.total_assets_in_market(EULER_MARKET))
-    sim.observe("total_assets", vault.total_assets())
+    vault_wbtc = sim.observe(wbtc.balance_of(preview.plasma_vault))
+    vault_usdc = sim.observe(usdc.balance_of(preview.plasma_vault))
+    euler_value = sim.observe(vault.total_assets_in_market(EULER_MARKET))
+    total_assets = sim.observe(vault.total_assets())
 
     result = sim.run()
     _assert_all_success(result)
 
-    _check(result.get("wbtc_price").amount > 0, "WBTC has no oracle price")
-    _check(result.get("usdc_price").amount > 0, "USDC has no oracle price")
+    _check(wbtc_price.value.amount > 0, "WBTC has no oracle price")
+    _check(usdc_price.value.amount > 0, "USDC has no oracle price")
     _check(
-        {bytes(value) for value in result.get("euler_substrates")}
+        {bytes(value) for value in euler_substrates.value}
         == {bytes(value) for value in euler_market_substrates()},
         "Euler substrates differ from the narrow WBTC/USDC grant",
     )
     _check(
-        {bytes(value) for value in result.get("swapper_substrates")}
+        {bytes(value) for value in swapper_substrates.value}
         == {bytes(value) for value in swapper_market_substrates()},
         "swapper substrates differ from the narrow pair/target grant",
     )
-    _check(result.get("collateral_shares") > 0, "Euler collateral was not supplied")
+    _check(collateral_shares.value > 0, "Euler collateral was not supplied")
     _check(
-        result.get("usdc_debt") >= BORROW_USDC,
-        f"Euler USDC debt was not opened: {result.get('usdc_debt')}",
+        usdc_debt.value >= BORROW_USDC,
+        f"Euler USDC debt was not opened: {usdc_debt.value}",
     )
-    _check(result.get("vault_usdc") == 0, "borrowed USDC was not fully swapped")
+    _check(vault_usdc.value == 0, "borrowed USDC was not fully swapped")
     _check(
-        result.get("vault_wbtc") < Amount(1_000_000),
-        f"unexpected WBTC residue after flash repayment: {result.get('vault_wbtc')}",
+        vault_wbtc.value < Amount(1_000_000),
+        f"unexpected WBTC residue after flash repayment: {vault_wbtc.value}",
     )
-    _check(result.get("euler_value") > 0, "Euler net position has no value")
+    _check(euler_value.value > 0, "Euler net position has no value")
     _check(
-        INITIAL_WBTC * 98 // 100 <= result.get("total_assets") <= INITIAL_WBTC,
-        f"loop NAV moved outside the 2% safety band: {result.get('total_assets')}",
+        INITIAL_WBTC * 98 // 100 <= total_assets.value <= INITIAL_WBTC,
+        f"loop NAV moved outside the 2% safety band: {total_assets.value}",
     )
 
     log.info(
         "OK -- collateral shares=%s, USDC debt=%s, idle WBTC=%s, NAV=%s, gas=%s",
-        result.get("collateral_shares"),
-        result.get("usdc_debt"),
-        result.get("vault_wbtc"),
-        result.get("total_assets"),
+        collateral_shares.value,
+        usdc_debt.value,
+        vault_wbtc.value,
+        total_assets.value,
         result.gas_used,
     )
     return result

@@ -98,7 +98,7 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
             )
         ]
     )
-    sim.observe("debt_after_borrow", evault_debt_of(EVAULT_WETH, plan.euler_account))
+    debt_after_borrow = sim.observe(evault_debt_of(EVAULT_WETH, plan.euler_account))
 
     # Repay the full debt.
     sim.execute(
@@ -110,7 +110,7 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
             )
         ]
     )
-    sim.observe("debt_after_repay", evault_debt_of(EVAULT_WETH, plan.euler_account))
+    debt_after_repay = sim.observe(evault_debt_of(EVAULT_WETH, plan.euler_account))
 
     # Tear down the credit position (controller first, then collateral).
     sim.execute(
@@ -126,14 +126,13 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
 
     result = sim.run()
     log.info(
-        "all_success=%s gas=%s reason=%s obs=%s",
+        "all_success=%s gas=%s reason=%s",
         result.all_success,
         result.gas_used,
         result.revert_reason,
-        result.observations,
     )
     assert_all_success(result)
 
     # borrow opened debt; repay cleared it.
-    assert result.get("debt_after_borrow") >= BORROW_AMOUNT
-    assert result.get("debt_after_repay") == 0
+    assert debt_after_borrow.value >= BORROW_AMOUNT
+    assert debt_after_repay.value == 0

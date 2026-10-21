@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
 
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
@@ -115,7 +114,7 @@ class StargateLane(CrosschainLane):
     def observation(self) -> Call[LaneObservation]:
         return self.dispatcher.observation().map(_to_lane)
 
-    def propose_balance(self, observation: BalanceObservation) -> Call[Any]:
+    def propose_balance(self, observation: BalanceObservation) -> Call[None]:
         """No return value on this transport: read the id with
         ``proposal_id_from_logs`` or ``executor.active_proposal_id``."""
         self._require_spoke(observation)

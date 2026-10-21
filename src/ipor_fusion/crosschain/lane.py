@@ -30,7 +30,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast
+from typing import ClassVar
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
@@ -258,24 +258,30 @@ class CrosschainLane(ABC):
         hub = self.hub_ctx
         if hub.default_block in _MOVING_BLOCK_TAGS:
             hub = hub.at_block(hub.web3.eth.get_block(hub.default_block)["number"])
-        values = Multicall3(hub).aggregate(
-            cast(
-                list[Call[Any]],
-                [
-                    self.settled_remote_balance(),
-                    self.outbound_in_flight(),
-                    self.idle_ledger(),
-                    self.is_dispatcher_ready(),
-                    self.chain_blocked(),
-                    self.last_approved_observed_at(),
-                    self.staleness_max(),
-                    self.remote_state_version(),
-                    self.has_active_command(),
-                    self.pending_transfer_count(),
-                ],
-            )
+        batch = Multicall3(hub).batch()
+        settled_remote_balance = batch.add(self.settled_remote_balance())
+        outbound_in_flight = batch.add(self.outbound_in_flight())
+        idle_ledger = batch.add(self.idle_ledger())
+        dispatcher_ready = batch.add(self.is_dispatcher_ready())
+        chain_blocked = batch.add(self.chain_blocked())
+        last_approved_observed_at = batch.add(self.last_approved_observed_at())
+        staleness_max = batch.add(self.staleness_max())
+        remote_state_version = batch.add(self.remote_state_version())
+        has_active_command = batch.add(self.has_active_command())
+        pending_transfer_count = batch.add(self.pending_transfer_count())
+        batch.run()
+        return LaneHubState(
+            settled_remote_balance=settled_remote_balance.value,
+            outbound_in_flight=outbound_in_flight.value,
+            idle_ledger=idle_ledger.value,
+            dispatcher_ready=dispatcher_ready.value,
+            chain_blocked=chain_blocked.value,
+            last_approved_observed_at=last_approved_observed_at.value,
+            staleness_max=staleness_max.value,
+            remote_state_version=remote_state_version.value,
+            has_active_command=has_active_command.value,
+            pending_transfer_count=pending_transfer_count.value,
         )
-        return LaneHubState(*values)
 
     def read_observation(self) -> LaneObservation:
         """:meth:`observation` run on ``spoke_ctx``."""
@@ -408,7 +414,9 @@ class CrosschainLane(ABC):
         """The dispatcher's canonical snapshot: run it on ``spoke_ctx``."""
 
     @abstractmethod
-    def propose_balance(self, observation: BalanceObservation) -> Call[Any]:
+    def propose_balance(
+        self, observation: BalanceObservation
+    ) -> Call[ProposalId | None]:
         """``BALANCE_PROPOSER`` only, sent on ``hub_ctx``. Returns the proposal id where the
         transport's function does (CCIP); Stargate emits it only, see
         ``proposal_id_from_logs``."""

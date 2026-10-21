@@ -119,8 +119,8 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
         from_=owner,
     )
 
-    sim.observe("raw_usdc_initial", usdc.balance_of(vault_address))
-    sim.observe("fluid_stake_initial", fluid_stake_token.balance_of(vault_address))
+    raw_usdc_initial = sim.observe(usdc.balance_of(vault_address))
+    fluid_stake_initial = sim.observe(fluid_stake_token.balance_of(vault_address))
 
     # ── Cleanup: unstake fluid + withdraw all from fluid pool ────────────
     # Mirrors withdraw_from_fluid() helper. Using MAX_UINT256 for the
@@ -132,8 +132,8 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
         ]
     )
 
-    sim.observe("raw_usdc_post_cleanup", usdc.balance_of(vault_address))
-    sim.observe("fluid_stake_post_cleanup", fluid_stake_token.balance_of(vault_address))
+    raw_usdc_post_cleanup = sim.observe(usdc.balance_of(vault_address))
+    fluid_stake_post_cleanup = sim.observe(fluid_stake_token.balance_of(vault_address))
 
     # ── Strategy: Aave V3 supply USDC, then withdraw ─────────────────────
     # Pre-compute supply amount with safety buffer (1 USDC) below the post-cleanup
@@ -142,13 +142,13 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
     supply_amount = expected_post_cleanup - 1_000_000  # 1 USDC buffer
 
     sim.execute([aave.supply(asset=ARBITRUM_USDC, amount=supply_amount, e_mode=300)])
-    sim.observe("ausdc_post_supply", ausdc.balance_of(vault_address))
-    sim.observe("raw_usdc_post_supply", usdc.balance_of(vault_address))
+    ausdc_post_supply = sim.observe(ausdc.balance_of(vault_address))
+    sim.observe(usdc.balance_of(vault_address))
 
     # Withdraw same amount back from Aave
     sim.execute([aave.withdraw(asset=ARBITRUM_USDC, amount=supply_amount)])
-    sim.observe("ausdc_post_withdraw", ausdc.balance_of(vault_address))
-    sim.observe("raw_usdc_post_withdraw", usdc.balance_of(vault_address))
+    ausdc_post_withdraw = sim.observe(ausdc.balance_of(vault_address))
+    raw_usdc_post_withdraw = sim.observe(usdc.balance_of(vault_address))
 
     result = sim.run()
 
@@ -158,21 +158,20 @@ def test_simulate_supply_and_withdraw_from_aave_v3(web3_arb):
         result.gas_used,
         result.revert_reason,
     )
-    log.info("observations=%s", result.observations)
 
     assert_all_success(result)
 
     # Probe-derived invariants:
-    assert result.get("raw_usdc_initial") == raw_usdc
-    assert result.get("fluid_stake_initial") == fluid_stake
+    assert raw_usdc_initial.value == raw_usdc
+    assert fluid_stake_initial.value == fluid_stake
     # Cleanup releases at least the staked amount minus any rounding dust
-    assert result.get("raw_usdc_post_cleanup") >= raw_usdc + fluid_stake - 100_000
-    assert result.get("fluid_stake_post_cleanup") == 0
+    assert raw_usdc_post_cleanup.value >= raw_usdc + fluid_stake - 100_000
+    assert fluid_stake_post_cleanup.value == 0
     # Aave supply moves USDC to aUSDC (1:1 in e-mode 300)
-    assert result.get("ausdc_post_supply") >= supply_amount
+    assert ausdc_post_supply.value >= supply_amount
     # Withdraw moves it back, leaving small accrued interest in aUSDC
-    assert result.get("raw_usdc_post_withdraw") >= supply_amount
-    assert result.get("ausdc_post_withdraw") < supply_amount  # < not 0 due to interest
+    assert raw_usdc_post_withdraw.value >= supply_amount
+    assert ausdc_post_withdraw.value < supply_amount  # < not 0 due to interest
 
 
 def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
@@ -220,24 +219,21 @@ def test_simulate_supply_and_withdraw_from_compound_v3(web3_arb):
         ]
     )
     sim.execute([compound.supply(asset=ARBITRUM_USDC, amount=supply_amount)])
-    sim.observe("cusdc_post_supply", cusdc.balance_of(vault_address))
+    cusdc_post_supply = sim.observe(cusdc.balance_of(vault_address))
     sim.execute([compound.withdraw(asset=ARBITRUM_USDC, amount=supply_amount)])
-    sim.observe("cusdc_post_withdraw", cusdc.balance_of(vault_address))
-    sim.observe("raw_usdc_post_withdraw", usdc.balance_of(vault_address))
+    cusdc_post_withdraw = sim.observe(cusdc.balance_of(vault_address))
+    raw_usdc_post_withdraw = sim.observe(usdc.balance_of(vault_address))
     result = sim.run()
 
     log.info(
-        "all_success=%s gas_used=%s observations=%s",
+        "all_success=%s gas_used=%s",
         result.all_success,
         result.gas_used,
-        result.observations,
     )
     assert_all_success(result)
-    assert (
-        result.get("cusdc_post_supply") >= supply_amount * 99 // 100
-    )  # ~ supply_amount
-    assert result.get("cusdc_post_withdraw") < supply_amount  # < interest only
-    assert result.get("raw_usdc_post_withdraw") >= supply_amount
+    assert cusdc_post_supply.value >= supply_amount * 99 // 100  # ~ supply_amount
+    assert cusdc_post_withdraw.value < supply_amount  # < interest only
+    assert raw_usdc_post_withdraw.value >= supply_amount
 
 
 def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
@@ -290,15 +286,15 @@ def test_simulate_supply_and_withdraw_from_fluid(web3_arb):
             fluid_staking_fuse.stake(),
         ]
     )
-    sim.observe("fluid_stake_after", fluid_stake_token.balance_of(vault_address))
-    sim.observe("raw_usdc_after", usdc.balance_of(vault_address))
+    fluid_stake_after = sim.observe(fluid_stake_token.balance_of(vault_address))
+    raw_usdc_after = sim.observe(usdc.balance_of(vault_address))
     result = sim.run()
 
-    log.info("all_success=%s observations=%s", result.all_success, result.observations)
+    log.info("all_success=%s", result.all_success)
     assert_all_success(result)
     # Vault re-staked roughly the same fluid amount it started with
-    assert result.get("fluid_stake_after") >= re_supply_amount * 99 // 100
-    assert result.get("raw_usdc_after") < 1_000_000_000  # almost everything re-staked
+    assert fluid_stake_after.value >= re_supply_amount * 99 // 100
+    assert raw_usdc_after.value < 1_000_000_000  # almost everything re-staked
 
 
 def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
@@ -367,7 +363,7 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
             gearbox_stake.stake(),
         ]
     )
-    sim.observe("farmd_post_stake", farmd_token.balance_of(vault_address))
+    farmd_post_stake = sim.observe(farmd_token.balance_of(vault_address))
     # Unstake + withdraw — read farmd amount via observation, but use the
     # known supply_amount as a deterministic input for unstake (vault's farmd
     # mints 1:1 with the dToken).
@@ -377,12 +373,12 @@ def test_simulate_supply_and_withdraw_from_gearbox(web3_arb):
             gearbox_supply.withdraw(vault_address=GEARBOX_D_TOKEN, amount=MAX_UINT256),
         ]
     )
-    sim.observe("farmd_post_withdraw", farmd_token.balance_of(vault_address))
-    sim.observe("raw_usdc_post_withdraw", usdc.balance_of(vault_address))
+    farmd_post_withdraw = sim.observe(farmd_token.balance_of(vault_address))
+    raw_usdc_post_withdraw = sim.observe(usdc.balance_of(vault_address))
     result = sim.run()
 
-    log.info("all_success=%s observations=%s", result.all_success, result.observations)
+    log.info("all_success=%s", result.all_success)
     assert_all_success(result)
-    assert result.get("farmd_post_stake") >= supply_amount * 99 // 100
-    assert result.get("farmd_post_withdraw") == 0
-    assert result.get("raw_usdc_post_withdraw") >= supply_amount * 99 // 100
+    assert farmd_post_stake.value >= supply_amount * 99 // 100
+    assert farmd_post_withdraw.value == 0
+    assert raw_usdc_post_withdraw.value >= supply_amount * 99 // 100

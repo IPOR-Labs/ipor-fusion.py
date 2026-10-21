@@ -52,7 +52,6 @@ from ipor_fusion.cli.vault_rendering import (
 )
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core import oracle
-from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fee_manager import HighWaterMarkPerformanceFee, RecipientFee
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
@@ -95,7 +94,7 @@ from ipor_fusion.vault_positions import (
     _fetch_breakdown_token_prices,
     _fetch_morpho_positions,
 )
-from ipor_fusion.vault_reads import _read_batch, _safe_call
+from ipor_fusion.vault_reads import _safe_call
 
 VALID_ADDR_LOWER = "0x" + "ab" * 20
 VALID_ADDR_UPPER = "0x" + "AB" * 20
@@ -2151,47 +2150,6 @@ class TestPrintFuseSection:
         )
         captured = capsys.readouterr()
         assert "(none)" in captured.out
-
-
-class TestReadBatch:
-    """Required reads raise their own error; optional reads degrade to None;
-    both share one Multicall3 round trip."""
-
-    @staticmethod
-    def _call(ctx: MagicMock, value: int) -> Call[int]:
-        return Call(
-            to=ADDR_1,
-            data=bytes(4) + encode(["uint256"], [value]),
-            output_types=["uint256"],
-        )
-
-    @staticmethod
-    def _ctx() -> MagicMock:
-        def handler(_to: str, data: bytes) -> bytes:
-            (value,) = decode(["uint256"], data[4:])
-            if value == 0:
-                raise ContractLogicError("execution reverted: Zero")
-            return encode(["uint256"], [value])
-
-        ctx = MagicMock()
-        ctx.call.side_effect = multicall_aware(handler)
-        return ctx
-
-    def test_splits_required_and_optional_in_one_round_trip(self):
-        ctx = self._ctx()
-
-        required, optional = _read_batch(
-            ctx, [self._call(ctx, 1), self._call(ctx, 2)], [self._call(ctx, 0)]
-        )
-
-        assert (required, optional) == ([1, 2], [None])
-        ctx.call.assert_called_once()
-
-    def test_failing_required_read_raises_its_revert(self):
-        ctx = self._ctx()
-
-        with pytest.raises(ContractLogicError, match="Zero"):
-            _read_batch(ctx, [self._call(ctx, 1), self._call(ctx, 0)])
 
 
 class TestFuseMarketIdCall:

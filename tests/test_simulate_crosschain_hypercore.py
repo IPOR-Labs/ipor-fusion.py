@@ -41,6 +41,7 @@ from _crosschain_lifecycle import (
     claim,
     prepare_deployed_run,
     redeem_and_recall,
+    required,
     supply,
 )
 from _hypercore_model import market55_model
@@ -156,13 +157,12 @@ def _wire(run: Run, web3_hyperevm) -> PlasmaVault:
         label="whitelist_dispatcher_on_hypercore_vault",
     )
     run.relay()
-    run.csim.observe(
+    hypercore_vault_allowed = run.csim.observe(
         run.spoke_chain_id,
-        "hypercore_vault_allowed",
         lane.dispatcher.is_allowed_vault(HYPERCORE_VAULT),
     )
-    results = run.relay()
-    assert results[run.spoke_chain_id].get("hypercore_vault_allowed") is True
+    run.relay()
+    assert hypercore_vault_allowed.value is True
     return hypercore_vault
 
 
@@ -319,12 +319,12 @@ def _assert_deliveries_within_route_limits(run: Run) -> dict[str, int]:
     lane = run.lane
     assert isinstance(lane, CcipLane)
     hub, spoke = run.hub_chain_id, run.spoke_chain_id
-    run.csim.observe(hub, "route_hub", lane.executor.ccip_route(spoke))
-    run.csim.observe(spoke, "route_spoke", lane.dispatcher.ccip_route(hub))
+    route_hub = run.csim.observe(hub, lane.executor.ccip_route(spoke))
+    route_spoke = run.csim.observe(spoke, lane.dispatcher.ccip_route(hub))
     results = run.relay()
     routes = {
-        spoke: results[hub].get("route_hub"),
-        hub: results[spoke].get("route_spoke"),
+        spoke: route_hub.value,
+        hub: route_spoke.value,
     }
     commands: dict[str, int] = {}
     for index, message in enumerate(run.csim.delivered):
@@ -366,7 +366,7 @@ def test_simulate_crosschain_supply_into_a_hypercore_vault(web3_arb, web3_hypere
     run.remote_vault = hypercore_vault
 
     credited = supply(run)
-    attest(run, tag="initial", observation_label="observation_after_settle")
+    attest(run, tag="initial", observed=required(run.observation_after_settle))
     shares = _deposit(run, credited)
     home = _trade_on_hypercore(run, hypercore_vault, web3_hyperevm, credited)
 

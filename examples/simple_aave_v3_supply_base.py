@@ -253,7 +253,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     #   - sim.add_call(call=X, from_=OWNER) -> X.send(ctx) by the owner/atomist
     #     (or X.calldata to a multisig / timelock).
     #   - sim.execute([action]) -> plasma_vault.execute([action]).send(ctx) by the alpha.
-    #   - sim.observe("key", X) -> X.call(ctx), a plain read.
+    #   - read = sim.observe(X), then read.value -> X.call(ctx), a plain read.
     sim = VaultSimulator(
         web3=web3, vault=preview.plasma_vault, alpha=ALPHA, block=PINNED_BLOCK
     )
@@ -321,13 +321,13 @@ def run_simulation(web3: Web3) -> SimulationResult:
     plan.append("add Aave V3 supply fuse + balance fuse, grant the USDC substrate")
 
     # Read the granted substrate set back so we can assert it is EXACTLY USDC.
-    sim.observe("granted_substrates", plasma_vault.get_market_substrates(AAVE_MARKET))
+    granted_substrates = sim.observe(plasma_vault.get_market_substrates(AAVE_MARKET))
     plan.append("read the granted substrate set back")
 
     # Oracle coverage: the vault must be able to price USDC. A fresh vault's
     # price manager delegates to the global middleware for assets without an
     # override, so this reads the effective price.
-    sim.observe("usdc_price", price_manager.get_asset_price(BASE_USDC))
+    usdc_price_obs = sim.observe(price_manager.get_asset_price(BASE_USDC))
     plan.append("verify oracle coverage for USDC")
 
     # Fund the depositor, then deposit into the vault. The whale -> depositor
@@ -341,8 +341,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.add_call(call=plasma_vault.deposit(DEPOSIT_AMOUNT, DEPOSITOR), from_=DEPOSITOR)
     plan.append("fund the depositor and deposit 1,000 USDC")
 
-    sim.observe("total_assets_after_deposit", plasma_vault.total_assets())
-    sim.observe("vault_usdc_after_deposit", usdc.balance_of(preview.plasma_vault))
+    total_assets_after_deposit = sim.observe(plasma_vault.total_assets())
+    vault_usdc_after_deposit = sim.observe(usdc.balance_of(preview.plasma_vault))
 
     # Strategy: the alpha supplies the deposited USDC to Aave V3, keeping a small
     # idle buffer back to avoid dust-rounding reverts.
@@ -350,9 +350,9 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.execute([build_supply_action(supply_amount)])
     plan.append("alpha supplies ~999 USDC to Aave V3")
 
-    sim.observe("total_assets_after_supply", plasma_vault.total_assets())
-    sim.observe("aave_value_t0", plasma_vault.total_assets_in_market(AAVE_MARKET))
-    sim.observe("vault_usdc_after_supply", usdc.balance_of(preview.plasma_vault))
+    total_assets_after_supply = sim.observe(plasma_vault.total_assets())
+    aave_value_t0 = sim.observe(plasma_vault.total_assets_in_market(AAVE_MARKET))
+    vault_usdc_after_supply_obs = sim.observe(usdc.balance_of(preview.plasma_vault))
 
     # SIMULATION ONLY (time advancement): next_block shifts block.timestamp so a
     # year of Aave interest accrues inside one batch. There is no production
@@ -362,8 +362,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # alone would not move the vault's stored NAV.
     sim.next_block(time_shift_seconds=ONE_YEAR_SECONDS)
     sim.add_call(call=plasma_vault.update_markets_balances([AAVE_MARKET]), from_=ALPHA)
-    sim.observe("aave_value_t1", plasma_vault.total_assets_in_market(AAVE_MARKET))
-    sim.observe("total_assets_t1", plasma_vault.total_assets())
+    aave_value_t1 = sim.observe(plasma_vault.total_assets_in_market(AAVE_MARKET))
+    total_assets_t1 = sim.observe(plasma_vault.total_assets())
     plan.append("advance one year and re-value the Aave position")
 
     log.info("transaction plan:")
@@ -378,15 +378,15 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # recorded observations back and verify the outcome, failing loud on any
     # mismatch. ─────────────────────────────────────────────────────────────
     supply_amount_int = int(supply_amount)
-    usdc_price = result.get("usdc_price")
-    total_after_deposit = result.get("total_assets_after_deposit")
-    total_after_supply = result.get("total_assets_after_supply")
-    vault_usdc_after_supply = result.get("vault_usdc_after_supply")
+    usdc_price = usdc_price_obs.value
+    total_after_deposit = total_assets_after_deposit.value
+    total_after_supply = total_assets_after_supply.value
+    vault_usdc_after_supply = vault_usdc_after_supply_obs.value
 
     _check(usdc_price.amount > 0, "USDC has no oracle price -- vault cannot value it")
     # No unrelated permissions: the granted set is EXACTLY the USDC substrate, and
     # nothing else. Compare as sets (grant order is not guaranteed).
-    granted = {bytes(s) for s in result.get("granted_substrates")}
+    granted = {bytes(s) for s in granted_substrates.value}
     _check(
         granted == {_address_substrate(BASE_USDC)},
         f"unexpected market substrates granted: {sorted(s.hex() for s in granted)}",
@@ -397,7 +397,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
         f"deposit not credited to NAV: {total_after_deposit}",
     )
     _check(
-        result.get("vault_usdc_after_deposit") >= DEPOSIT_AMOUNT,
+        vault_usdc_after_deposit.value >= DEPOSIT_AMOUNT,
         "vault did not receive the deposited USDC",
     )
     # NAV is preserved across the supply: USDC moves into an Aave position ~1:1,
@@ -415,16 +415,16 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # The position shows up in the Aave market valuation right after the supply
     # (>= 99% of supplied; Aave's scaled-balance math rounds down by dust).
     _check(
-        result.get("aave_value_t0") >= supply_amount_int * 99 // 100,
+        aave_value_t0.value >= supply_amount_int * 99 // 100,
         "Aave position undervalued right after supply",
     )
     # After a year the position has appreciated, and NAV reflects the growth.
     _check(
-        result.get("aave_value_t1") > result.get("aave_value_t0"),
+        aave_value_t1.value > aave_value_t0.value,
         "Aave position did not accrue interest over the year",
     )
     _check(
-        result.get("total_assets_t1") > total_after_supply,
+        total_assets_t1.value > total_after_supply,
         "NAV did not reflect the accrued interest",
     )
 
@@ -433,7 +433,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
         usdc_price.amount,
         usdc_price.decimals,
         total_after_supply,
-        result.get("total_assets_t1"),
+        total_assets_t1.value,
         result.gas_used,
     )
     return result

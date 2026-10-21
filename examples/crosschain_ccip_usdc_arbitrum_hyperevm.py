@@ -76,6 +76,7 @@ from ipor_fusion import (
     Command,
     CrosschainLane,
     CrosschainSimulator,
+    LaneObservation,
     PlasmaVault,
     SimulationResult,
     VaultSimulator,
@@ -336,9 +337,10 @@ def _open(web3_arb: Web3, web3_hype: Web3) -> _Flow:
     )
 
 
-def _deposit_and_supply(flow: _Flow, web3_arb: Web3) -> Amount:
+def _deposit_and_supply(flow: _Flow, web3_arb: Web3) -> tuple[Amount, LaneObservation]:
     """Steps 3 and 4: the depositor funds the hub vault, the alpha supplies the
-    spoke. Returns the amount the dispatcher was credited with."""
+    spoke. Returns the amount the dispatcher was credited with and its
+    observation once the transfer settled."""
     lane, hub = flow.lane, flow.hub
     # SIMULATION ONLY: the depositor's USDC is a storage override at the
     # token's balance slot. Live, the depositor already holds USDC.
@@ -359,9 +361,8 @@ def _deposit_and_supply(flow: _Flow, web3_arb: Web3) -> Amount:
         label="deposit_hub_vault",
     )
     # The vault's USDC once the deposit is in and before any of it leaves.
-    flow.simulator.observe(
+    vault_usdc_after_deposit = flow.simulator.observe(
         ARBITRUM_CHAIN_ID,
-        "vault_usdc_after_deposit",
         flow.hub_usdc.balance_of(HUB_VAULT),
     )
     # The supply: the supply fuse moves USDC vault -> executor -> CCIP. CCIP has
@@ -374,38 +375,38 @@ def _deposit_and_supply(flow: _Flow, web3_arb: Web3) -> Amount:
             )
         ]
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "outbound_after_send", lane.outbound_in_flight()
+    outbound_after_send = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.outbound_in_flight()
     )
     flow.advance(BRIDGE_LATENCY)
-    results = flow.relay()
+    flow.relay()
     _check(
-        results[ARBITRUM_CHAIN_ID].get("outbound_after_send") == DEPOSIT_AMOUNT,
+        outbound_after_send.value == DEPOSIT_AMOUNT,
         "the supply did not enter the outbound bucket",
     )
 
     # After the relay: the token leg landed on the spoke, the settlement
     # receipt landed back on the hub, the outbound bucket is empty again.
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "settled_after_supply", lane.settled_remote_balance()
+    settled_after_supply = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.settled_remote_balance()
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "outbound_after_supply", lane.outbound_in_flight()
+    outbound_after_supply = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.outbound_in_flight()
     )
-    flow.simulator.observe(
-        HYPEREVM_CHAIN_ID, "observation_after_supply", lane.observation()
+    observation_after_supply = flow.simulator.observe(
+        HYPEREVM_CHAIN_ID, lane.observation()
     )
-    results = flow.relay()
-    observation = results[HYPEREVM_CHAIN_ID].get("observation_after_supply")
+    flow.relay()
+    observation = observation_after_supply.value
     credited = Amount(observation.tracked_idle)
-    vault_after_deposit = results[ARBITRUM_CHAIN_ID].get("vault_usdc_after_deposit")
+    vault_after_deposit = vault_usdc_after_deposit.value
     _check(0 < credited <= DEPOSIT_AMOUNT, "nothing was credited on the spoke")
     _check(
-        results[ARBITRUM_CHAIN_ID].get("settled_after_supply") == credited,
+        settled_after_supply.value == credited,
         "the hub's settled bucket disagrees with the spoke's credit",
     )
     _check(
-        results[ARBITRUM_CHAIN_ID].get("outbound_after_supply") == 0,
+        outbound_after_supply.value == 0,
         "the outbound bucket did not clear",
     )
     log.info("supply: sent=%d credited=%d", DEPOSIT_AMOUNT, credited)
@@ -416,15 +417,16 @@ def _deposit_and_supply(flow: _Flow, web3_arb: Web3) -> Amount:
             "vault_usdc_after_deposit": int(vault_after_deposit),
         }
     )
-    return credited
+    return credited, observation
 
 
-def _attest(flow: _Flow, tag: str, observation_label: str, *, hub_idle: int = 0) -> int:
-    """Step 5 (and 8 and 10): the two-key attestation of the spoke observation
-    recorded under ``observation_label``, then the alpha's NAV refresh.
-    Returns the attested settled balance."""
+def _attest(
+    flow: _Flow, tag: str, observation: LaneObservation, *, hub_idle: int = 0
+) -> int:
+    """Step 5 (and 8 and 10): the two-key attestation of a spoke
+    ``observation``, then the alpha's NAV refresh. Returns the attested
+    settled balance."""
     lane, hub = flow.lane, flow.hub
-    observation = flow.simulator.results[HYPEREVM_CHAIN_ID].get(observation_label)
     # The proposal is the dispatcher snapshot at the spoke block it was read
     # in, stamped with that block's number and time; it must still match the
     # dispatcher's state version when approved.
@@ -459,18 +461,14 @@ def _attest(flow: _Flow, tag: str, observation_label: str, *, hub_idle: int = 0)
         from_=ALPHA,
         label=f"update_balances_{tag}",
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, f"executor_balance_{tag}", lane.get_balance()
+    executor_nav = flow.simulator.observe(ARBITRUM_CHAIN_ID, lane.get_balance())
+    market_nav = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, flow.hub_vault.total_assets_in_market(CROSSCHAIN_MARKET)
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID,
-        f"market_total_{tag}",
-        flow.hub_vault.total_assets_in_market(CROSSCHAIN_MARKET),
-    )
-    results = flow.relay()
+    flow.relay()
     attested = int(observation.accounted_balance)
-    executor_balance = results[ARBITRUM_CHAIN_ID].get(f"executor_balance_{tag}")
-    market_total = results[ARBITRUM_CHAIN_ID].get(f"market_total_{tag}")
+    executor_balance = executor_nav.value
+    market_total = market_nav.value
     # The executor's NAV is the attested remote balance plus whatever idle it
     # holds on the hub; the vault's market total follows it.
     _check(
@@ -498,25 +496,25 @@ def _deposit_into_spoke_vault(flow: _Flow, credited: Amount) -> Shares:
     hub.execute([lane.send_command(deposit_command(credited))])
     flow.advance(BRIDGE_LATENCY)
     flow.relay()
-    flow.simulator.observe(
-        HYPEREVM_CHAIN_ID, "spoke_shares", flow.spoke_vault.balance_of(EXECUTOR)
+    spoke_shares = flow.simulator.observe(
+        HYPEREVM_CHAIN_ID, flow.spoke_vault.balance_of(EXECUTOR)
     )
-    flow.simulator.observe(
-        HYPEREVM_CHAIN_ID, "observation_after_deposit", lane.observation()
+    observation_after_deposit = flow.simulator.observe(
+        HYPEREVM_CHAIN_ID, lane.observation()
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "active_after_deposit", lane.has_active_command()
+    active_after_deposit = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.has_active_command()
     )
-    results = flow.relay()
-    shares = Shares(results[HYPEREVM_CHAIN_ID].get("spoke_shares"))
-    observation = results[HYPEREVM_CHAIN_ID].get("observation_after_deposit")
+    flow.relay()
+    shares = spoke_shares.value
+    observation = observation_after_deposit.value
     _check(shares > 0, "the spoke vault issued no shares to the dispatcher")
     _check(
         observation.tracked_idle == 0, "the dispatcher still holds idle after DEPOSIT"
     )
     # The command slot is free again only once the hub processed the ACK.
     _check(
-        results[ARBITRUM_CHAIN_ID].get("active_after_deposit") is False,
+        active_after_deposit.value is False,
         "the DEPOSIT command is still active on the hub",
     )
     log.info("deposit: shares=%d", shares)
@@ -524,8 +522,11 @@ def _deposit_into_spoke_vault(flow: _Flow, credited: Amount) -> Shares:
     return shares
 
 
-def _redeem_from_spoke_vault(flow: _Flow, shares: Shares) -> Amount:
-    """Step 7: REDEEM the shares; the proceeds become the dispatcher's idle."""
+def _redeem_from_spoke_vault(
+    flow: _Flow, shares: Shares
+) -> tuple[Amount, LaneObservation]:
+    """Step 7: REDEEM the shares; the proceeds become the dispatcher's idle.
+    Returns that idle and the dispatcher's observation after the REDEEM."""
     lane, hub = flow.lane, flow.hub
     # A later spoke block: the spoke vault's redemption delay separates the
     # deposit and the redeem.
@@ -533,33 +534,30 @@ def _redeem_from_spoke_vault(flow: _Flow, shares: Shares) -> Amount:
     hub.execute([lane.send_command(redeem_command(shares))])
     flow.advance(BRIDGE_LATENCY)
     flow.relay()
-    flow.simulator.observe(
-        HYPEREVM_CHAIN_ID, "observation_after_redeem", lane.observation()
+    observation_after_redeem = flow.simulator.observe(
+        HYPEREVM_CHAIN_ID, lane.observation()
     )
-    flow.simulator.observe(
+    spoke_shares_after_redeem = flow.simulator.observe(
         HYPEREVM_CHAIN_ID,
-        "spoke_shares_after_redeem",
         flow.spoke_vault.balance_of(EXECUTOR),
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "active_after_redeem", lane.has_active_command()
+    active_after_redeem = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.has_active_command()
     )
-    results = flow.relay()
-    remote_idle = Amount(
-        results[HYPEREVM_CHAIN_ID].get("observation_after_redeem").tracked_idle
-    )
+    flow.relay()
+    remote_idle = observation_after_redeem.value.tracked_idle
     _check(
-        results[HYPEREVM_CHAIN_ID].get("spoke_shares_after_redeem") == 0,
+        spoke_shares_after_redeem.value == 0,
         "shares remain after REDEEM",
     )
     _check(remote_idle > 0, "REDEEM returned nothing to the dispatcher")
     _check(
-        results[ARBITRUM_CHAIN_ID].get("active_after_redeem") is False,
+        active_after_redeem.value is False,
         "the REDEEM command is still active on the hub",
     )
     log.info("redeem: remote_idle=%d", remote_idle)
     flow.numbers["remote_idle"] = int(remote_idle)
-    return remote_idle
+    return remote_idle, observation_after_redeem.value
 
 
 def _recall_and_claim(flow: _Flow, remote_idle: Amount) -> None:
@@ -572,22 +570,22 @@ def _recall_and_claim(flow: _Flow, remote_idle: Amount) -> None:
     hub.execute([lane.recall(amount=remote_idle, min_return=remote_idle)])
     flow.advance(BRIDGE_LATENCY)
     flow.relay()
-    flow.simulator.observe(ARBITRUM_CHAIN_ID, "idle_after_return", lane.idle_ledger())
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "settled_after_return", lane.settled_remote_balance()
+    idle_after_return = flow.simulator.observe(ARBITRUM_CHAIN_ID, lane.idle_ledger())
+    settled_after_return = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.settled_remote_balance()
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "pending_after_return", lane.pending_transfer_count()
+    pending_after_return = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, lane.pending_transfer_count()
     )
-    flow.simulator.observe(
-        HYPEREVM_CHAIN_ID, "observation_after_return", lane.observation()
+    observation_after_return = flow.simulator.observe(
+        HYPEREVM_CHAIN_ID, lane.observation()
     )
-    results = flow.relay()
-    idle = int(results[ARBITRUM_CHAIN_ID].get("idle_after_return"))
-    settled = int(results[ARBITRUM_CHAIN_ID].get("settled_after_return"))
+    flow.relay()
+    idle = idle_after_return.value
+    settled = settled_after_return.value
     _check(0 < idle <= remote_idle, "the recall credited nothing on the hub")
     _check(
-        results[ARBITRUM_CHAIN_ID].get("pending_after_return") == 0,
+        pending_after_return.value == 0,
         "a transfer is still pending",
     )
     # The executor debits the settled bucket by the amount the spoke sent, so
@@ -601,7 +599,7 @@ def _recall_and_claim(flow: _Flow, remote_idle: Amount) -> None:
     # Step 10a: the dispatcher observes zero; the attesters mark it. The
     # executor's NAV is then exactly the idle it holds.
     flow.advance(flow.min_update_interval)
-    _attest(flow, "residue", "observation_after_return", hub_idle=idle)
+    _attest(flow, "residue", observation_after_return.value, hub_idle=idle)
 
     # Step 10b: the claim pulls the idle from the executor into the vault.
     hub.execute([lane.claim(Amount(idle))])
@@ -610,22 +608,21 @@ def _recall_and_claim(flow: _Flow, remote_idle: Amount) -> None:
         from_=ALPHA,
         label="update_balances_final",
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "vault_usdc_after", flow.hub_usdc.balance_of(HUB_VAULT)
+    vault_usdc_after = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, flow.hub_usdc.balance_of(HUB_VAULT)
     )
-    flow.simulator.observe(
-        ARBITRUM_CHAIN_ID, "executor_usdc_after", flow.hub_usdc.balance_of(EXECUTOR)
+    executor_usdc_after = flow.simulator.observe(
+        ARBITRUM_CHAIN_ID, flow.hub_usdc.balance_of(EXECUTOR)
     )
-    flow.simulator.observe(ARBITRUM_CHAIN_ID, "idle_after_claim", lane.idle_ledger())
-    flow.simulator.observe(ARBITRUM_CHAIN_ID, "nav_final", lane.get_balance())
-    flow.simulator.observe(
+    idle_after_claim = flow.simulator.observe(ARBITRUM_CHAIN_ID, lane.idle_ledger())
+    nav_final = flow.simulator.observe(ARBITRUM_CHAIN_ID, lane.get_balance())
+    market_final = flow.simulator.observe(
         ARBITRUM_CHAIN_ID,
-        "market_final",
         flow.hub_vault.total_assets_in_market(CROSSCHAIN_MARKET),
     )
-    results = flow.relay()
+    flow.relay()
     vault_after_deposit = flow.numbers["vault_usdc_after_deposit"]
-    vault_after = int(results[ARBITRUM_CHAIN_ID].get("vault_usdc_after"))
+    vault_after = vault_usdc_after.value
     # The vault holds what it held after the deposit, minus whatever the round
     # trip cost (bridge fees, the spoke vault's fee); the executor keeps nothing
     # and the market values to zero.
@@ -634,18 +631,16 @@ def _recall_and_claim(flow: _Flow, remote_idle: Amount) -> None:
         f"vault USDC {vault_after} != {vault_after_deposit} - {DEPOSIT_AMOUNT} sent + {idle} back",
     )
     _check(
-        results[ARBITRUM_CHAIN_ID].get("executor_usdc_after") == 0,
+        executor_usdc_after.value == 0,
         "the executor still holds USDC",
     )
     _check(
-        results[ARBITRUM_CHAIN_ID].get("idle_after_claim") == 0,
+        idle_after_claim.value == 0,
         "the idle ledger is not empty",
     )
+    _check(nav_final.value == 0, "the executor NAV is not zero")
     _check(
-        results[ARBITRUM_CHAIN_ID].get("nav_final") == 0, "the executor NAV is not zero"
-    )
-    _check(
-        results[ARBITRUM_CHAIN_ID].get("market_final") == 0,
+        market_final.value == 0,
         "the crosschain market is not zero",
     )
     flow.numbers.update(
@@ -678,16 +673,16 @@ def run_simulation(web3_arb: Web3, web3_hype: Web3) -> dict[str, int]:
     ):
         log.info("  %d. %s", i, step)
 
-    credited = _deposit_and_supply(flow, web3_arb)
-    _attest(flow, "initial", "observation_after_supply")
+    credited, observation_after_supply = _deposit_and_supply(flow, web3_arb)
+    _attest(flow, "initial", observation_after_supply)
     shares = _deposit_into_spoke_vault(flow, credited)
-    remote_idle = _redeem_from_spoke_vault(flow, shares)
+    remote_idle, observation_after_redeem = _redeem_from_spoke_vault(flow, shares)
     # Step 8: mark the redeemed amount before recalling it. The dispatcher
     # carries a deposit at cost and the spoke vault's fee or a loss shows only
     # at REDEEM; attesting it now keeps it out of the settled bucket, where a
     # full recall could otherwise leave an un-attestable residue.
     flow.advance(flow.min_update_interval)
-    _attest(flow, "redeemed", "observation_after_redeem")
+    _attest(flow, "redeemed", observation_after_redeem)
     _recall_and_claim(flow, remote_idle)
     return flow.numbers
 

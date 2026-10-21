@@ -17,20 +17,22 @@ Example -- bridge from a source vault and let the dispatcher settle::
     sim.add_chain(8453, web3_base, block=BASE_BLOCK)
     sim.fund_native(8453, DISPATCHER, 10**17)   # the dispatcher pays its receipts
     src.execute([supply_fuse.enter(...)])
-    sim.observe(1, "settled", executor.settled_remote_balance(8453))
-    results = sim.relay()
-    assert results[1].get("settled") > 0
+    settled = sim.observe(1, executor.settled_remote_balance(8453))
+    sim.relay()
+    assert settled.value > 0
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TypeVar
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.simulation import (
+    SimulationObservation,
     SimulationResult,
     VaultSimulator,
     erc20_balance_slot,
@@ -42,6 +44,8 @@ from ipor_fusion.crosschain.transport import (
 )
 from ipor_fusion.errors import SimulationRunError
 from ipor_fusion.types import ChainId, PlasmaVaultAddress
+
+T = TypeVar("T")
 
 #: What the synthetic token source holds: enough for any test amount.
 SYNTHETIC_BALANCE = 2**96
@@ -111,9 +115,12 @@ class CrosschainSimulator:
         are usually near empty."""
         self._chains[chain_id].with_state_override(address, balance=hex(wei))
 
-    def observe(self, chain_id: ChainId, label: str, call: Call) -> None:
-        """Queue a labelled read on ``chain_id`` (see ``VaultSimulator.observe``)."""
-        self._chains[chain_id].observe(label, call)
+    def observe(
+        self, chain_id: ChainId, call: Call[T], *, label: str | None = None
+    ) -> SimulationObservation[T]:
+        """Queue a read on ``chain_id`` (see ``VaultSimulator.observe``); its
+        value comes from the latest relay round's run of that chain."""
+        return self._chains[chain_id].observe(call, label=label)
 
     def relay(self, max_rounds: int = 8) -> dict[ChainId, SimulationResult]:
         """Run every chain and deliver messages until nothing is in flight.

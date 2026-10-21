@@ -16,6 +16,7 @@ from ipor_fusion import (
     Multicall3,
     PlasmaVault,
     PlasmaVaultAddress,
+    VaultSimulator,
     Web3Context,
     fetch_unpriceable_priced_tokens,
 )
@@ -72,6 +73,18 @@ def roles_do_not_mix(ctx: Web3Context, vault: PlasmaVaultAddress) -> None:
 
 def selectors_are_not_chain_ids(factory: CcipCrosschainFactory) -> None:
     factory.chain_id_of_selector(42161)  # pyright: ignore[reportArgumentType]
+
+
+def batch_values_keep_their_types(
+    ctx: Web3Context, vault: PlasmaVaultAddress, sim: VaultSimulator
+) -> None:
+    batch = Multicall3(ctx).batch()
+    name = batch.try_add(PlasmaVault(vault).name())
+    batch.run()
+    required: str = name.value  # pyright: ignore[reportAssignmentType]
+    assets: Amount = sim.observe(PlasmaVault(vault).name()).value  # pyright: ignore[reportAssignmentType]
+    sim.observe("label", PlasmaVault(vault).total_assets())  # pyright: ignore[reportCallIssue]
+    del required, assets
 
 
 def options_are_keyword_only(ctx: Web3Context, oracle: ChecksumAddress) -> None:

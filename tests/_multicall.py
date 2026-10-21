@@ -8,7 +8,8 @@ results re-encoded the way the contract returns them. A handler raising
 
 `SequentialMulticall` stands in for `Multicall3` where a test mocks contract
 wrappers (MagicMock `Call`s with `.call.return_value`): it runs each call on
-its own, exactly like the production fallback on chains without Multicall3.
+its own, exactly like the production fallback on chains without Multicall3,
+and so does each `Multicall3Batch` it starts.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion.core.multicall import MULTICALL3_ADDRESS
+from ipor_fusion.core.multicall import MULTICALL3_ADDRESS, Multicall3Batch
 from ipor_fusion.errors import EmptyCallResultError
 
 AGGREGATE3_SELECTOR = function_signature_to_4byte_selector(
@@ -81,6 +82,13 @@ class SequentialMulticall:
 
     def __init__(self, ctx: Any, *args: Any, **kwargs: Any):
         self._ctx = ctx
+
+    def _fetch(self, calls: Sequence[Any]) -> None:
+        """No aggregate3 results: every batch read takes the per-call path."""
+        return None
+
+    def batch(self) -> Multicall3Batch:
+        return Multicall3Batch(self)  # pyright: ignore[reportArgumentType]
 
     def aggregate(self, calls: Sequence[Any]) -> list[Any]:
         return [call.call(self._ctx) for call in calls]

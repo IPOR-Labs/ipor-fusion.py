@@ -326,8 +326,8 @@ class TestLegacyOracleIsContextFree:
         assert Multicall3(batch_ctx).aggregate([call]) == [expected]
 
         sim = VaultSimulator(MagicMock())
-        sim.observe("price", call)
-        result = sim._parse_response(
+        price = sim.observe(call)
+        sim._parse_response(
             simulate_response(
                 returnData=HexBytes(raw).to_0x_hex(),
                 status="0x1",
@@ -335,4 +335,4 @@ class TestLegacyOracleIsContextFree:
                 logs=[],
             )
         )
-        assert result.get("price") == expected
+        assert price.value == expected

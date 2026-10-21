@@ -138,6 +138,56 @@ placeholder wrapper.
 | `executor.parse_balance_proposed(log)` / `find_balance_proposed(logs)` | `...(log, chain_id=...)` / `...(logs, chain_id=...)` |
 | `CcipLane(executor=, dispatcher=, spoke_chain_id=, ...)` | `CcipLane(hub_ctx=, spoke_ctx=, executor=, dispatcher=, ...)` (same for `StargateLane`) |
 | `transport.executor(ctx, address)` / `transport.dispatcher(ctx, address)` | `transport.executor(address)` / `transport.dispatcher(address)` |
+| `sim.observe("label", call)` ... `result.get("label")` | `read = sim.observe(call)` ... `read.value` |
+| `csim.observe(chain_id, "label", call)` ... `results[chain_id].get("label")` | `read = csim.observe(chain_id, call)` ... `read.value` |
+| `result.observations`, `SimulatedCallResult.decoded` | gone: keep the observation, or `call.decode(bytes(r.return_data))` |
+| `a, b = Multicall3(ctx).aggregate(cast(list[Call[Any]], [x, y]))` | `batch = Multicall3(ctx).batch()`; `a = batch.add(x)`; `b = batch.add(y)`; `batch.run()`; `a.value`, `b.value` |
+
+### Typed batches and simulation observations
+
+Reads of different types keep their types. `Multicall3(ctx).batch()` returns a
+`Multicall3Batch`: `batch.add(call)` queues a `Call[T]` and returns a
+`BatchValue[T]`; `batch.try_add(call)` returns a `BatchValue[T | None]`. One
+`batch.run()` executes every queued read in one `eth_call` per `batch_size` reads
+(one per read where Multicall3 is not deployed), exactly as `aggregate` does for the
+same calls. A failing `add` read raises from `run()` what `Call.call(ctx)` would; a
+failing `try_add` read is `None`, as in `try_aggregate`. Each read chooses its own
+failure handling, so a mixed batch of required and optional reads is one round trip
+and every `value` says in its type whether it can be `None`. Reading `value` before
+`run()` raises `RuntimeError`, and a batch runs once. `aggregate` / `try_aggregate`
+stay for lists of one type.
+
+```python
+batch = Multicall3(ctx).batch()
+assets = batch.add(vault.total_assets())    # BatchValue[Amount]
+fuses = batch.add(vault.get_fuses())        # BatchValue[list[FuseAddress]]
+name = batch.try_add(vault.name())          # BatchValue[str | None]
+batch.run()
+assets.value, fuses.value, name.value
+```
+
+`VaultSimulator.observe(call, *, label=None)` returns a `SimulationObservation[T]`
+instead of the simulator, so it no longer chains, and its label is optional (it
+names the read in `result.calls` and in failures). After `run()`,
+`observation.value` is the read decoded as its `Call` decodes it, from the latest
+run; `observation.result` is its `SimulatedCallResult`.
+`CrosschainSimulator.observe(chain_id, call, *, label=None)` returns the same,
+resolved by every relay round. `SimulationResult.get`, `SimulationResult.observations`
+and `SimulatedCallResult.decoded` are removed: a list of results of many types has no
+honest element type, so the typed value lives on the observation. A write queued with
+`add_call` is no longer decoded; decode its return data with the `Call` you queued.
+
+```python
+before = sim.observe(vault.total_assets())   # SimulationObservation[Amount]
+sim.execute([action])
+after = sim.observe(vault.total_assets())
+sim.run()
+after.value - before.value
+```
+
+`Call` is a frozen dataclass and covariant in its result type: assigning to a
+field raises, and a `Call[Amount]` is a `Call[int]` and a `Call[object]`, so a
+`Sequence[Call[object]]` takes any calls without a cast.
 
 ### Renamed methods
 
@@ -775,5 +825,10 @@ are listed with a link.
 - `LendingMarketHealth.substrate_id` for a Morpho market is `0x`-prefixed (the JSON
   documents already were).
 - `TransactionError.tx_hash` is `0x`-prefixed.
+- An observed simulation read that reverted raises `SimulationError` from its
+  `value`, one that returned no data raises `EmptyCallResultError`, and one its
+  decoder cannot read raises the decoder's error. 3.x left it out of
+  `result.observations` (so `result.get(label)` raised `KeyError`) or reported an
+  undecodable read as `None`, indistinguishable from a read that returns `None`.
 - Saved config entries are checksummed when loaded; the MCP `vault_add` tool rejects
   a value that is not an address.

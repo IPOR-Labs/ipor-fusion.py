@@ -8,12 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Literal, cast
+from typing import Literal
 
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.plasma_vault import PlasmaVault
@@ -127,16 +126,15 @@ def read_hypercore_transfer_snapshot(
             f"no HyperCorePendingReader known for chain {ctx.chain_id}"
         )
     reader = HyperCoreReader()
-    calls = cast(
-        list[Call[Any]],
-        [
-            reader.core_user_exists(vault),
-            reader.spot_balance(vault, token_index),
-            ERC20(evm_token).balance_of(vault),
-            HyperCorePendingReader(vault, pending_reader).pending_state(),
-        ],
+    batch = Multicall3(pinned).batch()
+    exists = batch.add(reader.core_user_exists(vault))
+    spot_read = batch.add(reader.spot_balance(vault, token_index))
+    evm_balance = batch.add(ERC20(evm_token).balance_of(vault))
+    pending_read = batch.add(
+        HyperCorePendingReader(vault, pending_reader).pending_state()
     )
-    exists, spot, evm_balance, pending = Multicall3(pinned).aggregate(calls)
+    batch.run()
+    spot, pending = spot_read.value, pending_read.value
     return HyperCoreTransferSnapshot(
         block_number=block,
         vault=vault,
@@ -145,10 +143,10 @@ def read_hypercore_transfer_snapshot(
         action_nonce=pending.action_nonce,
         pending=pending.pending,
         settled=pending.settled,
-        core_user_exists=exists,
+        core_user_exists=exists.value,
         core_total_wei=spot.total,
         core_hold_wei=spot.hold,
-        evm_balance=evm_balance,
+        evm_balance=evm_balance.value,
     )
 
 
@@ -263,20 +261,13 @@ def read_hypercore_evm_exit_ceiling(
     """
     pinned, _ = _pinned_context(ctx)
     pv = PlasmaVault(vault)
-    shares, asset = Multicall3(pinned).aggregate(
-        cast(
-            list[Call[Any]],
-            [pv.balance_of(holder), pv.underlying_asset_address()],
-        )
-    )
+    batch = Multicall3(pinned).batch()
+    shares_read = batch.add(pv.balance_of(holder))
+    asset = batch.add(pv.underlying_asset_address())
+    batch.run()
+    shares = shares_read.value
     share_assets, idle = Multicall3(pinned).aggregate(
-        cast(
-            list[Call[Any]],
-            [
-                pv.convert_to_assets(shares),
-                ERC20(asset).balance_of(vault),
-            ],
-        )
+        [pv.convert_to_assets(shares), ERC20(asset.value).balance_of(vault)]
     )
     return HyperCoreEvmExitCeiling(
         shares=shares,

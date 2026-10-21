@@ -140,12 +140,12 @@ payload = vault.execute([action]).calldata   # raw bytes for an external signer
 
 # Simulate first via eth_simulateV1 (no local node); alpha is the account allowed to call execute()
 sim = VaultSimulator(ctx.web3, vault=vault.address, alpha=Web3.to_checksum_address("0xALPHA"))
-sim.observe("before", vault.total_assets())
+before = sim.observe(vault.total_assets())      # SimulationObservation[Amount]
 sim.execute([action])
-sim.observe("after", vault.total_assets())
+after = sim.observe(vault.total_assets())
 result = sim.run()
 if result.all_success:
-    print(result.get("after") - result.get("before"))
+    print(after.value - before.value)
 ```
 
 ## CLI Quickstart

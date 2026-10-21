@@ -432,10 +432,9 @@ class ExternalStateExecutor(ContractWrapper):
         beforehand saves a reverted transaction rather than adding safety.
 
         `None` means nothing is pending: a successful `confirm_balance` DELETES
-        the slot, so that is the normal state between marks, not an error.
-        Under `VaultSimulator.observe` that sentinel is ambiguous -- the
-        simulator reports a failed decode as `None` too -- so distinguish the
-        two with `.call(ctx)` rather than an observed read.
+        the slot, so that is the normal state between marks, not an error. A
+        failed read raises instead, from `.call(ctx)` and from an observed
+        read's ``value`` alike, so `None` is never a failure.
 
         The hash is bound to a chain: ``chain_id`` is the chain the proposal
         lives on, captured in the decoder. Executing the Call on a context of

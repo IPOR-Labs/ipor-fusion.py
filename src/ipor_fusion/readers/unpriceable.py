@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Any
 
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -265,20 +264,20 @@ def _unpriceable(
     successful Multicall3 batch is a deterministic revert at that block; a
     transport failure raises instead of flagging.
     """
-    ordered = sorted(set(tokens))
-    calls: list[Call[Any]] = [
-        call
-        for token in ordered
-        for call in (
-            oracle.get_source_of_asset_price(token),
-            oracle.get_asset_price(token),
+    batch = Multicall3(ctx).batch()
+    reads = [
+        (
+            token,
+            batch.try_add(oracle.get_source_of_asset_price(token)),
+            batch.try_add(oracle.get_asset_price(token)),
         )
+        for token in sorted(set(tokens))
     ]
-    reads = Multicall3(ctx).try_aggregate(calls)
+    batch.run()
     return {
-        token: source if source != _ZERO else None
-        for token, source, price in zip(ordered, reads[::2], reads[1::2], strict=True)
-        if price is None
+        token: source.value if source.value != _ZERO else None
+        for token, source, price in reads
+        if price.value is None
     }
 
 

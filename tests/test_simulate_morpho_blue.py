@@ -38,12 +38,12 @@ def test_simulate_supply_and_withdraw_morpho_blue(web3_eth):
         web3=web3_eth, vault=VAULT, alpha=ALPHA, block=hex(PINNED_BLOCK)
     )
 
-    sim.observe("usdc_before", usdc.balance_of(VAULT))
+    usdc_before_obs = sim.observe(usdc.balance_of(VAULT))
     sim.execute([supply_action])
-    sim.observe("usdc_after_supply", usdc.balance_of(VAULT))
+    usdc_after_supply_obs = sim.observe(usdc.balance_of(VAULT))
     sim.execute([withdraw_action])
-    sim.observe("usdc_after_withdraw", usdc.balance_of(VAULT))
-    sim.observe("total_assets", plasma_vault.total_assets())
+    usdc_after_withdraw_obs = sim.observe(usdc.balance_of(VAULT))
+    total_assets = sim.observe(plasma_vault.total_assets())
 
     result = sim.run()
 
@@ -51,17 +51,16 @@ def test_simulate_supply_and_withdraw_morpho_blue(web3_eth):
         "simulation result: success=%s gas_used=%s", result.success, result.gas_used
     )
     log.info("revert_reason: %s", result.revert_reason)
-    log.info("observations: %s", result.observations)
 
     assert_all_success(result)
 
-    usdc_before = result.get("usdc_before")
-    usdc_after_supply = result.get("usdc_after_supply")
-    usdc_after_withdraw = result.get("usdc_after_withdraw")
+    usdc_before = usdc_before_obs.value
+    usdc_after_supply = usdc_after_supply_obs.value
+    usdc_after_withdraw = usdc_after_withdraw_obs.value
 
     assert usdc_before - usdc_after_supply == SUPPLY_AMOUNT
     assert usdc_after_withdraw - usdc_after_supply > 999_000000
-    assert result.get("total_assets") > 0
+    assert total_assets.value > 0
 
 
 def test_simulate_revert_surfaces_reason(web3_eth):

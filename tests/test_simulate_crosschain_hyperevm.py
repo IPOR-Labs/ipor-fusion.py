@@ -21,6 +21,7 @@ from _crosschain_lifecycle import (
     Run,
     assert_reverted,
     attest,
+    required,
     run_lifecycle,
     supply,
 )
@@ -353,8 +354,7 @@ def test_simulate_contract_creation(web3_arb):
         nonce=0,
         label="deploy_constant",
     )
-    simulator.observe(
-        "constant",
+    constant = simulator.observe(
         Call(to=deployed, data=b"", output_types=["uint256"]),
     )
 
@@ -363,7 +363,7 @@ def test_simulate_contract_creation(web3_arb):
     result.raise_for_failure()
     assert result.calls[0].return_data == runtime
     assert result.calls[0].predicted_address == deployed
-    assert result.get("constant") == 42
+    assert constant.value == 42
 
 
 def test_compile_and_deploy_crosschain_fuses(web3_arb):
@@ -388,21 +388,26 @@ def test_compile_and_deploy_crosschain_fuses(web3_arb):
     }
     market_id_call = bytes(Web3.keccak(text="MARKET_ID()")[:4])
     version_call = bytes(Web3.keccak(text="VERSION()")[:4])
-    for contract, address in deployed.items():
-        simulator.observe(
-            f"market_id_{contract.name}",
-            Call(to=address, data=market_id_call, output_types=["uint256"]),
+    market_ids = {
+        contract: simulator.observe(
+            Call[int](to=address, data=market_id_call, output_types=["uint256"]),
+            label=f"market_id_{contract.name}",
         )
-        if contract.name != "CrosschainBalanceFuse":
-            simulator.observe(
-                f"version_{contract.name}",
-                Call(
-                    to=address,
-                    data=version_call,
-                    output_types=["address"],
-                    decoder=Web3.to_checksum_address,
-                ),
-            )
+        for contract, address in deployed.items()
+    }
+    versions = {
+        contract: simulator.observe(
+            Call(
+                to=address,
+                data=version_call,
+                output_types=["address"],
+                decoder=Web3.to_checksum_address,
+            ),
+            label=f"version_{contract.name}",
+        )
+        for contract, address in deployed.items()
+        if contract.name != "CrosschainBalanceFuse"
+    }
 
     result = simulator.run()
 
@@ -411,9 +416,9 @@ def test_compile_and_deploy_crosschain_fuses(web3_arb):
         deployment = result.calls[index]
         assert deployment.predicted_address == deployed[contract]
         assert artifacts[contract].matches_runtime(deployment.return_data)
-        assert result.get(f"market_id_{contract.name}") == market_id
+        assert market_ids[contract].value == market_id
         if contract.name != "CrosschainBalanceFuse":
-            assert result.get(f"version_{contract.name}") == deployed[contract]
+            assert versions[contract].value == deployed[contract]
 
 
 def _ctx(web3, chain_id: ChainId, block: int) -> Web3Context:
@@ -586,13 +591,12 @@ def _deploy_source_generation(
     spoke_factory = CcipCrosschainFactory(factory_address)
     # The factory's own timelock (24 h in source, 300 s on the patched test
     # builds), so a patched checkout rehearses unchanged.
-    simulator.observe(ARBITRUM, "source_config_delay", hub_factory.config_delay())
-    simulator.observe(HYPEREVM, "source_config_delay", spoke_factory.config_delay())
-    results = simulator.relay()
-    delays = {
-        chain_id: results[chain_id].get("source_config_delay")
-        for chain_id in (ARBITRUM, HYPEREVM)
+    delay_reads = {
+        ARBITRUM: simulator.observe(ARBITRUM, hub_factory.config_delay()),
+        HYPEREVM: simulator.observe(HYPEREVM, spoke_factory.config_delay()),
     }
+    simulator.relay()
+    delays = {chain_id: read.value for chain_id, read in delay_reads.items()}
     assert delays[ARBITRUM] == delays[HYPEREVM] > 0
     config_delay = delays[ARBITRUM]
     executor_code_hash = _configure_source_factory(
@@ -617,41 +621,37 @@ def _deploy_source_generation(
         route_template=_source_route(ARBITRUM_SELECTOR, ROUTE_MAX_FEES[1]),
         config_delay=config_delay,
     )
-    for chain_id, factory, peer in (
-        (ARBITRUM, hub_factory, HYPEREVM),
-        (HYPEREVM, spoke_factory, ARBITRUM),
-    ):
-        simulator.observe(
-            chain_id, "source_creation_codes", factory.creation_codes_configured()
+    reads = {
+        chain_id: (
+            simulator.observe(chain_id, factory.creation_codes_configured()),
+            simulator.observe(chain_id, factory.executor_creation_code_hash()),
+            simulator.observe(chain_id, factory.asset_config(asset.asset_id)),
+            simulator.observe(chain_id, factory.ccip_route(peer)),
+            simulator.observe(chain_id, factory.dispatcher_deployment_gas_limit(peer)),
         )
-        simulator.observe(
-            chain_id, "source_executor_code_hash", factory.executor_creation_code_hash()
+        for chain_id, factory, peer in (
+            (ARBITRUM, hub_factory, HYPEREVM),
+            (HYPEREVM, spoke_factory, ARBITRUM),
         )
-        simulator.observe(
-            chain_id, "source_factory_asset", factory.asset_config(asset.asset_id)
-        )
-        simulator.observe(chain_id, "source_factory_route", factory.ccip_route(peer))
-        simulator.observe(
-            chain_id,
-            "source_deployment_gas_limit",
-            factory.dispatcher_deployment_gas_limit(peer),
-        )
+    }
     results = simulator.relay()
     for chain_id, index, peer_selector in (
         (ARBITRUM, 0, HYPEREVM_SELECTOR),
         (HYPEREVM, 1, ARBITRUM_SELECTOR),
     ):
-        result = results[chain_id]
-        result.raise_for_failure()
-        assert result.get("source_creation_codes") is True
-        assert result.get("source_executor_code_hash") == executor_code_hash
-        assert result.get("source_deployment_gas_limit") == V3.ticket_gas_limit
-        assert result.get("source_factory_asset") == (
+        results[chain_id].raise_for_failure()
+        creation_codes, code_hash, factory_asset, factory_route, gas_limit = reads[
+            chain_id
+        ]
+        assert creation_codes.value is True
+        assert code_hash.value == executor_code_hash
+        assert gas_limit.value == V3.ticket_gas_limit
+        assert factory_asset.value == (
             asset.tokens[index],
             asset.decimals,
             True,
         )
-        route = result.get("source_factory_route")
+        route = factory_route.value
         assert route.enabled
         assert route.peer == factory_address
         assert route.chain_selector == peer_selector
@@ -715,27 +715,29 @@ def _feed_read(ctx, address, signature, output_types):
 def _assert_configured_prices(
     simulator, contexts, instances, asset: RehearsalAsset, factory: ChecksumAddress
 ):
+    reads = []
     for index, ctx in enumerate(contexts):
         manager = PriceOracleMiddlewareManager(instances[index].price_manager)
-        simulator.observe(
-            ctx.chain_id, "asset_price", manager.get_asset_price(asset.tokens[index])
-        )
-        simulator.observe(
-            ctx.chain_id,
-            "asset_source",
-            manager.get_source_of_asset_price(asset.tokens[index]),
-        )
-        simulator.observe(
-            ctx.chain_id,
-            "factory_asset",
-            CcipCrosschainFactory(factory).asset_config(asset.asset_id),
+        reads.append(
+            (
+                simulator.observe(
+                    ctx.chain_id, manager.get_asset_price(asset.tokens[index])
+                ),
+                simulator.observe(
+                    ctx.chain_id, manager.get_source_of_asset_price(asset.tokens[index])
+                ),
+                simulator.observe(
+                    ctx.chain_id,
+                    CcipCrosschainFactory(factory).asset_config(asset.asset_id),
+                ),
+            )
         )
     results = simulator.relay()
     for index, ctx in enumerate(contexts):
-        result = results[ctx.chain_id]
-        result.raise_for_failure()
-        assert result.get("asset_source") == asset.feeds[index]
-        assert result.get("factory_asset") == (
+        results[ctx.chain_id].raise_for_failure()
+        asset_price, asset_source, factory_asset = reads[index]
+        assert asset_source.value == asset.feeds[index]
+        assert factory_asset.value == (
             asset.tokens[index],
             asset.decimals,
             True,
@@ -747,7 +749,7 @@ def _assert_configured_prices(
             ["uint80", "int256", "uint256", "uint256", "uint80"],
         )[1]
         decimals = _feed_read(ctx, asset.feeds[index], "decimals()", ["uint8"])
-        price = result.get("asset_price")
+        price = asset_price.value
         assert price.decimals == 18
         assert price.amount == answer * 10 ** (18 - decimals)
 
@@ -803,16 +805,16 @@ def test_simulate_clone_htest_vault(
     simulator.with_block_override(gasLimit=30_000_000)
     simulator.add_call(clone, from_=OWNER, label="clone_vault")
     vault = PlasmaVault(preview.plasma_vault)
-    simulator.observe("vault_asset", vault.underlying_asset_address())
-    simulator.observe("vault_access_manager", vault.get_access_manager_address())
+    vault_asset = simulator.observe(vault.underlying_asset_address())
+    vault_access_manager = simulator.observe(vault.get_access_manager_address())
 
     result = simulator.run()
 
     result.raise_for_failure()
-    instance = result.get("clone_vault")
-    assert instance == preview
-    assert result.get("vault_asset") == token
-    assert result.get("vault_access_manager") == preview.access_manager
+    (deployment,) = [call for call in result.calls if call.label == "clone_vault"]
+    assert clone.decode(bytes(deployment.return_data)) == preview
+    assert vault_asset.value == token
+    assert vault_access_manager.value == preview.access_manager
 
 
 def _asset_for(asset: RehearsalAsset, generation: str) -> RehearsalAsset:
@@ -911,7 +913,9 @@ def test_simulate_v3_dispatcher_deployment_gas_governance(web3_arb):
     simulator.add_call(execute, from_=OWNER, label="execute_early")
     simulator.next_block(time_shift_seconds=300 + 1)
     simulator.add_call(execute, from_=OWNER, label="execute")
-    simulator.observe("limit", factory.dispatcher_deployment_gas_limit(HYPEREVM))
+    limit = simulator.observe(
+        factory.dispatcher_deployment_gas_limit(HYPEREVM), label="limit"
+    )
 
     result = simulator.run()
 
@@ -927,7 +931,7 @@ def test_simulate_v3_dispatcher_deployment_gas_governance(web3_arb):
     early = next(call for call in result.calls if call.label == "execute_early")
     assert_reverted(early, "ConfigNotReady(bytes32,uint256)")
     assert V3.dispatcher_deployment_gas_limit != new_limit
-    assert result.get("limit") == new_limit
+    assert limit.value == new_limit
 
 
 def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
@@ -979,16 +983,16 @@ def _assert_token_deliveries_within_gas_limit(run: Run) -> None:
     pool's release or mint is outside it, as it is for the live OffRamp, which
     meters the receiver call separately."""
     assert isinstance(run.lane, CcipLane)
-    run.csim.observe(
-        ARBITRUM, "gas_limit_route_hub", run.lane.executor.ccip_route(HYPEREVM)
+    gas_limit_route_hub = run.csim.observe(
+        ARBITRUM, run.lane.executor.ccip_route(HYPEREVM)
     )
-    run.csim.observe(
-        HYPEREVM, "gas_limit_route_spoke", run.lane.dispatcher.ccip_route(ARBITRUM)
+    gas_limit_route_spoke = run.csim.observe(
+        HYPEREVM, run.lane.dispatcher.ccip_route(ARBITRUM)
     )
     results = run.relay()
     limits = {
-        HYPEREVM: results[ARBITRUM].get("gas_limit_route_hub").token_gas_limit,
-        ARBITRUM: results[HYPEREVM].get("gas_limit_route_spoke").token_gas_limit,
+        HYPEREVM: gas_limit_route_hub.value.token_gas_limit,
+        ARBITRUM: gas_limit_route_spoke.value.token_gas_limit,
     }
     token_legs = [message for message in run.csim.delivered if message.token_amount]
     assert [message.dst_chain_id for message in token_legs] == [HYPEREVM, ARBITRUM]
@@ -1100,14 +1104,17 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
             message.raw.token_transfer[0].amount - message.token_amount == fee_raw_units
         )
     hub = run.csim.results[ARBITRUM]
-    assert hub.get("outbound_after_send") == transfers[0].raw.token_transfer[0].amount
-    assert hub.get("settled_after_settle") == transfers[0].token_amount
-    assert hub.get("idle_ledger") == transfers[1].token_amount
+    assert (
+        required(run.outbound_after_send).value
+        == transfers[0].raw.token_transfer[0].amount
+    )
+    assert required(run.settled_after_settle).value == transfers[0].token_amount
+    assert required(run.idle_ledger).value == transfers[1].token_amount
     # What left the spoke is the credit less the management fee accrued over
     # the 7-day gap (5 bps a year), re-attested before the recall.
     accrued_fee = transfers[0].token_amount - transfers[1].raw.token_transfer[0].amount
     assert 0 < accrued_fee <= transfers[0].token_amount // 10_000
-    residue = hub.get("settled_after_return")
+    residue = required(run.settled_after_return).value
     assert residue == 0
     _assert_return_finalized(
         hub,
@@ -1134,9 +1141,9 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
         assert minimum == transfers[1].raw.token_transfer[0].amount
 
     run.advance(run.staleness_max + 1)
-    run.hub.observe("nav_after_residue", run.lane.get_balance())
-    results = run.relay()
-    assert results[ARBITRUM].get("nav_after_residue") == 0
+    nav_after_residue = run.hub.observe(run.lane.get_balance())
+    run.relay()
+    assert nav_after_residue.value == 0
 
 
 def _assert_return_finalized(hub, *, sent: int, received: int) -> None:
@@ -1164,20 +1171,18 @@ def test_simulate_usdc_cctp_fee_alone(web3_arb, web3_hyperevm, generation):
         web3_arb, web3_hyperevm, asset, transport=transport, generation=generation
     )
     credited = supply(run)
-    attest(run, tag="initial", observation_label="observation_after_settle")
+    attest(run, tag="initial", observed=required(run.observation_after_settle))
 
     run.hub.execute([run.lane.recall(amount=credited, min_return=credited)])
     run.relay()
-    run.csim.observe(ARBITRUM, "idle_after_recall", run.lane.idle_ledger())
-    run.csim.observe(
-        ARBITRUM, "settled_after_recall", run.lane.settled_remote_balance()
-    )
-    run.csim.observe(HYPEREVM, "observation_after_recall", run.lane.observation())
-    results = run.relay()
-    received = results[ARBITRUM].get("idle_after_recall")
+    idle_after_recall = run.csim.observe(ARBITRUM, run.lane.idle_ledger())
+    settled_after_recall = run.csim.observe(ARBITRUM, run.lane.settled_remote_balance())
+    observation_after_recall = run.csim.observe(HYPEREVM, run.lane.observation())
+    run.relay()
+    received = idle_after_recall.value
     assert received == credited - 24
-    assert results[ARBITRUM].get("settled_after_recall") == 0
-    assert results[HYPEREVM].get("observation_after_recall").tracked_idle == 0
+    assert settled_after_recall.value == 0
+    assert observation_after_recall.value.tracked_idle == 0
 
     # Same wait as `_attest_residue`: the zero-to-zero approval is otherwise
     # refused with `MinUpdateIntervalNotMet`.
@@ -1185,33 +1190,33 @@ def test_simulate_usdc_cctp_fee_alone(web3_arb, web3_hyperevm, generation):
     attest(
         run,
         tag="zero_after_fee",
-        observation_label="observation_after_recall",
+        observed=observation_after_recall,
         hub_idle=received,
     )
     run.advance(run.staleness_max + 1)
-    run.hub.observe("nav_after_fee_only", run.lane.get_balance())
-    results = run.relay()
-    assert results[ARBITRUM].get("nav_after_fee_only") == received
+    nav_after_fee_only = run.hub.observe(run.lane.get_balance())
+    run.relay()
+    assert nav_after_fee_only.value == received
 
 
 def _check_hub_usdc_roundtrip(run: Run, usdc: RehearsalAsset):
-    run.hub.observe("hub_share_decimals", run.vault.decimals())
-    results = run.relay()
-    scale = 10 ** (results[ARBITRUM].get("hub_share_decimals") - USDC.decimals)
+    hub_share_decimals = run.hub.observe(run.vault.decimals())
+    run.relay()
+    scale = 10 ** (hub_share_decimals.value - USDC.decimals)
     assert scale > 1
     run.advance(60)
     run.hub.add_call(run.vault.withdraw(Amount(1), OWNER, OWNER), from_=OWNER)
-    run.hub.observe("after_one_raw_unit", run.hub_asset.balance_of(OWNER))
-    run.hub.observe("shares_after_one_raw_unit", run.vault.balance_of(OWNER))
+    after_one_raw_unit = run.hub.observe(run.hub_asset.balance_of(OWNER))
+    shares_after_one_raw_unit = run.hub.observe(run.vault.balance_of(OWNER))
     remaining_shares = Shares((USDC.deposit_amount - 1) * scale)
     run.hub.add_call(run.vault.redeem(remaining_shares, OWNER, OWNER), from_=OWNER)
-    run.hub.observe("usdc_recovered", run.hub_asset.balance_of(OWNER))
-    run.hub.observe("hub_usdc_remaining", run.hub_asset.balance_of(run.vault.address))
-    results = run.relay()
-    assert results[ARBITRUM].get("after_one_raw_unit") == 1
-    assert results[ARBITRUM].get("shares_after_one_raw_unit") == remaining_shares
-    assert results[ARBITRUM].get("usdc_recovered") == USDC.deposit_amount
-    assert results[ARBITRUM].get("hub_usdc_remaining") == 0
+    usdc_recovered = run.hub.observe(run.hub_asset.balance_of(OWNER))
+    hub_usdc_remaining = run.hub.observe(run.hub_asset.balance_of(run.vault.address))
+    run.relay()
+    assert after_one_raw_unit.value == 1
+    assert shares_after_one_raw_unit.value == remaining_shares
+    assert usdc_recovered.value == USDC.deposit_amount
+    assert hub_usdc_remaining.value == 0
 
 
 def _check_spoke_usdc_rounding(run: Run, web3, usdc: RehearsalAsset):
@@ -1228,31 +1233,29 @@ def _check_spoke_usdc_rounding(run: Run, web3, usdc: RehearsalAsset):
         token.approve(vault.address, USDC.deposit_amount), from_=holder
     )
     run.spoke_sim.add_call(vault.deposit(USDC.deposit_amount, holder), from_=holder)
-    run.spoke_sim.observe("spoke_share_decimals", vault.decimals())
-    run.spoke_sim.observe("spoke_deposited_shares", vault.balance_of(holder))
-    results = run.relay()
-    scale = 10 ** (results[HYPEREVM].get("spoke_share_decimals") - USDC.decimals)
+    spoke_share_decimals = run.spoke_sim.observe(vault.decimals())
+    spoke_deposited_shares = run.spoke_sim.observe(vault.balance_of(holder))
+    run.relay()
+    scale = 10 ** (spoke_share_decimals.value - USDC.decimals)
     assert scale > 1
-    assert (
-        results[HYPEREVM].get("spoke_deposited_shares") == USDC.deposit_amount * scale
-    )
+    assert spoke_deposited_shares.value == USDC.deposit_amount * scale
     run.advance(60)
     run.spoke_sim.add_call(
         vault.redeem(Shares(scale + 1), holder, holder), from_=holder
     )
-    run.spoke_sim.observe("spoke_fractional_redemption", token.balance_of(holder))
+    spoke_fractional_redemption = run.spoke_sim.observe(token.balance_of(holder))
     run.spoke_sim.add_call(
         vault.redeem(Shares((USDC.deposit_amount - 1) * scale - 1), holder, holder),
         from_=holder,
     )
-    run.spoke_sim.observe("spoke_recovered", token.balance_of(holder))
-    run.spoke_sim.observe("spoke_rounding_dust", token.balance_of(vault.address))
-    run.spoke_sim.observe("spoke_final_shares", vault.balance_of(holder))
-    results = run.relay()
-    assert results[HYPEREVM].get("spoke_fractional_redemption") == 1
-    assert results[HYPEREVM].get("spoke_final_shares") == 0
-    assert results[HYPEREVM].get("spoke_recovered") == USDC.deposit_amount - 1
-    assert results[HYPEREVM].get("spoke_rounding_dust") == 1
+    spoke_recovered = run.spoke_sim.observe(token.balance_of(holder))
+    spoke_rounding_dust = run.spoke_sim.observe(token.balance_of(vault.address))
+    spoke_final_shares = run.spoke_sim.observe(vault.balance_of(holder))
+    run.relay()
+    assert spoke_fractional_redemption.value == 1
+    assert spoke_final_shares.value == 0
+    assert spoke_recovered.value == USDC.deposit_amount - 1
+    assert spoke_rounding_dust.value == 1
 
 
 def _prepare_asset_run(
@@ -1313,18 +1316,17 @@ def _prepare_asset_run(
         hub.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
         spoke.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
         ccip_factory = CcipCrosschainFactory(factory_address)
-        simulator.observe(
+        source_executor_address = simulator.observe(
             ARBITRUM,
-            "source_executor_address",
             ccip_factory.compute_executor_address(OWNER, user_salt),
         )
-        simulator.observe(
-            ARBITRUM, "source_executor_route", ccip_factory.ccip_route(HYPEREVM)
+        source_executor_route = simulator.observe(
+            ARBITRUM, ccip_factory.ccip_route(HYPEREVM)
         )
         results = simulator.relay()
         results[ARBITRUM].raise_for_failure()
-        executor = results[ARBITRUM].get("source_executor_address")
-        route = replace(results[ARBITRUM].get("source_executor_route"), peer=executor)
+        executor = source_executor_address.value
+        route = replace(source_executor_route.value, peer=executor)
         first_fuse_nonce = len(CORE_LIBRARIES) + 1
     else:
         pair = FACTORY_PAIRS[generation]
@@ -1512,34 +1514,31 @@ def _prepare_asset_run(
     for result in results.values():
         result.raise_for_failure()
 
-    simulator.observe(
+    dispatcher_ready = simulator.observe(
         ARBITRUM,
-        "dispatcher_ready",
         CcipCrosschainExecutor(executor).has_dispatcher(HYPEREVM),
     )
-    simulator.observe(
+    dispatcher_registered = simulator.observe(
         HYPEREVM,
-        "dispatcher_registered",
         CcipCrosschainFactory(factory_address).is_dispatcher(executor),
     )
-    simulator.observe(ARBITRUM, "hub_shares", hub_vault.balance_of(OWNER))
-    simulator.observe(
+    hub_shares = simulator.observe(ARBITRUM, hub_vault.balance_of(OWNER))
+    hub_assets = simulator.observe(
         ARBITRUM,
-        "hub_assets",
         token.balance_of(hub_instance.plasma_vault),
     )
     results = simulator.relay()
     for result in results.values():
         result.raise_for_failure()
-    assert results[ARBITRUM].get("dispatcher_ready") is True
-    assert results[HYPEREVM].get("dispatcher_registered") is True
+    assert dispatcher_ready.value is True
+    assert dispatcher_registered.value is True
     share_scale = 10 ** (
         hub_instance.asset_decimals - hub_instance.underlying_token_decimals
     )
     assert hub_instance.underlying_token_decimals == asset.decimals
     assert spoke_instance.underlying_token_decimals == asset.decimals
-    assert results[ARBITRUM].get("hub_shares") == asset.deposit_amount * share_scale
-    assert results[ARBITRUM].get("hub_assets") == asset.deposit_amount
+    assert hub_shares.value == asset.deposit_amount * share_scale
+    assert hub_assets.value == asset.deposit_amount
     _assert_configured_prices(
         simulator,
         (arb_ctx, hyper_ctx),
@@ -1724,18 +1723,16 @@ def test_simulate_executor_and_dispatcher_deployment(web3_arb, web3_hyperevm):
         if message is ticket:
             assert delivery.gas_used > 3_000_000
 
-    simulator.observe(
+    dispatcher_ready = simulator.observe(
         ARBITRUM,
-        "dispatcher_ready",
         CcipCrosschainExecutor(executor).has_dispatcher(HYPEREVM),
     )
-    simulator.observe(
+    dispatcher_registered = simulator.observe(
         HYPEREVM,
-        "dispatcher_registered",
         CcipCrosschainFactory(V3.address).is_dispatcher(executor),
     )
     results = simulator.relay()
     for result in results.values():
         result.raise_for_failure()
-    assert results[ARBITRUM].get("dispatcher_ready") is True
-    assert results[HYPEREVM].get("dispatcher_registered") is True
+    assert dispatcher_ready.value is True
+    assert dispatcher_registered.value is True

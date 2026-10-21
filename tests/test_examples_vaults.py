@@ -42,7 +42,6 @@ def _simulated_call(
         gas_used=0,
         error=None if success else "execution reverted",
         logs=logs if logs is not None else [],
-        decoded=None,
     )
 
 
@@ -55,7 +54,6 @@ def _simulation_result(calls: list[SimulatedCallResult]) -> SimulationResult:
         revert_reason="execution reverted" if failed else None,
         gas_used=0,
         execute_logs=[],
-        observations={},
         calls=calls,
         failed_calls=failed,
     )

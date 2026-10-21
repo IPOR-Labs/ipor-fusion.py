@@ -190,21 +190,20 @@ def test_simulate_looping_morpho_blue(web3_base):
     )
 
     # Pre-loop snapshot (after deposit, before execute)
-    sim.observe("vault_wsteth_pre_loop", wsteth.balance_of(VAULT_ADDRESS))
+    vault_wsteth_pre_loop = sim.observe(wsteth.balance_of(VAULT_ADDRESS))
 
     # 5. alpha executes the flash-loan-wrapped leverage loop atomically
     sim.execute([flash_loan])
 
     # Post-loop observations
-    sim.observe("vault_wsteth_post_loop", wsteth.balance_of(VAULT_ADDRESS))
-    sim.observe("vault_weth_post_loop", weth.balance_of(VAULT_ADDRESS))
-    sim.observe("total_assets_post_loop", plasma_vault.total_assets())
+    sim.observe(wsteth.balance_of(VAULT_ADDRESS))
+    vault_weth_post_loop = sim.observe(weth.balance_of(VAULT_ADDRESS))
+    total_assets_post_loop = sim.observe(plasma_vault.total_assets())
 
     result = sim.run()
 
     log.info("success=%s gas_used=%s", result.success, result.gas_used)
     log.info("revert_reason=%s", result.revert_reason)
-    log.info("observations=%s", result.observations)
 
     # Every queued call (setup + execute + observations) must succeed.
     assert_all_success(result)
@@ -213,6 +212,6 @@ def test_simulate_looping_morpho_blue(web3_base):
     # - pre-loop wsteth = vault_pre + deposit (deterministic on the pinned block)
     # - WETH dust ~0 (everything borrowed got swapped to repay the flash loan)
     # - totalAssets is positive after collateral is recognized
-    assert result.get("vault_wsteth_pre_loop") == post_balance
-    assert result.get("vault_weth_post_loop") < int(0.01e18)
-    assert result.get("total_assets_post_loop") > 0
+    assert vault_wsteth_pre_loop.value == post_balance
+    assert vault_weth_post_loop.value < int(0.01e18)
+    assert total_assets_post_loop.value > 0
