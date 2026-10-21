@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any
 
 import click
 from eth_typing import HexAddress
@@ -13,6 +12,7 @@ from ipor_fusion.cli.vault_rendering import (
     _print_table,
     _substrate_details,
 )
+from ipor_fusion.readers.lending_health import LendingMarketHealth, VaultLendingHealth
 from ipor_fusion.substrates import (
     decode_substrate,
     format_market_label,
@@ -42,7 +42,7 @@ def _print_lending_health(data: VaultData) -> None:  # noqa: C901
     click.echo("Position Breakdown:")
     morpho_health, aave_health = _index_lending_health(lh)
     consumed_morpho_subs: set[str] = set()
-    consumed_aave_mids: set[int | str] = set()
+    consumed_aave_mids: set[MarketId | str] = set()
 
     for ipor_mid, positions in (data.morpho_positions or {}).items():
         click.echo(f"  {format_market_label(ipor_mid)}:")
@@ -98,16 +98,16 @@ def _print_lending_health(data: VaultData) -> None:  # noqa: C901
 
 
 def _index_lending_health(
-    lh: Any,
-) -> tuple[dict[str, Any], dict[int | str, Any]]:
+    lh: VaultLendingHealth | None,
+) -> tuple[dict[str, LendingMarketHealth], dict[MarketId | str, LendingMarketHealth]]:
     """Split lending health rows by protocol for fast lookup during rendering.
 
     Morpho rows are keyed by morpho substrate id (one row per substrate).
     Aave V3 rows are keyed by IPOR market id (account-aggregated, one row per
     market); Aave V4 rows by Spoke address (account-aggregated per Spoke).
     """
-    morpho: dict[str, Any] = {}
-    aave: dict[int | str, Any] = {}
+    morpho: dict[str, LendingMarketHealth] = {}
+    aave: dict[MarketId | str, LendingMarketHealth] = {}
     if lh is None:
         return morpho, aave
     for m in lh.markets:
@@ -120,7 +120,7 @@ def _index_lending_health(
     return morpho, aave
 
 
-def _print_health_lines(market: Any, indent: str) -> None:
+def _print_health_lines(market: LendingMarketHealth, indent: str) -> None:
     """Render LTV / Health Factor / Status lines for a lending market.
 
     Status colors: green when safe, yellow at warning (HF < 1.10), red+bold

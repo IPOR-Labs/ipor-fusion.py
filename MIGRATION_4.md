@@ -54,6 +54,10 @@ before it is fixed.
    nominal types. Wrap literals and raw values, `ChainId(8453)`, `Period(0)`,
    `Amount(n)`, `parse_fuse_address(...)`; values the SDK returns already carry
    their type. See [Nominal types](#nominal-types).
+9. **Typed JSON documents.** `build_vault_info_json` and the `fusion market`
+   builders return TypedDicts (`VaultInfoJson`, ...); code annotating them
+   `dict[str, Any]` switches to the TypedDict or `Mapping[str, object]`. See
+   [Typed JSON documents](#typed-json-documents).
 
 Then read [Behavior changes](#behavior-changes): they apply to every caller,
 type-checked or not.
@@ -720,6 +724,45 @@ except as listed under [Behavior changes](#behavior-changes)): `chain_id` fields
 string). Calling an MCP tool function
 directly from Python takes `ChainId`. Their amount, decimals and time fields stay
 `int`: they are JSON output models, and the SDK values above fit them unchanged.
+
+## Typed JSON documents
+
+The JSON document builders return `TypedDict`s instead of `dict[str, Any]`; the
+documents themselves (keys, values, order, the MCP schemas) are unchanged, so
+untyped code needs none of this section.
+
+| Builder | Returns |
+|---|---|
+| `build_vault_info_json` | `VaultInfoJson` |
+| `build_morpho_blue_market_json` | `MorphoBlueMarketJson` |
+| `build_meta_morpho_json` | `MetaMorphoV1Json \| MetaMorphoV2Json`, told apart by `doc["version"]` |
+| `RoleAccount.to_dict` | `RoleAccountJson` |
+
+Every nested block has its own TypedDict (`FeesJson`, `WithdrawManagerJson`,
+`BalanceFuseJson`, `ReconciliationJson`, `HyperCoreJson`, `MorphoSupplyingVaultJson`,
+...), all importable from `ipor_fusion` and from `ipor_fusion.vault_info` /
+`ipor_fusion.market_info` (`RoleAccountJson` from `ipor_fusion.core`). Values carry the
+SDK's nominal types (`doc["vault"]` is a `PlasmaVaultAddress`, `doc["chain_id"]` a
+`ChainId`). A block that can be `null` is `X | None`: check it before indexing
+(`fees = doc["fees"]; if fees is not None: fees["management_fee_percent"]`). A key
+that only some entries carry is `NotRequired` (a balance fuse's `pct_of_total` and
+`position_breakdown`, the Morpho API keys of the market document): read it with
+`.get`. A decoded substrate entry stays open-ended, `SubstrateEntryJson`
+(`dict[str, str | bool]`), since each decoder adds its own fields.
+
+- A variable or parameter annotated `dict[str, Any]` no longer accepts these
+  documents (a `TypedDict` is not a `dict[str, Any]`): annotate it with the TypedDict,
+  or `Mapping[str, object]` for code that only passes the document on (`json.dumps`
+  accepts either).
+- Parsing entry points take `Mapping[str, object]` instead of `Mapping[str, Any]`:
+  `decode_external_state_event(log)` and `FusionInstance.from_dict(data)`.
+  `VerifierResult.message` is a `Mapping[str, object]`, and `OutboundMessage.raw` is
+  `object`: narrow it before use (`isinstance(message.raw, MessageV1)` for CCIP; a
+  Stargate `Packet`, or a `(Packet, TaxiMessage)` pair for a token transfer).
+- The `vault info` document's `deployment` is `DeploymentJson` (block, timestamp,
+  age) or `DeploymentErrorJson` (`{"error": ...}`) or `None`; `share_price` is
+  `SharePriceJson` (`asset`, and `usd` when the asset is priced); `dependency_graph`
+  is `DependencyGraphJson` (`edges`, `update_reach`, `update_groups`).
 
 ## Behavior changes
 

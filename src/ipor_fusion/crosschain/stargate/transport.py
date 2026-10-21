@@ -170,24 +170,27 @@ class StargateTransport(CrosschainTransport):
 
     def delivery_calls(self, message: OutboundMessage) -> list[DeliveryCall]:
         dst = self._chains[message.dst_chain_id]
-        packet = message.raw[0] if isinstance(message.raw, tuple) else message.raw
-        if not isinstance(message.raw, tuple):
-            data = lz_receive_calldata(
-                src_eid=packet.src_eid,
-                sender=packet.sender,
-                nonce=packet.nonce,
-                guid=packet.guid,
-                message=packet.message,
-            )
-            return [
-                DeliveryCall(
-                    to=message.receiver,
-                    data=data,
-                    from_=dst.endpoint,
-                    label=f"lz_receive:{message.message_id.hex()[:8]}",
+        match message.raw:
+            case Packet() as packet:
+                data = lz_receive_calldata(
+                    src_eid=packet.src_eid,
+                    sender=packet.sender,
+                    nonce=packet.nonce,
+                    guid=packet.guid,
+                    message=packet.message,
                 )
-            ]
-        taxi: TaxiMessage = message.raw[1]
+                return [
+                    DeliveryCall(
+                        to=message.receiver,
+                        data=data,
+                        from_=dst.endpoint,
+                        label=f"lz_receive:{message.message_id.hex()[:8]}",
+                    )
+                ]
+            case (Packet() as packet, TaxiMessage() as taxi):
+                pass
+            case raw:
+                raise TypeError(f"not a Stargate message: {type(raw).__name__}")
         compose = encode_oft_compose_msg(
             nonce=packet.nonce,
             src_eid=packet.src_eid,

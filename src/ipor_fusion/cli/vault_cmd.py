@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any
+from typing import TypedDict
 
 import click
 from web3 import Web3
+from web3.types import Timestamp
 
 from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.cli.config_store import (
@@ -41,7 +42,7 @@ from ipor_fusion.errors import (
 from ipor_fusion.readers.oracle_mapping import (
     build_oracle_mapping,
 )
-from ipor_fusion.types import ChainId, PlasmaVaultAddress
+from ipor_fusion.types import ChainId, Check, PlasmaVaultAddress, Severity, Verdict
 from ipor_fusion.validation import (
     VaultValidation,
     validate_vault,
@@ -51,11 +52,41 @@ from ipor_fusion.vault_data import (
     fetch_vault_data,
 )
 from ipor_fusion.vault_info import (
+    Erc20BalanceJson,
+    LendingHealthJson,
+    ReconciliationJson,
+    VaultAssetJson,
     _erc20_balances_json,
     _lending_health_json,
     _reconciliation_json,
     _unix_to_iso,
 )
+
+
+class _FindingJson(TypedDict):
+    check: Check
+    severity: Severity
+    message: str
+
+
+class _ValidationJson(TypedDict):
+    """The ``fusion vault validate --json`` document."""
+
+    vault: PlasmaVaultAddress
+    chain: str
+    chain_id: ChainId
+    block: int
+    block_timestamp: Timestamp
+    block_timestamp_utc: str
+    asset: VaultAssetJson
+    verdict: Verdict
+    criticals: list[str]
+    warnings: list[str]
+    ok: list[str]
+    findings: list[_FindingJson]
+    reconciliation: ReconciliationJson
+    erc20_balances: list[Erc20BalanceJson]
+    lending_health: LendingHealthJson | None
 
 
 def _auto_save_vault(
@@ -276,7 +307,7 @@ def validate(
         sys.exit(1)
 
 
-def _validation_json(validation: VaultValidation, chain_label: str) -> dict[str, Any]:
+def _validation_json(validation: VaultValidation, chain_label: str) -> _ValidationJson:
     return {
         "vault": validation.vault,
         "chain": chain_label,
