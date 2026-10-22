@@ -17,10 +17,9 @@ from _crosschain_lifecycle import (
 )
 from web3 import Web3
 
-from ipor_fusion import (
-    AccessManager,
-    AccessManagerAddress,
-    Amount,
+from ipor_fusion import AccessManager, AccessManagerAddress, Amount, Roles, Shares
+from ipor_fusion.core.fuse_action import FuseAction
+from ipor_fusion.crosschain import (
     CcipCommandType,
     CcipLane,
     CcipObservation,
@@ -28,10 +27,7 @@ from ipor_fusion import (
     CommandId,
     CommandStatus,
     OperationId,
-    Roles,
-    Shares,
 )
-from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.crosschain.messages import (
     EMPTY_COMMAND,
     CcipMsgType,

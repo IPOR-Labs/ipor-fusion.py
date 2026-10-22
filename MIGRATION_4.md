@@ -23,12 +23,16 @@ the details, and each change is described once, in its section.
 Work through these in order; each is what breaks first at run time after the one
 before it is fixed.
 
-1. **Removed and renamed imports fail first, at import.** The crosschain encoders
-   left `ipor_fusion.fuses.crosschain` for `ipor_fusion.crosschain.fuses` (no shim);
-   the event decoder modules `ipor_fusion.fuses.external_state_events` and
-   `ipor_fusion.fuses.hypercore_events` are renamed `external_state_event_decoding`
-   and `hypercore_event_decoding` (import their names from `ipor_fusion` or
-   `ipor_fusion.fuses`); `IporFusionMarkets.RWA`, `MORPHO_BLUE_ADDRESS`, the 3.x cache
+1. **Removed and renamed imports fail first, at import.** The preview features
+   left the top level: crosschain names import from `ipor_fusion.crosschain`,
+   HyperCore names from the new `ipor_fusion.hypercore` (see
+   [Preview features leave the top level](#preview-features-leave-the-top-level));
+   the crosschain encoders left `ipor_fusion.fuses.crosschain` for
+   `ipor_fusion.crosschain.fuses` (no shim); the event decoder modules
+   `ipor_fusion.fuses.external_state_events` and `ipor_fusion.fuses.hypercore_events`
+   are renamed `external_state_event_decoding` and `hypercore_event_decoding` (import
+   the external-state names from `ipor_fusion` or `ipor_fusion.fuses`, the HyperCore
+   ones from `ipor_fusion.hypercore`); `IporFusionMarkets.RWA`, `MORPHO_BLUE_ADDRESS`, the 3.x cache
    functions, `read_erc20_holdings`, `ExternalStateExecutor.mark_nav` and `NavMark`
    are gone. See [Moved, removed and reshaped](#moved-removed-and-reshaped).
 2. **Wrappers are built from an address; execution takes the context.**
@@ -309,14 +313,14 @@ vocabulary `Severity`, `Verdict` and `Check`. Also new: `InFlightLimit` (see
 **Crosschain fuse encoders moved.** The crosschain market encoders moved from
 `ipor_fusion.fuses.crosschain` into the crosschain package, and
 `ipor_fusion.fuses` no longer re-exports them. There is no shim: the old paths
-raise `ImportError`. The top-level names (`from ipor_fusion import ...`) are
-unchanged.
+raise `ImportError`. They are not top-level names either (see the next
+paragraph).
 
 | 3.x import | 4.0 import |
 |---|---|
 | `ipor_fusion.fuses.crosschain` | `ipor_fusion.crosschain.fuses` (or `ipor_fusion.crosschain`) |
 | `ipor_fusion.fuses.crosschain.base`, `.ccip`, `.stargate` | `ipor_fusion.crosschain.fuses` (its submodules `base`, `ccip` and `stargate` exist but are internal) |
-| `from ipor_fusion.fuses import CcipCrosschainSupplyFuse` (and the other crosschain encoders, `SendParams`, `CrosschainSubstrate*`, `crosschain_market_id`) | `from ipor_fusion.crosschain import ...` or `from ipor_fusion import ...` |
+| `from ipor_fusion.fuses import CcipCrosschainSupplyFuse` (and the other crosschain encoders, `SendParams`, `CrosschainSubstrate*`, `crosschain_market_id`) | `from ipor_fusion.crosschain import ...` |
 
 `ipor_fusion.crosschain` now exports the whole crosschain surface: besides the
 codecs and wrappers, the encoders, `CrosschainLane`, `CcipLane`, `StargateLane`,
@@ -324,6 +328,41 @@ the transports and chains, `discover_deployment`, `open_lane(s)`, `LANES` and
 `CrosschainSimulator`, which 3.x exported only from `ipor_fusion`.
 `ipor_fusion.crosschain.ccip` and `.stargate` keep exporting only their codecs
 and wrappers.
+
+#### Preview features leave the top level
+
+Crosschain and HyperCore are preview features (`PREVIEW_FEATURES`): their names
+may change in a minor release, which the top level's major-only removal promise
+could not hold. 4.0 exports them only from their subpackages.
+
+- **Crosschain:** the 124 crosschain names import from `ipor_fusion.crosschain`,
+  or from `crosschain.ccip` / `crosschain.stargate` / `crosschain.fuses` as before.
+  That covers lanes, discovery, transports, encoders, wrappers, codecs and
+  `CrosschainSimulator`. It also covers the crosschain ids (`AssetId`, `CommandId`,
+  `MessageId`, `LayerZeroEid`, `CcipChainSelector`, ...), which still import from
+  `ipor_fusion.types` too.
+- **HyperCore:** the 97 HyperCore names import from the new
+  `ipor_fusion.hypercore`. That covers the fuses and `HyperCoreSubstrates`, the
+  readers and `read_hypercore_*`, the event classes, specs and decoders, and the
+  ids (`HyperCoreAsset`, `HyperCoreTokenIndex`, `MarginTableId`, `PayloadHash`,
+  ...). It also covers the constants and helpers (`SPOT_DEX`, `USDC_TOKEN_INDEX`,
+  `USDC_SYSTEM_ADDRESS`, `system_address`, `precompile_index_of`, `SettlementMode`,
+  `TimeInForce`, `TransferDirection`, ...). `HYPEREVM_CHAIN_ID` stays a top-level
+  chain constant. `ipor_fusion.fuses`
+  and `ipor_fusion.readers` no longer list them; the ids still import from
+  `ipor_fusion.types`.
+- **Unchanged:** the exception classes (`HyperCoreEventDecodeError`,
+  `HyperCoreValuationError`, `CrosschainDiscoveryError`,
+  `VerifierResultUnavailable`, ...) stay top-level names of `ipor_fusion.errors`. The `vault info` document's HyperCore TypedDicts
+  (`HyperCoreJson`, ...) stay with the document.
+- **Error registration:** `import ipor_fusion` no longer loads the crosschain
+  package. Import `ipor_fusion.crosschain` to register the crosschain contracts'
+  custom errors for decoding by name.
+
+```python
+from ipor_fusion.crosschain import CcipLane, discover_deployment, open_lanes
+from ipor_fusion.hypercore import HyperCoreDepositFuse, read_hypercore_vault_state
+```
 
 **Fuse base.** `Fuse`, `StakeFuse` and the shared validators and substrate packers
 moved to `ipor_fusion.core.fuse`. Import `Fuse` and `StakeFuse` from `ipor_fusion`
@@ -343,7 +382,8 @@ The internal `ipor_fusion.fuses.base` still re-exports them. The CLI's internal
 from `ipor_fusion.fuses`, hid its submodule of the same name (`import
 ipor_fusion.fuses.hypercore_events as m` bound the function); the external-state
 module was renamed to match. Import the decoders with `from ipor_fusion import
-external_state_events, hypercore_events`; the modules are internal.
+external_state_events` and `from ipor_fusion.hypercore import hypercore_events`;
+the modules are internal.
 
 **Removed.**
 
@@ -956,6 +996,13 @@ are listed with a link.
   ASSETS_BALANCE_VALIDATION (plain addresses) were `no_decoder(NAME)` in 3.x and
   now decode per their Solidity substrate libraries and grant checks. The markets
   still without a decoder are listed with their reason.
+
+- **`CcipLane.open` refuses a spoke it cannot reach.** The executor's
+  `ccipRoute(spoke)` must be registered and point at the dispatcher at the
+  executor's own address; otherwise `open` (and `open_lane` / `open_lanes`)
+  raises `CrosschainDiscoveryError`, where 3.x built a lane whose default send
+  parameters carried a zero fee cap and gas limit and failed only on chain. A
+  registered but disabled route still opens, but `default_send` raises.
 
 - **The reconciliation counts the rewards claim manager.** `PlasmaVault.totalAssets`
   adds `RewardsClaimManager.balanceOf()` (vested rewards) to the vault's idle

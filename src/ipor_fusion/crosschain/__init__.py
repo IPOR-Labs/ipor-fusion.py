@@ -152,8 +152,34 @@ from ipor_fusion.crosschain.transport import (
     OutboundMessage,
 )
 from ipor_fusion.errors import VerifierResultUnavailable
+from ipor_fusion.types import (
+    AssetId,
+    CcipChainSelector,
+    CommandId,
+    DeploymentRequestId,
+    LayerZeroEid,
+    MessageId,
+    OperationId,
+    PositionSetHash,
+    ProposalId,
+    ReturnRequestId,
+    StargateAssetId,
+    TransferId,
+)
 
 __all__ = [
+    "AssetId",
+    "CcipChainSelector",
+    "CommandId",
+    "DeploymentRequestId",
+    "LayerZeroEid",
+    "MessageId",
+    "OperationId",
+    "PositionSetHash",
+    "ProposalId",
+    "ReturnRequestId",
+    "StargateAssetId",
+    "TransferId",
     "CrosschainClaimFuse",
     "CrosschainCommandFuse",
     "CrosschainSubstrate",

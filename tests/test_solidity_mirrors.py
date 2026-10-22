@@ -14,6 +14,7 @@ from functools import cache
 
 import pytest
 import requests
+from _live import unavailable
 from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.config.roles import Roles
@@ -58,11 +59,11 @@ def _solidity_source(path: str) -> str:
     try:
         resp = requests.get(url, timeout=15)
     except requests.RequestException as exc:
-        pytest.skip(f"cannot fetch {path} from GitHub: {exc}")
+        unavailable("GITHUB", f"cannot fetch {path} from GitHub: {type(exc).__name__}")
     if resp.status_code == 404:
         pytest.fail(f"{url} not found — wrong pinned ref or moved file")
     if resp.status_code != 200:
-        pytest.skip(f"GitHub returned HTTP {resp.status_code} for {path}")
+        unavailable("GITHUB", f"GitHub returned HTTP {resp.status_code} for {path}")
     return resp.text
 
 

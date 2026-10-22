@@ -50,19 +50,23 @@ from web3 import Web3
 
 from ipor_fusion import (
     AccessManager,
-    CcipLane,
-    CrosschainSubstrateLib,
-    CrosschainTransportKind,
-    HyperCoreDepositFuse,
-    HyperCoreOrderFuse,
-    HyperCoreSendFuse,
     PlasmaVault,
     Roles,
-    TimeInForce,
     Web3Context,
     erc20_balance_slot,
 )
+from ipor_fusion.crosschain import (
+    CcipLane,
+    CrosschainSubstrateLib,
+    CrosschainTransportKind,
+)
 from ipor_fusion.fuses.hypercore import SPOT_DEX, USDC_SYSTEM_ADDRESS
+from ipor_fusion.hypercore import (
+    HyperCoreDepositFuse,
+    HyperCoreOrderFuse,
+    HyperCoreSendFuse,
+    TimeInForce,
+)
 from ipor_fusion.readers.hypercore import (
     HyperCoreAccountMarginSummary,
     HyperCoreSpotBalance,

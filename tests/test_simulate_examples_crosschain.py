@@ -4,7 +4,7 @@ and wherever ``HYPEREVM_PROVIDER_URL`` is set."""
 
 from __future__ import annotations
 
-from ipor_fusion import discover_deployment
+from ipor_fusion.crosschain import discover_deployment
 from ipor_fusion.crosschain.transport import CrosschainTransportKind
 
 
