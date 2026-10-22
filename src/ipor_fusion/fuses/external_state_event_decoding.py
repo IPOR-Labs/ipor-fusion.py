@@ -22,19 +22,17 @@ raises ``ExternalStateEventDecodeError``.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, TypedDict, cast
+from typing import Literal, TypeAlias, TypedDict
 
-from eth_abi import decode
-from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from web3 import Web3
 from web3.types import Timestamp, TxReceipt
 
+from ipor_fusion.core.logs import RawLog
 from ipor_fusion.errors import ExternalStateEventDecodeError
-from ipor_fusion.fuses.events import abi_value
-from ipor_fusion.types import Amount, FuseAddress, MarketId, TxHash, parse_tx_hash
+from ipor_fusion.fuses.events import decode_event_log, event_name
+from ipor_fusion.types import Amount, FuseAddress, MarketId, TxHash
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,123 +285,23 @@ EXTERNAL_STATE_EVENT_CLASSES: dict[str, type[ExternalStateEvent]] = {
 }
 
 
-def _as_bytes(value: object, what: str) -> bytes:
-    """Raw log bytes from what a node or an indexer serves: bytes-like
-    (bytes, bytearray, HexBytes) or ``0x``-prefixed hex text. Anything else —
-    an int (``bytes(32)`` would invent 32 zero bytes), unprefixed or invalid
-    hex, a missing value — raises ``ExternalStateEventDecodeError``."""
-    if isinstance(value, bytes | bytearray | memoryview):
-        return bytes(value)
-    if isinstance(value, str):
-        if not value.startswith("0x"):
-            raise ExternalStateEventDecodeError(f"{what}: hex text without 0x prefix")
-        try:
-            return bytes.fromhex(value[2:])
-        except ValueError as exc:
-            raise ExternalStateEventDecodeError(f"{what}: invalid hex") from exc
-    raise ExternalStateEventDecodeError(
-        f"{what}: unsupported type {type(value).__name__}"
-    )
-
-
-def _as_quantity(value: object, what: str) -> int | None:
-    """A block number or log index: int, or a JSON-RPC ``0x`` quantity;
-    None stays None (optional identity); anything else raises."""
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        raise ExternalStateEventDecodeError(f"{what}: boolean is not a quantity")
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and value.startswith("0x"):
-        try:
-            return int(value, 16)
-        except ValueError as exc:
-            raise ExternalStateEventDecodeError(f"{what}: invalid quantity") from exc
-    raise ExternalStateEventDecodeError(f"{what}: unsupported quantity {value!r}")
-
-
-def _topic_key(topic: object) -> bytes | None:
-    """topic0 as 32 bytes, or None when it cannot be a topic at all (then the
-    log is simply not one of ours)."""
-    try:
-        raw = _as_bytes(topic, "topic0")
-    except ExternalStateEventDecodeError:
-        return None
-    return raw if len(raw) == 32 else None
-
-
 def external_state_event_name(topic: bytes | str) -> str | None:
-    """The ExternalState event behind ``topic0``, or None for any other log."""
-    key = _topic_key(topic)
-    spec = EXTERNAL_STATE_EVENTS.get(key) if key is not None else None
-    return spec.name if spec else None
+    """The ExternalState event behind ``topic0``; None for any other topic and
+    for a value that cannot be a topic."""
+    return event_name(topic, EXTERNAL_STATE_EVENTS)
 
 
-def _hex(value: object) -> TxHash | None:
-    if value is None:
-        return None
-    raw = _as_bytes(value, "transactionHash")
-    if len(raw) != 32:
-        raise ExternalStateEventDecodeError(
-            f"transactionHash: {len(raw)} bytes, expected 32"
-        )
-    return parse_tx_hash(raw)
-
-
-def decode_external_state_event(  # proctor: ignore[primitives-untyped-dict]
-    log: Mapping[str, object],
-) -> ExternalStateEvent | None:
+def decode_external_state_event(log: RawLog) -> ExternalStateEvent | None:
     """Decode one log — a web3 receipt log or the raw JSON-RPC / indexer
     mapping (hex text topics, data, hashes and quantities). None when its
     topic is not an ExternalState event; once the topic is recognized, any
     malformed part (data, topic count, identity) raises
     ``ExternalStateEventDecodeError``."""
-    topics = log.get("topics")
-    if not isinstance(topics, list | tuple) or not topics:
-        return None
-    key = _topic_key(topics[0])
-    spec = EXTERNAL_STATE_EVENTS.get(key) if key is not None else None
-    if spec is None:
-        return None
-    if len(topics) != 1:
-        raise ExternalStateEventDecodeError(
-            f"{spec.name}: {len(topics) - 1} indexed topic(s), the declaration has none"
-        )
-    if "data" not in log:
-        raise ExternalStateEventDecodeError(f"{spec.name}: no data")
-    raw = _as_bytes(log["data"], f"{spec.name} data")
-    if len(raw) != 32 * len(spec.params):
-        raise ExternalStateEventDecodeError(
-            f"{spec.name}: {len(raw)} data bytes, {32 * len(spec.params)} declared"
-        )
-    try:
-        values = decode([abi_type for abi_type, _ in spec.params], raw)
-    except DecodingError as exc:
-        raise ExternalStateEventDecodeError(f"{spec.name}: {exc}") from exc
-    # Each value is narrowed to its ABI type.
-    args = {
-        name: abi_value(abi_type, value)
-        for (abi_type, name), value in zip(spec.params, values, strict=True)
-    }
-    address = log.get("address")
-    if not isinstance(address, str | bytes):
-        raise ExternalStateEventDecodeError(f"{spec.name}: emitter")
-    try:
-        emitter = Web3.to_checksum_address(address)
-    except ValueError as exc:
-        raise ExternalStateEventDecodeError(f"{spec.name}: emitter") from exc
-    # The class's args TypedDict is the spec's shape (pinned by the tests), so
-    # the decoded dict is that class's args.
-    event_class = cast(
-        Callable[..., ExternalStateEvent], EXTERNAL_STATE_EVENT_CLASSES[spec.name]
-    )
-    return event_class(
-        emitter=emitter,
-        args=args,
-        block_number=_as_quantity(log.get("blockNumber"), "blockNumber"),
-        transaction_hash=_hex(log.get("transactionHash")),
-        log_index=_as_quantity(log.get("logIndex"), "logIndex"),
+    return decode_event_log(
+        log,
+        EXTERNAL_STATE_EVENTS,
+        EXTERNAL_STATE_EVENT_CLASSES,
+        ExternalStateEventDecodeError,
     )
 
 

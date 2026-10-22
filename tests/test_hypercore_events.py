@@ -19,6 +19,7 @@ from ipor_fusion import (
     HyperCoreActionEnqueuedEvent,
     HyperCoreDepositFuseEnterEvent,
     HyperCoreEvent,
+    HyperCoreEventDecodeError,
     decode_hypercore_event,
     find_hypercore_events,
     hypercore_event_name,
@@ -168,6 +169,61 @@ def test_event_class_mirrors_the_spec(spec):
     assert_event_class_mirrors_spec(
         HYPERCORE_EVENT_CLASSES[spec.name], spec.name, spec.params
     )
+
+
+def _margin_log(**over: object) -> dict:
+    spec = next(
+        s for s in HYPERCORE_EVENT_SPECS if s.name == "HyperCoreMarginFuseEnter"
+    )
+    fuse = CREATED["HyperCoreDepositFuse"]
+    log: dict = {
+        "address": VAULT.lower(),
+        "topics": ["0x" + spec.topic.hex()],
+        "data": "0x" + encode([t for t, _ in spec.params], [fuse, 5, True]).hex(),
+        "blockNumber": "0x2db1f73",
+        "transactionHash": "0x" + "fa" * 32,
+        "logIndex": "0x3",
+    }
+    log.update(over)
+    return log
+
+
+def test_a_raw_json_rpc_log_decodes_with_its_identity():
+    """The same input contract as the ExternalState decoder: hex text topics,
+    data, hash and quantities, as JSON-RPC or an indexer serves them."""
+    event = decode_hypercore_event(_margin_log())
+    assert event is not None and event.name == "HyperCoreMarginFuseEnter"
+    assert event.emitter == VAULT
+    assert event.args["usd6"] == 5 and event.args["toPerp"] is True
+    assert (event.block_number, event.log_index) == (0x2DB1F73, 3)
+    assert event.transaction_hash == "0x" + "fa" * 32
+
+
+@pytest.mark.parametrize(
+    ("change", "match"),
+    [
+        ({"data": "0xzz"}, "invalid hex"),
+        ({"data": "00"}, "without 0x prefix"),
+        ({"data": "0x" + "00" * 31}, "data bytes"),
+        ({"address": None}, "emitter"),
+        ({"logIndex": True}, "boolean"),
+        ({"transactionHash": "0x" + "fa" * 31}, "transactionHash"),
+        ({"topics": [_margin_log()["topics"][0], "0x" + "00" * 32]}, "indexed"),
+    ],
+)
+def test_a_recognized_topic_with_malformed_parts_raises_the_declared_error(
+    change, match
+):
+    with pytest.raises(HyperCoreEventDecodeError, match=match):
+        decode_hypercore_event(_margin_log(**change))
+    assert issubclass(HyperCoreEventDecodeError, ValueError)
+
+
+@pytest.mark.parametrize("topic", ["0xzz", "11" * 32, 12345, b"\x01" * 31])
+def test_a_value_that_cannot_be_a_topic_is_not_ours(topic):
+    assert hypercore_event_name(topic) is None
+    assert decode_hypercore_event(_margin_log(topics=[topic])) is None
+    assert decode_hypercore_event(_margin_log(topics=[])) is None
 
 
 def test_every_spec_has_an_event_class():

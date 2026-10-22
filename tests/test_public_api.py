@@ -175,6 +175,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "ExternalStateEvent",
             "ExternalStateEventArgs",
             "ExternalStateEventDecodeError",
+            "HyperCoreEventDecodeError",
             "ExternalStateEventSpec",
             "ExternalStateExecutor",
             "ExternalStateExecutorArgs",
@@ -1089,6 +1090,7 @@ _MODULE_PATH_SNAPSHOT: dict[str, frozenset[str]] = {
     "ipor_fusion.errors": frozenset(
         {
             "ExternalStateEventDecodeError",
+            "HyperCoreEventDecodeError",
             "OwnerNotFoundError",
             "VerifierResultUnavailable",
             "BalanceSlotNotFoundError",
