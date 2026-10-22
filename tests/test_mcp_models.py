@@ -38,6 +38,7 @@ from ipor_fusion import (
     PricedAmountJson,
     UsdAmountJson,
     VaultInfoJson,
+    VaultValidationJson,
 )
 from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.hypercore import HyperCoreActionId, HyperCoreAsset, HyperCoreTokenIndex
@@ -56,6 +57,7 @@ from ipor_fusion.mcp.models import (
     ServerInfoResponse,
     VaultInfoResponse,
     VaultListEntry,
+    VaultValidationResponse,
     WithdrawManagerDetails,
 )
 from ipor_fusion.readers.oracle_mapping import (
@@ -668,6 +670,9 @@ class TestTypedDocumentsMirrorModels:
 
     def test_vault_info(self):
         _assert_mirrors(VaultInfoJson, VaultInfoResponse, "vault_info")
+
+    def test_vault_validation(self):
+        _assert_mirrors(VaultValidationJson, VaultValidationResponse, "vault_validate")
 
     def test_oracle_mapping(self):
         _assert_mirrors(OracleMappingJson, OracleMappingResponse, "oracle_mapping")
