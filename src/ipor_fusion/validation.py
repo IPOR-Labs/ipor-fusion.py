@@ -345,7 +345,7 @@ def _reconcile(state: VaultState) -> Reconciliation:
     total = Amount(gross - fee)
     total_usd = balance_fuses_usd + underlying_usd + rewards_usd - fee_usd
     delta = Amount(total - on_chain)
-    delta_usd = abs(total_usd - (on_chain / 10**decimals * price)) if price else 0
+    delta_usd = abs(total_usd - (on_chain / 10**decimals * price)) if price else 0.0
     delta_percent = abs(delta / on_chain * 100) if on_chain else 0.0
 
     # totalAssets reads the global market total while balance fuses report

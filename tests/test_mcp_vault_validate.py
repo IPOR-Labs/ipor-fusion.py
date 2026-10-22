@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,7 +29,8 @@ VAULT = "0x31744E44d6aF88225C1dBEFbe5Df8308fAeA641B"
 
 def _reconciliation(**overrides: int | float) -> Reconciliation:
     values: dict[str, int | float | None] = {
-        f.name: 0 for f in dataclasses.fields(Reconciliation)
+        f.name: 0.0 if f.name.endswith(("_usd", "_percent")) else 0
+        for f in dataclasses.fields(Reconciliation)
     }
     values.update(overrides)
     return Reconciliation(**values)  # type: ignore[arg-type]
@@ -206,6 +208,36 @@ class TestResponse:
         assert balance.formatted == "2.5"
         assert response.erc20.value_in_asset.formatted == "10,000.0"
         assert response.erc20.value_in_asset.usd == 10000.0
+
+
+def test_the_mcp_output_is_the_cli_document():
+    """One document: the tool dumps exactly what the builder produced, keys
+    the builder omits included (none added as null)."""
+    erc20 = Erc20Holdings(
+        tokens=(
+            Erc20Holding("0xabc", "WETH", 18, 25 * 10**17, 4000.0, 10000.0, ""),
+            Erc20Holding("0xdef", "DAI", 18, None, None, None, "balanceOf reverted"),
+            Erc20Holding("0x123", "?", None, None, None, None, "not a token"),
+        ),
+        value_in_asset=10_000_000_000,
+        value_usd=10000.0,
+        unpriced_tokens=("0x123 (?)",),
+    )
+    validation = _validation(
+        (Finding("orphan_fuse", "warning", "WARNING — fuse without market"),),
+        lending=VaultLendingHealth(markets=[_market()]),
+        erc20=erc20,
+    )
+    document = build_vault_validation_json(validation, "base")
+    dumped = VaultValidationResponse.model_validate(document).model_dump(mode="json")
+    assert json.dumps(dumped) == json.dumps(document)
+    # A failed balance read keeps the decimals that were read.
+    assert document["erc20"]["tokens"][1] == {
+        "address": "0xdef",
+        "symbol": "DAI",
+        "decimals": 18,
+        "note": "balanceOf reverted",
+    }
 
 
 def _config() -> FusionConfig:

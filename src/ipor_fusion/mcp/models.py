@@ -84,7 +84,7 @@ class _Sparse(_Base):
 # ---------------------------------------------------------------------------
 
 
-class Amount(_Base):
+class Amount(_Sparse):
     """Token amount with both raw and formatted representations."""
 
     raw: int | str = Field(description="Raw on-chain integer (or 'unlimited').")
@@ -368,7 +368,7 @@ class BalanceFuseEntry(_Base):
     )
 
 
-class ERC20Entry(_Base):
+class ERC20Entry(_Sparse):
     """ERC-20 balance entry; field set varies by data availability."""
 
     address: str

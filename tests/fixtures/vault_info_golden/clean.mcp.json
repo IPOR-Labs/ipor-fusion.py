@@ -26,14 +26,12 @@
   },
   "total_supply": {
     "raw": 0,
-    "formatted": "0.0",
-    "usd": null
+    "formatted": "0.0"
   },
   "share_price": null,
   "supply_cap": {
     "raw": 1000000000000,
-    "formatted": "1,000,000.0",
-    "usd": null
+    "formatted": "1,000,000.0"
   },
   "managers": {
     "access": "0x00000000000000000000000000000000000000AC",
@@ -59,8 +57,7 @@
       "market_id": 1,
       "balance": {
         "raw": 0,
-        "formatted": "0.0",
-        "usd": null
+        "formatted": "0.0"
       },
       "fuse": "0x00000000000000000000000000000000000000f1",
       "contract": "AaveV3BalanceFuse",
@@ -131,8 +128,7 @@
     },
     "implied_market_total": {
       "raw": 0,
-      "formatted": "0.0",
-      "usd": null
+      "formatted": "0.0"
     },
     "market_storage_divergence": 0
   },

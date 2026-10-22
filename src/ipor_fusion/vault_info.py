@@ -47,6 +47,7 @@ from ipor_fusion.types import (
     parse_hex_address,
 )
 from ipor_fusion.validation import (
+    Erc20Holding,
     Reconciliation,
     VaultValidation,
     _format_amount,
@@ -825,28 +826,33 @@ def _lending_substrate_ref(substrate_id: str | None) -> str | None:
 
 
 def _erc20_balances_json(validation: VaultValidation) -> list[Erc20BalanceJson]:
-    entries: list[Erc20BalanceJson] = []
-    for token in validation.erc20.tokens:
-        if token.decimals is None or token.balance is None:
-            entries.append(
-                {"address": token.address, "symbol": token.symbol, "note": token.note}
-            )
-            continue
-        entries.append(
-            {
-                "address": token.address,
-                "symbol": token.symbol,
-                "decimals": token.decimals,
-                "balance": {
-                    "raw": token.balance,
-                    "formatted": _format_amount(token.balance, token.decimals),
-                },
-                "price_usd": token.price_usd,
-                "usd_value": token.usd_value,
-                "note": token.note,
-            }
-        )
-    return entries
+    """One entry per token; the decimals stay when known even if the balance
+    read failed, and the balance keys are absent without a balance."""
+    return [_erc20_balance_json(token) for token in validation.erc20.tokens]
+
+
+def _erc20_balance_json(token: Erc20Holding) -> Erc20BalanceJson:
+    if token.decimals is None:
+        return {"address": token.address, "symbol": token.symbol, "note": token.note}
+    if token.balance is None:
+        return {
+            "address": token.address,
+            "symbol": token.symbol,
+            "decimals": token.decimals,
+            "note": token.note,
+        }
+    return {
+        "address": token.address,
+        "symbol": token.symbol,
+        "decimals": token.decimals,
+        "balance": {
+            "raw": token.balance,
+            "formatted": _format_amount(token.balance, token.decimals),
+        },
+        "price_usd": token.price_usd,
+        "usd_value": token.usd_value,
+        "note": token.note,
+    }
 
 
 def _amount_json(raw: int, decimals: int, usd: float | None) -> UsdAmountJson:

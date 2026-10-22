@@ -1002,9 +1002,16 @@ are listed with a link.
     replaces the CLI's `erc20_balances`; `erc20.tokens` has the same entries.
   - `reconciliation`, `lending_health` and `asset` share their shapes with the
     `vault info` document. For the MCP tool this means `delta.percent` instead of
-    `delta_percent`, amounts formatted with thousands separators (`"14,912.465797"`)
-    and the delta's `formatted` as its absolute value, as in `vault info`.
+    `delta_percent`, amounts formatted with thousands separators and at most six
+    decimals (`"14,912.465797"`; `raw` keeps the exact value) and the delta's
+    `formatted` as its absolute value, as in `vault info`.
   - The MCP tool's output gains `block_timestamp`.
+  - An ERC20 entry whose balance read failed keeps its `decimals` when they were
+    read (in `vault info` too).
+  - The MCP output is the builder's document key for key: an amount without a
+    USD value and an ERC20 entry without a balance no longer gain `null` keys
+    (`usd`, `price_usd`, ...) in either tool, `vault_info` included, and a zero
+    USD delta without a price is `0.0`, not `0`.
 
 - **A failed lending read is a warning, never a silent `ok`.** 3.x caught every
   exception in the lending-health readers and dropped the position, so a provider
