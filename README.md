@@ -443,8 +443,10 @@ import these from their subpackage, and expect changes in a minor release.
 
 The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Pass
 `market_id=crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` to `open_lane`
-/ `discover_deployment` for that deployment: both take the market ID from the caller
-and read the executor, transport and fuses under it.
+/ `discover_deployment` for that deployment. Both require it explicitly:
+`discover_deployment` reads the market's executor grants; `open_lane` takes an executor
+address and uses the market ID to find the vault's matching fuses unless they are
+passed.
 
 ### Readers (`ipor_fusion.readers`)
 
