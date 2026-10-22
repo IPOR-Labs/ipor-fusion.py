@@ -133,6 +133,11 @@ jobs:
         run: uv run ruff check ./
         id: static-code-analyze
 
+      - name: Type check
+        if: inputs.static-code-analysis-enabled
+        run: uv run pyright
+        id: type-check
+
       - name: Version release (semantic)
         if: inputs.publish-enabled && !inputs.skip-version-bump && !inputs.dev-build
         id: release
