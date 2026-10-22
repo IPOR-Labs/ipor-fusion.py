@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from _multicall import multicall_aware
-from _simulate import simulate_response
+from _simulate import run_with_response, simulate_response
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError, ValueOutOfBounds
 from eth_typing import ChecksumAddress
@@ -63,18 +63,19 @@ def _make_executor(address=EXECUTOR_ADDR):
 def _observed(call, return_data: bytes):
     """Run `call` through the real `VaultSimulator` decode path.
 
-    Feeds a synthetic `eth_simulateV1` response to `_parse_response`, so the
+    Answers `run()` with a synthetic `eth_simulateV1` response, so the
     result is whatever an observation's ``value`` reports -- including a
     decoder that raises."""
     sim = VaultSimulator(MagicMock())
     slot = sim.observe(call)
-    sim._parse_response(
+    run_with_response(
+        sim,
         simulate_response(
             returnData=HexBytes(return_data).to_0x_hex(),
             status="0x1",
             gasUsed="0x0",
             logs=[],
-        )
+        ),
     )
     return slot.value
 
@@ -172,7 +173,7 @@ class TestBalances:
         assert call.data[:4] == Web3.keccak(text="balances(address)")[:4]
         (account,) = decode(["address"], call.data[4:])
         assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
-        assert call.output_types == ["uint256"]
+        assert call.output_types == ("uint256",)
         assert call.decoder is Amount
 
     def test_decodes_uint256(self):
@@ -192,7 +193,7 @@ class TestLastUpdated:
         assert call.data[:4] == Web3.keccak(text="lastUpdated(address)")[:4]
         (account,) = decode(["address"], call.data[4:])
         assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
-        assert call.output_types == ["uint256"]
+        assert call.output_types == ("uint256",)
         # `Timestamp` is a NewType: pinned here because swapping it for another
         # one would change nothing at runtime and still pass pyright.
         assert call.decoder is Timestamp
@@ -278,7 +279,7 @@ class TestPendingProposals:
         assert call.data[:4] == Web3.keccak(text="pendingProposals(address)")[:4]
         (account,) = decode(["address"], call.data[4:])
         assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
-        assert call.output_types == ["uint256", "address", "uint64", "uint256"]
+        assert call.output_types == ("uint256", "address", "uint64", "uint256")
 
     def test_decodes_slot_into_proposal(self):
         executor, ctx = self._executor_with_slot()
@@ -1325,7 +1326,7 @@ class TestExecutorViews:
         executor = ExternalStateExecutor(EXECUTOR_ADDR)
         call = getattr(executor, method)()
         assert bytes(call.data)[:4] == Web3.keccak(text=signature)[:4]
-        assert call.output_types == ["uint256"]
+        assert call.output_types == ("uint256",)
 
     def test_balance_fuse_snapshot_decodes_to_the_dataclass(self):
         from ipor_fusion import BalanceFuseSnapshot
@@ -1333,7 +1334,7 @@ class TestExecutorViews:
         executor = ExternalStateExecutor(EXECUTOR_ADDR)
         call = executor.get_balance_fuse_snapshot()
         assert bytes(call.data)[:4] == Web3.keccak(text="getBalanceFuseSnapshot()")[:4]
-        assert call.output_types == ["uint256", "uint256", "uint256"]
+        assert call.output_types == ("uint256", "uint256", "uint256")
         assert call.decoder is not None
         snap = call.decoder((32_928_135, 50_000, 1_791_458_983))
         assert snap == BalanceFuseSnapshot(32_928_135, 50_000, 1_791_458_983)

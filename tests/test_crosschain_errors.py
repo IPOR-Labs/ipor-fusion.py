@@ -11,7 +11,7 @@ from eth_abi import encode as abi_encode
 from eth_utils import keccak
 from hexbytes import HexBytes
 
-from ipor_fusion.core.simulation import (
+from ipor_fusion.core.simulation_result import (
     SimulatedCallResult,
     SimulationResult,
     _decode_revert,

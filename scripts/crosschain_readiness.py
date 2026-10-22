@@ -30,20 +30,22 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Literal, NotRequired, TypedDict, TypeVar, final
 
 from dotenv import load_dotenv
-from eth_typing import ChecksumAddress
+from eth_typing import ChecksumAddress, HexAddress, HexStr
 from eth_utils import function_signature_to_4byte_selector, keccak
 from web3 import Web3
-from web3.types import RPCEndpoint
+from web3.types import BlockData, LogReceipt, RPCEndpoint
 
 from ipor_fusion import ERC20, Call, Web3Context, ccip_token_lane
 from ipor_fusion.crosschain import CcipCrosschainFactory, CcipOffRamp, CcipRouter
-from ipor_fusion.types import CcipChainSelector, ChainId
+from ipor_fusion.types import AssetId, CcipChainSelector, ChainId
+
+T = TypeVar("T")
 
 SCHEMA = "ipor-fusion.crosschain-readiness/4"
 EXIT_OK = 0
@@ -51,11 +53,11 @@ EXIT_CONFIG = 2
 EXIT_INCOMPLETE = 3
 
 USDC_SYMBOL = "USDC"
-USDC_ASSET_ID = keccak(text=USDC_SYMBOL)
+USDC_ASSET_ID = AssetId(keccak(text=USDC_SYMBOL))
 USDC_DECIMALS = 6
 #: The transport canary's asset: Chainlink's BurnMint test token, 18 decimals.
 TESTTR_SYMBOL = "TESTTR"
-TESTTR_ASSET_ID = keccak(text=TESTTR_SYMBOL)
+TESTTR_ASSET_ID = AssetId(keccak(text=TESTTR_SYMBOL))
 TESTTR_DECIMALS = 18
 SUPPORTED_ON_RAMP_PREFIX = "OnRamp 2."
 RPC_TIMEOUT_S = 30.0
@@ -186,17 +188,239 @@ class BlockNumberMismatch(Exception):
     """The provider answered a block request with a different block number."""
 
 
+class BlockFacts(TypedDict):
+    number: int
+    hash: str
+    timestamp: int
+
+
+class StageError(TypedDict):
+    stage: str
+    type: str
+
+
+@final
+class InformationalError(TypedDict):
+    """An informational section that could not be read."""
+
+    error: str
+    informational: bool
+
+
+class TokenReport(TypedDict):
+    address: ChecksumAddress
+    symbol: str
+    decimals: int
+    is_native_usdc: bool
+
+
+class LaneReport(TypedDict):
+    direction: str
+    router: ChecksumAddress
+    destination_selector: CcipChainSelector
+    message_lane: bool
+    on_ramp: ChecksumAddress | None
+    on_ramp_version: str | None
+    on_ramp_supported: bool
+    pool: ChecksumAddress | None
+    pool_version: str | None
+    token_lane: bool
+    ready: bool
+
+
+class ExecutionCounts(TypedDict):
+    executions: int
+    executions_in_big_blocks: int
+
+
+class ExecutorRow(TypedDict):
+    address: ChecksumAddress
+    executions: int
+    executions_in_big_blocks: int
+    using_big_blocks: bool
+
+
+class ExcludedExecutorRow(TypedDict):
+    address: ChecksumAddress
+    reason: str
+    executions: int
+    executions_in_big_blocks: int
+
+
+class BlockWindow(TypedDict):
+    from_block: int
+    to_block: int
+
+
+class ExecutorsReport(TypedDict):
+    off_ramp: ChecksumAddress
+    window: BlockWindow
+    executions_observed: int
+    min_executions: int
+    complete: bool
+    executors: list[ExecutorRow]
+    excluded: list[ExcludedExecutorRow]
+    opted_in: int
+    total: int
+    all_on_big_blocks: bool
+    big_block_flags_read_at: str
+
+
+class CreationCodeHashes(TypedDict):
+    executor: str
+    dispatcher: str
+
+
+class CreatorReport(TypedDict):
+    address: ChecksumAddress
+    is_allowed_creator: bool
+    native_balance_wei: int
+    using_big_blocks: NotRequired[bool]
+
+
+class AssetReport(TypedDict):
+    asset_id: str
+    token: ChecksumAddress
+    shared_decimals: int
+    enabled: bool
+    ready: bool
+
+
+class RouteReport(TypedDict):
+    peer_chain_id: int
+    enabled: bool
+    chain_selector: CcipChainSelector
+    peer: ChecksumAddress
+    peer_is_factory: bool
+    fee_token: ChecksumAddress
+    message_gas_limit: int
+    token_gas_limit: int
+    max_fee: int
+    selector_maps_to_peer: bool
+    ready: bool
+    dispatcher_deployment_gas_limit: int
+    effective_dispatcher_deployment_gas_limit: int
+
+
+class FactoryGates(TypedDict):
+    interface_version_supported: bool
+    router_matches: bool
+    creation_codes_configured: bool
+    creation_codes_expected: bool
+    creator_authorized: bool
+    usdc_asset_ready: bool
+    route_to_peer_ready: bool
+    creator_big_blocks: NotRequired[bool]
+
+
+class FactoryReport(TypedDict):
+    address: ChecksumAddress
+    interface_version: int
+    owner: HexAddress
+    creation_restricted: bool
+    creation_code_hashes: CreationCodeHashes
+    creator: CreatorReport
+    config_delay_seconds: int
+    ccip_router: ChecksumAddress
+    usdc_asset: AssetReport
+    testtr_asset: AssetReport
+    route_to_peer: RouteReport
+    gates: FactoryGates
+    ready: bool
+
+
+class FeedReport(TypedDict):
+    address: ChecksumAddress
+    description: str
+    decimals: int
+    answer: int
+    updated_at: int
+    age_seconds: int
+    note: str
+
+
+class ChainSnapshot(TypedDict):
+    """Every fact about one side of the pair; a section is absent when its
+    read failed (the failure is in ``errors``)."""
+
+    chain_id: int
+    chain_selector: CcipChainSelector
+    role: Literal["hub", "spoke"]
+    errors: list[StageError]
+    complete: bool
+    block: NotRequired[BlockFacts]
+    usdc: NotRequired[TokenReport]
+    token_lane_out: NotRequired[LaneReport]
+    factory: NotRequired[FactoryReport]
+    usdc_usd_feed: NotRequired[FeedReport]
+    testtr_lane_out: NotRequired[LaneReport | InformationalError]
+    chainlink_executors: NotRequired[ExecutorsReport | InformationalError]
+
+
+class Pair(TypedDict):
+    hub: str
+    spoke: str
+    asset: str
+
+
+class HyperEvmDelivery(TypedDict):
+    executors_on_big_blocks: bool
+    executors_opted_in: int | None
+    executors_total: int | None
+    executors_complete: bool
+    manual_execution_required: bool | None
+    dispatcher_deployment_manual: bool | None
+
+
+class ReportError(TypedDict):
+    type: str
+    message: str
+
+
+#: Per chain name its candidate block, plus the skew in seconds and a note.
+RepinCandidates = dict[str, BlockFacts | int | str]
+
+
+class Report(TypedDict):
+    schema: str
+    generated_at: str
+    pair: Pair
+    complete: bool
+    ready: bool
+    transport_ready: bool
+    factories_ready: bool
+    blocked_by: list[str]
+    chains: dict[str, ChainSnapshot]
+    observed_blocks: dict[str, BlockFacts | None]
+    repin_candidates: RepinCandidates | None
+    repin_status: str
+    hyperevm_delivery: HyperEvmDelivery
+    simulation_governance: dict[str, str]
+    error: NotRequired[ReportError]
+
+
 def _view(
-    ctx: Web3Context, to: ChecksumAddress, signature: str, output_types: list[str]
-) -> Any:
+    ctx: Web3Context,
+    to: ChecksumAddress,
+    signature: str,
+    output_types: list[str],
+    decoder: Callable[..., T],
+) -> T:
     return Call(
         to=to,
         data=function_signature_to_4byte_selector(signature),
         output_types=output_types,
+        decoder=decoder,
     ).call(ctx)
 
 
-def _block_facts(block: Mapping[str, Any]) -> dict[str, Any]:
+def _round_data(
+    values: tuple[int, int, int, int, int],
+) -> tuple[int, int, int, int, int]:
+    return values
+
+
+def _block_facts(block: BlockData) -> BlockFacts:
     return {
         "number": int(block["number"]),
         "hash": "0x" + bytes(block["hash"]).hex(),
@@ -204,7 +428,7 @@ def _block_facts(block: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _read_token(ctx: Web3Context, spec: ChainSpec) -> dict[str, Any]:
+def _read_token(ctx: Web3Context, spec: ChainSpec) -> TokenReport:
     token = ERC20(spec.usdc)
     symbol = token.symbol().call(ctx)
     decimals = int(token.decimals().call(ctx))
@@ -221,7 +445,7 @@ def _read_lane(
     spec: ChainSpec,
     peer: ChainSpec,
     token: ChecksumAddress | None = None,
-) -> dict[str, Any]:
+) -> LaneReport:
     lane = ccip_token_lane(ctx, spec.router, token or spec.usdc, peer.chain_selector)
     on_ramp_supported = bool(
         lane.on_ramp_version
@@ -268,7 +492,9 @@ def _using_big_blocks(ctx: Web3Context, address: ChecksumAddress) -> bool:
     return bool(response["result"])
 
 
-def _off_ramp_from(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> Any:
+def _off_ramp_from(
+    ctx: Web3Context, spec: ChainSpec, peer: ChainSpec
+) -> ChecksumAddress:
     """The CCIP 2.0 OffRamp delivering ``peer``'s messages on ``spec``."""
     candidates = [
         ramp
@@ -289,25 +515,25 @@ def _off_ramp_from(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> Any:
 
 
 def _execution_logs(
-    ctx: Web3Context, off_ramp: ChecksumAddress, start: int
-) -> list[Any]:
-    logs: list[Any] = []
-    for first in range(start, ctx.default_block + 1, LOG_CHUNK_BLOCKS):
-        last = min(first + LOG_CHUNK_BLOCKS - 1, ctx.default_block)
+    ctx: Web3Context, off_ramp: ChecksumAddress, start: int, head: int
+) -> list[LogReceipt]:
+    logs: list[LogReceipt] = []
+    for first in range(start, head + 1, LOG_CHUNK_BLOCKS):
+        last = min(first + LOG_CHUNK_BLOCKS - 1, head)
         logs += ctx.web3.eth.get_logs(
             {
                 "address": off_ramp,
                 "fromBlock": first,
                 "toBlock": last,
-                "topics": ["0x" + EXECUTION_STATE_CHANGED.hex()],
+                "topics": [HexStr("0x" + EXECUTION_STATE_CHANGED.hex())],
             }
         )
     return logs
 
 
 def _executions_by_sender(
-    ctx: Web3Context, logs: list[Any]
-) -> dict[ChecksumAddress, dict[str, int]]:
+    ctx: Web3Context, logs: list[LogReceipt]
+) -> dict[ChecksumAddress, ExecutionCounts]:
     """Per transaction sender: execution transactions and how many of them
     landed in a big block. One block read (with transactions) per block."""
     by_block: dict[int, set[bytes]] = {}
@@ -315,12 +541,13 @@ def _executions_by_sender(
         by_block.setdefault(int(log["blockNumber"]), set()).add(
             bytes(log["transactionHash"])
         )
-    senders: dict[ChecksumAddress, dict[str, int]] = {}
+    senders: dict[ChecksumAddress, ExecutionCounts] = {}
     for number, hashes in sorted(by_block.items()):
         block = ctx.web3.eth.get_block(number, full_transactions=True)
         big = int(block["gasLimit"]) > HYPEREVM_SMALL_BLOCK_GAS_LIMIT
         for tx in block["transactions"]:
-            if bytes(tx["hash"]) not in hashes:
+            # Full transactions were requested; a bare hash cannot be one.
+            if isinstance(tx, bytes) or bytes(tx["hash"]) not in hashes:
                 continue
             row = senders.setdefault(
                 Web3.to_checksum_address(tx["from"]),
@@ -332,8 +559,8 @@ def _executions_by_sender(
 
 
 def _read_chainlink_executors(
-    ctx: Web3Context, spec: ChainSpec, peer: ChainSpec
-) -> dict[str, Any]:
+    ctx: Web3Context, spec: ChainSpec, peer: ChainSpec, head: int
+) -> ExecutorsReport:
     """Who executed deliveries on ``spec``'s OffRamp for ``peer`` over the
     window (from every source chain: one executor pool serves them all), and
     whether each of them sends into big blocks now.
@@ -343,19 +570,26 @@ def _read_chainlink_executors(
     latest state, not the pinned block's.
     """
     off_ramp = _off_ramp_from(ctx, spec, peer)
-    start = max(0, ctx.default_block - EXECUTOR_WINDOW_BLOCKS + 1)
-    observed = _executions_by_sender(ctx, _execution_logs(ctx, off_ramp, start))
-    executors, excluded = [], []
+    start = max(0, head - EXECUTOR_WINDOW_BLOCKS + 1)
+    observed = _executions_by_sender(ctx, _execution_logs(ctx, off_ramp, start, head))
+    executors: list[ExecutorRow] = []
+    excluded: list[ExcludedExecutorRow] = []
     for address, row in sorted(observed.items()):
         if address in NON_CHAINLINK_EXECUTORS:
             excluded.append(
-                {"address": address, "reason": NON_CHAINLINK_EXECUTORS[address], **row}
+                {
+                    "address": address,
+                    "reason": NON_CHAINLINK_EXECUTORS[address],
+                    "executions": row["executions"],
+                    "executions_in_big_blocks": row["executions_in_big_blocks"],
+                }
             )
             continue
         executors.append(
             {
                 "address": address,
-                **row,
+                "executions": row["executions"],
+                "executions_in_big_blocks": row["executions_in_big_blocks"],
                 "using_big_blocks": _using_big_blocks(ctx, address),
             }
         )
@@ -364,7 +598,7 @@ def _read_chainlink_executors(
     complete = executions >= MIN_OBSERVED_EXECUTIONS
     return {
         "off_ramp": off_ramp,
-        "window": {"from_block": start, "to_block": ctx.default_block},
+        "window": {"from_block": start, "to_block": head},
         "executions_observed": executions,
         "min_executions": MIN_OBSERVED_EXECUTIONS,
         "complete": complete,
@@ -377,7 +611,7 @@ def _read_chainlink_executors(
     }
 
 
-def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[str, Any]:
+def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> FactoryReport:
     """The factory's USDC asset, its route to ``peer``, the creation gates and
     the canary creator's standing, each read once; ``gates`` holds every
     boolean ``ready`` is made of."""
@@ -397,16 +631,16 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
         and testtr_decimals == TESTTR_DECIMALS
     )
     peer_chain_id = int(factory.chain_id_of_selector(peer.chain_selector).call(ctx))
-    owner = _view(ctx, FACTORY, "OWNER()", ["address"])
+    owner = _view(ctx, FACTORY, "OWNER()", ["address"], HexAddress)
     router = factory.ccip_router().call(ctx)
     restricted = bool(factory.creation_restricted().call(ctx))
     creator_allowed = bool(factory.is_allowed_creator(CREATOR).call(ctx))
-    creation_code_hashes = {
+    creation_code_hashes: CreationCodeHashes = {
         "executor": "0x" + bytes(factory.executor_creation_code_hash().call(ctx)).hex(),
         "dispatcher": "0x"
         + bytes(factory.dispatcher_creation_code_hash().call(ctx)).hex(),
     }
-    creator: dict[str, Any] = {
+    creator: CreatorReport = {
         "address": CREATOR,
         "is_allowed_creator": creator_allowed,
         "native_balance_wei": int(
@@ -423,7 +657,7 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
         and route.peer == FACTORY
     )
     interface_version = int(factory.factory_interface_version().call(ctx))
-    gates = {
+    gates: FactoryGates = {
         "interface_version_supported": (
             interface_version == EXPECTED_FACTORY_INTERFACE_VERSION
         ),
@@ -447,7 +681,7 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
         "creation_restricted": restricted,
         "creation_code_hashes": creation_code_hashes,
         "creator": creator,
-        "config_delay_seconds": int(_view(ctx, FACTORY, "CONFIG_DELAY()", ["uint256"])),
+        "config_delay_seconds": _view(ctx, FACTORY, "CONFIG_DELAY()", ["uint256"], int),
         "ccip_router": router,
         "usdc_asset": {
             "asset_id": "0x" + USDC_ASSET_ID.hex(),
@@ -483,20 +717,19 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> dict[st
     }
 
 
-def _read_feed(
-    ctx: Web3Context, spec: ChainSpec, block_timestamp: int
-) -> dict[str, Any]:
+def _read_feed(ctx: Web3Context, spec: ChainSpec, block_timestamp: int) -> FeedReport:
     feed = spec.usdc_usd_feed
     _, answer, _, updated_at, _ = _view(
         ctx,
         feed,
         "latestRoundData()",
         ["uint80", "int256", "uint256", "uint256", "uint80"],
+        _round_data,
     )
     return {
         "address": feed,
-        "description": _view(ctx, feed, "description()", ["string"]),
-        "decimals": int(_view(ctx, feed, "decimals()", ["uint8"])),
+        "description": _view(ctx, feed, "description()", ["string"], str),
+        "decimals": _view(ctx, feed, "decimals()", ["uint8"], int),
         "answer": int(answer),
         "updated_at": int(updated_at),
         "age_seconds": block_timestamp - int(updated_at),
@@ -507,86 +740,105 @@ def _read_feed(
     }
 
 
-def snapshot_chain(
-    ctx: Web3Context, spec: ChainSpec, peer: ChainSpec
-) -> dict[str, Any]:
+def snapshot_chain(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> ChainSnapshot:
     """Every fact about ``spec``'s side of the pair at ``ctx.default_block``.
 
     ``ctx.default_block`` must be a block number: the block is read before and
     after the calls, it must carry that number, and the snapshot is complete
     only if its hash is unchanged.
     """
-    if not isinstance(ctx.default_block, int):
+    head = ctx.default_block
+    if not isinstance(head, int):
         raise ReadinessConfigError(f"{spec.name}: default_block must be pinned")
-    snapshot: dict[str, Any] = {
+    snapshot: ChainSnapshot = {
         "chain_id": int(spec.chain_id),
         "chain_selector": spec.chain_selector,
         "role": "hub" if spec is HUB else "spoke",
         "errors": [],
+        "complete": False,
     }
-    block = None
+    block: BlockFacts | None = None
     try:
-        facts = _block_facts(ctx.web3.eth.get_block(ctx.default_block))
-        if facts["number"] != ctx.default_block:
-            raise BlockNumberMismatch(f"{facts['number']} != {ctx.default_block}")
+        facts = _block_facts(ctx.web3.eth.get_block(head))
+        if facts["number"] != head:
+            raise BlockNumberMismatch(f"{facts['number']} != {head}")
         block = snapshot["block"] = facts
     except Exception as exc:  # noqa: BLE001 - reported by class name only
         snapshot["errors"].append({"stage": "block", "type": type(exc).__name__})
     if block is not None:
-        _read_sections(ctx, spec, peer, snapshot)
-        _confirm_block(ctx, snapshot)
+        _read_sections(ctx, spec, peer, snapshot, block, head)
+        _confirm_block(ctx, snapshot, block, head)
     snapshot["complete"] = not snapshot["errors"]
     return snapshot
 
 
+def _attempt(snapshot: ChainSnapshot, stage: str, read: Callable[[], T]) -> T | None:
+    """``read()``, or ``None`` with the failure recorded by class name only."""
+    try:
+        return read()
+    except Exception as exc:  # noqa: BLE001 - reported by class name only
+        snapshot["errors"].append({"stage": stage, "type": type(exc).__name__})
+        return None
+
+
+def _informational(read: Callable[[], T]) -> T | InformationalError:
+    try:
+        return read()
+    except Exception as exc:  # noqa: BLE001 - reported by class name only
+        return {"error": type(exc).__name__, "informational": True}
+
+
 def _read_sections(
-    ctx: Web3Context, spec: ChainSpec, peer: ChainSpec, snapshot: dict[str, Any]
+    ctx: Web3Context,
+    spec: ChainSpec,
+    peer: ChainSpec,
+    snapshot: ChainSnapshot,
+    block: BlockFacts,
+    head: int,
 ) -> None:
-    timestamp = snapshot["block"]["timestamp"]
-    sections: list[tuple[str, Callable[[], Any]]] = [
-        ("usdc", lambda: _read_token(ctx, spec)),
-        ("token_lane_out", lambda: _read_lane(ctx, spec, peer)),
-        ("factory", lambda: _read_factory(ctx, spec, peer)),
-        ("usdc_usd_feed", lambda: _read_feed(ctx, spec, timestamp)),
-    ]
-    for name, read in sections:
-        try:
-            snapshot[name] = read()
-        except Exception as exc:  # noqa: BLE001 - reported by class name only
-            snapshot["errors"].append({"stage": name, "type": type(exc).__name__})
+    if (usdc := _attempt(snapshot, "usdc", lambda: _read_token(ctx, spec))) is not None:
+        snapshot["usdc"] = usdc
+    lane = _attempt(snapshot, "token_lane_out", lambda: _read_lane(ctx, spec, peer))
+    if lane is not None:
+        snapshot["token_lane_out"] = lane
+    factory = _attempt(snapshot, "factory", lambda: _read_factory(ctx, spec, peer))
+    if factory is not None:
+        snapshot["factory"] = factory
+    feed = _attempt(
+        snapshot, "usdc_usd_feed", lambda: _read_feed(ctx, spec, block["timestamp"])
+    )
+    if feed is not None:
+        snapshot["usdc_usd_feed"] = feed
     # The TESTTR lane and the executors are reported, never gating: the
     # verdict is about USDC, and an unreadable informational section must not
     # hide a ready pair. An unreadable executors section keeps deliveries
     # into HyperEVM manual (`hyperevm_delivery`).
-    informational: list[tuple[str, Callable[[], Any]]] = [
-        ("testtr_lane_out", lambda: _read_lane(ctx, spec, peer, spec.testtr)),
-    ]
+    snapshot["testtr_lane_out"] = _informational(
+        lambda: _read_lane(ctx, spec, peer, spec.testtr)
+    )
     if spec is SPOKE:
-        informational.append(
-            ("chainlink_executors", lambda: _read_chainlink_executors(ctx, spec, peer))
+        snapshot["chainlink_executors"] = _informational(
+            lambda: _read_chainlink_executors(ctx, spec, peer, head)
         )
-    for name, read in informational:
-        try:
-            snapshot[name] = read()
-        except Exception as exc:  # noqa: BLE001 - reported by class name only
-            snapshot[name] = {"error": type(exc).__name__, "informational": True}
 
 
-def _confirm_block(ctx: Web3Context, snapshot: dict[str, Any]) -> None:
+def _confirm_block(
+    ctx: Web3Context, snapshot: ChainSnapshot, block: BlockFacts, head: int
+) -> None:
     try:
-        after = _block_facts(ctx.web3.eth.get_block(ctx.default_block))
+        after = _block_facts(ctx.web3.eth.get_block(head))
     except Exception as exc:  # noqa: BLE001 - reported by class name only
         snapshot["errors"].append(
             {"stage": "block_recheck", "type": type(exc).__name__}
         )
         return
-    if after["hash"] != snapshot["block"]["hash"]:
+    if after["hash"] != block["hash"]:
         snapshot["errors"].append(
             {"stage": "block_recheck", "type": "BlockHashChanged"}
         )
 
 
-def build_report(hub: dict[str, Any], spoke: dict[str, Any]) -> dict[str, Any]:
+def build_report(hub: ChainSnapshot, spoke: ChainSnapshot) -> Report:
     """Combine two chain snapshots into the readiness verdict.
 
     ``transport_ready`` needs the native USDC identity on both chains and the
@@ -602,11 +854,15 @@ def build_report(hub: dict[str, Any], spoke: dict[str, Any]) -> dict[str, Any]:
     """
     complete = hub["complete"] and spoke["complete"]
     chains = (hub, spoke)
-    tokens_ok = all(s.get("usdc", {}).get("is_native_usdc") for s in chains)
-    lanes_ok = all(s.get("token_lane_out", {}).get("ready") for s in chains)
+    tokens_ok = all(
+        (token := s.get("usdc")) is not None and token["is_native_usdc"] for s in chains
+    )
+    lanes_ok = all(
+        (lane := s.get("token_lane_out")) is not None and lane["ready"] for s in chains
+    )
     transport_ready = complete and tokens_ok and lanes_ok
     factories_ready = complete and all(
-        s.get("factory", {}).get("ready") for s in chains
+        (factory := s.get("factory")) is not None and factory["ready"] for s in chains
     )
     candidates, repin_status = _repin_candidates(hub, spoke, transport_ready)
     return {
@@ -627,7 +883,9 @@ def build_report(hub: dict[str, Any], spoke: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def hyperevm_delivery(hub: dict[str, Any], spoke: dict[str, Any]) -> dict[str, Any]:
+def hyperevm_delivery(
+    hub: ChainSnapshot | None, spoke: ChainSnapshot | None
+) -> HyperEvmDelivery:
     """Which deliveries from the hub into HyperEVM need manual execution.
 
     Commands and recall requests carry the hub route's message gas limit, the
@@ -637,14 +895,17 @@ def hyperevm_delivery(hub: dict[str, Any], spoke: dict[str, Any]) -> dict[str, A
     any of them); below a dispatcher creation's gas the ticket fails whoever
     executes it. Unknown executor state counts as small blocks.
     """
-    route = hub.get("factory", {}).get("route_to_peer")
-    executors = spoke.get("chainlink_executors", {})
-    all_on = bool(executors.get("all_on_big_blocks"))
-    verdict: dict[str, Any] = {
+    factory = hub.get("factory") if hub is not None else None
+    route = factory["route_to_peer"] if factory is not None else None
+    executors = spoke.get("chainlink_executors") if spoke is not None else None
+    if executors is None or "error" in executors:
+        executors = None
+    all_on = executors is not None and executors["all_on_big_blocks"]
+    verdict: HyperEvmDelivery = {
         "executors_on_big_blocks": all_on,
-        "executors_opted_in": executors.get("opted_in"),
-        "executors_total": executors.get("total"),
-        "executors_complete": executors.get("complete", False),
+        "executors_opted_in": executors["opted_in"] if executors else None,
+        "executors_total": executors["total"] if executors else None,
+        "executors_complete": executors["complete"] if executors else False,
         "manual_execution_required": None,
         "dispatcher_deployment_manual": None,
     }
@@ -665,7 +926,7 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def _blockers(hub: dict[str, Any], spoke: dict[str, Any]) -> list[str]:
+def _blockers(hub: ChainSnapshot, spoke: ChainSnapshot) -> list[str]:
     """One line per failed readiness gate, in evaluation order."""
     blockers: list[str] = []
     for snapshot in (hub, spoke):
@@ -681,7 +942,7 @@ def _blockers(hub: dict[str, Any], spoke: dict[str, Any]) -> list[str]:
     return blockers
 
 
-def _token_blockers(spec: ChainSpec, token: dict[str, Any] | None) -> list[str]:
+def _token_blockers(spec: ChainSpec, token: TokenReport | None) -> list[str]:
     if token is None or token["is_native_usdc"]:
         return []
     return [
@@ -690,7 +951,7 @@ def _token_blockers(spec: ChainSpec, token: dict[str, Any] | None) -> list[str]:
     ]
 
 
-def _lane_blockers(lane: dict[str, Any] | None) -> list[str]:
+def _lane_blockers(lane: LaneReport | None) -> list[str]:
     if lane is None or lane["ready"]:
         return []
     return [
@@ -700,7 +961,7 @@ def _lane_blockers(lane: dict[str, Any] | None) -> list[str]:
     ]
 
 
-def _factory_blockers(spec: ChainSpec, factory: dict[str, Any] | None) -> list[str]:
+def _factory_blockers(spec: ChainSpec, factory: FactoryReport | None) -> list[str]:
     if factory is None:
         return []
     return [
@@ -711,12 +972,13 @@ def _factory_blockers(spec: ChainSpec, factory: dict[str, Any] | None) -> list[s
 
 
 def _repin_candidates(
-    hub: dict[str, Any], spoke: dict[str, Any], transport_ready: bool
-) -> tuple[dict[str, Any] | None, str]:
+    hub: ChainSnapshot, spoke: ChainSnapshot, transport_ready: bool
+) -> tuple[RepinCandidates | None, str]:
     """Per-chain pin candidates and a one-line status. Heights are never
     compared; only the snapshot timestamps are."""
     if not transport_ready:
         return None, "not eligible: transport not ready"
+    # A ready transport implies a complete observation, so both blocks exist.
     hub_block, spoke_block = hub["block"], spoke["block"]
     skew = hub_block["timestamp"] - spoke_block["timestamp"]
     if skew < 0:
@@ -726,7 +988,7 @@ def _repin_candidates(
             None,
             f"not eligible: snapshot skew {skew} s exceeds {MAX_SNAPSHOT_SKEW_S} s",
         )
-    candidates = {
+    candidates: RepinCandidates = {
         HUB.name: hub_block,
         SPOKE.name: spoke_block,
         "hub_after_spoke_seconds": skew,
@@ -759,7 +1021,7 @@ def connect(spec: ChainSpec) -> Web3Context:
     return Web3Context(web3=web3, chain_id=spec.chain_id).at_block(head)
 
 
-def config_error_report(message: str) -> dict[str, Any]:
+def config_error_report(message: str) -> Report:
     """The report written when no observation could be made, so a stale
     ``--output`` file can never be mistaken for a current result."""
     return {
@@ -775,7 +1037,7 @@ def config_error_report(message: str) -> dict[str, Any]:
         "observed_blocks": {},
         "repin_candidates": None,
         "repin_status": "not eligible: no observation",
-        "hyperevm_delivery": hyperevm_delivery({}, {}),
+        "hyperevm_delivery": hyperevm_delivery(None, None),
         "error": {"type": ReadinessConfigError.__name__, "message": message},
         "simulation_governance": SIMULATION_GOVERNANCE,
     }
@@ -783,7 +1045,7 @@ def config_error_report(message: str) -> dict[str, Any]:
 
 def run(
     make_context: Callable[[ChainSpec], Web3Context] | None = None,
-) -> tuple[dict[str, Any], int, str]:
+) -> tuple[Report, int, str]:
     """Produce ``(report, exit_code, summary)``. ``make_context`` defaults to
     :func:`connect`; a configuration error yields :func:`config_error_report`.
 
@@ -804,7 +1066,7 @@ def run(
     return report, code, _summary(report)
 
 
-def _summary(report: dict[str, Any]) -> str:
+def _summary(report: Report) -> str:
     lines = [
         f"complete={report['complete']} ready={report['ready']} "
         f"transport_ready={report['transport_ready']} "
@@ -815,15 +1077,14 @@ def _summary(report: dict[str, Any]) -> str:
         if block:
             lines.append(f"{name}: block {block['number']} ts {block['timestamp']}")
     lines.append(f"repin: {report['repin_status']}")
-    delivery = report.get("hyperevm_delivery")
-    if delivery:
-        lines.append(
-            "hyperevm executors on big blocks: "
-            f"{delivery['executors_opted_in']}/{delivery['executors_total']}"
-            f" (complete={delivery['executors_complete']}); manual: commands="
-            f"{delivery['manual_execution_required']} ticket="
-            f"{delivery['dispatcher_deployment_manual']}"
-        )
+    delivery = report["hyperevm_delivery"]
+    lines.append(
+        "hyperevm executors on big blocks: "
+        f"{delivery['executors_opted_in']}/{delivery['executors_total']}"
+        f" (complete={delivery['executors_complete']}); manual: commands="
+        f"{delivery['manual_execution_required']} ticket="
+        f"{delivery['dispatcher_deployment_manual']}"
+    )
     lines.extend(f"blocked_by: {reason}" for reason in report["blocked_by"])
     return "\n".join(lines)
 
@@ -835,8 +1096,10 @@ def main(argv: list[str] | None = None) -> int:
         "--env-file", default=".env", help="dotenv file to load (default: .env)"
     )
     args = parser.parse_args(argv)
+    output: str | None = args.output
+    env_file: str = args.env_file
     try:
-        load_dotenv(args.env_file)
+        load_dotenv(env_file)
         report, code, summary = run()
     except Exception as exc:  # noqa: BLE001 - keep stale reports from looking current
         kind = type(exc).__name__
@@ -849,11 +1112,11 @@ def main(argv: list[str] | None = None) -> int:
         code = EXIT_INCOMPLETE
         summary = _summary(report)
     print(summary)
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as handle:
+    if output:
+        with open(output, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2, sort_keys=True)
             handle.write("\n")
-        print(f"report written to {args.output}")
+        print(f"report written to {output}")
     return code
 
 

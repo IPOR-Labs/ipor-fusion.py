@@ -28,7 +28,7 @@ INSUFFICIENT_NATIVE_FEE_SELECTOR: bytes = keccak(
 
 def quote_ccip_native_fee(
     web3: Web3,
-    call: Call,
+    call: Call[object],
     *,
     payer: ChecksumAddress,
     from_: ChecksumAddress,

@@ -67,7 +67,7 @@ def _fetch_morpho_positions(
         return None
 
     reader = MorphoReader(morpho_blue_address(ctx.chain_id))
-    futures: dict[MarketId, list[Future]] = {
+    futures: dict[MarketId, list[Future[MorphoPositionBreakdown | None]]] = {
         mid: [
             pool.submit(
                 _safe_call,
@@ -170,7 +170,7 @@ def _fetch_aave_positions(
         return None
 
     readers = {mid: AaveV3Reader(aave_pools[mid]) for mid in per_market_assets}
-    futures: dict[MarketId, list[Future]] = {
+    futures: dict[MarketId, list[Future[AaveV3PositionBreakdown | None]]] = {
         mid: [
             pool.submit(
                 _safe_call,

@@ -184,7 +184,7 @@ def mine_salt(
     aggregate_selector = function_signature_to_4byte_selector(
         "aggregate3((address,bool,bytes)[])"
     )
-    sp_tuple = sp.to_tuple()
+    sp_tuple = sp.as_tuple()
 
     def compute_calldata(salt_int: int) -> bytes:
         return compute_selector + encode(

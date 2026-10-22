@@ -11,7 +11,7 @@ from web3.types import LogReceipt
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.errors import EmptyCallResultError
-from ipor_fusion.types import Decimals, Price
+from ipor_fusion.types import Amount, Decimals, Price
 
 
 @dataclass(slots=True)
@@ -20,9 +20,9 @@ class AssetPriceSource:
     source: ChecksumAddress
 
 
-def _price_decoder(asset: ChecksumAddress, value: tuple) -> Price:
+def _price_decoder(asset: ChecksumAddress, value: tuple[int, int]) -> Price:
     amount, decimals = value
-    return Price(asset=asset, amount=amount, decimals=decimals)
+    return Price(asset=asset, amount=Amount(amount), decimals=Decimals(decimals))
 
 
 class PriceOracleMiddleware(ContractWrapper):

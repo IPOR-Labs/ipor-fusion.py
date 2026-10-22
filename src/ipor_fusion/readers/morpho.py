@@ -129,15 +129,30 @@ class MorphoPositionBreakdown:
     supply_assets: Amount
 
 
-def _market_decoder(value: tuple) -> MorphoMarket:
-    return MorphoMarket(*value)
+def _market_decoder(value: tuple[int, int, int, int, int, int]) -> MorphoMarket:
+    supply_assets, supply_shares, borrow_assets, borrow_shares, last_update, fee = value
+    return MorphoMarket(
+        total_supply_assets=Amount(supply_assets),
+        total_supply_shares=Shares(supply_shares),
+        total_borrow_assets=Amount(borrow_assets),
+        total_borrow_shares=Shares(borrow_shares),
+        last_update=Timestamp(last_update),
+        fee=Fee(fee),
+    )
 
 
-def _position_decoder(value: tuple) -> MorphoPosition:
-    return MorphoPosition(*value)
+def _position_decoder(value: tuple[int, int, int]) -> MorphoPosition:
+    supply_shares, borrow_shares, collateral = value
+    return MorphoPosition(
+        supply_shares=Shares(supply_shares),
+        borrow_shares=Shares(borrow_shares),
+        collateral=Amount(collateral),
+    )
 
 
-def _market_params_decoder(value: tuple) -> MorphoMarketParams:
+def _market_params_decoder(
+    value: tuple[str, str, str, str, int],
+) -> MorphoMarketParams:
     loan, collateral, oracle, irm, lltv = value
     return MorphoMarketParams(
         loan_token=Web3.to_checksum_address(loan),

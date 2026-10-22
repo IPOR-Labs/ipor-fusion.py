@@ -20,19 +20,19 @@ class VestingData:
     last_update_balance: Amount
 
 
-def _vesting_data_decoder(value: tuple) -> VestingData:
+def _vesting_data_decoder(value: tuple[int, int, int, int]) -> VestingData:
     vesting_time, update_balance_timestamp, transferred_tokens, last_update_balance = (
         value
     )
     return VestingData(
-        vesting_time=vesting_time,
-        update_balance_timestamp=update_balance_timestamp,
-        transferred_tokens=transferred_tokens,
-        last_update_balance=last_update_balance,
+        vesting_time=Timestamp(vesting_time),
+        update_balance_timestamp=Timestamp(update_balance_timestamp),
+        transferred_tokens=Amount(transferred_tokens),
+        last_update_balance=Amount(last_update_balance),
     )
 
 
-def _fuse_list_decoder(value: list) -> list[FuseAddress]:
+def _fuse_list_decoder(value: tuple[str, ...]) -> list[FuseAddress]:
     return [FuseAddress(Web3.to_checksum_address(item)) for item in value]
 
 

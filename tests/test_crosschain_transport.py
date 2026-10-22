@@ -54,6 +54,7 @@ from ipor_fusion.crosschain import (
     Packet,
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
+    log_bytes,
 )
 from ipor_fusion.crosschain.stargate.layerzero import (
     PACKET_SENT_TOPIC,
@@ -625,7 +626,7 @@ class ScriptedTransport(CrosschainTransport):
     def outbound_messages(self, src_chain_id, logs):
         out = []
         for log in logs:
-            raw = bytes.fromhex(log["data"][2:])
+            raw = log_bytes(log["data"])
             out.append(
                 OutboundMessage(
                     self.transport_kind,

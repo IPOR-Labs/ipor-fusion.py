@@ -79,7 +79,22 @@ class ExecutorInitParams:
     deployment_ttl: Period
     transfer_staleness_max: Period
 
-    def as_tuple(self) -> tuple:
+    def as_tuple(
+        self,
+    ) -> tuple[
+        AssetId,
+        PlasmaVaultAddress,
+        ChecksumAddress,
+        ChecksumAddress,
+        Period,
+        ChecksumAddress,
+        ChecksumAddress,
+        Period,
+        int,
+        Period,
+        Period,
+        Period,
+    ]:
         return (
             self.asset_id,
             self.manager,
@@ -247,7 +262,9 @@ class StargateCrosschainExecutor(CrosschainExecutor):
         return self._write("cancelStaleReturnRequest(uint256)", chain_id)
 
 
-def _active_command_decoder(values: tuple) -> ActiveCommand:
+def _active_command_decoder(
+    values: tuple[bool, bool, bool, int, bytes, int, int],
+) -> ActiveCommand:
     active, is_config, awaiting_cancel, status, command_id, sequence, epoch = values
     return ActiveCommand(
         active=bool(active),
@@ -300,7 +317,9 @@ class StargateCrosschainDispatcher(CrosschainDispatcher):
         )
 
 
-def _observation_decoder(values: tuple) -> Observation:
+def _observation_decoder(
+    values: tuple[int, tuple[str, ...], tuple[int, ...], int, int, bytes],
+) -> Observation:
     idle, vaults, asset_values, version, epoch, set_hash = values
     return Observation(
         tracked_idle=Amount(idle),

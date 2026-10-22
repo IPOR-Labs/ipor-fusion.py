@@ -71,9 +71,9 @@ def role_account_sort_key(role_account: RoleAccount) -> tuple[str, int]:
     return (role_account.account.lower(), role_account.role_id)
 
 
-def _role_status_decoder(values: tuple) -> RoleStatus:
+def _role_status_decoder(values: tuple[bool, int]) -> RoleStatus:
     is_member, execution_delay = values
-    return RoleStatus(is_member=is_member, execution_delay=execution_delay)
+    return RoleStatus(is_member=is_member, execution_delay=Period(execution_delay))
 
 
 class AccessManager(ContractWrapper):

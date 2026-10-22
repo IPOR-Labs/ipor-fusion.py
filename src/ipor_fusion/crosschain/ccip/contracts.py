@@ -61,7 +61,11 @@ class CcipRouteConfig:
     max_fee: int
     enabled: bool
 
-    def as_tuple(self) -> tuple:
+    def as_tuple(
+        self,
+    ) -> tuple[
+        CcipChainSelector, ChecksumAddress, ChecksumAddress, int, int, int, bool
+    ]:
         return (
             self.chain_selector,
             self.peer,
@@ -73,7 +77,9 @@ class CcipRouteConfig:
         )
 
     @classmethod
-    def from_tuple(cls, values: tuple) -> CcipRouteConfig:
+    def from_tuple(
+        cls, values: tuple[int, str, str, int, int, int, bool]
+    ) -> CcipRouteConfig:
         selector, peer, fee_token, message_gas, token_gas, max_fee, enabled = values
         return cls(
             chain_selector=CcipChainSelector(selector),
@@ -101,7 +107,19 @@ class SafetyConfig:
     min_update_interval: Period
     transfer_staleness_max: Period
 
-    def as_tuple(self) -> tuple:
+    def as_tuple(
+        self,
+    ) -> tuple[
+        ChecksumAddress,
+        ChecksumAddress,
+        ChecksumAddress,
+        ChecksumAddress,
+        Period,
+        Period,
+        int,
+        Period,
+        Period,
+    ]:
         return (
             self.rescue_admin,
             self.rescue_guardian,
@@ -338,7 +356,9 @@ class CcipCrosschainDispatcher(CrosschainDispatcher):
         return self._write("flushResponse()")
 
 
-def _ccip_observation_decoder(values: tuple) -> CcipObservation:
+def _ccip_observation_decoder(
+    values: tuple[int, int, int, int, int, bytes],
+) -> CcipObservation:
     accounted, idle, queued, version, epoch, set_hash = values
     return CcipObservation(
         accounted_balance=Amount(accounted),

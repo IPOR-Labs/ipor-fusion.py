@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from typing import TypedDict
 
 from eth_abi import encode
 from eth_abi.packed import encode_packed
@@ -193,12 +194,23 @@ def _debt_of(
 # ── Pure builders (no chain access) ──────────────────────────────────────────
 
 
-def clone_args() -> dict:
+class CloneKwargs(TypedDict):
+    """The keyword arguments of ``FusionFactory.clone``."""
+
+    asset_name: str
+    asset_symbol: str
+    underlying_token: ChecksumAddress
+    redemption_delay_seconds: Period
+    owner: ChecksumAddress
+    dao_fee_package_index: int
+
+
+def clone_args() -> CloneKwargs:
     return {
         "asset_name": "IPOR WBTC Euler Loop Vault (example)",
         "asset_symbol": "ipWBTCel",
         "underlying_token": ARBITRUM_WBTC,
-        "redemption_delay_seconds": 0,
+        "redemption_delay_seconds": Period(0),
         "owner": OWNER,
         "dao_fee_package_index": 0,
     }

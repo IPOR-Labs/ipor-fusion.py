@@ -40,7 +40,6 @@ from ipor_fusion.core.external_state_executor import (
     BalanceProposal,
     ExternalStateExecutor,
     ExternalStateVaultState,
-    RawLog,
     read_external_state,
 )
 from ipor_fusion.core.fee_manager import (
@@ -50,7 +49,12 @@ from ipor_fusion.core.fee_manager import (
     RecipientFee,
 )
 from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInstance
-from ipor_fusion.core.logs import LogSource, find_creation_block, get_logs_adaptive
+from ipor_fusion.core.logs import (
+    LogSource,
+    RawLog,
+    find_creation_block,
+    get_logs_adaptive,
+)
 from ipor_fusion.core.multicall import (
     MULTICALL3_ADDRESS,
     BatchValue,
@@ -74,13 +78,16 @@ from ipor_fusion.core.rewards_manager import RewardsManager, VestingData
 from ipor_fusion.core.simulation import (
     AccountOverride,
     BlockOverrides,
-    SimulatedCallResult,
     SimulationObservation,
-    SimulationResult,
     StateOverrideProvider,
     VaultSimulator,
     erc20_balance_slot,
     is_simulate_v1_supported,
+)
+from ipor_fusion.core.simulation_result import (
+    SimulatedCallResult,
+    SimulatedLog,
+    SimulationResult,
 )
 from ipor_fusion.core.withdraw_manager import (
     AccountRequest,
@@ -215,6 +222,7 @@ from ipor_fusion.errors import (
     EmptyCallResultError,
     ExternalStateError,
     ExternalStateEventDecodeError,
+    HyperCoreEventDecodeError,
     HyperCoreValuationError,
     IporFusionError,
     LogScanError,
@@ -635,6 +643,7 @@ __all__ = [
     "ExternalStateTotalBalanceUpdatedArgs",
     "ExternalStateUnpausedArgs",
     "ExternalStateEventDecodeError",
+    "HyperCoreEventDecodeError",
     "ExternalStateEventSpec",
     "decode_external_state_event",
     "external_state_event_name",
@@ -706,6 +715,7 @@ __all__ = [
     "SimulationObservation",
     "SimulationResult",
     "SimulatedCallResult",
+    "SimulatedLog",
     "is_simulate_v1_supported",
     "PlasmaVault",
     "AccessManager",

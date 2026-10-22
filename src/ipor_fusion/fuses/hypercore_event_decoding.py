@@ -14,16 +14,16 @@ Status: preview, not production. The contracts behind it are under active develo
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, TypedDict, cast
+from typing import Literal, TypeAlias, TypedDict
 
-from eth_abi import decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.types import LogReceipt, Timestamp, TxReceipt
+from web3.types import Timestamp, TxReceipt
 
-from ipor_fusion.fuses.events import abi_value
+from ipor_fusion.core.logs import RawLog
+from ipor_fusion.errors import HyperCoreEventDecodeError
+from ipor_fusion.fuses.events import decode_event_log, event_name
 from ipor_fusion.types import (
     Amount,
     FuseAddress,
@@ -33,6 +33,7 @@ from ipor_fusion.types import (
     HyperCoreOrderId,
     HyperCoreTokenIndex,
     PayloadHash,
+    TxHash,
 )
 
 
@@ -322,12 +323,14 @@ HYPERCORE_FUSE_EVENTS = frozenset(
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _HyperCoreEventBase:
-    """One decoded HyperCore log; each event is a subclass that pins ``name``
-    to a literal and ``args`` to its shape."""
+    """One decoded HyperCore log with its raw identity; each event is a
+    subclass that pins ``name`` to a literal and ``args`` to its shape."""
 
     name: str
     emitter: ChecksumAddress
     args: HyperCoreEventArgs
+    block_number: int | None = None
+    transaction_hash: TxHash | None = None
     log_index: int | None = None
 
     @property
@@ -479,39 +482,19 @@ HYPERCORE_EVENT_CLASSES: dict[str, type[HyperCoreEvent]] = {
 
 
 def hypercore_event_name(topic: bytes | str) -> str | None:
-    """The HyperCore event behind ``topic0``, or None for any other log."""
-    raw = (
-        bytes.fromhex(topic[2:] if topic.startswith("0x") else topic)
-        if isinstance(topic, str)
-        else bytes(topic)
-    )
-    spec = HYPERCORE_EVENTS.get(raw)
-    return spec.name if spec else None
+    """The HyperCore event behind ``topic0``; None for any other topic and for
+    a value that cannot be a topic."""
+    return event_name(topic, HYPERCORE_EVENTS)
 
 
-def decode_hypercore_event(log: LogReceipt) -> HyperCoreEvent | None:
-    """Decode one receipt log; None when it is not a HyperCore event."""
-    topics = log.get("topics") or []
-    if not topics:
-        return None
-    spec = HYPERCORE_EVENTS.get(bytes(topics[0]))
-    if spec is None:
-        return None
-    values = decode([abi_type for abi_type, _ in spec.params], bytes(log["data"]))
-    # Each value is narrowed to its ABI type.
-    args = {
-        name: abi_value(abi_type, value)
-        for (abi_type, name), value in zip(spec.params, values, strict=True)
-    }
-    # The class's args TypedDict is the spec's shape (pinned by the tests), so
-    # the decoded dict is that class's args.
-    event_class = cast(
-        Callable[..., HyperCoreEvent], HYPERCORE_EVENT_CLASSES[spec.name]
-    )
-    return event_class(
-        emitter=Web3.to_checksum_address(log["address"]),
-        args=args,
-        log_index=log.get("logIndex"),
+def decode_hypercore_event(log: RawLog) -> HyperCoreEvent | None:
+    """Decode one log — a web3 receipt log or the raw JSON-RPC / indexer
+    mapping (hex text topics, data, hashes and quantities). None when its
+    topic is not a HyperCore event; once the topic is recognized, any
+    malformed part (data, topic count, identity) raises
+    ``HyperCoreEventDecodeError``."""
+    return decode_event_log(
+        log, HYPERCORE_EVENTS, HYPERCORE_EVENT_CLASSES, HyperCoreEventDecodeError
     )
 
 

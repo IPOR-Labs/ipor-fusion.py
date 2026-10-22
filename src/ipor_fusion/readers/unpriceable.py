@@ -71,7 +71,7 @@ class MiddlewarePricedToken:
     price_source: ChecksumAddress | None = None
 
 
-def _address_call(to: ChecksumAddress, selector: bytes) -> Call:
+def _address_call(to: ChecksumAddress, selector: bytes) -> Call[ChecksumAddress]:
     return Call(
         to=to,
         data=selector,
@@ -80,12 +80,16 @@ def _address_call(to: ChecksumAddress, selector: bytes) -> Call:
     )
 
 
-def _silos_call(config: ChecksumAddress) -> Call:
+def _silos(silos: tuple[str, str]) -> list[ChecksumAddress]:
+    return [Web3.to_checksum_address(silo) for silo in silos]
+
+
+def _silos_call(config: ChecksumAddress) -> Call[list[ChecksumAddress]]:
     return Call(
         to=config,
         data=_GET_SILOS_SELECTOR,
         output_types=["address", "address"],
-        decoder=lambda silos: [Web3.to_checksum_address(s) for s in silos],
+        decoder=_silos,
     )
 
 

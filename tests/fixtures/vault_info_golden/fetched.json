@@ -1,0 +1,197 @@
+{
+  "vault": "0x000000000000000000000000000000000007a017",
+  "name": "IPOR USDC Fetched",
+  "links": {
+    "ipor_app": "https://app.ipor.io/fusion/ethereum/0x000000000000000000000000000000000007a017",
+    "etherscan": "https://etherscan.io/address/0x000000000000000000000000000000000007a017"
+  },
+  "chain": "ethereum",
+  "chain_id": 1,
+  "block": 1000,
+  "is_latest": false,
+  "block_timestamp": 1790000000,
+  "block_timestamp_utc": "2026-09-21T14:13:20Z",
+  "deployment": null,
+  "asset": {
+    "address": "0x00000000000000000000000000000000000005dC",
+    "symbol": "USDC",
+    "decimals": 6,
+    "price_usd": 1.0
+  },
+  "share_decimals": 8,
+  "total_assets": {
+    "raw": 1250000000,
+    "formatted": "1,250.0",
+    "usd": 1250.0
+  },
+  "total_supply": {
+    "raw": 120000000000,
+    "formatted": "1,200.0"
+  },
+  "share_price": {
+    "asset": 1.0416666667,
+    "usd": 1.0416666667
+  },
+  "supply_cap": {
+    "raw": 1000000000000000000000000000000,
+    "formatted": "10,000,000,000,000,000,000,000.0"
+  },
+  "managers": {
+    "access": "0x0000000000000000000000000000000000AcCE55",
+    "price_oracle": "0x0000000000000000000000000000000000000c1E",
+    "rewards": "0x0000000000000000000000000000000000000000",
+    "withdraw": "0x000000000000000000000000000000000000003D",
+    "fee": "0x0000000000000000000000000000000000FEeAa9"
+  },
+  "role_accounts": [],
+  "fees": {
+    "fee_manager": "0x0000000000000000000000000000000000FEeAa9",
+    "fee_manager_note": "FeeManager contract governing this vault's fees.",
+    "ipor_dao_fee_recipient": null,
+    "ipor_dao_fee_recipient_note": "Address receiving the IPOR DAO's share of the performance and management fees.",
+    "deposit_fee_percent": null,
+    "deposit_fee_wad": null,
+    "deposit_fee_percent_note": "Onboarding Contribution: charged when a deposit is made into the vault, in shares rather than assets. null when not known - most often because this vault's FeeManager predates the deposit fee.",
+    "request_fee_percent": 0.1,
+    "request_fee_wad": 1000000000000000,
+    "request_fee_percent_note": "Offboarding Contribution for Scheduled Withdrawals: charged at request time. Applies only to the Scheduled Withdrawal path, never to an Instant Withdrawal \u2013 a user pays one path, never both.",
+    "withdraw_fee_percent": 0.0,
+    "withdraw_fee_wad": 0,
+    "withdraw_fee_percent_note": "Offboarding Contribution for Instant Withdrawals: charged when performing an instant withdrawal. Applies only to the Instant Withdrawal path, never to a scheduled withdrawal request \u2013 a user pays one path, never both.",
+    "performance_fee_percent": 10.0,
+    "performance_fee_bps": 1000,
+    "performance_fee_percent_note": "Performance Fee the vault actually charges, on share-price gains above the high-water mark (marked to market, so unrealized gains count).",
+    "performance_fee_manager_percent": null,
+    "performance_fee_manager_percent_note": "The same fee as recorded by the FeeManager. Expected to equal performance_fee_percent; a mismatch means the vault and its FeeManager have drifted out of sync.",
+    "performance_fee_recipients": null,
+    "performance_fee_recipients_note": "Named recipients of the performance fee and their shares. Excludes the IPOR DAO, whose share is the remainder up to performance_fee_manager_percent.",
+    "high_water_mark": null,
+    "high_water_mark_note": "The performance fee applies only to gains above this exchange rate: the assets one whole share converts to, in underlying-asset units scaled by 10**asset_decimals. null when not known - most often because this vault's FeeManager predates high-water-mark support.",
+    "management_fee_percent": 2.0,
+    "management_fee_bps": 200,
+    "management_fee_percent_note": "Management Fee the vault actually charges, annualized on total assets.",
+    "management_fee_manager_percent": null,
+    "management_fee_manager_percent_note": "The same fee as recorded by the FeeManager. Expected to equal management_fee_percent; a mismatch means the vault and its FeeManager have drifted out of sync.",
+    "management_fee_recipients": null,
+    "management_fee_recipients_note": "Named recipients of the management fee and their shares. Excludes the IPOR DAO, whose share is the remainder up to management_fee_manager_percent.",
+    "management_fee_last_update_timestamp": 1789913600,
+    "management_fee_last_update_utc": "2026-09-20T14:13:20Z",
+    "management_fee_last_update_timestamp_note": "Unix timestamp of the last management-fee accrual update; 0 if never accrued.",
+    "unrealized_management_fee": {
+      "raw": 3000000,
+      "formatted": "3.0",
+      "usd": 3.0
+    },
+    "unrealized_management_fee_note": "Management fee accrued but not yet collected, in underlying asset units. NOT deducted from total_assets, which is gross of fees per ERC-4626; subtract this to get net assets."
+  },
+  "withdraw_manager_details": {
+    "withdraw_window_seconds": 86400,
+    "withdraw_window_seconds_note": "Length of the window, starting at request time, in which a scheduled withdrawal can be executed (also requires the vault Alpha to release funds after the request).",
+    "fees_note": "The two Offboarding Contributions (for Scheduled and for Instant Withdrawals) are reported in the top-level `fees` object, not here.",
+    "shares_to_release": {
+      "raw": 500000000,
+      "formatted": "5.0"
+    },
+    "shares_to_release_note": "Current shares the vault Alpha has approved for release via releaseFunds().",
+    "last_release_funds_timestamp": 1789996400,
+    "last_release_funds_utc": "2026-09-21T13:13:20Z",
+    "last_release_funds_timestamp_note": "Release timestamp set by the last releaseFunds() call; 0 if never released.",
+    "pending_requests": [],
+    "total_pending_shares": {
+      "raw": 0,
+      "formatted": "0.0"
+    },
+    "total_pending_shares_note": "Sum of shares across all pending withdrawal requests."
+  },
+  "fuses": [
+    {
+      "address": "0x000000000000000000000000000000000000F00e",
+      "contract": "?",
+      "market_id": 100001,
+      "market": "ERC4626_0001"
+    }
+  ],
+  "balance_fuses": [
+    {
+      "market": "ERC4626_0001",
+      "market_id": 100001,
+      "balance": {
+        "raw": 1000000000,
+        "formatted": "1,000.0"
+      },
+      "fuse": "0x000000000000000000000000000000000000BA1f",
+      "contract": "?",
+      "pct_of_total": 80.0
+    }
+  ],
+  "zero_balance_fuses": [],
+  "instant_withdrawal_fuses": [
+    {
+      "address": "0x000000000000000000000000000000000000F00e",
+      "contract": "?",
+      "market_id": 100001,
+      "market": "ERC4626_0001"
+    }
+  ],
+  "substrates": {
+    "ERC4626_0001 (100001)": [
+      {
+        "address": "0x0000000000000000000000000000000000004626"
+      }
+    ]
+  },
+  "dependency_graph": null,
+  "erc20_balances": [],
+  "reconciliation": {
+    "balance_fuses_total": {
+      "raw": 1000000000,
+      "formatted": "1,000.0",
+      "usd": 1000.0
+    },
+    "underlying_on_vault": {
+      "raw": 250000000,
+      "formatted": "250.0",
+      "usd": 250.0
+    },
+    "erc20_direct_total": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0.0
+    },
+    "sum": {
+      "raw": 1250000000,
+      "formatted": "1,250.0",
+      "usd": 1250.0
+    },
+    "on_chain_total_assets": {
+      "raw": 1250000000,
+      "formatted": "1,250.0",
+      "usd": 1250.0
+    },
+    "delta": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0.0,
+      "percent": 0.0
+    },
+    "pending_withdrawals": {
+      "raw": 5000000,
+      "formatted": "5.0",
+      "usd": 5.0
+    },
+    "implied_market_total": {
+      "raw": 1000000000,
+      "formatted": "1,000.0"
+    },
+    "market_storage_divergence": 0
+  },
+  "lending_health": null,
+  "hypercore": null,
+  "health_check": {
+    "ok": [
+      "Balance fuses + underlying = 1,250.0 USDC vs totalAssets 1,250.0 USDC (0.00%)"
+    ],
+    "warnings": [],
+    "criticals": []
+  }
+}

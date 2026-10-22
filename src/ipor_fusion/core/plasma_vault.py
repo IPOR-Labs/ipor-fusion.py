@@ -84,7 +84,7 @@ class ManagementFeeData:
     last_update_timestamp: Timestamp
 
 
-def _market_id_list_decoder(value: list) -> list[MarketId]:
+def _market_id_list_decoder(value: tuple[int, ...]) -> list[MarketId]:
     return [MarketId(v) for v in value]
 
 
@@ -114,11 +114,11 @@ def _address_in_word(word: bytes) -> ChecksumAddress:
     return Web3.to_checksum_address(bytes(word)[-20:])
 
 
-def _address_list_decoder(value: list) -> list[ChecksumAddress]:
+def _address_list_decoder(value: tuple[str, ...]) -> list[ChecksumAddress]:
     return [Web3.to_checksum_address(item) for item in value]
 
 
-def _fuse_list_decoder(value: list) -> list[FuseAddress]:
+def _fuse_list_decoder(value: tuple[str, ...]) -> list[FuseAddress]:
     return [FuseAddress(Web3.to_checksum_address(item)) for item in value]
 
 
@@ -126,7 +126,7 @@ def _access_manager_decoder(value: str) -> AccessManagerAddress:
     return AccessManagerAddress(Web3.to_checksum_address(value))
 
 
-def _performance_fee_data_decoder(value: tuple) -> PerformanceFeeData:
+def _performance_fee_data_decoder(value: tuple[str, int]) -> PerformanceFeeData:
     fee_account, fee_in_percentage = value
     return PerformanceFeeData(
         fee_account=Web3.to_checksum_address(fee_account),
@@ -134,7 +134,9 @@ def _performance_fee_data_decoder(value: tuple) -> PerformanceFeeData:
     )
 
 
-def _management_fee_data_decoder(value: tuple) -> ManagementFeeData:
+def _management_fee_data_decoder(
+    value: tuple[str, int, int],
+) -> ManagementFeeData:
     fee_account, fee_in_percentage, last_update_timestamp = value
     return ManagementFeeData(
         fee_account=Web3.to_checksum_address(fee_account),

@@ -19,7 +19,7 @@ names follow those libraries:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from eth_abi import decode, encode
@@ -29,6 +29,7 @@ from web3 import Web3
 
 from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.core.contract import _encode_calldata
+from ipor_fusion.core.logs import RawLog
 from ipor_fusion.crosschain.logs import log_bytes
 from ipor_fusion.types import (
     ZERO_ADDRESS,
@@ -177,7 +178,7 @@ class Packet:
         )
 
     @classmethod
-    def from_log(cls, log: Mapping) -> Packet:
+    def from_log(cls, log: RawLog) -> Packet:
         """Decode the packet inside a ``PacketSent`` log (raw dict with hex fields)."""
         encoded_payload, _options, _send_library = decode(
             ["bytes", "bytes", "address"], log_bytes(log["data"])

@@ -283,7 +283,7 @@ class TestAdvancedEulerV2CreditMarketBase(_ExampleOfflineChecks):
         assert call.data[:4] == function_signature_to_4byte_selector("debtOf(address)")
         # debtOf returns underlying units; a wrong/dropped return type would
         # misdecode the debt read, so pin it too.
-        assert call.output_types == ["uint256"]
+        assert call.output_types == ("uint256",)
         (decoded_account,) = decode(["address"], call.data[4:])
         assert Web3.to_checksum_address(decoded_account) == account
 

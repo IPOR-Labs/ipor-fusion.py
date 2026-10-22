@@ -63,7 +63,8 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import Any, NamedTuple
+from collections.abc import Mapping
+from typing import NamedTuple
 
 from eth_abi.abi import encode as abi_encode
 from eth_utils import keccak
@@ -75,6 +76,7 @@ from ipor_fusion import (
     SPOT_DEX,
     USDC_SYSTEM_ADDRESS,
     USDC_TOKEN_INDEX,
+    AccountOverride,
     CcipChain,
     CcipChainSelector,
     CcipCrosschainExecutor,
@@ -82,10 +84,12 @@ from ipor_fusion import (
     Command,
     CrosschainLane,
     CrosschainSimulator,
+    FuseAction,
     HyperCoreReader,
     LaneObservation,
     PlasmaVault,
     SimulationResult,
+    SubstrateInfo,
     TimeInForce,
     VaultSimulator,
     Web3Context,
@@ -223,7 +227,7 @@ def _connected_web3(env_var: str, chain_id: ChainId) -> Web3:
 
 def _usdc_balance_override(
     web3: Web3, holder: str, amount: int, *, block: BlockIdentifier = "latest"
-) -> dict[str, Any]:
+) -> dict[str, AccountOverride]:
     """An ``eth_call`` state override that credits ``holder`` with ``amount``
     USDC on HyperEVM: the balance slot is found by probing, never assumed."""
     slot = erc20_balance_slot(web3, HYPEREVM_USDC, block=block)
@@ -311,9 +315,9 @@ def _preview(
     web3: Web3,
     vault: PlasmaVault,
     step: str,
-    action: Any,
+    action: FuseAction,
     *,
-    override: dict[str, Any] | None,
+    override: Mapping[str, AccountOverride] | None,
     note: str,
 ) -> Preview:
     """``eth_estimateGas`` of ``execute([action])`` from the alpha at head: the
@@ -324,7 +328,7 @@ def _preview(
     reverts on a balance is information, not a failure of the example. A gas
     figure proves EVM acceptance only; Core executes the queued action later."""
     calldata = _to_hex(vault.execute([action]).calldata)
-    params: list[Any] = [
+    params: list[object] = [
         {"from": ALPHA, "to": HYPERCORE_VAULT, "data": calldata},
         "latest",
     ]
@@ -356,15 +360,19 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
         decode_substrate(raw, HYPERCORE_MARKET)
         for raw in vault.get_market_substrates(HYPERCORE_MARKET).call(ctx)
     ]
-    by_type: dict[str, list[Any]] = {}
+    by_type: dict[str, list[SubstrateInfo]] = {}
     for info in grants:
         by_type.setdefault(info.type_label, []).append(info)
     spot_tokens = {
-        int(i.extra["token_index"]): i.address for i in by_type.get("SPOT_TOKEN", [])
+        int(i.extra["token_index"]): i.address
+        for i in by_type.get("SPOT_TOKEN", [])
+        if i.address is not None
     }
     perp_markets = {int(i.extra["asset"]): i for i in by_type.get("PERP_MARKET", [])}
     destinations = {
-        Web3.to_checksum_address(i.address) for i in by_type.get("DESTINATION", [])
+        Web3.to_checksum_address(i.address)
+        for i in by_type.get("DESTINATION", [])
+        if i.address is not None
     }
     send_caps = {
         int(i.extra["token_index"]): int(i.extra["max_wei"])

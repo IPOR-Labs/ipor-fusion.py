@@ -26,7 +26,7 @@ repository-local work that does not require protocol context.
 uv sync --all-extras --locked                                 # install, same as CI
 uv run ruff format ./                                         # format (CI runs --check)
 uv run ruff check ./                                          # lint: bandit S, C901 max-complexity 10, PLR limits
-uv run pyright                                                # types, basic mode, src + tests
+uv run pyright                                                # types, basic mode, src + tests + examples + scripts
 uv run pytest                                                 # all tests + coverage gate (fail_under = 95)
 uv run pytest -m "cli or mcp" --no-cov                        # fast offline subset
 uv run pytest --run-readiness -m readiness --no-cov -rA       # opt-in live Ethereum-hub POC checks
@@ -40,8 +40,12 @@ uv lock --check                                               # uv.lock in sync 
 `fusion market morpho-blue|meta-morpho --json`, `fusion vault oracle-mapping
 --json` and the matching MCP tools (`vault_info`, `market_morpho_blue`,
 `market_meta_morpho`, `vault_oracle_mapping`, called through the server) is pinned
-in `tests/fixtures/*_golden/` (`tests/_golden.py`, the `*_golden.py` tests), from
-recorded inputs and no network. A change to any of them fails those tests;
+in `tests/fixtures/*_golden/` (`tests/_golden.py`, the `*_golden.py` tests), with
+no network. Most scenarios render synthetic snapshots (a hand-built `VaultData` or
+fixed reader answers over a fake chain) to cover every rendering branch;
+`test_vault_info_fetched_golden.py` runs `fetch_vault_data` unpatched over a fake
+JSON-RPC provider (`tests/_fake_rpc.py`) to pin the whole fetch-to-output path. A
+change to any of them fails those tests;
 regenerate with `UPDATE_GOLDEN=1` only when the change is intended and review the
 fixture diff. Without it the tests only compare.
 
@@ -252,14 +256,19 @@ the lifecycle matrix follows that.
   prefer a storage or view read over a scan, as `read_balance_fuses` and
   `read_withdraw_manager_address` do), `plasma_vault`, `access`, `withdraw_manager`, `rewards_manager`, `fee_manager`,
   `simulation` (`VaultSimulator`, eth_simulateV1, `erc20_balance_slot` and ERC-20 balance
-  overrides), `oracle`, `fusion_factory`,
+  overrides), `simulation_result` (the run's records, `SimulatedLog`, and the parsing
+  of the node's response), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`, `fuse_action`
   (`FuseAction`), `fuse` (the `Fuse` base, `StakeFuse`, the shared validators and
   substrate packers), `address` (`_validate_not_zero_address`). `core` imports neither
   `fuses` nor `crosschain` (`tests/test_sdk_layering.py`)
 - `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3,
   erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
-  uniswap_v3, universal, `events.py`); `base.py` re-exports the `core/fuse.py` base and validators,
+  uniswap_v3, universal); `events.py` (`extract_events`, `abi_value` and the raw-log
+  event decoder both event families share), `external_state_event_decoding.py` and
+  `hypercore_event_decoding.py` (the ExternalState and HyperCore event specs, classes
+  and decoders; internal modules, the names are exported from `ipor_fusion.fuses`);
+  `base.py` re-exports the `core/fuse.py` base and validators,
   `FuseAction` and `ZERO_ADDRESS` (from `types`). A fuse is a value: equality and
   hash cover its class and every attribute it stores
 - `crosschain/` — crosschain Plasma Vaults (executor on the hub chain, dispatcher at
@@ -389,9 +398,12 @@ or examples.
   `MorphoBlueMarketId` is always `0x` + 64 lowercase hex, built by
   `parse_morpho_market_id`. Raw input
   is parsed once at the boundary (click param types, MCP tools, the user config).
-  `src/`, `examples/` and `tests/typed_client/` are checked with
+  `src/`, `examples/`, `scripts/` and `tests/typed_client/` are checked with
   `reportArgumentType` on, so a bare `int`/`str` passed for one fails pyright; the
-  other tests keep it off and pass literals.
+  other tests keep it off and pass literals. The same roots turn on
+  `reportMissingTypeArgument` and `reportUnknownParameterType`: spell every type
+  argument (`tuple[int, str]` for a decoded ABI tuple, `Call[object]` where the
+  result is ignored, `RawLog` for a raw log), never a bare generic.
 - Addresses: fuse, factory and manager addresses per chain come from
   `ipor-abi` `addresses.json`; a fuse must be registered on the vault
   (`PlasmaVault.get_fuses()`) and its market granted substrates before an

@@ -69,7 +69,8 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import NamedTuple
+from collections.abc import Sequence
+from typing import NamedTuple, TypedDict
 
 from eth_abi.abi import decode
 from eth_typing import ChecksumAddress
@@ -88,7 +89,9 @@ from ipor_fusion import (
     PlasmaVault,
     Price,
     PriceOracleMiddlewareManager,
+    RawLog,
     Roles,
+    SimulatedLog,
     SimulationObservation,
     SimulationResult,
     VaultSimulator,
@@ -368,7 +371,7 @@ def _connected_web3() -> Web3:
     return web3
 
 
-def _logs_of(result: SimulationResult, label: str) -> list[dict]:
+def _logs_of(result: SimulationResult, label: str) -> list[SimulatedLog]:
     """Every log emitted by the labeled call in a finished simulation."""
     for call in result.calls:
         if call.label == label:
@@ -376,7 +379,9 @@ def _logs_of(result: SimulationResult, label: str) -> list[dict]:
     raise AssertionError(f"no simulated call labeled {label!r}")
 
 
-def _executor_from_logs(logs: list[dict], vault: ChecksumAddress) -> ChecksumAddress:
+def _executor_from_logs(
+    logs: Sequence[RawLog], vault: ChecksumAddress
+) -> ChecksumAddress:
     """Read the executor address out of the ExternalStateExecutorDeployed log
     that `vault` emitted.
 
@@ -403,15 +408,18 @@ def _executor_from_logs(logs: list[dict], vault: ChecksumAddress) -> ChecksumAdd
     as foreign, but it is equally not proof the log is ours.
     """
     for entry in logs:
-        topics = entry.get("topics") or ()
-        if not topics or topics[0] != EXECUTOR_DEPLOYED_TOPIC:
+        topics = entry.get("topics")
+        if not isinstance(topics, list) or not topics:
+            continue
+        if topics[0] != EXECUTOR_DEPLOYED_TOPIC:
             continue
         emitter = entry.get("address")
-        if emitter is None or Web3.to_checksum_address(emitter) != vault:
+        if not isinstance(emitter, str) or Web3.to_checksum_address(emitter) != vault:
             continue
-        executor, _market_id = decode(
-            ["address", "uint256"], bytes.fromhex(entry["data"][2:])
-        )
+        data = entry.get("data")
+        if not isinstance(data, str):
+            continue
+        executor, _market_id = decode(["address", "uint256"], bytes.fromhex(data[2:]))
         return Web3.to_checksum_address(executor)
     raise AssertionError(
         f"no ExternalStateExecutorDeployed log from vault {vault} in the enter"
@@ -421,7 +429,18 @@ def _executor_from_logs(logs: list[dict], vault: ChecksumAddress) -> ChecksumAdd
 # ── Pure builders (no chain access -- safe to import and unit-test offline) ───
 
 
-def clone_args() -> dict:
+class CloneKwargs(TypedDict):
+    """The keyword arguments of ``FusionFactory.clone``."""
+
+    asset_name: str
+    asset_symbol: str
+    underlying_token: ChecksumAddress
+    redemption_delay_seconds: Period
+    owner: ChecksumAddress
+    dao_fee_package_index: int
+
+
+def clone_args() -> CloneKwargs:
     """Arguments for FusionFactory.clone(...).
 
     The preview and the in-batch create MUST use identical args: same args plus
@@ -431,7 +450,7 @@ def clone_args() -> dict:
         "asset_name": "IPOR USDC External-State Vault (example)",
         "asset_symbol": "ipUSDCes",
         "underlying_token": BASE_USDC,
-        "redemption_delay_seconds": 0,
+        "redemption_delay_seconds": Period(0),
         "owner": OWNER,
         "dao_fee_package_index": 0,
     }

@@ -1232,7 +1232,7 @@ def test_writes_encode_arguments():
         )
         == observation.as_tuple()
     )
-    assert call.output_types == ["uint256"]
+    assert call.output_types == ("uint256",)
     assert call.call(ctx) == 42
     _selector(ccip.reject_balance_and_block(1), "rejectBalanceAndBlock(uint256)")
     _selector(

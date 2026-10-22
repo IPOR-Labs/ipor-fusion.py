@@ -3,11 +3,12 @@ the Router out."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
 
+from ipor_fusion.core.logs import RawLog
 from ipor_fusion.crosschain.ccip.codec import (
     CCIP_MESSAGE_SENT_TOPIC,
     Any2EVMMessage,
@@ -97,7 +98,7 @@ class CcipTransport(CrosschainTransport):
         return CcipCrosschainDispatcher(address)
 
     def outbound_messages(
-        self, src_chain_id: ChainId, logs: Iterable[Mapping]
+        self, src_chain_id: ChainId, logs: Iterable[RawLog]
     ) -> list[OutboundMessage]:
         src = self._chains[src_chain_id]
         messages = []

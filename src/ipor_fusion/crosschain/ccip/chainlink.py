@@ -172,7 +172,9 @@ class CcvRequirements:
     optional_threshold: int
 
 
-def _ccv_requirements(values: tuple) -> CcvRequirements:
+def _ccv_requirements(
+    values: tuple[tuple[str, ...], tuple[str, ...], int],
+) -> CcvRequirements:
     required, optional, threshold = values
     return CcvRequirements(
         tuple(_address(a) for a in required),

@@ -3,11 +3,12 @@ and ``lzCompose`` from the endpoint out."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
 
+from ipor_fusion.core.logs import RawLog
 from ipor_fusion.crosschain.logs import log_address, log_topic0
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
 from ipor_fusion.crosschain.stargate.contracts import (
@@ -123,7 +124,7 @@ class StargateTransport(CrosschainTransport):
         return StargateCrosschainDispatcher(address)
 
     def outbound_messages(
-        self, src_chain_id: ChainId, logs: Iterable[Mapping]
+        self, src_chain_id: ChainId, logs: Iterable[RawLog]
     ) -> list[OutboundMessage]:
         src = self._chains[src_chain_id]
         messages = []

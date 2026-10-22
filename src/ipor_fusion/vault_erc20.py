@@ -12,12 +12,12 @@ from web3 import Web3
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.multicall import Multicall3
+from ipor_fusion.core.multicall import BatchValue, Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
-from ipor_fusion.types import Amount, Decimals, MarketId, PlasmaVaultAddress
+from ipor_fusion.types import Amount, Decimals, MarketId, PlasmaVaultAddress, Price
 
 
 @dataclass(frozen=True)
@@ -130,7 +130,14 @@ def _read_tokens(
     """Every token's decimals, the vault's balance and the middleware price in
     one Multicall3 batch (a read that fails is ``None``)."""
     batch = Multicall3(ctx).batch()
-    pending = []
+    pending: list[
+        tuple[
+            HexAddress,
+            BatchValue[Decimals | None],
+            BatchValue[Amount | None],
+            BatchValue[Price | None],
+        ]
+    ] = []
     for address in addresses:
         checksum = Web3.to_checksum_address(address)
         token = ERC20(checksum)

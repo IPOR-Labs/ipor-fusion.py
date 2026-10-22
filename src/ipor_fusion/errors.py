@@ -226,6 +226,12 @@ class ExternalStateEventDecodeError(IporFusionError, ValueError):
     ValueError: the log the caller passed is not a decodable event."""
 
 
+class HyperCoreEventDecodeError(IporFusionError, ValueError):
+    """A log carries a listed HyperCore topic but its data does not decode to
+    the declared parameters: malformed, never a plausible event. Also a
+    ValueError: the log the caller passed is not a decodable event."""
+
+
 class OwnerNotFoundError(IporFusionError, LookupError):
     """An access manager has no account holding ``OWNER_ROLE`` (every owner
     was revoked or renounced). Also a LookupError: the owner looked up is not

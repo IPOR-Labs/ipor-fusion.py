@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from _multicall import multicall_aware
-from _simulate import simulate_response
+from _simulate import run_with_response, simulate_response
 from eth_abi import encode
 from hexbytes import HexBytes
 from web3 import Web3
@@ -327,12 +327,13 @@ class TestLegacyOracleIsContextFree:
 
         sim = VaultSimulator(MagicMock())
         price = sim.observe(call)
-        sim._parse_response(
+        run_with_response(
+            sim,
             simulate_response(
                 returnData=HexBytes(raw).to_0x_hex(),
                 status="0x1",
                 gasUsed="0x0",
                 logs=[],
-            )
+            ),
         )
         assert price.value == expected
