@@ -960,9 +960,10 @@ are listed with a link.
   - An Aave V3 market whose Pool could not be resolved is listed the same way
     instead of being skipped.
   - Any other exception propagates.
-  - When the whole lending-health read or the unpriceable-token check fails,
-    `VaultData.failed_reads` names it and validation reports an `incomplete_read`
-    warning.
+  - When the whole lending-health read or the unpriceable-token check fails with
+    a revert, an RPC error or a timeout, `VaultData.failed_reads` names it and
+    validation reports an `incomplete_read` warning. A transport failure (no
+    connection) still aborts the fetch rather than return a snapshot.
   - A substrate the unpriceable-token check could not cover is named the same
     way (`unpriceable_priced_tokens: <what>`). Examples: a Morpho position whose
     read failed, or a reverting `asset()` / `getSilos()`.

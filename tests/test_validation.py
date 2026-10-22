@@ -26,6 +26,7 @@ from ipor_fusion import (
     Erc20Holdings,
     Finding,
     LendingMarketHealth,
+    UnpriceableCheck,
     UnreadableLendingMarket,
     VaultLendingHealth,
     VaultValidation,
@@ -761,3 +762,58 @@ class TestFailedValidationInputs:
                 MagicMock(), pool, VAULT, self._markets()
             )
         assert reads.failed == []
+
+    def test_uncovered_substrates_reach_the_verdict(self):
+        """A partly read Morpho breakdown and a discovery gap of the price
+        check travel through the snapshot to incomplete_read warnings."""
+        reads = _VaultReads(
+            share_decimals=18,
+            total_assets=100 * WAD,
+            total_supply=100 * WAD,
+            supply_cap=100 * WAD,
+            asset=ASSET,
+            access_manager=_addr("ac"),
+            price_oracle=ORACLE,
+            fuses=[],
+            instant_fuses=[],
+            vault_name="Vault",
+            rewards_manager=None,
+            asset_decimals=18,
+            underlying_balance_on_vault=0,
+            asset_symbol="USDC",
+            asset_price_usd=1.0,
+            fuse_markets=None,
+            unimplemented_getters=[],
+            rewards_manager_balance=0,
+        )
+        lending = vault_data._LendingReads(
+            lending_health=VaultLendingHealth(markets=[]),
+            morpho_unread=["Morpho position in market 0xcd"],
+        )
+        check = UnpriceableCheck(tokens=[], unread=["asset() of granted vault 0xee"])
+        with (
+            patch.object(vault_data, "_read_erc20_market", return_value=None),
+            patch.object(
+                vault_data, "fetch_unpriceable_priced_tokens", return_value=check
+            ),
+            patch.object(vault_data, "_fetch_breakdown_token_prices", return_value={}),
+            ThreadPoolExecutor() as pool,
+        ):
+            derived = vault_data._derived_reads(
+                MagicMock(),
+                pool,
+                VAULT,
+                reads,
+                MagicMock(),
+                self._markets(),
+                lending,
+                metadata=False,
+            )
+        assert derived.failed == [
+            "unpriceable_priced_tokens: Morpho position in market 0xcd",
+            "unpriceable_priced_tokens: asset() of granted vault 0xee",
+        ]
+        validation = validate(State(failed_reads=derived.failed), 100 * WAD)
+        incomplete = [f for f in validation.findings if f.check == "incomplete_read"]
+        assert len(incomplete) == 2
+        assert validation.verdict == "warning"
