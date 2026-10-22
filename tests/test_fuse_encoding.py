@@ -938,6 +938,18 @@ class TestFuseEquality:
         assert ___(FUSE_ADDR, 1) != ___(FUSE_ADDR, 2)
         assert ___(FUSE_ADDR, 1) == ___(FUSE_ADDR, 1)
 
+    def test_slots_declared_by_an_iterator_count(self):
+        class IteratorFuse(Fuse):
+            __slots__ = iter(("target",))
+
+        def fuse(target):
+            instance = IteratorFuse(FUSE_ADDR)
+            instance.target = target  # pyright: ignore[reportAttributeAccessIssue]
+            return instance
+
+        assert fuse(1) != fuse(2)
+        assert len({fuse(1), fuse(2)}) == 2
+
     def test_an_unset_slot_is_left_out(self):
         class LazyFuse(Fuse):
             __slots__ = "cached"
