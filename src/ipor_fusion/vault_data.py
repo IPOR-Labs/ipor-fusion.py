@@ -102,6 +102,9 @@ T = TypeVar("T")
 # read in a degraded way and reports it in `VaultData.unimplemented_getters`.
 GET_MARKET_SUBSTRATES = "getMarketSubstrates(uint256)"
 GET_TOTAL_SUPPLY_CAP = "getTotalSupplyCap()"
+# Validation inputs `VaultData.failed_reads` names.
+_LENDING_HEALTH = "lending_health"
+_UNPRICEABLE_PRICED_TOKENS = "unpriceable_priced_tokens"
 GET_PRICE_ORACLE_MIDDLEWARE = "getPriceOracleMiddleware()"
 
 _logger = logging.getLogger(__name__)
@@ -196,6 +199,9 @@ class VaultData:
     # Getters the vault does not implement because it predates them (see
     # GET_MARKET_SUBSTRATES and friends); the data they serve is degraded.
     unimplemented_getters: list[str] = field(default_factory=list)
+    # Validation inputs whose read failed ("lending_health",
+    # "unpriceable_priced_tokens"); validation reports each instead of passing.
+    failed_reads: list[str] = field(default_factory=list)
     # totalAssetsInMarket of every balance-fuse market, once per market, in
     # balance-fuse order.
     market_balances: dict[MarketId, Amount] = field(default_factory=dict)
@@ -525,6 +531,7 @@ def _fetch_market_reads(
 @dataclass
 class _LendingReads:
     lending_health: VaultLendingHealth | None = None
+    failed: list[str] = field(default_factory=list)
     morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None = None
     aave_positions: dict[MarketId, list[AaveV3PositionBreakdown]] | None = None
 
@@ -558,8 +565,10 @@ def _fetch_lending_reads(
     aave_positions = _fetch_aave_positions(
         ctx, pool, vault_addr, markets.aave_pools, markets.market_substrates
     )
+    lending_health = f_health.result()
     return _LendingReads(
-        lending_health=f_health.result(),
+        lending_health=lending_health,
+        failed=[_LENDING_HEALTH] if lending_health is None else [],
         morpho_positions=morpho_positions,
         aave_positions=aave_positions,
     )
@@ -702,6 +711,7 @@ def _snapshot(
         asset_price_usd=reads.asset_price_usd,
         fuse_markets=reads.fuse_markets,
         unimplemented_getters=reads.unimplemented_getters,
+        failed_reads=[*lending.failed, *derived.failed],
         withdraw_manager=withdraw[0],
         withdraw_manager_data=withdraw[1],
         fee_data=fee_data,
@@ -731,6 +741,7 @@ class _DerivedReads:
     unpriceable_priced_tokens: list[MiddlewarePricedToken] | None = None
     token_symbols: dict[HexAddress, str] = field(default_factory=dict)
     token_decimals: dict[HexAddress, Decimals | None] = field(default_factory=dict)
+    failed: list[str] = field(default_factory=list)
 
 
 def _derived_reads(
@@ -791,6 +802,11 @@ def _derived_reads(
         symbols,
     )
     return _DerivedReads(
+        failed=(
+            [_UNPRICEABLE_PRICED_TOKENS]
+            if lending is not None and unpriceable is None
+            else []
+        ),
         erc20=erc20,
         token_prices_usd=token_prices_usd,
         unpriceable_priced_tokens=unpriceable,

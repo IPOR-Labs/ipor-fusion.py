@@ -84,6 +84,7 @@ Check: TypeAlias = Literal[
     "missing_erc20_dependency",
     "unpriceable_token",
     "lending_health",
+    "incomplete_read",
     "total_assets_reconciliation",
     "pending_withdrawals",
     "market_storage_drift",

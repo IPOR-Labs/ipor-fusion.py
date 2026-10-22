@@ -8,6 +8,7 @@ depends on the CLI's fetch types.
 from __future__ import annotations
 
 import dataclasses
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -18,13 +19,14 @@ from _validation import holding, validate
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.exceptions import ContractLogicError
+from web3.exceptions import ContractLogicError, Web3RPCError
 
 from ipor_fusion import (
     BalanceFuse,
     Erc20Holdings,
     Finding,
     LendingMarketHealth,
+    UnreadableLendingMarket,
     VaultLendingHealth,
     VaultValidation,
     Web3Context,
@@ -34,7 +36,7 @@ from ipor_fusion import (
 from ipor_fusion.cache import NullCache
 from ipor_fusion.core.oracle import price_oracle_middleware
 from ipor_fusion.market_ids import IporFusionMarkets
-from ipor_fusion.types import ChainId
+from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.validation import GET_MARKET_SUBSTRATES, Reconciliation
 from ipor_fusion.vault_data import VaultData, _MarketReads, _VaultReads
 from ipor_fusion.vault_erc20 import _Asset, _erc20_holdings, _read_erc20_market
@@ -102,6 +104,7 @@ class State:
     lending_health: VaultLendingHealth | None = None
     unpriceable_priced_tokens: list[Unpriceable] | None = None
     unimplemented_getters: list[str] = field(default_factory=list)
+    failed_reads: list[str] = field(default_factory=list)
     market_balances: dict[int, int] = field(default_factory=dict)
     erc20: Erc20Holdings = field(default_factory=Erc20Holdings)
 
@@ -282,6 +285,35 @@ class TestRouting:
             ("erc20_cache_stale", "warning"),
             ("missing_price_feed", "warning"),
         ]
+
+
+class TestIncompleteReads:
+    def test_a_failed_validation_input_is_a_warning_not_ok(self):
+        state = State(failed_reads=["lending_health", "unpriceable_priced_tokens"])
+        validation = validate(state, 100 * WAD)
+        incomplete = [f for f in validation.findings if f.check == "incomplete_read"]
+        assert [f.severity for f in incomplete] == ["warning", "warning"]
+        assert "lending_health could not be read" in incomplete[0].message
+        assert validation.verdict == "warning"
+
+    def test_an_unreadable_lending_market_is_a_warning(self):
+        health = VaultLendingHealth(
+            markets=[],
+            unreadable=[
+                UnreadableLendingMarket(
+                    protocol="morpho",
+                    market_id=MarketId(14),
+                    market_name="MORPHO",
+                    reason="oracle price read failed: Web3RPCError",
+                    substrate_id="0x" + "ab" * 32,
+                )
+            ],
+        )
+        validation = validate(State(lending_health=health), 100 * WAD)
+        (finding,) = [f for f in validation.findings if f.check == "lending_health"]
+        assert finding.severity == "warning"
+        assert "health unknown, oracle price read failed" in finding.message
+        assert validation.verdict == "warning"
 
 
 class TestReconciliation:
@@ -594,3 +626,47 @@ class TestValidateVault:
         assert (validation.vault, validation.chain_id) == (VAULT, 1)
         assert (validation.block_number, validation.asset_symbol) == (123, "USDC")
         assert validation.erc20.value_in_asset == 11 * WAD
+
+
+class TestFailedValidationInputs:
+    """A validation input whose read fails is named in `failed_reads`, so
+    validation warns instead of passing it as checked."""
+
+    @staticmethod
+    def _markets() -> _MarketReads:
+        return _MarketReads(
+            balance_fuses=[],
+            dependency_graph={},
+            market_substrates={},
+            aave_pools={},
+            market_balances={},
+        )
+
+    def test_a_failed_lending_health_read_is_recorded(self):
+        with (
+            patch.object(
+                vault_data,
+                "fetch_vault_lending_health",
+                side_effect=Web3RPCError("rate limited"),
+            ),
+            ThreadPoolExecutor() as pool,
+        ):
+            reads = vault_data._fetch_lending_reads(
+                MagicMock(), pool, VAULT, self._markets()
+            )
+        assert reads.lending_health is None
+        assert reads.failed == ["lending_health"]
+
+    def test_a_read_lending_health_is_not_recorded(self):
+        with (
+            patch.object(
+                vault_data,
+                "fetch_vault_lending_health",
+                return_value=VaultLendingHealth(markets=[]),
+            ),
+            ThreadPoolExecutor() as pool,
+        ):
+            reads = vault_data._fetch_lending_reads(
+                MagicMock(), pool, VAULT, self._markets()
+            )
+        assert reads.failed == []

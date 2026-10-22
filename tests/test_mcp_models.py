@@ -348,6 +348,15 @@ def _full_vault_info_dict() -> VaultInfoJson:
                     "is_critical": False,
                 }
             ],
+            "unreadable": [
+                {
+                    "protocol": "aave_v3",
+                    "market_id": MarketId(1),
+                    "market_name": "AAVE_V3",
+                    "substrate_id": None,
+                    "reason": "account data read failed: Web3RPCError",
+                }
+            ],
             "worst_ltv_usage_percent": 58.1,
         },
         "role_accounts": [

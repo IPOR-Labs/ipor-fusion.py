@@ -612,6 +612,7 @@
         "is_critical": false
       }
     ],
+    "unreadable": [],
     "worst_ltv_usage_percent": 97.67
   },
   "hypercore": {

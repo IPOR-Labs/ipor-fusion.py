@@ -3,11 +3,13 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from _multicall import sequenced
 from _validation import validate
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.exceptions import Web3RPCError
 
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
@@ -18,6 +20,7 @@ from ipor_fusion.readers.lending_health import (
     MORPHO_MARKET_IDS,
     ORACLE_PRICE_SCALE,
     LendingMarketHealth,
+    UnreadableLendingMarket,
     VaultLendingHealth,
     _compute_aave_market_health,
     _compute_aave_v4_market_health,
@@ -30,7 +33,7 @@ from ipor_fusion.readers.morpho import (
     to_assets_down,
     to_assets_up,
 )
-from ipor_fusion.types import ChainId, MorphoBlueMarketId
+from ipor_fusion.types import ChainId, MarketId, MorphoBlueMarketId
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 ORACLE_ADDR = Web3.to_checksum_address("0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd")
@@ -305,7 +308,7 @@ class TestComputeMorphoMarketHealth:
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
         )
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.protocol == "morpho"
         assert result.current_ltv == 0.0
         assert result.max_ltv == 0.86
@@ -346,7 +349,7 @@ class TestComputeMorphoMarketHealth:
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
         )
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.protocol == "morpho"
         assert 0.49 < result.current_ltv < 0.51
         assert result.max_ltv == 0.86
@@ -379,7 +382,7 @@ class TestComputeMorphoMarketHealth:
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
         )
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.is_critical
         assert result.is_warning
 
@@ -405,27 +408,28 @@ class TestComputeMorphoMarketHealth:
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
         )
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.current_ltv is None
         assert result.ltv_usage_percent is None
 
-    def test_position_read_failure_returns_none(self):
+    def test_position_read_failure_is_unreadable(self):
         reader, ctx = _make_morpho_reader()
-        ctx.call.side_effect = Exception("RPC error")
+        ctx.call.side_effect = Web3RPCError("RPC error")
 
         result = _compute_morpho_market_health(
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
         )
 
-        assert result is None
+        assert isinstance(result, UnreadableLendingMarket)
+        assert "read failed: Web3RPCError" in result.reason
 
-    def test_market_data_failure_returns_none(self):
+    def test_market_data_failure_is_unreadable(self):
         reader, ctx = _make_morpho_reader()
         # First call succeeds (position), second fails (market)
         ctx.call.side_effect = sequenced(
             [
                 encode(["uint256", "uint128", "uint128"], [0, 100, 1000]),
-                Exception("market read failed"),
+                Web3RPCError("market read failed"),
             ]
         )
 
@@ -433,7 +437,8 @@ class TestComputeMorphoMarketHealth:
             ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
         )
 
-        assert result is None
+        assert isinstance(result, UnreadableLendingMarket)
+        assert "read failed: Web3RPCError" in result.reason
 
 
 # ── Aave V3 health computation ───────────────────────────────────────
@@ -451,7 +456,7 @@ class TestComputeAaveMarketHealth:
 
         result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.protocol == "aave_v3"
         assert result.current_ltv == 0.0
         assert result.ltv_usage_percent == 0.0
@@ -479,7 +484,7 @@ class TestComputeAaveMarketHealth:
 
         result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.current_ltv == 0.5
         assert result.max_ltv == 0.85
         assert result.health_factor == 1.7
@@ -505,7 +510,7 @@ class TestComputeAaveMarketHealth:
 
         result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.is_warning
         assert not result.is_critical
         assert result.health_factor == 1.0625
@@ -528,18 +533,19 @@ class TestComputeAaveMarketHealth:
 
         result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.is_critical
         assert result.is_warning
         assert result.health_factor == 1.02
 
-    def test_reader_failure_returns_none(self):
+    def test_reader_failure_is_unreadable(self):
         reader, ctx = _make_aave_reader()
-        ctx.call.side_effect = Exception("RPC error")
+        ctx.call.side_effect = Web3RPCError("RPC error")
 
         result = _compute_aave_market_health(ctx, reader, VAULT_ADDR, 1, "AAVE_V3")
 
-        assert result is None
+        assert isinstance(result, UnreadableLendingMarket)
+        assert "read failed: Web3RPCError" in result.reason
 
 
 class TestComputeAaveV4MarketHealth:
@@ -550,7 +556,7 @@ class TestComputeAaveV4MarketHealth:
             ctx, AAVE_V4_SPOKE, VAULT_ADDR, 49, "AAVE_V4"
         )
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.protocol == "aave_v4"
         assert result.substrate_id == AAVE_V4_SPOKE
         assert result.total_collateral_usd == 50154.13
@@ -568,7 +574,7 @@ class TestComputeAaveV4MarketHealth:
             ctx, AAVE_V4_SPOKE, VAULT_ADDR, 49, "AAVE_V4"
         )
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.health_factor is None
         assert result.current_ltv == 0.0
         assert result.ltv_usage_percent == 0.0
@@ -583,21 +589,22 @@ class TestComputeAaveV4MarketHealth:
             ctx, AAVE_V4_SPOKE, VAULT_ADDR, 49, "AAVE_V4"
         )
 
-        assert result is not None
+        assert isinstance(result, LendingMarketHealth)
         assert result.current_ltv is None
         assert result.ltv_usage_percent is None
         assert result.total_debt_usd == 1.0
         assert result.is_critical
 
-    def test_read_failure_returns_none(self):
+    def test_read_failure_is_unreadable(self):
         ctx = MagicMock()
-        ctx.call.side_effect = Exception("RPC error")
+        ctx.call.side_effect = Web3RPCError("RPC error")
 
         result = _compute_aave_v4_market_health(
             ctx, AAVE_V4_SPOKE, VAULT_ADDR, 49, "AAVE_V4"
         )
 
-        assert result is None
+        assert isinstance(result, UnreadableLendingMarket)
+        assert "read failed: Web3RPCError" in result.reason
 
 
 # ── fetch_vault_lending_health integration ───────────────────────────
@@ -749,7 +756,7 @@ class TestFetchVaultLendingHealth:
         assert all(m.market_name == "AAVE_V4" for m in result.markets)
         assert result.worst_ltv_usage == 68.12
 
-    def test_unknown_chain_skips_aave(self):
+    def test_an_aave_market_without_a_pool_is_unreadable(self):
         ctx = MagicMock()
         # Chain 999999 has no Aave V3 pool configured
         result = fetch_vault_lending_health(
@@ -758,7 +765,22 @@ class TestFetchVaultLendingHealth:
             balance_fuse_market_ids=[1],  # AAVE_V3
             market_substrates={},
         )
-        assert not result.has_lending_positions
+        assert result.markets == []
+        (unreadable,) = result.unreadable
+        assert unreadable.protocol == "aave_v3"
+        assert not result.is_complete
+
+    def test_a_programming_error_is_not_swallowed(self):
+        ctx = MagicMock()
+        ctx.call.side_effect = TypeError("bug")
+        with pytest.raises(TypeError, match="bug"):
+            fetch_vault_lending_health(
+                ctx,
+                VAULT_ADDR,
+                balance_fuse_market_ids=[1],
+                market_substrates={},
+                aave_pools={MarketId(1): AAVE_V3_POOL[ChainId(1)]},
+            )
 
 
 # ── Health check integration with lending_health ─────────────────────

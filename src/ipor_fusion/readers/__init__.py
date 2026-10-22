@@ -48,6 +48,7 @@ from ipor_fusion.readers.hypercore_outcome import (
 )
 from ipor_fusion.readers.lending_health import (
     LendingMarketHealth,
+    UnreadableLendingMarket,
     VaultLendingHealth,
     fetch_vault_lending_health,
 )
@@ -140,6 +141,7 @@ __all__ = [
     "read_hypercore_vault_state",
     "LendingMarketHealth",
     "VaultLendingHealth",
+    "UnreadableLendingMarket",
     "fetch_vault_lending_health",
     "OracleAsset",
     "OracleMapping",

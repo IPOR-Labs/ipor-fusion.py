@@ -330,8 +330,19 @@ class LendingMarketJson(TypedDict):
     is_critical: bool
 
 
+class UnreadableLendingMarketJson(TypedDict):
+    """A lending position whose health could not be read."""
+
+    protocol: str
+    market_id: MarketId
+    market_name: str
+    substrate_id: str | None
+    reason: str
+
+
 class LendingHealthJson(TypedDict):
     markets: list[LendingMarketJson]
+    unreadable: list[UnreadableLendingMarketJson]
     worst_ltv_usage_percent: float | None
 
 
@@ -860,6 +871,16 @@ def _lending_health_json(health: VaultLendingHealth | None) -> LendingHealthJson
                 "is_critical": m.is_critical,
             }
             for m in health.markets
+        ],
+        "unreadable": [
+            {
+                "protocol": u.protocol,
+                "market_id": u.market_id,
+                "market_name": u.market_name,
+                "substrate_id": _lending_substrate_ref(u.substrate_id),
+                "reason": u.reason,
+            }
+            for u in health.unreadable
         ],
         "worst_ltv_usage_percent": health.worst_ltv_usage,
     }

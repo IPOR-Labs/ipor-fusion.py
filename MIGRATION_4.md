@@ -950,6 +950,25 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
 
+- **A failed lending read is a warning, never a silent `ok`.** 3.x caught every
+  exception in the lending-health readers and dropped the position, so a provider
+  outage could leave no lending finding and an `ok` verdict. Now:
+  - A position whose reads fail with a chain or transport error (revert, RPC,
+    timeout, no or malformed data) becomes an `UnreadableLendingMarket` in
+    `VaultLendingHealth.unreadable`.
+  - Each unreadable position is a `lending_health` warning.
+  - An Aave V3 market whose Pool could not be resolved is listed the same way
+    instead of being skipped.
+  - Any other exception propagates.
+  - When the whole lending-health read or the unpriceable-token check fails,
+    `VaultData.failed_reads` names it and validation reports an `incomplete_read`
+    warning.
+
+  The `lending_health` JSON block of `vault info` and `vault validate` carries
+  `unreadable`, and a custom `VaultState` adds the `failed_reads` property. The
+  Morpho and Aave position breakdowns are display-only and still degrade to
+  absent.
+
 - **The reconciliation counts the rewards claim manager.** `PlasmaVault.totalAssets`
   adds `RewardsClaimManager.balanceOf()` (vested rewards) to the vault's idle
   underlying and its markets; 3.x left it out, so a vault with vested rewards showed

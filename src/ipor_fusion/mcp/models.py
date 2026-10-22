@@ -426,8 +426,20 @@ class LendingMarketHealth(_Base):
     is_critical: bool
 
 
+class UnreadableLendingMarket(_Base):
+    """A lending position whose health could not be read: unknown, not
+    healthy."""
+
+    protocol: str
+    market_id: MarketId
+    market_name: str
+    substrate_id: str | None
+    reason: str
+
+
 class LendingHealth(_Base):
     markets: list[LendingMarketHealth]
+    unreadable: list[UnreadableLendingMarket] = Field(default_factory=list)
     worst_ltv_usage_percent: float | None
 
 
@@ -863,12 +875,25 @@ class LendingMarketModel(_Base):
 
 class LendingHealthModel(_Base):
     markets: list[LendingMarketModel]
+    unreadable: list[UnreadableLendingMarket] = Field(
+        description="Positions whose health could not be read: unknown, not healthy."
+    )
     worst_ltv_usage_percent: float | None
 
     @classmethod
     def from_health(cls, health: VaultLendingHealth) -> LendingHealthModel:
         return cls(
             markets=[LendingMarketModel.from_market(m) for m in health.markets],
+            unreadable=[
+                UnreadableLendingMarket(
+                    protocol=u.protocol,
+                    market_id=u.market_id,
+                    market_name=u.market_name,
+                    substrate_id=u.substrate_id,
+                    reason=u.reason,
+                )
+                for u in health.unreadable
+            ],
             worst_ltv_usage_percent=health.worst_ltv_usage,
         )
 
