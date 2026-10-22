@@ -632,6 +632,32 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "Web3Context",
             "WithdrawManager",
             "WithdrawRequestInfo",
+            "Call",
+            "BalanceFuseSnapshot",
+            "BalanceProposal",
+            "ExternalStateExecutor",
+            "ExternalStateVaultState",
+            "read_external_state",
+            "Fuse",
+            "StakeFuse",
+            "FuseAction",
+            "LogSource",
+            "RawLog",
+            "find_creation_block",
+            "get_logs_adaptive",
+            "AccountOverride",
+            "BlockOverrides",
+            "SimulationObservation",
+            "StateOverrideProvider",
+            "VaultSimulator",
+            "erc20_balance_slot",
+            "is_simulate_v1_supported",
+            "SimulatedCallResult",
+            "SimulatedLog",
+            "SimulationResult",
+            "price_oracle_middleware",
+            "resolve_access_manager",
+            "role_account_sort_key",
         }
     ),
     "ipor_fusion.crosschain": frozenset(
@@ -947,6 +973,32 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "perp_dex_of",
             "precompile_index_of",
             "system_address",
+            "EXTERNAL_STATE_EVENT_CLASSES",
+            "EXTERNAL_STATE_EVENT_SPECS",
+            "EXTERNAL_STATE_EVENTS",
+            "EXTERNAL_STATE_TOPICS",
+            "ExternalStateAssetRescuedArgs",
+            "ExternalStateAssetRescuedEvent",
+            "ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent",
+            "ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent",
+            "ExternalStateBigChangeDetectedArgs",
+            "ExternalStateBigChangeDetectedEvent",
+            "ExternalStateCustodianTimestampUpdatedArgs",
+            "ExternalStateEvent",
+            "ExternalStateEventArgs",
+            "ExternalStateEventSpec",
+            "ExternalStateExecutorArgs",
+            "ExternalStateExecutorCreatedEvent",
+            "ExternalStateExecutorDeployedEvent",
+            "ExternalStateOperationArgs",
+            "ExternalStateOperationFuseEnterEvent",
+            "ExternalStateOperationFuseExitEvent",
+            "ExternalStateTotalBalanceUpdatedArgs",
+            "ExternalStateUnpausedArgs",
+            "ExternalStateUnpausedEvent",
+            "decode_external_state_event",
+            "external_state_event_name",
+            "external_state_events",
         }
     ),
     "ipor_fusion.guide": frozenset(
@@ -1382,3 +1434,24 @@ def test_module_path_snapshot_lists_every_defined_name(module_name: str) -> None
         f"{module_name} defines exported names {sorted(missing)} missing from "
         "_MODULE_PATH_SNAPSHOT; add them deliberately"
     )
+
+
+@pytest.mark.parametrize(
+    "package",
+    [
+        "ipor_fusion.config",
+        "ipor_fusion.core",
+        "ipor_fusion.crosschain",
+        "ipor_fusion.fuses",
+        "ipor_fusion.readers",
+    ],
+)
+def test_subpackage_all_lists_every_exported_name_it_defines(package: str) -> None:
+    """A top-level name defined anywhere under a public subpackage is also in
+    that subpackage's ``__all__``, so the subpackage import offers it too."""
+    root = _module(package)
+    defined: set[str] = set()
+    for info in pkgutil.walk_packages(root.__path__, f"{package}."):
+        defined |= _defined_in(_module(info.name))
+    missing = sorted(defined - set(root.__all__))
+    assert not missing, f"{package}.__all__ lacks {missing}"
