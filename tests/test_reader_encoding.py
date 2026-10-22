@@ -320,13 +320,15 @@ class TestAaveV3FuseReaderPool:
 class TestMorphoReaderPositionBreakdown:
     def test_position_breakdown_converts_shares_to_assets(self):
         reader, ctx = _make_reader(MorphoReader)
-        # position(): supply_shares=1000, borrow_shares=500, collateral=42
-        position_raw = encode(["uint256", "uint128", "uint128"], [1000, 500, 42])
-        # market(): supply_assets=2_000_000, supply_shares=2_000_000,
-        #          borrow_assets=1_500_000, borrow_shares=1_500_000
+        # position(): supply_shares=1000e6, borrow_shares=500e6, collateral=42
+        position_raw = encode(
+            ["uint256", "uint128", "uint128"], [1000 * 10**6, 500 * 10**6, 42]
+        )
+        # market(): supply 2_000_100 assets / 2_000_000e6 shares,
+        #           borrow 1_500_250 assets / 1_500_000e6 shares (accrued interest)
         market_raw = encode(
             ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
-            [2_000_000, 2_000_000, 1_500_000, 1_500_000, 1700000000, 0],
+            [2_000_100, 2_000_000 * 10**6, 1_500_250, 1_500_000 * 10**6, 1700000000, 0],
         )
         params_raw = encode(
             ["address", "address", "address", "address", "uint256"],
@@ -341,9 +343,10 @@ class TestMorphoReaderPositionBreakdown:
         assert result.loan_token == TOKEN_A
         assert result.collateral_token == TOKEN_B
         assert result.collateral == 42
-        # borrow_assets = ceil(500 * (1_500_000+1) / (1_500_000+1)) = 500
-        assert result.borrow_assets == 500
-        # supply_assets = 1000 * 2_000_000 // 2_000_000 = 1000
+        # SharesMathLib.toAssetsUp: ceil(500e6 * 1_500_251 / (1_500_000e6 + 1e6))
+        # = ceil(500.0833...) = 501
+        assert result.borrow_assets == 501
+        # toAssetsDown: 1000e6 * 2_000_101 // (2_000_000e6 + 1e6) = 1000 (1000.0495...)
         assert result.supply_assets == 1000
 
     def test_position_breakdown_handles_empty_market(self):

@@ -7,7 +7,6 @@ for lending positions held by Plasma Vaults.
 from __future__ import annotations
 
 import logging
-import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
@@ -24,6 +23,7 @@ from ipor_fusion.readers.aave_v4 import AaveV4OracleReader, AaveV4SpokeReader
 from ipor_fusion.readers.morpho import (
     MorphoReader,
     morpho_blue_address,
+    to_assets_up,
 )
 from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import (
@@ -145,13 +145,6 @@ def _call_morpho_oracle_price(ctx: Web3Context, oracle_address: ChecksumAddress)
     return price
 
 
-def _shares_to_assets_up(shares: int, total_assets: int, total_shares: int) -> int:
-    """Convert shares to assets, rounding up (Morpho convention)."""
-    if total_shares == 0:
-        return shares
-    return math.ceil(shares * (total_assets + 1) / (total_shares + 1))
-
-
 def _compute_morpho_market_health(
     ctx: Web3Context,
     reader: MorphoReader,
@@ -197,7 +190,7 @@ def _compute_morpho_market_health(
         _logger.debug("Failed to read Morpho oracle price for %s", morpho_market_id)
         return None
 
-    borrowed = _shares_to_assets_up(
+    borrowed = to_assets_up(
         position.borrow_shares, market.total_borrow_assets, market.total_borrow_shares
     )
 

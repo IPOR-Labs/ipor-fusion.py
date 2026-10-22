@@ -950,6 +950,13 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
 
+- **Morpho shares convert to assets as Morpho Blue does.** The position breakdown
+  (`MorphoReader.read_position_breakdown`, the `vault info` Morpho rows) and the Morpho
+  lending health follow `SharesMathLib`: integer math with 1e6 virtual shares and one
+  virtual asset, borrow rounded up, supply rounded down. 3.x divided by
+  `total_shares + 1` in floating point, so large positions lost their low digits and
+  tiny or empty markets were off by orders of magnitude.
+
 - **MCP `outputSchema` describes every nested block.** The tool output is
   byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,
   `market_morpho_blue` and `market_meta_morpho` replace each free-form object with

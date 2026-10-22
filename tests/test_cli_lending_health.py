@@ -22,10 +22,14 @@ from ipor_fusion.readers.lending_health import (
     _compute_aave_market_health,
     _compute_aave_v4_market_health,
     _compute_morpho_market_health,
-    _shares_to_assets_up,
     fetch_vault_lending_health,
 )
-from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
+from ipor_fusion.readers.morpho import (
+    MorphoReader,
+    morpho_blue_address,
+    to_assets_down,
+    to_assets_up,
+)
 from ipor_fusion.types import ChainId, MorphoBlueMarketId
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
@@ -100,22 +104,44 @@ def _aave_account_data(health_factor_wad: int) -> bytes:
     )
 
 
-# ── shares_to_assets_up ──────────────────────────────────────────────
+# ── SharesMathLib ─────────────────────────────────────────────────────
+
+# Vectors worked by hand from Morpho Blue's SharesMathLib (VIRTUAL_SHARES = 1e6,
+# VIRTUAL_ASSETS = 1): toAssetsDown = shares * (assets + 1) / (shares_total + 1e6)
+# rounded down, toAssetsUp the same rounded up (mulDivUp).
 
 
-class TestSharesToAssetsUp:
+class TestSharesMath:
     def test_zero_shares(self):
-        assert _shares_to_assets_up(0, 1000, 1000) == 0
+        assert to_assets_up(0, 1000, 1000) == 0
+        assert to_assets_down(0, 1000, 1000) == 0
 
-    def test_zero_total_shares(self):
-        assert _shares_to_assets_up(100, 1000, 0) == 100
+    def test_an_empty_market_still_divides_by_the_virtual_shares(self):
+        # 100 * 1001 / 1_000_000 = 0.1001
+        assert to_assets_up(100, 1000, 0) == 1
+        assert to_assets_down(100, 1000, 0) == 0
 
-    def test_rounds_up(self):
-        # 100 * (1001) / (1001) = 100, but with non-round: 3 * 1001 / 4 = 750.75 → 751
-        assert _shares_to_assets_up(3, 1000, 3) == 751
+    def test_a_tiny_pool_is_dominated_by_the_virtual_shares(self):
+        # 3 * 1001 / 1_000_003 = 0.003003
+        assert to_assets_up(3, 1000, 3) == 1
+        assert to_assets_down(3, 1000, 3) == 0
 
-    def test_exact_division(self):
-        assert _shares_to_assets_up(500, 1000, 1000) == 500
+    def test_realistic_share_scale_converts_back_to_assets(self):
+        # Shares minted at 1e6 per asset, then 250 assets of interest:
+        # 500e6 * 1_500_251 / (1.5e12 + 1e6) = 500.0833..., so up 501, down 500.
+        assert to_assets_up(500 * 10**6, 1_500_250, 1_500_000 * 10**6) == 501
+        assert to_assets_down(500 * 10**6, 1_500_250, 1_500_000 * 10**6) == 500
+
+    def test_large_values_keep_integer_precision(self):
+        # shares / total_shares = 1 / 1000 of 987654321987654321987 assets (+1):
+        # 987654321987654321.988 before the virtual-share correction, so the
+        # exact results straddle ...321 / ...322; a float division loses the
+        # last two digits (it gave 987654321987654272).
+        shares = 123456789123456789123456789
+        total_shares = shares * 1000
+        assets = 987654321987654321987
+        assert to_assets_up(shares, assets, total_shares) == 987654321987654322
+        assert to_assets_down(shares, assets, total_shares) == 987654321987654321
 
 
 # ── LendingMarketHealth properties ───────────────────────────────────
@@ -290,8 +316,8 @@ class TestComputeMorphoMarketHealth:
         reader, ctx = _make_morpho_reader()
 
         # 50% LTV scenario:
-        # borrow_shares=500, total_borrow_assets=1000, total_borrow_shares=1000
-        # → borrowed ≈ 500
+        # borrow_shares=500e6, total_borrow_assets=1000, total_borrow_shares=1000e6
+        # (Morpho mints 1e6 shares per asset) → borrowed = 500
         # collateral=1000, oracle_price=1e36 (1:1 price)
         # → collateral_value = 1000
         # → current_ltv = 500/1000 = 0.5
@@ -300,11 +326,11 @@ class TestComputeMorphoMarketHealth:
         ctx.call.side_effect = sequenced(
             [
                 # position
-                encode(["uint256", "uint128", "uint128"], [0, 500, 1000]),
+                encode(["uint256", "uint128", "uint128"], [0, 500 * 10**6, 1000]),
                 # market
                 encode(
                     ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
-                    [2000, 2000, 1000, 1000, 1700000000, 0],
+                    [2000, 2000 * 10**6, 1000, 1000 * 10**6, 1700000000, 0],
                 ),
                 # market_params
                 encode(
@@ -336,10 +362,10 @@ class TestComputeMorphoMarketHealth:
         # borrowed ≈ 830, collateral=1000, oracle_price=1e36
         ctx.call.side_effect = sequenced(
             [
-                encode(["uint256", "uint128", "uint128"], [0, 830, 1000]),
+                encode(["uint256", "uint128", "uint128"], [0, 830 * 10**6, 1000]),
                 encode(
                     ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
-                    [2000, 2000, 1000, 1000, 1700000000, 0],
+                    [2000, 2000 * 10**6, 1000, 1000 * 10**6, 1700000000, 0],
                 ),
                 encode(
                     ["address", "address", "address", "address", "uint256"],
