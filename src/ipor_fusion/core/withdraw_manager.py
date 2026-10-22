@@ -46,15 +46,17 @@ class AccountRequest:
     can_withdraw: bool
 
 
-def _withdraw_request_info_decoder(value: tuple) -> WithdrawRequestInfo:
+def _withdraw_request_info_decoder(
+    value: tuple[int, int, bool, int],
+) -> WithdrawRequestInfo:
     amount, end_withdraw_window_timestamp, can_withdraw, withdraw_window_in_seconds = (
         value
     )
     return WithdrawRequestInfo(
-        shares=amount,
-        end_withdraw_window_timestamp=end_withdraw_window_timestamp,
+        shares=Shares(amount),
+        end_withdraw_window_timestamp=Timestamp(end_withdraw_window_timestamp),
         can_withdraw=can_withdraw,
-        withdraw_window_in_seconds=withdraw_window_in_seconds,
+        withdraw_window_in_seconds=Period(withdraw_window_in_seconds),
     )
 
 

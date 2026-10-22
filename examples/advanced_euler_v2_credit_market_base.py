@@ -43,6 +43,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from typing import TypedDict
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
@@ -238,7 +239,18 @@ def _evault_debt_of(
 # ── Pure builders (no chain access -- safe to import and unit-test offline) ───
 
 
-def clone_args() -> dict:
+class CloneKwargs(TypedDict):
+    """The keyword arguments of ``FusionFactory.clone``."""
+
+    asset_name: str
+    asset_symbol: str
+    underlying_token: ChecksumAddress
+    redemption_delay_seconds: Period
+    owner: ChecksumAddress
+    dao_fee_package_index: int
+
+
+def clone_args() -> CloneKwargs:
     """Arguments for FusionFactory.clone(...).
 
     The preview and the in-batch create MUST use identical args: same args plus
@@ -250,7 +262,7 @@ def clone_args() -> dict:
         "asset_name": "IPOR WETH Euler Credit Vault (example)",
         "asset_symbol": "ipWETHec",
         "underlying_token": BASE_WETH,
-        "redemption_delay_seconds": 0,
+        "redemption_delay_seconds": Period(0),
         "owner": OWNER,
         "dao_fee_package_index": 0,
     }

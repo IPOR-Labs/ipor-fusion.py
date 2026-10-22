@@ -154,7 +154,14 @@ _FUSION_INSTANCE_OUTPUT_TYPES: list[str] = [
 ]
 
 
-def _fusion_instance_decoder(values: tuple) -> FusionInstance:
+# index, version, assetName, assetSymbol, assetDecimals, underlyingToken,
+# underlyingTokenSymbol, underlyingTokenDecimals, then nine addresses.
+_FusionInstanceTuple = tuple[
+    int, int, str, str, int, str, str, int, str, str, str, str, str, str, str, str, str
+]
+
+
+def _fusion_instance_decoder(values: _FusionInstanceTuple) -> FusionInstance:
     # eth_abi.decode returns address fields as lowercase hex strings; the
     # FusionInstance dataclass declares them as ChecksumAddress, so normalize
     # to EIP-55 before constructing — otherwise equality against checksummed
@@ -262,9 +269,9 @@ def _event_values(
     *,
     contract_address: ChecksumAddress | None = None,
     instance_index: int | None = None,
-) -> tuple:
+) -> tuple[object, ...]:
     topic = bytes(Web3.keccak(text=event_signature))
-    matches: list[tuple] = []
+    matches: list[tuple[object, ...]] = []
     for log in receipt["logs"]:
         if not log["topics"] or bytes(log["topics"][0]) != topic:
             continue
@@ -272,7 +279,7 @@ def _event_values(
             Web3.to_checksum_address(log["address"]) != contract_address
         ):
             continue
-        values = tuple(abi_decode(abi_types, bytes(log["data"])))
+        values: tuple[object, ...] = tuple(abi_decode(abi_types, bytes(log["data"])))
         if instance_index is not None and values[0] != instance_index:
             continue
         matches.append(values)
@@ -325,9 +332,9 @@ class FusionFactory(ContractWrapper):
             _FUSION_INSTANCE_CREATED_TYPES,
             contract_address=self._address,
         )
-        instance_index = int(values[0])
+        instance_index = _integer(values[0])
         components = {
-            field: Web3.to_checksum_address(
+            field: _address(
                 _event_values(
                     receipt,
                     signature,
@@ -343,17 +350,17 @@ class FusionFactory(ContractWrapper):
         }
         return FusionInstance(
             index=instance_index,
-            version=int(values[1]),
-            asset_name=values[2],
-            asset_symbol=values[3],
-            asset_decimals=Decimals(int(values[4])),
-            underlying_token=Web3.to_checksum_address(values[5]),
-            underlying_token_symbol=values[6],
-            underlying_token_decimals=Decimals(int(values[7])),
-            initial_owner=Web3.to_checksum_address(values[8]),
-            plasma_vault=PlasmaVaultAddress(Web3.to_checksum_address(values[9])),
-            plasma_vault_base=Web3.to_checksum_address(values[10]),
-            fee_manager=Web3.to_checksum_address(values[11]),
+            version=_integer(values[1]),
+            asset_name=_text(values[2]),
+            asset_symbol=_text(values[3]),
+            asset_decimals=Decimals(_integer(values[4])),
+            underlying_token=_address(values[5]),
+            underlying_token_symbol=_text(values[6]),
+            underlying_token_decimals=Decimals(_integer(values[7])),
+            initial_owner=_address(values[8]),
+            plasma_vault=PlasmaVaultAddress(_address(values[9])),
+            plasma_vault_base=_address(values[10]),
+            fee_manager=_address(values[11]),
             access_manager=AccessManagerAddress(components.pop("access_manager")),
             **components,
         )

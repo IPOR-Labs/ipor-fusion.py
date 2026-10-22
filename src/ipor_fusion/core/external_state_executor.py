@@ -16,9 +16,8 @@ same proposal reaches an offline reader through the `BalanceProposed` event --
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import TypeAlias
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -30,6 +29,7 @@ from web3.types import BlockIdentifier, Timestamp
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.core.logs import RawLog
 from ipor_fusion.errors import ExternalStateError
 from ipor_fusion.types import (
     ZERO_ADDRESS,
@@ -39,14 +39,6 @@ from ipor_fusion.types import (
     PlasmaVaultAddress,
     ProposalHash,
 )
-
-# The log shapes the event readers below accept: a receipt log from web3.py
-# (HexBytes fields, checksummed address), and a raw JSON-RPC or
-# `eth_simulateV1` row (0x-hex strings, lowercase address). Looser than
-# `web3.types.LogReceipt`, which the rest of `core/` uses, because those rows
-# carry neither its field types nor all of its required keys. Every field is
-# read as `object` and narrowed; a `LogReceipt` is one of these mappings.
-RawLog: TypeAlias = Mapping[str, object]
 
 
 def _log_emitter(log: RawLog) -> ChecksumAddress | None:

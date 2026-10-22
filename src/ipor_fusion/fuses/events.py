@@ -1,17 +1,22 @@
+from collections.abc import Callable
+from typing import TypeVar
+
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from web3 import Web3
 from web3.types import TxReceipt
+
+T = TypeVar("T")
 
 
 def extract_events(
     receipt: TxReceipt,
     event_signature: str,
     abi_types: list[str],
-    dataclass_type,
-):
+    dataclass_type: Callable[..., T],
+) -> list[T]:
     sig_hash = Web3.keccak(text=event_signature)
-    events = []
+    events: list[T] = []
     for log in receipt["logs"]:
         if log["topics"][0] == sig_hash:
             decoded = decode(abi_types, log["data"])

@@ -40,7 +40,6 @@ from ipor_fusion.core.external_state_executor import (
     BalanceProposal,
     ExternalStateExecutor,
     ExternalStateVaultState,
-    RawLog,
     read_external_state,
 )
 from ipor_fusion.core.fee_manager import (
@@ -50,7 +49,12 @@ from ipor_fusion.core.fee_manager import (
     RecipientFee,
 )
 from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInstance
-from ipor_fusion.core.logs import LogSource, find_creation_block, get_logs_adaptive
+from ipor_fusion.core.logs import (
+    LogSource,
+    RawLog,
+    find_creation_block,
+    get_logs_adaptive,
+)
 from ipor_fusion.core.multicall import (
     MULTICALL3_ADDRESS,
     BatchValue,

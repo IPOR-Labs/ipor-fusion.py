@@ -74,11 +74,28 @@ class AaveV3PositionBreakdown:
         return self.supply == 0 and self.variable_debt == 0 and self.stable_debt == 0
 
 
-def _user_account_data_decoder(value: tuple) -> AaveV3UserAccountData:
-    return AaveV3UserAccountData(*value)
+def _user_account_data_decoder(
+    value: tuple[int, int, int, int, int, int],
+) -> AaveV3UserAccountData:
+    collateral, debt, available, liquidation_threshold, ltv, health_factor = value
+    return AaveV3UserAccountData(
+        total_collateral_base=Amount(collateral),
+        total_debt_base=Amount(debt),
+        available_borrows_base=Amount(available),
+        current_liquidation_threshold=liquidation_threshold,
+        ltv=ltv,
+        health_factor=health_factor,
+    )
 
 
-def _reserve_tokens_decoder(value: tuple) -> AaveV3ReserveTokens:
+# getReserveData: configuration, five uint128 indexes and rates,
+# lastUpdateTimestamp, id, four addresses, three uint128 totals.
+_ReserveData = tuple[
+    int, int, int, int, int, int, int, int, str, str, str, str, int, int, int
+]
+
+
+def _reserve_tokens_decoder(value: _ReserveData) -> AaveV3ReserveTokens:
     a_token = value[8]
     stable_debt_token = value[9]
     variable_debt_token = value[10]

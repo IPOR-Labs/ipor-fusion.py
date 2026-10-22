@@ -16,7 +16,7 @@ tuple in :data:`_ROUTE_CONFIG` and decodes to a tuple of its members.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
 from types import MappingProxyType
 
@@ -25,6 +25,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from web3 import Web3
 
+from ipor_fusion.core.logs import RawLog
 from ipor_fusion.crosschain.logs import log_address, log_bytes, log_topic0
 
 
@@ -56,7 +57,7 @@ class CcipEvent:
 
     name: str
     address: ChecksumAddress
-    values: Mapping[str, object]
+    values: RawLog
 
 
 #: ``ICcipCrosschain.CcipRouteConfig`` as an ABI tuple.
@@ -415,7 +416,7 @@ def _python_value(abi_type: str, value: object) -> object:
     return value
 
 
-def decode_ccip_event(log: Mapping) -> CcipEvent | None:
+def decode_ccip_event(log: RawLog) -> CcipEvent | None:
     """The CCIP event behind a raw log dict as ``eth_simulateV1`` returns it
     (hex strings or bytes), or ``None`` when topic0 is not a known signature."""
     topic = log_topic0(log)
@@ -434,11 +435,11 @@ def decode_ccip_event(log: Mapping) -> CcipEvent | None:
     )
 
 
-def ccip_events(logs: Iterable[Mapping]) -> list[CcipEvent]:
+def ccip_events(logs: Iterable[RawLog]) -> list[CcipEvent]:
     """Every known CCIP event among ``logs``, in log order; other logs are skipped."""
     return [event for event in map(decode_ccip_event, logs) if event is not None]
 
 
-def find_ccip_events(logs: Iterable[Mapping], name: str) -> list[CcipEvent]:
+def find_ccip_events(logs: Iterable[RawLog], name: str) -> list[CcipEvent]:
     """The events named ``name`` among ``logs``, in log order."""
     return [event for event in ccip_events(logs) if event.name == name]

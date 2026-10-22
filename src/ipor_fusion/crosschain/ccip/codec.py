@@ -11,7 +11,6 @@ simulation can impersonate the Router.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 from eth_abi import decode, encode
@@ -20,7 +19,8 @@ from eth_utils import keccak
 from web3 import Web3
 
 from ipor_fusion.core.contract import _encode_calldata
-from ipor_fusion.crosschain.logs import log_bytes
+from ipor_fusion.core.logs import RawLog
+from ipor_fusion.crosschain.logs import log_bytes, log_topics
 from ipor_fusion.types import Amount, CcipChainSelector, MessageId
 
 #: topic0 of ``OnRamp 2.0.0``'s ``CCIPMessageSent``; ``destChainSelector``,
@@ -186,8 +186,8 @@ class CcipMessageSent:
     encoded_message: bytes
 
     @classmethod
-    def from_log(cls, log: Mapping) -> CcipMessageSent:
-        topics = [log_bytes(topic) for topic in log["topics"]]
+    def from_log(cls, log: RawLog) -> CcipMessageSent:
+        topics = log_topics(log)
         if len(topics) != 4 or topics[0] != CCIP_MESSAGE_SENT_TOPIC:
             raise ValueError("not a CCIPMessageSent log")
         _fee_token, _amount_before_fees, encoded, _receipts, _blobs = decode(

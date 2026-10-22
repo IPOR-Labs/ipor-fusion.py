@@ -28,17 +28,18 @@ context: ``lane.get_balance().call(lane.hub_ctx)``,
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import ClassVar
 
 from eth_abi import decode
 from eth_typing import ChecksumAddress
-from web3.types import Timestamp
+from web3.types import Timestamp, TxReceipt
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fuse_action import FuseAction
+from ipor_fusion.core.logs import RawLog
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.crosschain.contracts import (
     BalanceObservation,
@@ -336,7 +337,7 @@ class CrosschainLane(ABC):
         """``BALANCE_APPROVER`` only."""
         return self.executor.approve_balance(proposal_id)
 
-    def proposal_id_from_logs(self, logs: Iterable[Mapping]) -> ProposalId:
+    def proposal_id_from_logs(self, logs: Iterable[RawLog]) -> ProposalId:
         """The id of the proposal this lane's executor emitted in ``logs``
         (a receipt's or a simulated call's), from its ``BalanceProposed``."""
         for log in logs:
@@ -348,7 +349,7 @@ class CrosschainLane(ABC):
                 return ProposalId(int(proposal_id))
         raise ValueError("no BalanceProposed log from the executor")
 
-    def proposal_id_from_receipt(self, receipt: Mapping) -> ProposalId:
+    def proposal_id_from_receipt(self, receipt: TxReceipt) -> ProposalId:
         return self.proposal_id_from_logs(receipt["logs"])
 
     def _require_spoke(self, observation: BalanceObservation) -> None:

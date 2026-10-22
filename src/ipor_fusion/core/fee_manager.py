@@ -32,7 +32,9 @@ class HighWaterMarkPerformanceFee:
     update_interval: Period
 
 
-def _recipient_fee_list_decoder(value: list) -> list[RecipientFee]:
+def _recipient_fee_list_decoder(
+    value: tuple[tuple[str, int], ...],
+) -> list[RecipientFee]:
     return [
         RecipientFee(
             recipient=Web3.to_checksum_address(recipient), fee_value=Fee(fee_value)
@@ -41,7 +43,9 @@ def _recipient_fee_list_decoder(value: list) -> list[RecipientFee]:
     ]
 
 
-def _high_water_mark_decoder(value: tuple) -> HighWaterMarkPerformanceFee:
+def _high_water_mark_decoder(
+    value: tuple[int, int, int],
+) -> HighWaterMarkPerformanceFee:
     high_water_mark, last_update, update_interval = value
     return HighWaterMarkPerformanceFee(
         high_water_mark=high_water_mark,

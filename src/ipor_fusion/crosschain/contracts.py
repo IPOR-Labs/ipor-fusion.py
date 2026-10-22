@@ -12,6 +12,7 @@ the PlasmaVault, so those are reachable only through the fuses in
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
@@ -50,7 +51,9 @@ class BalanceObservation:
     expiry: Timestamp
     tracked_position_set_hash: PositionSetHash
 
-    def as_tuple(self) -> tuple:
+    def as_tuple(
+        self,
+    ) -> tuple[ChainId, Amount, int, int, Timestamp, Timestamp, PositionSetHash]:
         return (
             self.chain_id,
             self.settled_balance,
@@ -66,7 +69,7 @@ def _address(value: str) -> ChecksumAddress:
     return Web3.to_checksum_address(value)
 
 
-def _address_list(values: list) -> list[ChecksumAddress]:
+def _address_list(values: Sequence[str]) -> list[ChecksumAddress]:
     return [Web3.to_checksum_address(v) for v in values]
 
 

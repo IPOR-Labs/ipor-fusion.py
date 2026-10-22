@@ -62,15 +62,25 @@ class EulerSwapStaticParams:
     euler_account: ChecksumAddress
     fee_recipient: ChecksumAddress
 
-    def to_tuple(self) -> list:
-        return [
+    def as_tuple(
+        self,
+    ) -> tuple[
+        ChecksumAddress,
+        ChecksumAddress,
+        ChecksumAddress,
+        ChecksumAddress,
+        ChecksumAddress,
+        ChecksumAddress,
+    ]:
+        """The ``StaticParams`` struct in field order, as ``eth_abi`` encodes it."""
+        return (
             self.supply_vault0,
             self.supply_vault1,
             self.borrow_vault0,
             self.borrow_vault1,
             self.euler_account,
             self.fee_recipient,
-        ]
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,8 +101,13 @@ class EulerSwapDynamicParams:
     swap_hooked_operations: int
     swap_hook: ChecksumAddress
 
-    def to_tuple(self) -> list:
-        return [
+    def as_tuple(
+        self,
+    ) -> tuple[
+        int, int, int, int, int, int, int, int, int, int, int, int, ChecksumAddress
+    ]:
+        """The ``DynamicParams`` struct in field order, as ``eth_abi`` encodes it."""
+        return (
             self.equilibrium_reserve0,
             self.equilibrium_reserve1,
             self.min_reserve0,
@@ -106,7 +121,7 @@ class EulerSwapDynamicParams:
             self.expiration,
             self.swap_hooked_operations,
             self.swap_hook,
-        ]
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,8 +131,9 @@ class EulerSwapInitialState:
     reserve0: int
     reserve1: int
 
-    def to_tuple(self) -> list:
-        return [self.reserve0, self.reserve1]
+    def as_tuple(self) -> tuple[int, int]:
+        """The ``InitialState`` struct in field order, as ``eth_abi`` encodes it."""
+        return (self.reserve0, self.reserve1)
 
 
 class EulerV2SupplyFuse(Fuse):
@@ -260,9 +276,9 @@ class EulerV2SwapDeployFuse(Fuse):
             self._ENTER_SIGNATURE,
             [
                 [
-                    static_params.to_tuple(),
-                    dynamic_params.to_tuple(),
-                    initial_state.to_tuple(),
+                    static_params.as_tuple(),
+                    dynamic_params.as_tuple(),
+                    initial_state.as_tuple(),
                     salt,
                     predicted_pool,
                     _sub_account_byte(sub_account),
@@ -313,8 +329,8 @@ class EulerV2SwapReconfigureFuse(Fuse):
                 [
                     pool,
                     _sub_account_byte(sub_account),
-                    dynamic_params.to_tuple(),
-                    initial_state.to_tuple(),
+                    dynamic_params.as_tuple(),
+                    initial_state.as_tuple(),
                 ]
             ],
         )
@@ -333,12 +349,14 @@ class EulerV2BatchItem:
     on_behalf_of_account: int
     data: bytes
 
-    def to_tuple(self) -> list:
-        return [
+    def as_tuple(self) -> tuple[ChecksumAddress, bytes, bytes]:
+        """The EVC ``BatchItem`` as the fuse encodes it: target, the one-byte
+        sub-account id, calldata."""
+        return (
             self.target_contract,
             _sub_account_byte(self.on_behalf_of_account),
             self.data,
-        ]
+        )
 
 
 class EulerV2BatchFuse(Fuse):
@@ -369,7 +387,7 @@ class EulerV2BatchFuse(Fuse):
             )
         return self._action_raw(
             self._ENTER_SIGNATURE,
-            [[[item.to_tuple() for item in items], assets, vaults]],
+            [[[item.as_tuple() for item in items], assets, vaults]],
         )
 
 

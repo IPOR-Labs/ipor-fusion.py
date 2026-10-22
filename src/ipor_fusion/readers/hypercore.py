@@ -169,15 +169,19 @@ class HyperCorePosition:
     is_isolated: bool
 
 
-def _spot_balance(values: tuple) -> HyperCoreSpotBalance:
+def _spot_balance(values: tuple[int, int, int]) -> HyperCoreSpotBalance:
     return HyperCoreSpotBalance(*values)
 
 
-def _margin_summary(values: tuple) -> HyperCoreAccountMarginSummary:
+def _margin_summary(
+    values: tuple[int, int, int, int],
+) -> HyperCoreAccountMarginSummary:
     return HyperCoreAccountMarginSummary(*values)
 
 
-def _token_info(values: tuple) -> HyperCoreTokenInfo:
+def _token_info(
+    values: tuple[str, tuple[int, ...], int, str, str, int, int, int],
+) -> HyperCoreTokenInfo:
     name, spots, fee_share, deployer, evm_contract, sz, wei, extra = values
     return HyperCoreTokenInfo(
         name=name,
@@ -185,17 +189,26 @@ def _token_info(values: tuple) -> HyperCoreTokenInfo:
         deployer_trading_fee_share=fee_share,
         deployer=Web3.to_checksum_address(deployer),
         evm_contract=Web3.to_checksum_address(evm_contract),
-        sz_decimals=sz,
-        wei_decimals=wei,
-        evm_extra_wei_decimals=extra,
+        sz_decimals=Decimals(sz),
+        wei_decimals=Decimals(wei),
+        evm_extra_wei_decimals=Decimals(extra),
     )
 
 
-def _perp_asset_info(values: tuple) -> HyperCorePerpAssetInfo:
-    return HyperCorePerpAssetInfo(*values)
+def _perp_asset_info(
+    values: tuple[str, int, int, int, bool],
+) -> HyperCorePerpAssetInfo:
+    coin, margin_table_id, sz_decimals, max_leverage, only_isolated = values
+    return HyperCorePerpAssetInfo(
+        coin=coin,
+        margin_table_id=MarginTableId(margin_table_id),
+        sz_decimals=Decimals(sz_decimals),
+        max_leverage=max_leverage,
+        only_isolated=only_isolated,
+    )
 
 
-def _position(values: tuple) -> HyperCorePosition:
+def _position(values: tuple[int, int, int, int, bool]) -> HyperCorePosition:
     return HyperCorePosition(*values)
 
 
@@ -356,7 +369,15 @@ _PENDING_STATE_SELECTOR = function_signature_to_4byte_selector("pendingState()")
 _IS_PENDING_SELECTOR = function_signature_to_4byte_selector("isPending()")
 
 
-def _decode_pending_state(values: tuple) -> HyperCorePendingState:
+# pendingUntil, enqueuedL1Block, enqueuedEvmBlock, actionClass, settlementMode,
+# reportedResult, resultL1Block, actionId, payloadHash, stateRefreshing,
+# cachedValueWad, actionNonce.
+_PendingAction = tuple[int, int, int, int, int, int, int, int, bytes, bool, int, int]
+
+
+def _decode_pending_state(
+    values: tuple[_PendingAction, bool, bool, bool, int, int, bool],
+) -> HyperCorePendingState:
     state, pending, settled, refreshing, l1_block, timestamp, l1_available = values
     (
         pending_until,
@@ -373,7 +394,7 @@ def _decode_pending_state(values: tuple) -> HyperCorePendingState:
         action_nonce,
     ) = state
     return HyperCorePendingState(
-        pending_until=pending_until,
+        pending_until=Timestamp(pending_until),
         enqueued_l1_block=enqueued_l1_block,
         enqueued_evm_block=enqueued_evm_block,
         action_class=HyperCoreActionClass(action_class),
@@ -388,7 +409,7 @@ def _decode_pending_state(values: tuple) -> HyperCorePendingState:
         pending=bool(pending),
         settled=bool(settled),
         current_l1_block=l1_block,
-        current_timestamp=timestamp,
+        current_timestamp=Timestamp(timestamp),
         l1_block_available=bool(l1_available),
     )
 

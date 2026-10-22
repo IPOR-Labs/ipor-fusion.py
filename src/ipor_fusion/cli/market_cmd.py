@@ -46,12 +46,15 @@ from ipor_fusion.types import ChainId, MorphoBlueMarketId, parse_morpho_market_i
 from ipor_fusion.vault_info import BLOCK_EXPLORER_URLS
 
 
-class MarketIdType(click.ParamType):
+# click < 8.4 does not make ParamType generic, so it cannot be subscripted.
+class MarketIdType(click.ParamType):  # pyright: ignore[reportMissingTypeArgument]
     """A 32-byte Morpho market ID (64 hex chars, with or without 0x prefix)."""
 
     name = "marketId"
 
-    def convert(self, value, param, ctx):
+    def convert(
+        self, value: object, param: click.Parameter | None, ctx: click.Context | None
+    ) -> MorphoBlueMarketId:
         if not isinstance(value, str):
             self.fail(f"expected string, got {type(value).__name__}", param, ctx)
         try:

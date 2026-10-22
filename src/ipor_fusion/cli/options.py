@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import click
+from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.chains import CHAIN_NAME_TO_ID, ensure_supported_chain
@@ -14,10 +15,13 @@ from ipor_fusion.errors import (
 from ipor_fusion.types import ChainId, PlasmaVaultAddress
 
 
-class AddressType(click.ParamType):
+# click < 8.4 does not make ParamType generic, so it cannot be subscripted.
+class AddressType(click.ParamType):  # pyright: ignore[reportMissingTypeArgument]
     name = "address"
 
-    def convert(self, value, param, ctx):
+    def convert(
+        self, value: object, param: click.Parameter | None, ctx: click.Context | None
+    ) -> ChecksumAddress:
         if not isinstance(value, str):
             self.fail(f"expected string, got {type(value).__name__}", param, ctx)
 
@@ -51,21 +55,28 @@ class VaultAddressType(AddressType):
     """An address the command treats as a Plasma Vault; the command's probe
     (`resolve_access_manager`) is what checks it on chain."""
 
-    def convert(self, value, param, ctx) -> PlasmaVaultAddress:
+    def convert(
+        self, value: object, param: click.Parameter | None, ctx: click.Context | None
+    ) -> PlasmaVaultAddress:
         return PlasmaVaultAddress(super().convert(value, param, ctx))
 
 
 VAULT_ADDRESS = VaultAddressType()
 
 
-class ChainType(click.ParamType):
+# click < 8.4 does not make ParamType generic, so it cannot be subscripted.
+class ChainType(click.ParamType):  # pyright: ignore[reportMissingTypeArgument]
     """Accepts chain ID as int or chain name (ethereum, base, arbitrum, ...)."""
 
     name = "chain"
 
-    def convert(self, value, param, ctx) -> ChainId:
+    def convert(
+        self, value: object, param: click.Parameter | None, ctx: click.Context | None
+    ) -> ChainId:
         if isinstance(value, int):
             return ChainId(value)
+        if not isinstance(value, str):
+            self.fail(f"expected string, got {type(value).__name__}", param, ctx)
         try:
             return ChainId(int(value))
         except ValueError:

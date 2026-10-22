@@ -287,7 +287,7 @@ def _print_balance_fuses_table(data: VaultData, resolve_name: NameResolver) -> N
     asset_symbol = data.asset_symbol
     asset_price_usd = data.asset_price_usd
     with ThreadPoolExecutor() as pool:
-        futures: list[tuple[int, MarketId, str, Future]] = []
+        futures: list[tuple[int, MarketId, str, Future[str]]] = []
         for idx, balance_fuse in enumerate(balance_fuses, 1):
             market_id_str = format_market_label(balance_fuse.market_id)
             f_contract = pool.submit(resolve_name, balance_fuse.fuse)

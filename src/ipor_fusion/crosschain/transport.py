@@ -19,7 +19,7 @@ do.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -27,6 +27,7 @@ from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.contract import _encode_calldata
+from ipor_fusion.core.logs import RawLog
 from ipor_fusion.crosschain.contracts import CrosschainDispatcher, CrosschainExecutor
 from ipor_fusion.crosschain.messages import CrosschainTransportKind
 from ipor_fusion.types import Amount, ChainId, MessageId
@@ -75,7 +76,7 @@ class CrosschainTransport(ABC):
 
     @abstractmethod
     def outbound_messages(
-        self, src_chain_id: ChainId, logs: Iterable[Mapping]
+        self, src_chain_id: ChainId, logs: Iterable[RawLog]
     ) -> list[OutboundMessage]:
         """Every message this transport sent from ``src_chain_id`` in ``logs``
         (raw log dicts, as ``SimulatedCallResult.logs`` carries them)."""

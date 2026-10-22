@@ -7,6 +7,7 @@ without importing that package, whose ``__init__`` loads every encoder.
 """
 
 from abc import ABC
+from collections.abc import Sequence
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
@@ -45,7 +46,7 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
         _validate_not_zero_address(value, name)
 
     @staticmethod
-    def _validate_non_empty_list(value: list, name: str) -> None:
+    def _validate_non_empty_list(value: Sequence[object], name: str) -> None:
         if not value:
             raise ValueError(f"{name} must not be empty")
 
@@ -60,7 +61,7 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
     def __hash__(self) -> int:
         return hash((type(self), *sorted(vars(self).items())))
 
-    def _action_raw(self, signature: str, values: list) -> FuseAction:
+    def _action_raw(self, signature: str, values: Sequence[object]) -> FuseAction:
         selector = function_signature_to_4byte_selector(signature)
         abi_types = _parse_param_types(signature)
         data = selector + encode(abi_types, values)

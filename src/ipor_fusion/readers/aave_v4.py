@@ -26,7 +26,9 @@ class AaveV4UserAccountData:
     borrow_count: int
 
 
-def _user_account_data_decoder(value: tuple) -> AaveV4UserAccountData:
+def _user_account_data_decoder(
+    value: tuple[int, int, int, int, int, int, int],
+) -> AaveV4UserAccountData:
     return AaveV4UserAccountData(*value)
 
 

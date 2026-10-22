@@ -70,7 +70,7 @@ import logging
 import os
 import sys
 from collections.abc import Sequence
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 from eth_abi.abi import decode
 from eth_typing import ChecksumAddress
@@ -429,7 +429,18 @@ def _executor_from_logs(
 # ── Pure builders (no chain access -- safe to import and unit-test offline) ───
 
 
-def clone_args() -> dict:
+class CloneKwargs(TypedDict):
+    """The keyword arguments of ``FusionFactory.clone``."""
+
+    asset_name: str
+    asset_symbol: str
+    underlying_token: ChecksumAddress
+    redemption_delay_seconds: Period
+    owner: ChecksumAddress
+    dao_fee_package_index: int
+
+
+def clone_args() -> CloneKwargs:
     """Arguments for FusionFactory.clone(...).
 
     The preview and the in-batch create MUST use identical args: same args plus
@@ -439,7 +450,7 @@ def clone_args() -> dict:
         "asset_name": "IPOR USDC External-State Vault (example)",
         "asset_symbol": "ipUSDCes",
         "underlying_token": BASE_USDC,
-        "redemption_delay_seconds": 0,
+        "redemption_delay_seconds": Period(0),
         "owner": OWNER,
         "dao_fee_package_index": 0,
     }

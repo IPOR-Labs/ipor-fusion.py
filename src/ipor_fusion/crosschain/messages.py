@@ -10,6 +10,7 @@ the Solidity sources.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -166,7 +167,7 @@ class Command:
         )
 
     @classmethod
-    def from_tuple(cls, values: tuple) -> Command:
+    def from_tuple(cls, values: tuple[bytes, int, int, int, bytes]) -> Command:
         command_id, sequence, config_epoch, action, action_data = values
         return cls(
             action=BusinessAction(action),
@@ -184,11 +185,16 @@ class Command:
         index = _ACTION_VAULT_INDEX.get(self.action)
         if index is None:
             return None
-        return Web3.to_checksum_address(self.decode_action_data()[index])
+        target = self.decode_action_data()[index]
+        if not isinstance(target, str):
+            raise TypeError(f"action vault decoded as {type(target).__name__}")
+        return Web3.to_checksum_address(target)
 
-    def decode_action_data(self) -> tuple:
+    def decode_action_data(self) -> tuple[object, ...]:
         """The per-action tuple behind ``action_data``
-        (``CrosschainMessages.decode*Action``)."""
+        (``CrosschainMessages.decode*Action``), each value as ``eth_abi``
+        decodes its ABI type: an ``int``, a lowercase hex ``str`` address or
+        ``bytes``; the shape depends on the action."""
         types = _ACTION_TYPES.get(self.action)
         if types is None:
             raise ValueError(f"action {self.action.name} carries no action data")
@@ -270,7 +276,7 @@ class Command:
 EMPTY_COMMAND = Command(BusinessAction.NONE, b"")
 
 
-def _encode_action(action: BusinessAction, values: list) -> bytes:
+def _encode_action(action: BusinessAction, values: Sequence[object]) -> bytes:
     return encode(_ACTION_TYPES[action], values)
 
 

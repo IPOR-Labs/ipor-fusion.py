@@ -15,8 +15,9 @@ import logging
 import re
 import threading
 import time
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 import requests
 from eth_typing import ChecksumAddress, HexStr
@@ -28,6 +29,14 @@ from web3.types import BlockIdentifier, FilterParams, LogReceipt
 
 from ipor_fusion.errors import LogScanError
 from ipor_fusion.types import ChainId
+
+# The log shapes the SDK's event readers accept: a receipt log from web3.py
+# (HexBytes fields, checksummed address), and a raw JSON-RPC or
+# `eth_simulateV1` row (0x-hex strings, lowercase address). Looser than
+# `web3.types.LogReceipt`, which the rest of `core/` uses, because those rows
+# carry neither its field types nor all of its required keys. Every field is
+# read as `object` and narrowed; a `LogReceipt` is one of these mappings.
+RawLog: TypeAlias = Mapping[str, object]
 
 _logger = logging.getLogger(__name__)
 
