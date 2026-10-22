@@ -516,7 +516,11 @@ decoder adds its own fields.
 - Reconciliation: `totalAssets = balance_fuses_sum + underlying_on_vault +
   rewards_manager_balance` (`PlasmaVault._getGrossTotalAssets` adds
   `IRewardsClaimManager.balanceOf()`, the vested rewards, when a manager is set;
-  0 without one, and an unreadable balance is a `rewards_manager_balance` warning).
+  0 without one; a manager or balance that cannot be read is a
+  `rewards_manager_balance` warning, and pre-rename vaults answer
+  `getRewardsManagerAddress()`). Vaults deployed before the August 2024 audit
+  return gross minus the unrealized management fee from `totalAssets`, so their
+  reconciliation shows that fee as a delta.
   Balance fuses already price non-underlying ERC20s (e.g. ERC20BalanceFuse
   values BOLD + BOLDUSDC-gauge in WETH terms). Never add all ERC20 values on
   top of balance fuse totals; that double-counts. `erc20_direct_total` in JSON

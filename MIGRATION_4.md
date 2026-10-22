@@ -958,7 +958,8 @@ are listed with a link.
   without a manager, `None` when the read fails, which validation reports as a
   `rewards_manager_balance` warning), and `Reconciliation`, the `vault info` and
   `vault validate` documents carry a `rewards_manager_balance` amount. A custom
-  `VaultState` adds the `rewards_manager_balance` property.
+  `VaultState` adds the `rewards_manager_balance` property, and code constructing a
+  `Reconciliation` passes `rewards_manager_balance` and `rewards_manager_balance_usd`.
 
 - **MCP `outputSchema` describes every nested block.** The tool output is
   byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,

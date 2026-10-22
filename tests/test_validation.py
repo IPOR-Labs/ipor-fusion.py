@@ -311,6 +311,24 @@ class TestReconciliation:
         assert finding.severity == "warning"
         assert validation.verdict == "warning"
 
+    def test_an_unknown_rewards_balance_is_not_called_market_drift(self):
+        state = State(total_assets=100 * WAD, rewards_manager_balance=None)
+        checks = {f.check for f in validate(state, 90 * WAD).findings}
+        assert "rewards_manager_balance" in checks
+        assert "total_assets_reconciliation" in checks
+        assert "market_storage_drift" not in checks
+
+    def test_the_reconciliation_line_names_the_rewards_manager(self):
+        state = State(total_assets=100 * WAD, rewards_manager_balance=5 * WAD)
+        (finding,) = [
+            f
+            for f in validate(state, 95 * WAD).findings
+            if f.check == "total_assets_reconciliation"
+        ]
+        assert finding.message.startswith(
+            "Balance fuses + underlying + rewards manager = 100"
+        )
+
     def test_balances_sum_once_per_market_with_idle_underlying(self):
         state = State(total_assets=100 * WAD, underlying_balance_on_vault=10 * WAD)
         recon = validate(state, 89 * WAD).reconciliation

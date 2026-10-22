@@ -69,6 +69,7 @@ _COMMON: dict[str, Response] = {
     "getInstantWithdrawalFuses()": encode(["address[]"], [[]]),
     "name()": encode(["string"], ["Vault"]),
     "getRewardsClaimManagerAddress()": _address("0x" + "00" * 20),
+    "getRewardsManagerAddress()": ContractLogicError("execution reverted"),
     "balanceOf(address)": _uint(5),
     "symbol()": encode(["string"], ["USDC"]),
     "MARKET_ID()": _uint(1),
@@ -251,6 +252,31 @@ class TestVaultReads:
             }
         )
         reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
+        assert reads.rewards_manager_balance is None
+
+    def test_a_legacy_rewards_manager_getter_is_read(self):
+        ctx = _ctx(
+            {
+                **CURRENT,
+                "getRewardsClaimManagerAddress()": b"",
+                "getRewardsManagerAddress()": _address(REWARDS_MANAGER),
+                "balanceOf()": _uint(7),
+            }
+        )
+        reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
+        assert reads.rewards_manager == REWARDS_MANAGER
+        assert reads.rewards_manager_balance == 7
+
+    def test_an_unknown_rewards_manager_leaves_its_balance_unknown(self):
+        ctx = _ctx(
+            {
+                **CURRENT,
+                "getRewardsClaimManagerAddress()": ContractLogicError("reverted"),
+                "getRewardsManagerAddress()": b"",
+            }
+        )
+        reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
+        assert reads.rewards_manager is None
         assert reads.rewards_manager_balance is None
 
     def test_reverting_supply_cap_read_stays_loud(self):

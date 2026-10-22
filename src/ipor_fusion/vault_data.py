@@ -26,7 +26,7 @@ from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sor
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.multicall import Multicall3
+from ipor_fusion.core.multicall import BatchValue, Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.core.rewards_manager import RewardsManager
@@ -372,6 +372,7 @@ def _fetch_vault_reads(
     instant_fuses = batch.add(pv.get_instant_withdrawal_fuses())
     vault_name = batch.try_add(pv.name())
     rewards_manager = batch.try_add(pv.get_rewards_claim_manager_address())
+    legacy_rewards_manager = batch.try_add(pv.get_rewards_manager_address())
     supply_cap_read = batch.try_add(pv.get_total_supply_cap())
     middleware_oracle = batch.try_add(pv.get_price_oracle_middleware_address())
     legacy_oracle = batch.try_add(pv.get_price_oracle_address())
@@ -405,11 +406,17 @@ def _fetch_vault_reads(
     fuse_market_ids = [
         (fuse, batch.try_add(_fuse_market_id_call(fuse))) for fuse in fuses
     ]
-    manager = rewards_manager.value
-    if manager is not None and int(manager, 16) == 0:
-        manager = None
+    # Vaults before the RewardsClaimManager rename answer the legacy getter;
+    # None from both leaves the manager, and so its balance, unknown.
+    manager = (
+        rewards_manager.value
+        if rewards_manager.value is not None
+        else legacy_rewards_manager.value
+    )
     manager_balance = (
-        batch.try_add(RewardsManager(manager).balance_of()) if manager else None
+        batch.try_add(RewardsManager(manager).balance_of())
+        if manager is not None and int(manager, 16) != 0
+        else None
     )
     batch.run()
     # Fuses without a readable MARKET_ID() are left out; the rest detect orphan
@@ -429,10 +436,8 @@ def _fetch_vault_reads(
         fuses=fuses,
         instant_fuses=instant_fuses.value,
         vault_name=vault_name.value or "",
-        rewards_manager=rewards_manager.value,
-        rewards_manager_balance=(
-            manager_balance.value if manager_balance is not None else Amount(0)
-        ),
+        rewards_manager=manager,
+        rewards_manager_balance=_rewards_manager_balance(manager, manager_balance),
         asset_decimals=asset_decimals.value,
         underlying_balance_on_vault=underlying_balance.value,
         asset_symbol=symbol.value or "?",
@@ -440,6 +445,16 @@ def _fetch_vault_reads(
         fuse_markets=fuse_markets or None,
         unimplemented_getters=unimplemented,
     ), oracle
+
+
+def _rewards_manager_balance(
+    manager: ChecksumAddress | None, read: BatchValue[Amount | None] | None
+) -> Amount | None:
+    """The manager's balance; 0 for the zero address (no manager), None when
+    the manager or its balance could not be read."""
+    if read is not None:
+        return read.value
+    return None if manager is None else Amount(0)
 
 
 def _fetch_role_accounts(

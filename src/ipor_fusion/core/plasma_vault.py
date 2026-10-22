@@ -449,6 +449,15 @@ class PlasmaVault(ContractWrapper):
             decoder=Web3.to_checksum_address,
         )
 
+    def get_rewards_manager_address(self) -> Call[ChecksumAddress]:
+        """The getter of vaults deployed before the manager was renamed
+        RewardsClaimManager (June 2024)."""
+        return self._view(
+            "getRewardsManagerAddress()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
     def get_performance_fee_data(self) -> Call[PerformanceFeeData]:
         return self._view(
             "getPerformanceFeeData()",

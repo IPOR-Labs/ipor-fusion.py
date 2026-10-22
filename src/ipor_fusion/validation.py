@@ -375,9 +375,9 @@ def _rewards_manager_findings(state: VaultState) -> list[Finding]:
         Finding(
             "rewards_manager_balance",
             "warning",
-            "WARNING — the rewards claim manager's balanceOf() could not be read: "
-            "totalAssets includes it, so the reconciliation leaves it out and "
-            "its delta may be that balance",
+            "WARNING — the rewards claim manager or its balanceOf() could not be "
+            "read: totalAssets includes that balance, so the reconciliation "
+            "leaves it out and its delta may be that balance",
         )
     ]
 
@@ -553,8 +553,11 @@ def _reconciliation_findings(
     symbol = state.asset_symbol
     expected = reconciliation.sum
     percent = abs(expected - total_assets) / total_assets * 100
+    terms = "Balance fuses + underlying"
+    if reconciliation.rewards_manager_balance > 0:
+        terms += " + rewards manager"
     line = (
-        f"Balance fuses + underlying = {_format_amount(expected, decimals)} "
+        f"{terms} = {_format_amount(expected, decimals)} "
         f"{symbol} vs totalAssets {_format_amount(total_assets, decimals)} "
         f"{symbol} ({percent:.2f}%)"
     )
@@ -572,7 +575,9 @@ def _reconciliation_findings(
             )
         )
     divergence = reconciliation.market_storage_divergence
-    if abs(divergence) > 10**decimals:
+    # With the rewards manager's balance unknown the divergence may be that
+    # balance; the rewards_manager_balance warning says so instead.
+    if abs(divergence) > 10**decimals and state.rewards_manager_balance is not None:
         findings.append(
             Finding(
                 "market_storage_drift",
