@@ -494,7 +494,7 @@ takes the same object.
 ## Development
 
 ```bash
-uv sync --all-extras                                       # Install dependencies
+uv sync --all-extras --locked                              # Install dependencies (as CI)
 uv run pytest tests/test_fuse_encoding.py -n auto -v       # Unit tests (fast, offline)
 uv run pytest -v -s                                        # All tests (needs `.*_PROVIDER_URL` variables in `.env`)
 uv run ruff format ./                                      # Format
