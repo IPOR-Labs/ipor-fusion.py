@@ -91,6 +91,7 @@ class State:
     total_assets: int = 100 * WAD
     underlying_balance_on_vault: int = 0
     rewards_manager_balance: int | None = 0
+    unrealized_management_fee: int | None = None
     price_oracle: str = ORACLE
     balance_fuses: list[BalanceFuse] = field(
         default_factory=lambda: [BalanceFuse(AAVE, FUSE)]  # type: ignore[arg-type]
@@ -301,6 +302,55 @@ class TestReconciliation:
         assert recon.market_storage_divergence == 0
         assert validation.verdict == "ok"
 
+    def test_a_netting_vault_reconciles_net_of_the_management_fee(self):
+        # Contracts before ipor-fusion #475: totalAssets = gross - unrealized fee.
+        state = State(
+            total_assets=97 * WAD,
+            underlying_balance_on_vault=10 * WAD,
+            unrealized_management_fee=3 * WAD,
+        )
+        validation = validate(state, 90 * WAD)
+        recon = validation.reconciliation
+        assert recon.management_fee_netted == 3 * WAD
+        assert recon.management_fee_netted_usd == 3.0
+        assert recon.sum == 97 * WAD
+        assert recon.delta == 0
+        assert recon.implied_market_total == 90 * WAD
+        assert recon.market_storage_divergence == 0
+        assert validation.verdict == "ok"
+        (line,) = [
+            f.message
+            for f in validation.findings
+            if f.check == "total_assets_reconciliation"
+        ]
+        assert line.startswith(
+            "Balance fuses + underlying - unrealized management fee = 97"
+        )
+
+    def test_a_gross_vault_does_not_net_its_management_fee(self):
+        # ipor-fusion #475 and later: totalAssets is gross despite an accrued fee.
+        state = State(
+            total_assets=100 * WAD,
+            underlying_balance_on_vault=10 * WAD,
+            unrealized_management_fee=3 * WAD,
+        )
+        recon = validate(state, 90 * WAD).reconciliation
+        assert recon.management_fee_netted == 0
+        assert recon.delta == 0
+
+    def test_a_fee_that_does_not_explain_the_gap_is_not_netted(self):
+        # 5 of drift on top of a 3 fee: the gap stays unexplained, not guessed.
+        state = State(total_assets=92 * WAD, unrealized_management_fee=3 * WAD)
+        recon = validate(state, 100 * WAD).reconciliation
+        assert recon.management_fee_netted == 0
+        assert recon.delta == 8 * WAD
+
+    def test_an_unread_management_fee_nets_nothing(self):
+        state = State(total_assets=97 * WAD, unrealized_management_fee=None)
+        recon = validate(state, 100 * WAD).reconciliation
+        assert recon.management_fee_netted == 0
+        assert recon.delta == 3 * WAD
+
     def test_an_unreadable_rewards_manager_balance_warns(self):
         state = State(total_assets=100 * WAD, rewards_manager_balance=None)
         validation = validate(state, 100 * WAD)
@@ -339,6 +389,8 @@ class TestReconciliation:
             underlying_on_vault_usd=10.0,
             rewards_manager_balance=0,
             rewards_manager_balance_usd=0.0,
+            management_fee_netted=0,
+            management_fee_netted_usd=0.0,
             erc20_direct_total=0,
             erc20_direct_total_usd=0.0,
             sum=99 * WAD,

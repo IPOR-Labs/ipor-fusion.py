@@ -209,6 +209,11 @@ class VaultData:
     token_symbols: dict[HexAddress, str] = field(default_factory=dict)
     token_decimals: dict[HexAddress, Decimals | None] = field(default_factory=dict)
 
+    @property
+    def unrealized_management_fee(self) -> Amount | None:
+        """``getUnrealizedManagementFee()`` from the fee snapshot."""
+        return self.fee_data.unrealized_management_fee if self.fee_data else None
+
 
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
 

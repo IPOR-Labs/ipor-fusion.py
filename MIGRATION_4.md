@@ -960,6 +960,15 @@ are listed with a link.
   `vault validate` documents carry a `rewards_manager_balance` amount. A custom
   `VaultState` adds the `rewards_manager_balance` property, and code constructing a
   `Reconciliation` passes `rewards_manager_balance` and `rewards_manager_balance_usd`.
+- **The reconciliation follows the vault's `totalAssets` formula.** Contracts before
+  ipor-fusion #475 (Feb 2026) return gross assets minus the unrealized management
+  fee, later ones gross. 3.x always compared gross, so every older vault with an
+  accrued fee showed that fee as a delta. The reconciliation now subtracts the
+  fee (`Reconciliation.management_fee_netted`, also in both JSON documents) when
+  the fee is exactly the gap to `totalAssets`, decided by the vault's numbers, not
+  by its age; with other drift on top the gap stays unexplained. A custom `VaultState` adds the `unrealized_management_fee` property
+  (`VaultData` derives it from `fee_data`); code constructing a `Reconciliation`
+  passes `management_fee_netted` and `management_fee_netted_usd`.
 
 - **MCP `outputSchema` describes every nested block.** The tool output is
   byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,
