@@ -580,10 +580,15 @@ def read_hypercore_nav(
     vault: PlasmaVaultAddress,
     market_id: MarketId = HYPERCORE_MARKET,
 ) -> HyperCoreNav:
-    """Reproduce ``HyperCoreValuationLib.liveValueWad(market_id)`` for the
-    vault at ``ctx.default_block``, in two Multicall3 batches. ``market_id``
-    is the id the vault keys its HyperCore market under; the grants are
-    decoded with the HyperCore layout either way.
+    """Reproduce the live Core value ``HyperCoreValuationLib.liveValueWad(market_id)``
+    computes for the vault at ``ctx.default_block``, in two Multicall3 batches.
+    ``market_id`` is the id the vault keys its HyperCore market under; the
+    grants are decoded with the HyperCore layout either way.
+
+    The library also compares that value with the stored market value and
+    reverts on a jump above both ``Config{MaxNavJumpBps}`` and
+    ``Config{NavJumpFloorUsd6}``; this function skips that check and returns
+    the value even where the balance fuse would revert.
 
     Mirrors the library's order and short-circuits: the dex bitmap is
     validated first, a vault without a Core account values at 0, a spot token

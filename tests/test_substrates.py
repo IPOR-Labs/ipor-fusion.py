@@ -417,8 +417,9 @@ def test_hypercore_typed_substrates():
         # tags the library has no member for
         ("0x00" + "00" * 31, "type=0"),
         ("0x07" + "00" * 31, "type=7"),
-        # a config key outside 1..6
-        ("0x0509" + "00" * 30, "CONFIG key=9"),
+        # config keys outside 1..11
+        ("0x0500" + "00" * 30, "CONFIG key=0"),
+        ("0x050c" + "00" * 30, "CONFIG key=12"),
     ],
 )
 def test_hypercore_words_the_library_rejects_are_errors(word, label):
@@ -429,3 +430,21 @@ def test_hypercore_words_the_library_rejects_are_errors(word, label):
     assert info.address is None
     assert info.raw_hex == word
     assert info.extra == {"error": "invalid HyperCore substrate"}
+
+
+@pytest.mark.parametrize(
+    ("key", "name", "value"),
+    [
+        (7, "TransferTimeoutSeconds", 600),
+        (8, "ActivationFeeAllowanceUsdcWei", 100_000_000),
+        (9, "MaxNavJumpBps", 5000),
+        (10, "MaxMarkOracleDeviationBps", 500),
+        (11, "NavJumpFloorUsd6", 1_600_000),
+    ],
+)
+def test_hypercore_config_keys_decode_to_solidity_names(key, name, value):
+    word = f"0x05{key:02x}{value:060x}"
+    info = decode_substrate(word, market_id=IporFusionMarkets.HYPERCORE)
+    assert info.type_label == "CONFIG"
+    assert not info.is_error
+    assert info.extra == {"key": name, "value": str(value)}

@@ -2239,6 +2239,18 @@ class TestHyperCoreFuses:
         assert HyperCoreSubstrates.config(
             HyperCoreConfigKey.SETTLEMENT_MODE, SettlementMode.TIMING
         ).hex() == ("0505000000000000000000000000000000000000000000000000000000000001")
+        # keys 7-11 in HyperCoreSubstrateLib.ConfigKey order
+        for key, key_byte in (
+            (HyperCoreConfigKey.TRANSFER_TIMEOUT_SECONDS, 7),
+            (HyperCoreConfigKey.ACTIVATION_FEE_ALLOWANCE_USDC_WEI, 8),
+            (HyperCoreConfigKey.MAX_NAV_JUMP_BPS, 9),
+            (HyperCoreConfigKey.MAX_MARK_ORACLE_DEVIATION_BPS, 10),
+            (HyperCoreConfigKey.NAV_JUMP_FLOOR_USD6, 11),
+        ):
+            assert HyperCoreSubstrates.config(key, 1)[:2] == bytes([5, key_byte])
+        assert HyperCoreSubstrates.config(
+            HyperCoreConfigKey.NAV_JUMP_FLOOR_USD6, 1_600_000
+        ).hex() == ("050b000000000000000000000000000000000000000000000000000000186a00")
         assert HyperCoreSubstrates.builder(
             Web3.to_checksum_address("0xcee5c4272e246a424aede992c987966736e0f63b"), 1
         ).hex() == ("040000000000000000000001cee5c4272e246a424aede992c987966736e0f63b")

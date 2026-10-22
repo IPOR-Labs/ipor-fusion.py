@@ -111,6 +111,11 @@ class HyperCoreConfigKey(IntEnum):
     PERP_DEX_IDS = 4
     SETTLEMENT_MODE = 5
     SPOT_SEND_BRIDGE_ENABLED = 6
+    TRANSFER_TIMEOUT_SECONDS = 7
+    ACTIVATION_FEE_ALLOWANCE_USDC_WEI = 8
+    MAX_NAV_JUMP_BPS = 9
+    MAX_MARK_ORACLE_DEVIATION_BPS = 10
+    NAV_JUMP_FLOOR_USD6 = 11
 
 
 def hip3_action_asset(dex: int, index_in_dex: int) -> HyperCoreAsset:
@@ -351,8 +356,14 @@ class HyperCoreSubstrates:
     Config keys. ``WINDOW_ORDER_SECONDS`` and ``SETTLEMENT_MODE`` are required
     before any order or cancel, ``MAX_USD_CLASS_TRANSFER_USD6`` before a margin
     transfer; ``WINDOW_TRANSFER_SECONDS`` defaults to 2 s and
-    ``SPOT_SEND_BRIDGE_ENABLED`` to disabled. :func:`ipor_fusion.decode_substrate`
-    inverts these.
+    ``SPOT_SEND_BRIDGE_ENABLED`` to disabled. The rest default when absent:
+    ``TRANSFER_TIMEOUT_SECONDS`` to 600 s (at least 60),
+    ``ACTIVATION_FEE_ALLOWANCE_USDC_WEI`` to 1 USDC in Core wei,
+    ``MAX_NAV_JUMP_BPS`` to 5000 and ``MAX_MARK_ORACLE_DEVIATION_BPS`` to 500
+    (both at least 1), and ``NAV_JUMP_FLOOR_USD6`` to 0, which leaves only the
+    relative NAV-jump check, so set it per vault (0.5-1 % of the expected TVL).
+    Each of these five must fit ``uint64``; a fuse reverts when it reads one
+    outside its range. :func:`ipor_fusion.decode_substrate` inverts these.
     """
 
     @staticmethod

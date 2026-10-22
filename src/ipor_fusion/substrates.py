@@ -19,6 +19,7 @@ from eth_typing import HexAddress
 from eth_utils import keccak
 
 from ipor_fusion.fuses.hypercore import (
+    HyperCoreConfigKey,
     is_hip3_asset,
     is_native_perp_asset,
     perp_dex_of,
@@ -285,14 +286,11 @@ _HYPERCORE_TYPES = {
     5: "CONFIG",
     6: "SEND_CAP",
 }
-# HyperCoreSubstrateLib.ConfigKey member names, by enum value.
+# HyperCoreSubstrateLib.ConfigKey member names (MAX_NAV_JUMP_BPS -> MaxNavJumpBps),
+# by enum value.
 _HYPERCORE_CONFIG_KEYS = {
-    1: "WindowTransferSeconds",
-    2: "WindowOrderSeconds",
-    3: "MaxUsdClassTransferUsd6",
-    4: "PerpDexIds",
-    5: "SettlementMode",
-    6: "SpotSendBridgeEnabled",
+    key.value: "".join(part.capitalize() for part in key.name.split("_"))
+    for key in HyperCoreConfigKey
 }
 _HYPERCORE_SETTLEMENT_MODES = {1: "TIMING", 2: "REPORTED"}
 
@@ -309,10 +307,10 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
       with 6 decimals, the low 120 bits are zero.
     - Destination (3): address in the low 20 bytes.
     - Builder (4): ``maxFeeRateDecibps << 160 | builder``.
-    - Config (5): ``key << 240 | uint240 value``. Keys 1..6 are
-      WindowTransferSeconds, WindowOrderSeconds, MaxUsdClassTransferUsd6,
-      PerpDexIds (bitmap: bit i enables perp dex i), SettlementMode (1 TIMING,
-      2 REPORTED) and SpotSendBridgeEnabled.
+    - Config (5): ``key << 240 | uint240 value``, the keys of
+      :class:`~ipor_fusion.HyperCoreConfigKey`, decoded to their Solidity names;
+      PerpDexIds is a bitmap (bit i enables perp dex i), SettlementMode 1 TIMING
+      or 2 REPORTED.
     - SendCap (6): ``tokenIndex << 128 | maxWei`` (Core wei).
     Words the library's decoders revert on come back raw with ``is_error``
     (a tag outside 1..6, an unknown config key, reserved bits set, a
