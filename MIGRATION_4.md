@@ -23,41 +23,58 @@ the details, and each change is described once, in its section.
 Work through these in order; each is what breaks first at run time after the one
 before it is fixed.
 
-1. **Wrappers are built from an address; execution takes the context.**
+1. **Removed and renamed imports fail first, at import.** The crosschain encoders
+   left `ipor_fusion.fuses.crosschain` for `ipor_fusion.crosschain.fuses` (no shim);
+   the event decoder modules `ipor_fusion.fuses.external_state_events` and
+   `ipor_fusion.fuses.hypercore_events` are renamed `external_state_event_decoding`
+   and `hypercore_event_decoding` (import their names from `ipor_fusion` or
+   `ipor_fusion.fuses`); `IporFusionMarkets.RWA`, `MORPHO_BLUE_ADDRESS`, the 3.x cache
+   functions, `read_erc20_holdings`, `ExternalStateExecutor.mark_nav` and `NavMark`
+   are gone. See [Moved, removed and reshaped](#moved-removed-and-reshaped).
+2. **Wrappers are built from an address; execution takes the context.**
    `PlasmaVault(vault)`, `ERC20(token)`, `AccessManager(manager)`; then
    `.call(ctx)`, `.send(ctx)`, `.build_transaction(ctx)`, `.estimate_gas(ctx)`. See
    [Context-free wrappers](#context-free-wrappers).
-2. **Methods that read the chain to answer are `read_*(ctx, ...)`**:
+3. **Methods that read the chain to answer are `read_*(ctx, ...)`**:
    `vault.get_balance_fuses()` is `vault.read_balance_fuses(ctx)`,
    `access_manager.owner()` is `read_owner(ctx)`. See
    [Renamed methods](#renamed-methods).
-3. **Pin a block with `ctx = ctx.at_block(n)`.** Assigning `ctx.default_block`
+4. **Pin a block with `ctx = ctx.at_block(n)`.** Assigning `ctx.default_block`
    raises `AttributeError`. See [Vault reads and validation](#vault-reads-and-validation).
-4. **The vault read is one snapshot.** `fetch_vault_data(ctx, vault, *, block=None,
+5. **The vault read is one snapshot.** `fetch_vault_data(ctx, vault, *, block=None,
    lending=True, metadata=True)` takes the vault address and the chain from `ctx`;
    `validate_vault_state(state)` and `build_vault_info_json(data, *,
    resolve_name=None)` are pure. See [Vault reads and validation](#vault-reads-and-validation).
-5. **Moved and removed names.** The crosschain encoders left
-   `ipor_fusion.fuses.crosschain` (no shim); `IporFusionMarkets.RWA`,
-   `MORPHO_BLUE_ADDRESS`, the 3.x cache functions, `read_erc20_holdings`,
-   `ExternalStateExecutor.mark_nav` and `NavMark` are gone; several functions take
+6. **Simulations return typed observations.** `sim.observe("label", call)` raises
+   `TypeError`: `read = sim.observe(call, label="label")` returns a
+   `SimulationObservation`, read as `read.value` after `run()`;
+   `SimulationResult.get`, `SimulationResult.observations` and
+   `SimulatedCallResult.decoded` are removed (`AttributeError`). `label` is
+   keyword-only on `observe`, `add_call`, `add_transaction` and `deploy_contract`.
+   A failed `run()` leaves every observation unresolved instead of holding the
+   previous run's value. The result records are frozen, logs are `SimulatedLog`
+   records, and a failed call always carries an `error`. See
+   [Typed batches and simulation observations](#typed-batches-and-simulation-observations)
+   and [Behavior changes](#behavior-changes).
+7. **Options by keyword and other reshaped signatures.** Several functions take
    their options by keyword or renamed a parameter. See
    [Moved, removed and reshaped](#moved-removed-and-reshaped).
-6. **Errors.** Every SDK exception derives from `IporFusionError`; some raises changed
-   class (empty call results, crosschain discovery, simulation, Morpho API). See
-   [Errors](#errors).
-7. **Cache and request limit.** `Web3Context.from_url` bounds requests in flight at
+8. **Errors.** Every SDK exception derives from `IporFusionError`; some raises changed
+   class (empty call results, crosschain discovery, simulation, Morpho API, malformed
+   HyperCore logs). See [Errors](#errors).
+9. **Cache and request limit.** `Web3Context.from_url` bounds requests in flight at
    8 (`max_concurrent_requests`; `InFlightLimit` to share a bound, `None` to lift
    it), and the contract cache is injected per context (`NullCache()` keeps
    nothing). See [Contract cache and request limit](#contract-cache-and-request-limit).
-8. **Typed callers** (pyright, mypy, Pylance): ids, addresses and amounts are
-   nominal types. Wrap literals and raw values, `ChainId(8453)`, `Period(0)`,
-   `Amount(n)`, `parse_fuse_address(...)`; values the SDK returns already carry
-   their type. See [Nominal types](#nominal-types).
-9. **Typed JSON documents.** `build_vault_info_json` and the `fusion market`
-   builders return TypedDicts (`VaultInfoJson`, ...); code annotating them
-   `dict[str, Any]` switches to the TypedDict or `Mapping[str, object]`. See
-   [Typed JSON documents](#typed-json-documents).
+10. **Typed callers** (pyright, mypy, Pylance): ids, addresses and amounts are
+    nominal types. Wrap literals and raw values, `ChainId(8453)`, `Period(0)`,
+    `Amount(n)`, `parse_fuse_address(...)`; values the SDK returns already carry
+    their type. See [Nominal types](#nominal-types).
+11. **Typed JSON documents and events.** `build_vault_info_json` and the `fusion
+    market` builders return TypedDicts (`VaultInfoJson`, ...); code annotating them
+    `dict[str, Any]` switches to the TypedDict or `Mapping[str, object]`. Decoded
+    events are discriminated unions narrowed by `event.name`. See
+    [Typed JSON documents](#typed-json-documents) and [Decoded events](#decoded-events).
 
 Then read [Behavior changes](#behavior-changes): they apply to every caller,
 type-checked or not.
@@ -174,7 +191,13 @@ assets.value, fuses.value, name.value
 instead of the simulator, so it no longer chains, and its label is optional (it
 names the read in `result.calls` and in failures). After `run()`,
 `observation.value` is the read decoded as its `Call` decodes it, from the latest
-run; `observation.result` is its `SimulatedCallResult`.
+run; `observation.result` is its `SimulatedCallResult`. Every `run()` unresolves the
+observations when it starts and resolves them only once the whole response has
+parsed: after a failed run (a transport error, an RPC error, a malformed response,
+raised as `SimulationRunError` for the last two) reading one raises `RuntimeError`
+until a run succeeds. `label` is keyword-only on `add_call` and `add_transaction`
+too, as on `observe` and `deploy_contract`: `sim.add_call(call, from_, "label")`
+raises `TypeError`, pass `label="label"`.
 `CrosschainSimulator.observe(chain_id, call, *, label=None)` returns the same,
 resolved by every relay round. `SimulationResult.get`, `SimulationResult.observations`
 and `SimulatedCallResult.decoded` are removed: a list of results of many types has no
@@ -189,9 +212,16 @@ sim.run()
 after.value - before.value
 ```
 
-`Call` is a frozen dataclass and covariant in its result type: assigning to a
-field raises, and a `Call[Amount]` is a `Call[int]` and a `Call[object]`, so a
-`Sequence[Call[object]]` takes any calls without a cast.
+`Call` is a frozen, hashable dataclass and covariant in its result type:
+assigning to a field raises, `output_types` is stored as a tuple (whatever sequence
+it was built with, so compare it with a tuple), and a `Call[Amount]` is a
+`Call[int]` and a `Call[object]`, so a `Sequence[Call[object]]` takes any calls
+without a cast. `add_call` and `execute_call` take a `Call[object]`.
+
+The logs of a simulated call (`SimulatedCallResult.logs`,
+`SimulationResult.execute_logs`) are `SimulatedLog` TypedDicts: `address`, `topics`
+and `data` as the node's `0x` text, plus its block and transaction identity fields
+when it sends them. Other keys a node adds are not kept.
 
 ### Renamed methods
 
@@ -214,6 +244,7 @@ field raises, and a `Call[Amount]` is a `Call[int]` and a `Call[object]`, so a
 | `AaveV3FuseReader.pool()` | `AaveV3FuseReader.read_pool(ctx)` |
 | `PlasmaVault.read(target, data)` / `read_as(target, data, ...)` | `PlasmaVault.universal_read(target, data)` / `universal_read_decoded(target, data, ...)` (they build a Call; `read_*` names only methods that execute) |
 | `read_index_of(asset)` | `precompile_index_of(asset)` (it reads nothing) |
+| `EulerSwapStaticParams.to_tuple()` (and `EulerSwapDynamicParams`, `EulerSwapInitialState`, `EulerV2BatchItem`) | `.as_tuple()`, a typed tuple instead of a list |
 | `ctx.default_block = n` | `ctx = ctx.at_block(n)` |
 
 A service that caches wrappers per chain can now share one wrapper across chains and
@@ -406,9 +437,14 @@ is the wrong one.
 - `Call.call(ctx)` and `Call.decode()` on a write-only `Call` raise `ValueError`, not
   `RuntimeError`. `CrosschainSimulator.relay` raises `ValueError`, not
   `RuntimeError`, for a message to a chain that was not added.
-- `VaultSimulator.run` (provider error from `eth_simulateV1`, or a result count that
-  does not match the queued calls) and `CrosschainSimulator.relay` (not settled within
-  `max_rounds`) raise the new `SimulationRunError`, still a `RuntimeError`.
+- `VaultSimulator.run` (provider error from `eth_simulateV1`, a result count that
+  does not match the queued calls, or a response not in the documented shape, which
+  raised `KeyError`, `TypeError` or `ValueError` before) and
+  `CrosschainSimulator.relay` (not settled within `max_rounds`) raise the new
+  `SimulationRunError`, still a `RuntimeError`.
+- `decode_hypercore_event` raises the new `HyperCoreEventDecodeError` (a
+  `ValueError`) for a log whose topic it recognizes but whose other parts are
+  malformed; see [Decoded events](#decoded-events).
 - The Morpho API client raises `MorphoApiError` for every answer it cannot use and
   every transport failure, never `KeyError`, `TypeError` or `ValueError`:
   - a required market id or address (market and V1 allocation ids, V1 flow-cap ids,
@@ -855,34 +891,54 @@ that only some entries carry is `NotRequired` (a balance fuse's `pct_of_total` a
   `ipor_fusion` and `ipor_fusion.readers`). Narrow by a key before reading a
   kind-specific one: `if detail is not None and "aggregator" in detail:
   detail["description"]`.
-- Decoded events are discriminated unions. `ExternalStateEvent` and `HyperCoreEvent`
-  are type aliases over one frozen dataclass per event (`ExternalStateUnpausedEvent`,
-  `HyperCoreDepositFuseEnterEvent`, ...), each with `name: Literal["<event>"]` and
-  `args` typed as that event's TypedDict (`ExternalStateUnpausedArgs`, ...). Comparing
-  `name` narrows the event and its `args`, with no key test:
-
-  ```python
-  for event in external_state_events(receipt):
-      if event.name == "ExternalStateUnpaused":
-          event.args["signer"]  # ChecksumAddress
-  match hc_event:
-      case HyperCoreDepositFuseEnterEvent(args=args):
-          args["evmAsset"]
-  ```
-
-  Without that comparison `event.args["signer"]` does not type-check.
-  `isinstance(x, ExternalStateEvent)` still works (the alias is a union); the events
-  are no longer built positionally (`ExternalStateEvent(...)` is not a class: build
-  the event's own class with keywords, its `name` is preset).
-  `EXTERNAL_STATE_EVENT_CLASSES` / `HYPERCORE_EVENT_CLASSES` map an event name to its
-  class; they replace `EXTERNAL_STATE_EVENT_ARGS` / `HYPERCORE_EVENT_ARGS`, which are
-  removed. An event's args TypedDict is its class's `args` annotation:
-  `typing.get_type_hints(EXTERNAL_STATE_EVENT_CLASSES[name])["args"]`. Values carry nominal types (`Amount`, `MarketId`, `FuseAddress`,
-  `HyperCoreTokenIndex`, `PayloadHash`, web3's `Timestamp`, ...), and
-  `HyperCoreEvent.fuse` is a `FuseAddress | None` on every event.
 - `RawLog` (the log shape `ExternalStateExecutor.parse_balance_proposed` /
-  `find_balance_proposed` accept) is `Mapping[str, object]`, not `Mapping[str, Any]`;
-  a web3 `LogReceipt` still fits it.
+  `find_balance_proposed`, the event decoders and the crosschain log helpers
+  accept) is `Mapping[str, object]`, not `Mapping[str, Any]`; a web3 `LogReceipt`
+  still fits it.
+- `Command.decode_action_data()` returns `tuple[object, ...]`: narrow each value
+  (an `int`, a lowercase hex `str` address or `bytes`, by the action) before use.
+
+## Decoded events
+
+Decoded events are discriminated unions. `ExternalStateEvent` and `HyperCoreEvent`
+are type aliases over one frozen dataclass per event (`ExternalStateUnpausedEvent`,
+`HyperCoreDepositFuseEnterEvent`, ...), each with `name: Literal["<event>"]` and
+`args` typed as that event's TypedDict (`ExternalStateUnpausedArgs`, ...). Comparing
+`name` narrows the event and its `args`, with no key test:
+
+```python
+for event in external_state_events(receipt):
+    if event.name == "ExternalStateUnpaused":
+        event.args["signer"]  # ChecksumAddress
+match hc_event:
+    case HyperCoreDepositFuseEnterEvent(args=args):
+        args["evmAsset"]
+```
+
+Without that comparison `event.args["signer"]` does not type-check.
+`isinstance(x, ExternalStateEvent)` still works (the alias is a union); the events
+are no longer built positionally (`ExternalStateEvent(...)` is not a class: build the
+event's own class with keywords, its `name` is preset).
+`EXTERNAL_STATE_EVENT_CLASSES` / `HYPERCORE_EVENT_CLASSES` map an event name to its
+class. An event's args TypedDict is its class's `args` annotation:
+`typing.get_type_hints(EXTERNAL_STATE_EVENT_CLASSES[name])["args"]`. Values carry
+nominal types (`Amount`, `MarketId`, `FuseAddress`, `HyperCoreTokenIndex`,
+`PayloadHash`, web3's `Timestamp`, ...), and `HyperCoreEvent.fuse` is a
+`FuseAddress | None` on every event. Every name is importable from `ipor_fusion` and
+from `ipor_fusion.fuses`.
+
+The two families share one input contract. `decode_external_state_event(log)` and
+`decode_hypercore_event(log)` take a web3 receipt log or a raw JSON-RPC / indexer
+mapping (hex text topics, data, hashes and quantities) and return `None` when topic0
+is not one of theirs, or cannot be a topic; once the topic is recognized, a malformed
+part raises `ExternalStateEventDecodeError` / `HyperCoreEventDecodeError` (both an
+`IporFusionError` and a `ValueError`). `external_state_event_name(topic)` and
+`hypercore_event_name(topic)` return `None` for any other topic or a value that
+cannot be one. For HyperCore this changes 3.x: `decode_hypercore_event` took only a
+receipt log with bytes topics and let eth_abi's errors through,
+`hypercore_event_name` raised on bad hex, and `log_index` was passed through as
+given (a hex string from a raw log); the events now also carry `block_number` and
+`transaction_hash`, like the ExternalState ones.
 
 ## Behavior changes
 

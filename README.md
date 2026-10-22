@@ -75,7 +75,7 @@ alt="Release">
 > vault read is one pinned snapshot, and several modules and names moved. A 3.x call
 > such as `PlasmaVault(ctx, address)` fails only when it runs, so a broad
 > `except Exception` can hide it. Follow the ordered checklist in
-> [MIGRATION_4.md, *Start here*](MIGRATION_4.md#start-here).
+> [MIGRATION_4.md, *Start here*](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/MIGRATION_4.md#start-here).
 
 ## Quickstart
 
@@ -250,7 +250,7 @@ resources `fusion://glossary`, `fusion://architecture`, `fusion://invariants` an
 
 ## Agent skills
 
-[`skills/ipor-deploy-vault/SKILL.md`](skills/ipor-deploy-vault/SKILL.md) teaches a
+[`skills/ipor-deploy-vault/SKILL.md`](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/skills/ipor-deploy-vault/SKILL.md) teaches a
 coding agent the full clone → roles → market → access posture → deposit → execute
 walk, with the invariants and the revert selectors, before it writes vault code.
 Its body is `fusion://invariants` and `fusion://quickstart` from `ipor_fusion.guide`
@@ -270,7 +270,7 @@ npx skills add IPOR-Labs/ipor-fusion.py -g -a codex      # or gemini-cli, cursor
 
 ## Common errors
 
-Reverts on the deploy-and-configure path, keyed by selector so a failed transaction is greppable. This table and the full invariants ship in the wheel as [`ipor_fusion.guide`](src/ipor_fusion/guide/invariants.md), which `fusion-mcp` serves as `fusion://invariants`.
+Reverts on the deploy-and-configure path, keyed by selector so a failed transaction is greppable. This table and the full invariants ship in the wheel as [`ipor_fusion.guide`](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/src/ipor_fusion/guide/invariants.md), which `fusion-mcp` serves as `fusion://invariants`.
 
 | Selector | Revert | What happened | Fix |
 |---|---|---|---|
@@ -286,7 +286,7 @@ Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` 
 
 A flash-loan fuse also needs `update_callback_handler(handler, sender, selector)` before its first `execute`: Morpho Blue calls back `onMorphoFlashLoan(uint256,bytes)`, the Euler EVC `onEulerFlashLoan(bytes)`, and an unregistered callback reverts `HandlerNotFound()`.
 
-The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](tests/test_simulate_vault_from_scratch_base.py).
+The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/tests/test_simulate_vault_from_scratch_base.py).
 
 Custom errors of the crosschain contracts decode by name: importing
 `ipor_fusion.crosschain` registers their signatures (`CROSSCHAIN_ERROR_SIGNATURES`),
@@ -298,22 +298,22 @@ raises `SimulationError` naming the first failed call.
 ## Vault construction examples
 
 Runnable, canonical examples for building and configuring a vault from scratch live in
-[`examples`](examples). They preview and simulate through `eth_simulateV1` — nothing is
+[`examples`](https://github.com/IPOR-Labs/ipor-fusion.py/tree/main/examples). They preview and simulate through `eth_simulateV1` — nothing is
 ever signed or broadcast.
 
-- [Simple Aave V3 supply vault](examples/simple_aave_v3_supply_base.py) — start here for vault
+- [Simple Aave V3 supply vault](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/simple_aave_v3_supply_base.py) — start here for vault
   creation, role bootstrap, and configuring a single supported market.
-- [Advanced Euler V2 credit-market vault](examples/advanced_euler_v2_credit_market_base.py) —
+- [Advanced Euler V2 credit-market vault](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/advanced_euler_v2_credit_market_base.py) —
   continue here for composing multiple functional fuses, typed Euler substrates and sub-accounts,
   and an ordered collateral → borrow → repay → unwind lifecycle.
-- [External-state margin leg](examples/external_state_margin_leg_base.py) — a vault whose capital
+- [External-state margin leg](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/external_state_margin_leg_base.py) — a vault whose capital
   sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
   the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
-- [Crosschain CCIP lifecycle](examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) (preview feature) — a vault
+- [Crosschain CCIP lifecycle](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) (preview feature) — a vault
   whose capital works on another chain: supply USDC from an Arbitrum hub to a HyperEVM spoke
   over CCIP, attest the remote balance with two keys, deposit and redeem on the spoke, recall
   and claim, driven through `CrosschainLane` and relayed by `CrosschainSimulator`.
-- [Composed HyperCore flow](examples/composed_hypercore_flow_arbitrum_hyperevm.py) (preview feature) — the
+- [Composed HyperCore flow](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/composed_hypercore_flow_arbitrum_hyperevm.py) (preview feature) — the
   same hub funding a HyperCore vault (market 55) that trades on Hyperliquid Core: the Core leg
   (bridge, dex transfer, order, close, exit) built from the vault's substrate grants and estimated
   with `eth_estimateGas` at head (EVM acceptance only, Core executes later), the REDEEM sized by the vault's EVM exit ceiling behind the executor's
@@ -400,6 +400,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50); the executor's thresholds (`staleness_max`, `big_change_bps`, `dust_threshold`, `min_update_interval`), the live aggregate (`get_balance_fuse_snapshot`) and the pre-hook's staleness clock (`get_oldest_update_timestamp`) |
 | `read_external_state`, `ExternalStateVaultState` | The market's vault-scoped state from the vault's ERC-7201 storage at one block: executor, the balance fuse's cached total, the custodian timestamp it last checked and the pause flag the pre-hook enforces (no getter exposes them) |
 | `decode_external_state_event`, `EXTERNAL_STATE_TOPICS` | The ExternalState events the vault emits (big change, cache updates, unpause, rescue, executor creation and deployment, operation enter/exit), decoded by topic with their raw log identity; a malformed listed log raises |
+| `decode_hypercore_event`, `hypercore_events` | **Preview.** The HyperCore fuse, pending-library, settlement and reporter events, decoded by topic with their raw log identity under the same input contract; a malformed listed log raises `HyperCoreEventDecodeError` |
 | `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | **Preview.** Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
 | `StargateCrosschainDispatcher`, `CcipCrosschainDispatcher` | Remote dispatcher state (`observation`, tracked idle, command lane) |
 | `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |
@@ -427,11 +428,11 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
 | Crosschain (preview) | `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse` (market 54); transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` |
+| HyperCore (Hyperliquid, market 55, preview) | `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` |
 
 The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Use
 `crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` for that deployment;
 `open_lane` discovers the vault's actual market grants rather than assuming 54.
-| HyperCore (Hyperliquid, market 55, preview) | `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` |
 
 ### Readers (`ipor_fusion.readers`)
 
@@ -495,7 +496,7 @@ cp .env.example .env
 # Edit .env with ARBITRUM_PROVIDER_URL, ETHEREUM_PROVIDER_URL, BASE_PROVIDER_URL
 ```
 
-Contributor and coding-agent instructions (commands, conventions, invariants, domain rules) live in [AGENTS.md](AGENTS.md).
+Contributor and coding-agent instructions (commands, conventions, invariants, domain rules) live in [AGENTS.md](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/AGENTS.md).
 
 ## Examples
 
