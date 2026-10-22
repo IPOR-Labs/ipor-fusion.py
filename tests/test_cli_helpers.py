@@ -13,7 +13,7 @@ from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.exceptions import ContractLogicError
+from web3.exceptions import ContractLogicError, Web3RPCError
 
 from ipor_fusion import vault_data, vault_erc20
 from ipor_fusion.cache import FileContractCache, NullCache, cache_key
@@ -1951,7 +1951,7 @@ class TestFetchMorphoPositions:
     @patch("ipor_fusion.vault_positions.MorphoReader")
     def test_returns_none_when_no_morpho_substrates(self, _mock_reader_cls):
         with ThreadPoolExecutor() as pool:
-            result = _fetch_morpho_positions(MagicMock(), pool, _VAULT_ADDR, {})
+            result = _fetch_morpho_positions(MagicMock(), pool, _VAULT_ADDR, {}, [])
         assert result is None
 
     @patch("ipor_fusion.vault_positions.MorphoReader")
@@ -1964,10 +1964,34 @@ class TestFetchMorphoPositions:
         ctx.chain_id = 42161
         morpho_sub = bytes.fromhex("ab" * 32)
         with ThreadPoolExecutor() as pool:
-            result = _fetch_morpho_positions(ctx, pool, _VAULT_ADDR, {14: [morpho_sub]})
+            unread: list[str] = []
+            result = _fetch_morpho_positions(
+                ctx, pool, _VAULT_ADDR, {14: [morpho_sub]}, unread
+            )
         assert result == {14: [_morpho_breakdown()]}
+        assert unread == []
         # Arbitrum has its own Morpho deployment — never the Ethereum address.
         mock_reader_cls.assert_called_once_with(MORPHO_BLUE_ADDRESSES[42161])
+
+    @patch("ipor_fusion.vault_positions.MorphoReader")
+    def test_a_failed_substrate_is_named_and_the_rest_kept(self, mock_reader_cls):
+        good, bad = bytes.fromhex("ab" * 32), bytes.fromhex("cd" * 32)
+
+        def read(_ctx, market_id, _vault):
+            if market_id.endswith("cd" * 32):
+                raise Web3RPCError("rate limited")
+            return _morpho_breakdown()
+
+        mock_reader_cls.return_value.read_position_breakdown.side_effect = read
+        ctx = MagicMock()
+        ctx.chain_id = 42161
+        unread: list[str] = []
+        with ThreadPoolExecutor() as pool:
+            result = _fetch_morpho_positions(
+                ctx, pool, _VAULT_ADDR, {14: [good, bad]}, unread
+            )
+        assert result == {14: [_morpho_breakdown()]}
+        assert unread == [f"Morpho position in market 0x{'cd' * 32}"]
 
 
 class TestBreakdownTokenPrices:

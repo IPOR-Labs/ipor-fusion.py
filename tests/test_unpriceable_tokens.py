@@ -87,6 +87,10 @@ def chain(monkeypatch):
 
 
 def _fetch(chain, substrates, balance_fuses=(), morpho_positions=None):
+    return _check(chain, substrates, balance_fuses, morpho_positions).tokens
+
+
+def _check(chain, substrates, balance_fuses=(), morpho_positions=None):
     return fetch_unpriceable_priced_tokens(
         chain.ctx,
         price_oracle=ORACLE,
@@ -169,12 +173,17 @@ class TestFetch:
         raw = encode(["address", "address"], [SILO_0, SILO_1])
         assert call.decode(raw) == [SILO_0, SILO_1]
 
-    def test_unreadable_vault_asset_and_silos_are_skipped(self, chain):
+    def test_unreadable_vault_asset_and_silos_are_named_unread(self, chain):
         substrates = {
             IporFusionMarkets.EULER_V2: [_high(VAULT)],
             IporFusionMarkets.SILO_V2: [_plain(SILO_CONFIG)],
         }
-        assert _fetch(chain, substrates) == []
+        check = _check(chain, substrates)
+        assert check.tokens == []
+        assert check.unread == [
+            f"getSilos() of granted Silo Config {SILO_CONFIG}",
+            f"asset() of granted Euler vault {VAULT}",
+        ]
 
     def test_morpho_loan_and_collateral(self, chain):
         chain.answers.update(

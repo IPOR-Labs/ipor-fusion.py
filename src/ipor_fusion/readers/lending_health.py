@@ -8,15 +8,25 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+import requests
 from eth_abi import decode
+from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.exceptions import (
+    BadFunctionCallOutput,
+    ContractLogicError,
+    ProviderConnectionError,
+    TimeExhausted,
+    Web3RPCError,
+)
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.multicall import Multicall3
+from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.aave_v4 import AaveV4OracleReader, AaveV4SpokeReader
@@ -35,6 +45,19 @@ from ipor_fusion.types import (
 )
 
 _logger = logging.getLogger(__name__)
+
+# What a lending read can fail with that is about the chain, not the code:
+# reverts, RPC and transport errors, a contract answering no or malformed data.
+_READ_ERRORS = (
+    ContractLogicError,
+    Web3RPCError,
+    TimeExhausted,
+    BadFunctionCallOutput,
+    ProviderConnectionError,
+    requests.RequestException,
+    EmptyCallResultError,
+    DecodingError,
+)
 
 WAD = 10**18
 RAY = 10**27
@@ -122,19 +145,45 @@ class LendingMarketHealth:
 
 
 @dataclass(slots=True)
+class UnreadableLendingMarket:
+    """A lending position whose health could not be read: it is unknown, not
+    healthy. ``substrate_id`` as in `LendingMarketHealth`."""
+
+    protocol: str
+    market_id: MarketId
+    market_name: str
+    reason: str
+    substrate_id: str | None = None
+
+
+@dataclass(slots=True)
 class VaultLendingHealth:
-    """Aggregated lending health for all lending markets in a vault."""
+    """Aggregated lending health for all lending markets in a vault.
+
+    ``unreadable`` lists the positions whose reads failed; the health is
+    complete only when it is empty."""
 
     markets: list[LendingMarketHealth]
+    unreadable: list[UnreadableLendingMarket] = field(default_factory=list)
 
     @property
     def has_lending_positions(self) -> bool:
-        return len(self.markets) > 0
+        return len(self.markets) > 0 or len(self.unreadable) > 0
+
+    @property
+    def is_complete(self) -> bool:
+        return not self.unreadable
 
     @property
     def worst_ltv_usage(self) -> float | None:
         usages = [m.ltv_usage_percent for m in self.markets if m.ltv_usage_percent]
         return max(usages) if usages else None
+
+
+def _reason(what: str, exc: Exception) -> str:
+    """Why a read failed, for the unreadable entry and its finding."""
+    _logger.debug("lending %s read failed: %s: %s", what, type(exc).__name__, exc)
+    return f"{what} read failed: {type(exc).__name__}"
 
 
 def _call_morpho_oracle_price(ctx: Web3Context, oracle_address: ChecksumAddress) -> int:
@@ -152,7 +201,7 @@ def _compute_morpho_market_health(
     vault_address: PlasmaVaultAddress,
     ipor_market_id: MarketId,
     market_name: str,
-) -> LendingMarketHealth | None:
+) -> LendingMarketHealth | UnreadableLendingMarket:
     """Compute LTV health for a single Morpho Blue market position."""
     batch = Multicall3(ctx).batch()
     position_read = batch.add(reader.position(morpho_market_id, vault_address))
@@ -160,9 +209,14 @@ def _compute_morpho_market_health(
     params_read = batch.add(reader.market_params(morpho_market_id))
     try:
         batch.run()
-    except Exception:
-        _logger.debug("Failed to read Morpho market data for %s", morpho_market_id)
-        return None
+    except _READ_ERRORS as exc:
+        return UnreadableLendingMarket(
+            protocol="morpho",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason=_reason("market data", exc),
+            substrate_id=morpho_market_id,
+        )
     position, market, params = (
         position_read.value,
         market_read.value,
@@ -186,9 +240,14 @@ def _compute_morpho_market_health(
 
     try:
         oracle_price = _call_morpho_oracle_price(ctx, params.oracle)
-    except Exception:
-        _logger.debug("Failed to read Morpho oracle price for %s", morpho_market_id)
-        return None
+    except _READ_ERRORS as exc:
+        return UnreadableLendingMarket(
+            protocol="morpho",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason=_reason("oracle price", exc),
+            substrate_id=morpho_market_id,
+        )
 
     borrowed = to_assets_up(
         position.borrow_shares, market.total_borrow_assets, market.total_borrow_shares
@@ -246,13 +305,18 @@ def _compute_aave_market_health(
     vault_address: PlasmaVaultAddress,
     ipor_market_id: MarketId,
     market_name: str,
-) -> LendingMarketHealth | None:
+) -> LendingMarketHealth | UnreadableLendingMarket:
     """Compute LTV health for the vault's Aave V3 position."""
     try:
         data = reader.get_user_account_data(vault_address).call(ctx)
-    except Exception:
-        _logger.debug("Failed to read Aave V3 account data for %s", vault_address)
-        return None
+    except _READ_ERRORS as exc:
+        return UnreadableLendingMarket(
+            protocol="aave_v3",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason=_reason("account data", exc),
+            substrate_id=None,
+        )
 
     # No debt = no risk
     if data.total_debt_base == 0:
@@ -300,16 +364,21 @@ def _compute_aave_v4_market_health(
     vault_address: PlasmaVaultAddress,
     ipor_market_id: MarketId,
     market_name: str,
-) -> LendingMarketHealth | None:
+) -> LendingMarketHealth | UnreadableLendingMarket:
     """Compute LTV health for the vault's account on one Aave V4 Spoke."""
     reader = AaveV4SpokeReader(spoke)
     try:
         data = reader.get_user_account_data(vault_address).call(ctx)
         oracle_decimals = AaveV4OracleReader(reader.oracle().call(ctx)).decimals()
         value_scale = 10 ** (oracle_decimals.call(ctx) + 18)
-    except Exception:
-        _logger.debug("Failed to read Aave V4 account data on spoke %s", spoke)
-        return None
+    except _READ_ERRORS as exc:
+        return UnreadableLendingMarket(
+            protocol="aave_v4",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason=_reason("account data", exc),
+            substrate_id=spoke,
+        )
 
     max_ltv = data.avg_collateral_factor / WAD
     current_ltv: float | None
@@ -355,6 +424,7 @@ class _LendingMarkets:
     morpho: list[tuple[MarketId, str, MorphoBlueMarketId]]
     aave_v3: list[tuple[MarketId, str, ChecksumAddress]]
     aave_v4: list[tuple[MarketId, str, ChecksumAddress]]
+    unreadable: list[UnreadableLendingMarket]
 
 
 def _collect_lending_markets(
@@ -364,7 +434,7 @@ def _collect_lending_markets(
 ) -> _LendingMarkets:
     """Pick the positions to read: Morpho substrates, Aave V3 markets with a Pool,
     and the Spokes of Aave V4 markets."""
-    markets = _LendingMarkets(morpho=[], aave_v3=[], aave_v4=[])
+    markets = _LendingMarkets(morpho=[], aave_v3=[], aave_v4=[], unreadable=[])
 
     for mid in balance_fuse_market_ids:
         name = market_name(mid)
@@ -377,7 +447,14 @@ def _collect_lending_markets(
             if aave_pool := aave_pools.get(mid):
                 markets.aave_v3.append((mid, name, aave_pool))
             else:
-                _logger.debug("No Aave V3 pool for market %d, skipping", mid)
+                markets.unreadable.append(
+                    UnreadableLendingMarket(
+                        protocol="aave_v3",
+                        market_id=mid,
+                        market_name=name,
+                        reason="the balance fuse's Aave V3 Pool could not be read",
+                    )
+                )
         elif mid in AAVE_V4_MARKET_IDS:
             for spoke in _aave_v4_spokes(market_substrates.get(mid, [])):
                 markets.aave_v4.append((mid, name, spoke))
@@ -402,8 +479,8 @@ def fetch_vault_lending_health(
         market_substrates: Map of market_id -> list of raw substrate bytes.
             Morpho market ids and Aave V4 Spokes are read from it.
         aave_pools: Map of Aave V3 market_id -> the Pool its balance fuse
-            reads (`AaveV3FuseReader.pool`). Aave V3 markets without an entry
-            are skipped. Defaults to the chain's Core pool for AAVE_V3 only:
+            reads (`AaveV3FuseReader.pool`). An Aave V3 market without an
+            entry is listed in ``unreadable``. Defaults to the chain's Core pool for AAVE_V3 only:
             the Pools of Aave V3 Prime and SparkLend are known only to their
             fuses.
     """
@@ -416,6 +493,7 @@ def fetch_vault_lending_health(
     )
 
     results: list[LendingMarketHealth] = []
+    unreadable = list(markets.unreadable)
 
     with ThreadPoolExecutor() as pool:
         futures = []
@@ -462,7 +540,9 @@ def fetch_vault_lending_health(
 
         for fut in futures:
             result = fut.result()
-            if result is not None:
+            if isinstance(result, UnreadableLendingMarket):
+                unreadable.append(result)
+            else:
                 results.append(result)
 
-    return VaultLendingHealth(markets=results)
+    return VaultLendingHealth(markets=results, unreadable=unreadable)

@@ -533,6 +533,11 @@ decoder adds its own fields.
 - `ZeroBalanceFuse` markets are capabilities (swap, flash-loan,
   instant-withdrawal, admin) with structurally zero balance, not venues. They
   go in `zero_balance_fuses` and are not counted as liquidity markets.
+- A validation input that cannot be read is never a silent `ok`: a lending
+  position whose reads fail is an `UnreadableLendingMarket` (a `lending_health`
+  warning), a failed lending-health or unpriceable-token read is named in
+  `VaultData.failed_reads` (an `incomplete_read` warning). Catch the chain and
+  transport errors only; degrade-to-`None` is for display-only data.
 - Reconciliation: `totalAssets = balance_fuses_sum + underlying_on_vault +
   rewards_manager_balance` (`PlasmaVault._getGrossTotalAssets` adds
   `IRewardsClaimManager.balanceOf()`, the vested rewards, when a manager is set;

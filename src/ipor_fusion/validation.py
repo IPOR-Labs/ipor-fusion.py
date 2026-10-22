@@ -154,6 +154,12 @@ class VaultState(Protocol):
     @property
     def unimplemented_getters(self) -> Sequence[str]: ...
     @property
+    def failed_reads(self) -> Sequence[str]:
+        """Validation inputs whose read failed (``lending_health``,
+        ``unpriceable_priced_tokens``): their checks did not run."""
+        ...
+
+    @property
     def market_balances(self) -> Mapping[MarketId, Amount]: ...
     @property
     def erc20(self) -> Erc20Holdings: ...
@@ -291,6 +297,7 @@ def validate_vault_state(state: VaultState) -> VaultValidation:
         *_missing_erc20_dependency_findings(state),
         *_unpriceable_token_findings(state),
         *_lending_health_findings(state),
+        *_failed_read_findings(state),
         *_reconciliation_findings(state, reconciliation),
         *_erc20_findings(state, state.erc20),
     ]
@@ -550,11 +557,43 @@ def _unpriceable_token_finding(token: UnpriceableToken) -> Finding:
     )
 
 
+_FAILED_READ_IMPACT = {
+    "lending_health": "the liquidation risk of the lending positions is unknown",
+    "unpriceable_priced_tokens": "tokens the price oracle cannot price were not "
+    "looked for",
+}
+
+
+def _failed_read_findings(state: VaultState) -> list[Finding]:
+    findings = []
+    for read in state.failed_reads:
+        name, _, detail = read.partition(": ")
+        what = f"{name} ({detail})" if detail else name
+        impact = _FAILED_READ_IMPACT.get(name, "its check did not run")
+        findings.append(
+            Finding(
+                "incomplete_read",
+                "warning",
+                f"WARNING — {what} could not be read: {impact}",
+            )
+        )
+    return findings
+
+
 def _lending_health_findings(state: VaultState) -> list[Finding]:
     health = state.lending_health
     if not health or not health.has_lending_positions:
         return []
-    findings: list[Finding] = []
+    findings = [
+        Finding(
+            "lending_health",
+            "warning",
+            f"WARNING — {u.protocol} {u.market_name}"
+            f"{f' ({u.substrate_id})' if u.substrate_id else ''}: health unknown, "
+            f"{u.reason}",
+        )
+        for u in health.unreadable
+    ]
     for market in health.markets:
         if market.ltv_usage_percent is None:
             continue

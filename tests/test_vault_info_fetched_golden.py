@@ -123,6 +123,7 @@ CHAIN: dict[tuple[str, str], Answer] = {
         ["(address,uint16,uint32)"], [(FEE_ACCOUNT, 200, TIMESTAMP - 86_400)]
     ),
     (VAULT, "getUnrealizedManagementFee()"): _uint(3 * USDC),
+    (TARGET_VAULT, "asset()"): _address(ASSET),
     (ASSET, "decimals()"): _uint(6),
     (ASSET, "symbol()"): encode(["string"], ["USDC"]),
     (ASSET, "balanceOf(address)"): _uint(250 * USDC),

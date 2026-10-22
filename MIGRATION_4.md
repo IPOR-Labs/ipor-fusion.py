@@ -990,6 +990,31 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
 
+- **A failed lending read is a warning, never a silent `ok`.** 3.x caught every
+  exception in the lending-health readers and dropped the position, so a provider
+  outage could leave no lending finding and an `ok` verdict. Now:
+  - A position whose reads fail with a chain or transport error (revert, RPC,
+    timeout, no or malformed data) becomes an `UnreadableLendingMarket` in
+    `VaultLendingHealth.unreadable`.
+  - Each unreadable position is a `lending_health` warning.
+  - An Aave V3 market whose Pool could not be resolved is listed the same way
+    instead of being skipped.
+  - Any other exception propagates.
+  - When the whole lending-health read or the unpriceable-token check fails with
+    a revert, an RPC error or a timeout, `VaultData.failed_reads` names it and
+    validation reports an `incomplete_read` warning. A transport failure (no
+    connection) still aborts the fetch rather than return a snapshot.
+  - A substrate the unpriceable-token check could not cover is named the same
+    way (`unpriceable_priced_tokens: <what>`). Examples: a Morpho position whose
+    read failed, or a reverting `asset()` / `getSilos()`.
+    `fetch_unpriceable_priced_tokens` returns an `UnpriceableCheck` (`tokens`,
+    `unread`) instead of a bare list.
+
+  The `lending_health` JSON block of `vault info` and `vault validate` carries
+  `unreadable`, and a custom `VaultState` adds the `failed_reads` property. A
+  position missing from the breakdown tables is shown as absent, while the
+  checks it feeds report it.
+
 - **More markets decode their substrates.** VELODROME_SUPERCHAIN (31, Gauge /
   Pool), AGUA_GLOBAL_CARRY (51, VAULT / ASSET), TERM_FINANCE (52, SERVICER address
   or COLLATERAL_TOKEN pair key), META_MORPHO_0001, MERKL and

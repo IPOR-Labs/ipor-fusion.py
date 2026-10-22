@@ -95,6 +95,17 @@ def _print_lending_health(data: VaultData) -> None:  # noqa: C901
             if m.protocol == "aave_v4":
                 click.echo(f"    spoke {m.substrate_id}:")
             _print_health_lines(m, indent="    ")
+    _print_unreadable_health(lh)
+
+
+def _print_unreadable_health(lh: VaultLendingHealth | None) -> None:
+    for u in lh.unreadable if lh is not None else []:
+        where = f" {u.substrate_id}" if u.substrate_id else ""
+        click.secho(
+            f"  {format_market_label(u.market_id)}: {u.protocol}{where} "
+            f"health unknown — {u.reason}",
+            fg="yellow",
+        )
 
 
 def _index_lending_health(

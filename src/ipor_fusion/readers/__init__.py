@@ -17,6 +17,7 @@ from ipor_fusion.readers.hypercore import (
 )
 from ipor_fusion.readers.lending_health import (
     LendingMarketHealth,
+    UnreadableLendingMarket,
     VaultLendingHealth,
     fetch_vault_lending_health,
 )
@@ -56,6 +57,7 @@ from ipor_fusion.readers.ramses_v2 import RamsesV2Position, RamsesV2Reader
 from ipor_fusion.readers.uniswap_v3 import UniswapV3Position, UniswapV3Reader
 from ipor_fusion.readers.unpriceable import (
     MiddlewarePricedToken,
+    UnpriceableCheck,
     fetch_unpriceable_priced_tokens,
 )
 
@@ -80,6 +82,7 @@ __all__ = [
     "HYPEREVM_CHAIN_ID",
     "LendingMarketHealth",
     "VaultLendingHealth",
+    "UnreadableLendingMarket",
     "fetch_vault_lending_health",
     "OracleAsset",
     "OracleMapping",
@@ -100,6 +103,7 @@ __all__ = [
     "build_oracle_mapping",
     "OracleMappingReader",
     "MiddlewarePricedToken",
+    "UnpriceableCheck",
     "fetch_unpriceable_priced_tokens",
     "PositionData",
     "UniswapV3Reader",
