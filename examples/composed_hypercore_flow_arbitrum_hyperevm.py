@@ -634,7 +634,7 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
 # ── Part B: the hub legs, simulated at pinned blocks ─────────────────────────
 def _assert_relay_success(results: dict[ChainId, SimulationResult]) -> None:
     failed = [
-        f"{chain}:{call.label}:{call.revert_reason}"
+        f"{chain}:{call.label}:{call.error}"
         for chain, result in results.items()
         for call in result.calls
         if not call.success

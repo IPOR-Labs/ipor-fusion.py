@@ -142,8 +142,17 @@ class _Block:
     override_provider: StateOverrideProvider | None = None
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SimulatedCallResult:
+    """One simulated call. ``error`` is set exactly when ``success`` is False:
+    check ``success``, then read ``error`` for a non-empty, human-readable
+    failure (the node's message with the decoded revert reason, or
+    ``"reverted without a reason"`` plus any undecodable return data).
+    Construction enforces it: a failed call's ``error`` is completed from its
+    return data, and a successful call given an ``error`` raises
+    ``ValueError``. The record is frozen, so the invariant holds afterwards;
+    build a changed copy with `dataclasses.replace`."""
+
     label: str | None
     success: bool
     return_data: HexBytes
@@ -151,19 +160,33 @@ class SimulatedCallResult:
     error: str | None
     logs: list[dict]
     predicted_address: ChecksumAddress | None = None
+    # Frozen would add a __hash__ that fails on the logs list; stay unhashable.
+    __hash__ = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.success:
+            if self.error is not None:
+                raise ValueError(
+                    f"successful simulated call {self.label!r} carries an error"
+                )
+        else:
+            # The record is frozen; completing the error is part of building it.
+            object.__setattr__(
+                self, "error", _failure_message(self.error, self.return_data)
+            )
 
     @property
     def revert_reason(self) -> str | None:
         """This call's decoded revert (a registered custom error by name, an
-        ``Error(string)`` text or ``Panic``), ``None`` when it succeeded or
-        reverted without data. ``SimulationResult.revert_reason`` is the
+        ``Error(string)`` text or ``Panic``), else its ``error``; ``None``
+        exactly when it succeeded. ``SimulationResult.revert_reason`` is the
         chain's first failed call, which may be a different one."""
         if self.success:
             return None
         return _decode_revert(self.return_data, self.error)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class SimulationResult:
     success: bool
     all_success: bool
@@ -172,6 +195,7 @@ class SimulationResult:
     execute_logs: list[dict]
     calls: list[SimulatedCallResult] = field(default_factory=list)
     failed_calls: list[SimulatedCallResult] = field(default_factory=list)
+    __hash__ = None  # type: ignore[assignment]
 
     def raise_for_failure(self) -> None:
         """Raise :class:`SimulationError` naming the first failed call (label,
@@ -179,15 +203,11 @@ class SimulationResult:
         if not self.failed_calls:
             return
         first = self.failed_calls[0]
-        reason = _decode_revert(first.return_data, first.error)
         label = first.label or "<unlabelled>"
-        detail = first.error or "reverted"
-        if reason and reason != first.error:
-            detail = f"{detail}: {reason}"
         raise SimulationError(
-            f"simulated call {label!r} failed: {detail}",
+            f"simulated call {label!r} failed: {first.error}",
             label=first.label,
-            revert_reason=reason,
+            revert_reason=first.revert_reason,
         )
 
 
@@ -223,12 +243,10 @@ class SimulationObservation(Generic[T_co]):
         result = self.result
         name = self._label or "<unlabelled>"
         if not result.success:
-            reason = result.revert_reason
             raise SimulationError(
-                f"observation {name!r} failed: {result.error or 'reverted'}"
-                + (f": {reason}" if reason and reason != result.error else ""),
+                f"observation {name!r} failed: {result.error}",
                 label=self._label,
-                revert_reason=reason,
+                revert_reason=result.revert_reason,
             )
         if not result.return_data:
             raise EmptyCallResultError(
@@ -732,7 +750,7 @@ class VaultSimulator:
             status = int(raw.get("status", "0x1"), 16)
             success = status == 1
             gas_used = int(raw.get("gasUsed", "0x0"), 16)
-            error, return_data = _normalize_call_error(raw.get("error"), return_data)
+            message, return_data = _normalize_call_error(raw.get("error"), return_data)
             logs = raw.get("logs", []) or []
 
             call_result = SimulatedCallResult(
@@ -740,7 +758,7 @@ class VaultSimulator:
                 success=success,
                 return_data=return_data,
                 gas_used=gas_used,
-                error=error,
+                error=None if success else message,
                 logs=logs,
                 predicted_address=(source.predicted_address if success else None),
             )
@@ -753,14 +771,13 @@ class VaultSimulator:
                 execute_gas += gas_used
                 execute_logs.extend(logs)
                 if not success and revert_reason is None:
-                    revert_reason = _decode_revert(return_data, error)
+                    revert_reason = call_result.revert_reason
 
         failed_calls = [c for c in parsed if not c.success]
         all_success = not failed_calls
         if revert_reason is None and failed_calls:
             # No execute call reverted but a setup/observation did — surface it.
-            first_failed = failed_calls[0]
-            revert_reason = _decode_revert(first_failed.return_data, first_failed.error)
+            revert_reason = failed_calls[0].revert_reason
 
         return SimulationResult(
             success=execute_success,
@@ -908,6 +925,22 @@ def _normalize_call_error(
             return_data = HexBytes(error_raw["data"])
         return error_raw.get("message"), return_data
     return (error_raw if isinstance(error_raw, str) else None), return_data
+
+
+def _failure_message(message: str | None, return_data: HexBytes) -> str:
+    """A failed call's ``error``: the node's message joined with the decoded
+    revert unless the message already carries it, else whichever exists, else
+    ``"reverted without a reason"`` with any return data too short to decode."""
+    reason = _decode_revert(return_data, None)
+    if message and reason:
+        return message if reason in message else f"{message}: {reason}"
+    if message:
+        return message
+    if reason:
+        return reason
+    if return_data:
+        return f"reverted without a reason (return data 0x{bytes(return_data).hex()})"
+    return "reverted without a reason"
 
 
 def _decode_revert(return_data: HexBytes, error: str | None) -> str | None:

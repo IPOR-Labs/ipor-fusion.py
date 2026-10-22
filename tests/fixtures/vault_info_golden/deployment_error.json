@@ -1,0 +1,131 @@
+{
+  "vault": "0x0000000000000000000000000000000000001111",
+  "name": null,
+  "links": {
+    "ipor_app": "https://app.ipor.io/fusion/ethereum/0x0000000000000000000000000000000000001111",
+    "etherscan": "https://etherscan.io/address/0x0000000000000000000000000000000000001111"
+  },
+  "chain": "ethereum",
+  "chain_id": 1,
+  "block": 100,
+  "is_latest": true,
+  "block_timestamp": 1700000000,
+  "block_timestamp_utc": "2023-11-14T22:13:20Z",
+  "deployment": {
+    "error": "rpc-fetch-failed"
+  },
+  "asset": {
+    "address": "0x00000000000000000000000000000000000000A1",
+    "symbol": "USDC",
+    "decimals": 6,
+    "price_usd": null
+  },
+  "share_decimals": 6,
+  "total_assets": {
+    "raw": 0,
+    "formatted": "0.0",
+    "usd": null
+  },
+  "total_supply": {
+    "raw": 0,
+    "formatted": "0.0"
+  },
+  "share_price": null,
+  "supply_cap": {
+    "raw": 1000000000000,
+    "formatted": "1,000,000.0"
+  },
+  "managers": {
+    "access": "0x00000000000000000000000000000000000000AC",
+    "price_oracle": "0x000000000000000000000000000000000000000C",
+    "rewards": null,
+    "withdraw": null,
+    "fee": null
+  },
+  "role_accounts": null,
+  "fees": null,
+  "withdraw_manager_details": null,
+  "fuses": [
+    {
+      "address": "0x00000000000000000000000000000000000000f1",
+      "contract": "AaveV3BalanceFuse",
+      "market_id": 1,
+      "market": "AAVE_V3"
+    }
+  ],
+  "balance_fuses": [
+    {
+      "market": "AAVE_V3",
+      "market_id": 1,
+      "balance": {
+        "raw": 0,
+        "formatted": "0.0"
+      },
+      "fuse": "0x00000000000000000000000000000000000000f1",
+      "contract": "AaveV3BalanceFuse"
+    }
+  ],
+  "zero_balance_fuses": [],
+  "instant_withdrawal_fuses": [],
+  "substrates": {
+    "AAVE_V3 (1)": [
+      {
+        "address": "0x00000000000000000000000000000000000000a1",
+        "symbol": "USDC",
+        "contract": "FiatTokenProxy"
+      }
+    ]
+  },
+  "dependency_graph": null,
+  "erc20_balances": [],
+  "reconciliation": {
+    "balance_fuses_total": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0.0
+    },
+    "underlying_on_vault": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0.0
+    },
+    "erc20_direct_total": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0.0
+    },
+    "sum": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0.0
+    },
+    "on_chain_total_assets": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": null
+    },
+    "delta": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0,
+      "percent": 0.0
+    },
+    "pending_withdrawals": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0.0
+    },
+    "implied_market_total": {
+      "raw": 0,
+      "formatted": "0.0"
+    },
+    "market_storage_divergence": 0
+  },
+  "lending_health": null,
+  "hypercore": null,
+  "health_check": {
+    "ok": [],
+    "warnings": [],
+    "criticals": []
+  }
+}

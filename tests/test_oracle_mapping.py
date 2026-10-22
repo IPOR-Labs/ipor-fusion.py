@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from _oracle_mapping_fake import FakeReader, FakeVault, addr, chainlink_asset
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -18,11 +19,6 @@ from web3.exceptions import ContractLogicError
 
 from ipor_fusion.readers import oracle_mapping as om
 from ipor_fusion.types import NodeStatus, Price
-
-
-def addr(n: int) -> str:
-    return Web3.to_checksum_address(f"0x{n:040x}")
-
 
 # ---------------------------------------------------------------------------
 # Pure helpers
@@ -69,137 +65,6 @@ class TestNormalizeWad:
 
 
 # ---------------------------------------------------------------------------
-# Fake reader for resolver tests
-# ---------------------------------------------------------------------------
-
-
-class FakeReader:
-    """In-memory stand-in for :class:`oracle_mapping.OracleMappingReader`."""
-
-    def __init__(self) -> None:
-        self.symbols: dict[str, str] = {}
-        self.decimals: dict[str, int] = {}
-        self.prices: dict[str, Price] = {}
-        self.sources: dict[str, str] = {}
-        self.feeds: dict[str, dict[str, Any]] = {}
-        self.vaults: dict[str, dict[str, Any]] = {}
-        self.morpho_prices: dict[str, int] = {}
-        # oracle variant (middleware-fallback resolution); "_mw" because the
-        # exact method name would be shadowed by the attribute
-        self.underlying_mw: str | None = None
-        self.registry: str | None = None
-        self.delegated: FakeReader | None = None
-        # enumeration (configured_assets / asset_source_events)
-        self.configured: list[str] | None = None
-        self.events: list[tuple[int, str, str]] = []
-        self.events_to_block: int | None = None
-
-    # token metadata
-    def symbol(self, a: str) -> str | None:
-        return self.symbols.get(a)
-
-    def token_decimals(self, a: str) -> int | None:
-        return self.decimals.get(a)
-
-    # oracle
-    def asset_price(self, a: str) -> Price | None:
-        return self.prices.get(a)
-
-    def source_of(self, a: str) -> str | None:
-        return self.sources.get(a)
-
-    # oracle variant probes
-    def underlying_middleware(self) -> str | None:
-        return self.underlying_mw
-
-    def chainlink_feed_registry(self) -> str | None:
-        return self.registry
-
-    def delegate(self, oracle: str) -> FakeReader:
-        assert oracle == self.underlying_mw  # must delegate to the probed middleware
-        assert self.delegated is not None  # fail fast on a misconfigured test
-        return self.delegated
-
-    # feed probes
-    def _f(self, s: str) -> dict[str, Any]:
-        return self.feeds.get(s, {})
-
-    def feed_morpho_oracle(self, s: str) -> str | None:
-        return self._f(s).get("morpho_oracle")
-
-    def feed_collateral_token(self, s: str) -> str | None:
-        return self._f(s).get("collateral")
-
-    def feed_loan_token(self, s: str) -> str | None:
-        return self._f(s).get("loan")
-
-    def feed_vault(self, s: str) -> str | None:
-        return self._f(s).get("vault")
-
-    def feed_latest_round_data(self, s: str):
-        return self._f(s).get("round")
-
-    def feed_decimals(self, s: str) -> int | None:
-        return self._f(s).get("feed_decimals")
-
-    def feed_description(self, s: str) -> str | None:
-        return self._f(s).get("description")
-
-    def feed_version(self, s: str) -> int | None:
-        return self._f(s).get("version")
-
-    def feed_aggregator(self, s: str) -> str | None:
-        return self._f(s).get("aggregator")
-
-    def feed_phase_id(self, s: str) -> int | None:
-        return self._f(s).get("phase_id")
-
-    def morpho_oracle_price(self, o: str) -> int | None:
-        return self.morpho_prices.get(o)
-
-    def feed_asset_x(self, s: str) -> str | None:
-        return self._f(s).get("asset_x")
-
-    def feed_asset_x_asset_y_feed(self, s: str) -> str | None:
-        return self._f(s).get("xy_feed")
-
-    def feed_asset_y_usd_feed(self, s: str) -> str | None:
-        return self._f(s).get("y_usd_feed")
-
-    # erc4626 vault
-    def vault_asset(self, v: str) -> str | None:
-        return self.vaults.get(v, {}).get("asset")
-
-    def vault_decimals(self, v: str) -> int | None:
-        return self.vaults.get(v, {}).get("decimals")
-
-    def vault_convert_to_assets(self, v: str, shares: int) -> int | None:
-        return self.vaults.get(v, {}).get("rate")
-
-    # enumeration
-    def configured_assets(self) -> list[str] | None:
-        return self.configured
-
-    def asset_source_events(self, to_block: int) -> list[tuple[int, str, str]]:
-        self.events_to_block = to_block
-        return self.events
-
-
-def _chainlink_asset(r: FakeReader, asset: str, source: str, *, symbol: str) -> None:
-    r.symbols[asset] = symbol
-    r.decimals[asset] = 6
-    r.sources[asset] = source
-    r.prices[asset] = Price(asset=asset, amount=99_980_000, decimals=8)
-    # full confirmed-tier evidence: description + version on top of the round
-    r.feeds[source] = {
-        "round": (1, 99_980_000, 0, 1_700_000_000, 1),
-        "feed_decimals": 8,
-        "description": f"{symbol} / USD",
-        "version": 4,
-    }
-
-
-# ---------------------------------------------------------------------------
 # Resolver
 # ---------------------------------------------------------------------------
 
@@ -208,7 +73,7 @@ class TestResolve:
     def test_chainlink_leaf(self):
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        chainlink_asset(r, usdc, feed, symbol="USDC")
 
         node = om.resolve_asset(r, usdc, max_depth=6)
 
@@ -241,7 +106,7 @@ class TestResolve:
         # confirmed-tier gate is incomplete → chainlink_style
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        chainlink_asset(r, usdc, feed, symbol="USDC")
         del r.feeds[feed]["description"]
 
         node = om.resolve_asset(r, usdc, max_depth=6)
@@ -260,7 +125,7 @@ class TestResolve:
         # label only, the node stays resolved with no reason
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        chainlink_asset(r, usdc, feed, symbol="USDC")
         del r.feeds[feed]["version"]
 
         node = om.resolve_asset(r, usdc, max_depth=6)
@@ -276,7 +141,7 @@ class TestResolve:
         # authoritative middleware price is what consumers use)
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        chainlink_asset(r, usdc, feed, symbol="USDC")
         del r.feeds[feed]["feed_decimals"]
 
         node = om.resolve_asset(r, usdc, max_depth=6)
@@ -294,7 +159,7 @@ class TestResolve:
         for rnd in [(1, 99_980_000, 0, 0, 1), (0, 99_980_000, 0, 1_700_000_000, 0)]:
             r = FakeReader()
             usdc, feed = addr(1), addr(0x11)
-            _chainlink_asset(r, usdc, feed, symbol="USDC")
+            chainlink_asset(r, usdc, feed, symbol="USDC")
             r.feeds[feed]["round"] = rnd
 
             node = om.resolve_asset(r, usdc, max_depth=6)
@@ -308,7 +173,7 @@ class TestResolve:
         # the raw value is still echoed in the metadata block
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        chainlink_asset(r, usdc, feed, symbol="USDC")
         r.feeds[feed]["description"] = ""
 
         node = om.resolve_asset(r, usdc, max_depth=6)
@@ -325,7 +190,7 @@ class TestResolve:
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
         aggregator = addr(0x71)
-        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        chainlink_asset(r, usdc, feed, symbol="USDC")
         r.feeds[feed]["aggregator"] = aggregator
         r.feeds[feed]["phase_id"] = 3
 
@@ -342,7 +207,7 @@ class TestResolve:
         # (the answer's value is never judged, only echoed)
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        chainlink_asset(r, usdc, feed, symbol="USDC")
         r.feeds[feed]["round"] = (1, -5, 0, 1_700_000_000, 1)
 
         node = om.resolve_asset(r, usdc, max_depth=6)
@@ -363,7 +228,7 @@ class TestResolve:
         r.prices[wsr] = Price(asset=wsr, amount=10**18, decimals=18)
         r.feeds[feed_w] = {"vault": vault_w}
         r.vaults[vault_w] = {"asset": rusd, "decimals": 18, "rate": 1_040_000}
-        _chainlink_asset(r, rusd, feed_r, symbol="rUSD")
+        chainlink_asset(r, rusd, feed_r, symbol="rUSD")
 
         node = om.resolve_asset(r, wsr, max_depth=6)
 
@@ -392,7 +257,7 @@ class TestResolve:
         r.prices[coll] = Price(asset=coll, amount=10**8, decimals=8)
         r.feeds[feed] = {"morpho_oracle": m_oracle, "collateral": coll, "loan": loan}
         r.morpho_prices[m_oracle] = 1_030_000
-        _chainlink_asset(r, loan, feed_loan, symbol="LOAN")
+        chainlink_asset(r, loan, feed_loan, symbol="LOAN")
 
         node = om.resolve_asset(r, coll, max_depth=6)
 
@@ -674,7 +539,7 @@ class TestResolve:
         r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
         r.underlying_mw = mw
         delegated = FakeReader()
-        _chainlink_asset(delegated, weth, feed, symbol="WETH")
+        chainlink_asset(delegated, weth, feed, symbol="WETH")
         r.delegated = delegated
 
         node = om.resolve_asset(r, weth, max_depth=6)
@@ -793,7 +658,7 @@ class TestResolve:
         r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
         r.underlying_mw = mw
         delegated = FakeReader()
-        _chainlink_asset(delegated, weth, feed, symbol="WETH")
+        chainlink_asset(delegated, weth, feed, symbol="WETH")
         r.delegated = delegated
 
         node = om.resolve_asset(r, weth, max_depth=0)
@@ -865,7 +730,7 @@ class TestResolve:
         r.sources[a] = feed_a
         r.feeds[feed_a] = {"vault": vault_a}
         r.vaults[vault_a] = {"asset": b, "decimals": 18, "rate": 10**18}
-        _chainlink_asset(r, b, feed_b, symbol="B")
+        chainlink_asset(r, b, feed_b, symbol="B")
 
         node = om.resolve_asset(r, a, max_depth=0)
 
@@ -902,7 +767,7 @@ class TestResolve:
         # aggregator evidence must not earn the confirmed label
         r = FakeReader()
         asset, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, asset, feed, symbol="ODD")
+        chainlink_asset(r, asset, feed, symbol="ODD")
         r.feeds[feed]["vault"] = addr(0x21)  # gate incomplete: vault has no asset()
 
         node = om.resolve_asset(r, asset, max_depth=6)
@@ -933,7 +798,7 @@ class TestResolve:
     def test_morpho_false_matcher_demoted_to_chainlink_style(self):
         r = FakeReader()
         asset, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, asset, feed, symbol="ODD")
+        chainlink_asset(r, asset, feed, symbol="ODD")
         r.feeds[feed]["morpho_oracle"] = addr(0x31)  # gate incomplete: no loanToken()
 
         node = om.resolve_asset(r, asset, max_depth=6)
@@ -954,7 +819,7 @@ class TestResolve:
         r.prices[wsr] = Price(asset=wsr, amount=10**18, decimals=18)
         r.feeds[feed_w] = {"vault": vault_w}
         r.vaults[vault_w] = {"asset": rusd, "decimals": 18}  # no "rate"
-        _chainlink_asset(r, rusd, feed_r, symbol="rUSD")
+        chainlink_asset(r, rusd, feed_r, symbol="rUSD")
 
         node = om.resolve_asset(r, wsr, max_depth=6)
 
@@ -1070,7 +935,7 @@ class TestToDict:
         # empty dependencies rather than omitting the keys.
         r = FakeReader()
         usdc, feed = addr(1), addr(0x11)
-        _chainlink_asset(r, usdc, feed, symbol="USDC")
+        chainlink_asset(r, usdc, feed, symbol="USDC")
 
         out = om.resolve_asset(r, usdc, max_depth=6).to_dict()
 
@@ -1122,7 +987,7 @@ class TestToDict:
         r.prices[wsr] = Price(asset=wsr, amount=10**18, decimals=18)
         r.feeds[feed_w] = {"vault": vault_w}
         r.vaults[vault_w] = {"asset": rusd, "decimals": 18, "rate": 1_040_000}
-        _chainlink_asset(r, rusd, feed_r, symbol="rUSD")
+        chainlink_asset(r, rusd, feed_r, symbol="rUSD")
 
         out = om.resolve_asset(r, wsr, max_depth=6).to_dict()
 
@@ -1410,39 +1275,6 @@ class TestEnumerateAssets:
 # ---------------------------------------------------------------------------
 
 
-class _Ret:
-    """Wraps a value as a Call-like object exposing .call(ctx)."""
-
-    def __init__(self, value: Any):
-        self._value = value
-
-    def call(self, ctx: Any) -> Any:
-        return self._value
-
-
-class _FakeVault:
-    """Stand-in for PlasmaVault — only the three reads build_oracle_mapping makes."""
-
-    def __init__(
-        self, oracle: str, asset: str, name: str, *, name_raises: bool = False
-    ):
-        self._oracle = oracle
-        self._asset = asset
-        self._name = name
-        self._name_raises = name_raises
-
-    def read_price_oracle_address(self, ctx: Any) -> str:
-        return self._oracle
-
-    def underlying_asset_address(self) -> _Ret:
-        return _Ret(self._asset)
-
-    def name(self) -> _Ret:
-        if self._name_raises:
-            raise RuntimeError("name() reverted")
-        return _Ret(self._name)
-
-
 class TestBuildOracleMapping:
     def test_assembles_tree_and_mirrors_unresolved(self):
         oracle, vault = addr(0x99), addr(0xAA)
@@ -1451,7 +1283,7 @@ class TestBuildOracleMapping:
 
         r = FakeReader()
         r.configured = [usdc, wsr, nosrc]  # manager path
-        _chainlink_asset(r, usdc, feed_c, symbol="USDC")
+        chainlink_asset(r, usdc, feed_c, symbol="USDC")
         # wsr: ERC4626 feed → vault → usdc (resolved leaf)
         r.symbols[wsr] = "wsrUSD"
         r.decimals[wsr] = 18
@@ -1465,7 +1297,7 @@ class TestBuildOracleMapping:
 
         with (
             patch.object(
-                om, "PlasmaVault", return_value=_FakeVault(oracle, usdc, "Reservoir")
+                om, "PlasmaVault", return_value=FakeVault(oracle, usdc, "Reservoir")
             ),
             patch.object(om, "OracleMappingReader", return_value=r),
         ):
@@ -1491,7 +1323,7 @@ class TestBuildOracleMapping:
 
         r = FakeReader()
         r.configured = [good, poison]
-        _chainlink_asset(r, good, feed_c, symbol="GOOD")
+        chainlink_asset(r, good, feed_c, symbol="GOOD")
 
         original = om.resolve_asset
 
@@ -1501,7 +1333,7 @@ class TestBuildOracleMapping:
             return original(reader, asset, max_depth)
 
         with (
-            patch.object(om, "PlasmaVault", return_value=_FakeVault(oracle, good, "V")),
+            patch.object(om, "PlasmaVault", return_value=FakeVault(oracle, good, "V")),
             patch.object(om, "OracleMappingReader", return_value=r),
             patch.object(om, "resolve_asset", side_effect=flaky),
         ):
@@ -1520,8 +1352,8 @@ class TestBuildOracleMapping:
 
         r = FakeReader()
         r.configured = [usdc]
-        _chainlink_asset(r, usdc, feed_c, symbol="USDC")
-        fake_vault = _FakeVault(oracle, usdc, "ignored", name_raises=True)
+        chainlink_asset(r, usdc, feed_c, symbol="USDC")
+        fake_vault = FakeVault(oracle, usdc, "ignored", name_raises=True)
 
         with (
             patch.object(om, "PlasmaVault", return_value=fake_vault),

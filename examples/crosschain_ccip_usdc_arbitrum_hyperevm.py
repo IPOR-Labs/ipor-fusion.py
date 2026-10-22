@@ -179,7 +179,7 @@ def _assert_relay_success(results: dict[ChainId, SimulationResult]) -> None:
     """Raise with a readable summary if any simulated call on either chain
     reverted; each entry names the call and decodes its own revert."""
     failed = [
-        (int(chain_id), call.label, call.revert_reason or call.error)
+        (int(chain_id), call.label, call.error)
         for chain_id, result in results.items()
         for call in result.calls
         if not call.success

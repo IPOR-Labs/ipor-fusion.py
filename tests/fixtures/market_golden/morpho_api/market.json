@@ -1,0 +1,208 @@
+{
+  "data": {
+    "marketById": {
+      "marketId": "0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc",
+      "lltv": "860000000000000000",
+      "loanAsset": {
+        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "symbol": "USDC",
+        "decimals": 6
+      },
+      "collateralAsset": {
+        "address": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+        "symbol": "wstETH",
+        "decimals": 18
+      },
+      "oracle": {
+        "address": "0x48F7E36EB6B826B2dF4B2E630B62Cd25e89E40e2"
+      },
+      "irmAddress": "0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC",
+      "state": {
+        "supplyAssets": 32599187714224,
+        "borrowAssets": 29365507783557,
+        "liquidityAssets": 3233679930667,
+        "utilization": 0.9008048924711075,
+        "supplyApy": 0.044736324511176394,
+        "borrowApy": 0.04978335057946373,
+        "fee": 0,
+        "timestamp": 1792584383
+      },
+      "supplyingVaults": [
+        {
+          "address": "0x4Ff4186188f8406917293A9e01A1ca16d3cf9E59",
+          "symbol": "sbMorphoUSDC",
+          "name": "SwissBorg Morpho USDC",
+          "asset": {
+            "symbol": "USDC",
+            "decimals": 6
+          },
+          "state": {
+            "totalAssets": 8676455873909,
+            "allocation": [
+              {
+                "market": {
+                  "marketId": "0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc"
+                },
+                "supplyAssets": 1301479972366,
+                "supplyCap": 50000000000000
+              },
+              {
+                "market": {
+                  "marketId": "0x54efdee08e272e929034a8f26f7ca34b1ebe364b275391169b28c6d7db24dbc8"
+                },
+                "supplyAssets": 433723189687,
+                "supplyCap": "10000000000000000000000000000"
+              }
+            ]
+          },
+          "allocators": [
+            {
+              "address": "0xFbA64167e4f091Ca625FA79aa6f83665856f8Bf2"
+            },
+            {
+              "address": "0xe8CB86aF43B439D454701cE13c8457bdB420A98D"
+            }
+          ],
+          "publicAllocatorConfig": {
+            "fee": 0,
+            "admin": "0x0000000000000000000000000000000000000000",
+            "flowCaps": []
+          }
+        },
+        {
+          "address": "0x68Aea7b82Df6CcdF76235D46445Ed83f85F845A3",
+          "symbol": "oevUSDC",
+          "name": "Yearn USDC",
+          "asset": {
+            "symbol": "USDC",
+            "decimals": 6
+          },
+          "state": {
+            "totalAssets": 6186038214264,
+            "allocation": [
+              {
+                "market": {
+                  "marketId": "0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc"
+                },
+                "supplyAssets": 312043821403,
+                "supplyCap": 100000000000000
+              },
+              {
+                "market": {
+                  "marketId": "0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64"
+                },
+                "supplyAssets": 4067446514319,
+                "supplyCap": 100000000000000
+              }
+            ]
+          },
+          "allocators": [
+            {
+              "address": "0xfFb824d00fd6f9513259fc6e79674A0065570862"
+            },
+            {
+              "address": "0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D"
+            },
+            {
+              "address": "0x75a1253432356f90611546a487b5350CEF08780D"
+            },
+            {
+              "address": "0x50B75d586929Ab2F75dC15f07E1B921b7C4Ba8fA"
+            }
+          ],
+          "publicAllocatorConfig": {
+            "fee": 0,
+            "admin": "0x75a1253432356f90611546a487b5350CEF08780D",
+            "flowCaps": [
+              {
+                "market": {
+                  "marketId": "0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc"
+                },
+                "maxIn": 15981621921875,
+                "maxOut": 34018378078125
+              },
+              {
+                "market": {
+                  "marketId": "0x54efdee08e272e929034a8f26f7ca34b1ebe364b275391169b28c6d7db24dbc8"
+                },
+                "maxIn": 113122627444233,
+                "maxOut": 86877372555767
+              }
+            ]
+          }
+        },
+        {
+          "address": "0xBEefb9f61CC44895d8AEc381373555a64191A9c4",
+          "symbol": "vbshUSDC",
+          "name": "Vault Bridge USDC",
+          "asset": {
+            "symbol": "USDC",
+            "decimals": 6
+          },
+          "state": {
+            "totalAssets": 8886532086629,
+            "allocation": [
+              {
+                "market": {
+                  "marketId": "0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc"
+                },
+                "supplyAssets": 163065198714,
+                "supplyCap": 200000000000000
+              },
+              {
+                "market": {
+                  "marketId": "0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64"
+                },
+                "supplyAssets": 0,
+                "supplyCap": 200000000000000
+              }
+            ]
+          },
+          "allocators": [
+            {
+              "address": "0xBEEF5F9f39e684CF39e0770fa57a43Fa46a3BEef"
+            },
+            {
+              "address": "0x7a175FDD0727228C66A985928C9b27104b964E8d"
+            },
+            {
+              "address": "0xfC580f2a77e85f1F47b60F096D36fDc97cE2d827"
+            },
+            {
+              "address": "0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D"
+            },
+            {
+              "address": "0x0000aeB716a0DF7A9A1AAd119b772644Bc089dA8"
+            },
+            {
+              "address": "0x9E9110cFd24cd851ea5bc73a27975B33E308f9e1"
+            },
+            {
+              "address": "0xfeed46c11F57B7126a773EeC6ae9cA7aE1C03C9a"
+            }
+          ],
+          "publicAllocatorConfig": {
+            "fee": 300000000000000,
+            "admin": "0xBEEF5F9f39e684CF39e0770fa57a43Fa46a3BEef",
+            "flowCaps": [
+              {
+                "market": {
+                  "marketId": "0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc"
+                },
+                "maxIn": 0,
+                "maxOut": 1000000000000000
+              },
+              {
+                "market": {
+                  "marketId": "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49"
+                },
+                "maxIn": 0,
+                "maxOut": 1000000000000000
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
