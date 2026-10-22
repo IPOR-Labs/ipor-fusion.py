@@ -22,7 +22,8 @@ from ipor_fusion.crosschain.fuses.ccip import (
 )
 from ipor_fusion.crosschain.lane import CrosschainLane, LaneFuses, LaneObservation
 from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
-from ipor_fusion.types import Amount, Period, ProposalId
+from ipor_fusion.errors import CrosschainDiscoveryError
+from ipor_fusion.types import Amount, ChainId, Period, ProposalId
 
 
 class CcipLane(CrosschainLane):
@@ -30,7 +31,12 @@ class CcipLane(CrosschainLane):
     send parameters come from the executor's registered ``route`` (fee
     ceiling, fee token, token or message gas limit). ``decimal_conversion_rate``
     is the executor's ``DECIMAL_CONVERSION_RATE`` (local per shared unit), used
-    to report the dispatcher observation in local decimals."""
+    to report the dispatcher observation in local decimals.
+
+    `open` refuses a spoke the executor has no route to, or whose route names
+    another peer than the dispatcher at the executor's address; a registered but
+    disabled route opens (state can still be read) and refuses the default send
+    parameters."""
 
     transport_kind = CrosschainTransportKind.CHAINLINK_CCIP
     enforces_min_received = False
@@ -77,13 +83,15 @@ class CcipLane(CrosschainLane):
         fuses: LaneFuses,
     ) -> CcipLane:
         hub_executor = CcipCrosschainExecutor(executor)
+        route = hub_executor.ccip_route(spoke_ctx.chain_id).call(hub_ctx)
+        _require_route_to_dispatcher(route, hub_executor.address, spoke_ctx.chain_id)
         return cls(
             hub_ctx=hub_ctx,
             spoke_ctx=spoke_ctx,
             executor=hub_executor,
             dispatcher=CcipCrosschainDispatcher(executor),
             fuses=fuses,
-            route=hub_executor.ccip_route(spoke_ctx.chain_id).call(hub_ctx),
+            route=route,
             decimal_conversion_rate=hub_executor.decimal_conversion_rate().call(
                 hub_ctx
             ),
@@ -93,6 +101,11 @@ class CcipLane(CrosschainLane):
         return self.executor.balance_staleness_max()
 
     def default_send(self, *, token: bool) -> CcipSendParams:
+        if not self.route.enabled:
+            raise CrosschainDiscoveryError(
+                f"CCIP route of executor {self.executor.address} to chain "
+                f"{self.spoke_chain_id} is disabled"
+            )
         return CcipSendParams.from_route(self.route, token=token)
 
     def default_command_send(self) -> CcipSendParams:
@@ -156,3 +169,19 @@ def _to_lane(observation: CcipObservation, rate: int) -> LaneObservation:
         command_config_epoch=observation.command_config_epoch,
         tracked_position_set_hash=observation.tracked_position_set_hash,
     )
+
+
+def _require_route_to_dispatcher(
+    route: CcipRouteConfig, executor: ChecksumAddress, spoke: ChainId
+) -> None:
+    """The executor sends to the dispatcher at its own address on the spoke; an
+    unregistered route reads back as all zeros."""
+    if route.chain_selector == 0 or int(route.peer, 16) == 0:
+        raise CrosschainDiscoveryError(
+            f"CCIP executor {executor} has no route to chain {spoke}"
+        )
+    if route.peer != executor:
+        raise CrosschainDiscoveryError(
+            f"CCIP executor {executor} routes chain {spoke} to {route.peer}, "
+            "not to the dispatcher at its own address"
+        )

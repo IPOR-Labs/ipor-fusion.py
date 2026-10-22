@@ -950,6 +950,13 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
 
+- **`CcipLane.open` refuses a spoke it cannot reach.** The executor's
+  `ccipRoute(spoke)` must be registered and point at the dispatcher at the
+  executor's own address; otherwise `open` (and `open_lane` / `open_lanes`)
+  raises `CrosschainDiscoveryError`, where 3.x built a lane whose default send
+  parameters carried a zero fee cap and gas limit and failed only on chain. A
+  registered but disabled route still opens, but `default_send` raises.
+
 - **The reconciliation counts the rewards claim manager.** `PlasmaVault.totalAssets`
   adds `RewardsClaimManager.balanceOf()` (vested rewards) to the vault's idle
   underlying and its markets; 3.x left it out, so a vault with vested rewards showed
