@@ -308,11 +308,11 @@ The internal `ipor_fusion.fuses.base` still re-exports them. The CLI's internal
 
 **Event decoder modules renamed.** `ipor_fusion.fuses.external_state_events` and
 `ipor_fusion.fuses.hypercore_events` are now `external_state_event_decoding` and
-`hypercore_event_decoding`: the receipt decoders `external_state_events` and
-`hypercore_events` kept their names and, re-exported from `ipor_fusion.fuses`,
-hid the submodule of the same name (`import ipor_fusion.fuses.hypercore_events as
-m` bound the function). Import the event names from `ipor_fusion` or
-`ipor_fusion.fuses`; the modules are internal.
+`hypercore_event_decoding`. The receipt decoder `hypercore_events`, re-exported
+from `ipor_fusion.fuses`, hid its submodule of the same name (`import
+ipor_fusion.fuses.hypercore_events as m` bound the function); the external-state
+module was renamed to match. Import the decoders with `from ipor_fusion import
+external_state_events, hypercore_events`; the modules are internal.
 
 **Removed.**
 
