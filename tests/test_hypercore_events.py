@@ -226,5 +226,11 @@ def test_a_value_that_cannot_be_a_topic_is_not_ours(topic):
     assert decode_hypercore_event(_margin_log(topics=[])) is None
 
 
+def test_a_registered_topic_needs_its_0x_prefix():
+    spec = HYPERCORE_EVENT_SPECS[0]
+    assert hypercore_event_name(spec.topic.hex()) is None
+    assert hypercore_event_name("0x" + spec.topic.hex()) == spec.name
+
+
 def test_every_spec_has_an_event_class():
     assert set(HYPERCORE_EVENT_CLASSES) == {spec.name for spec in HYPERCORE_EVENT_SPECS}
