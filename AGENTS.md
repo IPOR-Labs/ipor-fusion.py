@@ -27,7 +27,7 @@ uv sync --all-extras --locked                                 # install, same as
 uv run ruff format ./                                         # format (CI runs --check)
 uv run ruff check ./                                          # lint: bandit S, C901 max-complexity 10, PLR limits
 uv run pyright                                                # types, basic mode, src + tests + examples + scripts
-uv run pytest                                                 # all tests + coverage gate (fail_under = 95)
+uv run pytest                                                 # all tests + coverage gate (fail_under = 98, mcp/ included)
 uv run pytest -m "cli or mcp" --no-cov                        # fast offline subset
 uv run pytest --run-readiness -m readiness --no-cov -rA       # opt-in live Ethereum-hub POC checks
 uv run python scripts/crosschain_readiness.py --output /tmp/crosschain-readiness.json # live Arbitrum/HyperEVM report
@@ -54,13 +54,26 @@ the sequence in `.github/workflows/python-build.yml`. When ruff `C901` trips,
 extract helpers, never suppress.
 
 **Offline vs network.** `test_cli_*` and `test_mcp_*` need no network
-(auto-tagged `cli` / `mcp` in `conftest.py`; everything else is `sdk`).
+(auto-tagged `cli` / `mcp` in `conftest.py`, `test_examples_*` `examples`;
+everything else is `sdk`). Most `sdk` tests are offline too: the suite with no
+provider set still clears the coverage gate.
 Integration tests (`test_simulate_*`, `test_vault_info_onchain_*`) run against
 live RPCs via `eth_simulateV1`, no Docker or Anvil (`ANVIL_WALLET` is just a
 named address constant). They auto-skip unless `ETHEREUM_PROVIDER_URL`,
 `BASE_PROVIDER_URL` and `ARBITRUM_PROVIDER_URL` are set (`.env` is loaded via
-python-dotenv) and the provider supports `eth_simulateV1`. CI has all three as
-secrets. Never print `.env` or a provider URL: they embed API keys.
+python-dotenv) and the provider supports `eth_simulateV1`. Every such gate goes
+through `tests/_live.py` (`provider_url`, `archive_context`, `unavailable`): it
+skips locally and fails when the source is named in `IPOR_FUSION_REQUIRE_LIVE`
+(comma-separated env var names, `GITHUB` for the Solidity mirrors). CI
+(`ci.yml`) runs an offline job without secrets on Python 3.11, 3.12 and 3.13
+and, for pull requests from this repository, a live job with the three
+provider secrets that requires all of them and GitHub: a skip for one of those
+sources being unavailable is a failure there (state-dependent skips such as a
+pilot vault's preconditions remain skips, and the offline job still reads the
+public Solidity sources from GitHub). Skip only for an unavailable source; an
+exception from the
+SDK is a test failure, never a skip. Never print `.env` or a provider URL: they
+embed API keys, so skip and fail messages carry the exception type only.
 `HYPEREVM_PROVIDER_URL` is used by the HyperEVM lifecycle/deployment tests and
 the readiness script; general PR CI does not supply it.
 `test_simulate_crosschain_hyperevm.py` rehearses Arbitrum → HyperEVM on pinned blocks,
@@ -173,10 +186,14 @@ the lifecycle matrix follows that.
   strings (`field_docs.py` ships as API documentation). Comments only for edge
   cases and non-obvious logic.
 - The public API is `ipor_fusion.__all__` (README, "Public API and stability").
-  Every public symbol is imported and listed there; a symbol of a public
-  subpackage (`core`, `config`, `fuses`, `readers`, `crosschain`,
-  `crosschain.fuses`, `crosschain.ccip`, `crosschain.stargate`) also goes in that
-  subpackage's `__all__`. `ipor_fusion.guide` keeps its own namespace. The
+  Every stable public symbol is imported and listed there; a symbol of a stable
+  subpackage (`core`, `config`, `fuses`, `readers`) also goes in that
+  subpackage's `__all__`. Preview features (`PREVIEW_FEATURES`) export only from
+  their own subpackages, never from the top level: crosschain from `crosschain`
+  (`crosschain.fuses`, `crosschain.ccip`, `crosschain.stargate`), HyperCore from
+  `hypercore` (which re-exports from `fuses/` and `readers/` modules; those
+  subpackages do not list them). Their exceptions stay in `errors` and the top
+  level. `ipor_fusion.guide` keeps its own namespace. The
   public modules (`about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`,
   `field_docs`, `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`,
   `validation`, `vault_data`, `vault_info`) stay importable for the names they

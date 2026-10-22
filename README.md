@@ -340,8 +340,7 @@ renaming a name in it, or changing a signature incompatibly, waits for a major
 release; adding one does not.
 
 - **Public subpackages** declare their own `__all__`, each a subset of the top
-  level: `ipor_fusion.core`, `config`, `fuses`, `readers`, `crosschain`,
-  `crosschain.fuses`, `crosschain.ccip` and `crosschain.stargate`. `ipor_fusion.guide`
+  level: `ipor_fusion.core`, `config`, `fuses` and `readers`. `ipor_fusion.guide`
   (the packaged docs) keeps its names in its own namespace.
 - **Public modules** stay importable for the top-level names they define:
   `about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`, `field_docs`,
@@ -356,8 +355,12 @@ release; adding one does not.
   the subpackage or `ipor_fusion`), underscore names, and names in no `__all__`.
   They change without notice; the CLI and the MCP server are stable as commands
   and tools, not as Python modules.
-- **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`: crosschain,
-  HyperCore) are exported like the rest but may change in a minor release.
+- **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`) export only
+  from their own subpackages, `ipor_fusion.crosschain` (with `crosschain.fuses`,
+  `crosschain.ccip` and `crosschain.stargate`) and `ipor_fusion.hypercore`, never
+  from the top level, and may change in a minor release. Their exception classes
+  stay in `ipor_fusion.errors`, and the `vault info` document's HyperCore blocks
+  (`HyperCoreJson`, ...) stay with the document.
 - **Third-party types** are not re-exported: import `ChecksumAddress` and
   `HexAddress` from `eth_typing`, and `BlockIdentifier`, `Timestamp` and `TxParams`
   from `web3.types`. The SDK's own types (`ChainId`, `Amount`, `PlasmaVaultAddress`,
@@ -400,14 +403,6 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50); the executor's thresholds (`staleness_max`, `big_change_bps`, `dust_threshold`, `min_update_interval`), the live aggregate (`get_balance_fuse_snapshot`) and the pre-hook's staleness clock (`get_oldest_update_timestamp`) |
 | `read_external_state`, `ExternalStateVaultState` | The market's vault-scoped state from the vault's ERC-7201 storage at one block: executor, the balance fuse's cached total, the custodian timestamp it last checked and the pause flag the pre-hook enforces (no getter exposes them) |
 | `decode_external_state_event`, `EXTERNAL_STATE_TOPICS` | The ExternalState events the vault emits (big change, cache updates, unpause, rescue, executor creation and deployment, operation enter/exit), decoded by topic with their raw log identity; a malformed listed log raises |
-| `decode_hypercore_event`, `hypercore_events` | **Preview.** The HyperCore fuse, pending-library, settlement and reporter events, decoded by topic with their raw log identity under the same input contract; a malformed listed log raises `HyperCoreEventDecodeError` |
-| `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | **Preview.** Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
-| `StargateCrosschainDispatcher`, `CcipCrosschainDispatcher` | Remote dispatcher state (`observation`, tracked idle, command lane) |
-| `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |
-| `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation (`attestation`, `needs_attestation`, `staleness_max`); `enforces_min_received` identifies real supply floors (CCIP requires zero); `open_lane` detects the transport and finds the fuses |
-| `discover_deployment`, `open_lanes` | Read a vault's crosschain market from the hub alone (executors with transport, factory, fuses, attestation keys and spokes served; remote vaults per spoke) and open every lane; `LANES` maps a transport kind to its lane class |
-| `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between pinned chains by impersonating the endpoint or router on delivery, no bridge needed |
-| `ccip_token_lane` | Whether a CCIP message lane exists from a chain and whether a token's pool serves it, read on Chainlink's Router, OnRamp, TokenAdminRegistry and pool |
 | `erc20_balance_slot`, `VaultSimulator.with_erc20_balance` | Fund any address with any ERC-20 in a simulation by a storage override (slot found by probing), no holder to impersonate |
 | `ERC20` | Token reads and approvals |
 
@@ -427,8 +422,24 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Merkl | `MerklClaimWrapperFuse` |
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
-| Crosschain (preview) | `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse` (market 54); transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` |
-| HyperCore (Hyperliquid, market 55, preview) | `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` |
+
+### Preview features (`ipor_fusion.crosschain`, `ipor_fusion.hypercore`)
+
+Not production (see the note at the top) and outside the stable top level:
+import these from their subpackage, and expect changes in a minor release.
+
+| Name | Purpose |
+|------|---------|
+| `StargateCrosschainExecutor`, `CcipCrosschainExecutor` | Crosschain executor reads and attestation (`propose_balance`, `approve_balance`) |
+| `StargateCrosschainDispatcher`, `CcipCrosschainDispatcher` | Remote dispatcher state (`observation`, tracked idle, command lane) |
+| `StargateCrosschainFactory`, `CcipCrosschainFactory` | Executor creation and route/asset configuration reads |
+| `CrosschainLane`, `open_lane` | One executor/dispatcher pair driven transport-agnostically: supply, recall, command, claim, buckets, attestation (`attestation`, `needs_attestation`, `staleness_max`); `enforces_min_received` identifies real supply floors (CCIP requires zero); `open_lane` detects the transport and finds the fuses |
+| `discover_deployment`, `open_lanes` | Read a vault's crosschain market from the hub alone (executors with transport, factory, fuses, attestation keys and spokes served; remote vaults per spoke) and open every lane; `LANES` maps a transport kind to its lane class |
+| `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between pinned chains by impersonating the endpoint or router on delivery, no bridge needed |
+| `ccip_token_lane` | Whether a CCIP message lane exists from a chain and whether a token's pool serves it, read on Chainlink's Router, OnRamp, TokenAdminRegistry and pool |
+| `decode_hypercore_event`, `hypercore_events` | The HyperCore fuse, pending-library, settlement and reporter events, decoded by topic with their raw log identity under the same input contract as `decode_external_state_event`; a malformed listed log raises `HyperCoreEventDecodeError` |
+| Crosschain fuses (market 54): `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse`; transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` | `ipor_fusion.crosschain` |
+| HyperCore fuses (market 55): `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` | `ipor_fusion.hypercore`, with `HyperCoreReader`, `read_hypercore_vault_state` and the event decoders |
 
 The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Use
 `crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` for that deployment;

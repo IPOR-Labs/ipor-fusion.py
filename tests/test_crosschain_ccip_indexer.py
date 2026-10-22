@@ -11,7 +11,7 @@ from eth_utils import function_signature_to_4byte_selector as selector
 from eth_utils import keccak
 from web3 import Web3
 
-from ipor_fusion import (
+from ipor_fusion.crosschain import (
     INDEXER_URLS,
     CcipOffRamp,
     VerifierResult,

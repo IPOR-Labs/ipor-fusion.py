@@ -5,11 +5,11 @@ on:
 
     secrets:
       ARBITRUM_PROVIDER_URL:
-        required: true
+        required: false
       BASE_PROVIDER_URL:
-        required: true
+        required: false
       ETHEREUM_PROVIDER_URL:
-        required: true
+        required: false
 
     inputs:
       python-version:
@@ -41,6 +41,16 @@ on:
         description: "Enable pytest tests"
         type: boolean
         default: true
+        required: false
+      coverage-artifact-name:
+        description: "Name of the uploaded coverage artifact (unique per call in a run)"
+        type: string
+        default: coverage-report
+        required: false
+      require-live:
+        description: "Comma-separated live sources whose tests must run, not skip (tests/_live.py)"
+        type: string
+        default: ""
         required: false
 
 jobs:
@@ -93,6 +103,7 @@ jobs:
           ETHEREUM_PROVIDER_URL: ${{ secrets.ETHEREUM_PROVIDER_URL }}
           ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
           BASE_PROVIDER_URL: ${{ secrets.BASE_PROVIDER_URL }}
+          IPOR_FUSION_REQUIRE_LIVE: ${{ inputs.require-live }}
         id: tests
 
       - name: Coverage summary
@@ -104,6 +115,6 @@ jobs:
         if: inputs.test-enabled && always() && steps.tests.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
+          name: ${{ inputs.coverage-artifact-name }}
           path: coverage.xml
 

@@ -28,9 +28,6 @@ from ipor_fusion import (
     Decimals,
     Fee,
     FuseAddress,
-    HyperCoreActionId,
-    HyperCoreAsset,
-    HyperCoreTokenIndex,
     MarketId,
     MetaMorphoV1Json,
     MetaMorphoV2Json,
@@ -43,6 +40,7 @@ from ipor_fusion import (
     VaultInfoJson,
 )
 from ipor_fusion.core.access import RoleAccount
+from ipor_fusion.hypercore import HyperCoreActionId, HyperCoreAsset, HyperCoreTokenIndex
 from ipor_fusion.mcp import models as mcp_models
 from ipor_fusion.mcp.models import (
     Amount,

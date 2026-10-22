@@ -45,20 +45,22 @@ from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion import (
     ERC20,
+    PlasmaVault,
+    SimulationObservation,
+    VaultSimulator,
+    Web3Context,
+)
+from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
+from ipor_fusion.crosschain import (
     BalanceObservation,
     Command,
     CrosschainLane,
     CrosschainSimulator,
     CrosschainTransportKind,
     LaneObservation,
-    PlasmaVault,
-    SimulationObservation,
-    VaultSimulator,
-    Web3Context,
     discover_deployment,
     open_lane,
 )
-from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
 from ipor_fusion.types import Amount, ChainId, MarketId
 
 log = logging.getLogger(__name__)

@@ -36,24 +36,22 @@ from test_crosschain_encoding import (
 )
 from web3 import Web3
 
-from ipor_fusion import (
-    SYNTHETIC_TOKEN_SOURCE,
-    CrosschainSimulator,
-    CrosschainTransport,
-    DeliveryCall,
-    OutboundMessage,
-    SimulationRunError,
-    StargateChain,
-    StargateTransport,
-)
+from ipor_fusion import SimulationRunError
 from ipor_fusion.core.contract import Call
 from ipor_fusion.crosschain import (
+    SYNTHETIC_TOKEN_SOURCE,
     CcipCrosschainDispatcher,
     CcipCrosschainExecutor,
+    CrosschainSimulator,
+    CrosschainTransport,
     CrosschainTransportKind,
+    DeliveryCall,
+    OutboundMessage,
     Packet,
+    StargateChain,
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
+    StargateTransport,
     log_bytes,
 )
 from ipor_fusion.crosschain.stargate.layerzero import (
@@ -432,7 +430,7 @@ class TestCcipTransport:
         )
 
     def test_rejects_token_transfer_between_different_decimals(self):
-        from ipor_fusion import CcipChain, CcipTransport
+        from ipor_fusion.crosschain import CcipChain, CcipTransport
 
         transport = CcipTransport(
             [
@@ -475,7 +473,7 @@ class TestCcipTransport:
 
     @pytest.mark.parametrize("local_decimals", [-1, 256])
     def test_rejects_invalid_local_decimals(self, local_decimals):
-        from ipor_fusion import CcipChain
+        from ipor_fusion.crosschain import CcipChain
 
         with pytest.raises(ValueError, match="local_decimals must fit uint8"):
             CcipChain(
@@ -487,7 +485,7 @@ class TestCcipTransport:
             )
 
     def test_rejects_duplicate_chain_ids(self):
-        from ipor_fusion import CcipChain, CcipTransport
+        from ipor_fusion.crosschain import CcipChain, CcipTransport
 
         chains = [
             CcipChain(
@@ -509,7 +507,7 @@ class TestCcipTransport:
             CcipTransport(chains)
 
     def test_rejects_duplicate_chain_selectors(self):
-        from ipor_fusion import CcipChain, CcipTransport
+        from ipor_fusion.crosschain import CcipChain, CcipTransport
 
         chains = [
             CcipChain(
@@ -807,7 +805,11 @@ class TestCrosschainSimulator:
 
 class TestSyntheticTokenSource:
     def test_ccip_chain_without_a_holder_credits_from_the_synthetic_source(self):
-        from ipor_fusion import SYNTHETIC_TOKEN_SOURCE, CcipChain, CcipTransport
+        from ipor_fusion.crosschain import (
+            SYNTHETIC_TOKEN_SOURCE,
+            CcipChain,
+            CcipTransport,
+        )
 
         chain = CcipChain(
             chain_id=BASE,
@@ -833,7 +835,7 @@ class TestSyntheticTokenSource:
         from eth_abi import encode
         from eth_utils import keccak
 
-        from ipor_fusion import (
+        from ipor_fusion.crosschain import (
             SYNTHETIC_TOKEN_SOURCE,
             CcipChain,
             CcipTransport,

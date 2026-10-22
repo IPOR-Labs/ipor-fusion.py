@@ -14,7 +14,8 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import (
+from ipor_fusion import HyperCoreValuationError, PlasmaVault
+from ipor_fusion.hypercore import (
     HyperCoreActionClass,
     HyperCoreNav,
     HyperCorePendingReader,
@@ -23,8 +24,6 @@ from ipor_fusion import (
     HyperCoreReportedResult,
     HyperCoreSpotBalance,
     HyperCoreTokenInfo,
-    HyperCoreValuationError,
-    PlasmaVault,
     SettlementMode,
     convert_to_wad_int,
     read_hypercore_nav,

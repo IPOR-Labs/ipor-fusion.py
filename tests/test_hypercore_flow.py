@@ -25,21 +25,18 @@ from eth_abi import decode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
-from ipor_fusion import (
-    ERC20,
-    AccessManager,
+from ipor_fusion import ERC20, AccessManager, PlasmaVault, decode_substrate
+from ipor_fusion.fuses.hypercore import SPOT_DEX, USDC_SYSTEM_ADDRESS
+from ipor_fusion.hypercore import (
     HyperCoreCancelFuse,
     HyperCoreConfigKey,
     HyperCoreDepositFuse,
     HyperCoreOrderFuse,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
-    PlasmaVault,
     SettlementMode,
     TimeInForce,
-    decode_substrate,
 )
-from ipor_fusion.fuses.hypercore import SPOT_DEX, USDC_SYSTEM_ADDRESS
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import MarketId
 

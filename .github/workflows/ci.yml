@@ -11,22 +11,45 @@ jobs:
     secrets:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
 
-  build:
-    needs: notify
+  # No secrets: what the code proves offline, on every supported Python.
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    uses: ./.github/workflows/python-build.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      format-code-enabled: ${{ matrix.python-version == '3.12' }}
+      static-code-analysis-enabled: ${{ matrix.python-version == '3.12' }}
+      build-enabled: ${{ matrix.python-version == '3.12' }}
+      coverage-artifact-name: coverage-offline-${{ matrix.python-version }}
+
+  # Live providers, for pull requests from this repository only (a fork gets
+  # no secrets); a provider or GitHub outage fails it instead of skipping.
+  live:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     uses: ./.github/workflows/python-build.yml
     secrets:
       ETHEREUM_PROVIDER_URL: ${{ secrets.ETHEREUM_PROVIDER_URL }}
       ARBITRUM_PROVIDER_URL: ${{ secrets.ARBITRUM_PROVIDER_URL }}
       BASE_PROVIDER_URL: ${{ secrets.BASE_PROVIDER_URL }}
+    with:
+      format-code-enabled: false
+      static-code-analysis-enabled: false
+      build-enabled: false
+      coverage-artifact-name: coverage-live
+      require-live: ETHEREUM_PROVIDER_URL,ARBITRUM_PROVIDER_URL,BASE_PROVIDER_URL,GITHUB
 
   report:
     if: ${{ always() }}
     needs:
       - notify
-      - build
+      - offline
+      - live
     uses: ./.github/workflows/report-slack.yml
     secrets:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     with:
-      success: ${{ needs.build.result == 'success' }}
+      success: ${{ needs.offline.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.live.result) }}
       slack-status-msg-id: ${{ needs.notify.outputs.slack-status-msg-id }}

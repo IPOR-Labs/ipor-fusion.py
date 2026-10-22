@@ -45,7 +45,7 @@ executors submit into HyperEVM's 3 M-gas small blocks. Every lifecycle message
 here carries the factory route's 2 M and is executed automatically, but the
 one-time dispatcher deployment ticket carries 6 M and has to be executed by
 anyone through the permissionless ``OffRamp.execute``
-(``ipor_fusion.manual_execution``). The deployment below already has its
+(``ipor_fusion.crosschain.manual_execution``). The deployment below already has its
 dispatcher; the relay delivers every message directly.
 
 Run it (the shell snippets assume a POSIX shell -- bash or zsh):
@@ -70,6 +70,15 @@ from web3.types import Timestamp
 
 from ipor_fusion import (
     ERC20,
+    PlasmaVault,
+    SimulationResult,
+    VaultSimulator,
+    Web3Context,
+    erc20_balance_slot,
+    is_simulate_v1_supported,
+    parse_plasma_vault_address,
+)
+from ipor_fusion.crosschain import (
     CcipChain,
     CcipChainSelector,
     CcipTransport,
@@ -77,14 +86,7 @@ from ipor_fusion import (
     CrosschainLane,
     CrosschainSimulator,
     LaneObservation,
-    PlasmaVault,
-    SimulationResult,
-    VaultSimulator,
-    Web3Context,
-    erc20_balance_slot,
-    is_simulate_v1_supported,
     open_lane,
-    parse_plasma_vault_address,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import Amount, ChainId, Decimals, Period, Shares

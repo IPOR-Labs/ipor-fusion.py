@@ -11,13 +11,13 @@ import pytest
 from _crosschain import CHAINS, POC, Chain, Spoke, connect_readiness
 from web3 import Web3
 
-from ipor_fusion import (
+from ipor_fusion import Web3Context
+from ipor_fusion.crosschain import (
     CcipCrosschainExecutor,
     CcipCrosschainFactory,
     CrosschainTransportKind,
     StargateCrosschainFactory,
     StargateTokenMessaging,
-    Web3Context,
     ccip_token_lane,
 )
 

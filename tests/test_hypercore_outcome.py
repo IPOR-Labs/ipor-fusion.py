@@ -6,11 +6,10 @@ from unittest.mock import MagicMock
 import pytest
 from web3 import Web3
 
-from ipor_fusion import (
+from ipor_fusion import UnsupportedChainError, Web3Context
+from ipor_fusion.hypercore import (
     HyperCoreTransferSnapshot,
     HyperCoreTransferStatus,
-    UnsupportedChainError,
-    Web3Context,
     compare_hypercore_transfer,
     read_hypercore_transfer_snapshot,
 )

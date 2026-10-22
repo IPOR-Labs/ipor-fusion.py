@@ -123,12 +123,10 @@ executionEnvironments = [
 [tool.coverage.run]
 source = ["src/ipor_fusion"]
 data_file = ".coverage_data/.coverage"
-omit = ["src/ipor_fusion/mcp/*"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 95
-omit = ["src/ipor_fusion/mcp/*"]
+fail_under = 98
 
 [tool.semantic_release]
 # Runs inside the python-semantic-release Docker container, not on the runner

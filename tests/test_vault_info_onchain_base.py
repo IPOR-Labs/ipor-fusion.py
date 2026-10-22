@@ -17,11 +17,10 @@ historical block requires an archive node.
 
 from __future__ import annotations
 
-import os
 from collections import Counter
 from unittest.mock import patch
 
-import pytest
+from _live import archive_context, provider_url
 from web3 import Web3
 from web3.providers.rpc import HTTPProvider
 
@@ -35,15 +34,8 @@ EXPECTED_IDLE_USDC = 10 * 10**6  # 10 USDC (6 decimals) sitting idle on the vaul
 
 
 def test_idle_underlying_reconciles_on_real_base_vault():
-    url = os.environ.get("BASE_PROVIDER_URL")
-    if not url:
-        pytest.skip("BASE_PROVIDER_URL not set")
-
-    try:  # pylint: disable=broad-except
-        validation = validate_vault(Web3Context.from_url(url), VAULT, block=BLOCK)
-    except Exception as exc:  # pylint: disable=broad-except
-        # Infra problem (provider unreachable or non-archive) — skip, don't fail.
-        pytest.skip(f"BASE on-chain read failed (provider missing/non-archive?): {exc}")
+    ctx = archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)
+    validation = validate_vault(ctx, VAULT, block=BLOCK)
 
     # Sanity: confirm we are reading the expected vault/chain state at this block.
     recon = validation.reconciliation
@@ -64,9 +56,8 @@ MAX_ETH_CALLS = 20
 
 
 def test_fetch_stays_within_round_trip_budget():
-    url = os.environ.get("BASE_PROVIDER_URL")
-    if not url:
-        pytest.skip("BASE_PROVIDER_URL not set")
+    archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)  # skips without an archive
+    url = provider_url("BASE_PROVIDER_URL")
 
     methods: Counter[str] = Counter()
     make_request = HTTPProvider.make_request
@@ -75,15 +66,12 @@ def test_fetch_stays_within_round_trip_budget():
         methods[method] += 1
         return make_request(provider, method, params)
 
-    try:  # pylint: disable=broad-except
-        # web3 binds make_request when the provider is built, so the context
-        # must be created under the patch for any request to be counted.
-        with patch.object(HTTPProvider, "make_request", counting):
-            ctx = Web3Context.from_url(url)
-            methods.clear()
-            data = fetch_vault_data(ctx, VAULT, block=BLOCK)
-    except Exception as exc:  # pylint: disable=broad-except
-        pytest.skip(f"BASE on-chain read failed (provider missing/non-archive?): {exc}")
+    # web3 binds make_request when the provider is built, so the context
+    # must be created under the patch for any request to be counted.
+    with patch.object(HTTPProvider, "make_request", counting):
+        ctx = Web3Context.from_url(url)
+        methods.clear()
+        data = fetch_vault_data(ctx, VAULT, block=BLOCK)
 
     assert data.total_assets == EXPECTED_IDLE_USDC
     assert methods["eth_call"] > 0, "requests were not counted"
