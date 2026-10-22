@@ -459,6 +459,8 @@ validated on every live vault of these chains (`SUPPORTED_CHAIN_IDS`):
 - **Avalanche** C-Chain
 - **Katana**
 - **Monad**
+- **Ink** and **Robinhood**, which have no live vault yet: validated on a vault freshly
+  cloned through their FusionFactory on a fork
 
 Balance fuses and the withdraw manager are read from vault storage. The remaining event
 scans (role holders, pending withdraw requests) page `eth_getLogs` within the provider's
