@@ -990,6 +990,22 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
 
+- **`vault validate` publishes one document.** In 3.x the CLI's `--json` output
+  and the MCP `vault_validate` tool returned two different shapes; both now
+  return `VaultValidationJson`, built by `build_vault_validation_json(validation,
+  chain)` (exported from `ipor_fusion` and `ipor_fusion.vault_info`):
+  - `findings` lists every check in order with its `check`, `severity` and
+    `message`. It replaces the CLI's `criticals` / `warnings` / `ok` string lists
+    and the MCP tool's `criticals` / `warnings` / `passed` lists; filter by
+    `severity`.
+  - `erc20` (`tokens`, `value_in_asset`, `market_cached_value`, `unpriced_tokens`)
+    replaces the CLI's `erc20_balances`; `erc20.tokens` has the same entries.
+  - `reconciliation`, `lending_health` and `asset` share their shapes with the
+    `vault info` document. For the MCP tool this means `delta.percent` instead of
+    `delta_percent`, amounts formatted with thousands separators (`"14,912.465797"`)
+    and the delta's `formatted` as its absolute value, as in `vault info`.
+  - The MCP tool's output gains `block_timestamp`.
+
 - **A failed lending read is a warning, never a silent `ok`.** 3.x caught every
   exception in the lending-health readers and dropped the position, so a provider
   outage could leave no lending finding and an `ok` verdict. Now:

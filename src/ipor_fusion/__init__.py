@@ -368,7 +368,9 @@ from ipor_fusion.vault_info import (
     DeploymentErrorJson,
     DeploymentJson,
     Erc20BalanceJson,
+    Erc20HoldingsJson,
     FeesJson,
+    FindingJson,
     FuseJson,
     HealthCheckJson,
     HighWaterMarkJson,
@@ -392,8 +394,10 @@ from ipor_fusion.vault_info import (
     VaultAssetJson,
     VaultInfoJson,
     VaultLinksJson,
+    VaultValidationJson,
     WithdrawManagerJson,
     build_vault_info_json,
+    build_vault_validation_json,
 )
 
 __version__ = package_version()
@@ -719,6 +723,10 @@ __all__ = [
     "UsdAmountJson",
     "VaultAssetJson",
     "VaultInfoJson",
+    "VaultValidationJson",
+    "FindingJson",
+    "Erc20HoldingsJson",
+    "build_vault_validation_json",
     "VaultLinksJson",
     "WithdrawManagerJson",
     "MorphoApiError",

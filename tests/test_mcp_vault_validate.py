@@ -21,6 +21,7 @@ from ipor_fusion.validation import (
     Reconciliation,
     VaultValidation,
 )
+from ipor_fusion.vault_info import build_vault_validation_json
 
 VAULT = "0x31744E44d6aF88225C1dBEFbe5Df8308fAeA641B"
 
@@ -77,10 +78,17 @@ def _market(**overrides: object) -> LendingMarketHealth:
     return LendingMarketHealth(**values)  # type: ignore[arg-type]
 
 
+def _response(validation: VaultValidation) -> VaultValidationResponse:
+    """The MCP response: the shared validation document, validated."""
+    return VaultValidationResponse.model_validate(
+        build_vault_validation_json(validation, "base")
+    )
+
+
 class TestResponse:
     @staticmethod
-    def test_findings_are_split_by_severity_and_the_verdict_is_the_worst():
-        response = VaultValidationResponse.from_validation(
+    def test_findings_keep_their_order_and_the_verdict_is_the_worst():
+        response = _response(
             _validation(
                 (
                     Finding("lending_health", "ok", "morpho: LTV 0.10/0.62"),
@@ -89,45 +97,46 @@ class TestResponse:
                         "lending_health", "critical", "CRITICAL — near liquidation"
                     ),
                 )
-            ),
-            "base",
+            )
         )
         assert response.verdict == "critical"
-        assert [f.check for f in response.criticals] == ["lending_health"]
-        assert [f.check for f in response.warnings] == ["orphan_fuse"]
-        assert [f.message for f in response.passed] == ["morpho: LTV 0.10/0.62"]
+        assert [(f.check, f.severity) for f in response.findings] == [
+            ("lending_health", "ok"),
+            ("orphan_fuse", "warning"),
+            ("lending_health", "critical"),
+        ]
 
     @staticmethod
     def test_amounts_carry_raw_formatted_and_usd():
-        response = VaultValidationResponse.from_validation(_validation(), "base")
+        response = _response(_validation())
         rec = response.reconciliation
         assert rec.balance_fuses_total.raw == 14912465797
-        assert rec.balance_fuses_total.formatted == "14912.465797"
+        assert rec.balance_fuses_total.formatted == "14,912.465797"
         assert rec.balance_fuses_total.usd == 14911.0
-        assert rec.delta.formatted == "-1.5"
-        assert rec.delta_percent == -0.01
+        # As in vault info: the delta's raw keeps the sign, formatted is |delta|.
+        assert rec.delta.raw == -1500000
+        assert rec.delta.formatted == "1.5"
+        assert rec.delta.percent == -0.01
         assert rec.implied_market_total.usd is None
-        assert rec.sum.formatted == "0"
+        assert rec.sum.formatted == "0.0"
         assert response.block_timestamp_utc == "2026-10-12T07:35:09Z"
         assert response.verdict == "ok"
         assert response.asset.symbol == "USDC"
 
     @staticmethod
     def test_a_round_amount_is_never_in_scientific_notation():
-        response = VaultValidationResponse.from_validation(_validation(), "base")
-        assert response.reconciliation.on_chain_total_assets.formatted == "10000"
+        response = _response(_validation())
+        assert response.reconciliation.on_chain_total_assets.formatted == "10,000.0"
 
     @staticmethod
     def test_no_lending_position_is_null_not_an_empty_list():
-        response = VaultValidationResponse.from_validation(
-            _validation(lending=VaultLendingHealth(markets=[])), "base"
-        )
+        response = _response(_validation(lending=VaultLendingHealth(markets=[])))
         assert response.lending_health is None
 
     @staticmethod
     def test_lending_markets_and_worst_usage():
-        response = VaultValidationResponse.from_validation(
-            _validation(lending=VaultLendingHealth(markets=[_market()])), "base"
+        response = _response(
+            _validation(lending=VaultLendingHealth(markets=[_market()]))
         )
         assert response.lending_health is not None
         assert response.lending_health.worst_ltv_usage_percent == 68.1
@@ -138,7 +147,7 @@ class TestResponse:
     def test_a_morpho_market_id_is_0x_prefixed_like_vault_info():
         market_id = "ab" * 32
         spoke = "0x" + "cd" * 20
-        response = VaultValidationResponse.from_validation(
+        response = _response(
             _validation(
                 lending=VaultLendingHealth(
                     markets=[
@@ -146,8 +155,7 @@ class TestResponse:
                         _market(substrate_id=spoke),
                     ]
                 )
-            ),
-            "base",
+            )
         )
         assert response.lending_health is not None
         assert [m.substrate_id for m in response.lending_health.markets] == [
@@ -171,9 +179,7 @@ class TestResponse:
             ),
             unpriced_tokens=("0xabc",),
         )
-        response = VaultValidationResponse.from_validation(
-            _validation(erc20=erc20), "base"
-        )
+        response = _response(_validation(erc20=erc20))
         assert response.erc20.tokens[0].balance is None
         assert response.erc20.unpriced_tokens == ["0xabc"]
 
@@ -194,13 +200,11 @@ class TestResponse:
             value_in_asset=10_000_000_000,
             value_usd=10000.0,
         )
-        response = VaultValidationResponse.from_validation(
-            _validation(erc20=erc20), "base"
-        )
+        response = _response(_validation(erc20=erc20))
         balance = response.erc20.tokens[0].balance
         assert balance is not None
         assert balance.formatted == "2.5"
-        assert response.erc20.value_in_asset.formatted == "10000"
+        assert response.erc20.value_in_asset.formatted == "10,000.0"
         assert response.erc20.value_in_asset.usd == 10000.0
 
 
