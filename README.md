@@ -364,7 +364,8 @@ release; adding one does not.
 - **Third-party types** are not re-exported: import `ChecksumAddress` and
   `HexAddress` from `eth_typing`, and `BlockIdentifier`, `Timestamp` and `TxParams`
   from `web3.types`. The SDK's own types (`ChainId`, `Amount`, `PlasmaVaultAddress`,
-  ...) come from `ipor_fusion` or `ipor_fusion.types`.
+  ...) come from `ipor_fusion` or `ipor_fusion.types`; a preview feature's ids
+  (`CommandId`, `HyperCoreAsset`, ...) come from its subpackage.
 
 `tests/test_public_api.py` snapshots every `__all__` and the names each public
 module keeps by path, so a change to the surface is a deliberate, reviewed edit.
