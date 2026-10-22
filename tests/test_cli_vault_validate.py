@@ -16,6 +16,7 @@ from ipor_fusion.cli import config_store
 from ipor_fusion.cli.config_store import FusionConfig, save_config
 from ipor_fusion.cli.main import cli
 from ipor_fusion.errors import NotPlasmaVaultError, UnsupportedVaultVersionError
+from ipor_fusion.mcp.models import VaultValidationResponse
 from ipor_fusion.types import ChainId
 from ipor_fusion.validation import Erc20Holdings
 from ipor_fusion.vault_data import VaultData
@@ -125,8 +126,10 @@ def test_json_output():
     assert result.exit_code == 1, result.output
     payload = json.loads(result.output)
     assert payload["verdict"] == "critical"
-    assert payload["criticals"] == ["CRITICAL — orphan"]
-    assert payload["ok"] == ["balanced"]
+    assert [(f["severity"], f["message"]) for f in payload["findings"]] == [
+        ("critical", "CRITICAL — orphan"),
+        ("ok", "balanced"),
+    ]
     assert payload["findings"][0] == {
         "check": "orphan_fuse",
         "severity": "critical",
@@ -135,8 +138,10 @@ def test_json_output():
     assert payload["asset"]["symbol"] == "USDC"
     assert payload["block"] == 21_000_000
     assert payload["reconciliation"]["sum"]["raw"] == 100 * 10**6
-    assert payload["erc20_balances"][0]["symbol"] == "TKN"
+    assert payload["erc20"]["tokens"][0]["symbol"] == "TKN"
     assert payload["lending_health"] is None
+    # The CLI and the MCP vault_validate tool publish one document.
+    VaultValidationResponse.model_validate(payload)
 
 
 def test_not_a_plasma_vault_is_a_usage_error():

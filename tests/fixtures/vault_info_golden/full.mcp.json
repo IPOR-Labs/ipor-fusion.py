@@ -31,8 +31,7 @@
   },
   "total_supply": {
     "raw": 290000000000,
-    "formatted": "2,900.0",
-    "usd": null
+    "formatted": "2,900.0"
   },
   "share_price": {
     "asset": 1.0344827586,
@@ -40,8 +39,7 @@
   },
   "supply_cap": {
     "raw": 115792089237316195423570985008687907853269984665640564039457584007913129639935,
-    "formatted": "unlimited",
-    "usd": null
+    "formatted": "unlimited"
   },
   "managers": {
     "access": "0x00000000000000000000000000000000000000AC",
@@ -134,8 +132,7 @@
     "fees_note": "The two Offboarding Contributions (for Scheduled and for Instant Withdrawals) are reported in the top-level `fees` object, not here.",
     "shares_to_release": {
       "raw": 4000000000,
-      "formatted": "40.0",
-      "usd": null
+      "formatted": "40.0"
     },
     "shares_to_release_note": "Current shares the vault Alpha has approved for release via releaseFunds().",
     "last_release_funds_timestamp": 1729900000,
@@ -146,8 +143,7 @@
         "account": "0x00000000000000000000000000000000000000e1",
         "shares": {
           "raw": 2500000000,
-          "formatted": "25.0",
-          "usd": null
+          "formatted": "25.0"
         },
         "end_withdraw_window_timestamp": 1730050000,
         "end_withdraw_window_utc": "2024-10-27T17:26:40Z",
@@ -163,8 +159,7 @@
         "account": "0x00000000000000000000000000000000000000E2",
         "shares": {
           "raw": 1500000000,
-          "formatted": "15.0",
-          "usd": null
+          "formatted": "15.0"
         },
         "end_withdraw_window_timestamp": 1730090000,
         "end_withdraw_window_utc": "2024-10-28T04:33:20Z",
@@ -179,8 +174,7 @@
     ],
     "total_pending_shares": {
       "raw": 4000000000,
-      "formatted": "40.0",
-      "usd": null
+      "formatted": "40.0"
     },
     "total_pending_shares_note": "Sum of shares across all pending withdrawal requests."
   },
@@ -210,8 +204,7 @@
       "market_id": 1,
       "balance": {
         "raw": 1000000000,
-        "formatted": "1,000.0",
-        "usd": null
+        "formatted": "1,000.0"
       },
       "fuse": "0x00000000000000000000000000000000000000f1",
       "contract": "AaveV3BalanceFuse",
@@ -255,8 +248,7 @@
       "market_id": 14,
       "balance": {
         "raw": 2000000000,
-        "formatted": "2,000.0",
-        "usd": null
+        "formatted": "2,000.0"
       },
       "fuse": "0x00000000000000000000000000000000000000F2",
       "contract": "MorphoBalanceFuse",
@@ -327,8 +319,7 @@
       "market_id": 7,
       "balance": {
         "raw": 5000000,
-        "formatted": "5.0",
-        "usd": null
+        "formatted": "5.0"
       },
       "fuse": "0x00000000000000000000000000000000000000f3",
       "contract": "ERC20BalanceFuse",
@@ -341,8 +332,7 @@
       "market_id": 1,
       "balance": {
         "raw": 1000000000,
-        "formatted": "1,000.0",
-        "usd": null
+        "formatted": "1,000.0"
       },
       "fuse": "0x00000000000000000000000000000000000000F4",
       "contract": "AaveV3BalanceFuse",
@@ -448,8 +438,7 @@
       "decimals": 6,
       "balance": {
         "raw": 50000000,
-        "formatted": "50.0",
-        "usd": null
+        "formatted": "50.0"
       },
       "price_usd": 1.0,
       "usd_value": 50.0,
@@ -461,8 +450,7 @@
       "decimals": 18,
       "balance": {
         "raw": 10000000000000000000,
-        "formatted": "10.0",
-        "usd": null
+        "formatted": "10.0"
       },
       "price_usd": 2.0,
       "usd_value": 20.0,
@@ -474,8 +462,7 @@
       "decimals": 18,
       "balance": {
         "raw": 3000000000000000000,
-        "formatted": "3.0",
-        "usd": null
+        "formatted": "3.0"
       },
       "price_usd": null,
       "usd_value": null,
@@ -487,8 +474,7 @@
       "decimals": 18,
       "balance": {
         "raw": 0,
-        "formatted": "0.0",
-        "usd": null
+        "formatted": "0.0"
       },
       "price_usd": 1.0,
       "usd_value": 0.0,
@@ -497,10 +483,6 @@
     {
       "address": "0x00000000000000000000000000000000000000b4",
       "symbol": "BROKEN",
-      "decimals": null,
-      "balance": null,
-      "price_usd": null,
-      "usd_value": null,
       "note": ""
     }
   ],
@@ -553,8 +535,7 @@
     },
     "implied_market_total": {
       "raw": 2950000000,
-      "formatted": "2,950.0",
-      "usd": null
+      "formatted": "2,950.0"
     },
     "market_storage_divergence": 55000000
   },

@@ -115,7 +115,7 @@
     "delta": {
       "raw": 0,
       "formatted": "0.0",
-      "usd": 0,
+      "usd": 0.0,
       "percent": 0.0
     },
     "pending_withdrawals": {

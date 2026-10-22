@@ -31,6 +31,7 @@ from ipor_fusion.substrates import (
 from ipor_fusion.types import (
     AccessManagerAddress,
     ChainId,
+    Check,
     Decimals,
     Fee,
     FuseAddress,
@@ -41,9 +42,12 @@ from ipor_fusion.types import (
     MorphoBlueMarketId,
     Period,
     PlasmaVaultAddress,
+    Severity,
+    Verdict,
     parse_hex_address,
 )
 from ipor_fusion.validation import (
+    Erc20Holding,
     Reconciliation,
     VaultValidation,
     _format_amount,
@@ -431,6 +435,41 @@ class HealthCheckJson(TypedDict):
     criticals: list[str]
 
 
+class FindingJson(TypedDict):
+    """One validation check result (`Finding`)."""
+
+    check: Check
+    severity: Severity
+    message: str
+
+
+class Erc20HoldingsJson(TypedDict):
+    """The ERC20_VAULT_BALANCE tokens read directly (`Erc20Holdings`)."""
+
+    tokens: list[Erc20BalanceJson]
+    value_in_asset: UsdAmountJson
+    market_cached_value: AmountJson
+    unpriced_tokens: list[str]
+
+
+class VaultValidationJson(TypedDict):
+    """The ``fusion vault validate --json`` document and the ``vault_validate``
+    MCP tool output (`build_vault_validation_json`)."""
+
+    vault: PlasmaVaultAddress
+    chain: str
+    chain_id: ChainId
+    block: int
+    block_timestamp: Timestamp
+    block_timestamp_utc: str
+    asset: VaultAssetJson
+    verdict: Verdict
+    findings: list[FindingJson]
+    reconciliation: ReconciliationJson
+    erc20: Erc20HoldingsJson
+    lending_health: LendingHealthJson | None
+
+
 class VaultInfoJson(TypedDict):
     """The ``fusion vault info --json`` document (`build_vault_info_json`)."""
 
@@ -787,28 +826,33 @@ def _lending_substrate_ref(substrate_id: str | None) -> str | None:
 
 
 def _erc20_balances_json(validation: VaultValidation) -> list[Erc20BalanceJson]:
-    entries: list[Erc20BalanceJson] = []
-    for token in validation.erc20.tokens:
-        if token.decimals is None or token.balance is None:
-            entries.append(
-                {"address": token.address, "symbol": token.symbol, "note": token.note}
-            )
-            continue
-        entries.append(
-            {
-                "address": token.address,
-                "symbol": token.symbol,
-                "decimals": token.decimals,
-                "balance": {
-                    "raw": token.balance,
-                    "formatted": _format_amount(token.balance, token.decimals),
-                },
-                "price_usd": token.price_usd,
-                "usd_value": token.usd_value,
-                "note": token.note,
-            }
-        )
-    return entries
+    """One entry per token; the decimals stay when known even if the balance
+    read failed, and the balance keys are absent without a balance."""
+    return [_erc20_balance_json(token) for token in validation.erc20.tokens]
+
+
+def _erc20_balance_json(token: Erc20Holding) -> Erc20BalanceJson:
+    if token.decimals is None:
+        return {"address": token.address, "symbol": token.symbol, "note": token.note}
+    if token.balance is None:
+        return {
+            "address": token.address,
+            "symbol": token.symbol,
+            "decimals": token.decimals,
+            "note": token.note,
+        }
+    return {
+        "address": token.address,
+        "symbol": token.symbol,
+        "decimals": token.decimals,
+        "balance": {
+            "raw": token.balance,
+            "formatted": _format_amount(token.balance, token.decimals),
+        },
+        "price_usd": token.price_usd,
+        "usd_value": token.usd_value,
+        "note": token.note,
+    }
 
 
 def _amount_json(raw: int, decimals: int, usd: float | None) -> UsdAmountJson:
@@ -1133,6 +1177,49 @@ def _markets_json(
 
 def _no_name(_address: HexAddress) -> str:
     return ""
+
+
+def build_vault_validation_json(
+    validation: VaultValidation, chain: str
+) -> VaultValidationJson:
+    """A validation as the one document the CLI (``vault validate --json``) and
+    the MCP ``vault_validate`` tool publish. ``chain`` is the chain's display
+    name. Amounts and blocks share their shapes with the ``vault info``
+    document."""
+    erc20 = validation.erc20
+    decimals = validation.asset_decimals
+    return {
+        "vault": validation.vault,
+        "chain": chain,
+        "chain_id": validation.chain_id,
+        "block": validation.block_number,
+        "block_timestamp": validation.block_timestamp,
+        "block_timestamp_utc": _unix_to_iso(validation.block_timestamp),
+        "asset": {
+            "address": validation.asset,
+            "symbol": validation.asset_symbol,
+            "decimals": validation.asset_decimals,
+            "price_usd": validation.asset_price_usd,
+        },
+        "verdict": validation.verdict,
+        "findings": [
+            {"check": f.check, "severity": f.severity, "message": f.message}
+            for f in validation.findings
+        ],
+        "reconciliation": _reconciliation_json(validation.reconciliation, decimals),
+        "erc20": {
+            "tokens": _erc20_balances_json(validation),
+            "value_in_asset": _amount_json(
+                erc20.value_in_asset, decimals, erc20.value_usd
+            ),
+            "market_cached_value": {
+                "raw": erc20.market_cached_value,
+                "formatted": _format_amount(erc20.market_cached_value, decimals),
+            },
+            "unpriced_tokens": list(erc20.unpriced_tokens),
+        },
+        "lending_health": _lending_health_json(validation.lending_health),
+    }
 
 
 def build_vault_info_json(

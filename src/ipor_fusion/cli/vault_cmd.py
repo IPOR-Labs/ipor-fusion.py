@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import TypedDict
 
 import click
-from web3.types import Timestamp
 
 from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.cli.config_store import (
@@ -41,9 +39,8 @@ from ipor_fusion.errors import (
 from ipor_fusion.readers.oracle_mapping import (
     build_oracle_mapping,
 )
-from ipor_fusion.types import ChainId, Check, PlasmaVaultAddress, Severity, Verdict
+from ipor_fusion.types import ChainId, PlasmaVaultAddress
 from ipor_fusion.validation import (
-    VaultValidation,
     validate_vault,
 )
 from ipor_fusion.vault_data import (
@@ -51,41 +48,9 @@ from ipor_fusion.vault_data import (
     fetch_vault_data,
 )
 from ipor_fusion.vault_info import (
-    Erc20BalanceJson,
-    LendingHealthJson,
-    ReconciliationJson,
-    VaultAssetJson,
-    _erc20_balances_json,
-    _lending_health_json,
-    _reconciliation_json,
     _unix_to_iso,
+    build_vault_validation_json,
 )
-
-
-class _FindingJson(TypedDict):
-    check: Check
-    severity: Severity
-    message: str
-
-
-class _ValidationJson(TypedDict):
-    """The ``fusion vault validate --json`` document."""
-
-    vault: PlasmaVaultAddress
-    chain: str
-    chain_id: ChainId
-    block: int
-    block_timestamp: Timestamp
-    block_timestamp_utc: str
-    asset: VaultAssetJson
-    verdict: Verdict
-    criticals: list[str]
-    warnings: list[str]
-    ok: list[str]
-    findings: list[_FindingJson]
-    reconciliation: ReconciliationJson
-    erc20_balances: list[Erc20BalanceJson]
-    lending_health: LendingHealthJson | None
 
 
 def _auto_save_vault(
@@ -295,7 +260,9 @@ def validate(
 
     chain_label = CHAIN_NAMES.get(chain_id, str(chain_id))
     if json_output:
-        click.echo(json.dumps(_validation_json(validation, chain_label), indent=2))
+        click.echo(
+            json.dumps(build_vault_validation_json(validation, chain_label), indent=2)
+        )
     else:
         click.echo(f"Vault:   {validation.vault}")
         click.echo(f"Chain:   {chain_label} (chain-id={chain_id})")
@@ -304,36 +271,6 @@ def validate(
         _print_validation(validation)
     if validation.verdict == "critical":
         sys.exit(1)
-
-
-def _validation_json(validation: VaultValidation, chain_label: str) -> _ValidationJson:
-    return {
-        "vault": validation.vault,
-        "chain": chain_label,
-        "chain_id": validation.chain_id,
-        "block": validation.block_number,
-        "block_timestamp": validation.block_timestamp,
-        "block_timestamp_utc": _unix_to_iso(validation.block_timestamp),
-        "asset": {
-            "address": validation.asset,
-            "symbol": validation.asset_symbol,
-            "decimals": validation.asset_decimals,
-            "price_usd": validation.asset_price_usd,
-        },
-        "verdict": validation.verdict,
-        "criticals": list(validation.criticals),
-        "warnings": list(validation.warnings),
-        "ok": list(validation.ok),
-        "findings": [
-            {"check": f.check, "severity": f.severity, "message": f.message}
-            for f in validation.findings
-        ],
-        "reconciliation": _reconciliation_json(
-            validation.reconciliation, validation.asset_decimals
-        ),
-        "erc20_balances": _erc20_balances_json(validation),
-        "lending_health": _lending_health_json(validation.lending_health),
-    }
 
 
 @vault.command("role-accounts")

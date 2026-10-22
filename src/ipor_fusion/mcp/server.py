@@ -66,7 +66,7 @@ from ipor_fusion.vault_data import (
     fetch_deployment_info,
     fetch_vault_data,
 )
-from ipor_fusion.vault_info import build_vault_info_json
+from ipor_fusion.vault_info import build_vault_info_json, build_vault_validation_json
 
 # chain_id default: detect the chain from the saved vault or the single provider.
 
@@ -242,8 +242,10 @@ def vault_validate(
     resolve_access_manager(ctx, checksum)
 
     validation = validate_vault(ctx, checksum, block=effective_block, metadata=True)
-    return VaultValidationResponse.from_validation(
-        validation, CHAIN_NAMES.get(chain_id, str(chain_id))
+    return VaultValidationResponse.model_validate(
+        build_vault_validation_json(
+            validation, CHAIN_NAMES.get(chain_id, str(chain_id))
+        )
     )
 
 

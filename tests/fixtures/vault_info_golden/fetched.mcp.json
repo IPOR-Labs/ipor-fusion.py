@@ -28,8 +28,7 @@
   },
   "total_supply": {
     "raw": 120000000000,
-    "formatted": "1,200.0",
-    "usd": null
+    "formatted": "1,200.0"
   },
   "share_price": {
     "asset": 1.0416666667,
@@ -37,8 +36,7 @@
   },
   "supply_cap": {
     "raw": 1000000000000000000000000000000,
-    "formatted": "10,000,000,000,000,000,000,000.0",
-    "usd": null
+    "formatted": "10,000,000,000,000,000,000,000.0"
   },
   "managers": {
     "access": "0x0000000000000000000000000000000000AcCE55",
@@ -94,8 +92,7 @@
     "fees_note": "The two Offboarding Contributions (for Scheduled and for Instant Withdrawals) are reported in the top-level `fees` object, not here.",
     "shares_to_release": {
       "raw": 500000000,
-      "formatted": "5.0",
-      "usd": null
+      "formatted": "5.0"
     },
     "shares_to_release_note": "Current shares the vault Alpha has approved for release via releaseFunds().",
     "last_release_funds_timestamp": 1789996400,
@@ -104,8 +101,7 @@
     "pending_requests": [],
     "total_pending_shares": {
       "raw": 0,
-      "formatted": "0.0",
-      "usd": null
+      "formatted": "0.0"
     },
     "total_pending_shares_note": "Sum of shares across all pending withdrawal requests."
   },
@@ -123,8 +119,7 @@
       "market_id": 100001,
       "balance": {
         "raw": 1000000000,
-        "formatted": "1,000.0",
-        "usd": null
+        "formatted": "1,000.0"
       },
       "fuse": "0x000000000000000000000000000000000000BA1f",
       "contract": "?",
@@ -200,8 +195,7 @@
     },
     "implied_market_total": {
       "raw": 1000000000,
-      "formatted": "1,000.0",
-      "usd": null
+      "formatted": "1,000.0"
     },
     "market_storage_divergence": 0
   },

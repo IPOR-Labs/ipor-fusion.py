@@ -1007,6 +1007,29 @@ are listed with a link.
   - **Parity test:** `tests/test_cli_mcp_parity.py` holds every command to a
     tool with the same arguments.
 
+- **`vault validate` publishes one document.** In 3.x the CLI's `--json` output
+  and the MCP `vault_validate` tool returned two different shapes; both now
+  return `VaultValidationJson`, built by `build_vault_validation_json(validation,
+  chain)` (exported from `ipor_fusion` and `ipor_fusion.vault_info`):
+  - `findings` lists every check in order with its `check`, `severity` and
+    `message`. It replaces the CLI's `criticals` / `warnings` / `ok` string lists
+    and the MCP tool's `criticals` / `warnings` / `passed` lists; filter by
+    `severity`.
+  - `erc20` (`tokens`, `value_in_asset`, `market_cached_value`, `unpriced_tokens`)
+    replaces the CLI's `erc20_balances`; `erc20.tokens` has the same entries.
+  - `reconciliation`, `lending_health` and `asset` share their shapes with the
+    `vault info` document. For the MCP tool this means `delta.percent` instead of
+    `delta_percent`, amounts formatted with thousands separators and at most six
+    decimals (`"14,912.465797"`; `raw` keeps the exact value) and the delta's
+    `formatted` as its absolute value, as in `vault info`.
+  - The MCP tool's output gains `block_timestamp`.
+  - An ERC20 entry whose balance read failed keeps its `decimals` when they were
+    read (in `vault info` too).
+  - The MCP output is the builder's document key for key: an amount without a
+    USD value and an ERC20 entry without a balance no longer gain `null` keys
+    (`usd`, `price_usd`, ...) in either tool, `vault_info` included, and a zero
+    USD delta without a price is `0.0`, not `0`.
+
 - **A failed lending read is a warning, never a silent `ok`.** 3.x caught every
   exception in the lending-health readers and dropped the position, so a provider
   outage could leave no lending finding and an `ok` verdict. Now:

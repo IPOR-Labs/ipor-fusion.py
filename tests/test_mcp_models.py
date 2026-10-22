@@ -40,6 +40,7 @@ from ipor_fusion import (
     Roles,
     UsdAmountJson,
     VaultInfoJson,
+    VaultValidationJson,
     build_role_accounts_json,
 )
 from ipor_fusion.core.access import RoleAccount
@@ -59,6 +60,7 @@ from ipor_fusion.mcp.models import (
     ServerInfoResponse,
     VaultInfoResponse,
     VaultListEntry,
+    VaultValidationResponse,
     WithdrawManagerDetails,
 )
 from ipor_fusion.readers.oracle_mapping import (
@@ -674,6 +676,9 @@ class TestTypedDocumentsMirrorModels:
 
     def test_role_accounts(self):
         _assert_mirrors(RoleAccountsJson, RoleAccountsResponse, "vault_role_accounts")
+
+    def test_vault_validation(self):
+        _assert_mirrors(VaultValidationJson, VaultValidationResponse, "vault_validate")
 
     def test_oracle_mapping(self):
         _assert_mirrors(OracleMappingJson, OracleMappingResponse, "oracle_mapping")

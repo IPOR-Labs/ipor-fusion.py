@@ -489,9 +489,13 @@ structured home: a one-line summary, behavioral notes, cost warnings. Do not
 repeat schema content as prose; it drifts.
 
 `mcp/models.py` forbids extra keys and stays the source of the published JSON
-schema. Adding a field to `build_vault_info_json` (or a `fusion market` document)
-means adding it to its TypedDict, to the matching model (with a default for
-back-compat) and to the `_full_vault_info_dict` fixture;
+schema. A command whose CLI `--json` and MCP tool return the same data publish one
+document: an SDK builder returns its TypedDict (`build_vault_info_json`,
+`build_vault_validation_json`, the `fusion market` builders) and the tool
+validates it into the mirroring model, never a second hand-built shape. Adding a
+field to a document means adding it to its TypedDict, to the matching model (with
+a default for back-compat) and to the `_full_vault_info_dict` fixture for vault
+info;
 `TestTypedDocumentsMirrorModels` in `test_mcp_models.py` holds every TypedDict to
 its model block by block, a union block (`deployment`, `position_breakdown`,
 `source_detail`) shape by shape. Every block is a model; a block whose optional keys
