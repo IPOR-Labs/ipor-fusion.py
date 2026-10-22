@@ -1306,11 +1306,18 @@ def test_preview_names_are_not_in_the_top_level() -> None:
 # Defined in a preview module yet stable: the chain id the vault snapshot
 # gates the HyperCore read on.
 _STABLE_IN_PREVIEW_MODULES = frozenset({"HYPEREVM_CHAIN_ID"})
+_STABLE_SUBPACKAGES = (
+    "ipor_fusion.config",
+    "ipor_fusion.core",
+    "ipor_fusion.fuses",
+    "ipor_fusion.readers",
+)
 
 
-def test_names_defined_by_preview_modules_export_from_preview_packages() -> None:
-    """Every top-level-worthy name a preview module defines exports from a
-    preview subpackage, not from ``ipor_fusion``."""
+def test_no_stable_package_exports_a_name_a_preview_module_defines() -> None:
+    """A class, function or constant defined in a preview module is never
+    exported from ``ipor_fusion`` or a stable subpackage (the snapshots pin
+    what the preview subpackages export)."""
     root = Path(ipor_fusion.__file__).parent
     modules = [
         *root.joinpath("crosschain").rglob("*.py"),
@@ -1324,10 +1331,11 @@ def test_names_defined_by_preview_modules_export_from_preview_packages() -> None
                 defined.add(node.name)
             elif isinstance(node, ast.Assign):
                 defined |= {t.id for t in node.targets if isinstance(t, ast.Name)}
-    in_top = sorted((defined & set(ipor_fusion.__all__)) - _STABLE_IN_PREVIEW_MODULES)
-    assert not in_top
-    preview_names = {n for p in _PREVIEW for n in _module(p).__all__}
-    public = {n for n in defined if not n.startswith("_") and n.isidentifier()}
-    assert sorted(public & set(ipor_fusion.__all__) - preview_names) == sorted(
-        _STABLE_IN_PREVIEW_MODULES & public
-    )
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                defined.add(node.target.id)
+    stable = {
+        name
+        for package in ("ipor_fusion", *_STABLE_SUBPACKAGES)
+        for name in _module(package).__all__
+    }
+    assert sorted(defined & stable - _STABLE_IN_PREVIEW_MODULES) == []
