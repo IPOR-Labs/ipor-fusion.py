@@ -4,8 +4,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Final, Generic, NotRequired, TypedDict, TypeVar, Unpack
 
-from eth_abi import decode, encode
-from eth_abi.exceptions import DecodingError
+from eth_abi import encode
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
@@ -15,12 +14,16 @@ from web3.utils.address import get_create_address
 
 from ipor_fusion.core.contract import Call, _encode_calldata
 from ipor_fusion.core.fuse_action import FuseAction
+from ipor_fusion.core.simulation_result import (
+    SimulatedCallResult,
+    SimulationResult,
+    parse_simulate_response,
+)
 from ipor_fusion.errors import (
     BalanceSlotNotFoundError,
     EmptyCallResultError,
     SimulationError,
     SimulationRunError,
-    decode_custom_error,
 )
 from ipor_fusion.types import PlasmaVaultAddress
 
@@ -142,78 +145,12 @@ class _Block:
     override_provider: StateOverrideProvider | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class SimulatedCallResult:
-    """One simulated call. ``error`` is set exactly when ``success`` is False:
-    check ``success``, then read ``error`` for a non-empty, human-readable
-    failure (the node's message with the decoded revert reason, or
-    ``"reverted without a reason"`` plus any undecodable return data).
-    Construction enforces it: a failed call's ``error`` is completed from its
-    return data, and a successful call given an ``error`` raises
-    ``ValueError``. The record is frozen, so the invariant holds afterwards;
-    build a changed copy with `dataclasses.replace`."""
-
-    label: str | None
-    success: bool
-    return_data: HexBytes
-    gas_used: int
-    error: str | None
-    logs: list[dict]
-    predicted_address: ChecksumAddress | None = None
-    # Frozen would add a __hash__ that fails on the logs list; stay unhashable.
-    __hash__ = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.success:
-            if self.error is not None:
-                raise ValueError(
-                    f"successful simulated call {self.label!r} carries an error"
-                )
-        else:
-            # The record is frozen; completing the error is part of building it.
-            object.__setattr__(
-                self, "error", _failure_message(self.error, self.return_data)
-            )
-
-    @property
-    def revert_reason(self) -> str | None:
-        """This call's decoded revert (a registered custom error by name, an
-        ``Error(string)`` text or ``Panic``), else its ``error``; ``None``
-        exactly when it succeeded. ``SimulationResult.revert_reason`` is the
-        chain's first failed call, which may be a different one."""
-        if self.success:
-            return None
-        return _decode_revert(self.return_data, self.error)
-
-
-@dataclass(frozen=True, slots=True)
-class SimulationResult:
-    success: bool
-    all_success: bool
-    revert_reason: str | None
-    gas_used: int
-    execute_logs: list[dict]
-    calls: list[SimulatedCallResult] = field(default_factory=list)
-    failed_calls: list[SimulatedCallResult] = field(default_factory=list)
-    __hash__ = None  # type: ignore[assignment]
-
-    def raise_for_failure(self) -> None:
-        """Raise :class:`SimulationError` naming the first failed call (label,
-        client error, decoded revert reason); a no-op when every call succeeded."""
-        if not self.failed_calls:
-            return
-        first = self.failed_calls[0]
-        label = first.label or "<unlabelled>"
-        raise SimulationError(
-            f"simulated call {label!r} failed: {first.error}",
-            label=first.label,
-            revert_reason=first.revert_reason,
-        )
-
-
 class SimulationObservation(Generic[T_co]):
     """A read queued by `VaultSimulator.observe`, resolved by each `run()`:
-    ``value`` is the read decoded as its `Call` decodes, from the latest run."""
+    ``value`` is the read decoded as its `Call` decodes, from the latest run.
+    Every `run()` unresolves it when it starts and resolves it only once the
+    whole response has parsed, so a failed run leaves it unresolved rather
+    than holding an earlier run's answer."""
 
     __slots__ = ("_call", "_label", "_result")
 
@@ -228,11 +165,13 @@ class SimulationObservation(Generic[T_co]):
 
     @property
     def result(self) -> SimulatedCallResult:
-        """The raw simulated call (success, return data, gas, logs)."""
+        """The raw simulated call (success, return data, gas, logs). Raises
+        ``RuntimeError`` until a `run()` has completed, and after a failed one."""
         if self._result is None:
             raise RuntimeError(
-                f"observation {self._label or '<unlabelled>'!r} read before "
-                "VaultSimulator.run()"
+                f"observation {self._label or '<unlabelled>'!r} has no result: "
+                "no VaultSimulator.run() has completed since it was queued, or "
+                "the latest run failed"
             )
         return self._result
 
@@ -487,7 +426,7 @@ class VaultSimulator:
         return self._queue_execute(self._vault, data, self._alpha)
 
     def execute_call(
-        self, call: Call, from_: ChecksumAddress | None = None
+        self, call: Call[object], from_: ChecksumAddress | None = None
     ) -> VaultSimulator:
         """Queue a pre-encoded write call as an `execute`-style step. Used for
         e.g. `RewardsManager.claim_rewards(...)` where the wrapper differs from
@@ -516,7 +455,7 @@ class VaultSimulator:
 
     def add_call(
         self,
-        call: Call,
+        call: Call[object],
         from_: ChecksumAddress | None = None,
         label: str | None = None,
         *,
@@ -649,10 +588,40 @@ class VaultSimulator:
         return observation
 
     def run(self) -> SimulationResult:
-        non_empty_blocks = [b for b in self._blocks if b.calls]
-        if not non_empty_blocks:
+        """Send every queued block in one ``eth_simulateV1`` request. Raises
+        ``SimulationRunError`` when the request fails or the response is
+        malformed; every observation is then left unresolved."""
+        sources = [c for b in self._blocks for c in b.calls]
+        for source in sources:
+            if source.observation is not None:
+                source.observation._result = None
+        if not sources:
             raise ValueError("No calls buffered — call execute() or observe() first")
 
+        request: _SimulateRequest = {
+            "blockStateCalls": self._block_state_calls(),
+            "validation": self._validation,
+            "traceTransfers": self._trace_transfers,
+        }
+        payload = [
+            request,
+            self._block if isinstance(self._block, str) else hex(int(self._block)),
+        ]
+
+        response = self._web3.provider.make_request(
+            RPCEndpoint("eth_simulateV1"), payload
+        )
+        if "error" in response:
+            err = response["error"]
+            raise SimulationRunError(f"eth_simulateV1 failed: {err}")
+
+        result = parse_simulate_response(sources, response.get("result"))
+        for source, call_result in zip(sources, result.calls, strict=True):
+            if source.observation is not None:
+                source.observation._result = call_result
+        return result
+
+    def _block_state_calls(self) -> list[_BlockStateCall]:
         block_state_calls: list[_BlockStateCall] = []
         # A block with no calls is not sent, but its overrides still apply to
         # everything after it (state carries between blocks), so they fold
@@ -690,25 +659,7 @@ class VaultSimulator:
                 entry["stateOverrides"] = state_overrides
             block_state_calls.append(entry)
             block_overrides, state_overrides = {}, {}
-
-        request: _SimulateRequest = {
-            "blockStateCalls": block_state_calls,
-            "validation": self._validation,
-            "traceTransfers": self._trace_transfers,
-        }
-        payload = [
-            request,
-            self._block if isinstance(self._block, str) else hex(int(self._block)),
-        ]
-
-        response = self._web3.provider.make_request(
-            RPCEndpoint("eth_simulateV1"), payload
-        )
-        if "error" in response:
-            err = response["error"]
-            raise SimulationRunError(f"eth_simulateV1 failed: {err}")
-
-        return self._parse_response(response["result"])
+        return block_state_calls
 
     def _serialize_call(self, call: _Call) -> _SimulatedCall:
         if call.transaction is not None:
@@ -725,69 +676,6 @@ class VaultSimulator:
         if call.gas is not None:
             out["gas"] = hex(call.gas)
         return out
-
-    def _parse_response(self, result: list[dict]) -> SimulationResult:
-        # Flatten the multi-block response back into the order calls were queued.
-        sources: list[_Call] = [c for b in self._blocks for c in b.calls]
-        raw_calls: list[dict] = []
-        for block_result in result:
-            raw_calls.extend(block_result.get("calls", []))
-        if len(raw_calls) != len(sources):
-            raise SimulationRunError(
-                "eth_simulateV1 returned "
-                f"{len(raw_calls)} call results for {len(sources)} queued calls"
-            )
-
-        execute_success = True
-        revert_reason: str | None = None
-        execute_gas = 0
-        execute_logs: list[dict] = []
-        parsed: list[SimulatedCallResult] = []
-
-        for source, raw in zip(sources, raw_calls, strict=True):
-            return_hex = raw.get("returnData", "0x")
-            return_data = HexBytes(return_hex)
-            status = int(raw.get("status", "0x1"), 16)
-            success = status == 1
-            gas_used = int(raw.get("gasUsed", "0x0"), 16)
-            message, return_data = _normalize_call_error(raw.get("error"), return_data)
-            logs = raw.get("logs", []) or []
-
-            call_result = SimulatedCallResult(
-                label=source.label,
-                success=success,
-                return_data=return_data,
-                gas_used=gas_used,
-                error=None if success else message,
-                logs=logs,
-                predicted_address=(source.predicted_address if success else None),
-            )
-            parsed.append(call_result)
-            if source.observation is not None:
-                source.observation._result = call_result
-
-            if source.is_execute:
-                execute_success = execute_success and success
-                execute_gas += gas_used
-                execute_logs.extend(logs)
-                if not success and revert_reason is None:
-                    revert_reason = call_result.revert_reason
-
-        failed_calls = [c for c in parsed if not c.success]
-        all_success = not failed_calls
-        if revert_reason is None and failed_calls:
-            # No execute call reverted but a setup/observation did — surface it.
-            revert_reason = failed_calls[0].revert_reason
-
-        return SimulationResult(
-            success=execute_success,
-            all_success=all_success,
-            revert_reason=revert_reason,
-            gas_used=execute_gas,
-            execute_logs=execute_logs,
-            calls=parsed,
-            failed_calls=failed_calls,
-        )
 
 
 def _transaction_data(transaction: TxParams) -> bytes | bytearray | str:
@@ -908,58 +796,3 @@ def erc20_balance_slot(
     raise BalanceSlotNotFoundError(
         f"no balances mapping slot found for {token} up to {max_slot}"
     )
-
-
-def _normalize_call_error(
-    error_raw: object, return_data: HexBytes
-) -> tuple[str | None, HexBytes]:
-    """Normalize a per-call `error` into (message, revert payload).
-
-    Per the eth_simulateV1 spec, a failed call carries a JSON-RPC error object
-    `{code, message, data}` — the revert payload is in `error.data`, and some
-    clients leave `returnData` empty in that case. Other clients report the
-    error as a plain string and put the revert payload in `returnData`.
-    """
-    if isinstance(error_raw, dict):
-        if not return_data and error_raw.get("data"):
-            return_data = HexBytes(error_raw["data"])
-        return error_raw.get("message"), return_data
-    return (error_raw if isinstance(error_raw, str) else None), return_data
-
-
-def _failure_message(message: str | None, return_data: HexBytes) -> str:
-    """A failed call's ``error``: the node's message joined with the decoded
-    revert unless the message already carries it, else whichever exists, else
-    ``"reverted without a reason"`` with any return data too short to decode."""
-    reason = _decode_revert(return_data, None)
-    if message and reason:
-        return message if reason in message else f"{message}: {reason}"
-    if message:
-        return message
-    if reason:
-        return reason
-    if return_data:
-        return f"reverted without a reason (return data 0x{bytes(return_data).hex()})"
-    return "reverted without a reason"
-
-
-def _decode_revert(return_data: HexBytes, error: str | None) -> str | None:
-    if return_data and len(return_data) >= 4:
-        selector = bytes(return_data[:4])
-        if selector == b"\x08\xc3\x79\xa0":  # Error(string)
-            try:
-                (msg,) = decode(["string"], bytes(return_data[4:]))
-                return msg
-            except (DecodingError, OverflowError, ValueError):
-                pass
-        if selector == b"\x4e\x48\x7b\x71":  # Panic(uint256)
-            try:
-                (code,) = decode(["uint256"], bytes(return_data[4:]))
-                return f"Panic(0x{code:x})"
-            except (DecodingError, OverflowError, ValueError):
-                pass
-        decoded = decode_custom_error(selector, bytes(return_data[4:]))
-        if decoded is not None:
-            return decoded
-        return f"custom error 0x{selector.hex()}"
-    return error

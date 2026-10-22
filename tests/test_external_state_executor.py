@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from _multicall import multicall_aware
-from _simulate import simulate_response
+from _simulate import run_with_response, simulate_response
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError, ValueOutOfBounds
 from eth_typing import ChecksumAddress
@@ -63,18 +63,19 @@ def _make_executor(address=EXECUTOR_ADDR):
 def _observed(call, return_data: bytes):
     """Run `call` through the real `VaultSimulator` decode path.
 
-    Feeds a synthetic `eth_simulateV1` response to `_parse_response`, so the
+    Answers `run()` with a synthetic `eth_simulateV1` response, so the
     result is whatever an observation's ``value`` reports -- including a
     decoder that raises."""
     sim = VaultSimulator(MagicMock())
     slot = sim.observe(call)
-    sim._parse_response(
+    run_with_response(
+        sim,
         simulate_response(
             returnData=HexBytes(return_data).to_0x_hex(),
             status="0x1",
             gasUsed="0x0",
             logs=[],
-        )
+        ),
     )
     return slot.value
 

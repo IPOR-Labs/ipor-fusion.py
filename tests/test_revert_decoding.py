@@ -1,7 +1,7 @@
 # pyright: reportOperatorIssue=false
 from unittest.mock import MagicMock
 
-from _simulate import simulate_response
+from _simulate import run_with_response, simulate_response
 from eth_abi import encode as abi_encode
 from web3 import Web3
 
@@ -218,7 +218,7 @@ def test_get_revert_reason_data_not_hex_prefix():
 
 
 # ---------------------------------------------------------------------------
-# VaultSimulator._parse_response — eth_simulateV1 client-variant error shapes.
+# VaultSimulator.run response parsing — eth_simulateV1 client-variant error shapes.
 # The spec's error-object form ({code,message,data} with the revert payload in
 # error.data) is verified against a real provider by
 # test_simulate_claim_merkl_wrapper_base.py::
@@ -246,8 +246,9 @@ def _failed_call_response(error: object, return_data: str = "0x") -> list[dict]:
 
 def test_parse_response_error_object_without_data():
     """Error object with no revert payload falls back to its message."""
-    result = _sim_with_one_execute()._parse_response(
-        _failed_call_response({"code": -32000, "message": "out of gas"})
+    result = run_with_response(
+        _sim_with_one_execute(),
+        _failed_call_response({"code": -32000, "message": "out of gas"}),
     )
     assert result.revert_reason == "out of gas"
     assert result.calls[0].error == "out of gas"
@@ -255,8 +256,8 @@ def test_parse_response_error_object_without_data():
 
 def test_parse_response_plain_string_error_passthrough():
     """Clients reporting error as a plain string keep the old behavior."""
-    result = _sim_with_one_execute()._parse_response(
-        _failed_call_response("execution reverted")
+    result = run_with_response(
+        _sim_with_one_execute(), _failed_call_response("execution reverted")
     )
     assert result.revert_reason == "execution reverted"
     assert result.calls[0].error == "execution reverted"

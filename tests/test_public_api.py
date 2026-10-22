@@ -423,6 +423,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "SharePriceJson",
             "Shares",
             "SimulatedCallResult",
+            "SimulatedLog",
             "SimulationError",
             "SimulationObservation",
             "SimulationResult",

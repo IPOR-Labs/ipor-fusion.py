@@ -13,6 +13,7 @@ from ipor_fusion import (
     EmptyCallResultError,
     SimulationError,
     SimulationObservation,
+    SimulationRunError,
     VaultSimulator,
 )
 from ipor_fusion.core.contract import Call
@@ -61,7 +62,7 @@ def test_value_before_run_raises():
     sim, _ = _simulator(_ok(7))
     observation = sim.observe(_read(), label="read")
 
-    with pytest.raises(RuntimeError, match="'read' read before VaultSimulator.run"):
+    with pytest.raises(RuntimeError, match="'read' has no result"):
         _ = observation.value
 
 
@@ -123,4 +124,122 @@ def test_observe_queues_no_label_in_the_payload():
     (payload, _block) = provider.make_request.call_args.args[1]
     assert payload["blockStateCalls"][0]["calls"] == [
         {"input": "0x00000000", "to": TOKEN}
+    ]
+
+
+def _resolved_pair() -> tuple[
+    VaultSimulator, MagicMock, SimulationObservation[str], SimulationObservation[str]
+]:
+    """Two observations resolved by a first, successful run."""
+    sim, provider = _simulator(_ok(1), _ok(2))
+    first = sim.observe(_read(), label="first")
+    second = sim.observe(_read(), label="second")
+    sim.run()
+    assert (first.value, second.value) == ("#1", "#2")
+    return sim, provider, first, second
+
+
+def _assert_unresolved(*observations: SimulationObservation[str]) -> None:
+    for observation in observations:
+        with pytest.raises(RuntimeError, match="has no result"):
+            _ = observation.value
+
+
+def test_a_transport_error_leaves_every_observation_unresolved():
+    sim, provider, first, second = _resolved_pair()
+    provider.make_request.side_effect = ConnectionError("reset")
+
+    with pytest.raises(ConnectionError):
+        sim.run()
+    _assert_unresolved(first, second)
+
+
+def test_a_top_level_rpc_error_leaves_every_observation_unresolved():
+    sim, provider, first, second = _resolved_pair()
+    provider.make_request.return_value = {"error": {"code": -32000}}
+
+    with pytest.raises(SimulationRunError, match="eth_simulateV1 failed"):
+        sim.run()
+    _assert_unresolved(first, second)
+
+
+def test_a_result_count_mismatch_leaves_every_observation_unresolved():
+    sim, provider, first, second = _resolved_pair()
+    provider.make_request.return_value = {"result": [{"calls": [_ok(3)]}]}
+
+    with pytest.raises(SimulationRunError, match="1 call results for 2 queued"):
+        sim.run()
+    _assert_unresolved(first, second)
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        {"status": "0xzz", "returnData": "0x", "gasUsed": "0x0", "logs": []},
+        {"status": "0x1", "returnData": 7, "gasUsed": "0x0", "logs": []},
+        {"status": "0x1", "returnData": "0x", "gasUsed": "0x0", "logs": [{}]},
+        {
+            "status": "0x1",
+            "returnData": "0x",
+            "logs": [{"address": "0x", "topics": [1], "data": "0x"}],
+        },
+        "not a call result",
+    ],
+)
+def test_a_partial_parse_failure_publishes_nothing(broken):
+    """The first call parses, the second does not: neither observation may
+    hold the new first result next to the old second one."""
+    sim, provider, first, second = _resolved_pair()
+    provider.make_request.return_value = {"result": [{"calls": [_ok(3), broken]}]}
+
+    with pytest.raises(SimulationRunError, match="malformed response"):
+        sim.run()
+    _assert_unresolved(first, second)
+
+
+@pytest.mark.parametrize("result", [None, {"calls": []}, [{"calls": {}}], ["block"]])
+def test_a_malformed_result_shape_raises_a_run_error(result):
+    sim, provider = _simulator()
+    sim.observe(_read())
+    provider.make_request.return_value = {"result": result}
+
+    with pytest.raises(SimulationRunError, match="malformed response"):
+        sim.run()
+
+
+def test_a_run_after_a_failed_run_resolves_again():
+    sim, provider, first, second = _resolved_pair()
+    provider.make_request.return_value = {"error": {"code": -32000}}
+    with pytest.raises(SimulationRunError):
+        sim.run()
+
+    provider.make_request.return_value = {"result": [{"calls": [_ok(5), _ok(6)]}]}
+    sim.run()
+
+    assert (first.value, second.value) == ("#5", "#6")
+
+
+def test_logs_are_typed_records_keeping_the_node_fields():
+    log = {
+        "address": "0x" + "ab" * 20,
+        "topics": ["0x" + "01" * 32],
+        "data": "0x",
+        "blockNumber": "0x65",
+        "logIndex": "0x0",
+        "removed": False,
+        "unknownField": "dropped",
+    }
+    sim, _ = _simulator({**_ok(1), "logs": [log]})
+    observation = sim.observe(_read())
+    sim.run()
+
+    assert observation.result.logs == [
+        {
+            "address": "0x" + "ab" * 20,
+            "topics": ["0x" + "01" * 32],
+            "data": "0x",
+            "blockNumber": "0x65",
+            "logIndex": "0x0",
+            "removed": False,
+        }
     ]
