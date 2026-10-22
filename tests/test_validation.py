@@ -90,6 +90,9 @@ class State:
     asset_price_usd: float | None = 1.0
     total_assets: int = 100 * WAD
     underlying_balance_on_vault: int = 0
+    rewards_manager_balance: int | None = 0
+    unrealized_management_fee: int | None = None
+    stored_markets_total: int | None = None
     price_oracle: str = ORACLE
     balance_fuses: list[BalanceFuse] = field(
         default_factory=lambda: [BalanceFuse(AAVE, FUSE)]  # type: ignore[arg-type]
@@ -284,6 +287,126 @@ class TestRouting:
 
 
 class TestReconciliation:
+    def test_the_rewards_manager_balance_is_part_of_total_assets(self):
+        state = State(
+            total_assets=100 * WAD,
+            underlying_balance_on_vault=10 * WAD,
+            rewards_manager_balance=5 * WAD,
+        )
+        validation = validate(state, 85 * WAD)
+        recon = validation.reconciliation
+        assert recon.rewards_manager_balance == 5 * WAD
+        assert recon.rewards_manager_balance_usd == 5.0
+        assert recon.sum == 100 * WAD
+        assert recon.delta == 0
+        assert recon.implied_market_total == 85 * WAD
+        assert recon.market_storage_divergence == 0
+        assert validation.verdict == "ok"
+
+    def test_a_netting_vault_reconciles_net_of_the_management_fee(self):
+        # Contracts before ipor-fusion #475: totalAssets = gross - unrealized fee.
+        state = State(
+            total_assets=97 * WAD,
+            underlying_balance_on_vault=10 * WAD,
+            unrealized_management_fee=3 * WAD,
+            stored_markets_total=90 * WAD,
+        )
+        validation = validate(state, 90 * WAD)
+        recon = validation.reconciliation
+        assert recon.management_fee_netted == 3 * WAD
+        assert recon.management_fee_netted_usd == 3.0
+        assert recon.sum == 97 * WAD
+        assert recon.delta == 0
+        assert recon.implied_market_total == 90 * WAD
+        assert recon.market_storage_divergence == 0
+        assert validation.verdict == "ok"
+        (line,) = [
+            f.message
+            for f in validation.findings
+            if f.check == "total_assets_reconciliation"
+        ]
+        assert line.startswith(
+            "Balance fuses + underlying - unrealized management fee = 97"
+        )
+
+    def test_a_gross_vault_does_not_net_its_management_fee(self):
+        # ipor-fusion #475 and later: totalAssets is gross despite an accrued fee.
+        state = State(
+            total_assets=100 * WAD,
+            underlying_balance_on_vault=10 * WAD,
+            unrealized_management_fee=3 * WAD,
+            stored_markets_total=90 * WAD,
+        )
+        recon = validate(state, 90 * WAD).reconciliation
+        assert recon.management_fee_netted == 0
+        assert recon.delta == 0
+
+    def test_market_drift_equal_to_the_fee_is_not_taken_for_the_fee(self):
+        # A gross vault whose stored global total (87) lags the per-market
+        # caches (90) by exactly the accrued fee (3): drift, not netting.
+        state = State(
+            total_assets=97 * WAD,
+            underlying_balance_on_vault=10 * WAD,
+            unrealized_management_fee=3 * WAD,
+            stored_markets_total=87 * WAD,
+        )
+        validation = validate(state, 90 * WAD)
+        recon = validation.reconciliation
+        assert recon.management_fee_netted == 0
+        assert recon.delta == 3 * WAD
+        assert recon.implied_market_total == 87 * WAD
+        assert "market_storage_drift" in {f.check for f in validation.findings}
+
+    def test_a_fee_above_gross_nets_to_zero_total_assets(self):
+        state = State(
+            total_assets=0,
+            unrealized_management_fee=5 * WAD,
+            stored_markets_total=2 * WAD,
+        )
+        recon = validate(state, 2 * WAD).reconciliation
+        assert recon.management_fee_netted == 2 * WAD
+        assert recon.sum == 0
+
+    def test_without_the_stored_total_nothing_is_netted(self):
+        state = State(total_assets=97 * WAD, unrealized_management_fee=3 * WAD)
+        recon = validate(state, 100 * WAD).reconciliation
+        assert recon.management_fee_netted == 0
+        assert recon.delta == 3 * WAD
+
+    def test_an_unread_management_fee_nets_nothing(self):
+        state = State(total_assets=97 * WAD, unrealized_management_fee=None)
+        recon = validate(state, 100 * WAD).reconciliation
+        assert recon.management_fee_netted == 0
+        assert recon.delta == 3 * WAD
+
+    def test_an_unreadable_rewards_manager_balance_warns(self):
+        state = State(total_assets=100 * WAD, rewards_manager_balance=None)
+        validation = validate(state, 100 * WAD)
+        assert validation.reconciliation.rewards_manager_balance == 0
+        (finding,) = [
+            f for f in validation.findings if f.check == "rewards_manager_balance"
+        ]
+        assert finding.severity == "warning"
+        assert validation.verdict == "warning"
+
+    def test_an_unknown_rewards_balance_is_not_called_market_drift(self):
+        state = State(total_assets=100 * WAD, rewards_manager_balance=None)
+        checks = {f.check for f in validate(state, 90 * WAD).findings}
+        assert "rewards_manager_balance" in checks
+        assert "total_assets_reconciliation" in checks
+        assert "market_storage_drift" not in checks
+
+    def test_the_reconciliation_line_names_the_rewards_manager(self):
+        state = State(total_assets=100 * WAD, rewards_manager_balance=5 * WAD)
+        (finding,) = [
+            f
+            for f in validate(state, 95 * WAD).findings
+            if f.check == "total_assets_reconciliation"
+        ]
+        assert finding.message.startswith(
+            "Balance fuses + underlying + rewards manager = 100"
+        )
+
     def test_balances_sum_once_per_market_with_idle_underlying(self):
         state = State(total_assets=100 * WAD, underlying_balance_on_vault=10 * WAD)
         recon = validate(state, 89 * WAD).reconciliation
@@ -292,6 +415,10 @@ class TestReconciliation:
             balance_fuses_total_usd=89.0,
             underlying_on_vault=10 * WAD,
             underlying_on_vault_usd=10.0,
+            rewards_manager_balance=0,
+            rewards_manager_balance_usd=0.0,
+            management_fee_netted=0,
+            management_fee_netted_usd=0.0,
             erc20_direct_total=0,
             erc20_direct_total_usd=0.0,
             sum=99 * WAD,
@@ -478,6 +605,7 @@ class TestSnapshotTokenMetadata:
             asset_price_usd=state.asset_price_usd,
             fuse_markets=None,
             unimplemented_getters=[],
+            rewards_manager_balance=0,
         )
         oracle = price_oracle_middleware(ctx, ORACLE)  # type: ignore[arg-type]
         with (

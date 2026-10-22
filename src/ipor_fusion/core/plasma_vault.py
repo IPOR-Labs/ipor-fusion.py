@@ -90,6 +90,15 @@ def _market_id_list_decoder(value: tuple[int, ...]) -> list[MarketId]:
 
 _BALANCE_OF_SELECTOR = function_signature_to_4byte_selector("balanceOf()")
 
+# PlasmaVaultStorageLib.PLASMA_VAULT_TOTAL_ASSETS_IN_ALL_MARKETS, and its value
+# before the June 2024 storage rename (ipor-fusion #43).
+_TOTAL_ASSETS_IN_ALL_MARKETS_SLOT = int(
+    "0x24e02552e88772b8e8fd15f3e6699ba530635ffc6b52322da922b0b497a77300", 16
+)
+_LEGACY_TOTAL_ASSETS_SLOT = int(
+    "0xf660efede6b8071aab61a75191de57a4a8a416b088f961d8c2a18168aa7c7700", 16
+)
+
 
 def _read_result_data(result: tuple[bytes]) -> bytes:
     """``ReadResult.data``, undecoded."""
@@ -449,6 +458,15 @@ class PlasmaVault(ContractWrapper):
             decoder=Web3.to_checksum_address,
         )
 
+    def get_rewards_manager_address(self) -> Call[ChecksumAddress]:
+        """The getter of vaults deployed before the manager was renamed
+        RewardsClaimManager (June 2024)."""
+        return self._view(
+            "getRewardsManagerAddress()",
+            output_types=["address"],
+            decoder=Web3.to_checksum_address,
+        )
+
     def get_performance_fee_data(self) -> Call[PerformanceFeeData]:
         return self._view(
             "getPerformanceFeeData()",
@@ -575,6 +593,16 @@ class PlasmaVault(ContractWrapper):
             BalanceFuse(market_id=market_id, fuse=fuse)
             for market_id, fuse in zip(market_ids, fuses, strict=True)
         ]
+
+    def read_stored_markets_total(self, ctx: Web3Context) -> Amount:
+        """The global market total the vault stores (the
+        ``totalAssetsInAllMarkets`` term of ``totalAssets``), read from its
+        ERC-7201 slot; vaults built before June 2024 keep it at an earlier slot,
+        read when the current one is empty."""
+        for slot in (_TOTAL_ASSETS_IN_ALL_MARKETS_SLOT, _LEGACY_TOTAL_ASSETS_SLOT):
+            if value := int.from_bytes(ctx.get_storage_at(self._address, slot)):
+                return Amount(value)
+        return Amount(0)
 
     def _address_at(self, ctx: Web3Context, slot: int) -> ChecksumAddress:
         return _address_in_word(ctx.get_storage_at(self._address, slot))

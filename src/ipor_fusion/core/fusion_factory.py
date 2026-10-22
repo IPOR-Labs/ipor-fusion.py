@@ -79,9 +79,7 @@ class FusionInstance:
     price_manager: ChecksumAddress
 
     @classmethod
-    def from_dict(  # proctor: ignore[primitives-untyped-dict]
-        cls, data: Mapping[str, object]
-    ) -> FusionInstance:
+    def from_dict(cls, data: Mapping[str, object]) -> FusionInstance:
         """Rebuild an instance from its JSON form (``dataclasses.asdict``),
         parsing every field: role addresses through their parsers, the rest
         checksummed, integers and strings type-checked. Raises ``ValueError``

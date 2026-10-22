@@ -156,7 +156,7 @@ class Web3Context:
         return self._signer
 
     @classmethod
-    def from_url(  # proctor: ignore[primitives-too-many-params]
+    def from_url(
         cls,
         url: str,
         *,
