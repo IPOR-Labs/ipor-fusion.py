@@ -55,11 +55,33 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
         if value < 0:
             raise ValueError(f"{name} must not be negative, got {value}")
 
+    def _value_state(self) -> tuple[tuple[str, object], ...]:
+        """Every attribute the instance stores, in its ``__dict__`` or in a
+        subclass's ``__slots__``, sorted by name."""
+        state = dict(vars(self))
+        for klass in type(self).__mro__:
+            slots = klass.__dict__.get("__slots__", ())
+            for slot in (slots,) if isinstance(slots, str) else slots:
+                if slot in ("__dict__", "__weakref__"):
+                    continue
+                name = (
+                    f"_{klass.__name__.lstrip('_')}{slot}"
+                    if slot.startswith("__") and not slot.endswith("__")
+                    else slot
+                )
+                if hasattr(self, name):
+                    state[name] = getattr(self, name)
+        return tuple(sorted(state.items()))
+
     def __eq__(self, other: object) -> bool:
-        return type(self) is type(other) and vars(self) == vars(other)
+        return (
+            isinstance(other, Fuse)
+            and type(self) is type(other)
+            and self._value_state() == other._value_state()
+        )
 
     def __hash__(self) -> int:
-        return hash((type(self), *sorted(vars(self).items())))
+        return hash((type(self), *self._value_state()))
 
     def _action_raw(self, signature: str, values: Sequence[object]) -> FuseAction:
         selector = function_signature_to_4byte_selector(signature)

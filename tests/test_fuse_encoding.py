@@ -10,6 +10,7 @@ from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
 from ipor_fusion.fuses.async_action import AsyncActionFuse, AsyncActionSubstrates
+from ipor_fusion.fuses.base import Fuse
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
 from ipor_fusion.fuses.euler_v2 import (
@@ -892,6 +893,29 @@ class TestFuseEquality:
         assert AaveV3SupplyFuse(FUSE_ADDR) != AaveV3SupplyFuse(FUSE_ADDR_2)
         assert AaveV3SupplyFuse(FUSE_ADDR) != AaveV3BorrowFuse(FUSE_ADDR)
         assert AaveV3SupplyFuse(FUSE_ADDR) != FUSE_ADDR
+
+    def test_state_kept_in_slots_counts(self):
+        class SlottedFuse(Fuse):
+            __slots__ = ("target", "__secret")
+
+            def __init__(self, address, target, secret):
+                super().__init__(address)
+                self.target = target
+                self.__secret = secret
+
+        one = SlottedFuse(FUSE_ADDR, TOKEN_A, 1)
+        assert one == SlottedFuse(FUSE_ADDR, TOKEN_A, 1)
+        assert hash(one) == hash(SlottedFuse(FUSE_ADDR, TOKEN_A, 1))
+        assert one != SlottedFuse(FUSE_ADDR, TOKEN_B, 1)
+        assert one != SlottedFuse(FUSE_ADDR, TOKEN_A, 2)
+        assert len({one, SlottedFuse(FUSE_ADDR, TOKEN_B, 1)}) == 2
+
+    def test_an_unset_slot_is_left_out(self):
+        class LazyFuse(Fuse):
+            __slots__ = "cached"
+
+        assert LazyFuse(FUSE_ADDR) == LazyFuse(FUSE_ADDR)
+        assert hash(LazyFuse(FUSE_ADDR)) == hash(LazyFuse(FUSE_ADDR))
 
 
 # ── Input Validation ──────────────────────────────────────────────────
