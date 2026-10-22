@@ -447,8 +447,11 @@ decoder sets a `type_label` (enum name or a protocol tag like `EULER_VAULT`);
 a label-less decode renders as a generic placeholder in every consumer.
 Plain-address decoding only when the fuses check `isSubstrateAsAssetGranted`;
 typed layouts get their own decoder with the enum labels carried over. A
-market with no substrate semantics stays unregistered ON PURPOSE and renders
-as a loud `no_decoder(NAME)` (e.g. LITE_PSM=48). Never default to
+market with no substrate semantics, or whose layout cannot be verified, stays
+unregistered ON PURPOSE with its reason in `_UNREGISTERED_ON_PURPOSE` and
+renders as a loud `no_decoder(NAME)` (e.g. LITE_PSM=48);
+`test_every_market_has_a_decoder_or_a_reason` fails for a member that has
+neither. Never default to
 plain-address or guess a layout: a wrong decoder renders plausible-looking
 garbage addresses that consumers act on, so it is worse than none (Aave V4,
 id 49, is the documented case in `substrates.py`). `decode_substrate` handles
