@@ -23,6 +23,7 @@ jobs:
       format-code-enabled: ${{ matrix.python-version == '3.12' }}
       static-code-analysis-enabled: ${{ matrix.python-version == '3.12' }}
       build-enabled: ${{ matrix.python-version == '3.12' }}
+      coverage-artifact-name: coverage-offline-${{ matrix.python-version }}
 
   # Live providers, for pull requests from this repository only (a fork gets
   # no secrets); a provider or GitHub outage fails it instead of skipping.
@@ -37,6 +38,7 @@ jobs:
       format-code-enabled: false
       static-code-analysis-enabled: false
       build-enabled: false
+      coverage-artifact-name: coverage-live
       require-live: ETHEREUM_PROVIDER_URL,ARBITRUM_PROVIDER_URL,BASE_PROVIDER_URL,GITHUB
 
   report:

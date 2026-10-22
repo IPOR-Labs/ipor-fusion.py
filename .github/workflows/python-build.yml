@@ -42,6 +42,11 @@ on:
         type: boolean
         default: true
         required: false
+      coverage-artifact-name:
+        description: "Name of the uploaded coverage artifact (unique per call in a run)"
+        type: string
+        default: coverage-report
+        required: false
       require-live:
         description: "Comma-separated live sources whose tests must run, not skip (tests/_live.py)"
         type: string
@@ -110,6 +115,6 @@ jobs:
         if: inputs.test-enabled && always() && steps.tests.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
+          name: ${{ inputs.coverage-artifact-name }}
           path: coverage.xml
 

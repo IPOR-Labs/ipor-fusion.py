@@ -34,7 +34,7 @@ EXPECTED_IDLE_USDC = 10 * 10**6  # 10 USDC (6 decimals) sitting idle on the vaul
 
 
 def test_idle_underlying_reconciles_on_real_base_vault():
-    ctx = archive_context("BASE_PROVIDER_URL", BLOCK)
+    ctx = archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)
     validation = validate_vault(ctx, VAULT, block=BLOCK)
 
     # Sanity: confirm we are reading the expected vault/chain state at this block.
@@ -56,7 +56,7 @@ MAX_ETH_CALLS = 20
 
 
 def test_fetch_stays_within_round_trip_budget():
-    archive_context("BASE_PROVIDER_URL", BLOCK)  # skips without an archive provider
+    archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)  # skips without an archive
     url = provider_url("BASE_PROVIDER_URL")
 
     methods: Counter[str] = Counter()

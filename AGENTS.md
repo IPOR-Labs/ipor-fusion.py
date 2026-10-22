@@ -67,8 +67,11 @@ skips locally and fails when the source is named in `IPOR_FUSION_REQUIRE_LIVE`
 (comma-separated env var names, `GITHUB` for the Solidity mirrors). CI
 (`ci.yml`) runs an offline job without secrets on Python 3.11, 3.12 and 3.13
 and, for pull requests from this repository, a live job with the three
-provider secrets that requires all of them and GitHub; a skipped live check
-there is a failure. Skip only for an unavailable source; an exception from the
+provider secrets that requires all of them and GitHub: a skip for one of those
+sources being unavailable is a failure there (state-dependent skips such as a
+pilot vault's preconditions remain skips, and the offline job still reads the
+public Solidity sources from GitHub). Skip only for an unavailable source; an
+exception from the
 SDK is a test failure, never a skip. Never print `.env` or a provider URL: they
 embed API keys, so skip and fail messages carry the exception type only.
 `HYPEREVM_PROVIDER_URL` is used by the HyperEVM lifecycle/deployment tests and

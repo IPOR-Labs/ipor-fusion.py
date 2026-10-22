@@ -29,7 +29,7 @@ BLOCK = 50788912
 
 
 def test_vault_without_withdraw_manager_fetches_on_real_base_vault():
-    ctx = archive_context("BASE_PROVIDER_URL", BLOCK)
+    ctx = archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)
     pv = PlasmaVault(VAULT)
 
     withdraw_manager = pv.read_withdraw_manager_address(ctx)
