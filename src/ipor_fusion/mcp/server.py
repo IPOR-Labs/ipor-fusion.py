@@ -149,6 +149,8 @@ ChainArg = Annotated[
 ]
 
 
+# The market tools need the chain: no auto-detection, so no omission either.
+RequiredChainArg = Annotated[ChainId, Field(description="Chain ID.", gt=0)]
 BlockArg = Annotated[
     int | None,
     Field(description="Block number (positive); omitted: latest.", ge=1),
@@ -585,7 +587,7 @@ def config_set_etherscan_key(api_key: str) -> ActionResult:
 @mcp.tool()
 def market_morpho_blue(
     market_id: str,
-    chain_id: ChainId,
+    chain_id: RequiredChainArg,
     block_number: BlockArg = None,
     no_api: bool = False,
 ) -> MorphoBlueMarketResponse:
@@ -643,7 +645,7 @@ def market_morpho_blue(
 @mcp.tool()
 def market_meta_morpho(
     vault_address: str,
-    chain_id: ChainId,
+    chain_id: RequiredChainArg,
 ) -> MetaMorphoVaultResponse:
     """Inspect a MetaMorpho V1 or Morpho Vault V2 by address (Morpho API).
 

@@ -112,6 +112,24 @@ def test_mcp_refuses_the_old_zero_sentinel(
     load.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("tool", "arguments"),
+    [
+        ("market_morpho_blue", {"market_id": _MARKET, "chain_id": 0}),
+        ("market_meta_morpho", {"vault_address": _VAULT, "chain_id": 0}),
+    ],
+)
+def test_a_required_chain_is_positive(tool: str, arguments: dict[str, object]) -> None:
+    with (
+        patch("ipor_fusion.mcp.server.load_config", autospec=True) as load,
+        patch("ipor_fusion.mcp.server.fetch_vault", autospec=True) as fetch,
+        pytest.raises(ToolError, match="chain_id"),
+    ):
+        asyncio.run(server.mcp.call_tool(tool, arguments))
+    load.assert_not_called()
+    fetch.assert_not_called()
+
+
 def test_the_block_schema_requires_a_positive_block() -> None:
     props = {t.name: t for t in asyncio.run(server.mcp.list_tools())}[
         "vault_info"
