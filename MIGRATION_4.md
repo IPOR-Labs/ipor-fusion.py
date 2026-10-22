@@ -956,8 +956,8 @@ are listed with a link.
   ASSETS_BALANCE_VALIDATION (plain addresses) were `no_decoder(NAME)` in 3.x and
   now decode per their Solidity substrate libraries and grant checks. The markets
   still without a decoder are listed with their reason.
-=======
 
+- **The reconciliation counts the rewards claim manager.** `PlasmaVault.totalAssets`
   adds `RewardsClaimManager.balanceOf()` (vested rewards) to the vault's idle
   underlying and its markets; 3.x left it out, so a vault with vested rewards showed
   a delta of that size and an inflated `implied_market_total` (a false market-storage
@@ -979,7 +979,7 @@ are listed with a link.
   custom `VaultState` adds the `unrealized_management_fee` (`VaultData` derives it
   from `fee_data`) and `stored_markets_total` properties; code constructing a
   `Reconciliation` passes `management_fee_netted` and `management_fee_netted_usd`.
->>>>>>> origin/main
+
 - **Morpho shares convert to assets as Morpho Blue does.** The position breakdown
   (`MorphoReader.read_position_breakdown`, the `vault info` Morpho rows) and the Morpho
   lending health follow `SharesMathLib`: integer math with 1e6 virtual shares and one
