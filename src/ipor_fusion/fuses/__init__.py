@@ -49,7 +49,7 @@ from ipor_fusion.fuses.hypercore import (
     precompile_index_of,
     system_address,
 )
-from ipor_fusion.fuses.hypercore_events import (
+from ipor_fusion.fuses.hypercore_event_decoding import (
     HYPERCORE_EVENT_CLASSES,
     HYPERCORE_EVENT_SPECS,
     HYPERCORE_EVENTS,

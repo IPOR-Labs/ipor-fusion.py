@@ -306,6 +306,14 @@ The internal `ipor_fusion.fuses.base` still re-exports them. The CLI's internal
 `ipor_fusion.cli.vault_cmd` was split into `options`, `vault_info_view`,
 `vault_markets_view` and `oracle_mapping_view` (private names, not API).
 
+**Event decoder modules renamed.** `ipor_fusion.fuses.external_state_events` and
+`ipor_fusion.fuses.hypercore_events` are now `external_state_event_decoding` and
+`hypercore_event_decoding`. The receipt decoder `hypercore_events`, re-exported
+from `ipor_fusion.fuses`, hid its submodule of the same name (`import
+ipor_fusion.fuses.hypercore_events as m` bound the function); the external-state
+module was renamed to match. Import the decoders with `from ipor_fusion import
+external_state_events, hypercore_events`; the modules are internal.
+
 **Removed.**
 
 - `IporFusionMarkets.RWA`: market 50 is `IporFusionMarkets.EXTERNAL_STATE`.
@@ -379,7 +387,7 @@ is the wrong one.
   from `IporFusionError`, so an `except IporFusionError` placed before their own
   handlers catches them first. All three live in `ipor_fusion.errors`, like every
   other SDK exception, and are exported from `ipor_fusion`; the modules that raise
-  them (`ipor_fusion.morpho_api`, `ipor_fusion.fuses.external_state_events`,
+  them (`ipor_fusion.morpho_api`, `ipor_fusion.fuses.external_state_event_decoding`,
   `ipor_fusion.crosschain.ccip.indexer`) still import the same classes.
 - `AccessManager.read_owner(ctx)` raises the new `OwnerNotFoundError` (a
   `LookupError`) when no account holds `OWNER_ROLE`, instead of an `IndexError`.
