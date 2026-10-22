@@ -22,7 +22,8 @@ pytest_plugins = ["pytester"]
 def test_readiness_requires_explicit_opt_in(pytester, args, passed, deselected):
     pytester.makeconftest(Path(__file__).with_name("conftest.py").read_text())
     pytester.makepyfile(
-        _multicall=Path(__file__).with_name("_multicall.py").read_text()
+        _multicall=Path(__file__).with_name("_multicall.py").read_text(),
+        _live=Path(__file__).with_name("_live.py").read_text(),
     )
     pytester.makeini("[pytest]\nmarkers =\n    sdk\n    cli\n    mcp\n    readiness\n")
     pytester.makepyfile(

@@ -16,12 +16,10 @@ code under test runs unguarded, so a regression fails instead of skipping.
 
 from __future__ import annotations
 
-import os
-
-import pytest
+from _live import archive_context
 from web3 import Web3
 
-from ipor_fusion import PlasmaVault, Web3Context
+from ipor_fusion import PlasmaVault
 from ipor_fusion.vault_data import fetch_vault_data
 
 VAULT = Web3.to_checksum_address("0x45aa96f0b3188D47a1DaFdbefCE1db6B37f58216")
@@ -30,22 +28,9 @@ CHAIN_ID = 8453
 BLOCK = 50788912
 
 
-def _connect(url: str) -> tuple[Web3Context, PlasmaVault]:
-    """Skip on infra problems only (unreachable or non-archive provider)."""
-    try:
-        ctx = Web3Context.from_url(url).at_block(BLOCK)
-        pv = PlasmaVault(VAULT)
-        pv.underlying_asset_address().call(ctx)  # state read at BLOCK needs archive
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"BASE on-chain read failed (provider missing/non-archive?): {exc}")
-    return ctx, pv
-
-
 def test_vault_without_withdraw_manager_fetches_on_real_base_vault():
-    url = os.environ.get("BASE_PROVIDER_URL")
-    if not url:
-        pytest.skip("BASE_PROVIDER_URL not set")
-    ctx, pv = _connect(url)
+    ctx = archive_context("BASE_PROVIDER_URL", BLOCK)
+    pv = PlasmaVault(VAULT)
 
     withdraw_manager = pv.read_withdraw_manager_address(ctx)
     data = fetch_vault_data(ctx, pv.address, block=BLOCK)

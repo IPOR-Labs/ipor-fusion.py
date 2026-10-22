@@ -1,11 +1,11 @@
 import importlib.util
-import os
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
 import pytest
+from _live import provider_url, unavailable
 from _multicall import SequentialMulticall
 from dotenv import load_dotenv
 from web3 import Web3
@@ -72,40 +72,38 @@ def pytest_collection_modifyitems(config, items):
 
 
 def _connected_web3(env_var: str) -> Web3:
-    """Build a Web3 client from `env_var`; skip the test if missing/unreachable."""
-    url = os.environ.get(env_var)
-    if not url:
-        pytest.skip(f"{env_var} not set")
-    w3 = Web3(Web3.HTTPProvider(url))
+    """Build a Web3 client from `env_var`; skip the test if missing/unreachable
+    (fail when the run requires it, see `_live`)."""
+    w3 = Web3(Web3.HTTPProvider(provider_url(env_var)))
     if not w3.is_connected():
-        pytest.skip(f"cannot reach RPC at {env_var}")
+        unavailable(env_var, f"cannot reach RPC at {env_var}")
     return w3
 
 
-def _ensure_simulate_v1(web3: Web3) -> None:
+def _ensure_simulate_v1(web3: Web3, env_var: str) -> None:
     """Skip if the provider does not implement `eth_simulateV1`."""
     if not is_simulate_v1_supported(web3):
-        pytest.skip("provider does not support eth_simulateV1")
+        unavailable(env_var, f"{env_var} does not support eth_simulateV1")
 
 
 @pytest.fixture(scope="session")
 def web3_eth() -> Web3:
     w3 = _connected_web3("ETHEREUM_PROVIDER_URL")
-    _ensure_simulate_v1(w3)
+    _ensure_simulate_v1(w3, "ETHEREUM_PROVIDER_URL")
     return w3
 
 
 @pytest.fixture(scope="session")
 def web3_base() -> Web3:
     w3 = _connected_web3("BASE_PROVIDER_URL")
-    _ensure_simulate_v1(w3)
+    _ensure_simulate_v1(w3, "BASE_PROVIDER_URL")
     return w3
 
 
 @pytest.fixture(scope="session")
 def web3_arb() -> Web3:
     w3 = _connected_web3("ARBITRUM_PROVIDER_URL")
-    _ensure_simulate_v1(w3)
+    _ensure_simulate_v1(w3, "ARBITRUM_PROVIDER_URL")
     return w3
 
 
@@ -113,5 +111,5 @@ def web3_arb() -> Web3:
 def web3_hyperevm() -> Web3:
     """HyperEVM simulation fixture; general PR CI does not supply its RPC secret."""
     w3 = _connected_web3("HYPEREVM_PROVIDER_URL")
-    _ensure_simulate_v1(w3)
+    _ensure_simulate_v1(w3, "HYPEREVM_PROVIDER_URL")
     return w3
