@@ -56,11 +56,6 @@ from ipor_fusion.fuses.fluid_instadapp import (
     FluidInstadappSupplyFuse,
 )
 from ipor_fusion.fuses.gearbox_v3 import GearboxStakeFuse, GearboxSupplyFuse
-from ipor_fusion.fuses.hypercore import (
-    SPOT_DEX,
-    USDC_SYSTEM_ADDRESS,
-    USDC_TOKEN_INDEX,
-)
 from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
     MorphoBorrowFuse,
@@ -126,9 +121,6 @@ __all__ = [
     "ExternalStateAction",
     "ExternalStateOperationFuse",
     "ExternalStateSubstrates",
-    "SPOT_DEX",
-    "USDC_SYSTEM_ADDRESS",
-    "USDC_TOKEN_INDEX",
     "UniversalTokenSwapperAbi",
     "UniversalTokenSwapperFuse",
     "UniversalTokenSwapperSubstrates",

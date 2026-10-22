@@ -15,9 +15,6 @@ from ipor_fusion.readers.compound_v3 import CompoundV3Reader
 from ipor_fusion.readers.hypercore import (
     HYPEREVM_CHAIN_ID,
 )
-from ipor_fusion.readers.hypercore_outcome import (
-    TransferDirection,
-)
 from ipor_fusion.readers.lending_health import (
     LendingMarketHealth,
     VaultLendingHealth,
@@ -81,7 +78,6 @@ __all__ = [
     "AaveV4UserAccountData",
     "CompoundV3Reader",
     "HYPEREVM_CHAIN_ID",
-    "TransferDirection",
     "LendingMarketHealth",
     "VaultLendingHealth",
     "fetch_vault_lending_health",

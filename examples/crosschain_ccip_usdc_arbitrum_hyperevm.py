@@ -70,7 +70,6 @@ from web3.types import Timestamp
 
 from ipor_fusion import (
     ERC20,
-    CcipChainSelector,
     PlasmaVault,
     SimulationResult,
     VaultSimulator,
@@ -81,6 +80,7 @@ from ipor_fusion import (
 )
 from ipor_fusion.crosschain import (
     CcipChain,
+    CcipChainSelector,
     CcipTransport,
     Command,
     CrosschainLane,

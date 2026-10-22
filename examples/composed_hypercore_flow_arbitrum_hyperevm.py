@@ -73,11 +73,7 @@ from web3.types import BlockIdentifier, RPCEndpoint, Timestamp
 
 from ipor_fusion import (
     ERC20,
-    SPOT_DEX,
-    USDC_SYSTEM_ADDRESS,
-    USDC_TOKEN_INDEX,
     AccountOverride,
-    CcipChainSelector,
     FuseAction,
     PlasmaVault,
     SimulationResult,
@@ -93,6 +89,7 @@ from ipor_fusion import (
 )
 from ipor_fusion.crosschain import (
     CcipChain,
+    CcipChainSelector,
     CcipCrosschainExecutor,
     CcipTransport,
     Command,
@@ -104,6 +101,9 @@ from ipor_fusion.crosschain import (
     quote_ccip_native_fee,
 )
 from ipor_fusion.hypercore import (
+    SPOT_DEX,
+    USDC_SYSTEM_ADDRESS,
+    USDC_TOKEN_INDEX,
     HyperCoreDepositFuse,
     HyperCoreOrderFuse,
     HyperCoreReader,

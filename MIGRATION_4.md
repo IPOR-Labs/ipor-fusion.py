@@ -335,20 +335,25 @@ Crosschain and HyperCore are preview features (`PREVIEW_FEATURES`): their names
 may change in a minor release, which the top level's major-only removal promise
 could not hold. 4.0 exports them only from their subpackages.
 
-- **Crosschain:** the 112 crosschain names (lanes, discovery, transports,
-  encoders, wrappers, codecs, `CrosschainSimulator`, ...) import from
-  `ipor_fusion.crosschain`, or from `crosschain.ccip` / `crosschain.stargate` /
-  `crosschain.fuses` as before.
-- **HyperCore:** the 91 HyperCore names import from the new
+- **Crosschain:** the 124 crosschain names import from `ipor_fusion.crosschain`,
+  or from `crosschain.ccip` / `crosschain.stargate` / `crosschain.fuses` as before.
+  That covers lanes, discovery, transports, encoders, wrappers, codecs and
+  `CrosschainSimulator`. It also covers the crosschain ids (`AssetId`, `CommandId`,
+  `MessageId`, `LayerZeroEid`, `CcipChainSelector`, ...), which still import from
+  `ipor_fusion.types` too.
+- **HyperCore:** the 97 HyperCore names import from the new
   `ipor_fusion.hypercore`. That covers the fuses and `HyperCoreSubstrates`, the
-  readers and `read_hypercore_*`, the event classes, specs and decoders, the ids
-  (`HyperCoreAsset`, `HyperCoreTokenIndex`, ...) and the helpers (`system_address`,
-  `precompile_index_of`, `SettlementMode`, `TimeInForce`, ...). `ipor_fusion.fuses`
+  readers and `read_hypercore_*`, the event classes, specs and decoders, and the
+  ids (`HyperCoreAsset`, `HyperCoreTokenIndex`, `MarginTableId`, `PayloadHash`,
+  ...). It also covers the constants and helpers (`SPOT_DEX`, `USDC_TOKEN_INDEX`,
+  `USDC_SYSTEM_ADDRESS`, `system_address`, `precompile_index_of`, `SettlementMode`,
+  `TimeInForce`, `TransferDirection`, ...). `HYPEREVM_CHAIN_ID` stays a top-level
+  chain constant. `ipor_fusion.fuses`
   and `ipor_fusion.readers` no longer list them; the ids still import from
   `ipor_fusion.types`.
 - **Unchanged:** the exception classes (`HyperCoreEventDecodeError`,
-  `HyperCoreValuationError`, `CrosschainDiscoveryError`, ...) stay top-level names
-  of `ipor_fusion.errors`. The `vault info` document's HyperCore TypedDicts
+  `HyperCoreValuationError`, `CrosschainDiscoveryError`,
+  `VerifierResultUnavailable`, ...) stay top-level names of `ipor_fusion.errors`. The `vault info` document's HyperCore TypedDicts
   (`HyperCoreJson`, ...) stay with the document.
 - **Error registration:** `import ipor_fusion` no longer loads the crosschain
   package. Import `ipor_fusion.crosschain` to register the crosschain contracts'

@@ -6,10 +6,12 @@ must change them here too, so every change to the surface is deliberate and
 visible in review.
 """
 
+import ast
 import importlib
 import inspect
 import pkgutil
 import re
+from pathlib import Path
 from types import ModuleType
 
 import pytest
@@ -53,7 +55,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "AggregatorFeedDetailJson",
             "Amount",
             "AmountJson",
-            "AssetId",
             "AssetPriceSource",
             "AssetSource",
             "AsyncActionFuse",
@@ -72,13 +73,11 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "CacheField",
             "CacheKey",
             "Call",
-            "CcipChainSelector",
             "ChainId",
             "ChainlinkDetailJson",
             "ChangelogEntry",
             "Check",
             "CloneArgs",
-            "CommandId",
             "CompoundV3Reader",
             "CompoundV3SupplyFuse",
             "ContractCache",
@@ -90,7 +89,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "DependencyGraphJson",
             "DeploymentErrorJson",
             "DeploymentJson",
-            "DeploymentRequestId",
             "DualXrefDetailJson",
             "ERC20",
             "ERC4626SupplyFuse",
@@ -127,7 +125,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "ExternalStateEvent",
             "ExternalStateEventArgs",
             "ExternalStateEventDecodeError",
-            "HyperCoreEventDecodeError",
             "ExternalStateEventSpec",
             "ExternalStateExecutor",
             "ExternalStateExecutorArgs",
@@ -164,6 +161,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "HealthCheckJson",
             "HighWaterMarkJson",
             "HighWaterMarkPerformanceFee",
+            "HyperCoreEventDecodeError",
             "HyperCoreJson",
             "HyperCorePendingJson",
             "HyperCorePerpLegJson",
@@ -173,7 +171,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "InFlightLimit",
             "IporFusionError",
             "IporFusionMarkets",
-            "LayerZeroEid",
             "LegacyPriceOracleMiddleware",
             "LendingHealthJson",
             "LendingMarketHealth",
@@ -187,10 +184,8 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "ManagementFeeData",
             "ManagersJson",
             "MappingStatus",
-            "MarginTableId",
             "MarketId",
             "MerklClaimWrapperFuse",
-            "MessageId",
             "MetaMorphoAdapterJson",
             "MetaMorphoAllocationJson",
             "MetaMorphoCapJson",
@@ -230,7 +225,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "NodeStatus",
             "NotPlasmaVaultError",
             "NullCache",
-            "OperationId",
             "OracleAsset",
             "OracleAssetJson",
             "OracleMapping",
@@ -244,7 +238,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "PREVIEW_FEATURES",
             "PREVIEW_STATEMENT",
             "PUBLIC_ALLOCATOR_ADDRESSES",
-            "PayloadHash",
             "PendingRequestJson",
             "PendingRequestsInfo",
             "PerformanceFeeData",
@@ -252,14 +245,12 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "PlasmaVault",
             "PlasmaVaultAddress",
             "PositionData",
-            "PositionSetHash",
             "PreviewFeature",
             "Price",
             "PriceOracleMiddleware",
             "PriceOracleMiddlewareManager",
             "PricedAmountJson",
             "ProposalHash",
-            "ProposalId",
             "RamsesClaimFuse",
             "RamsesEvents",
             "RamsesNewPositionEvent",
@@ -273,14 +264,12 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "RecipientFeeJson",
             "Reconciliation",
             "ReconciliationJson",
-            "ReturnRequestId",
             "RewardsManager",
             "RoleAccount",
             "RoleAccountJson",
             "RoleId",
             "RoleStatus",
             "Roles",
-            "SPOT_DEX",
             "SUPPORTED_CHAIN_IDS",
             "Severity",
             "SharePriceJson",
@@ -293,18 +282,13 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "SimulationRunError",
             "SourceDetailJson",
             "StakeFuse",
-            "StargateAssetId",
             "StateOverrideProvider",
             "SubstrateEntryJson",
             "SubstrateInfo",
             "Tick",
             "TokenId",
             "TransactionError",
-            "TransferDirection",
-            "TransferId",
             "TxHash",
-            "USDC_SYSTEM_ADDRESS",
-            "USDC_TOKEN_INDEX",
             "UniswapV3ClosePositionEvent",
             "UniswapV3CollectFuse",
             "UniswapV3Events",
@@ -338,6 +322,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "VaultV2Info",
             "VaultValidation",
             "Verdict",
+            "VerifierResultUnavailable",
             "VestingData",
             "Web3Context",
             "WithdrawManager",
@@ -479,8 +464,14 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "HyperCoreTransferSnapshot",
             "HyperCoreTransferStatus",
             "HyperCoreVaultState",
+            "MarginTableId",
+            "PayloadHash",
+            "SPOT_DEX",
             "SettlementMode",
             "TimeInForce",
+            "TransferDirection",
+            "USDC_SYSTEM_ADDRESS",
+            "USDC_TOKEN_INDEX",
             "compare_hypercore_transfer",
             "convert_to_wad_int",
             "decode_hypercore_event",
@@ -566,6 +557,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
         {
             "ActiveCommand",
             "Any2EVMMessage",
+            "AssetId",
             "BalanceObservation",
             "BusinessAction",
             "CCIP_EVENTS",
@@ -575,6 +567,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "CODEC_VERSION",
             "CROSSCHAIN_ERROR_SIGNATURES",
             "CcipChain",
+            "CcipChainSelector",
             "CcipCommandType",
             "CcipCommitteeVerifier",
             "CcipCrosschainCommandFuse",
@@ -600,6 +593,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "CcipVerifierResolver",
             "CcvRequirements",
             "Command",
+            "CommandId",
             "CommandStatus",
             "CrosschainClaimFuse",
             "CrosschainCommandFuse",
@@ -617,6 +611,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "CrosschainTransport",
             "CrosschainTransportKind",
             "DeliveryCall",
+            "DeploymentRequestId",
             "DeploymentStatus",
             "EMPTY_COMMAND",
             "EVMTokenAmount",
@@ -628,17 +623,24 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "LaneFuses",
             "LaneHubState",
             "LaneObservation",
+            "LayerZeroEid",
             "MessageExecutionState",
+            "MessageId",
             "MessageV1",
             "MsgType",
             "Observation",
+            "OperationId",
             "OptionsBuilder",
             "OutboundMessage",
             "PACKET_SENT_TOPIC",
             "Packet",
+            "PositionSetHash",
+            "ProposalId",
+            "ReturnRequestId",
             "SYNTHETIC_TOKEN_SOURCE",
             "SafetyConfig",
             "SendParams",
+            "StargateAssetId",
             "StargateChain",
             "StargateCrosschainCommandFuse",
             "StargateCrosschainCommandType",
@@ -652,6 +654,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "StargateTransport",
             "TaxiMessage",
             "TokenTransferV1",
+            "TransferId",
             "VerifierResult",
             "VerifierResultUnavailable",
             "ccip_events",
@@ -769,6 +772,10 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "AsyncActionSubstrates",
             "CompoundV3SupplyFuse",
             "ERC4626SupplyFuse",
+            "EXTERNAL_STATE_EVENTS",
+            "EXTERNAL_STATE_EVENT_CLASSES",
+            "EXTERNAL_STATE_EVENT_SPECS",
+            "EXTERNAL_STATE_TOPICS",
             "EulerSwapDynamicParams",
             "EulerSwapInitialState",
             "EulerSwapStaticParams",
@@ -782,8 +789,27 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "EulerV2SwapReconfigureFuse",
             "EulerV2SwapRegistryFuse",
             "ExternalStateAction",
+            "ExternalStateAssetRescuedArgs",
+            "ExternalStateAssetRescuedEvent",
+            "ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent",
+            "ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent",
+            "ExternalStateBigChangeDetectedArgs",
+            "ExternalStateBigChangeDetectedEvent",
+            "ExternalStateCustodianTimestampUpdatedArgs",
+            "ExternalStateEvent",
+            "ExternalStateEventArgs",
+            "ExternalStateEventSpec",
+            "ExternalStateExecutorArgs",
+            "ExternalStateExecutorCreatedEvent",
+            "ExternalStateExecutorDeployedEvent",
+            "ExternalStateOperationArgs",
             "ExternalStateOperationFuse",
+            "ExternalStateOperationFuseEnterEvent",
+            "ExternalStateOperationFuseExitEvent",
             "ExternalStateSubstrates",
+            "ExternalStateTotalBalanceUpdatedArgs",
+            "ExternalStateUnpausedArgs",
+            "ExternalStateUnpausedEvent",
             "FluidInstadappStakingFuse",
             "FluidInstadappSupplyFuse",
             "Fuse",
@@ -802,10 +828,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "RamsesV2CollectFuse",
             "RamsesV2ModifyPositionFuse",
             "RamsesV2NewPositionFuse",
-            "SPOT_DEX",
             "StakeFuse",
-            "USDC_SYSTEM_ADDRESS",
-            "USDC_TOKEN_INDEX",
             "UniswapV3ClosePositionEvent",
             "UniswapV3CollectFuse",
             "UniswapV3Events",
@@ -816,31 +839,8 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "UniversalTokenSwapperAbi",
             "UniversalTokenSwapperFuse",
             "UniversalTokenSwapperSubstrates",
-            "euler_substrate",
-            "EXTERNAL_STATE_EVENT_CLASSES",
-            "EXTERNAL_STATE_EVENT_SPECS",
-            "EXTERNAL_STATE_EVENTS",
-            "EXTERNAL_STATE_TOPICS",
-            "ExternalStateAssetRescuedArgs",
-            "ExternalStateAssetRescuedEvent",
-            "ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent",
-            "ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent",
-            "ExternalStateBigChangeDetectedArgs",
-            "ExternalStateBigChangeDetectedEvent",
-            "ExternalStateCustodianTimestampUpdatedArgs",
-            "ExternalStateEvent",
-            "ExternalStateEventArgs",
-            "ExternalStateEventSpec",
-            "ExternalStateExecutorArgs",
-            "ExternalStateExecutorCreatedEvent",
-            "ExternalStateExecutorDeployedEvent",
-            "ExternalStateOperationArgs",
-            "ExternalStateOperationFuseEnterEvent",
-            "ExternalStateOperationFuseExitEvent",
-            "ExternalStateTotalBalanceUpdatedArgs",
-            "ExternalStateUnpausedArgs",
-            "ExternalStateUnpausedEvent",
             "decode_external_state_event",
+            "euler_substrate",
             "external_state_event_name",
             "external_state_events",
         }
@@ -897,7 +897,6 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "RamsesV2Position",
             "RamsesV2Reader",
             "SourceDetailJson",
-            "TransferDirection",
             "UniswapV3Position",
             "UniswapV3Reader",
             "VaultLendingHealth",
@@ -1288,12 +1287,47 @@ def test_subpackage_all_lists_every_exported_name_it_defines(package: str) -> No
 
 def test_preview_names_are_not_in_the_top_level() -> None:
     """Preview features export only through their subpackages, so the stable
-    surface promises nothing about them."""
+    surface promises nothing about them; their exception classes stay top-level
+    names of ``ipor_fusion.errors``."""
     leaked = sorted(
         name
         for package in _PREVIEW
         for name in _module(package).__all__
         if name in ipor_fusion.__all__
         and getattr(ipor_fusion, name) is getattr(_module(package), name)
+        and not (
+            inspect.isclass(getattr(ipor_fusion, name))
+            and issubclass(getattr(ipor_fusion, name), BaseException)
+        )
     )
     assert not leaked
+
+
+# Defined in a preview module yet stable: the chain id the vault snapshot
+# gates the HyperCore read on.
+_STABLE_IN_PREVIEW_MODULES = frozenset({"HYPEREVM_CHAIN_ID"})
+
+
+def test_names_defined_by_preview_modules_export_from_preview_packages() -> None:
+    """Every top-level-worthy name a preview module defines exports from a
+    preview subpackage, not from ``ipor_fusion``."""
+    root = Path(ipor_fusion.__file__).parent
+    modules = [
+        *root.joinpath("crosschain").rglob("*.py"),
+        *root.joinpath("fuses").glob("hypercore*.py"),
+        *root.joinpath("readers").glob("hypercore*.py"),
+    ]
+    defined: set[str] = set()
+    for path in modules:
+        for node in ast.parse(path.read_text()).body:
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+                defined.add(node.name)
+            elif isinstance(node, ast.Assign):
+                defined |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+    in_top = sorted((defined & set(ipor_fusion.__all__)) - _STABLE_IN_PREVIEW_MODULES)
+    assert not in_top
+    preview_names = {n for p in _PREVIEW for n in _module(p).__all__}
+    public = {n for n in defined if not n.startswith("_") and n.isidentifier()}
+    assert sorted(public & set(ipor_fusion.__all__) - preview_names) == sorted(
+        _STABLE_IN_PREVIEW_MODULES & public
+    )

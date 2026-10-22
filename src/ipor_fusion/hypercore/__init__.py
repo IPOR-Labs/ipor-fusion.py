@@ -6,6 +6,9 @@ minor release, which is why they live here rather than in `ipor_fusion`.
 """
 
 from ipor_fusion.fuses.hypercore import (
+    SPOT_DEX,
+    USDC_SYSTEM_ADDRESS,
+    USDC_TOKEN_INDEX,
     HyperCoreBuilderFeeFuse,
     HyperCoreCancelFuse,
     HyperCoreConfigKey,
@@ -94,6 +97,7 @@ from ipor_fusion.readers.hypercore_outcome import (
     HyperCoreTransferOutcome,
     HyperCoreTransferSnapshot,
     HyperCoreTransferStatus,
+    TransferDirection,
     compare_hypercore_transfer,
     read_hypercore_evm_exit_ceiling,
     read_hypercore_transfer_outcome,
@@ -105,9 +109,17 @@ from ipor_fusion.types import (
     HyperCoreClientOrderId,
     HyperCoreOrderId,
     HyperCoreTokenIndex,
+    MarginTableId,
+    PayloadHash,
 )
 
 __all__ = [
+    "MarginTableId",
+    "PayloadHash",
+    "SPOT_DEX",
+    "TransferDirection",
+    "USDC_SYSTEM_ADDRESS",
+    "USDC_TOKEN_INDEX",
     "HYPERCORE_EVENTS",
     "HYPERCORE_EVENT_CLASSES",
     "HYPERCORE_EVENT_SPECS",
