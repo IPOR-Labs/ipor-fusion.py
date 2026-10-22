@@ -28,7 +28,7 @@ uv run ruff format ./                                         # format (CI runs 
 uv run ruff check ./                                          # lint: bandit S, C901 max-complexity 10, PLR limits
 uv run pyright                                                # types, basic mode, src + tests + examples + scripts
 uv run pytest                                                 # all tests + coverage gate (fail_under = 98, mcp/ included)
-uv run pytest -m "cli or mcp" --no-cov                        # fast offline subset
+uv run pytest -m "cli or mcp" --no-cov                        # CLI/MCP subset (the full suite is mostly offline too)
 uv run pytest --run-readiness -m readiness --no-cov -rA       # opt-in live Ethereum-hub POC checks
 uv run python scripts/crosschain_readiness.py --output /tmp/crosschain-readiness.json # live Arbitrum/HyperEVM report
 uv run pytest tests/test_fuse_encoding.py -k aave --no-cov    # single file / test
@@ -59,9 +59,9 @@ everything else is `sdk`). Most `sdk` tests are offline too: the suite with no
 provider set still clears the coverage gate.
 Integration tests (`test_simulate_*`, `test_vault_info_onchain_*`) run against
 live RPCs via `eth_simulateV1`, no Docker or Anvil (`ANVIL_WALLET` is just a
-named address constant). They auto-skip unless `ETHEREUM_PROVIDER_URL`,
-`BASE_PROVIDER_URL` and `ARBITRUM_PROVIDER_URL` are set (`.env` is loaded via
-python-dotenv) and the provider supports `eth_simulateV1`. Every such gate goes
+named address constant). Each skips unless the provider it needs
+(`ETHEREUM_PROVIDER_URL`, `BASE_PROVIDER_URL` or `ARBITRUM_PROVIDER_URL`; `.env` is
+loaded via python-dotenv) is set and supports `eth_simulateV1`. Every such gate goes
 through `tests/_live.py` (`provider_url`, `archive_context`, `unavailable`): it
 skips locally and fails when the source is named in `IPOR_FUSION_REQUIRE_LIVE`
 (comma-separated env var names, `GITHUB` for the Solidity mirrors). CI
@@ -84,9 +84,11 @@ executors from the creation code they store; `source` builds a factory pair from
 that revision (the fuses are compiled from it); a checkout without `node_modules` also
 needs `IPOR_FUSION_FOUNDRY_REMAPPINGS` for OpenZeppelin. `test_crosschain_ccip_events.py`
 mirrors the CCIP event registry from a checkout at its own `CONTRACTS_REVISION`.
-`test_solidity_compiler.py` uses `IPOR_FUSION_CONTRACTS_DIR` for a local contracts
-checkout and optional `IPOR_FUSION_FOUNDRY_REMAPPINGS`. These tests skip when their
-external prerequisites are unavailable.
+`test_solidity_compiler.py` unit-tests that compiler helper (`tests/_foundry.py`)
+offline, with `forge` and `git` mocked. The checkout-based tests above skip when their
+external prerequisites are unavailable. `test_hypercore_live.py`,
+`test_hypercore_deployment.py` and `test_hypercore_simulation.py` need
+`HYPEREVM_PROVIDER_URL` as well.
 `test_simulate_crosschain_lifecycle.py` drives the mainnet POC deployment from
 Ethereum to every spoke on every transport through `CrosschainLane` and
 `CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
@@ -110,8 +112,9 @@ the deployed runtimes, and `tests/_hypercore_model.py` answers those addresses t
 tests prove EVM validation under supplied Core state. `test_hypercore_simulation.py`
 runs one vault cycle; `test_simulate_crosschain_hypercore.py` runs the composed flow
 (v3 canary hub → CCIP → the market-55 vault → a trade → recall → claim) and holds every
-CCIP delivery to its route gas limit. Both skip without the source directory and both
-RPCs.
+CCIP delivery to its route gas limit. Both skip without the source directory;
+`test_hypercore_simulation.py` also needs `HYPEREVM_PROVIDER_URL`, the composed flow
+`ARBITRUM_PROVIDER_URL` as well.
 `test_crosschain_readiness.py` checks the Ethereum-hub POC's live bridge and IPOR
 preconditions. Its `readiness` marker requires `--run-readiness`: ordinary runs
 exclude it even with `-m sdk`. Known HyperEVM gaps are non-strict xfails restricted
@@ -243,8 +246,10 @@ the lifecycle matrix follows that.
   snapshots), `vault_positions.py` (Morpho/Aave position breakdowns and their token
   prices) and `vault_erc20.py` (the ERC20_VAULT_BALANCE holdings);
   `vault_info.py` — `build_vault_info_json(data)`, the `fusion vault info --json`
-  document rendered from the snapshot alone (contract names via an injected
-  `resolve_name`) and typed block by block (`VaultInfoJson` and its nested
+  document rendered from the snapshot, plus three inputs that are not chain state at
+  its block: contract names through the injected `resolve_name` (Etherscan I/O on a
+  pool), the deployment fields the caller writes into the snapshot from
+  `fetch_deployment_info`, and `age_days` from the wall clock; typed block by block (`VaultInfoJson` and its nested
   TypedDicts), and `health_check_lists`; `explorer.py` Etherscan V2 (single endpoint, needs API key);
   `cache.py` the `ContractCache` protocol (`get`/`put` of immutable facts keyed
   `CacheKey(chain_id, address, field)`), `FileContractCache` (one JSON file, atomic
@@ -284,13 +289,16 @@ the lifecycle matrix follows that.
   uniswap_v3, universal); `events.py` (`extract_events`, `abi_value` and the raw-log
   event decoder both event families share), `external_state_event_decoding.py` and
   `hypercore_event_decoding.py` (the ExternalState and HyperCore event specs, classes
-  and decoders; internal modules, the names are exported from `ipor_fusion.fuses`);
+  and decoders; internal modules, the ExternalState names are exported from
+  `ipor_fusion.fuses`, the HyperCore ones from `ipor_fusion.hypercore`), `hypercore.py`
+  (the HyperCore fuses, market 55);
   `base.py` re-exports the `core/fuse.py` base and validators,
   `FuseAction` and `ZERO_ADDRESS` (from `types`). A fuse is a value: equality and
   hash cover its class and every attribute it stores
 - `crosschain/` — crosschain Plasma Vaults (executor on the hub chain, dispatcher at
   the same address on each spoke chain), split like the contracts: shared `messages`
-  (`Command`, `MsgType`, envelopes), `contracts` (wrapper bases), `transport`
+  (`Command`, `MsgType`, envelopes), `logs` (`log_bytes` and the raw-log field
+  helpers the decoders share), `contracts` (wrapper bases), `transport`
   (`CrosschainTransport` seam), `lane` (`CrosschainLane`: one executor/dispatcher pair
   driven without knowing its transport; it carries its transport's fuse classes and
   the keeper's attestation helpers), `discovery` (`discover_deployment` reads the
@@ -304,6 +312,8 @@ the lifecycle matrix follows that.
   `ccip/`, each with its wire codecs, executor/dispatcher/factory wrappers, transport
   and lane; `ccip/chainlink` reads Chainlink's Router, OnRamp, TokenAdminRegistry and
   token pool (`ccip_token_lane`: is there a lane, does the token travel on it);
+  `ccip/quote` (`quote_ccip_native_fee`: the exact native fee of a send, from a
+  simulation with the payer's balance at zero);
   `ccip/events` decodes the executor/dispatcher/factory events by topic (one
   registry, mirrored from the v3 source; the v2 pair emits a subset of it);
   `ccip/chainlink` also wraps the 2.0 OffRamp, verifier resolver and committee verifier
@@ -314,19 +324,27 @@ the lifecycle matrix follows that.
   mirroring `contracts/fuses/crosschain/`; they build on `core/fuse.py`, so the
   dependency direction is `core` <- `crosschain` and `fuses/` holds no crosschain code
   (neither package imports the other). Names mirror the Solidity contracts and
-  libraries. Adding a transport: a new subpackage, its encoders in `crosschain/fuses/`
-  and one `LANES` entry. Layering: the encoders import the wire codecs and wrappers;
+  libraries. Adding a transport: a new subpackage, its encoders in `crosschain/fuses/`,
+  one `LANES` entry and its probe in `discovery.detect_transport` (CCIP answers
+  `transportKind()`, Stargate a non-zero `STARGATE_POOL()`). Layering: the encoders import the wire codecs and wrappers;
   lanes, discovery, transports and the simulator import the encoders.
   `ipor_fusion.crosschain` exports the whole surface (encoders, lanes, discovery,
   transports, simulator). A package `__init__` runs before its modules and the
   encoders import `ccip.contracts` / `stargate.layerzero`, so `.ccip` and `.stargate`
-  export only their codecs and wrappers. `tests/test_crosschain_layering.py` pins this:
+  export only what sits below the encoders: their codecs and wrappers, and for
+  `.ccip` also the Chainlink readers (`ccip_token_lane`), the fee quote
+  (`quote_ccip_native_fee`) and the indexer client (`fetch_verifier_result`,
+  `manual_execution`). `tests/test_crosschain_layering.py` pins this:
   the SDK's module-level import graph, with the implicit package-`__init__` edges, is
   acyclic, and the crosschain package has no function-level or `TYPE_CHECKING`
   imports; never work around a cycle with a lazy import, move the module instead.
-- `readers/` — read side: lending_health, oracle_mapping, position_manager, aave_v3,
-  compound_v3, morpho, ramses_v2, uniswap_v3, unpriceable (middleware-priced tokens of
-  granted substrates the oracle cannot price)
+- `readers/` — read side: lending_health, oracle_mapping (with oracle_mapping_nodes
+  and oracle_mapping_reader), position_manager, aave_v3, aave_v4, compound_v3, morpho,
+  ramses_v2, uniswap_v3, unpriceable (middleware-priced tokens of granted substrates
+  the oracle cannot price), hypercore and hypercore_outcome (HyperCore reads and
+  transfer outcomes)
+- `hypercore/` — the preview HyperCore names re-exported from `fuses/hypercore*.py`
+  and `readers/hypercore*.py`; no code of its own
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`,
   `vault_cmd.py` command orchestration over `vault_data` / `vault_info`; `options.py`
   the shared `--chain-id` / address param types and chain/provider resolution;
@@ -387,7 +405,8 @@ or examples.
 - Fuses (`fuses/`) are stateless encoders: a method returns an immutable
   `FuseAction(fuse_address, calldata)` and touches no chain. `Fuse` builds it
   via `self._action_raw(solidity_signature, values)`; the shared `_validate_*`
-  helpers raise before encoding. `PlasmaVault.execute([actions])` runs the
+  helpers raise before encoding (the HyperCore encoders add their own integer-width
+  checks, `_validate_uint` / `_validate_positive_uint` in `fuses/hypercore.py`). `PlasmaVault.execute([actions])` runs the
   batch atomically.
 - Pin reads, never mutate a shared context: `ctx.at_block(n)` is a copy whose
   reads (and `get_logs` upper bound) default to block ``n``; `Call.call(ctx, block=n)`

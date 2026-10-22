@@ -1,10 +1,11 @@
 """`fusion market` command group — protocol-level market inspection.
 
-Currently exposes `morpho-blue <marketId>`: fetches a Morpho Blue market's
-parameters and state (loan/collateral/oracle/IRM/LLTV, totals, liquidity, APYs)
-plus the MetaMorpho vaults supplying it (current allocation, supply caps, and
-PublicAllocator flow caps + fees). Combines on-chain reads via `MorphoReader`
-with the Morpho public GraphQL API for vault discovery.
+`morpho-blue <marketId>` fetches a Morpho Blue market's parameters and state
+(loan/collateral/oracle/IRM/LLTV, totals, liquidity, APYs) plus the MetaMorpho
+vaults supplying it (current allocation, supply caps, and PublicAllocator flow
+caps + fees), combining on-chain reads via `MorphoReader` with the Morpho public
+GraphQL API. `meta-morpho <vault>` inspects a MetaMorpho V1 or Vault V2 from the
+API: roles, fees, adapters or allocations and caps.
 """
 
 from __future__ import annotations
