@@ -1139,6 +1139,7 @@ class TestVaultAddressResolvesSavedChain:
         with (
             patch(
                 "ipor_fusion.mcp.server.load_config",
+                autospec=True,
                 return_value=self._config([1, 8453]),
             ),
             patch("ipor_fusion.mcp.server._build_ctx", autospec=True, side_effect=stop),
@@ -1150,7 +1151,9 @@ class TestVaultAddressResolvesSavedChain:
     def test_missing_saved_chain_provider_is_reported_not_substituted(self):
         with (
             patch(
-                "ipor_fusion.mcp.server.load_config", return_value=self._config([8453])
+                "ipor_fusion.mcp.server.load_config",
+                autospec=True,
+                return_value=self._config([8453]),
             ),
             pytest.raises(ValueError, match="No provider for chain 1"),
         ):
