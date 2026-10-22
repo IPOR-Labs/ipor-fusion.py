@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from unittest.mock import MagicMock
 
 import pytest
@@ -243,3 +244,12 @@ def test_logs_are_typed_records_keeping_the_node_fields():
             "removed": False,
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "method", ["add_call", "add_transaction", "observe", "deploy_contract"]
+)
+def test_label_is_keyword_only(method):
+    parameter = inspect.signature(getattr(VaultSimulator, method)).parameters["label"]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is None

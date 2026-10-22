@@ -457,8 +457,8 @@ class VaultSimulator:
         self,
         call: Call[object],
         from_: ChecksumAddress | None = None,
-        label: str | None = None,
         *,
+        label: str | None = None,
         gas: int | None = None,
     ) -> VaultSimulator:
         """Queue an arbitrary write/setup call (role grant, config tweak,
@@ -484,7 +484,7 @@ class VaultSimulator:
         return self
 
     def add_transaction(
-        self, transaction: TxParams, label: str | None = None
+        self, transaction: TxParams, *, label: str | None = None
     ) -> VaultSimulator:
         """Queue a complete transaction dict exactly as a signer would receive it,
         e.g. the output of `Call.build_transaction` or `Web3Context.build_transaction`.
