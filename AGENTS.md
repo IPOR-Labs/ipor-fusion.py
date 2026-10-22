@@ -513,7 +513,10 @@ decoder adds its own fields.
 - `ZeroBalanceFuse` markets are capabilities (swap, flash-loan,
   instant-withdrawal, admin) with structurally zero balance, not venues. They
   go in `zero_balance_fuses` and are not counted as liquidity markets.
-- Reconciliation: `totalAssets = balance_fuses_sum + underlying_on_vault`.
+- Reconciliation: `totalAssets = balance_fuses_sum + underlying_on_vault +
+  rewards_manager_balance` (`PlasmaVault._getGrossTotalAssets` adds
+  `IRewardsClaimManager.balanceOf()`, the vested rewards, when a manager is set;
+  0 without one, and an unreadable balance is a `rewards_manager_balance` warning).
   Balance fuses already price non-underlying ERC20s (e.g. ERC20BalanceFuse
   values BOLD + BOLDUSDC-gauge in WETH terms). Never add all ERC20 values on
   top of balance fuse totals; that double-counts. `erc20_direct_total` in JSON

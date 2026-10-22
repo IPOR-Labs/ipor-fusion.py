@@ -29,6 +29,7 @@ from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
+from ipor_fusion.core.rewards_manager import RewardsManager
 from ipor_fusion.errors import (
     EmptyCallResultError,
     UnsupportedVaultVersionError,
@@ -143,6 +144,10 @@ class VaultData:
     # ERC20_VAULT_BALANCE substrate, so it is read directly in
     # fetch_vault_data rather than derived from substrates.
     underlying_balance_on_vault: Amount = Amount(0)
+    # RewardsClaimManager.balanceOf() (its vested underlying), which
+    # PlasmaVault.totalAssets adds to the vault's own balance and its markets.
+    # 0 without a manager; None when the vault has one but the read failed.
+    rewards_manager_balance: Amount | None = Amount(0)
     vault_name: str = ""
     deployment_block: int | None = None
     deployment_timestamp: Timestamp | None = None
@@ -342,6 +347,7 @@ class _VaultReads:
     asset_price_usd: float | None
     fuse_markets: dict[FuseAddress, MarketId] | None
     unimplemented_getters: list[str]
+    rewards_manager_balance: Amount | None
 
 
 def _fetch_vault_reads(
@@ -351,8 +357,9 @@ def _fetch_vault_reads(
     oracle wrapper resolved for them (reused, so its ABI is probed once).
 
     Two Multicall3 round trips: vault getters, then everything that needs the
-    asset, the oracle or the fuse list (asset metadata, idle balance, price,
-    each fuse's MARKET_ID()).
+    asset, the oracle, the fuse list or the rewards claim manager (asset
+    metadata, idle balance, price, each fuse's MARKET_ID(), the manager's
+    vested balance).
     """
     pv = plasma_vault
     batch = Multicall3(ctx).batch()
@@ -398,6 +405,12 @@ def _fetch_vault_reads(
     fuse_market_ids = [
         (fuse, batch.try_add(_fuse_market_id_call(fuse))) for fuse in fuses
     ]
+    manager = rewards_manager.value
+    if manager is not None and int(manager, 16) == 0:
+        manager = None
+    manager_balance = (
+        batch.try_add(RewardsManager(manager).balance_of()) if manager else None
+    )
     batch.run()
     # Fuses without a readable MARKET_ID() are left out; the rest detect orphan
     # markets (action fuse registered, no balance fuse for its market).
@@ -417,6 +430,9 @@ def _fetch_vault_reads(
         instant_fuses=instant_fuses.value,
         vault_name=vault_name.value or "",
         rewards_manager=rewards_manager.value,
+        rewards_manager_balance=(
+            manager_balance.value if manager_balance is not None else Amount(0)
+        ),
         asset_decimals=asset_decimals.value,
         underlying_balance_on_vault=underlying_balance.value,
         asset_symbol=symbol.value or "?",
@@ -664,6 +680,7 @@ def _snapshot(
         instant_fuses=reads.instant_fuses,
         vault_name=reads.vault_name,
         rewards_manager=reads.rewards_manager,
+        rewards_manager_balance=reads.rewards_manager_balance,
         asset_decimals=reads.asset_decimals,
         underlying_balance_on_vault=reads.underlying_balance_on_vault,
         asset_symbol=reads.asset_symbol,

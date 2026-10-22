@@ -79,6 +79,7 @@ Severity: TypeAlias = Literal["ok", "warning", "critical"]
 Verdict: TypeAlias = Literal["ok", "warning", "critical"]
 Check: TypeAlias = Literal[
     "unimplemented_getter",
+    "rewards_manager_balance",
     "orphan_fuse",
     "missing_erc20_dependency",
     "unpriceable_token",

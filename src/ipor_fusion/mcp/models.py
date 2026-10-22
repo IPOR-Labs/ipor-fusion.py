@@ -397,6 +397,11 @@ class ERC20Entry(_Base):
 class Reconciliation(_Base):
     balance_fuses_total: Amount
     underlying_on_vault: Amount
+    rewards_manager_balance: Amount | None = Field(
+        default=None,
+        description="RewardsClaimManager.balanceOf(), which totalAssets includes; "
+        "0 without a manager or when it could not be read.",
+    )
     erc20_direct_total: Amount
     sum: Amount
     on_chain_total_assets: Amount
@@ -764,10 +769,15 @@ class FindingModel(_Base):
 
 
 class ReconciliationModel(_Base):
-    """totalAssets against balance fuses plus idle underlying."""
+    """totalAssets against balance fuses, idle underlying and the rewards
+    claim manager's balance."""
 
     balance_fuses_total: Amount
     underlying_on_vault: Amount
+    rewards_manager_balance: Amount = Field(
+        description="RewardsClaimManager.balanceOf(), which totalAssets includes; "
+        "0 without a manager or when it could not be read."
+    )
     erc20_direct_total: Amount = Field(
         description="Informational: already valued by the ERC20_VAULT_BALANCE "
         "balance fuse, never added to sum."
@@ -796,6 +806,9 @@ class ReconciliationModel(_Base):
             ),
             underlying_on_vault=amount(
                 rec.underlying_on_vault, rec.underlying_on_vault_usd
+            ),
+            rewards_manager_balance=amount(
+                rec.rewards_manager_balance, rec.rewards_manager_balance_usd
             ),
             erc20_direct_total=amount(
                 rec.erc20_direct_total, rec.erc20_direct_total_usd

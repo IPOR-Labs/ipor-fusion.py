@@ -95,6 +95,11 @@
       "formatted": "0.0",
       "usd": 0.0
     },
+    "rewards_manager_balance": {
+      "raw": 0,
+      "formatted": "0.0",
+      "usd": 0.0
+    },
     "erc20_direct_total": {
       "raw": 0,
       "formatted": "0.0",

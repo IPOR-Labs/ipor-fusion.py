@@ -120,6 +120,12 @@ class VaultState(Protocol):
     @property
     def underlying_balance_on_vault(self) -> Amount: ...
     @property
+    def rewards_manager_balance(self) -> Amount | None:
+        """The RewardsClaimManager's balanceOf(), part of totalAssets; 0
+        without a manager, None when it could not be read."""
+        ...
+
+    @property
     def price_oracle(self) -> ChecksumAddress: ...
     @property
     def balance_fuses(self) -> Sequence[BalanceFuse]: ...
@@ -155,20 +161,24 @@ class Finding:
 
 @dataclass(frozen=True)
 class Reconciliation:
-    """``totalAssets`` against what the vault's markets and idle underlying add
-    up to. Raw amounts are in the underlying asset's decimals; ``*_usd`` values
+    """``totalAssets`` against what the vault's markets, idle underlying and
+    rewards claim manager add up to. Raw amounts are in the underlying asset's decimals; ``*_usd`` values
     are 0 when the asset has no USD price (``on_chain_total_assets_usd``:
     ``None``).
 
     Balance fuses already value non-underlying ERC20s (via
     ERC20_VAULT_BALANCE), so ``sum`` is balance fuses plus idle underlying
-    only; ``erc20_direct_total`` is informational and never added to it.
+    plus the rewards claim manager's balance; ``erc20_direct_total`` is informational and never added to it.
     """
 
     balance_fuses_total: Amount
     balance_fuses_total_usd: float
     underlying_on_vault: Amount
     underlying_on_vault_usd: float
+    # RewardsClaimManager.balanceOf(): vested rewards totalAssets counts
+    # (0 without a manager or when it could not be read).
+    rewards_manager_balance: Amount
+    rewards_manager_balance_usd: float
     erc20_direct_total: Amount
     erc20_direct_total_usd: float
     sum: Amount
@@ -181,7 +191,8 @@ class Reconciliation:
     # sharesToRelease of the WithdrawManager converted to assets.
     pending_withdrawals: Amount
     pending_withdrawals_usd: float
-    # totalAssets minus idle underlying: the global market total the vault
+    # totalAssets minus idle underlying and the rewards claim manager's
+    # balance: the global market total the vault
     # stores, which per-market caches drift from after partial refreshes.
     implied_market_total: Amount
 
@@ -259,6 +270,7 @@ def validate_vault_state(state: VaultState) -> VaultValidation:
     reconciliation = _reconcile(state)
     findings = [
         *_unimplemented_getter_findings(state),
+        *_rewards_manager_findings(state),
         *_orphan_fuse_findings(state),
         *_missing_erc20_dependency_findings(state),
         *_unpriceable_token_findings(state),
@@ -300,8 +312,11 @@ def _reconcile(state: VaultState) -> Reconciliation:
     if underlying > 0 and price:
         underlying_usd = (underlying / 10**decimals) * price
 
-    total = Amount(balance_fuses_total + underlying)
-    total_usd = balance_fuses_usd + underlying_usd
+    rewards = state.rewards_manager_balance or Amount(0)
+    rewards_usd = (rewards / 10**decimals) * price if rewards > 0 and price else 0.0
+
+    total = Amount(balance_fuses_total + underlying + rewards)
+    total_usd = balance_fuses_usd + underlying_usd + rewards_usd
     on_chain = state.total_assets
     delta = Amount(total - on_chain)
     delta_usd = abs(total_usd - (on_chain / 10**decimals * price)) if price else 0
@@ -325,6 +340,8 @@ def _reconcile(state: VaultState) -> Reconciliation:
         balance_fuses_total_usd=balance_fuses_usd,
         underlying_on_vault=underlying,
         underlying_on_vault_usd=underlying_usd,
+        rewards_manager_balance=rewards,
+        rewards_manager_balance_usd=rewards_usd,
         erc20_direct_total=erc20.value_in_asset,
         erc20_direct_total_usd=erc20.value_usd,
         sum=total,
@@ -336,7 +353,7 @@ def _reconcile(state: VaultState) -> Reconciliation:
         delta_percent=delta_percent,
         pending_withdrawals=pending,
         pending_withdrawals_usd=pending_usd,
-        implied_market_total=Amount(max(0, on_chain - underlying)),
+        implied_market_total=Amount(max(0, on_chain - underlying - rewards)),
     )
 
 
@@ -348,6 +365,20 @@ def _unimplemented_getter_findings(state: VaultState) -> list[Finding]:
             f"WARNING — vault predates {getter}: {_UNIMPLEMENTED_GETTER_IMPACT[getter]}",
         )
         for getter in state.unimplemented_getters
+    ]
+
+
+def _rewards_manager_findings(state: VaultState) -> list[Finding]:
+    if state.rewards_manager_balance is not None:
+        return []
+    return [
+        Finding(
+            "rewards_manager_balance",
+            "warning",
+            "WARNING — the rewards claim manager's balanceOf() could not be read: "
+            "totalAssets includes it, so the reconciliation leaves it out and "
+            "its delta may be that balance",
+        )
     ]
 
 

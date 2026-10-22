@@ -305,6 +305,7 @@ class Erc20BalanceJson(TypedDict):
 class ReconciliationJson(TypedDict):
     balance_fuses_total: UsdAmountJson
     underlying_on_vault: UsdAmountJson
+    rewards_manager_balance: UsdAmountJson
     erc20_direct_total: UsdAmountJson
     sum: UsdAmountJson
     on_chain_total_assets: UsdAmountJson
@@ -809,6 +810,11 @@ def _reconciliation_json(recon: Reconciliation, decimals: int) -> Reconciliation
         ),
         "underlying_on_vault": _amount_json(
             recon.underlying_on_vault, decimals, recon.underlying_on_vault_usd
+        ),
+        "rewards_manager_balance": _amount_json(
+            recon.rewards_manager_balance,
+            decimals,
+            recon.rewards_manager_balance_usd,
         ),
         "erc20_direct_total": _amount_json(
             recon.erc20_direct_total, decimals, recon.erc20_direct_total_usd

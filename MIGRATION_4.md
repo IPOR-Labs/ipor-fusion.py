@@ -639,7 +639,7 @@ converted amounts `Amount`. A custom `VaultState` annotates the same.
 `Shares` (vault shares), and `transfer` / `approve` / `transfer_from` /
 `set_total_supply_cap` take `Shares`; `ERC20` keeps `Amount`.
 `Reconciliation` amounts (`balance_fuses_total`, `underlying_on_vault`,
-`erc20_direct_total`, `sum`, `on_chain_total_assets`, `delta`,
+`rewards_manager_balance`, `erc20_direct_total`, `sum`, `on_chain_total_assets`, `delta`,
 `pending_withdrawals`, `implied_market_total`, `market_storage_divergence`) are
 `Amount`. `FusionInstance.asset_decimals` / `underlying_token_decimals` are
 `Decimals`, and `CloneArgs.redemption_delay_seconds` is a `Period`.
@@ -949,6 +949,16 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
+
+- **The reconciliation counts the rewards claim manager.** `PlasmaVault.totalAssets`
+  adds `RewardsClaimManager.balanceOf()` (vested rewards) to the vault's idle
+  underlying and its markets; 3.x left it out, so a vault with vested rewards showed
+  a delta of that size and an inflated `implied_market_total` (a false market-storage
+  drift). `fetch_vault_data` reads it into `VaultData.rewards_manager_balance` (0
+  without a manager, `None` when the read fails, which validation reports as a
+  `rewards_manager_balance` warning), and `Reconciliation`, the `vault info` and
+  `vault validate` documents carry a `rewards_manager_balance` amount. A custom
+  `VaultState` adds the `rewards_manager_balance` property.
 
 - **MCP `outputSchema` describes every nested block.** The tool output is
   byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,

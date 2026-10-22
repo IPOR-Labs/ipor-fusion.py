@@ -90,6 +90,7 @@ class State:
     asset_price_usd: float | None = 1.0
     total_assets: int = 100 * WAD
     underlying_balance_on_vault: int = 0
+    rewards_manager_balance: int | None = 0
     price_oracle: str = ORACLE
     balance_fuses: list[BalanceFuse] = field(
         default_factory=lambda: [BalanceFuse(AAVE, FUSE)]  # type: ignore[arg-type]
@@ -284,6 +285,32 @@ class TestRouting:
 
 
 class TestReconciliation:
+    def test_the_rewards_manager_balance_is_part_of_total_assets(self):
+        state = State(
+            total_assets=100 * WAD,
+            underlying_balance_on_vault=10 * WAD,
+            rewards_manager_balance=5 * WAD,
+        )
+        validation = validate(state, 85 * WAD)
+        recon = validation.reconciliation
+        assert recon.rewards_manager_balance == 5 * WAD
+        assert recon.rewards_manager_balance_usd == 5.0
+        assert recon.sum == 100 * WAD
+        assert recon.delta == 0
+        assert recon.implied_market_total == 85 * WAD
+        assert recon.market_storage_divergence == 0
+        assert validation.verdict == "ok"
+
+    def test_an_unreadable_rewards_manager_balance_warns(self):
+        state = State(total_assets=100 * WAD, rewards_manager_balance=None)
+        validation = validate(state, 100 * WAD)
+        assert validation.reconciliation.rewards_manager_balance == 0
+        (finding,) = [
+            f for f in validation.findings if f.check == "rewards_manager_balance"
+        ]
+        assert finding.severity == "warning"
+        assert validation.verdict == "warning"
+
     def test_balances_sum_once_per_market_with_idle_underlying(self):
         state = State(total_assets=100 * WAD, underlying_balance_on_vault=10 * WAD)
         recon = validate(state, 89 * WAD).reconciliation
@@ -292,6 +319,8 @@ class TestReconciliation:
             balance_fuses_total_usd=89.0,
             underlying_on_vault=10 * WAD,
             underlying_on_vault_usd=10.0,
+            rewards_manager_balance=0,
+            rewards_manager_balance_usd=0.0,
             erc20_direct_total=0,
             erc20_direct_total_usd=0.0,
             sum=99 * WAD,
@@ -478,6 +507,7 @@ class TestSnapshotTokenMetadata:
             asset_price_usd=state.asset_price_usd,
             fuse_markets=None,
             unimplemented_getters=[],
+            rewards_manager_balance=0,
         )
         oracle = price_oracle_middleware(ctx, ORACLE)  # type: ignore[arg-type]
         with (
