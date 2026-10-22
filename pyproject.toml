@@ -87,7 +87,7 @@ max-statements = 100
 max-complexity = 10
 
 [tool.pyright]
-include = ["src", "tests", "examples"]
+include = ["src", "tests", "examples", "scripts"]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
 # Resolve imports against the uv-managed ./.venv so an editor-launched pyright (eglot, etc.)
@@ -104,7 +104,7 @@ reportTypedDictNotRequiredAccess = false
 # Tests pass raw ints/literals where domain NewTypes (Amount, MarketId, Period, …) are
 # declared — harmless (NewType is identity at runtime).
 reportArgumentType = false
-# Library code, examples and the typed-client check are held to the nominal
+# Library code, examples, scripts and the typed-client check are held to the nominal
 # types; the remaining tests pass raw literals. They also name every type
 # argument and leave no parameter or return partially unknown, so a bare
 # `tuple`, `list[dict]` or `Call` cannot reach a signature. The other
@@ -113,6 +113,7 @@ reportArgumentType = false
 executionEnvironments = [
   { root = "src", reportArgumentType = "error", reportMissingTypeArgument = "error", reportUnknownParameterType = "error" },
   { root = "examples", reportArgumentType = "error", reportMissingTypeArgument = "error", reportUnknownParameterType = "error" },
+  { root = "scripts", reportArgumentType = "error", reportMissingTypeArgument = "error", reportUnknownParameterType = "error" },
   # A negative case is a line that must fail to type-check, marked with
   # `# pyright: ignore[rule]`; an ignore that suppresses nothing is an error.
   # A client reads the SDK's NotRequired document keys with .get().
