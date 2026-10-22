@@ -36,7 +36,7 @@ from datetime import UTC, datetime
 from typing import Literal, NotRequired, TypedDict, TypeVar, final
 
 from dotenv import load_dotenv
-from eth_typing import ChecksumAddress, HexStr
+from eth_typing import ChecksumAddress, HexAddress, HexStr
 from eth_utils import function_signature_to_4byte_selector, keccak
 from web3 import Web3
 from web3.types import BlockData, LogReceipt, RPCEndpoint
@@ -316,7 +316,7 @@ class FactoryGates(TypedDict):
 class FactoryReport(TypedDict):
     address: ChecksumAddress
     interface_version: int
-    owner: ChecksumAddress
+    owner: HexAddress
     creation_restricted: bool
     creation_code_hashes: CreationCodeHashes
     creator: CreatorReport
@@ -631,7 +631,7 @@ def _read_factory(ctx: Web3Context, spec: ChainSpec, peer: ChainSpec) -> Factory
         and testtr_decimals == TESTTR_DECIMALS
     )
     peer_chain_id = int(factory.chain_id_of_selector(peer.chain_selector).call(ctx))
-    owner = _view(ctx, FACTORY, "OWNER()", ["address"], Web3.to_checksum_address)
+    owner = _view(ctx, FACTORY, "OWNER()", ["address"], HexAddress)
     router = factory.ccip_router().call(ctx)
     restricted = bool(factory.creation_restricted().call(ctx))
     creator_allowed = bool(factory.is_allowed_creator(CREATOR).call(ctx))
