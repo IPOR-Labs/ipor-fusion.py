@@ -193,7 +193,12 @@ def _response_calls(result: object) -> list[Mapping[str, object]]:
 
 
 def _parse_call(source: QueuedCall, raw: Mapping[str, object]) -> SimulatedCallResult:
-    success = _quantity(raw.get("status", "0x1"), "status") == 1
+    status = _quantity(raw.get("status"), "status")
+    if status not in (0, 1):
+        raise ValueError(f"status is {status}, not 0 or 1")
+    success = status == 1
+    # A failed call may come without logs; a present value must be a list.
+    logs = raw.get("logs")
     message, return_data = _normalize_call_error(
         raw.get("error"), HexBytes(_text(raw.get("returnData", "0x"), "returnData"))
     )
@@ -203,7 +208,7 @@ def _parse_call(source: QueuedCall, raw: Mapping[str, object]) -> SimulatedCallR
         return_data=return_data,
         gas_used=_quantity(raw.get("gasUsed", "0x0"), "gasUsed"),
         error=None if success else message,
-        logs=[_parse_log(log) for log in _array(raw.get("logs") or [], "logs")],
+        logs=[] if logs is None else [_parse_log(log) for log in _array(logs, "logs")],
         predicted_address=source.predicted_address if success else None,
     )
 

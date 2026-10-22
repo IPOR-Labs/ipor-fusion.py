@@ -185,6 +185,9 @@ def test_a_result_count_mismatch_leaves_every_observation_unresolved():
             "logs": [{"address": "0x", "topics": [1], "data": "0x"}],
         },
         "not a call result",
+        {"returnData": "0x", "gasUsed": "0x0", "logs": []},
+        {"status": "0x2", "returnData": "0x", "gasUsed": "0x0", "logs": []},
+        {"status": "0x1", "returnData": "0x", "gasUsed": "0x0", "logs": {}},
     ],
 )
 def test_a_partial_parse_failure_publishes_nothing(broken):
@@ -253,3 +256,12 @@ def test_label_is_keyword_only(method):
     parameter = inspect.signature(getattr(VaultSimulator, method)).parameters["label"]
     assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
     assert parameter.default is None
+
+
+def test_a_failed_call_without_logs_has_none():
+    sim, _ = _simulator({"status": "0x0", "returnData": "0x", "gasUsed": "0x10"})
+    observation = sim.observe(_read())
+    sim.run()
+
+    assert observation.result.logs == []
+    assert observation.result.success is False

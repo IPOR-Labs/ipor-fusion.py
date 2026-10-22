@@ -439,7 +439,8 @@ is the wrong one.
   `RuntimeError`, for a message to a chain that was not added.
 - `VaultSimulator.run` (provider error from `eth_simulateV1`, a result count that
   does not match the queued calls, or a response not in the documented shape, which
-  raised `KeyError`, `TypeError` or `ValueError` before) and
+  raised `KeyError`, `TypeError` or `ValueError` before: a call result without a
+  `0x0`/`0x1` `status`, which 3.x read as a success, or `logs` that is not a list) and
   `CrosschainSimulator.relay` (not settled within `max_rounds`) raise the new
   `SimulationRunError`, still a `RuntimeError`.
 - `decode_hypercore_event` raises the new `HyperCoreEventDecodeError` (a
@@ -897,6 +898,9 @@ that only some entries carry is `NotRequired` (a balance fuse's `pct_of_total` a
   still fits it.
 - `Command.decode_action_data()` returns `tuple[object, ...]`: narrow each value
   (an `int`, a lowercase hex `str` address or `bytes`, by the action) before use.
+- `CrosschainLane.proposal_id_from_receipt(receipt)` is typed to take web3's
+  `TxReceipt`; for a raw JSON-RPC or minimal `{"logs": ...}` receipt call
+  `lane.proposal_id_from_logs(receipt["logs"])`, which takes any `RawLog`s.
 
 ## Decoded events
 
@@ -936,8 +940,9 @@ part raises `ExternalStateEventDecodeError` / `HyperCoreEventDecodeError` (both 
 `hypercore_event_name(topic)` return `None` for any other topic or a value that
 cannot be one. For HyperCore this changes 3.x: `decode_hypercore_event` took only a
 receipt log with bytes topics and let eth_abi's errors through,
-`hypercore_event_name` raised on bad hex, and `log_index` was passed through as
-given (a hex string from a raw log); the events now also carry `block_number` and
+`hypercore_event_name` raised on bad hex and also matched hex text without `0x`
+(which now returns `None`: pass `"0x" + topic.hex()` or `HexBytes(topic).to_0x_hex()`),
+and `log_index` was passed through as given (a hex string from a raw log); the events now also carry `block_number` and
 `transaction_hash`, like the ExternalState ones.
 
 ## Behavior changes
