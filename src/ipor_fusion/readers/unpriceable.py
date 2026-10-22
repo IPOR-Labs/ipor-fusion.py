@@ -11,7 +11,7 @@ triggers it.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -171,8 +171,21 @@ def _morpho_tokens(
     ]
 
 
+@dataclass(frozen=True)
+class UnpriceableCheck:
+    """`fetch_unpriceable_priced_tokens`: the flagged ``tokens``, and in
+    ``unread`` the granted substrates whose priced token could not be found
+    (a reverting ``asset()`` or ``getSilos()``): the check is complete only
+    when it is empty."""
+
+    tokens: list[MiddlewarePricedToken]
+    unread: list[str] = field(default_factory=list)
+
+
 def _vault_asset_tokens(
-    ctx: Web3Context, market_substrates: dict[MarketId, list[bytes]]
+    ctx: Web3Context,
+    market_substrates: dict[MarketId, list[bytes]],
+    unread: list[str],
 ) -> list[MiddlewarePricedToken]:
     """``asset()`` of granted ERC4626 vaults (Euler V2, generic ERC4626) and
     of both silos of every granted Silo Config. All three fuses price it
@@ -196,6 +209,11 @@ def _vault_asset_tokens(
     multicall = Multicall3(ctx)
     if configs:
         silo_pairs = multicall.try_aggregate([_silos_call(c) for c in configs])
+        unread += [
+            f"getSilos() of granted Silo Config {config}"
+            for config, silos in zip(configs, silo_pairs, strict=True)
+            if silos is None
+        ]
         vaults += [
             (
                 IporFusionMarkets.SILO_V2,
@@ -211,6 +229,9 @@ def _vault_asset_tokens(
     assets = multicall.try_aggregate(
         [_address_call(vault, _ASSET_SELECTOR) for _, vault, _ in vaults]
     )
+    unread += [
+        via for (_, _, via), asset in zip(vaults, assets, strict=True) if asset is None
+    ]
     return [
         MiddlewarePricedToken(
             market_id,
@@ -293,17 +314,20 @@ def fetch_unpriceable_priced_tokens(
     balance_fuses: list[BalanceFuse],
     market_substrates: dict[MarketId, list[bytes]],
     morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None,
-) -> list[MiddlewarePricedToken]:
+) -> UnpriceableCheck:
     """Every middleware-priced token of a granted substrate the middleware
-    cannot price, in market order."""
+    cannot price, in market order, and the substrates whose token could not
+    be found. ``morpho_positions`` must hold every Morpho substrate: a
+    position left out is a token left unchecked."""
+    unread: list[str] = []
     priced = [
         *_plain_tokens(market_substrates, Web3.to_checksum_address(underlying)),
         *_morpho_tokens(morpho_positions),
-        *_vault_asset_tokens(ctx, market_substrates),
+        *_vault_asset_tokens(ctx, market_substrates, unread),
         *_aave_v3_middleware_tokens(ctx, balance_fuses, market_substrates),
     ]
     if not priced:
-        return []
+        return UnpriceableCheck(tokens=[], unread=unread)
     oracle = price_oracle_middleware(ctx, Web3.to_checksum_address(price_oracle))
     unpriceable = _unpriceable(ctx, oracle, (p.token for p in priced))
     flagged = {
@@ -311,4 +335,6 @@ def fetch_unpriceable_priced_tokens(
         for p in priced
         if p.token in unpriceable
     }
-    return [flagged[key] for key in sorted(flagged)]
+    return UnpriceableCheck(
+        tokens=[flagged[key] for key in sorted(flagged)], unread=unread
+    )

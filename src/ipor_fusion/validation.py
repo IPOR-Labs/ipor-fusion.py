@@ -565,15 +565,19 @@ _FAILED_READ_IMPACT = {
 
 
 def _failed_read_findings(state: VaultState) -> list[Finding]:
-    return [
-        Finding(
-            "incomplete_read",
-            "warning",
-            f"WARNING — {read} could not be read: "
-            f"{_FAILED_READ_IMPACT.get(read, 'its check did not run')}",
+    findings = []
+    for read in state.failed_reads:
+        name, _, detail = read.partition(": ")
+        what = f"{name} ({detail})" if detail else name
+        impact = _FAILED_READ_IMPACT.get(name, "its check did not run")
+        findings.append(
+            Finding(
+                "incomplete_read",
+                "warning",
+                f"WARNING — {what} could not be read: {impact}",
+            )
         )
-        for read in state.failed_reads
-    ]
+    return findings
 
 
 def _lending_health_findings(state: VaultState) -> list[Finding]:

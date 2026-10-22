@@ -16,7 +16,13 @@ from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.exceptions import Web3Exception
+from web3.exceptions import (
+    BadFunctionCallOutput,
+    ContractLogicError,
+    ProviderConnectionError,
+    TimeExhausted,
+    Web3RPCError,
+)
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.multicall import Multicall3
@@ -43,7 +49,11 @@ _logger = logging.getLogger(__name__)
 # What a lending read can fail with that is about the chain, not the code:
 # reverts, RPC and transport errors, a contract answering no or malformed data.
 _READ_ERRORS = (
-    Web3Exception,
+    ContractLogicError,
+    Web3RPCError,
+    TimeExhausted,
+    BadFunctionCallOutput,
+    ProviderConnectionError,
     requests.RequestException,
     EmptyCallResultError,
     DecodingError,
@@ -469,8 +479,8 @@ def fetch_vault_lending_health(
         market_substrates: Map of market_id -> list of raw substrate bytes.
             Morpho market ids and Aave V4 Spokes are read from it.
         aave_pools: Map of Aave V3 market_id -> the Pool its balance fuse
-            reads (`AaveV3FuseReader.pool`). Aave V3 markets without an entry
-            are skipped. Defaults to the chain's Core pool for AAVE_V3 only:
+            reads (`AaveV3FuseReader.pool`). An Aave V3 market without an
+            entry is listed in ``unreadable``. Defaults to the chain's Core pool for AAVE_V3 only:
             the Pools of Aave V3 Prime and SparkLend are known only to their
             fuses.
     """

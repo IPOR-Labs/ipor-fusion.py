@@ -54,8 +54,10 @@ def _fetch_morpho_positions(
     pool: ThreadPoolExecutor,
     vault_addr: ChecksumAddress,
     market_substrates: dict[MarketId, list[bytes]],
+    unread: list[str],
 ) -> dict[MarketId, list[MorphoPositionBreakdown]] | None:
-    """Fetch collateral / borrow / supply breakdown for every Morpho substrate.
+    """Fetch collateral / borrow / supply breakdown for every Morpho substrate;
+    a substrate whose read fails is left out and named in ``unread``.
 
     Each IPOR Morpho market (MORPHO_MARKET_IDS) can hold multiple morpho
     market_id substrates; each substrate has an independent position. The
@@ -82,7 +84,13 @@ def _fetch_morpho_positions(
 
     result: dict[MarketId, list[MorphoPositionBreakdown]] = {}
     for mid, per_market in futures.items():
-        breakdowns = [bd for fut in per_market if (bd := fut.result()) is not None]
+        reads = [fut.result() for fut in per_market]
+        unread += [
+            f"Morpho position in market {morpho_mid}"
+            for morpho_mid, bd in zip(per_market_substrates[mid], reads, strict=True)
+            if bd is None
+        ]
+        breakdowns = [bd for bd in reads if bd is not None]
         if breakdowns:
             result[mid] = breakdowns
     return result or None

@@ -203,7 +203,8 @@ class VaultData:
     # GET_MARKET_SUBSTRATES and friends); the data they serve is degraded.
     unimplemented_getters: list[str] = field(default_factory=list)
     # Validation inputs whose read failed ("lending_health",
-    # "unpriceable_priced_tokens"); validation reports each instead of passing.
+    # "unpriceable_priced_tokens", or "unpriceable_priced_tokens: <what>" for one
+    # substrate the check could not cover); validation warns on each.
     failed_reads: list[str] = field(default_factory=list)
     # totalAssetsInMarket of every balance-fuse market, once per market, in
     # balance-fuse order.
@@ -542,6 +543,9 @@ class _LendingReads:
     failed: list[str] = field(default_factory=list)
     morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None = None
     aave_positions: dict[MarketId, list[AaveV3PositionBreakdown]] | None = None
+    # Morpho substrates whose position could not be read: their tokens are
+    # missing from the unpriceable-token check.
+    morpho_unread: list[str] = field(default_factory=list)
 
 
 def _fetch_lending_reads(
@@ -567,8 +571,9 @@ def _fetch_lending_reads(
             aave_pools=markets.aave_pools,
         ),
     )
+    morpho_unread: list[str] = []
     morpho_positions = _fetch_morpho_positions(
-        ctx, pool, vault_addr, markets.market_substrates
+        ctx, pool, vault_addr, markets.market_substrates, morpho_unread
     )
     aave_positions = _fetch_aave_positions(
         ctx, pool, vault_addr, markets.aave_pools, markets.market_substrates
@@ -579,6 +584,7 @@ def _fetch_lending_reads(
         failed=[_LENDING_HEALTH] if lending_health is None else [],
         morpho_positions=morpho_positions,
         aave_positions=aave_positions,
+        morpho_unread=morpho_unread,
     )
 
 
@@ -783,6 +789,7 @@ def _derived_reads(
     )
     token_prices_usd: dict[HexAddress, float] | None = None
     unpriceable: list[MiddlewarePricedToken] | None = None
+    failed: list[str] = []
     if lending is not None:
         token_prices_usd = _fetch_breakdown_token_prices(
             ctx,
@@ -791,7 +798,7 @@ def _derived_reads(
                 lending.morpho_positions, lending.aave_positions
             ),
         )
-        unpriceable = _safe_call(
+        check = _safe_call(
             partial(
                 fetch_unpriceable_priced_tokens,
                 ctx,
@@ -802,6 +809,11 @@ def _derived_reads(
                 morpho_positions=lending.morpho_positions,
             )
         )
+        unpriceable = check.tokens if check is not None else None
+        unread = [*lending.morpho_unread, *(check.unread if check else [])]
+        if check is None:
+            failed.append(_UNPRICEABLE_PRICED_TOKENS)
+        failed += [f"{_UNPRICEABLE_PRICED_TOKENS}: {item}" for item in unread]
     symbols: dict[HexAddress, str] = {}
     decimals: dict[HexAddress, Decimals | None] = {}
     if metadata:
@@ -816,11 +828,7 @@ def _derived_reads(
         symbols,
     )
     return _DerivedReads(
-        failed=(
-            [_UNPRICEABLE_PRICED_TOKENS]
-            if lending is not None and unpriceable is None
-            else []
-        ),
+        failed=failed,
         erc20=erc20,
         token_prices_usd=token_prices_usd,
         unpriceable_priced_tokens=unpriceable,

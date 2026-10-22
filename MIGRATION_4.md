@@ -963,11 +963,16 @@ are listed with a link.
   - When the whole lending-health read or the unpriceable-token check fails,
     `VaultData.failed_reads` names it and validation reports an `incomplete_read`
     warning.
+  - A substrate the unpriceable-token check could not cover is named the same
+    way (`unpriceable_priced_tokens: <what>`). Examples: a Morpho position whose
+    read failed, or a reverting `asset()` / `getSilos()`.
+    `fetch_unpriceable_priced_tokens` returns an `UnpriceableCheck` (`tokens`,
+    `unread`) instead of a bare list.
 
   The `lending_health` JSON block of `vault info` and `vault validate` carries
-  `unreadable`, and a custom `VaultState` adds the `failed_reads` property. The
-  Morpho and Aave position breakdowns are display-only and still degrade to
-  absent.
+  `unreadable`, and a custom `VaultState` adds the `failed_reads` property. A
+  position missing from the breakdown tables is shown as absent, while the
+  checks it feeds report it.
 
 - **The reconciliation counts the rewards claim manager.** `PlasmaVault.totalAssets`
   adds `RewardsClaimManager.balanceOf()` (vested rewards) to the vault's idle

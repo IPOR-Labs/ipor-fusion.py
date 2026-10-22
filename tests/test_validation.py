@@ -298,6 +298,17 @@ class TestIncompleteReads:
         assert "lending_health could not be read" in incomplete[0].message
         assert validation.verdict == "warning"
 
+    def test_a_substrate_the_price_check_missed_is_named(self):
+        read = f"unpriceable_priced_tokens: Morpho position in market 0x{'ab' * 32}"
+        (finding,) = [
+            f
+            for f in validate(State(failed_reads=[read]), 100 * WAD).findings
+            if f.check == "incomplete_read"
+        ]
+        assert finding.message.startswith(
+            "WARNING — unpriceable_priced_tokens (Morpho position in market 0x"
+        )
+
     def test_an_unreadable_lending_market_is_a_warning(self):
         health = VaultLendingHealth(
             markets=[],

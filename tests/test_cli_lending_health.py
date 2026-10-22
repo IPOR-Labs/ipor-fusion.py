@@ -9,7 +9,7 @@ from _validation import validate
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.exceptions import Web3RPCError
+from web3.exceptions import Web3RPCError, Web3ValueError
 
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
@@ -770,10 +770,11 @@ class TestFetchVaultLendingHealth:
         assert unreadable.protocol == "aave_v3"
         assert not result.is_complete
 
-    def test_a_programming_error_is_not_swallowed(self):
+    @pytest.mark.parametrize("error", [TypeError("bug"), Web3ValueError("bug")])
+    def test_a_programming_error_is_not_swallowed(self, error):
         ctx = MagicMock()
-        ctx.call.side_effect = TypeError("bug")
-        with pytest.raises(TypeError, match="bug"):
+        ctx.call.side_effect = error
+        with pytest.raises(type(error), match="bug"):
             fetch_vault_lending_health(
                 ctx,
                 VAULT_ADDR,
