@@ -8,6 +8,7 @@ visible in review.
 
 import importlib
 import inspect
+import pkgutil
 import re
 from types import ModuleType
 
@@ -1319,6 +1320,15 @@ def test_every_all_name_resolves(package: str) -> None:
     module = _module(package)
     missing = [name for name in module.__all__ if not hasattr(module, name)]
     assert not missing
+
+
+@pytest.mark.parametrize("package", sorted(_ALL_SNAPSHOT))
+def test_no_exported_name_hides_a_submodule(package: str) -> None:
+    module = _module(package)
+    if not hasattr(module, "__path__"):
+        return
+    submodules = {info.name for info in pkgutil.iter_modules(module.__path__)}
+    assert not sorted(submodules & set(module.__all__))
 
 
 @pytest.mark.parametrize(

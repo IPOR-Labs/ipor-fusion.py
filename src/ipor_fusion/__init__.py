@@ -315,7 +315,7 @@ from ipor_fusion.fuses import (
     precompile_index_of,
     system_address,
 )
-from ipor_fusion.fuses.external_state_events import (
+from ipor_fusion.fuses.external_state_event_decoding import (
     EXTERNAL_STATE_EVENT_CLASSES,
     EXTERNAL_STATE_EVENT_SPECS,
     EXTERNAL_STATE_EVENTS,
@@ -343,7 +343,7 @@ from ipor_fusion.fuses.external_state_events import (
     external_state_event_name,
     external_state_events,
 )
-from ipor_fusion.fuses.hypercore_events import (
+from ipor_fusion.fuses.hypercore_event_decoding import (
     HYPERCORE_EVENT_CLASSES,
     HyperCoreActionEnqueuedArgs,
     HyperCoreActionEnqueuedEvent,
