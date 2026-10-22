@@ -10,6 +10,7 @@ from ipor_fusion.core.contract import _parse_param_types
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
 from ipor_fusion.fuses.async_action import AsyncActionFuse, AsyncActionSubstrates
+from ipor_fusion.fuses.base import Fuse
 from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
 from ipor_fusion.fuses.euler_v2 import (
@@ -892,6 +893,69 @@ class TestFuseEquality:
         assert AaveV3SupplyFuse(FUSE_ADDR) != AaveV3SupplyFuse(FUSE_ADDR_2)
         assert AaveV3SupplyFuse(FUSE_ADDR) != AaveV3BorrowFuse(FUSE_ADDR)
         assert AaveV3SupplyFuse(FUSE_ADDR) != FUSE_ADDR
+
+    def test_state_kept_in_slots_counts(self):
+        class SlottedFuse(Fuse):
+            __slots__ = ("target", "__secret")
+
+            def __init__(self, address, target, secret):
+                super().__init__(address)
+                self.target = target
+                self.__secret = secret
+
+        one = SlottedFuse(FUSE_ADDR, TOKEN_A, 1)
+        assert one == SlottedFuse(FUSE_ADDR, TOKEN_A, 1)
+        assert hash(one) == hash(SlottedFuse(FUSE_ADDR, TOKEN_A, 1))
+        assert one != SlottedFuse(FUSE_ADDR, TOKEN_B, 1)
+        assert one != SlottedFuse(FUSE_ADDR, TOKEN_A, 2)
+        assert len({one, SlottedFuse(FUSE_ADDR, TOKEN_B, 1)}) == 2
+
+    def test_a_shadowed_base_slot_still_counts(self):
+        class Parent(Fuse):
+            __slots__ = ("target",)
+
+        class Child(Parent):
+            __slots__ = ("target",)
+
+        def child(base_target):
+            fuse = Child(FUSE_ADDR)
+            Parent.__dict__["target"].__set__(fuse, base_target)
+            fuse.target = 3
+            return fuse
+
+        assert child(1) != child(2)
+        assert len({child(1), child(2)}) == 2
+        assert child(1) == child(1)
+
+    def test_a_private_slot_of_an_all_underscore_class_counts(self):
+        class ___(Fuse):  # noqa: N801
+            __slots__ = ("__secret",)
+
+            def __init__(self, address, secret):
+                super().__init__(address)
+                self.__secret = secret
+
+        assert ___(FUSE_ADDR, 1) != ___(FUSE_ADDR, 2)
+        assert ___(FUSE_ADDR, 1) == ___(FUSE_ADDR, 1)
+
+    def test_slots_declared_by_an_iterator_count(self):
+        class IteratorFuse(Fuse):
+            __slots__ = iter(("target",))
+
+        def fuse(target):
+            instance = IteratorFuse(FUSE_ADDR)
+            instance.target = target  # pyright: ignore[reportAttributeAccessIssue]
+            return instance
+
+        assert fuse(1) != fuse(2)
+        assert len({fuse(1), fuse(2)}) == 2
+
+    def test_an_unset_slot_is_left_out(self):
+        class LazyFuse(Fuse):
+            __slots__ = "cached"
+
+        assert LazyFuse(FUSE_ADDR) == LazyFuse(FUSE_ADDR)
+        assert hash(LazyFuse(FUSE_ADDR)) == hash(LazyFuse(FUSE_ADDR))
 
 
 # ── Input Validation ──────────────────────────────────────────────────

@@ -62,6 +62,26 @@ def morpho_blue_address(chain_id: ChainId) -> ChecksumAddress:
     )
 
 
+# Morpho Blue's SharesMathLib: virtual shares and assets offset every
+# conversion, so a market's first depositor cannot inflate the share price.
+VIRTUAL_SHARES = 10**6
+VIRTUAL_ASSETS = 1
+
+
+def to_assets_down(shares: int, total_assets: int, total_shares: int) -> Amount:
+    """``SharesMathLib.toAssetsDown``: supply shares to assets, rounded down."""
+    return Amount(
+        shares * (total_assets + VIRTUAL_ASSETS) // (total_shares + VIRTUAL_SHARES)
+    )
+
+
+def to_assets_up(shares: int, total_assets: int, total_shares: int) -> Amount:
+    """``SharesMathLib.toAssetsUp``: borrow shares to assets, rounded up."""
+    numerator = shares * (total_assets + VIRTUAL_ASSETS)
+    denominator = total_shares + VIRTUAL_SHARES
+    return Amount((numerator + denominator - 1) // denominator)
+
+
 @dataclass(slots=True)
 class MorphoMarket:
     """On-chain state of a Morpho Blue lending market."""
@@ -206,22 +226,12 @@ class MorphoReader(ContractWrapper):
         params_read = batch.add(self.market_params(market_id))
         batch.run()
         pos, market, params = pos_read.value, market_read.value, params_read.value
-        if market.total_borrow_shares > 0:
-            borrow_assets = math.ceil(
-                pos.borrow_shares
-                * (market.total_borrow_assets + 1)
-                / (market.total_borrow_shares + 1)
-            )
-        else:
-            borrow_assets = 0
-        if market.total_supply_shares > 0:
-            supply_assets = (
-                pos.supply_shares
-                * market.total_supply_assets
-                // market.total_supply_shares
-            )
-        else:
-            supply_assets = 0
+        borrow_assets = to_assets_up(
+            pos.borrow_shares, market.total_borrow_assets, market.total_borrow_shares
+        )
+        supply_assets = to_assets_down(
+            pos.supply_shares, market.total_supply_assets, market.total_supply_shares
+        )
         return MorphoPositionBreakdown(
             market_id=market_id,
             loan_token=params.loan_token,
