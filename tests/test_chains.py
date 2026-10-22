@@ -30,10 +30,10 @@ def test_message_lists_supported_chains():
     with pytest.raises(
         UnsupportedChainError,
         match=r"ethereum \(1\), unichain \(130\), monad \(143\), hyperevm \(999\), "
-        r"base \(8453\), plasma \(9745\), arbitrum \(42161\), avalanche \(43114\), "
-        r"katana \(747474\)$",
+        r"robinhood \(4663\), base \(8453\), plasma \(9745\), arbitrum \(42161\), "
+        r"avalanche \(43114\), ink \(57073\), katana \(747474\)$",
     ):
-        ensure_supported_chain(57073)
+        ensure_supported_chain(3637)
 
 
 def test_error_hierarchy():
@@ -58,10 +58,12 @@ def test_supported_chains():
         "arbitrum",
         "avalanche",
         "katana",
+        "ink",
+        "robinhood",
     }
 
 
-@pytest.mark.parametrize("chain_id", [239, 57073, 4663, 3637])
+@pytest.mark.parametrize("chain_id", [239, 3637, 14])
 def test_chains_without_validated_vaults_stay_gated(chain_id):
     with pytest.raises(UnsupportedChainError):
         ensure_supported_chain(chain_id)

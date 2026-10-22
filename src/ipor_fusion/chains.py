@@ -32,9 +32,11 @@ CHAIN_NAME_TO_ID: dict[str, ChainId] = {name: cid for cid, name in CHAIN_NAMES.i
 # validated on. A provider for another chain may connect fine and still fail
 # deeper in the stack (a missing Multicall3, an oracle quirk, an eth_getLogs
 # cap the adaptive scan cannot page through). Extend only after the full
-# vault_info path passes on every live vault of that chain.
+# vault_info path passes on every live vault of that chain — or, for a chain
+# with none yet (Ink, Robinhood), on a vault cloned through its FusionFactory.
 SUPPORTED_CHAIN_IDS: frozenset[ChainId] = frozenset(
-    ChainId(cid) for cid in (1, 130, 143, 999, 8453, 9745, 42161, 43114, 747474)
+    ChainId(cid)
+    for cid in (1, 130, 143, 999, 4663, 8453, 9745, 42161, 43114, 57073, 747474)
 )
 
 # First eth_getLogs page size, in blocks, on chains whose providers cap the
