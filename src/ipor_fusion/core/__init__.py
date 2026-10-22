@@ -2,7 +2,9 @@ from ipor_fusion.core.access import (
     AccessManager,
     RoleAccount,
     RoleAccountJson,
+    RoleAccountsJson,
     RoleStatus,
+    build_role_accounts_json,
     resolve_access_manager,
     role_account_sort_key,
 )
@@ -138,4 +140,6 @@ __all__ = [
     "price_oracle_middleware",
     "resolve_access_manager",
     "role_account_sort_key",
+    "RoleAccountsJson",
+    "build_role_accounts_json",
 ]

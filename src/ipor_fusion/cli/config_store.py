@@ -88,3 +88,21 @@ def load_config() -> FusionConfig:
 def save_config(config: FusionConfig) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(config.model_dump_json(indent=2), encoding="utf-8")
+
+
+def resolve_chain_id(
+    cfg: FusionConfig, vault_address: str, chain_id: ChainId | None
+) -> ChainId | None:
+    """The chain a command or tool runs on: the one given, else the saved
+    vault's, else the chain of the only configured provider; None when none
+    applies. The CLI and the MCP server share it so both resolve alike."""
+    if chain_id is not None:
+        return chain_id
+    if entry := next(
+        (v for v in cfg.vaults if v.address.lower() == vault_address.lower()),
+        None,
+    ):
+        return entry.chain_id
+    if len(cfg.providers) == 1:
+        return ChainId(int(next(iter(cfg.providers))))
+    return None

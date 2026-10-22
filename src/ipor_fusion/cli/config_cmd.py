@@ -20,7 +20,7 @@ def config() -> None:
 @click.argument("url")
 @click.option(
     "--chain-id",
-    type=int,
+    type=click.IntRange(min=1),
     default=None,
     help="Chain ID (auto-detected from URL if omitted).",
 )

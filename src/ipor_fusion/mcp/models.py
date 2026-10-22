@@ -59,7 +59,6 @@ from ipor_fusion.types import (
 
 if TYPE_CHECKING:
     from ipor_fusion.about import ChangelogEntry
-    from ipor_fusion.core.access import RoleAccount
     from ipor_fusion.readers.oracle_mapping import OracleMapping, OracleNode
 
 
@@ -502,38 +501,6 @@ class RoleAccountsResponse(_Base):
         description="Canonical role name when filtered; null = all roles.",
     )
     accounts: list[RoleAccountEntry]
-
-    @classmethod
-    def from_role_accounts(
-        cls,
-        accounts: list[RoleAccount],
-        *,
-        vault: str,
-        access_manager: str,
-        chain_id: ChainId,
-        role_filter: str | None,
-    ) -> RoleAccountsResponse:
-        """Build the response from SDK dataclasses (sorted for stable output)."""
-        # Deferred import keeps this module's import graph pydantic-only.
-        from ipor_fusion.core.access import role_account_sort_key
-
-        entries = [
-            RoleAccountEntry(
-                account=ra.account,
-                role_id=ra.role_id,
-                role_name=ra.role_name,
-                is_member=ra.is_member,
-                execution_delay=ra.execution_delay,
-            )
-            for ra in sorted(accounts, key=role_account_sort_key)
-        ]
-        return cls(
-            vault=vault,
-            access_manager=access_manager,
-            chain_id=chain_id,
-            role_filter=role_filter,
-            accounts=entries,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -1222,9 +1189,9 @@ class ServerInfoResponse(_Base):
     )
     changelog: list[ChangelogEntryModel] = Field(
         description="Newest first, and only a slice of the release history: "
-        "the running version's entry alone unless changelog_since asked for "
+        "the running version's entry alone unless since asked for "
         "more. Empty when nothing matches: no section for the running "
-        "version, or no release newer than changelog_since."
+        "version, or no release newer than since."
     )
     preview_features: list[PreviewFeatureModel] = Field(
         default_factory=_package_preview_features,

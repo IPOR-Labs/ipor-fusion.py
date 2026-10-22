@@ -990,6 +990,25 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
 
+- **The CLI and the MCP tools take the same arguments.**
+  - **MCP inputs:** `chain_id` and `block_number` are optional and omitted means
+    auto-detected / latest. The `0` sentinel is gone, and `0` is now rejected with
+    an error naming the argument to omit (it is never read as chain or block 0);
+    a client that passed `0` must omit the argument instead. The CLI refuses
+    `--block-number 0` and `--chain-id 0` the same way. `server_info(changelog_since=)` is `server_info(since=)` as in
+    `fusion changelog --since`, and `vault_oracle_mapping` takes `max_depth` like
+    `--max-depth`.
+  - **Chain auto-detection:** both surfaces use the saved vault's chain, else the
+    chain of the only configured provider. The CLI used only the saved vault.
+  - **CLI options:** every `--block-number` rejects a negative block, and
+    `fusion market morpho-blue --block` is `--block-number` (`--block` still
+    works).
+  - **One role-accounts document:** `fusion vault role-accounts --json` and
+    `vault_role_accounts` publish `RoleAccountsJson`, built by
+    `build_role_accounts_json` (exported).
+  - **Parity test:** `tests/test_cli_mcp_parity.py` holds every command to a
+    tool with the same arguments.
+
 - **`vault validate` publishes one document.** In 3.x the CLI's `--json` output
   and the MCP `vault_validate` tool returned two different shapes; both now
   return `VaultValidationJson`, built by `build_vault_validation_json(validation,

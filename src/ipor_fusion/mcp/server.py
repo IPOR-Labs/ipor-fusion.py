@@ -4,11 +4,12 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
+from collections.abc import Callable
 from functools import partial
 from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from web3 import Web3
 
 from ipor_fusion.about import (
@@ -22,10 +23,11 @@ from ipor_fusion.cli.config_store import (
     VaultEntry,
     load_config,
     mask_provider_url,
+    resolve_chain_id,
     save_config,
 )
 from ipor_fusion.config.roles import Roles
-from ipor_fusion.core.access import resolve_access_manager
+from ipor_fusion.core.access import build_role_accounts_json, resolve_access_manager
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.explorer import get_contract_name
@@ -68,7 +70,6 @@ from ipor_fusion.vault_data import (
 from ipor_fusion.vault_info import build_vault_info_json, build_vault_validation_json
 
 # chain_id default: detect the chain from the saved vault or the single provider.
-_AUTO_CHAIN = ChainId(0)
 
 mcp = FastMCP(
     "ipor-fusion",
@@ -100,32 +101,61 @@ def _resolve_provider(cfg: FusionConfig, chain_id: ChainId) -> str:
 
 
 def _resolve_chain_id(
-    cfg: FusionConfig, vault_address: str, chain_id: ChainId
+    cfg: FusionConfig, vault_address: str, chain_id: ChainId | None
 ) -> ChainId:
-    if chain_id:
-        return chain_id
-    entry = next(
-        (v for v in cfg.vaults if v.address.lower() == vault_address.lower()),
-        None,
-    )
-    if entry:
-        return entry.chain_id
-    if len(cfg.providers) == 1:
-        return ChainId(int(next(iter(cfg.providers))))
+    if (resolved := resolve_chain_id(cfg, vault_address, chain_id)) is not None:
+        return resolved
     raise ValueError(
-        "Cannot auto-detect chain ID. Use chain_id parameter or save the vault first."
+        "Cannot tell the chain: the vault is not saved and there is not exactly one "
+        "configured provider. Pass chain_id or save the vault first."
     )
 
 
 def _build_ctx(
-    cfg: FusionConfig, chain_id: ChainId, block_number: int = 0
+    cfg: FusionConfig, chain_id: ChainId, block_number: int | None = None
 ) -> tuple[Web3Context, int | None]:
-    provider_url = _resolve_provider(cfg, chain_id)
-    ctx = Web3Context.from_url(provider_url)
-    effective_block = block_number if block_number else None
-    if effective_block is not None:
-        ctx = ctx.at_block(effective_block)
-    return ctx, effective_block
+    ctx = Web3Context.from_url(_resolve_provider(cfg, chain_id))
+    if block_number is not None:
+        ctx = ctx.at_block(block_number)
+    return ctx, block_number
+
+
+def _no_zero_sentinel(name: str) -> Callable[[object], object]:
+    """Refuse 0 with an explicit message: clients built against the 3.x tools
+    still send it meaning auto / latest, and reading it as block or chain 0
+    would answer with genesis-block data instead of an error."""
+
+    def check(value: object) -> object:
+        if value == 0 and not isinstance(value, bool):
+            raise ValueError(
+                f"{name}=0 is not a sentinel any more: omit {name} for "
+                + ("the latest block" if name == "block_number" else "auto-detection")
+            )
+        return value
+
+    return check
+
+
+# Shared argument types, so every tool takes chain and block as the CLI does:
+# omitted means auto-detected / latest, never a 0 sentinel.
+ChainArg = Annotated[
+    ChainId | None,
+    Field(
+        description="Chain ID; omitted: the saved vault's chain, else the chain "
+        "of the only configured provider.",
+        gt=0,
+    ),
+    BeforeValidator(_no_zero_sentinel("chain_id")),
+]
+
+
+# The market tools need the chain: no auto-detection, so no omission either.
+RequiredChainArg = Annotated[ChainId, Field(description="Chain ID.", gt=0)]
+BlockArg = Annotated[
+    int | None,
+    Field(description="Block number (positive); omitted: latest.", ge=1),
+    BeforeValidator(_no_zero_sentinel("block_number")),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +170,7 @@ def _build_ctx(
 # version/repository ride along with the changelog.
 @mcp.tool()
 def server_info(
-    changelog_since: Annotated[
+    since: Annotated[
         str,
         Field(
             description="Return every release newer than this version, e.g. "
@@ -156,8 +186,7 @@ def server_info(
         version=package_version(),
         repository=repository_url(),
         changelog=[
-            ChangelogEntryModel.from_entry(entry)
-            for entry in read_changelog(changelog_since)
+            ChangelogEntryModel.from_entry(entry) for entry in read_changelog(since)
         ],
     )
 
@@ -169,9 +198,9 @@ def server_info(
 
 @mcp.tool()
 def vault_info(
-    vault_address: str,
-    chain_id: ChainId = _AUTO_CHAIN,
-    block_number: int = 0,
+    vault_address: Annotated[str, Field(description="Plasma Vault address.")],
+    chain_id: ChainArg = None,
+    block_number: BlockArg = None,
 ) -> VaultInfoResponse:
     """Get full on-chain state of a Plasma Vault — the comprehensive summary.
 
@@ -179,11 +208,6 @@ def vault_info(
     for the complete output schema (assets, balance fuses, fees, withdraw
     manager, reconciliation, lending health, substrates, role accounts,
     etc.).
-
-    Args:
-        vault_address: Vault address (required).
-        chain_id: Chain ID (auto-detected if 0).
-        block_number: Block number (latest if 0).
     """
     cfg = load_config()
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
@@ -221,10 +245,8 @@ def vault_info(
 @mcp.tool()
 def vault_validate(
     vault_address: Annotated[str, Field(description="Plasma Vault address.")],
-    chain_id: Annotated[
-        ChainId, Field(description="Chain ID (auto-detected if 0).")
-    ] = _AUTO_CHAIN,
-    block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
+    chain_id: ChainArg = None,
+    block_number: BlockArg = None,
 ) -> VaultValidationResponse:
     """Check a Plasma Vault's health and return an ok / warning / critical verdict.
 
@@ -234,8 +256,6 @@ def vault_validate(
     substrates). Every read is pinned to one block, so the result is
     consistent. It reads about as much as vault_info and takes about as long.
     """
-    if block_number < 0:
-        raise ValueError("block_number must be >= 0")
     cfg = load_config()
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
     ensure_supported_chain(chain_id)
@@ -291,10 +311,8 @@ def vault_role_accounts(
         RoleName | None,
         Field(description="Role to filter by; omit to list all roles."),
     ] = None,
-    chain_id: Annotated[
-        ChainId, Field(description="Chain ID (auto-detected if 0).")
-    ] = _AUTO_CHAIN,
-    block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
+    chain_id: ChainArg = None,
+    block_number: BlockArg = None,
 ) -> RoleAccountsResponse:
     """List confirmed role holders on a Plasma Vault's AccessManager.
 
@@ -318,22 +336,28 @@ def vault_role_accounts(
         if role_id is None
         else access_manager.read_accounts_with_role(ctx, role_id)
     )
-    return RoleAccountsResponse.from_role_accounts(
-        accounts,
-        vault=checksum,
-        access_manager=access_manager.address,
-        chain_id=chain_id,
-        role_filter=Roles.get_name(role_id) if role_id is not None else None,
+    return RoleAccountsResponse.model_validate(
+        build_role_accounts_json(
+            accounts,
+            vault=checksum,
+            access_manager=access_manager.address,
+            chain_id=chain_id,
+            role=role_id,
+        )
     )
 
 
 @mcp.tool()
 def vault_oracle_mapping(
     vault_address: Annotated[str, Field(description="Plasma Vault address.")],
-    chain_id: Annotated[
-        ChainId, Field(description="Chain ID (auto-detected if 0).")
-    ] = _AUTO_CHAIN,
-    block_number: Annotated[int, Field(description="Block number (latest if 0).")] = 0,
+    chain_id: ChainArg = None,
+    block_number: BlockArg = None,
+    max_depth: Annotated[
+        int,
+        Field(
+            description="Max recursion depth for feeds derived from other assets.", ge=0
+        ),
+    ] = 6,
 ) -> OracleMappingResponse:
     """Map how a Plasma Vault prices every configured asset at a block.
 
@@ -383,8 +407,6 @@ def vault_oracle_mapping(
     it, else by replaying AssetPriceSourceUpdated logs (asset_source:
     'events'). Historical blocks require an archive node.
     """
-    if block_number < 0:
-        raise ValueError("block_number must be >= 0")
     cfg = load_config()
     chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
     # The asset-source event replay scans logs from block 0 — fail fast
@@ -395,12 +417,16 @@ def vault_oracle_mapping(
 
     # The event-replay fallback and the output both need a concrete block
     # number, so resolve "latest" up front and pin the context to it.
-    effective_block = block_number if block_number else ctx.web3.eth.block_number
+    effective_block = (
+        block_number if block_number is not None else ctx.web3.eth.block_number
+    )
     ctx = ctx.at_block(effective_block)
 
     resolve_access_manager(ctx, checksum)
 
-    mapping = build_oracle_mapping(ctx, checksum, effective_block=effective_block)
+    mapping = build_oracle_mapping(
+        ctx, checksum, effective_block=effective_block, max_depth=max_depth
+    )
     return OracleMappingResponse.from_mapping(mapping)
 
 
@@ -423,19 +449,25 @@ def vault_list() -> list[VaultListEntry]:
 def vault_add(
     address: str,
     label: str = "",
-    chain_id: ChainId = _AUTO_CHAIN,
+    chain_id: Annotated[
+        ChainId | None,
+        Field(
+            description="Chain ID; omitted: the chain of the only configured provider.",
+            gt=0,
+        ),
+        BeforeValidator(_no_zero_sentinel("chain_id")),
+    ] = None,
 ) -> ActionResult:
     """Save a Plasma Vault to the local config.
 
     Args:
         address: Vault address (required).
         label: Human-readable label (fetched from on-chain name() if empty).
-        chain_id: Chain ID (auto-detected when only one provider configured).
     """
     checksum = parse_plasma_vault_address(address)
     cfg = load_config()
 
-    if not chain_id:
+    if chain_id is None:
         if len(cfg.providers) == 1:
             chain_id = ChainId(int(next(iter(cfg.providers))))
         else:
@@ -511,14 +543,20 @@ def config_show() -> ConfigShowResponse:
 
 
 @mcp.tool()
-def config_set_provider(url: str, chain_id: ChainId = _AUTO_CHAIN) -> ActionResult:
+def config_set_provider(
+    url: str,
+    chain_id: Annotated[
+        ChainId | None,
+        Field(description="Chain ID; omitted: read from the URL's eth_chainId.", gt=0),
+        BeforeValidator(_no_zero_sentinel("chain_id")),
+    ] = None,
+) -> ActionResult:
     """Set RPC provider URL for a chain.
 
     Args:
         url: RPC provider URL.
-        chain_id: Chain ID (auto-detected via eth_chainId if 0).
     """
-    if not chain_id:
+    if chain_id is None:
         web3 = Web3(Web3.HTTPProvider(url))
         chain_id = ChainId(web3.eth.chain_id)
 
@@ -549,8 +587,8 @@ def config_set_etherscan_key(api_key: str) -> ActionResult:
 @mcp.tool()
 def market_morpho_blue(
     market_id: str,
-    chain_id: ChainId,
-    block_number: int = 0,
+    chain_id: RequiredChainArg,
+    block_number: BlockArg = None,
     no_api: bool = False,
 ) -> MorphoBlueMarketResponse:
     """Inspect a Morpho Blue market by its 32-byte market ID.
@@ -572,7 +610,6 @@ def market_morpho_blue(
     Args:
         market_id: 32-byte market ID (0x-prefixed hex or 64 raw hex chars).
         chain_id: EVM chain ID (1 = Ethereum, 8453 = Base, ...).
-        block_number: Block number for on-chain reads (latest if 0).
         no_api: Skip Morpho API call (no vault discovery / PublicAllocator info).
     """
     mid = parse_morpho_market_id(market_id)
@@ -608,7 +645,7 @@ def market_morpho_blue(
 @mcp.tool()
 def market_meta_morpho(
     vault_address: str,
-    chain_id: ChainId,
+    chain_id: RequiredChainArg,
 ) -> MetaMorphoVaultResponse:
     """Inspect a MetaMorpho V1 or Morpho Vault V2 by address (Morpho API).
 

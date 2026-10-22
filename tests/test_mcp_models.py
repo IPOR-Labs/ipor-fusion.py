@@ -36,9 +36,12 @@ from ipor_fusion import (
     OracleMappingJson,
     PlasmaVaultAddress,
     PricedAmountJson,
+    RoleAccountsJson,
+    Roles,
     UsdAmountJson,
     VaultInfoJson,
     VaultValidationJson,
+    build_role_accounts_json,
 )
 from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.hypercore import HyperCoreActionId, HyperCoreAsset, HyperCoreTokenIndex
@@ -671,6 +674,9 @@ class TestTypedDocumentsMirrorModels:
     def test_vault_info(self):
         _assert_mirrors(VaultInfoJson, VaultInfoResponse, "vault_info")
 
+    def test_role_accounts(self):
+        _assert_mirrors(RoleAccountsJson, RoleAccountsResponse, "vault_role_accounts")
+
     def test_vault_validation(self):
         _assert_mirrors(VaultValidationJson, VaultValidationResponse, "vault_validate")
 
@@ -1019,20 +1025,21 @@ def _role_account(role_id: int, account: str, delay: int = 0) -> RoleAccount:
 
 
 class TestRoleAccountsResponse:
-    def test_from_role_accounts_maps_and_sorts(self):
+    def test_the_shared_document_maps_and_sorts(self):
         accounts = [
             _role_account(100, "0xBBBB", delay=60),
             _role_account(1, "0xaaaa"),
             _role_account(2, "0xaaaa"),
         ]
 
-        resp = RoleAccountsResponse.from_role_accounts(
+        document = build_role_accounts_json(
             accounts,
-            vault="0xVAULT",
-            access_manager="0xAM",
-            chain_id=1,
-            role_filter=None,
+            vault="0xVAULT",  # type: ignore[arg-type]
+            access_manager="0xAM",  # type: ignore[arg-type]
+            chain_id=ChainId(1),
         )
+        resp = RoleAccountsResponse.model_validate(document)
+        assert resp.model_dump(mode="json") == document
 
         # Sorted by (account.lower(), role_id); role_name resolved via the enum.
         assert [(e.account, e.role_id) for e in resp.accounts] == [
@@ -1045,12 +1052,14 @@ class TestRoleAccountsResponse:
         assert resp.role_filter is None
 
     def test_role_filter_echo(self):
-        resp = RoleAccountsResponse.from_role_accounts(
-            [],
-            vault="0xVAULT",
-            access_manager="0xAM",
-            chain_id=1,
-            role_filter="ATOMIST_ROLE",
+        resp = RoleAccountsResponse.model_validate(
+            build_role_accounts_json(
+                [],
+                vault="0xVAULT",  # type: ignore[arg-type]
+                access_manager="0xAM",  # type: ignore[arg-type]
+                chain_id=ChainId(1),
+                role=Roles.ATOMIST_ROLE,
+            )
         )
         assert resp.role_filter == "ATOMIST_ROLE"
         assert resp.accounts == []
