@@ -336,6 +336,10 @@ HYPERCORE_WORDS = {
     "config_mode": "0x0505000000000000000000000000000000000000000000000000000000000001",
     "builder": "0x040000000000000000000001cee5c4272e246a424aede992c987966736e0f63b",
 }
+# The HyperCoreSubstrateLib.encodePerpPositionCap layout for (110002, 50_000_000)
+HYPERCORE_POSITION_CAP = (
+    "0x070001adb20000000000000002faf08000000000000000000000000000000000"
+)
 
 
 def test_hypercore_typed_substrates():
@@ -377,6 +381,33 @@ def test_hypercore_typed_substrates():
     assert builder.address == "0xcee5c4272e246a424aede992c987966736e0f63b"
     assert builder.extra == {"max_fee_rate_decibps": "1"}
 
+    position_cap = decode_substrate(HYPERCORE_POSITION_CAP, market_id=market)
+    assert position_cap == SubstrateInfo(
+        raw_hex=HYPERCORE_POSITION_CAP,
+        type_label="PERP_POSITION_CAP",
+        extra={
+            "asset": "110002",
+            "max_position_notional_usd6": "50000000",
+            "dex": "1",
+            "read_index": "10002",
+        },
+    )
+
+    native = f"0x{(7 << 248) | (1 << 216) | (1 << 128):064x}"
+    assert decode_substrate(native, market_id=market).extra == {
+        "asset": "1",
+        "max_position_notional_usd6": "1",
+        "dex": "0",
+        "read_index": "1",
+    }
+
+    # 10_000 is neither a native nor a HIP-3 asset: no read coordinates
+    outside = f"0x{(7 << 248) | (10_000 << 216) | (1 << 128):064x}"
+    assert decode_substrate(outside, market_id=market).extra == {
+        "asset": "10000",
+        "max_position_notional_usd6": "1",
+    }
+
 
 @pytest.mark.parametrize(
     ("word", "label"),
@@ -414,9 +445,12 @@ def test_hypercore_typed_substrates():
             + hex(100 * 10**8)[2:].rjust(32, "0"),
             "SEND_CAP",
         ),
+        # PerpPositionCap with the lowest and the highest of the low 128 bits set
+        (HYPERCORE_POSITION_CAP[:-2] + "01", "PERP_POSITION_CAP"),
+        (HYPERCORE_POSITION_CAP[:34] + "8" + "0" * 31, "PERP_POSITION_CAP"),
         # tags the library has no member for
         ("0x00" + "00" * 31, "type=0"),
-        ("0x07" + "00" * 31, "type=7"),
+        ("0x08" + "00" * 31, "type=8"),
         # config keys outside 1..11
         ("0x0500" + "00" * 30, "CONFIG key=0"),
         ("0x050c" + "00" * 30, "CONFIG key=12"),

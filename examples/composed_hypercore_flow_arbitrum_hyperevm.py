@@ -63,6 +63,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import Sequence
 from typing import Any, NamedTuple
 
 from eth_abi.abi import encode as abi_encode
@@ -86,6 +87,7 @@ from ipor_fusion import (
     LaneObservation,
     PlasmaVault,
     SimulationResult,
+    SubstrateInfo,
     TimeInForce,
     VaultSimulator,
     Web3Context,
@@ -266,6 +268,60 @@ def _dex_equity_wei(account_value_usd6: int, cap_wei: int) -> int:
     return min(max(int(account_value_usd6), 0) * 100, max(int(cap_wei), 0))
 
 
+def _grants_by_type(
+    grants: Sequence[SubstrateInfo],
+) -> dict[str, list[SubstrateInfo]]:
+    """Decoded grants grouped by type label, without the words the SDK flags
+    (logged).
+
+    A malformed word of a known type reverts every fuse call that decodes it
+    (one bad PerpPositionCap blocks orders on every asset); the fuses skip a
+    word of an unknown type."""
+    flagged = [info.raw_hex for info in grants if info.is_error]
+    if flagged:
+        log.warning("granted HyperCore words the SDK flags as invalid: %s", flagged)
+    by_type: dict[str, list[SubstrateInfo]] = {}
+    for info in grants:
+        if not info.is_error:
+            by_type.setdefault(info.type_label, []).append(info)
+    return by_type
+
+
+def _lot(sz_decimals: int) -> int:
+    """``HyperCoreLib.lotOf``: one size unit of a market in the 8-decimal
+    order scale. The fuses revert for ``szDecimals`` above 8."""
+    _check(
+        sz_decimals <= 8,
+        f"szDecimals {sz_decimals} above 8: the order fuse cannot represent the size",
+    )
+    return 10 ** (8 - sz_decimals)
+
+
+def _post_order_notional_usd6(
+    szi: int, sz: int, *, is_buy: bool, px: int, sz_decimals: int
+) -> int | None:
+    """The position's notional in USD6 after a full fill of ``sz``, rounded
+    up: the figure the order fuse holds to a PerpPositionCap. ``None`` when
+    the order keeps or shrinks ``|size|``, which the cap never blocks.
+
+    ``sz`` has 8 implied decimals and is a whole number of lots, as the fuse
+    requires; ``szi`` is in the position's ``szDecimals`` units; ``px`` is
+    the price the fuse values the order at, with 8 decimals: the limit for a
+    buy, ``max(limit, mark)`` for a sell."""
+    lot = _lot(sz_decimals)
+    post = szi + sz // lot if is_buy else szi - sz // lot
+    if abs(post) <= abs(szi):
+        return None
+    return -(-abs(post) * lot * px // 10**10)
+
+
+def _within_position_cap(notional_usd6: int | None, cap_usd6: int | None) -> bool:
+    """The fuse admits the order when no PerpPositionCap is granted for the
+    asset, when the order does not grow ``|size|`` (``notional_usd6`` is
+    ``None``), or when the post-fill notional fits the cap."""
+    return cap_usd6 is None or notional_usd6 is None or notional_usd6 <= cap_usd6
+
+
 def _redeem_size(shares: int, share_assets: int, idle: int, max_withdraw: int) -> int:
     """The live planner's REDEEM sizing (composed_hypercore_trade_plan):
     everything the holder has when its value fits the vault's idle and
@@ -356,16 +412,22 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
         decode_substrate(raw, HYPERCORE_MARKET)
         for raw in vault.get_market_substrates(HYPERCORE_MARKET).call(ctx)
     ]
-    by_type: dict[str, list[Any]] = {}
-    for info in grants:
-        by_type.setdefault(info.type_label, []).append(info)
+    by_type = _grants_by_type(grants)
+    # The decoder sets an address on every unflagged SPOT_TOKEN and
+    # DESTINATION; the filters only narrow the type.
     spot_tokens = {
-        int(i.extra["token_index"]): i.address for i in by_type.get("SPOT_TOKEN", [])
+        int(i.extra["token_index"]): i.address
+        for i in by_type.get("SPOT_TOKEN", [])
+        if i.address is not None
     }
     perp_markets = {int(i.extra["asset"]): i for i in by_type.get("PERP_MARKET", [])}
     destinations = {
-        Web3.to_checksum_address(i.address) for i in by_type.get("DESTINATION", [])
+        Web3.to_checksum_address(i.address)
+        for i in by_type.get("DESTINATION", [])
+        if i.address is not None
     }
+    # At most one SendCap per token: the send fuse reverts every send of a
+    # token granted two, which this dict (the last grant wins) does not detect.
     send_caps = {
         int(i.extra["token_index"]): int(i.extra["max_wei"])
         for i in by_type.get("SEND_CAP", [])
@@ -388,12 +450,21 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     )
     market = perp_markets[XYZ_NVDA_ASSET]
     max_notional_usd6 = int(market.extra["max_notional_usd6"])
+    # A PerpPositionCap is optional; without one, only the per-order cap
+    # applies. At most one per asset: the order fuse reverts every order on an
+    # asset granted two, which this dict (the last grant wins) does not detect.
+    position_caps = {
+        int(i.extra["asset"]): int(i.extra["max_position_notional_usd6"])
+        for i in by_type.get("PERP_POSITION_CAP", [])
+    }
+    position_cap_usd6 = position_caps.get(XYZ_NVDA_ASSET)
     send_cap = send_caps[0]
     log.info(
-        "grants: spot tokens %s, perp markets %s (xyz:NVDA cap %d USD6, reduce-only %s), send cap USDC %d wei, config %s",
+        "grants: spot tokens %s, perp markets %s (xyz:NVDA cap %d USD6, position cap %s USD6, reduce-only %s), send cap USDC %d wei, config %s",
         sorted(spot_tokens),
         sorted(perp_markets),
         max_notional_usd6,
+        position_cap_usd6,
         market.extra["reduce_only_required"],
         send_cap,
         config,
@@ -504,8 +575,16 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
         )
     # A3/A4. A limit order through the mark (fills like a market order) and
     #        its reduce-only close. The order fuse validates the market grant,
-    #        the notional cap and the order window on the EVM side; the close
-    #        preview does not depend on the buy preview having run.
+    #        the per-order and position caps and the order window on the EVM
+    #        side. The close preview does not depend on the buy preview having
+    #        run: both run against the live position. The position cap ignores
+    #        reduce-only, so the close is held to it too whenever it grows
+    #        |size| (from a flat position, say). The fuse rejects a size that
+    #        is not a whole number of lots before any cap check.
+    _check(
+        ORDER_SIZE % _lot(sz_decimals) == 0,
+        f"order size {ORDER_SIZE} is not a whole number of lots at szDecimals {sz_decimals}",
+    )
     limit_buy = mark * (10_000 + LIMIT_SLIPPAGE_BPS) // 10_000
     limit_sell = mark * (10_000 - LIMIT_SLIPPAGE_BPS) // 10_000
     notional_usd6 = ORDER_SIZE * limit_buy // CORE_WEI // 100  # 8+8 dp -> 6 dp
@@ -513,6 +592,21 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
         notional_usd6 <= max_notional_usd6,
         f"order notional {notional_usd6} above the market cap {max_notional_usd6}",
     )
+    for side, is_buy, admission_px in (
+        ("buy", True, limit_buy),
+        ("close", False, max(limit_sell, mark)),
+    ):
+        position_notional_usd6 = _post_order_notional_usd6(
+            position.szi,
+            ORDER_SIZE,
+            is_buy=is_buy,
+            px=admission_px,
+            sz_decimals=sz_decimals,
+        )
+        _check(
+            _within_position_cap(position_notional_usd6, position_cap_usd6),
+            f"position notional {position_notional_usd6} after the {side} above the position cap {position_cap_usd6}",
+        )
     previews.append(
         _preview(
             web3_hype,

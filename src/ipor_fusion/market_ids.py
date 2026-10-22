@@ -110,8 +110,9 @@ class IporFusionMarkets:
     # HyperCore market (id 55): a HyperEVM PlasmaVault trading on Hyperliquid
     # Core through delegatecalled fuses (CoreWriter actions, precompile reads).
     # Substrate type: HyperCoreSubstrateLib (1 SpotToken, 2 PerpMarket,
-    # 3 Destination, 4 Builder, 5 Config, 6 SendCap). Ahead of the public
-    # contracts repo; the mirror test allowlists it until the constant lands.
+    # 3 Destination, 4 Builder, 5 Config, 6 SendCap, 7 PerpPositionCap). Ahead
+    # of the public contracts repo; the mirror test allowlists it until the
+    # constant lands.
     # The first HyperEVM test deployment ran on id 54 before the contracts
     # team assigned 54 to crosschain and moved HyperCore to 55; that vault's
     # market 54 is pre-renumbering HyperCore wiring, not a crosschain market.

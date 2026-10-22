@@ -2230,6 +2230,13 @@ class TestHyperCoreFuses:
             "020001adb20000000000000000e4e1c000000000000000000000000000000000"
         )
         assert HyperCoreSubstrates.perp_market(1, 1, reduce_only_required=True)[16] == 1
+        assert HyperCoreSubstrates.perp_position_cap(110_002, 50_000_000).hex() == (
+            "070001adb20000000000000002faf08000000000000000000000000000000000"
+        )
+        with pytest.raises(ValueError, match="max_position_notional_usd6"):
+            HyperCoreSubstrates.perp_position_cap(1, 1 << 88)
+        with pytest.raises(ValueError, match="asset"):
+            HyperCoreSubstrates.perp_position_cap(1 << 32, 1)
         assert HyperCoreSubstrates.send_cap(0, 100 * 10**8).hex() == (
             "06000000000000000000000000000000000000000000000000000002540be400"
         )

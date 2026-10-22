@@ -285,6 +285,7 @@ _HYPERCORE_TYPES = {
     4: "BUILDER",
     5: "CONFIG",
     6: "SEND_CAP",
+    7: "PERP_POSITION_CAP",
 }
 # HyperCoreSubstrateLib.ConfigKey member names (MAX_NAV_JUMP_BPS -> MaxNavJumpBps),
 # by enum value.
@@ -312,8 +313,10 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
       PerpDexIds is a bitmap (bit i enables perp dex i), SettlementMode 1 TIMING
       or 2 REPORTED.
     - SendCap (6): ``tokenIndex << 128 | maxWei`` (Core wei).
+    - PerpPositionCap (7): ``asset << 216 | maxPositionNotionalUsd6 << 128``,
+      the aggregate cap for one PerpMarket's asset, the low 128 bits zero.
     Words the library's decoders revert on come back raw with ``is_error``
-    (a tag outside 1..6, an unknown config key, reserved bits set, a
+    (a tag outside 1..7, an unknown config key, reserved bits set, a
     reduce-only flag other than 0/1): the fuses would reject them, so no
     field of theirs may look granted.
     """
@@ -324,7 +327,14 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
     if type_byte == 5:
         return _decode_hypercore_config(hex_str)
     # Reserved bits the library requires to be zero, as hex spans of the word.
-    reserved = {1: (2, 8), 2: (34, 64), 3: (2, 24), 4: (2, 8), 6: (2, 16)}[type_byte]
+    reserved = {
+        1: (2, 8),
+        2: (34, 64),
+        3: (2, 24),
+        4: (2, 8),
+        6: (2, 16),
+        7: (32, 64),
+    }[type_byte]
     if hex_str[reserved[0] : reserved[1]].strip("0"):
         return _hypercore_invalid(hex_str, label)
     if type_byte == 1:
@@ -342,12 +352,16 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
             "asset": str(asset),
             "max_notional_usd6": str(int(hex_str[10:32], 16)),
             "reduce_only_required": str(reduce_flag == 1).lower(),
+            **_hypercore_read_coordinates(asset),
         }
-        # The HIP-3 coordinates the read precompiles want; absent for an asset
-        # outside the native and HIP-3 families, which the perp fuses reject.
-        if is_native_perp_asset(asset) or is_hip3_asset(asset):
-            extra["dex"] = str(perp_dex_of(asset))
-            extra["read_index"] = str(precompile_index_of(asset))
+        return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
+    if type_byte == 7:
+        asset = HyperCoreAsset(int(hex_str[2:10], 16))
+        extra = {
+            "asset": str(asset),
+            "max_position_notional_usd6": str(int(hex_str[10:32], 16)),
+            **_hypercore_read_coordinates(asset),
+        }
         return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
     if type_byte == 3:
         return SubstrateInfo(address=_address(hex_str[24:]), type_label=label)
@@ -365,6 +379,17 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
             "max_wei": str(int(hex_str[32:], 16)),
         },
     )
+
+
+def _hypercore_read_coordinates(asset: HyperCoreAsset) -> dict[str, str]:
+    """The HIP-3 coordinates the read precompiles want; none for an asset
+    outside the native and HIP-3 families, which the perp fuses reject."""
+    if is_native_perp_asset(asset) or is_hip3_asset(asset):
+        return {
+            "dex": str(perp_dex_of(asset)),
+            "read_index": str(precompile_index_of(asset)),
+        }
+    return {}
 
 
 def _decode_hypercore_config(hex_str: str) -> SubstrateInfo:

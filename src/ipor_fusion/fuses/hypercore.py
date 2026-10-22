@@ -349,9 +349,10 @@ class HyperCoreSubstrates:
     Mirrors ``HyperCoreSubstrateLib.sol``: ``bytes32(uint256(type) << 248 |
     data)``. The Atomist grants a SpotToken for every Core token the vault may
     hold (an unlisted token is not in NAV), a PerpMarket per tradable market
-    (at most one when any of them is HIP-3), Destinations for ``sendAsset`` /
-    ``spotSend`` (only the vault itself and, for the Core -> EVM route, the
-    token's :func:`system_address` are accepted by the fuses), a SendCap per
+    (at most one when any of them is HIP-3), optionally a PerpPositionCap per
+    PerpMarket, Destinations for ``sendAsset`` / ``spotSend`` (only the vault
+    itself and, for the Core -> EVM route, the token's
+    :func:`system_address` are accepted by the fuses), a SendCap per
     token (mandatory: a token without one cannot be sent), Builders, and the
     Config keys. ``WINDOW_ORDER_SECONDS`` and ``SETTLEMENT_MODE`` are required
     before any order or cancel, ``MAX_USD_CLASS_TRANSFER_USD6`` before a margin
@@ -390,6 +391,21 @@ class HyperCoreSubstrates:
         if reduce_only_required:
             data |= 1 << 120
         return _word(2, data)
+
+    @staticmethod
+    def perp_position_cap(
+        asset: HyperCoreAsset, max_position_notional_usd6: int
+    ) -> bytes:
+        """Aggregate position cap for ``asset`` in USD (6 decimals): an order
+        that grows ``|size|`` past it reverts. Optional, at most one per asset;
+        without it only the :meth:`perp_market` per-order cap applies. The fuse
+        values the position after a full fill at the order's admission price
+        (``limitPx`` for a buy, ``max(limitPx, markPx)`` for a sell) and cannot
+        see resting orders, so the cap bounds the position plus the order being
+        placed, not the sum of open orders."""
+        _validate_uint(asset, 32, "asset")
+        _validate_uint(max_position_notional_usd6, 88, "max_position_notional_usd6")
+        return _word(7, (asset << 216) | (max_position_notional_usd6 << 128))
 
     @staticmethod
     def destination(destination: ChecksumAddress) -> bytes:

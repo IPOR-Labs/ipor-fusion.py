@@ -18,6 +18,7 @@ from eth_abi.abi import encode
 from test_examples_vaults import Loader, _simulated_call, _simulation_result
 from web3 import Web3
 
+from ipor_fusion import SubstrateInfo
 from ipor_fusion.crosschain.transport import CrosschainTransportKind
 
 MODULE = "composed_hypercore_flow_arbitrum_hyperevm.py"
@@ -212,6 +213,51 @@ class TestComposedHypercoreFlow:
         assert self.mod._dex_equity_wei(0, 10**10) == 0
         assert self.mod._dex_equity_wei(1_000_000, 10**10) == 100_000_000
         assert self.mod._dex_equity_wei(1_000_000, 50) == 50
+
+    def test_grants_by_type_logs_and_drops_flagged_words(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        good = SubstrateInfo(raw_hex="0x06", type_label="SEND_CAP")
+        bad = SubstrateInfo(
+            raw_hex="0x07", type_label="PERP_POSITION_CAP", is_error=True
+        )
+        with caplog.at_level("WARNING"):
+            assert self.mod._grants_by_type([good, bad]) == {"SEND_CAP": [good]}
+        assert "0x07" in caplog.text
+        caplog.clear()
+        assert self.mod._grants_by_type([good]) == {"SEND_CAP": [good]}
+        assert not caplog.text
+
+    def test_lot_mirrors_lot_of(self) -> None:
+        assert self.mod._lot(8) == 1
+        assert self.mod._lot(3) == 100_000
+        assert self.mod._lot(0) == 10**8
+        with pytest.raises(AssertionError, match="szDecimals 9"):
+            self.mod._lot(9)
+
+    def test_post_order_notional_mirrors_the_order_fuse(self) -> None:
+        # szDecimals 3: a lot is 1e5 in the 1e8 order scale; 0.05 = 50 units.
+        notional = self.mod._post_order_notional_usd6
+        px = 200 * 10**8  # 200 USD
+        kw = {"px": px, "sz_decimals": 3}
+        assert notional(0, 5_000_000, is_buy=True, **kw) == 10_000_000
+        assert notional(100, 5_000_000, is_buy=True, **kw) == 30_000_000  # 0.15
+        assert notional(0, 5_000_000, is_buy=False, **kw) == 10_000_000
+        # a buy against a short grows |size| only once it flips past it
+        assert notional(-20, 5_000_000, is_buy=True, **kw) == 6_000_000
+        assert notional(-30, 5_000_000, is_buy=True, **kw) is None
+        assert notional(-100, 5_000_000, is_buy=True, **kw) is None
+        assert notional(100, 5_000_000, is_buy=False, **kw) is None
+        assert notional(-100, 5_000_000, is_buy=False, **kw) == 30_000_000
+        # rounded up, as the fuse does
+        assert notional(0, 5_000_000, is_buy=True, px=1, sz_decimals=3) == 1
+
+    def test_within_position_cap_admits_what_the_fuse_admits(self) -> None:
+        within = self.mod._within_position_cap
+        assert within(10**12, None)  # no cap granted
+        assert within(None, 1)  # the order does not grow |size|
+        assert within(1_000_000, 1_000_000)
+        assert not within(1_000_001, 1_000_000)
 
     def test_redeem_size_follows_the_live_planner_policy(self) -> None:
         size = self.mod._redeem_size
