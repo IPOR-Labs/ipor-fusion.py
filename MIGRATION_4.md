@@ -965,10 +965,12 @@ are listed with a link.
   fee, later ones gross. 3.x always compared gross, so every older vault with an
   accrued fee showed that fee as a delta. The reconciliation now subtracts the
   fee (`Reconciliation.management_fee_netted`, also in both JSON documents) when
-  the fee is exactly the gap to `totalAssets`, decided by the vault's numbers, not
-  by its age; with other drift on top the gap stays unexplained. A custom `VaultState` adds the `unrealized_management_fee` property
-  (`VaultData` derives it from `fee_data`); code constructing a `Reconciliation`
-  passes `management_fee_netted` and `management_fee_netted_usd`.
+  `totalAssets` equals `max(0, gross - fee)` rather than `gross`, gross built from
+  the global market total the vault stores (`VaultData.stored_markets_total`, read
+  by `PlasmaVault.read_stored_markets_total`); the vault's age plays no part. A
+  custom `VaultState` adds the `unrealized_management_fee` (`VaultData` derives it
+  from `fee_data`) and `stored_markets_total` properties; code constructing a
+  `Reconciliation` passes `management_fee_netted` and `management_fee_netted_usd`.
 
 - **MCP `outputSchema` describes every nested block.** The tool output is
   byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,

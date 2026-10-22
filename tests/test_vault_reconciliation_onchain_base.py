@@ -15,7 +15,9 @@ from __future__ import annotations
 import os
 
 import pytest
+import requests
 from web3 import Web3
+from web3.exceptions import Web3Exception
 
 from ipor_fusion import Web3Context, validate_vault
 from ipor_fusion.vault_data import fetch_vault_data
@@ -34,11 +36,11 @@ def _ctx() -> Web3Context:
 
 def _fetch(ctx: Web3Context, vault):
     try:
-        data = fetch_vault_data(ctx, vault, block=BLOCK, lending=False, metadata=False)
-        validation = validate_vault(ctx, vault, block=BLOCK)
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"BASE on-chain read failed (provider missing/non-archive?): {exc}")
-    return data, validation
+        ctx.web3.eth.get_block(BLOCK)
+    except (Web3Exception, requests.RequestException) as exc:
+        pytest.skip(f"BASE archive block unavailable: {type(exc).__name__}")
+    data = fetch_vault_data(ctx, vault, block=BLOCK, lending=False, metadata=False)
+    return data, validate_vault(ctx, vault, block=BLOCK)
 
 
 def test_a_vault_netting_the_management_fee_reconciles():
@@ -47,6 +49,8 @@ def test_a_vault_netting_the_management_fee_reconciles():
     fee = data.unrealized_management_fee
     assert fee is not None and fee > 0
     assert recon.management_fee_netted == fee
+    assert data.stored_markets_total
+    assert recon.implied_market_total == data.stored_markets_total
     assert recon.delta == 0
     assert "market_storage_drift" not in {f.check for f in validation.findings}
 

@@ -521,8 +521,11 @@ decoder adds its own fields.
   `getRewardsManagerAddress()`). Vaults built from contracts before ipor-fusion
   #475 (Feb 2026), the August 2024 audit generation included, return gross minus
   the unrealized management fee; later ones return gross. The deployed version
-  is not readable, so the reconciliation decides by the numbers: it nets the fee
-  (`management_fee_netted`) when the fee is exactly the gap to `totalAssets`.
+  is not readable, so the reconciliation decides by behavior: it nets the fee
+  (`management_fee_netted`) when `totalAssets` equals `max(0, gross - fee)` and not
+  `gross`, with gross built from the stored global market total
+  (`PlasmaVault.read_stored_markets_total`, an ERC-7201 slot), never from the
+  per-market caches.
   Never key it on the legacy-getter or pre-audit detection.
   Balance fuses already price non-underlying ERC20s (e.g. ERC20BalanceFuse
   values BOLD + BOLDUSDC-gauge in WETH terms). Never add all ERC20 values on

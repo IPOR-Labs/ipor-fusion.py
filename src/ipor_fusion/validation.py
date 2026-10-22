@@ -120,6 +120,11 @@ class VaultState(Protocol):
     @property
     def underlying_balance_on_vault(self) -> Amount: ...
     @property
+    def stored_markets_total(self) -> Amount | None:
+        """The global market total the vault stores; None when not read."""
+        ...
+
+    @property
     def unrealized_management_fee(self) -> Amount | None:
         """``getUnrealizedManagementFee()``, None when not read."""
         ...
@@ -328,7 +333,7 @@ def _reconcile(state: VaultState) -> Reconciliation:
 
     on_chain = state.total_assets
     gross = Amount(balance_fuses_total + underlying + rewards)
-    fee = _netted_management_fee(gross - on_chain, state.unrealized_management_fee)
+    fee = _netted_management_fee(state, underlying + rewards)
     fee_usd = _usd(fee, decimals, price)
     total = Amount(gross - fee)
     total_usd = balance_fuses_usd + underlying_usd + rewards_usd - fee_usd
@@ -377,17 +382,26 @@ def _usd(amount: int, decimals: int, price: float | None) -> float:
     return (amount / 10**decimals) * price if amount and price else 0.0
 
 
-def _netted_management_fee(gross_delta: int, fee: Amount | None) -> Amount:
-    """The unrealized management fee when ``totalAssets`` nets it.
+def _netted_management_fee(state: VaultState, outside_markets: int) -> Amount:
+    """The unrealized management fee ``totalAssets`` subtracts, 0 when it
+    returns gross.
 
-    PlasmaVault contracts before ipor-fusion #475 (Feb 2026) return gross
-    assets minus the unrealized management fee; later ones return gross. The
-    deployed vault's version is not readable, so its numbers decide: the fee is
-    netted when it is exactly the gap between the components and
-    ``totalAssets`` (both read at one block). With other drift on top the gap
-    stays unexplained rather than guessed.
+    PlasmaVault contracts before ipor-fusion #475 (Feb 2026) return
+    ``max(0, gross - fee)``, later ones ``gross``, where gross is idle
+    underlying plus the stored global market total plus the rewards manager's
+    balance. The deployed version is not readable, so the formula is decided by
+    which one ``totalAssets`` matches, from the stored global total rather than
+    the per-market caches the reconciliation compares (a drift between those
+    must not pass for the fee). Without the stored total, the fee or a match,
+    nothing is netted.
     """
-    return fee if fee and gross_delta == fee else Amount(0)
+    fee, stored = state.unrealized_management_fee, state.stored_markets_total
+    if not fee or stored is None:
+        return Amount(0)
+    gross = outside_markets + stored
+    if state.total_assets == gross or state.total_assets != max(0, gross - fee):
+        return Amount(0)
+    return Amount(min(fee, gross))
 
 
 def _unimplemented_getter_findings(state: VaultState) -> list[Finding]:

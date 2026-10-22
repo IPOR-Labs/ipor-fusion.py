@@ -92,6 +92,7 @@ class State:
     underlying_balance_on_vault: int = 0
     rewards_manager_balance: int | None = 0
     unrealized_management_fee: int | None = None
+    stored_markets_total: int | None = None
     price_oracle: str = ORACLE
     balance_fuses: list[BalanceFuse] = field(
         default_factory=lambda: [BalanceFuse(AAVE, FUSE)]  # type: ignore[arg-type]
@@ -308,6 +309,7 @@ class TestReconciliation:
             total_assets=97 * WAD,
             underlying_balance_on_vault=10 * WAD,
             unrealized_management_fee=3 * WAD,
+            stored_markets_total=90 * WAD,
         )
         validation = validate(state, 90 * WAD)
         recon = validation.reconciliation
@@ -333,17 +335,43 @@ class TestReconciliation:
             total_assets=100 * WAD,
             underlying_balance_on_vault=10 * WAD,
             unrealized_management_fee=3 * WAD,
+            stored_markets_total=90 * WAD,
         )
         recon = validate(state, 90 * WAD).reconciliation
         assert recon.management_fee_netted == 0
         assert recon.delta == 0
 
-    def test_a_fee_that_does_not_explain_the_gap_is_not_netted(self):
-        # 5 of drift on top of a 3 fee: the gap stays unexplained, not guessed.
-        state = State(total_assets=92 * WAD, unrealized_management_fee=3 * WAD)
+    def test_market_drift_equal_to_the_fee_is_not_taken_for_the_fee(self):
+        # A gross vault whose stored global total (87) lags the per-market
+        # caches (90) by exactly the accrued fee (3): drift, not netting.
+        state = State(
+            total_assets=97 * WAD,
+            underlying_balance_on_vault=10 * WAD,
+            unrealized_management_fee=3 * WAD,
+            stored_markets_total=87 * WAD,
+        )
+        validation = validate(state, 90 * WAD)
+        recon = validation.reconciliation
+        assert recon.management_fee_netted == 0
+        assert recon.delta == 3 * WAD
+        assert recon.implied_market_total == 87 * WAD
+        assert "market_storage_drift" in {f.check for f in validation.findings}
+
+    def test_a_fee_above_gross_nets_to_zero_total_assets(self):
+        state = State(
+            total_assets=0,
+            unrealized_management_fee=5 * WAD,
+            stored_markets_total=2 * WAD,
+        )
+        recon = validate(state, 2 * WAD).reconciliation
+        assert recon.management_fee_netted == 2 * WAD
+        assert recon.sum == 0
+
+    def test_without_the_stored_total_nothing_is_netted(self):
+        state = State(total_assets=97 * WAD, unrealized_management_fee=3 * WAD)
         recon = validate(state, 100 * WAD).reconciliation
         assert recon.management_fee_netted == 0
-        assert recon.delta == 8 * WAD
+        assert recon.delta == 3 * WAD
 
     def test_an_unread_management_fee_nets_nothing(self):
         state = State(total_assets=97 * WAD, unrealized_management_fee=None)
