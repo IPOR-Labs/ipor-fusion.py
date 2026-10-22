@@ -457,6 +457,8 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
 
+        mock_pv.read_stored_markets_total.return_value = None
+
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
@@ -578,6 +580,8 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
 
+        mock_pv.read_stored_markets_total.return_value = None
+
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
@@ -657,6 +661,8 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
 
+        mock_pv.read_stored_markets_total.return_value = None
+
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
@@ -723,6 +729,8 @@ class TestVaultInfo:
         mock_ctx_cls.from_url.return_value = mock_ctx
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
 
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
@@ -804,6 +812,8 @@ class TestVaultInfo:
 
         mock_pv = MagicMock()
 
+        mock_pv.read_stored_markets_total.return_value = None
+
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
@@ -871,6 +881,8 @@ class TestVaultInfo:
         mock_ctx_cls.from_url.return_value = mock_ctx
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
 
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
@@ -985,6 +997,8 @@ class TestVaultInfoJson:
             fuse: str
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
 
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
@@ -1159,6 +1173,8 @@ class TestVaultInfoJson:
 
         mock_pv = MagicMock()
 
+        mock_pv.read_stored_markets_total.return_value = None
+
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
@@ -1243,6 +1259,8 @@ class TestVaultInfoJson:
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
 
         mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1

@@ -523,9 +523,15 @@ decoder adds its own fields.
   `IRewardsClaimManager.balanceOf()`, the vested rewards, when a manager is set;
   0 without one; a manager or balance that cannot be read is a
   `rewards_manager_balance` warning, and pre-rename vaults answer
-  `getRewardsManagerAddress()`). Vaults deployed before the August 2024 audit
-  return gross minus the unrealized management fee from `totalAssets`, so their
-  reconciliation shows that fee as a delta.
+  `getRewardsManagerAddress()`). Vaults built from contracts before ipor-fusion
+  #475 (Feb 2026), the August 2024 audit generation included, return gross minus
+  the unrealized management fee; later ones return gross. The deployed version
+  is not readable, so the reconciliation decides by behavior: it nets the fee
+  (`management_fee_netted`) when `totalAssets` equals `max(0, gross - fee)` and not
+  `gross`, with gross built from the stored global market total
+  (`PlasmaVault.read_stored_markets_total`, an ERC-7201 slot), never from the
+  per-market caches.
+  Never key it on the legacy-getter or pre-audit detection.
   Balance fuses already price non-underlying ERC20s (e.g. ERC20BalanceFuse
   values BOLD + BOLDUSDC-gauge in WETH terms). Never add all ERC20 values on
   top of balance fuse totals; that double-counts. `erc20_direct_total` in JSON

@@ -323,6 +323,7 @@ def _full_vault_info_dict() -> VaultInfoJson:
             "balance_fuses_total": _usd_amount(800_000_000, "800.0", 800.0),
             "underlying_on_vault": _usd_amount(100, "0.0001", 0.0001),
             "rewards_manager_balance": _usd_amount(0, "0", None),
+            "management_fee_netted": _usd_amount(0, "0", None),
             "erc20_direct_total": _usd_amount(100, "0.0001", 0.0001),
             "sum": _usd_amount(800_000_100, "800.0001", 800.0001),
             "on_chain_total_assets": _usd_amount(800_000_100, "800.0001", 800.0001),

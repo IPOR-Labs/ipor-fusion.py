@@ -80,6 +80,13 @@ def _print_reconciliation(data: VaultData, validation: VaultValidation) -> None:
             f"  Rewards manager:      {fmt_rewards} {sym}{usd_rewards}"
             "   [vested rewards, in totalAssets]"
         )
+    if recon.management_fee_netted > 0:
+        fmt_fee = _format_amount(recon.management_fee_netted, decimals)
+        usd_fee = f" (${recon.management_fee_netted_usd:,.2f})" if price else ""
+        click.echo(
+            f"  Management fee:      -{fmt_fee} {sym}{usd_fee}"
+            "   [unrealized, netted by totalAssets]"
+        )
     click.echo(f"  Sum:                  {fmt_sum} {sym}{usd_sum}")
     click.echo(f"  On-chain totalAssets: {fmt_onchain} {sym}{usd_onchain}")
     sign = "+" if recon.delta >= 0 else "-"

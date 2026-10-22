@@ -151,6 +151,9 @@ class VaultData:
     # PlasmaVault.totalAssets adds to the vault's own balance and its markets.
     # 0 without a manager; None when the vault has one but the read failed.
     rewards_manager_balance: Amount | None = Amount(0)
+    # The global market total the vault stores (the totalAssetsInAllMarkets
+    # term of totalAssets); None when the storage read failed.
+    stored_markets_total: Amount | None = None
     vault_name: str = ""
     deployment_block: int | None = None
     deployment_timestamp: Timestamp | None = None
@@ -214,6 +217,11 @@ class VaultData:
     # address (ctx.cache), so a cached value may postdate the block.
     token_symbols: dict[HexAddress, str] = field(default_factory=dict)
     token_decimals: dict[HexAddress, Decimals | None] = field(default_factory=dict)
+
+    @property
+    def unrealized_management_fee(self) -> Amount | None:
+        """``getUnrealizedManagementFee()`` from the fee snapshot."""
+        return self.fee_data.unrealized_management_fee if self.fee_data else None
 
 
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
@@ -627,6 +635,9 @@ def fetch_vault_data(
         f_fees = pool.submit(_fetch_fee_data, ctx, plasma_vault)
         f_withdraw = pool.submit(_fetch_withdraw_manager, ctx, plasma_vault)
         f_roles = pool.submit(_fetch_role_accounts, ctx, plasma_vault)
+        f_stored_total = pool.submit(
+            _safe_call, partial(plasma_vault.read_stored_markets_total, ctx)
+        )
         f_markets = pool.submit(
             _fetch_market_reads, ctx, plasma_vault, with_aave_pools=lending
         )
@@ -662,6 +673,7 @@ def fetch_vault_data(
             fee_data=f_fees.result(),
             role_accounts=f_roles.result(),
             hypercore=f_hypercore.result(),
+            stored_markets_total=f_stored_total.result(),
         )
 
 
@@ -685,6 +697,7 @@ def _snapshot(
     fee_data: FeeData | None,
     role_accounts: list[RoleAccount] | None,
     hypercore: HyperCoreVaultState | None,
+    stored_markets_total: Amount | None,
 ) -> VaultData:
     """`VaultData` from the pipelines' results."""
     return VaultData(
@@ -705,6 +718,7 @@ def _snapshot(
         vault_name=reads.vault_name,
         rewards_manager=reads.rewards_manager,
         rewards_manager_balance=reads.rewards_manager_balance,
+        stored_markets_total=stored_markets_total,
         asset_decimals=reads.asset_decimals,
         underlying_balance_on_vault=reads.underlying_balance_on_vault,
         asset_symbol=reads.asset_symbol,

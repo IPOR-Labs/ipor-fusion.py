@@ -979,6 +979,17 @@ are listed with a link.
   `vault validate` documents carry a `rewards_manager_balance` amount. A custom
   `VaultState` adds the `rewards_manager_balance` property, and code constructing a
   `Reconciliation` passes `rewards_manager_balance` and `rewards_manager_balance_usd`.
+- **The reconciliation follows the vault's `totalAssets` formula.** Contracts before
+  ipor-fusion #475 (Feb 2026) return gross assets minus the unrealized management
+  fee, later ones gross. 3.x always compared gross, so every older vault with an
+  accrued fee showed that fee as a delta. The reconciliation now subtracts the
+  fee (`Reconciliation.management_fee_netted`, also in both JSON documents) when
+  `totalAssets` equals `max(0, gross - fee)` rather than `gross`, gross built from
+  the global market total the vault stores (`VaultData.stored_markets_total`, read
+  by `PlasmaVault.read_stored_markets_total`); the vault's age plays no part. A
+  custom `VaultState` adds the `unrealized_management_fee` (`VaultData` derives it
+  from `fee_data`) and `stored_markets_total` properties; code constructing a
+  `Reconciliation` passes `management_fee_netted` and `management_fee_netted_usd`.
 
 - **Morpho shares convert to assets as Morpho Blue does.** The position breakdown
   (`MorphoReader.read_position_breakdown`, the `vault info` Morpho rows) and the Morpho

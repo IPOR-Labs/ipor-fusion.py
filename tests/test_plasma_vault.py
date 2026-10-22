@@ -802,3 +802,34 @@ class TestPlasmaVaultFeeData:
             assert call.calldata == function_signature_to_4byte_selector(signature), (
                 signature
             )
+
+
+class TestStoredMarketsTotal:
+    """The stored global market total, at the ERC-7201 slot of the current
+    storage layout or, for vaults built before June 2024, the earlier one."""
+
+    CURRENT = int(
+        "0x24e02552e88772b8e8fd15f3e6699ba530635ffc6b52322da922b0b497a77300", 16
+    )
+    LEGACY = int(
+        "0xf660efede6b8071aab61a75191de57a4a8a416b088f961d8c2a18168aa7c7700", 16
+    )
+
+    @staticmethod
+    def _ctx(words: dict[int, int]) -> MagicMock:
+        ctx = MagicMock()
+        ctx.get_storage_at.side_effect = lambda _address, slot: words.get(
+            slot, 0
+        ).to_bytes(32, "big")
+        return ctx
+
+    def test_reads_the_current_slot(self):
+        ctx = self._ctx({self.CURRENT: 90, self.LEGACY: 5})
+        assert PlasmaVault(VAULT_ADDR).read_stored_markets_total(ctx) == 90
+
+    def test_falls_back_to_the_legacy_slot(self):
+        ctx = self._ctx({self.LEGACY: 7})
+        assert PlasmaVault(VAULT_ADDR).read_stored_markets_total(ctx) == 7
+
+    def test_an_empty_vault_stores_zero(self):
+        assert PlasmaVault(VAULT_ADDR).read_stored_markets_total(self._ctx({})) == 0

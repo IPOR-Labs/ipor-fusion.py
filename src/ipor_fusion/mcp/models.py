@@ -402,6 +402,11 @@ class Reconciliation(_Base):
         description="RewardsClaimManager.balanceOf(), which totalAssets includes; "
         "0 without a manager or when it could not be read.",
     )
+    management_fee_netted: Amount | None = Field(
+        default=None,
+        description="Unrealized management fee subtracted from sum: totalAssets "
+        "nets it on vaults built before ipor-fusion #475; 0 otherwise.",
+    )
     erc20_direct_total: Amount
     sum: Amount
     on_chain_total_assets: Amount
@@ -790,6 +795,10 @@ class ReconciliationModel(_Base):
         description="RewardsClaimManager.balanceOf(), which totalAssets includes; "
         "0 without a manager or when it could not be read."
     )
+    management_fee_netted: Amount = Field(
+        description="Unrealized management fee subtracted from sum: totalAssets "
+        "nets it on vaults built before ipor-fusion #475; 0 otherwise."
+    )
     erc20_direct_total: Amount = Field(
         description="Informational: already valued by the ERC20_VAULT_BALANCE "
         "balance fuse, never added to sum."
@@ -821,6 +830,9 @@ class ReconciliationModel(_Base):
             ),
             rewards_manager_balance=amount(
                 rec.rewards_manager_balance, rec.rewards_manager_balance_usd
+            ),
+            management_fee_netted=amount(
+                rec.management_fee_netted, rec.management_fee_netted_usd
             ),
             erc20_direct_total=amount(
                 rec.erc20_direct_total, rec.erc20_direct_total_usd
