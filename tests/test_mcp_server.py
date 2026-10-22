@@ -26,6 +26,7 @@ from ipor_fusion.mcp.models import (
     WithdrawManagerDetails,
 )
 from ipor_fusion.mcp.server import (
+    _vault_arg,
     config_set_etherscan_key,
     config_set_provider,
     config_show,
@@ -1082,3 +1083,28 @@ class TestMarketMetaMorpho:
     def test_unknown_vault_errors(self, _fetch):
         with pytest.raises(MorphoApiError, match="not found"):
             market_meta_morpho(vault_address=_VAULT, chain_id=1)
+
+
+class TestVaultAddressArgument:
+    """Tool callers send addresses as 3.x accepted them; the server normalizes
+    before the strict SDK parser."""
+
+    VAULT = "0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2"
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            VAULT,
+            VAULT.upper().replace("0X", "0x"),
+            VAULT[2:],
+            f"  {VAULT}  ",
+            Web3.to_checksum_address(VAULT),
+        ],
+    )
+    def test_accepts_any_spelling(self, raw: str):
+        assert _vault_arg(raw) == Web3.to_checksum_address(self.VAULT)
+
+    @pytest.mark.parametrize("raw", ["", "0x1234", "not an address", "0x" + "g" * 40])
+    def test_rejects_non_addresses(self, raw: str):
+        with pytest.raises(ValueError):
+            _vault_arg(raw)
