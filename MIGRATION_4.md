@@ -1015,6 +1015,13 @@ are listed with a link.
   position missing from the breakdown tables is shown as absent, while the
   checks it feeds report it.
 
+- **More markets decode their substrates.** VELODROME_SUPERCHAIN (31, Gauge /
+  Pool), AGUA_GLOBAL_CARRY (51, VAULT / ASSET), TERM_FINANCE (52, SERVICER address
+  or COLLATERAL_TOKEN pair key), META_MORPHO_0001, MERKL and
+  ASSETS_BALANCE_VALIDATION (plain addresses) were `no_decoder(NAME)` in 3.x and
+  now decode per their Solidity substrate libraries and grant checks. The markets
+  still without a decoder are listed with their reason.
+
 - **`CcipLane.open` refuses a spoke it cannot reach.** The executor's
   `ccipRoute(spoke)` must be registered and point at the dispatcher at the
   executor's own address; otherwise `open` (and `open_lane` / `open_lanes`)

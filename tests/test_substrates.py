@@ -8,7 +8,10 @@ mainnet by tx 0x9321732ec456e44a46d6f10ba9eee956333c13f5a45fec3bd242218ce8c3ce93
 from __future__ import annotations
 
 import pytest
+from eth_abi import encode
+from eth_utils import keccak
 
+from ipor_fusion import substrates
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import SubstrateInfo, decode_substrate, market_name
 
@@ -269,16 +272,115 @@ def test_market_ids_52_and_53_follow_ipor_fusion_markets_sol():
     assert IporFusionMarkets.UNISWAP_V4 == 53
     assert market_name(52) == "TERM_FINANCE"
     assert market_name(53) == "UNISWAP_V4"
-    # no substrate library mirrored for Term Finance yet: loud, never guessed
-    info = decode_substrate("0x" + "11" * 32, market_id=52)
-    assert info.address is None
-    assert info.type_label == "no_decoder(TERM_FINANCE)"
 
 
-def test_market_without_decoder_is_labelled_not_guessed():
-    info = decode_substrate("0x" + "11" * 32, market_id=31)
+SERVICER = "0x" + "5e" * 20
+
+
+def test_term_finance_servicer_is_the_plain_address():
+    info = decode_substrate("0x" + "00" * 12 + SERVICER[2:], market_id=52)
+    assert info == SubstrateInfo(address=SERVICER, type_label="SERVICER")
+
+
+def test_term_finance_collateral_pair_key_is_not_an_address():
+    # TermFinanceSubstrateLib.collateralPairKey: 0x01 << 248 | keccak(...)[low 248]
+    key = keccak(encode(["address", "address"], [SERVICER, USDE]))
+    raw = "0x01" + key.hex()[2:]
+    info = decode_substrate(raw, market_id=52)
+    assert info == SubstrateInfo(raw_hex=raw, type_label="COLLATERAL_TOKEN")
+
+
+def test_term_finance_unknown_word_is_an_error():
+    info = decode_substrate("0x02" + "11" * 31, market_id=52)
+    assert info.is_error
     assert info.address is None
-    assert info.type_label == "no_decoder(VELODROME_SUPERCHAIN)"
+    assert info.type_label == "type=2"
+
+
+@pytest.mark.parametrize(("type_byte", "label"), [(1, "Gauge"), (2, "Pool")])
+def test_velodrome_superchain_shares_the_slipstream_layout(type_byte, label):
+    raw = "0x" + "00" * 11 + f"{type_byte:02x}" + BOLD[2:]
+    for market_id in (31, 32):
+        info = decode_substrate(raw, market_id=market_id)
+        assert info == SubstrateInfo(address=BOLD, type_label=label)
+
+
+@pytest.mark.parametrize(("type_byte", "label"), [(1, "VAULT"), (2, "ASSET")])
+def test_agua_typed_substrates(type_byte, label):
+    raw = "0x" + "00" * 11 + f"{type_byte:02x}" + USDE[2:]
+    info = decode_substrate(raw, market_id=51)
+    assert info == SubstrateInfo(address=USDE, type_label=label)
+
+
+@pytest.mark.parametrize(
+    "market_id",
+    [
+        IporFusionMarkets.MERKL,
+        IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
+        IporFusionMarkets.META_MORPHO_0001,
+    ],
+)
+def test_substrate_as_asset_markets_decode_plain_addresses(market_id):
+    info = decode_substrate("0x" + "00" * 12 + USDE[2:], market_id=market_id)
+    assert info == SubstrateInfo(address=USDE)
+
+
+def test_term_finance_dirty_servicer_padding_is_an_error():
+    raw = "0x00" + "11" * 11 + SERVICER[2:]
+    info = decode_substrate(raw, market_id=52)
+    assert info.is_error
+    assert info.address is None
+
+
+@pytest.mark.parametrize("market_id", [31, 51])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        # dirty bits above the type byte: Solidity converts the whole word >> 160
+        "0x01" + "00" * 10 + "01" + USDE[2:],
+        # out-of-range enum value: Solidity reverts on it
+        "0x" + "00" * 11 + "03" + USDE[2:],
+    ],
+)
+def test_strict_typed_markets_flag_noncanonical_words(market_id, raw):
+    info = decode_substrate(raw, market_id=market_id)
+    assert info == SubstrateInfo(raw_hex=raw, type_label="noncanonical", is_error=True)
+
+
+@pytest.mark.parametrize(
+    "market_id",
+    [
+        IporFusionMarkets.MERKL,
+        IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
+        IporFusionMarkets.META_MORPHO_0001,
+    ],
+)
+def test_strict_plain_markets_flag_dirty_padding(market_id):
+    raw = "0x" + "00" * 11 + "01" + USDE[2:]
+    info = decode_substrate(raw, market_id=market_id)
+    assert info.is_error
+    assert info.address is None
+
+
+def test_every_market_has_a_decoder_or_a_reason():
+    members = {
+        getattr(IporFusionMarkets, name)
+        for name in dir(IporFusionMarkets)
+        if not name.startswith("_")
+        and isinstance(getattr(IporFusionMarkets, name), int)
+    }
+    registered = set(substrates._SUBSTRATE_DECODERS)
+    on_purpose = set(substrates._UNREGISTERED_ON_PURPOSE)
+    assert not registered & on_purpose
+    assert members - registered == on_purpose
+    assert all(reason for reason in substrates._UNREGISTERED_ON_PURPOSE.values())
+
+
+@pytest.mark.parametrize("market_id", sorted(substrates._UNREGISTERED_ON_PURPOSE))
+def test_a_market_without_a_decoder_is_labelled_not_guessed(market_id):
+    info = decode_substrate("0x" + "11" * 32, market_id=market_id)
+    assert info.address is None
+    assert info.type_label == f"no_decoder({market_name(market_id)})"
 
 
 def test_external_state_is_market_50():
