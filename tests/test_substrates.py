@@ -325,6 +325,43 @@ def test_substrate_as_asset_markets_decode_plain_addresses(market_id):
     assert info == SubstrateInfo(address=USDE)
 
 
+def test_term_finance_dirty_servicer_padding_is_an_error():
+    raw = "0x00" + "11" * 11 + SERVICER[2:]
+    info = decode_substrate(raw, market_id=52)
+    assert info.is_error
+    assert info.address is None
+
+
+@pytest.mark.parametrize("market_id", [31, 51])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        # dirty bits above the type byte: Solidity converts the whole word >> 160
+        "0x01" + "00" * 10 + "01" + USDE[2:],
+        # out-of-range enum value: Solidity reverts on it
+        "0x" + "00" * 11 + "03" + USDE[2:],
+    ],
+)
+def test_strict_typed_markets_flag_noncanonical_words(market_id, raw):
+    info = decode_substrate(raw, market_id=market_id)
+    assert info == SubstrateInfo(raw_hex=raw, type_label="noncanonical", is_error=True)
+
+
+@pytest.mark.parametrize(
+    "market_id",
+    [
+        IporFusionMarkets.MERKL,
+        IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
+        IporFusionMarkets.META_MORPHO_0001,
+    ],
+)
+def test_strict_plain_markets_flag_dirty_padding(market_id):
+    raw = "0x" + "00" * 11 + "01" + USDE[2:]
+    info = decode_substrate(raw, market_id=market_id)
+    assert info.is_error
+    assert info.address is None
+
+
 def test_every_market_has_a_decoder_or_a_reason():
     members = {
         getattr(IporFusionMarkets, name)

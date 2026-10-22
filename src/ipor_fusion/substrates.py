@@ -77,6 +77,28 @@ def _decode_plain_address(hex_str: str) -> SubstrateInfo:
     return SubstrateInfo(address=_address(hex_str[24:]))
 
 
+def _noncanonical(hex_str: str) -> SubstrateInfo:
+    return SubstrateInfo(
+        raw_hex=f"0x{hex_str}", type_label="noncanonical", is_error=True
+    )
+
+
+def _decode_strict_plain_address(hex_str: str) -> SubstrateInfo:
+    """A substrate-as-asset address: ``isSubstrateAsAssetGranted`` grants only
+    the zero-padded word, so dirty upper bits are no grant of the low address."""
+    if hex_str[:24] != "0" * 24:
+        return _noncanonical(hex_str)
+    return _decode_plain_address(hex_str)
+
+
+def _decode_strict_type_lshift160(hex_str: str, types: dict[int, str]) -> SubstrateInfo:
+    """type<<160 | address where Solidity converts the whole ``word >> 160`` to
+    the enum: any other upper bits, or a value outside it, reverts there."""
+    if hex_str[:22] != "0" * 22 or int(hex_str[22:24], 16) not in types:
+        return _noncanonical(hex_str)
+    return _decode_type_lshift160(hex_str, types)
+
+
 def _decode_term_finance(hex_str: str) -> SubstrateInfo:
     """TermFinanceSubstrateLib.sol: a SERVICER is the TermRepoServicer address
     in the plain zero-padded form (the whole upper 96 bits zero, as the fuses'
@@ -455,16 +477,21 @@ _register_markets(
         44,  # SPARK_LEND — reuses AaveV3SupplyFuse (isSubstrateAsAssetGranted)
         46,  # NAPIER — isSubstrateAsAssetGranted, plain asset addresses
         *range(100_001, 100_021),  # ERC4626_0001 .. ERC4626_0020
-        # META_MORPHO_0001: deployed as Erc4626SupplyFuse (isSubstrateAsAssetGranted
-        # on the MetaMorpho vault) on Ethereum, Base and Unichain
-        200_001,
-        # MERKL: MerklClaimWrapperFuse gates reward tokens by isSubstrateAsAssetGranted
-        IporFusionMarkets.MERKL,
-        # ASSETS_BALANCE_VALIDATION: PlasmaVaultBalanceAssetsValidationFuse gates
-        # assets by isSubstrateAsAssetGranted
-        IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
     ],
     _decode_plain_address,
+)
+# Substrate-as-asset markets registered from their grant checks, decoded
+# strictly (a word with dirty upper bits grants nothing):
+# META_MORPHO_0001 is deployed as Erc4626SupplyFuse (the MetaMorpho vault),
+# MERKL as MerklClaimWrapperFuse (the reward tokens it forwards) and
+# ASSETS_BALANCE_VALIDATION as PlasmaVaultBalanceAssetsValidationFuse.
+_register_markets(
+    [
+        200_001,
+        IporFusionMarkets.MERKL,
+        IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
+    ],
+    _decode_strict_plain_address,
 )
 # Morpho markets — raw bytes32 market ids. MORPHO_FLASH_LOAN (19) is NOT one:
 # MorphoFlashLoanFuse gates the loan token via isSubstrateAsAssetGranted, and
@@ -498,16 +525,23 @@ _register_markets(
         h, {0: "UNDEFINED", 1: "GAUGE", 2: "POOL", 3: "TOKEN"}
     ),
 )
-# Velodrome Superchain (VelodromeSuperchainLib.sol) and its Slipstream
-# variant share the type<<160 Gauge / Pool layout
+# Velodrome Superchain Slipstream
 _register_markets(
-    [31, 32],
+    [32],
     lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "Gauge", 2: "Pool"}),
+)
+# Velodrome Superchain (VelodromeSuperchainLib.sol): the same type<<160 Gauge /
+# Pool layout, decoded strictly
+_register_markets(
+    [31],
+    lambda h: _decode_strict_type_lshift160(h, {0: "UNDEFINED", 1: "Gauge", 2: "Pool"}),
 )
 # Agua Global Carry (AguaSubstrateLib.sol): type<<160 | address
 _register_markets(
     [51],
-    lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "VAULT", 2: "ASSET"}),
+    lambda h: _decode_strict_type_lshift160(
+        h, {0: "UNDEFINED", 1: "VAULT", 2: "ASSET"}
+    ),
 )
 # Term Finance (TermFinanceSubstrateLib.sol): SERVICER / COLLATERAL_TOKEN
 _register_markets([52], _decode_term_finance)
@@ -575,13 +609,12 @@ _UNREGISTERED_ON_PURPOSE: dict[MarketId, str] = {
     IporFusionMarkets.SPOL_UNSTAKE: "SPOLUnstakeFuse is not in the public contracts "
     "repository, so its grant check cannot be verified",
     **{
-        MarketId(mid): "no fuse is deployed on this market; META_MORPHO_0001 is an "
-        "Erc4626SupplyFuse, but the layout of a later one is not assumed"
+        MarketId(mid): "no deployment or layout verified in the address registry; "
+        "META_MORPHO_0001 is an Erc4626SupplyFuse, but a later one is not assumed"
         for mid in range(200_002, 200_011)
     },
-    IporFusionMarkets.EXCHANGE_RATE_VALIDATOR: "packed ExchangeRateLimiterConfig "
-    "hook and validator words (ExchangeRateLimiterConfigLib), not addresses; not "
-    "mirrored here",
+    IporFusionMarkets.EXCHANGE_RATE_VALIDATOR: "packed hook and validator words "
+    "(ExchangeRateValidatorConfigLib), not addresses; not mirrored here yet",
     IporFusionMarkets.ZERO_BALANCE_MARKET: "a capability market: no fuse defines a "
     "substrate layout for it",
 }
