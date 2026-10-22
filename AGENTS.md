@@ -59,9 +59,9 @@ everything else is `sdk`). Most `sdk` tests are offline too: the suite with no
 provider set still clears the coverage gate.
 Integration tests (`test_simulate_*`, `test_vault_info_onchain_*`) run against
 live RPCs via `eth_simulateV1`, no Docker or Anvil (`ANVIL_WALLET` is just a
-named address constant). They auto-skip unless `ETHEREUM_PROVIDER_URL`,
-`BASE_PROVIDER_URL` and `ARBITRUM_PROVIDER_URL` are set (`.env` is loaded via
-python-dotenv) and the provider supports `eth_simulateV1`. Every such gate goes
+named address constant). Each skips unless the provider it needs
+(`ETHEREUM_PROVIDER_URL`, `BASE_PROVIDER_URL` or `ARBITRUM_PROVIDER_URL`; `.env` is
+loaded via python-dotenv) is set and supports `eth_simulateV1`. Every such gate goes
 through `tests/_live.py` (`provider_url`, `archive_context`, `unavailable`): it
 skips locally and fails when the source is named in `IPOR_FUSION_REQUIRE_LIVE`
 (comma-separated env var names, `GITHUB` for the Solidity mirrors). CI
@@ -112,8 +112,9 @@ the deployed runtimes, and `tests/_hypercore_model.py` answers those addresses t
 tests prove EVM validation under supplied Core state. `test_hypercore_simulation.py`
 runs one vault cycle; `test_simulate_crosschain_hypercore.py` runs the composed flow
 (v3 canary hub → CCIP → the market-55 vault → a trade → recall → claim) and holds every
-CCIP delivery to its route gas limit. Both skip without the source directory and both
-RPCs.
+CCIP delivery to its route gas limit. Both skip without the source directory;
+`test_hypercore_simulation.py` also needs `HYPEREVM_PROVIDER_URL`, the composed flow
+`ARBITRUM_PROVIDER_URL` as well.
 `test_crosschain_readiness.py` checks the Ethereum-hub POC's live bridge and IPOR
 preconditions. Its `readiness` marker requires `--run-readiness`: ordinary runs
 exclude it even with `-m sdk`. Known HyperEVM gaps are non-strict xfails restricted

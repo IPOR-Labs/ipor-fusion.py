@@ -441,9 +441,10 @@ import these from their subpackage, and expect changes in a minor release.
 | Crosschain fuses (market 54): `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse`; transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` | `ipor_fusion.crosschain` |
 | HyperCore fuses (market 55): `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` | `ipor_fusion.hypercore`, with `HyperCoreReader`, `read_hypercore_vault_state` and the event decoders |
 
-The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Use
-`crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` for that deployment;
-`open_lane` discovers the vault's actual market grants rather than assuming 54.
+The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Pass
+`market_id=crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` to `open_lane`
+/ `discover_deployment` for that deployment: both take the market ID from the caller
+and read the executor, transport and fuses under it.
 
 ### Readers (`ipor_fusion.readers`)
 
@@ -496,13 +497,16 @@ takes the same object.
 ```bash
 uv sync --all-extras --locked                              # Install dependencies (as CI)
 uv run pytest tests/test_fuse_encoding.py -n auto -v       # Unit tests (fast, offline)
-uv run pytest -v -s                                        # All tests (needs `.*_PROVIDER_URL` variables in `.env`)
+uv run pytest -v -s                                        # All tests; live ones skip without their provider
 uv run ruff format ./                                      # Format
 uv run ruff check ./                                       # Lint
 uv run pyright                                             # Type check
 ```
 
-Integration tests need provider URLs in `.env` (eth_simulateV1 at a pinned fork block — no local node):
+Each integration test runs when its provider URL is in `.env` (eth_simulateV1 at a
+pinned fork block, no local node) and skips otherwise; HyperEVM tests also need
+`HYPEREVM_PROVIDER_URL`, and the source-backed rehearsals a contracts checkout (see
+AGENTS.md):
 
 ```bash
 cp .env.example .env
