@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TypedDict
 
@@ -21,7 +21,13 @@ from ipor_fusion.errors import (
     NotPlasmaVaultError,
     OwnerNotFoundError,
 )
-from ipor_fusion.types import AccessManagerAddress, Period, PlasmaVaultAddress, RoleId
+from ipor_fusion.types import (
+    AccessManagerAddress,
+    ChainId,
+    Period,
+    PlasmaVaultAddress,
+    RoleId,
+)
 
 
 class RoleAccountJson(TypedDict):
@@ -69,6 +75,38 @@ class RoleAccount:
 def role_account_sort_key(role_account: RoleAccount) -> tuple[str, int]:
     """Canonical presentation order: account (case-insensitive), then role id."""
     return (role_account.account.lower(), role_account.role_id)
+
+
+class RoleAccountsJson(TypedDict):
+    """The ``fusion vault role-accounts --json`` document and the
+    ``vault_role_accounts`` MCP tool output (`build_role_accounts_json`)."""
+
+    vault: PlasmaVaultAddress
+    access_manager: AccessManagerAddress
+    chain_id: ChainId
+    role_filter: str | None
+    accounts: list[RoleAccountJson]
+
+
+def build_role_accounts_json(
+    accounts: Sequence[RoleAccount],
+    *,
+    vault: PlasmaVaultAddress,
+    access_manager: AccessManagerAddress,
+    chain_id: ChainId,
+    role: RoleId | Roles | None = None,
+) -> RoleAccountsJson:
+    """Role holders as the one document both tools publish, in
+    `role_account_sort_key` order; ``role`` is the filter applied, if any."""
+    return {
+        "vault": vault,
+        "access_manager": access_manager,
+        "chain_id": chain_id,
+        "role_filter": Roles.get_name(role) if role is not None else None,
+        "accounts": [
+            ra.to_dict() for ra in sorted(accounts, key=role_account_sort_key)
+        ],
+    }
 
 
 def _role_status_decoder(values: tuple[bool, int]) -> RoleStatus:

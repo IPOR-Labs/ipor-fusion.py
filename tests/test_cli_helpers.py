@@ -416,9 +416,15 @@ class TestResolveChainId:
         )
         assert _resolve_chain_id(cfg, "0xABC", None) == 42161
 
-    def test_raises_when_unknown_vault(self):
+    def test_an_unknown_vault_takes_the_only_provider_chain(self):
         cfg = FusionConfig(providers={"42161": "https://arb-rpc.example.com"})
-        with pytest.raises(click.UsageError, match="Unknown vault"):
+        assert _resolve_chain_id(cfg, "0xABC", None) == 42161
+
+    def test_raises_when_nothing_tells_the_chain(self):
+        cfg = FusionConfig(
+            providers={"42161": "https://arb.example.com", "1": "https://eth.example"}
+        )
+        with pytest.raises(click.UsageError, match="--chain-id"):
             _resolve_chain_id(cfg, "0xABC", None)
 
 

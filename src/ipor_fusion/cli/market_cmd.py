@@ -81,8 +81,10 @@ def market() -> None:
     help="Chain ID or name (ethereum, base, arbitrum, ...).",
 )
 @click.option(
+    "--block-number",
     "--block",
-    type=int,
+    "block_number",
+    type=click.IntRange(min=0),
     default=None,
     help="Block number for on-chain reads (default: latest).",
 )
@@ -109,7 +111,7 @@ def market() -> None:
 def morpho_blue(
     market_id: MorphoBlueMarketId,
     chain_id: ChainId,
-    block: int | None,
+    block_number: int | None,
     no_api: bool,
     vault_filter: str | None,
     json_output: bool,
@@ -125,8 +127,8 @@ def morpho_blue(
     cfg = load_config()
     provider_url = _resolve_provider(cfg, chain_id)
     ctx = Web3Context.from_url(provider_url)
-    if block is not None:
-        ctx = ctx.at_block(block)
+    if block_number is not None:
+        ctx = ctx.at_block(block_number)
     reader = MorphoReader(morpho_blue_address(chain_id))
     mid = market_id
     params, state = reader.read_existing_market(ctx, mid)

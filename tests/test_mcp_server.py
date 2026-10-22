@@ -5,6 +5,7 @@ import importlib.metadata
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 from web3 import Web3
 
 from ipor_fusion import (
@@ -237,7 +238,7 @@ class TestServerInfo:
 
     @patch("ipor_fusion.mcp.server.read_changelog", return_value=[])
     def test_changelog_since_is_passed_through(self, read):
-        server_info(changelog_since="3.1.0")
+        server_info(since="3.1.0")
         read.assert_called_once_with("3.1.0")
 
     @patch(
@@ -604,8 +605,14 @@ class TestVaultOracleMapping:
         return_value=_config_with_provider(),
     )
     def test_negative_block_rejected_before_rpc(self, _load, mock_build_ctx):
-        with pytest.raises(ValueError, match="block_number must be >= 0"):
-            vault_oracle_mapping(vault_address=VAULT_ADDR, block_number=-1)
+        # FastMCP validates the arguments against the input schema.
+        with pytest.raises(ToolError, match="block_number"):
+            asyncio.run(
+                mcp.call_tool(
+                    "vault_oracle_mapping",
+                    {"vault_address": VAULT_ADDR, "block_number": -1},
+                )
+            )
         mock_build_ctx.assert_not_called()
 
     @patch("ipor_fusion.mcp.server.build_oracle_mapping")

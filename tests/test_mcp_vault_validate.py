@@ -7,6 +7,7 @@ import dataclasses
 from unittest.mock import MagicMock, patch
 
 import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 
 from ipor_fusion import NotPlasmaVaultError, UnsupportedChainError
 from ipor_fusion.cli.config_store import FusionConfig
@@ -269,8 +270,13 @@ class TestTool:
     @staticmethod
     @patch("ipor_fusion.mcp.server.load_config")
     def test_negative_block_rejected(load):
-        with pytest.raises(ValueError, match="block_number must be >= 0"):
-            vault_validate(VAULT, 8453, -1)
+        with pytest.raises(ToolError, match="block_number"):
+            asyncio.run(
+                mcp.call_tool(
+                    "vault_validate",
+                    {"vault_address": VAULT, "chain_id": 8453, "block_number": -1},
+                )
+            )
         load.assert_not_called()
 
     @staticmethod

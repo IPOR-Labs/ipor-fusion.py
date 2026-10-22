@@ -990,6 +990,23 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
 
+- **The CLI and the MCP tools take the same arguments.**
+  - **MCP inputs:** `chain_id` and `block_number` are optional and omitted means
+    auto-detected / latest; the `0` sentinel is gone, so `block_number=0` now
+    reads block 0. `server_info(changelog_since=)` is `server_info(since=)` as in
+    `fusion changelog --since`, and `vault_oracle_mapping` takes `max_depth` like
+    `--max-depth`.
+  - **Chain auto-detection:** both surfaces use the saved vault's chain, else the
+    chain of the only configured provider. The CLI used only the saved vault.
+  - **CLI options:** every `--block-number` rejects a negative block, and
+    `fusion market morpho-blue --block` is `--block-number` (`--block` still
+    works).
+  - **One role-accounts document:** `fusion vault role-accounts --json` and
+    `vault_role_accounts` publish `RoleAccountsJson`, built by
+    `build_role_accounts_json` (exported).
+  - **Parity test:** `tests/test_cli_mcp_parity.py` holds every command to a
+    tool with the same arguments.
+
 - **A failed lending read is a warning, never a silent `ok`.** 3.x caught every
   exception in the lending-health readers and dropped the position, so a provider
   outage could leave no lending finding and an `ok` verdict. Now:

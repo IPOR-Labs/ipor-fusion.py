@@ -5,7 +5,6 @@ import sys
 from typing import TypedDict
 
 import click
-from web3 import Web3
 from web3.types import Timestamp
 
 from ipor_fusion.chains import CHAIN_NAMES
@@ -29,8 +28,8 @@ from ipor_fusion.cli.vault_rendering import (
 )
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import (
+    build_role_accounts_json,
     resolve_access_manager,
-    role_account_sort_key,
 )
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
@@ -216,7 +215,7 @@ vault.add_command(list_vaults, "ls")
 )
 @click.option(
     "--block-number",
-    type=int,
+    type=click.IntRange(min=0),
     default=None,
     help="Block number (default: latest).",
 )
@@ -261,7 +260,7 @@ def info(
 )
 @click.option(
     "--block-number",
-    type=int,
+    type=click.IntRange(min=0),
     default=None,
     help="Block number (default: latest).",
 )
@@ -350,7 +349,7 @@ def _validation_json(validation: VaultValidation, chain_label: str) -> _Validati
 )
 @click.option(
     "--block-number",
-    type=int,
+    type=click.IntRange(min=0),
     default=None,
     help="Block number (default: latest).",
 )
@@ -389,21 +388,19 @@ def role_accounts(
         raise click.ClickException(
             f"RoleGranted log scan failed ({type(exc).__name__}: {exc})."
         ) from exc
-    rows = [ra.to_dict() for ra in sorted(accounts, key=role_account_sort_key)]
-
+    document = build_role_accounts_json(
+        accounts,
+        vault=vault_address,
+        access_manager=manager.address,
+        chain_id=chain_id,
+        role=role_id,
+    )
     if json_output:
-        payload = {
-            "vault": Web3.to_checksum_address(vault_address),
-            "access_manager": manager.address,
-            "chain_id": chain_id,
-            "role_filter": Roles.get_name(role_id) if role_id is not None else None,
-            "accounts": rows,
-        }
-        click.echo(json.dumps(payload, indent=2))
+        click.echo(json.dumps(document, indent=2))
         return
 
     click.echo(f"Access Manager: {manager.address}")
-    _print_role_accounts_table(rows)
+    _print_role_accounts_table(document["accounts"])
 
 
 @vault.command("oracle-mapping")

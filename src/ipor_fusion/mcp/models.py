@@ -61,7 +61,6 @@ from ipor_fusion.types import (
 
 if TYPE_CHECKING:
     from ipor_fusion.about import ChangelogEntry
-    from ipor_fusion.core.access import RoleAccount
     from ipor_fusion.readers.lending_health import (
         LendingMarketHealth as ReaderLendingMarketHealth,
     )
@@ -516,38 +515,6 @@ class RoleAccountsResponse(_Base):
         description="Canonical role name when filtered; null = all roles.",
     )
     accounts: list[RoleAccountEntry]
-
-    @classmethod
-    def from_role_accounts(
-        cls,
-        accounts: list[RoleAccount],
-        *,
-        vault: str,
-        access_manager: str,
-        chain_id: ChainId,
-        role_filter: str | None,
-    ) -> RoleAccountsResponse:
-        """Build the response from SDK dataclasses (sorted for stable output)."""
-        # Deferred import keeps this module's import graph pydantic-only.
-        from ipor_fusion.core.access import role_account_sort_key
-
-        entries = [
-            RoleAccountEntry(
-                account=ra.account,
-                role_id=ra.role_id,
-                role_name=ra.role_name,
-                is_member=ra.is_member,
-                execution_delay=ra.execution_delay,
-            )
-            for ra in sorted(accounts, key=role_account_sort_key)
-        ]
-        return cls(
-            vault=vault,
-            access_manager=access_manager,
-            chain_id=chain_id,
-            role_filter=role_filter,
-            accounts=entries,
-        )
 
 
 # ---------------------------------------------------------------------------

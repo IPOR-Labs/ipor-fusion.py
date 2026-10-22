@@ -140,6 +140,12 @@ class TestRoleAccounts:
         mock_resolve.assert_not_called()
 
     def test_unknown_vault_needs_chain_id(self, _ctx, mock_resolve, tmp_config):
+        # Not saved and two providers: nothing tells the chain.
+        save_config(
+            FusionConfig(
+                providers={"1": "https://rpc.example.com", "8453": "https://b.example"}
+            )
+        )
         result = CliRunner().invoke(cli, ["vault", "role-accounts", VAULT])
 
         assert result.exit_code != 0

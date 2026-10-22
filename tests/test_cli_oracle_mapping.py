@@ -411,6 +411,12 @@ class TestOracleMappingCommand:
     def test_unknown_vault_needs_chain_id(
         self, mock_ctx_cls, _resolve, mock_build, tmp_config
     ):
+        # Not saved and two providers: nothing tells the chain.
+        save_config(
+            FusionConfig(
+                providers={"1": "https://rpc.example.com", "8453": "https://b.example"}
+            )
+        )
         result = CliRunner().invoke(cli, ["vault", "oracle-mapping", VAULT])
 
         assert result.exit_code != 0

@@ -7,6 +7,7 @@ from web3 import Web3
 from ipor_fusion.chains import CHAIN_NAME_TO_ID, ensure_supported_chain
 from ipor_fusion.cli.config_store import (
     FusionConfig,
+    resolve_chain_id,
 )
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.errors import (
@@ -98,15 +99,11 @@ CHAIN = ChainType()
 def _resolve_chain_id(
     cfg: FusionConfig, vault_address: PlasmaVaultAddress, chain_id: ChainId | None
 ) -> ChainId:
-    if chain_id is not None:
-        return chain_id
-    if entry := next(
-        (v for v in cfg.vaults if v.address.lower() == vault_address.lower()),
-        None,
-    ):
-        return entry.chain_id
+    if (resolved := resolve_chain_id(cfg, vault_address, chain_id)) is not None:
+        return resolved
     raise click.UsageError(
-        "Unknown vault — use --chain-id (e.g. --chain-id ethereum, --chain-id 8453)"
+        "Cannot tell the chain: the vault is not saved and several providers are "
+        "configured — use --chain-id (e.g. --chain-id ethereum, --chain-id 8453)"
     )
 
 

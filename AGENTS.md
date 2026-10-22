@@ -218,7 +218,7 @@ the lifecycle matrix follows that.
 | `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors An id sourced from a contracts feature branch ahead of the pinned ref goes in the test's `_AHEAD_OF_UPSTREAM` allowlist and is removed when the ref catches up |
 | substrate decoders | `substrates.py` registry mirrors each market's `contracts/fuses/<protocol>/*SubstrateLib.sol` or `*FuseLib.sol` |
 | `vault_info` / `fusion market` JSON shapes | the builders and their TypedDicts (`VaultInfoJson`, `MorphoBlueMarketJson`, `MetaMorphoV1Json` / `MetaMorphoV2Json`) in `vault_info.py` / `market_info.py`, models in `mcp/models.py` (`extra="forbid"`, the published schema), the `VaultInfoJson`-typed `_full_vault_info_dict` fixture in `test_mcp_models.py` |
-| CLI command set | every CLI command has a matching tool in `mcp/server.py` (`changelog` maps to `server_info`) |
+| CLI command set | every CLI command has a matching tool in `mcp/server.py` with the same arguments (`changelog` maps to `server_info`; `--json` and display filters are CLI-only); `tests/test_cli_mcp_parity.py` enforces it, and both resolve chain and provider through `cli/config_store.resolve_chain_id` |
 
 ## Layout (`src/ipor_fusion/`)
 
@@ -479,7 +479,9 @@ the rest share names). Read-only: `vault_info`, `vault_validate`,
 `vault_list`, `vault_role_accounts`, `vault_oracle_mapping`, `market_morpho_blue`,
 `market_meta_morpho`, `config_show`, `server_info`. Mutating: `vault_add`,
 `vault_remove`, `config_set_provider`, `config_set_etherscan_key`. Every new
-CLI command gets a matching MCP tool. Put every fact in its structured home:
+CLI command gets a matching MCP tool with the same argument names; an optional
+chain or block is `None` when omitted (`ChainArg`, `BlockArg`), never a `0`
+sentinel. Put every fact in its structured home:
 the return shape is the Pydantic return type (it becomes `outputSchema`),
 per-argument semantics go in `Annotated[..., Field(description=...)]`, closed
 value sets are `Literal` enums. The docstring keeps only what has no
