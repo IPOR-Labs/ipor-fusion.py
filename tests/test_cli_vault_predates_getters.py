@@ -43,6 +43,7 @@ ACCESS_MANAGER = Web3.to_checksum_address("0x" + "33" * 20)
 ORACLE = Web3.to_checksum_address("0x" + "44" * 20)
 LEGACY_ORACLE = Web3.to_checksum_address("0x" + "45" * 20)
 FUSE = Web3.to_checksum_address("0x" + "55" * 20)
+REWARDS_MANAGER = Web3.to_checksum_address("0x" + "66" * 20)
 UINT256_MAX = 2**256 - 1
 
 Response = bytes | Exception
@@ -68,6 +69,7 @@ _COMMON: dict[str, Response] = {
     "getInstantWithdrawalFuses()": encode(["address[]"], [[]]),
     "name()": encode(["string"], ["Vault"]),
     "getRewardsClaimManagerAddress()": _address("0x" + "00" * 20),
+    "getRewardsManagerAddress()": ContractLogicError("execution reverted"),
     "balanceOf(address)": _uint(5),
     "symbol()": encode(["string"], ["USDC"]),
     "MARKET_ID()": _uint(1),
@@ -224,6 +226,58 @@ class TestVaultReads:
         with pytest.raises(UnsupportedVaultVersionError, match=selector) as exc:
             _fetch_vault_reads(ctx, _vault(ctx))
         assert isinstance(exc.value, ValueError)
+
+    def test_without_a_rewards_manager_its_balance_is_zero(self):
+        reads, _ = _fetch_vault_reads(_ctx(CURRENT), _vault(_ctx(CURRENT)))
+        assert reads.rewards_manager_balance == 0
+
+    def test_the_rewards_manager_balance_is_read(self):
+        ctx = _ctx(
+            {
+                **CURRENT,
+                "getRewardsClaimManagerAddress()": _address(REWARDS_MANAGER),
+                "balanceOf()": _uint(42),
+            }
+        )
+        reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
+        assert reads.rewards_manager == REWARDS_MANAGER
+        assert reads.rewards_manager_balance == 42
+
+    def test_an_unreadable_rewards_manager_balance_is_none(self):
+        ctx = _ctx(
+            {
+                **CURRENT,
+                "getRewardsClaimManagerAddress()": _address(REWARDS_MANAGER),
+                "balanceOf()": ContractLogicError("execution reverted"),
+            }
+        )
+        reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
+        assert reads.rewards_manager_balance is None
+
+    def test_a_legacy_rewards_manager_getter_is_read(self):
+        ctx = _ctx(
+            {
+                **CURRENT,
+                "getRewardsClaimManagerAddress()": b"",
+                "getRewardsManagerAddress()": _address(REWARDS_MANAGER),
+                "balanceOf()": _uint(7),
+            }
+        )
+        reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
+        assert reads.rewards_manager == REWARDS_MANAGER
+        assert reads.rewards_manager_balance == 7
+
+    def test_an_unknown_rewards_manager_leaves_its_balance_unknown(self):
+        ctx = _ctx(
+            {
+                **CURRENT,
+                "getRewardsClaimManagerAddress()": ContractLogicError("reverted"),
+                "getRewardsManagerAddress()": b"",
+            }
+        )
+        reads, _ = _fetch_vault_reads(ctx, _vault(ctx))
+        assert reads.rewards_manager is None
+        assert reads.rewards_manager_balance is None
 
     def test_reverting_supply_cap_read_stays_loud(self):
         ctx = _ctx({**CURRENT, GET_TOTAL_SUPPLY_CAP: ContractLogicError("boom")})

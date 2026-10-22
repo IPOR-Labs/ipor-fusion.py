@@ -26,9 +26,10 @@ from ipor_fusion.core.access import AccessManager, RoleAccount, role_account_sor
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
-from ipor_fusion.core.multicall import Multicall3
+from ipor_fusion.core.multicall import BatchValue, Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
+from ipor_fusion.core.rewards_manager import RewardsManager
 from ipor_fusion.errors import (
     EmptyCallResultError,
     UnsupportedVaultVersionError,
@@ -143,6 +144,13 @@ class VaultData:
     # ERC20_VAULT_BALANCE substrate, so it is read directly in
     # fetch_vault_data rather than derived from substrates.
     underlying_balance_on_vault: Amount = Amount(0)
+    # RewardsClaimManager.balanceOf() (its vested underlying), which
+    # PlasmaVault.totalAssets adds to the vault's own balance and its markets.
+    # 0 without a manager; None when the vault has one but the read failed.
+    rewards_manager_balance: Amount | None = Amount(0)
+    # The global market total the vault stores (the totalAssetsInAllMarkets
+    # term of totalAssets); None when the storage read failed.
+    stored_markets_total: Amount | None = None
     vault_name: str = ""
     deployment_block: int | None = None
     deployment_timestamp: Timestamp | None = None
@@ -203,6 +211,11 @@ class VaultData:
     # address (ctx.cache), so a cached value may postdate the block.
     token_symbols: dict[HexAddress, str] = field(default_factory=dict)
     token_decimals: dict[HexAddress, Decimals | None] = field(default_factory=dict)
+
+    @property
+    def unrealized_management_fee(self) -> Amount | None:
+        """``getUnrealizedManagementFee()`` from the fee snapshot."""
+        return self.fee_data.unrealized_management_fee if self.fee_data else None
 
 
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
@@ -342,6 +355,7 @@ class _VaultReads:
     asset_price_usd: float | None
     fuse_markets: dict[FuseAddress, MarketId] | None
     unimplemented_getters: list[str]
+    rewards_manager_balance: Amount | None
 
 
 def _fetch_vault_reads(
@@ -351,8 +365,9 @@ def _fetch_vault_reads(
     oracle wrapper resolved for them (reused, so its ABI is probed once).
 
     Two Multicall3 round trips: vault getters, then everything that needs the
-    asset, the oracle or the fuse list (asset metadata, idle balance, price,
-    each fuse's MARKET_ID()).
+    asset, the oracle, the fuse list or the rewards claim manager (asset
+    metadata, idle balance, price, each fuse's MARKET_ID(), the manager's
+    vested balance).
     """
     pv = plasma_vault
     batch = Multicall3(ctx).batch()
@@ -365,6 +380,7 @@ def _fetch_vault_reads(
     instant_fuses = batch.add(pv.get_instant_withdrawal_fuses())
     vault_name = batch.try_add(pv.name())
     rewards_manager = batch.try_add(pv.get_rewards_claim_manager_address())
+    legacy_rewards_manager = batch.try_add(pv.get_rewards_manager_address())
     supply_cap_read = batch.try_add(pv.get_total_supply_cap())
     middleware_oracle = batch.try_add(pv.get_price_oracle_middleware_address())
     legacy_oracle = batch.try_add(pv.get_price_oracle_address())
@@ -398,6 +414,18 @@ def _fetch_vault_reads(
     fuse_market_ids = [
         (fuse, batch.try_add(_fuse_market_id_call(fuse))) for fuse in fuses
     ]
+    # Vaults before the RewardsClaimManager rename answer the legacy getter;
+    # None from both leaves the manager, and so its balance, unknown.
+    manager = (
+        rewards_manager.value
+        if rewards_manager.value is not None
+        else legacy_rewards_manager.value
+    )
+    manager_balance = (
+        batch.try_add(RewardsManager(manager).balance_of())
+        if manager is not None and int(manager, 16) != 0
+        else None
+    )
     batch.run()
     # Fuses without a readable MARKET_ID() are left out; the rest detect orphan
     # markets (action fuse registered, no balance fuse for its market).
@@ -416,7 +444,8 @@ def _fetch_vault_reads(
         fuses=fuses,
         instant_fuses=instant_fuses.value,
         vault_name=vault_name.value or "",
-        rewards_manager=rewards_manager.value,
+        rewards_manager=manager,
+        rewards_manager_balance=_rewards_manager_balance(manager, manager_balance),
         asset_decimals=asset_decimals.value,
         underlying_balance_on_vault=underlying_balance.value,
         asset_symbol=symbol.value or "?",
@@ -424,6 +453,16 @@ def _fetch_vault_reads(
         fuse_markets=fuse_markets or None,
         unimplemented_getters=unimplemented,
     ), oracle
+
+
+def _rewards_manager_balance(
+    manager: ChecksumAddress | None, read: BatchValue[Amount | None] | None
+) -> Amount | None:
+    """The manager's balance; 0 for the zero address (no manager), None when
+    the manager or its balance could not be read."""
+    if read is not None:
+        return read.value
+    return None if manager is None else Amount(0)
 
 
 def _fetch_role_accounts(
@@ -587,6 +626,9 @@ def fetch_vault_data(
         f_fees = pool.submit(_fetch_fee_data, ctx, plasma_vault)
         f_withdraw = pool.submit(_fetch_withdraw_manager, ctx, plasma_vault)
         f_roles = pool.submit(_fetch_role_accounts, ctx, plasma_vault)
+        f_stored_total = pool.submit(
+            _safe_call, partial(plasma_vault.read_stored_markets_total, ctx)
+        )
         f_markets = pool.submit(
             _fetch_market_reads, ctx, plasma_vault, with_aave_pools=lending
         )
@@ -622,6 +664,7 @@ def fetch_vault_data(
             fee_data=f_fees.result(),
             role_accounts=f_roles.result(),
             hypercore=f_hypercore.result(),
+            stored_markets_total=f_stored_total.result(),
         )
 
 
@@ -645,6 +688,7 @@ def _snapshot(
     fee_data: FeeData | None,
     role_accounts: list[RoleAccount] | None,
     hypercore: HyperCoreVaultState | None,
+    stored_markets_total: Amount | None,
 ) -> VaultData:
     """`VaultData` from the pipelines' results."""
     return VaultData(
@@ -664,6 +708,8 @@ def _snapshot(
         instant_fuses=reads.instant_fuses,
         vault_name=reads.vault_name,
         rewards_manager=reads.rewards_manager,
+        rewards_manager_balance=reads.rewards_manager_balance,
+        stored_markets_total=stored_markets_total,
         asset_decimals=reads.asset_decimals,
         underlying_balance_on_vault=reads.underlying_balance_on_vault,
         asset_symbol=reads.asset_symbol,
