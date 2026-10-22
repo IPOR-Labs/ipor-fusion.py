@@ -3,7 +3,7 @@ the per-transport fuses encode, normalizes reads, and finds its own parts."""
 
 from __future__ import annotations
 
-from dataclasses import astuple
+from dataclasses import astuple, replace
 from unittest.mock import MagicMock
 
 import pytest
@@ -662,7 +662,8 @@ def _deployment_ctx() -> MagicMock:
     probe_vault = PlasmaVault(VAULT)
     probe_exec = StargateCrosschainExecutor(EXECUTOR)
     route_raw = encode(
-        ["(uint64,address,address,uint96,uint96,uint256,bool)"], [ROUTE.as_tuple()]
+        ["(uint64,address,address,uint96,uint96,uint256,bool)"],
+        [replace(ROUTE, peer=CCIP_EXECUTOR).as_tuple()],
     )
     by_selector: dict[tuple[str, bytes], bytes] = {
         (VAULT, _sel(probe_vault.get_market_substrates(MARKET))): encode(
@@ -845,7 +846,10 @@ class TestDeploymentDiscovery:
             CCIP_EXECUTOR,
         ]
         ccip = next(lane for lane in lanes if isinstance(lane, CcipLane))
-        assert ccip.route == ROUTE and ccip.fuses == CCIP_FUSES
+        assert (
+            ccip.route == replace(ROUTE, peer=CCIP_EXECUTOR)
+            and ccip.fuses == CCIP_FUSES
+        )
         assert ccip.decimal_conversion_rate == DECIMAL_CONVERSION_RATE
 
 
@@ -1035,6 +1039,57 @@ class TestContextOwnership:
 
         assert observation.accounted_balance == 7
         hub.call.assert_not_called()
+
+    def _ccip_hub(self, route: CcipRouteConfig) -> MagicMock:
+        return _ctx_answering(
+            {
+                selector("ccipRoute(uint256)"): encode(
+                    ["(uint64,address,address,uint96,uint96,uint256,bool)"],
+                    [route.as_tuple()],
+                ),
+                selector("DECIMAL_CONVERSION_RATE()"): encode(
+                    ["uint256"], [DECIMAL_CONVERSION_RATE]
+                ),
+            }
+        )
+
+    def test_ccip_open_refuses_a_spoke_without_a_route(self):
+        unregistered = CcipRouteConfig(
+            chain_selector=0,
+            peer=ZERO_ADDRESS,  # type: ignore[arg-type]
+            fee_token=ZERO_ADDRESS,  # type: ignore[arg-type]
+            message_gas_limit=0,
+            token_gas_limit=0,
+            max_fee=0,
+            enabled=False,
+        )
+        with pytest.raises(CrosschainDiscoveryError, match="has no route to chain"):
+            CcipLane.open(
+                self._ccip_hub(unregistered),
+                self._wrong_chain(SPOKE),
+                executor=EXECUTOR,
+                fuses=FUSES,
+            )
+
+    def test_ccip_open_refuses_a_route_to_another_peer(self):
+        foreign = replace(ROUTE, peer=REMOTE_VAULT)
+        with pytest.raises(CrosschainDiscoveryError, match="not to the dispatcher"):
+            CcipLane.open(
+                self._ccip_hub(foreign),
+                self._wrong_chain(SPOKE),
+                executor=EXECUTOR,
+                fuses=FUSES,
+            )
+
+    def test_a_disabled_route_opens_but_refuses_default_send(self):
+        lane = CcipLane.open(
+            self._ccip_hub(replace(ROUTE, enabled=False)),
+            self._wrong_chain(SPOKE),
+            executor=EXECUTOR,
+            fuses=FUSES,
+        )
+        with pytest.raises(CrosschainDiscoveryError, match="is disabled"):
+            lane.default_send(token=True)
 
     def test_ccip_open_reads_the_route_on_the_hub(self):
         route_raw = encode(
