@@ -40,6 +40,7 @@ from ipor_fusion.mcp.server import (
     vault_oracle_mapping,
     vault_remove,
     vault_role_accounts,
+    vault_validate,
 )
 from ipor_fusion.morpho_api import (
     MorphoApiError,
@@ -1108,3 +1109,49 @@ class TestVaultAddressArgument:
     def test_rejects_non_addresses(self, raw: str):
         with pytest.raises(ValueError):
             _vault_arg(raw)
+
+
+class TestVaultAddressResolvesSavedChain:
+    """Every spelling the tools accept finds the saved vault's chain."""
+
+    @staticmethod
+    def _config(providers: list[int]):
+        from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
+
+        return FusionConfig(
+            providers={str(c): "https://rpc.example.com" for c in providers},
+            vaults=[VaultEntry(address=_SAVED_VAULT, label="Test", chain_id=1)],
+        )
+
+    @pytest.mark.parametrize(
+        "spelling", [f"  {_SAVED_VAULT}  ", _SAVED_VAULT[2:], _SAVED_VAULT.upper()]
+    )
+    @pytest.mark.parametrize(
+        "tool", [vault_info, vault_validate, vault_role_accounts, vault_oracle_mapping]
+    )
+    def test_saved_chain_wins_over_other_providers(self, tool, spelling: str):
+        seen: list[int] = []
+
+        def stop(_cfg, chain_id, _block):
+            seen.append(chain_id)
+            raise RuntimeError("stop")
+
+        with (
+            patch(
+                "ipor_fusion.mcp.server.load_config",
+                return_value=self._config([1, 8453]),
+            ),
+            patch("ipor_fusion.mcp.server._build_ctx", autospec=True, side_effect=stop),
+            pytest.raises(RuntimeError, match="stop"),
+        ):
+            tool(spelling)
+        assert seen == [1]
+
+    def test_missing_saved_chain_provider_is_reported_not_substituted(self):
+        with (
+            patch(
+                "ipor_fusion.mcp.server.load_config", return_value=self._config([8453])
+            ),
+            pytest.raises(ValueError, match="No provider for chain 1"),
+        ):
+            vault_info(f"  {_SAVED_VAULT[2:]}  ")

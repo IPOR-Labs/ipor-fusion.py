@@ -217,12 +217,12 @@ def vault_info(
     etc.).
     """
     cfg = load_config()
-    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    checksum = _vault_arg(vault_address)
+    chain_id = _resolve_chain_id(cfg, checksum, chain_id)
     # Fail fast (before any RPC) on chains the vault tooling can't handle;
     # UnsupportedChainError doubles as ValueError so FastMCP surfaces it.
     ensure_supported_chain(chain_id)
     ctx, effective_block = _build_ctx(cfg, chain_id, block_number)
-    checksum = _vault_arg(vault_address)
 
     # Cheap single-call probe: raises the typed ContractNotFoundError /
     # NotPlasmaVaultError ("not a vault" in both revert and empty-return
@@ -264,10 +264,10 @@ def vault_validate(
     consistent. It reads about as much as vault_info and takes about as long.
     """
     cfg = load_config()
-    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    checksum = _vault_arg(vault_address)
+    chain_id = _resolve_chain_id(cfg, checksum, chain_id)
     ensure_supported_chain(chain_id)
     ctx, effective_block = _build_ctx(cfg, chain_id, block_number)
-    checksum = _vault_arg(vault_address)
 
     # Same cheap probe as vault_info: "not a vault" fails before the fetch.
     resolve_access_manager(ctx, checksum)
@@ -330,12 +330,12 @@ def vault_role_accounts(
     """
     cfg = load_config()
     role_id = None if role is None else Roles.resolve(role)
-    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    checksum = _vault_arg(vault_address)
+    chain_id = _resolve_chain_id(cfg, checksum, chain_id)
     # Fail fast (before any RPC) on chains the vault tooling is not
     # validated on.
     ensure_supported_chain(chain_id)
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
-    checksum = _vault_arg(vault_address)
 
     access_manager = resolve_access_manager(ctx, checksum)
     accounts = (
@@ -415,12 +415,12 @@ def vault_oracle_mapping(
     'events'). Historical blocks require an archive node.
     """
     cfg = load_config()
-    chain_id = _resolve_chain_id(cfg, vault_address, chain_id)
+    checksum = _vault_arg(vault_address)
+    chain_id = _resolve_chain_id(cfg, checksum, chain_id)
     # The asset-source event replay scans logs from block 0 — fail fast
     # (before any RPC) on chains the vault tooling is not validated on.
     ensure_supported_chain(chain_id)
     ctx, _ = _build_ctx(cfg, chain_id, block_number)
-    checksum = _vault_arg(vault_address)
 
     # The event-replay fallback and the output both need a concrete block
     # number, so resolve "latest" up front and pin the context to it.
