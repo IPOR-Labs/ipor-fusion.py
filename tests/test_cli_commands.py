@@ -456,6 +456,10 @@ class TestVaultInfo:
         balance_fuse_1 = FakeBalanceFuse(market_id=1, fuse=ADDR_FUSE_1)
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
@@ -575,6 +579,10 @@ class TestVaultInfo:
         mock_ctx_cls.from_url.return_value = mock_ctx
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
@@ -652,6 +660,10 @@ class TestVaultInfo:
         mock_ctx_cls.from_url.return_value = mock_ctx
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
@@ -717,6 +729,10 @@ class TestVaultInfo:
         mock_ctx_cls.from_url.return_value = mock_ctx
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
@@ -795,6 +811,10 @@ class TestVaultInfo:
         mock_ctx_cls.from_url.return_value = mock_ctx
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
@@ -861,6 +881,10 @@ class TestVaultInfo:
         mock_ctx_cls.from_url.return_value = mock_ctx
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
@@ -973,6 +997,10 @@ class TestVaultInfoJson:
             fuse: str
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
@@ -1144,6 +1172,10 @@ class TestVaultInfoJson:
         mock_ctx_cls.from_url.return_value = mock_ctx
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
@@ -1227,6 +1259,10 @@ class TestVaultInfoJson:
         addr_bytes = bytes.fromhex("00" * 12 + "ab" * 20)
 
         mock_pv = MagicMock()
+
+        mock_pv.read_stored_markets_total.return_value = None
+
+        mock_pv.get_rewards_manager_address.return_value.call.return_value = None
         mock_pv.address = ADDR_1
         mock_pv.name.return_value.call.return_value = "Test Vault"
         mock_pv.decimals.return_value.call.return_value = 18
