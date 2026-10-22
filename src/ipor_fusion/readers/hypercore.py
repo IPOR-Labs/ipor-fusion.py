@@ -218,7 +218,7 @@ class HyperCoreReader:
     Mirrors ``HyperCoreLib``'s reads: a precompile takes its arguments as raw
     ABI-encoded words (no selector) and answers one ABI-encoded value. The
     perp reads take the *read index* of a market
-    (:func:`ipor_fusion.precompile_index_of`: the action asset without the HIP-3
+    (:func:`ipor_fusion.hypercore.precompile_index_of`: the action asset without the HIP-3
     offset), never the action asset itself.
     """
 

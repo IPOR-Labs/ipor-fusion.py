@@ -10,8 +10,9 @@ from _simulate import simulate_response
 from eth_abi import encode
 from web3 import Web3
 
-from ipor_fusion import SimulationError, quote_ccip_native_fee
+from ipor_fusion import SimulationError
 from ipor_fusion.core.contract import Call
+from ipor_fusion.crosschain import quote_ccip_native_fee
 from ipor_fusion.crosschain.ccip.quote import INSUFFICIENT_NATIVE_FEE_SELECTOR
 
 FACTORY = Web3.to_checksum_address("0x" + "11" * 20)

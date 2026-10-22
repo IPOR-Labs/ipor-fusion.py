@@ -22,20 +22,17 @@ from eth_abi import decode
 from hexbytes import HexBytes
 from web3 import Web3
 
-from ipor_fusion import (
-    ERC20,
+from ipor_fusion import ERC20, PlasmaVault, VaultSimulator, erc20_balance_slot
+from ipor_fusion.fuses.hypercore import SPOT_DEX
+from ipor_fusion.hypercore import (
     HyperCoreAccountMarginSummary,
     HyperCoreDepositFuse,
     HyperCoreOrderFuse,
     HyperCoreReader,
     HyperCoreSendFuse,
     HyperCoreSpotBalance,
-    PlasmaVault,
     TimeInForce,
-    VaultSimulator,
-    erc20_balance_slot,
 )
-from ipor_fusion.fuses.hypercore import SPOT_DEX
 from ipor_fusion.types import MarketId
 
 FIXTURE = json.loads(

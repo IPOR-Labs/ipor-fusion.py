@@ -12,14 +12,14 @@ from eth_abi import encode
 from hexbytes import HexBytes
 from web3 import Web3
 
-from ipor_fusion import (
+from ipor_fusion import HyperCoreEventDecodeError
+from ipor_fusion.hypercore import (
     HYPERCORE_EVENT_CLASSES,
     HYPERCORE_EVENT_SPECS,
     HYPERCORE_EVENTS,
     HyperCoreActionEnqueuedEvent,
     HyperCoreDepositFuseEnterEvent,
     HyperCoreEvent,
-    HyperCoreEventDecodeError,
     decode_hypercore_event,
     find_hypercore_events,
     hypercore_event_name,

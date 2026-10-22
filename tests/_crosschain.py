@@ -34,16 +34,16 @@ from dataclasses import dataclass, replace
 import pytest
 from web3 import Web3
 
-from ipor_fusion import (
+from ipor_fusion import Web3Context
+from ipor_fusion.crosschain import (
     CcipChain,
     CcipTransport,
     CrosschainTransport,
+    CrosschainTransportKind,
     LaneFuses,
     StargateChain,
     StargateTransport,
-    Web3Context,
 )
-from ipor_fusion.crosschain import CrosschainTransportKind
 from ipor_fusion.crosschain.fuses import crosschain_market_id
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId, MarketId

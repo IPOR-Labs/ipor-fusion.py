@@ -173,10 +173,14 @@ the lifecycle matrix follows that.
   strings (`field_docs.py` ships as API documentation). Comments only for edge
   cases and non-obvious logic.
 - The public API is `ipor_fusion.__all__` (README, "Public API and stability").
-  Every public symbol is imported and listed there; a symbol of a public
-  subpackage (`core`, `config`, `fuses`, `readers`, `crosschain`,
-  `crosschain.fuses`, `crosschain.ccip`, `crosschain.stargate`) also goes in that
-  subpackage's `__all__`. `ipor_fusion.guide` keeps its own namespace. The
+  Every stable public symbol is imported and listed there; a symbol of a stable
+  subpackage (`core`, `config`, `fuses`, `readers`) also goes in that
+  subpackage's `__all__`. Preview features (`PREVIEW_FEATURES`) export only from
+  their own subpackages, never from the top level: crosschain from `crosschain`
+  (`crosschain.fuses`, `crosschain.ccip`, `crosschain.stargate`), HyperCore from
+  `hypercore` (which re-exports from `fuses/` and `readers/` modules; those
+  subpackages do not list them). Their exceptions stay in `errors` and the top
+  level. `ipor_fusion.guide` keeps its own namespace. The
   public modules (`about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`,
   `field_docs`, `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`,
   `validation`, `vault_data`, `vault_info`) stay importable for the names they

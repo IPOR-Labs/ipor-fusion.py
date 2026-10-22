@@ -10,6 +10,8 @@ import pytest
 from eth_abi.exceptions import DecodingError
 
 import ipor_fusion
+import ipor_fusion.crosschain
+import ipor_fusion.hypercore
 from ipor_fusion import (
     BalanceSlotNotFoundError,
     ContractNotFoundError,
@@ -32,8 +34,8 @@ from ipor_fusion import (
     UnsupportedChainError,
     UnsupportedContractVersionError,
     UnsupportedVaultVersionError,
-    VerifierResultUnavailable,
 )
+from ipor_fusion.crosschain import VerifierResultUnavailable
 
 
 def _sdk_exceptions() -> set[type[BaseException]]:
@@ -75,10 +77,12 @@ def test_every_sdk_exception_lives_in_the_errors_module():
 
 
 def test_every_sdk_exception_is_exported():
+    """From the top level, or from the preview subpackage of its feature."""
     exported = {
-        getattr(ipor_fusion, name)
-        for name in ipor_fusion.__all__
-        if inspect.isclass(getattr(ipor_fusion, name))
+        getattr(module, name)
+        for module in (ipor_fusion, ipor_fusion.crosschain, ipor_fusion.hypercore)
+        for name in module.__all__
+        if inspect.isclass(getattr(module, name))
     }
     missing = sorted(cls.__qualname__ for cls in _sdk_exceptions() - exported)
     assert missing == []

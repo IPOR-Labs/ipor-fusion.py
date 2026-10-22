@@ -21,21 +21,7 @@ from click.testing import CliRunner
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import (
-    ERC20,
-    HyperCoreCancelFuse,
-    HyperCoreDepositFuse,
-    HyperCoreOrderFuse,
-    HyperCorePendingReader,
-    HyperCoreReader,
-    HyperCoreSendFuse,
-    PlasmaVault,
-    TimeInForce,
-    read_hypercore_evm_exit_ceiling,
-    read_hypercore_nav,
-    read_hypercore_transfer_snapshot,
-    read_hypercore_vault_state,
-)
+from ipor_fusion import ERC20, PlasmaVault
 from ipor_fusion.cli import vault_cmd
 from ipor_fusion.cli.config_store import FusionConfig
 from ipor_fusion.cli.main import cli
@@ -46,6 +32,19 @@ from ipor_fusion.fuses.hypercore import (
     SPOT_DEX,
     USDC_SYSTEM_ADDRESS,
     precompile_index_of,
+)
+from ipor_fusion.hypercore import (
+    HyperCoreCancelFuse,
+    HyperCoreDepositFuse,
+    HyperCoreOrderFuse,
+    HyperCorePendingReader,
+    HyperCoreReader,
+    HyperCoreSendFuse,
+    TimeInForce,
+    read_hypercore_evm_exit_ceiling,
+    read_hypercore_nav,
+    read_hypercore_transfer_snapshot,
+    read_hypercore_vault_state,
 )
 from ipor_fusion.mcp import server
 from ipor_fusion.types import MarketId

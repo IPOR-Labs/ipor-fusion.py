@@ -42,6 +42,16 @@ from web3 import Web3
 from ipor_fusion import (
     ERC20,
     AccessManager,
+    PlasmaVault,
+    PriceOracleMiddlewareManager,
+    Roles,
+    VaultSimulator,
+    Web3Context,
+    erc20_balance_slot,
+)
+from ipor_fusion.core.contract import Call
+from ipor_fusion.core.fusion_factory import FusionFactory
+from ipor_fusion.crosschain import (
     CcipChain,
     CcipCommandType,
     CcipCrosschainDispatcher,
@@ -56,17 +66,9 @@ from ipor_fusion import (
     LaneFuses,
     MessageV1,
     OutboundMessage,
-    PlasmaVault,
-    PriceOracleMiddlewareManager,
-    Roles,
     SafetyConfig,
-    VaultSimulator,
-    Web3Context,
     ccip_token_lane,
-    erc20_balance_slot,
 )
-from ipor_fusion.core.contract import Call
-from ipor_fusion.core.fusion_factory import FusionFactory
 from ipor_fusion.crosschain.logs import log_bytes, log_topic0
 from ipor_fusion.types import Amount, ChainId, MarketId, Shares
 

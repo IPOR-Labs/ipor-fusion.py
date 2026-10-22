@@ -7,8 +7,9 @@ from pathlib import Path
 import pytest
 from web3 import Web3
 
-from ipor_fusion import HyperCoreSubstrates, PlasmaVault
+from ipor_fusion import PlasmaVault
 from ipor_fusion.core.context import Web3Context
+from ipor_fusion.hypercore import HyperCoreSubstrates
 from ipor_fusion.readers.hypercore import HYPERCORE_PENDING_READERS
 from ipor_fusion.types import MarketId
 

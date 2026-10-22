@@ -13,36 +13,32 @@ from eth_utils import function_signature_to_4byte_selector as selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import (
+from ipor_fusion import CrosschainDiscoveryError, IporFusionError, PlasmaVault
+from ipor_fusion.core.multicall import MULTICALL3_ADDRESS
+from ipor_fusion.crosschain import (
     LANES,
+    BalanceObservation,
+    CcipCrosschainDispatcher,
+    CcipCrosschainExecutor,
     CcipLane,
-    CrosschainDiscoveryError,
+    CcipRouteConfig,
+    Command,
+    CommandStatus,
     CrosschainExecutorInfo,
     CrosschainLane,
-    IporFusionError,
+    CrosschainTransportKind,
     LaneFuses,
     LaneHubState,
     LaneObservation,
-    PlasmaVault,
+    OptionsBuilder,
+    StargateCrosschainDispatcher,
+    StargateCrosschainExecutor,
     StargateLane,
     detect_transport,
     discover_deployment,
     discover_lane_fuses,
     open_lane,
     open_lanes,
-)
-from ipor_fusion.core.multicall import MULTICALL3_ADDRESS
-from ipor_fusion.crosschain import (
-    BalanceObservation,
-    CcipCrosschainDispatcher,
-    CcipCrosschainExecutor,
-    CcipRouteConfig,
-    Command,
-    CommandStatus,
-    CrosschainTransportKind,
-    OptionsBuilder,
-    StargateCrosschainDispatcher,
-    StargateCrosschainExecutor,
 )
 from ipor_fusion.crosschain.fuses import (
     CcipCrosschainCommandFuse,

@@ -21,17 +21,19 @@ from ipor_fusion import (
     AccessManager,
     AccessManagerAddress,
     Amount,
-    CcipCommandType,
-    CcipLane,
-    CcipObservation,
-    Command,
     CommandId,
-    CommandStatus,
     OperationId,
     Roles,
     Shares,
 )
 from ipor_fusion.core.fuse_action import FuseAction
+from ipor_fusion.crosschain import (
+    CcipCommandType,
+    CcipLane,
+    CcipObservation,
+    Command,
+    CommandStatus,
+)
 from ipor_fusion.crosschain.messages import (
     EMPTY_COMMAND,
     CcipMsgType,
