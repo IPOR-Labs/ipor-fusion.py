@@ -75,11 +75,11 @@ class ChainType(click.ParamType):  # pyright: ignore[reportMissingTypeArgument]
         self, value: object, param: click.Parameter | None, ctx: click.Context | None
     ) -> ChainId:
         if isinstance(value, int):
-            return ChainId(value)
+            return self._positive(value, param, ctx)
         if not isinstance(value, str):
             self.fail(f"expected string, got {type(value).__name__}", param, ctx)
         try:
-            return ChainId(int(value))
+            return self._positive(int(value), param, ctx)
         except ValueError:
             pass
         lower = value.lower().strip()
@@ -92,8 +92,44 @@ class ChainType(click.ParamType):  # pyright: ignore[reportMissingTypeArgument]
             ctx,
         )
 
+    def _positive(
+        self, value: int, param: click.Parameter | None, ctx: click.Context | None
+    ) -> ChainId:
+        if value <= 0:
+            self.fail(
+                f"chain ID must be positive, got {value}; omit --chain-id to "
+                "auto-detect it",
+                param,
+                ctx,
+            )
+        return ChainId(value)
+
 
 CHAIN = ChainType()
+
+
+class BlockNumberType(click.IntRange):
+    """A positive block number. 0 is refused rather than read as block 0:
+    some callers still pass it meaning "latest"."""
+
+    name = "block"
+
+    def __init__(self) -> None:
+        super().__init__(min=1)
+
+    def convert(
+        self, value: object, param: click.Parameter | None, ctx: click.Context | None
+    ) -> int:
+        if value in (0, "0"):
+            self.fail(
+                "0 is not a block selector: omit --block-number for the latest block",
+                param,
+                ctx,
+            )
+        return super().convert(value, param, ctx)
+
+
+BLOCK_NUMBER = BlockNumberType()
 
 
 def _resolve_chain_id(

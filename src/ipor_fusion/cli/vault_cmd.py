@@ -12,7 +12,13 @@ from ipor_fusion.cli.config_store import (
     load_config,
     save_config,
 )
-from ipor_fusion.cli.options import CHAIN, VAULT_ADDRESS, _build_ctx, _resolve_provider
+from ipor_fusion.cli.options import (
+    BLOCK_NUMBER,
+    CHAIN,
+    VAULT_ADDRESS,
+    _build_ctx,
+    _resolve_provider,
+)
 from ipor_fusion.cli.oracle_mapping_view import _print_oracle_mapping
 from ipor_fusion.cli.vault_health import (
     _print_validation,
@@ -180,7 +186,7 @@ vault.add_command(list_vaults, "ls")
 )
 @click.option(
     "--block-number",
-    type=click.IntRange(min=0),
+    type=BLOCK_NUMBER,
     default=None,
     help="Block number (default: latest).",
 )
@@ -225,7 +231,7 @@ def info(
 )
 @click.option(
     "--block-number",
-    type=click.IntRange(min=0),
+    type=BLOCK_NUMBER,
     default=None,
     help="Block number (default: latest).",
 )
@@ -286,7 +292,7 @@ def validate(
 )
 @click.option(
     "--block-number",
-    type=click.IntRange(min=0),
+    type=BLOCK_NUMBER,
     default=None,
     help="Block number (default: latest).",
 )
@@ -347,7 +353,7 @@ def role_accounts(
 )
 @click.option(
     "--block-number",
-    type=click.IntRange(min=0),
+    type=BLOCK_NUMBER,
     default=None,
     help="Block number (default: latest).",
 )

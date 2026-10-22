@@ -4,11 +4,12 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
+from collections.abc import Callable
 from functools import partial
 from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from web3 import Web3
 
 from ipor_fusion.about import (
@@ -119,6 +120,22 @@ def _build_ctx(
     return ctx, block_number
 
 
+def _no_zero_sentinel(name: str) -> Callable[[object], object]:
+    """Refuse 0 with an explicit message: clients built against the 3.x tools
+    still send it meaning auto / latest, and reading it as block or chain 0
+    would answer with genesis-block data instead of an error."""
+
+    def check(value: object) -> object:
+        if value == 0 and not isinstance(value, bool):
+            raise ValueError(
+                f"{name}=0 is not a sentinel any more: omit {name} for "
+                + ("the latest block" if name == "block_number" else "auto-detection")
+            )
+        return value
+
+    return check
+
+
 # Shared argument types, so every tool takes chain and block as the CLI does:
 # omitted means auto-detected / latest, never a 0 sentinel.
 ChainArg = Annotated[
@@ -128,9 +145,14 @@ ChainArg = Annotated[
         "of the only configured provider.",
         gt=0,
     ),
+    BeforeValidator(_no_zero_sentinel("chain_id")),
 ]
+
+
 BlockArg = Annotated[
-    int | None, Field(description="Block number; omitted: latest.", ge=0)
+    int | None,
+    Field(description="Block number (positive); omitted: latest.", ge=1),
+    BeforeValidator(_no_zero_sentinel("block_number")),
 ]
 
 
@@ -431,6 +453,7 @@ def vault_add(
             description="Chain ID; omitted: the chain of the only configured provider.",
             gt=0,
         ),
+        BeforeValidator(_no_zero_sentinel("chain_id")),
     ] = None,
 ) -> ActionResult:
     """Save a Plasma Vault to the local config.
@@ -523,6 +546,7 @@ def config_set_provider(
     chain_id: Annotated[
         ChainId | None,
         Field(description="Chain ID; omitted: read from the URL's eth_chainId.", gt=0),
+        BeforeValidator(_no_zero_sentinel("chain_id")),
     ] = None,
 ) -> ActionResult:
     """Set RPC provider URL for a chain.

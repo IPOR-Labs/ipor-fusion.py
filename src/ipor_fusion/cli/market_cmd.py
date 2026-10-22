@@ -16,7 +16,7 @@ from eth_typing import ChecksumAddress
 
 from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.cli.config_store import load_config
-from ipor_fusion.cli.options import ADDRESS, CHAIN, _resolve_provider
+from ipor_fusion.cli.options import ADDRESS, BLOCK_NUMBER, CHAIN, _resolve_provider
 from ipor_fusion.cli.vault_rendering import _format_amount, _print_table
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.market_info import (
@@ -84,7 +84,7 @@ def market() -> None:
     "--block-number",
     "--block",
     "block_number",
-    type=click.IntRange(min=0),
+    type=BLOCK_NUMBER,
     default=None,
     help="Block number for on-chain reads (default: latest).",
 )

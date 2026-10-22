@@ -992,8 +992,10 @@ are listed with a link.
 
 - **The CLI and the MCP tools take the same arguments.**
   - **MCP inputs:** `chain_id` and `block_number` are optional and omitted means
-    auto-detected / latest; the `0` sentinel is gone, so `block_number=0` now
-    reads block 0. `server_info(changelog_since=)` is `server_info(since=)` as in
+    auto-detected / latest. The `0` sentinel is gone, and `0` is now rejected with
+    an error naming the argument to omit (it is never read as chain or block 0);
+    a client that passed `0` must omit the argument instead. The CLI refuses
+    `--block-number 0` and `--chain-id 0` the same way. `server_info(changelog_since=)` is `server_info(since=)` as in
     `fusion changelog --since`, and `vault_oracle_mapping` takes `max_depth` like
     `--max-depth`.
   - **Chain auto-detection:** both surfaces use the saved vault's chain, else the
