@@ -957,6 +957,16 @@ are listed with a link.
   parameters carried a zero fee cap and gas limit and failed only on chain. A
   registered but disabled route still opens, but `default_send` raises.
 
+- **Morpho shares convert to assets as Morpho Blue does.** The position breakdown
+  (`MorphoReader.read_position_breakdown`, the `vault info` Morpho rows) and the Morpho
+  lending health follow `SharesMathLib`: integer math with 1e6 virtual shares and one
+  virtual asset, borrow rounded up, supply rounded down, on the market totals Morpho
+  stores (interest accrued since the market's last update is not included). 3.x
+  converted borrow shares by dividing by `total_shares + 1` in floating point and
+  supply shares without the virtual offsets, so large positions lost their low digits
+  and small or empty markets could be off by orders of magnitude: expect materially
+  different numbers where they were wrong.
+
 - **MCP `outputSchema` describes every nested block.** The tool output is
   byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,
   `market_morpho_blue` and `market_meta_morpho` replace each free-form object with
