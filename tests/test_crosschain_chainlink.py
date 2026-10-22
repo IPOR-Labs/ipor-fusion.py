@@ -142,7 +142,11 @@ CCV_DATA = bytes.fromhex("e9a05a20") + (2).to_bytes(2, "big") + b"\xab\xcd"
 
 
 def test_off_ramp_reads_decode_to_typed_values():
-    from ipor_fusion import CcipOffRamp, CcvRequirements, MessageExecutionState
+    from ipor_fusion.crosschain import (
+        CcipOffRamp,
+        CcvRequirements,
+        MessageExecutionState,
+    )
 
     ctx = _ctx(
         {
@@ -167,7 +171,7 @@ def test_off_ramp_reads_decode_to_typed_values():
 
 
 def test_off_ramp_execute_encodes_one_result_per_ccv():
-    from ipor_fusion import CcipOffRamp
+    from ipor_fusion.crosschain import CcipOffRamp
 
     off_ramp = CcipOffRamp(OFF_RAMP)
 
@@ -198,7 +202,7 @@ def test_off_ramp_execute_encodes_one_result_per_ccv():
 
 
 def test_resolver_and_committee_verifier_reads():
-    from ipor_fusion import CcipCommitteeVerifier, CcipVerifierResolver
+    from ipor_fusion.crosschain import CcipCommitteeVerifier, CcipVerifierResolver
 
     ctx = _ctx(
         {

@@ -20,7 +20,7 @@ from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector, keccak
 from web3 import Web3
 
-from ipor_fusion import (
+from ipor_fusion.crosschain import (
     CCIP_EVENT_TOPICS,
     CCIP_EVENTS,
     CcipCrosschainExecutor,

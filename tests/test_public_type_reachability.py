@@ -34,6 +34,7 @@ _PUBLIC_PACKAGES = (
     "ipor_fusion.crosschain.fuses",
     "ipor_fusion.crosschain.stargate",
     "ipor_fusion.fuses",
+    "ipor_fusion.hypercore",
     "ipor_fusion.readers",
 )
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")

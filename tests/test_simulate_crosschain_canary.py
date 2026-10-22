@@ -20,7 +20,7 @@ import pytest
 from _crosschain import CANARY, CANARY_V3, Deployment, Spoke
 from _crosschain_lifecycle import Run, prepare_deployed_run, run_lifecycle
 
-from ipor_fusion import CcipLane
+from ipor_fusion.crosschain import CcipLane
 
 CANARY_LIFECYCLES = [
     pytest.param(
