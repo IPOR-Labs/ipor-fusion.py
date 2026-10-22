@@ -985,6 +985,7 @@ are listed with a link.
   `vault validate` documents carry a `rewards_manager_balance` amount. A custom
   `VaultState` adds the `rewards_manager_balance` property, and code constructing a
   `Reconciliation` passes `rewards_manager_balance` and `rewards_manager_balance_usd`.
+
 - **The reconciliation follows the vault's `totalAssets` formula.** Contracts before
   ipor-fusion #475 (Feb 2026) return gross assets minus the unrealized management
   fee, later ones gross. 3.x always compared gross, so every older vault with an

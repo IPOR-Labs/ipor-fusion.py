@@ -8,6 +8,7 @@ without importing that package, whose ``__init__`` loads every encoder.
 
 from abc import ABC
 from collections.abc import Sequence
+from types import MemberDescriptorType
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
@@ -55,11 +56,33 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
         if value < 0:
             raise ValueError(f"{name} must not be negative, got {value}")
 
+    def _value_state(self) -> tuple[tuple[str, object], ...]:
+        """Every attribute the instance stores, in its ``__dict__`` or in a
+        subclass's ``__slots__``, sorted by name."""
+        state = dict(vars(self))
+        # Slot storage is a member descriptor in the declaring class's own
+        # namespace (already name-mangled). Reading each one directly, keyed by
+        # its class, keeps a base slot shadowed by a subclass attribute apart.
+        for klass in type(self).__mro__:
+            for name, member in vars(klass).items():
+                if not isinstance(member, MemberDescriptorType):
+                    continue
+                try:
+                    value = member.__get__(self, klass)
+                except AttributeError:
+                    continue
+                state[f"{klass.__module__}.{klass.__qualname__}.{name}"] = value
+        return tuple(sorted(state.items()))
+
     def __eq__(self, other: object) -> bool:
-        return type(self) is type(other) and vars(self) == vars(other)
+        return (
+            isinstance(other, Fuse)
+            and type(self) is type(other)
+            and self._value_state() == other._value_state()
+        )
 
     def __hash__(self) -> int:
-        return hash((type(self), *sorted(vars(self).items())))
+        return hash((type(self), *self._value_state()))
 
     def _action_raw(self, signature: str, values: Sequence[object]) -> FuseAction:
         selector = function_signature_to_4byte_selector(signature)
