@@ -9,6 +9,7 @@ import inspect
 from collections.abc import Iterator
 
 import click
+from click.testing import CliRunner
 
 from ipor_fusion.cli.main import cli
 from ipor_fusion.mcp import server
@@ -60,3 +61,15 @@ def test_chain_and_block_are_optional_and_never_a_sentinel() -> None:
         for arg in ("chain_id", "block_number"):
             if arg in props and arg not in tool.inputSchema.get("required", []):
                 assert props[arg].get("default") is None, (name, arg)
+                assert {"type": "null"} in props[arg].get("anyOf", []), (name, arg)
+
+
+def test_a_zero_chain_is_rejected_by_both_surfaces() -> None:
+    result = CliRunner().invoke(
+        cli, ["config", "set-provider", "https://rpc.example.com", "--chain-id", "0"]
+    )
+    assert result.exit_code == 2
+    props = {t.name: t for t in asyncio.run(server.mcp.list_tools())}[
+        "config_set_provider"
+    ].inputSchema["properties"]["chain_id"]
+    assert {"type": "integer", "exclusiveMinimum": 0} in props["anyOf"]

@@ -105,8 +105,8 @@ def _resolve_chain_id(
     if (resolved := resolve_chain_id(cfg, vault_address, chain_id)) is not None:
         return resolved
     raise ValueError(
-        "Cannot tell the chain: the vault is not saved and several providers are "
-        "configured. Pass chain_id or save the vault first."
+        "Cannot tell the chain: the vault is not saved and there is not exactly one "
+        "configured provider. Pass chain_id or save the vault first."
     )
 
 

@@ -102,8 +102,8 @@ def _resolve_chain_id(
     if (resolved := resolve_chain_id(cfg, vault_address, chain_id)) is not None:
         return resolved
     raise click.UsageError(
-        "Cannot tell the chain: the vault is not saved and several providers are "
-        "configured — use --chain-id (e.g. --chain-id ethereum, --chain-id 8453)"
+        "Cannot tell the chain: the vault is not saved and there is not exactly one "
+        "configured provider — use --chain-id (e.g. --chain-id ethereum, --chain-id 8453)"
     )
 
 

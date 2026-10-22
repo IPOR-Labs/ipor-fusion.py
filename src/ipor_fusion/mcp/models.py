@@ -1407,9 +1407,9 @@ class ServerInfoResponse(_Base):
     )
     changelog: list[ChangelogEntryModel] = Field(
         description="Newest first, and only a slice of the release history: "
-        "the running version's entry alone unless changelog_since asked for "
+        "the running version's entry alone unless since asked for "
         "more. Empty when nothing matches: no section for the running "
-        "version, or no release newer than changelog_since."
+        "version, or no release newer than since."
     )
     preview_features: list[PreviewFeatureModel] = Field(
         default_factory=_package_preview_features,
