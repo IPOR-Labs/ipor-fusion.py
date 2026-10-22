@@ -950,6 +950,13 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
 
+- **More markets decode their substrates.** VELODROME_SUPERCHAIN (31, Gauge /
+  Pool), AGUA_GLOBAL_CARRY (51, VAULT / ASSET), TERM_FINANCE (52, SERVICER address
+  or COLLATERAL_TOKEN pair key), META_MORPHO_0001, MERKL and
+  ASSETS_BALANCE_VALIDATION (plain addresses) were `no_decoder(NAME)` in 3.x and
+  now decode per their Solidity substrate libraries and grant checks. The markets
+  still without a decoder are listed with their reason.
+
 - **MCP `outputSchema` describes every nested block.** The tool output is
   byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,
   `market_morpho_blue` and `market_meta_morpho` replace each free-form object with

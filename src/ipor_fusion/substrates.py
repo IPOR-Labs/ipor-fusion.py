@@ -77,6 +77,23 @@ def _decode_plain_address(hex_str: str) -> SubstrateInfo:
     return SubstrateInfo(address=_address(hex_str[24:]))
 
 
+def _decode_term_finance(hex_str: str) -> SubstrateInfo:
+    """TermFinanceSubstrateLib.sol: a SERVICER is the TermRepoServicer address
+    in the plain zero-padded form (the whole upper 96 bits zero, as the fuses'
+    strict ``isServicerSubstrate`` requires); a COLLATERAL_TOKEN is type byte
+    0x01 over ``keccak256(abi.encode(servicer, collateralToken))`` truncated to
+    248 bits, a pair key and not an address."""
+    if hex_str[:24] == "0" * 24:
+        return SubstrateInfo(address=_address(hex_str[24:]), type_label="SERVICER")
+    if hex_str[:2] == "01":
+        return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="COLLATERAL_TOKEN")
+    return SubstrateInfo(
+        raw_hex=f"0x{hex_str}",
+        type_label=f"type={int(hex_str[:2], 16)}",
+        is_error=True,
+    )
+
+
 def _decode_morpho(hex_str: str) -> SubstrateInfo:
     """Raw bytes32 Morpho market ID — no structure."""
     return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="morpho_market_id")
@@ -438,6 +455,14 @@ _register_markets(
         44,  # SPARK_LEND — reuses AaveV3SupplyFuse (isSubstrateAsAssetGranted)
         46,  # NAPIER — isSubstrateAsAssetGranted, plain asset addresses
         *range(100_001, 100_021),  # ERC4626_0001 .. ERC4626_0020
+        # META_MORPHO_0001: deployed as Erc4626SupplyFuse (isSubstrateAsAssetGranted
+        # on the MetaMorpho vault) on Ethereum, Base and Unichain
+        200_001,
+        # MERKL: MerklClaimWrapperFuse gates reward tokens by isSubstrateAsAssetGranted
+        IporFusionMarkets.MERKL,
+        # ASSETS_BALANCE_VALIDATION: PlasmaVaultBalanceAssetsValidationFuse gates
+        # assets by isSubstrateAsAssetGranted
+        IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
     ],
     _decode_plain_address,
 )
@@ -473,11 +498,19 @@ _register_markets(
         h, {0: "UNDEFINED", 1: "GAUGE", 2: "POOL", 3: "TOKEN"}
     ),
 )
-# Velodrome Superchain Slipstream
+# Velodrome Superchain (VelodromeSuperchainLib.sol) and its Slipstream
+# variant share the type<<160 Gauge / Pool layout
 _register_markets(
-    [32],
+    [31, 32],
     lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "Gauge", 2: "Pool"}),
 )
+# Agua Global Carry (AguaSubstrateLib.sol): type<<160 | address
+_register_markets(
+    [51],
+    lambda h: _decode_type_lshift160(h, {0: "UNDEFINED", 1: "VAULT", 2: "ASSET"}),
+)
+# Term Finance (TermFinanceSubstrateLib.sol): SERVICER / COLLATERAL_TOKEN
+_register_markets([52], _decode_term_finance)
 # Aave V4 (id 49 per IporFusionMarkets.sol) — typed Reserve substrates per
 # AaveV4SubstrateLib.sol; an earlier draft enum (Asset/Spoke, address in the
 # low bytes) shipped here and decoded live substrates to garbage addresses
@@ -514,11 +547,6 @@ _register_markets([40], _decode_async_action)
 # / four uint248 guards).
 _register_markets([50], _decode_external_state)
 # Uniswap V4 (id 53 per IporFusionMarkets.sol): PoolId or pool currency.
-# TERM_FINANCE (52) stays unregistered on purpose — its substrate library is
-# not mirrored here yet, and no_decoder(TERM_FINANCE) is the honest answer.
-# SPOL_UNSTAKE (424243) likewise: SPOLUnstakeFuse is not in the public
-# contracts repo, so its substrate grant check cannot be verified — the market
-# doc says the sPOLController address, but no_decoder until the fuse is mirrored
 _register_markets([53], _decode_uniswap_v4)
 # Crosschain (id 54 on the contracts' crosschain branch): EXECUTOR /
 # REMOTE_VAULT typed substrates per CrosschainSubstrateLib.sol. The mainnet
@@ -536,6 +564,27 @@ _register_markets(
 # tests/fixtures/hypercore_hip3_flow.json; that run used id 54 before the
 # renumbering). Numeric 54 is the crosschain market, registered above.
 _register_markets([55], _decode_hypercore)
+
+
+# Markets left without a decoder on purpose, each with the reason; they decode
+# as no_decoder(NAME). tests/test_substrates.py holds every IporFusionMarkets
+# member to a decoder or an entry here, so a new market cannot go unnoticed.
+_UNREGISTERED_ON_PURPOSE: dict[MarketId, str] = {
+    IporFusionMarkets.LITE_PSM: "IporFusionMarkets.sol declares no substrates "
+    "(a ZeroBalanceFuse market)",
+    IporFusionMarkets.SPOL_UNSTAKE: "SPOLUnstakeFuse is not in the public contracts "
+    "repository, so its grant check cannot be verified",
+    **{
+        MarketId(mid): "no fuse is deployed on this market; META_MORPHO_0001 is an "
+        "Erc4626SupplyFuse, but the layout of a later one is not assumed"
+        for mid in range(200_002, 200_011)
+    },
+    IporFusionMarkets.EXCHANGE_RATE_VALIDATOR: "packed ExchangeRateLimiterConfig "
+    "hook and validator words (ExchangeRateLimiterConfigLib), not addresses; not "
+    "mirrored here",
+    IporFusionMarkets.ZERO_BALANCE_MARKET: "a capability market: no fuse defines a "
+    "substrate layout for it",
+}
 
 
 def _build_market_lookup() -> dict[int, str]:
