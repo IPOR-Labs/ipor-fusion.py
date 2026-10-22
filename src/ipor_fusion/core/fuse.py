@@ -64,13 +64,15 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
             for slot in (slots,) if isinstance(slots, str) else slots:
                 if slot in ("__dict__", "__weakref__"):
                     continue
-                name = (
-                    f"_{klass.__name__.lstrip('_')}{slot}"
-                    if slot.startswith("__") and not slot.endswith("__")
-                    else slot
-                )
-                if hasattr(self, name):
-                    state[name] = getattr(self, name)
+                name = _mangled(klass, slot)
+                # Each class's own descriptor: a subclass slot of the same name
+                # shadows it on the instance but not in storage. The key names the
+                # declaring class so the two never collapse.
+                try:
+                    value = klass.__dict__[name].__get__(self, klass)
+                except AttributeError:
+                    continue
+                state[f"{klass.__module__}.{klass.__qualname__}.{name}"] = value
         return tuple(sorted(state.items()))
 
     def __eq__(self, other: object) -> bool:
@@ -88,6 +90,16 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
         abi_types = _parse_param_types(signature)
         data = selector + encode(abi_types, values)
         return FuseAction(fuse=self._address, data=data)
+
+
+def _mangled(klass: type, name: str) -> str:
+    """``name`` as Python stores a slot declared in ``klass``: a private name
+    is mangled with the class name stripped of leading underscores, unless
+    nothing is left of it."""
+    stripped = klass.__name__.lstrip("_")
+    if name.startswith("__") and not name.endswith("__") and stripped:
+        return f"_{stripped}{name}"
+    return name
 
 
 class StakeFuse(Fuse):

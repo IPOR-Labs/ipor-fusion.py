@@ -910,6 +910,34 @@ class TestFuseEquality:
         assert one != SlottedFuse(FUSE_ADDR, TOKEN_A, 2)
         assert len({one, SlottedFuse(FUSE_ADDR, TOKEN_B, 1)}) == 2
 
+    def test_a_shadowed_base_slot_still_counts(self):
+        class Parent(Fuse):
+            __slots__ = ("target",)
+
+        class Child(Parent):
+            __slots__ = ("target",)
+
+        def child(base_target):
+            fuse = Child(FUSE_ADDR)
+            Parent.__dict__["target"].__set__(fuse, base_target)
+            fuse.target = 3
+            return fuse
+
+        assert child(1) != child(2)
+        assert len({child(1), child(2)}) == 2
+        assert child(1) == child(1)
+
+    def test_a_private_slot_of_an_all_underscore_class_counts(self):
+        class ___(Fuse):  # noqa: N801
+            __slots__ = ("__secret",)
+
+            def __init__(self, address, secret):
+                super().__init__(address)
+                self.__secret = secret
+
+        assert ___(FUSE_ADDR, 1) != ___(FUSE_ADDR, 2)
+        assert ___(FUSE_ADDR, 1) == ___(FUSE_ADDR, 1)
+
     def test_an_unset_slot_is_left_out(self):
         class LazyFuse(Fuse):
             __slots__ = "cached"
