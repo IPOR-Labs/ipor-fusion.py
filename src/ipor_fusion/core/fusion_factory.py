@@ -79,7 +79,7 @@ class FusionInstance:
     price_manager: ChecksumAddress
 
     @classmethod
-    def from_dict(  # proctor: ignore[primitives-untyped-dict]
+    def from_dict(
         cls, data: Mapping[str, object]
     ) -> FusionInstance:
         """Rebuild an instance from its JSON form (``dataclasses.asdict``),
