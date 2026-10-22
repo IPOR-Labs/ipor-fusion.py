@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Generic, TypeVar, cast
 
@@ -18,7 +18,10 @@ T_co = TypeVar("T_co", covariant=True)
 U = TypeVar("U")
 
 
-@dataclass(frozen=True, slots=True)
+# No ``slots=True``: on early 3.11 and 3.12 patch releases (3.11.1, 3.12.0 and
+# 3.12.1 checked) ``Call[int](...)`` on a slotted frozen generic dataclass
+# raises ``TypeError`` when typing sets ``__orig_class__`` on the instance.
+@dataclass(frozen=True)
 class Call(Generic[T_co]):
     """A pre-encoded contract call: target, calldata, and (for views) the ABI
     output types + decoder to a typed Python return.
@@ -39,13 +42,22 @@ class Call(Generic[T_co]):
         balance = usdc.balance_of(addr).call(ctx)       # eth_call → Amount
         usdc.transfer(addr, amount).send(ctx)           # tx → TxReceipt
         after = sim.observe(usdc.balance_of(vault))      # eth_simulateV1
-        sim.add_call(call=usdc.approve(spender, amount), from_=user)
+        sim.add_call(usdc.approve(spender, amount), from_=user)
+
+    A `Call` is a hashable value: ``output_types`` is stored as a tuple
+    whatever sequence it was given as. Equality compares the decoder by
+    identity, so two separately built Calls with equivalent lambdas differ.
     """
 
     to: ChecksumAddress
     data: bytes
-    output_types: list[str] | None = None
+    output_types: Sequence[str] | None = None
     decoder: Callable[..., T_co] | None = None
+
+    def __post_init__(self) -> None:
+        if self.output_types is not None:
+            # Frozen: normalizing the field is part of building the value.
+            object.__setattr__(self, "output_types", tuple(self.output_types))
 
     @property
     def calldata(self) -> bytes:
@@ -67,7 +79,7 @@ class Call(Generic[T_co]):
         return Call(
             to=self.to,
             data=self.data,
-            output_types=list(self.output_types),
+            output_types=self.output_types,
             decoder=mapped,
         )
 
@@ -149,7 +161,7 @@ class ContractWrapper:
         self,
         signature: str,
         *args: object,
-        output_types: list[str],
+        output_types: Sequence[str],
         decoder: Callable[..., T] | None = None,
     ) -> Call[T]:
         return Call(

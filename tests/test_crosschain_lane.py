@@ -342,7 +342,7 @@ class TestAttestation:
         assert call.data[:4] == selector(
             "proposeBalance(uint256,uint256,uint64,uint64,uint64,uint64,bytes32)"
         )
-        assert call.output_types == ["uint256"]
+        assert call.output_types == ("uint256",)
         assert decode(["uint256"] * 2, call.data[4:68]) == (SPOKE, 999_700)
         assert _ccip_lane().approve_balance(3).data == selector(
             "approveBalance(uint256)"

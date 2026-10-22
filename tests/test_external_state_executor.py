@@ -172,7 +172,7 @@ class TestBalances:
         assert call.data[:4] == Web3.keccak(text="balances(address)")[:4]
         (account,) = decode(["address"], call.data[4:])
         assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
-        assert call.output_types == ["uint256"]
+        assert call.output_types == ("uint256",)
         assert call.decoder is Amount
 
     def test_decodes_uint256(self):
@@ -192,7 +192,7 @@ class TestLastUpdated:
         assert call.data[:4] == Web3.keccak(text="lastUpdated(address)")[:4]
         (account,) = decode(["address"], call.data[4:])
         assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
-        assert call.output_types == ["uint256"]
+        assert call.output_types == ("uint256",)
         # `Timestamp` is a NewType: pinned here because swapping it for another
         # one would change nothing at runtime and still pass pyright.
         assert call.decoder is Timestamp
@@ -278,7 +278,7 @@ class TestPendingProposals:
         assert call.data[:4] == Web3.keccak(text="pendingProposals(address)")[:4]
         (account,) = decode(["address"], call.data[4:])
         assert Web3.to_checksum_address(account) == BALANCE_ACCOUNT
-        assert call.output_types == ["uint256", "address", "uint64", "uint256"]
+        assert call.output_types == ("uint256", "address", "uint64", "uint256")
 
     def test_decodes_slot_into_proposal(self):
         executor, ctx = self._executor_with_slot()
@@ -1325,7 +1325,7 @@ class TestExecutorViews:
         executor = ExternalStateExecutor(EXECUTOR_ADDR)
         call = getattr(executor, method)()
         assert bytes(call.data)[:4] == Web3.keccak(text=signature)[:4]
-        assert call.output_types == ["uint256"]
+        assert call.output_types == ("uint256",)
 
     def test_balance_fuse_snapshot_decodes_to_the_dataclass(self):
         from ipor_fusion import BalanceFuseSnapshot
@@ -1333,7 +1333,7 @@ class TestExecutorViews:
         executor = ExternalStateExecutor(EXECUTOR_ADDR)
         call = executor.get_balance_fuse_snapshot()
         assert bytes(call.data)[:4] == Web3.keccak(text="getBalanceFuseSnapshot()")[:4]
-        assert call.output_types == ["uint256", "uint256", "uint256"]
+        assert call.output_types == ("uint256", "uint256", "uint256")
         assert call.decoder is not None
         snap = call.decoder((32_928_135, 50_000, 1_791_458_983))
         assert snap == BalanceFuseSnapshot(32_928_135, 50_000, 1_791_458_983)

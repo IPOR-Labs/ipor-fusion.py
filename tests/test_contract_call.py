@@ -1,6 +1,9 @@
 """Unit tests for `Call.call(ctx)` — the eth_call + decode path shared by every
 reader and wrapper."""
 
+import dataclasses
+import importlib
+import pkgutil
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,6 +12,7 @@ from eth_abi.exceptions import DecodingError, InsufficientDataBytes
 from hexbytes import HexBytes
 from web3 import Web3
 
+import ipor_fusion
 from ipor_fusion.core.contract import Call
 from ipor_fusion.errors import EmptyCallResultError, IporFusionError
 
@@ -44,7 +48,7 @@ def test_map_composes_decoder_and_preserves_call():
     assert mapped.to == call.to
     assert mapped.data == call.data
     assert mapped.output_types == call.output_types
-    assert mapped.output_types is not call.output_types
+    assert hash(mapped.output_types) == hash(call.output_types)
 
 
 def test_map_rejects_write_only_call():
@@ -92,3 +96,38 @@ def test_write_only_call_cannot_be_read():
         call.call(ctx)
     with pytest.raises(ValueError, match="write-only Call"):
         call.decode(b"")
+
+
+def test_subscripted_construction_and_hashing():
+    call = Call[int](to=TARGET, data=SELECTOR, output_types=["uint256"])
+    assert call.output_types == ("uint256",)
+    same = Call[int](to=TARGET, data=SELECTOR, output_types=("uint256",))
+    assert call == same
+    assert hash(call) == hash(same)
+    assert {call, same} == {call}
+
+
+def test_no_generic_dataclass_is_slotted():
+    """Early 3.11/3.12 patch releases (3.11.1, 3.12.0, 3.12.1) raise
+    ``TypeError`` from ``Cls[T](...)`` on a frozen slotted generic dataclass,
+    which current interpreters do not reproduce; keep the pattern out."""
+    offenders = []
+    for module_name in _sdk_modules():
+        module = importlib.import_module(module_name)
+        for obj in vars(module).values():
+            if (
+                isinstance(obj, type)
+                and obj.__module__ == module_name
+                and dataclasses.is_dataclass(obj)
+                and getattr(obj, "__parameters__", ())
+                and "__slots__" in vars(obj)
+            ):
+                offenders.append(f"{module_name}.{obj.__name__}")
+    assert offenders == []
+
+
+def _sdk_modules() -> list[str]:
+    return [
+        info.name
+        for info in pkgutil.walk_packages(ipor_fusion.__path__, "ipor_fusion.")
+    ]
