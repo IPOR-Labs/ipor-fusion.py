@@ -51,12 +51,13 @@ def _parse_solidity_int(value: str) -> int:
 
 
 @cache
-def _solidity_source(path: str) -> str:
-    """The contract at `path` (repo-relative), at the pinned upstream commit.
+def _solidity_source(path: str, ref: str = IPOR_FUSION_REF) -> str:
+    """The contract at `path` (repo-relative), at the pinned upstream commit
+    (or ``ref``).
 
     Cached so gates reading the same file share one fetch; `cache` stores
     nothing on a raising path, so a transient failure still re-tries."""
-    url = _RAW_URL.format(ref=IPOR_FUSION_REF, path=path)
+    url = _RAW_URL.format(ref=ref, path=path)
     try:
         resp = requests.get(url, timeout=15)
     except requests.RequestException as exc:
