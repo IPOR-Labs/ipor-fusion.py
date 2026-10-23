@@ -972,14 +972,12 @@ class HyperCorePerpMarketEntry(_Base):
 
 class HyperCorePendingEntry(_Base):
     """HyperCorePendingReader.pendingState(): `pending` and `settled` are the
-    authoritative predicates; the raw fields stay after a TIMING settlement."""
+    authoritative predicates; the raw fields stay after a settlement until the
+    next enqueue."""
 
     pending: bool
     settled: bool
-    refreshing: bool
     action_class: Literal["NONE", "TRANSFER", "ORDER"]
-    settlement_mode: Literal["TIMING", "REPORTED"] | None
-    reported_result: Literal["NONE", "EXECUTED", "REJECTED"]
     action_id: int
     action_nonce: int
     pending_until: int
@@ -992,6 +990,20 @@ class HyperCorePendingEntry(_Base):
     )
     current_timestamp: int
     l1_block_available: bool
+    effect_kind: Literal["NONE", "CORE_SPOT", "EVM_BALANCE"] = Field(
+        description="The balance a transfer waits for before it settles."
+    )
+    effect_token_index: int = Field(description="Core token of a CORE_SPOT effect.")
+    effect_evm_asset: str = Field(description="ERC-20 of an EVM_BALANCE effect.")
+    expected_balance: int = Field(
+        description="Balance (Core wei or token units) that settles the transfer."
+    )
+    timeout_at: int = Field(
+        description="Unix time after which the transfer settles without the effect."
+    )
+    last_order_l1_block: int = Field(
+        description="Core L1 block of the last order; another waits for the next."
+    )
 
 
 class HyperCoreSection(_Base):

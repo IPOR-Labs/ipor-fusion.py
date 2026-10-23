@@ -1,13 +1,12 @@
-"""HyperCore events by topic: the fuses', the pending library's, the
-settlement fuse's and the settlement reporter's.
+"""HyperCore events by topic: the fuses' and the pending library's.
 
 Mirrors the ``event`` declarations in ``contracts/fuses/hypercore``. Every
 parameter is unindexed (the repository's event policy), so a log decodes from
 its ``data`` alone; the first parameter of a fuse event, ``version``, is the
 fuse's own address (``VERSION``). ``HyperCoreActionEnqueued`` is emitted by
 the vault (the fuses run as delegatecalls) once per enqueued action and
-``HyperCoreActionSettled`` only from a settlement fuse transaction; TIMING
-settlements emit nothing.
+``HyperCoreActionSettled`` by either HyperCore pre-hook when it clears a settled
+action.
 
 Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
@@ -134,42 +133,6 @@ HYPERCORE_EVENT_SPECS: tuple[HyperCoreEventSpec, ...] = (
         ),
     ),
     HyperCoreEventSpec("HyperCoreActionSettled", (("uint256", "nonce"),)),
-    # HyperCoreSettlementFuse
-    HyperCoreEventSpec(
-        "HyperCoreReportedActionSettled",
-        (
-            ("uint256", "nonce"),
-            ("uint24", "actionId"),
-            ("bytes32", "payloadHash"),
-            ("uint8", "outcome"),
-            ("uint64", "resultL1Block"),
-            ("bytes32", "evidenceHash"),
-            ("bytes32", "reasonHash"),
-        ),
-    ),
-    # HyperCoreSettlementReporter
-    HyperCoreEventSpec(
-        "ReportSubmitted",
-        (("bytes32", "digest"), ("uint256", "nonce"), ("uint8", "outcome")),
-    ),
-    HyperCoreEventSpec("ObserverSetProposed", (("uint64", "executeAfter"),)),
-    HyperCoreEventSpec(
-        "ObserverSetChanged",
-        (("address", "observer0"), ("address", "observer1"), ("address", "observer2")),
-    ),
-    HyperCoreEventSpec(
-        "RecoveryProposed",
-        (
-            ("bytes32", "digest"),
-            ("bytes32", "evidenceHash"),
-            ("bytes32", "reasonHash"),
-            ("uint64", "executeAfter"),
-        ),
-    ),
-    HyperCoreEventSpec(
-        "RecoveryExecuted",
-        (("bytes32", "digest"), ("bytes32", "evidenceHash"), ("bytes32", "reasonHash")),
-    ),
 )
 
 # Event parameters by their Solidity names; ``version`` is the emitting fuse.
@@ -250,45 +213,6 @@ class HyperCoreActionSettledArgs(TypedDict):
     nonce: int
 
 
-class HyperCoreReportedActionSettledArgs(TypedDict):
-    nonce: int
-    actionId: HyperCoreActionId
-    payloadHash: PayloadHash
-    outcome: int
-    resultL1Block: int
-    evidenceHash: bytes
-    reasonHash: bytes
-
-
-class HyperCoreReportSubmittedArgs(TypedDict):
-    digest: bytes
-    nonce: int
-    outcome: int
-
-
-class HyperCoreObserverSetProposedArgs(TypedDict):
-    executeAfter: Timestamp
-
-
-class HyperCoreObserverSetChangedArgs(TypedDict):
-    observer0: ChecksumAddress
-    observer1: ChecksumAddress
-    observer2: ChecksumAddress
-
-
-class HyperCoreRecoveryProposedArgs(TypedDict):
-    digest: bytes
-    evidenceHash: bytes
-    reasonHash: bytes
-    executeAfter: Timestamp
-
-
-class HyperCoreRecoveryExecutedArgs(TypedDict):
-    digest: bytes
-    evidenceHash: bytes
-    reasonHash: bytes
-
-
 #: The parameters of one HyperCore event.
 HyperCoreEventArgs: TypeAlias = (
     HyperCoreDepositFuseEnterArgs
@@ -301,12 +225,6 @@ HyperCoreEventArgs: TypeAlias = (
     | HyperCoreBuilderFeeFuseEnterArgs
     | HyperCoreActionEnqueuedArgs
     | HyperCoreActionSettledArgs
-    | HyperCoreReportedActionSettledArgs
-    | HyperCoreReportSubmittedArgs
-    | HyperCoreObserverSetProposedArgs
-    | HyperCoreObserverSetChangedArgs
-    | HyperCoreRecoveryProposedArgs
-    | HyperCoreRecoveryExecutedArgs
 )
 
 #: topic0 -> spec, for every HyperCore event.
@@ -403,42 +321,6 @@ class HyperCoreActionSettledEvent(_HyperCoreEventBase):
     args: HyperCoreActionSettledArgs
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HyperCoreReportedActionSettledEvent(_HyperCoreEventBase):
-    name: Literal["HyperCoreReportedActionSettled"] = "HyperCoreReportedActionSettled"
-    args: HyperCoreReportedActionSettledArgs
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HyperCoreReportSubmittedEvent(_HyperCoreEventBase):
-    name: Literal["ReportSubmitted"] = "ReportSubmitted"
-    args: HyperCoreReportSubmittedArgs
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HyperCoreObserverSetProposedEvent(_HyperCoreEventBase):
-    name: Literal["ObserverSetProposed"] = "ObserverSetProposed"
-    args: HyperCoreObserverSetProposedArgs
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HyperCoreObserverSetChangedEvent(_HyperCoreEventBase):
-    name: Literal["ObserverSetChanged"] = "ObserverSetChanged"
-    args: HyperCoreObserverSetChangedArgs
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HyperCoreRecoveryProposedEvent(_HyperCoreEventBase):
-    name: Literal["RecoveryProposed"] = "RecoveryProposed"
-    args: HyperCoreRecoveryProposedArgs
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class HyperCoreRecoveryExecutedEvent(_HyperCoreEventBase):
-    name: Literal["RecoveryExecuted"] = "RecoveryExecuted"
-    args: HyperCoreRecoveryExecutedArgs
-
-
 #: One decoded HyperCore event; ``event.name == "..."`` narrows it, and its
 #: ``args``, to that event's class.
 HyperCoreEvent: TypeAlias = (
@@ -452,12 +334,6 @@ HyperCoreEvent: TypeAlias = (
     | HyperCoreBuilderFeeFuseEnterEvent
     | HyperCoreActionEnqueuedEvent
     | HyperCoreActionSettledEvent
-    | HyperCoreReportedActionSettledEvent
-    | HyperCoreReportSubmittedEvent
-    | HyperCoreObserverSetProposedEvent
-    | HyperCoreObserverSetChangedEvent
-    | HyperCoreRecoveryProposedEvent
-    | HyperCoreRecoveryExecutedEvent
 )
 
 #: Event name -> its event class (``args`` annotation: its TypedDict).
@@ -472,12 +348,6 @@ HYPERCORE_EVENT_CLASSES: dict[str, type[HyperCoreEvent]] = {
     "HyperCoreBuilderFeeFuseEnter": HyperCoreBuilderFeeFuseEnterEvent,
     "HyperCoreActionEnqueued": HyperCoreActionEnqueuedEvent,
     "HyperCoreActionSettled": HyperCoreActionSettledEvent,
-    "HyperCoreReportedActionSettled": HyperCoreReportedActionSettledEvent,
-    "ReportSubmitted": HyperCoreReportSubmittedEvent,
-    "ObserverSetProposed": HyperCoreObserverSetProposedEvent,
-    "ObserverSetChanged": HyperCoreObserverSetChangedEvent,
-    "RecoveryProposed": HyperCoreRecoveryProposedEvent,
-    "RecoveryExecuted": HyperCoreRecoveryExecutedEvent,
 }
 
 

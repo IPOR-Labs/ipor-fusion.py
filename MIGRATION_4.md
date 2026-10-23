@@ -390,6 +390,39 @@ module was renamed to match. Import the decoders with `from ipor_fusion import
 external_state_events` and `from ipor_fusion.hypercore import hypercore_events`;
 the modules are internal.
 
+#### HyperCore follows the released contracts
+
+4.0 reads and encodes the HyperCore contracts `ipor-abi` publishes on HyperEVM
+(contracts release 2026-10-21), not the earlier market-55 test deployment.
+
+- **Pending reader.** `HYPERCORE_PENDING_READERS[999]` is
+  `0x1EFFb12434f5fb59a636C54D8CBaC93b13DF1A9E`. `HyperCorePendingReader.is_pending()`
+  is gone (the released reader has no `isPending()`): call `is_action_pending()`,
+  and `is_order_in_flight()` for the order rate limit. `pending_state()` decodes
+  the released 23-word tuple only; the earlier reader `0x83F54bc9…` returns 18
+  words and is no longer supported. The released reader serves a vault of the
+  earlier build too: the struct only grew.
+- **`HyperCorePendingState`.** Removed: `settlement_mode`, `reported_result`,
+  `result_l1_block`, `refreshing` (the contracts no longer write them). Added:
+  `effect_kind` (`HyperCoreEffectKind`), `effect_token_index`, `effect_evm_asset`,
+  `expected_balance`, `timeout_at`, `last_order_l1_block`. A transfer with an effect
+  settles when the expected balance is observed or `timeout_at` passes.
+- **`vault info` / `vault_info`.** `hypercore.pending` drops `refreshing`,
+  `settlement_mode`, `reported_result` and gains the six fields above.
+- **Settlement mode removed.** `SettlementMode` and `HyperCoreReportedResult` are
+  gone, and so are the settlement fuse and reporter events
+  (`HyperCoreReportedActionSettled`, `ReportSubmitted`, `ObserverSetProposed`,
+  `ObserverSetChanged`, `RecoveryProposed`, `RecoveryExecuted` and their `*Args`
+  / `*Event` classes): orders settle by time, transfers by time and effect.
+  `HyperCoreConfigKey.WINDOW_ORDER_SECONDS` and `SETTLEMENT_MODE` keep their
+  numbers but are reserved and ignored (`RESERVED_HYPERCORE_CONFIG_KEYS`); a
+  decoded substrate of either carries `extra["reserved"] == "true"`.
+- **New substrates.** `HyperCoreSubstrates.perp_position_cap(asset,
+  max_position_notional_usd6)` (type 7) and `HyperCoreConfigKey`
+  `TRANSFER_TIMEOUT_SECONDS`, `ACTIVATION_FEE_ALLOWANCE_USDC_WEI`, `MAX_NAV_JUMP_BPS`,
+  `MAX_MARK_ORACLE_DEVIATION_BPS`, `NAV_JUMP_FLOOR_USD6` (7..11); `decode_substrate`
+  decodes them instead of flagging them as errors.
+
 **Removed.**
 
 - `IporFusionMarkets.RWA`: market 50 is `IporFusionMarkets.EXTERNAL_STATE`.

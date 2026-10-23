@@ -47,6 +47,7 @@ from ipor_fusion.hypercore import (
     read_hypercore_vault_state,
 )
 from ipor_fusion.mcp import server
+from ipor_fusion.readers.hypercore import HYPERCORE_PENDING_READERS
 from ipor_fusion.types import MarketId
 
 FIXTURE = json.loads(
@@ -88,7 +89,9 @@ def vault() -> PlasmaVault:
 
 @pytest.fixture(scope="module")
 def pending(vault: PlasmaVault) -> HyperCorePendingReader:
-    return HyperCorePendingReader(vault.address, CREATED["HyperCorePendingReader"])
+    # the published reader: same pending slot, append-only struct, so it
+    # reads a vault of the earlier build too (the appended fields are zero)
+    return HyperCorePendingReader(vault.address, HYPERCORE_PENDING_READERS[999])
 
 
 def test_nav_identity_matches_the_balance_fuse(ctx: Web3Context, vault: PlasmaVault):
@@ -106,7 +109,7 @@ def test_vault_state_reads_everything_at_one_block(ctx: Web3Context):
         VAULT,
         CREATED["HyperCoreBalanceFuse"],
         LIVE_MARKET,
-        pending_reader=CREATED["HyperCorePendingReader"],
+        pending_reader=HYPERCORE_PENDING_READERS[999],
     )
     assert state.nav_matches_balance_fuse is True
     assert state.pending is not None and state.pending.l1_block_available
@@ -121,7 +124,8 @@ def test_pending_state_reads_through_the_vault(
     state = pending.pending_state().call(ctx)
     assert state.l1_block_available and state.current_l1_block > 0
     assert state.current_timestamp > 0
-    assert state.pending == pending.is_pending().call(ctx)
+    assert state.pending == pending.is_action_pending().call(ctx)
+    assert isinstance(pending.is_order_in_flight().call(ctx), bool)
     assert state.pending or state.settled
 
 
@@ -197,7 +201,7 @@ def _dry_run(ctx: Web3Context, call: Call) -> int:
 
 
 def _skip_if_pending(ctx: Web3Context, pending: HyperCorePendingReader) -> None:
-    if pending.is_pending().call(ctx):
+    if pending.is_action_pending().call(ctx):
         pytest.skip("the vault has a pending HyperCore action (state, not the SDK)")
 
 

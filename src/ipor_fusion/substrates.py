@@ -323,6 +323,7 @@ _HYPERCORE_TYPES = {
     4: "BUILDER",
     5: "CONFIG",
     6: "SEND_CAP",
+    7: "PERP_POSITION_CAP",
 }
 # HyperCoreSubstrateLib.ConfigKey member names, by enum value.
 _HYPERCORE_CONFIG_KEYS = {
@@ -332,8 +333,14 @@ _HYPERCORE_CONFIG_KEYS = {
     4: "PerpDexIds",
     5: "SettlementMode",
     6: "SpotSendBridgeEnabled",
+    7: "TransferTimeoutSeconds",
+    8: "ActivationFeeAllowanceUsdcWei",
+    9: "MaxNavJumpBps",
+    10: "MaxMarkOracleDeviationBps",
+    11: "NavJumpFloorUsd6",
 }
-_HYPERCORE_SETTLEMENT_MODES = {1: "TIMING", 2: "REPORTED"}
+# Keys the library keeps for their stable numbering; the fuses ignore them.
+_HYPERCORE_RESERVED_CONFIG_KEYS = frozenset({2, 5})
 
 
 def _decode_hypercore(hex_str: str) -> SubstrateInfo:
@@ -348,13 +355,17 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
       with 6 decimals, the low 120 bits are zero.
     - Destination (3): address in the low 20 bytes.
     - Builder (4): ``maxFeeRateDecibps << 160 | builder``.
-    - Config (5): ``key << 240 | uint240 value``. Keys 1..6 are
-      WindowTransferSeconds, WindowOrderSeconds, MaxUsdClassTransferUsd6,
-      PerpDexIds (bitmap: bit i enables perp dex i), SettlementMode (1 TIMING,
-      2 REPORTED) and SpotSendBridgeEnabled.
+    - Config (5): ``key << 240 | uint240 value``. Keys 1..11 are
+      WindowTransferSeconds, WindowOrderSeconds (reserved, ignored),
+      MaxUsdClassTransferUsd6, PerpDexIds (bitmap: bit i enables perp dex i),
+      SettlementMode (reserved, ignored), SpotSendBridgeEnabled,
+      TransferTimeoutSeconds, ActivationFeeAllowanceUsdcWei, MaxNavJumpBps,
+      MaxMarkOracleDeviationBps and NavJumpFloorUsd6.
     - SendCap (6): ``tokenIndex << 128 | maxWei`` (Core wei).
+    - PerpPositionCap (7): ``asset << 216 | maxPositionNotionalUsd6 << 128``,
+      the low 128 bits zero.
     Words the library's decoders revert on come back raw with ``is_error``
-    (a tag outside 1..6, an unknown config key, reserved bits set, a
+    (a tag outside 1..7, an unknown config key, reserved bits set, a
     reduce-only flag other than 0/1): the fuses would reject them, so no
     field of theirs may look granted.
     """
@@ -364,40 +375,51 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
         return _hypercore_invalid(hex_str, f"type={type_byte}")
     if type_byte == 5:
         return _decode_hypercore_config(hex_str)
-    # Reserved bits the library requires to be zero, as hex spans of the word.
-    reserved = {1: (2, 8), 2: (34, 64), 3: (2, 24), 4: (2, 8), 6: (2, 16)}[type_byte]
-    if hex_str[reserved[0] : reserved[1]].strip("0"):
+    start, end = _HYPERCORE_RESERVED_SPANS[type_byte]
+    if hex_str[start:end].strip("0"):
         return _hypercore_invalid(hex_str, label)
-    if type_byte == 1:
-        return SubstrateInfo(
-            address=_address(hex_str[24:]),
-            type_label=label,
-            extra={"token_index": str(int(hex_str[8:24], 16))},
-        )
-    if type_byte == 2:
-        reduce_flag = int(hex_str[32:34], 16)
-        if reduce_flag > 1:
-            return _hypercore_invalid(hex_str, label)
-        asset = HyperCoreAsset(int(hex_str[2:10], 16))
-        extra = {
-            "asset": str(asset),
-            "max_notional_usd6": str(int(hex_str[10:32], 16)),
-            "reduce_only_required": str(reduce_flag == 1).lower(),
-        }
-        # The HIP-3 coordinates the read precompiles want; absent for an asset
-        # outside the native and HIP-3 families, which the perp fuses reject.
-        if is_native_perp_asset(asset) or is_hip3_asset(asset):
-            extra["dex"] = str(perp_dex_of(asset))
-            extra["read_index"] = str(precompile_index_of(asset))
-        return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
-    if type_byte == 3:
-        return SubstrateInfo(address=_address(hex_str[24:]), type_label=label)
-    if type_byte == 4:
-        return SubstrateInfo(
-            address=_address(hex_str[24:]),
-            type_label=label,
-            extra={"max_fee_rate_decibps": str(int(hex_str[8:24], 16))},
-        )
+    return _HYPERCORE_FIELD_DECODERS[type_byte](hex_str, label)
+
+
+def _hypercore_spot_token(hex_str: str, label: str) -> SubstrateInfo:
+    return SubstrateInfo(
+        address=_address(hex_str[24:]),
+        type_label=label,
+        extra={"token_index": str(int(hex_str[8:24], 16))},
+    )
+
+
+def _hypercore_perp_market(hex_str: str, label: str) -> SubstrateInfo:
+    reduce_flag = int(hex_str[32:34], 16)
+    if reduce_flag > 1:
+        return _hypercore_invalid(hex_str, label)
+    asset = HyperCoreAsset(int(hex_str[2:10], 16))
+    extra = {
+        "asset": str(asset),
+        "max_notional_usd6": str(int(hex_str[10:32], 16)),
+        "reduce_only_required": str(reduce_flag == 1).lower(),
+    }
+    # The HIP-3 coordinates the read precompiles want; absent for an asset
+    # outside the native and HIP-3 families, which the perp fuses reject.
+    if is_native_perp_asset(asset) or is_hip3_asset(asset):
+        extra["dex"] = str(perp_dex_of(asset))
+        extra["read_index"] = str(precompile_index_of(asset))
+    return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
+
+
+def _hypercore_destination(hex_str: str, label: str) -> SubstrateInfo:
+    return SubstrateInfo(address=_address(hex_str[24:]), type_label=label)
+
+
+def _hypercore_builder(hex_str: str, label: str) -> SubstrateInfo:
+    return SubstrateInfo(
+        address=_address(hex_str[24:]),
+        type_label=label,
+        extra={"max_fee_rate_decibps": str(int(hex_str[8:24], 16))},
+    )
+
+
+def _hypercore_send_cap(hex_str: str, label: str) -> SubstrateInfo:
     return SubstrateInfo(
         raw_hex=f"0x{hex_str}",
         type_label=label,
@@ -408,6 +430,36 @@ def _decode_hypercore(hex_str: str) -> SubstrateInfo:
     )
 
 
+def _hypercore_perp_position_cap(hex_str: str, label: str) -> SubstrateInfo:
+    return SubstrateInfo(
+        raw_hex=f"0x{hex_str}",
+        type_label=label,
+        extra={
+            "asset": str(int(hex_str[2:10], 16)),
+            "max_position_notional_usd6": str(int(hex_str[10:32], 16)),
+        },
+    )
+
+
+# Reserved bits the library requires to be zero, as hex spans of the word.
+_HYPERCORE_RESERVED_SPANS = {
+    1: (2, 8),
+    2: (34, 64),
+    3: (2, 24),
+    4: (2, 8),
+    6: (2, 16),
+    7: (32, 64),
+}
+_HYPERCORE_FIELD_DECODERS: dict[int, Callable[[str, str], SubstrateInfo]] = {
+    1: _hypercore_spot_token,
+    2: _hypercore_perp_market,
+    3: _hypercore_destination,
+    4: _hypercore_builder,
+    6: _hypercore_send_cap,
+    7: _hypercore_perp_position_cap,
+}
+
+
 def _decode_hypercore_config(hex_str: str) -> SubstrateInfo:
     key = int(hex_str[2:4], 16)
     value = int(hex_str[4:], 16)
@@ -415,8 +467,8 @@ def _decode_hypercore_config(hex_str: str) -> SubstrateInfo:
     if name is None:
         return _hypercore_invalid(hex_str, f"CONFIG key={key}")
     extra = {"key": name, "value": str(value)}
-    if key == 5:
-        extra["mode"] = _HYPERCORE_SETTLEMENT_MODES.get(value, f"mode={value}")
+    if key in _HYPERCORE_RESERVED_CONFIG_KEYS:
+        extra["reserved"] = "true"
     return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="CONFIG", extra=extra)
 
 

@@ -656,10 +656,7 @@
     "pending": {
       "pending": false,
       "settled": true,
-      "refreshing": false,
       "action_class": "TRANSFER",
-      "settlement_mode": null,
-      "reported_result": "NONE",
       "action_id": 13,
       "action_nonce": 32,
       "pending_until": 1790609642,
@@ -669,7 +666,13 @@
       "cached_value_wad": 10000000000000000,
       "current_l1_block": 1168823034,
       "current_timestamp": 1790931001,
-      "l1_block_available": true
+      "l1_block_available": true,
+      "effect_kind": "NONE",
+      "effect_token_index": 0,
+      "effect_evm_asset": "0x0000000000000000000000000000000000000000",
+      "expected_balance": 0,
+      "timeout_at": 0,
+      "last_order_l1_block": 0
     },
     "pending_note": "HyperCorePendingReader.pendingState(): whether a HyperCore action blocks execute and updateMarketsBalances, the settled predicate, and the raw last action (class, id, nonce, window). Null when no reader is known for the chain."
   },

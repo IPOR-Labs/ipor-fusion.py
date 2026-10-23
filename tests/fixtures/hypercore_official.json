@@ -1,0 +1,16 @@
+{
+  "_source": "ipor-abi mainnet/mainnet-hyperevm-fusion/addresses.json at 5bb6913 (2026-10-22), contracts release 2026-10-21",
+  "chain_id": 999,
+  "contracts": {
+    "HyperCoreBalanceFuse": "0xbEd25202529DCD2a05f7D8944B10779b6dbc6Fa6",
+    "HyperCoreBuilderFeeFuse": "0xf6dF3B5D427E9B46C5D14684512E467C9B71AD6c",
+    "HyperCoreCancelFuse": "0xdbf6833211A41B2edD5575e639E2Bb5C6dea6fD8",
+    "HyperCoreCapitalFlowPreHook": "0xbA999E8b50bDC2672CcE13A1F896aaD7Dc5BE547",
+    "HyperCoreDepositFuse": "0x5DBB60251Ff1F4BD57394976F4526987d05d1eB6",
+    "HyperCoreMarginFuse": "0xE7e8a7D15e4eb558B953d91c602EFfDbE913959e",
+    "HyperCoreOrderFuse": "0x96f97c088E9610A036a2738B004DF04Ee9Cf17a2",
+    "HyperCorePendingActionPreHook": "0xd240690cf7C41dDD75863c4b4a9358ea62B20c85",
+    "HyperCorePendingReader": "0x1EFFb12434f5fb59a636C54D8CBaC93b13DF1A9E",
+    "HyperCoreSendFuse": "0x0C7b6788716eD1563De79743C2b7690D82f7C999"
+  }
+}
