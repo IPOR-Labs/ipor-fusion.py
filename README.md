@@ -320,10 +320,12 @@ A flash-loan fuse also needs `update_callback_handler(handler, sender, selector)
 
 The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/tests/test_simulate_vault_from_scratch_base.py).
 
-Custom errors of the crosschain contracts decode by name: importing
-`ipor_fusion.crosschain` registers their signatures (`CROSSCHAIN_ERROR_SIGNATURES`),
-so a simulated or sent call that reverts reads `NavSettledStale(8453)` in
-`SimulationResult.revert_reason` and `TransactionError` instead of a bare selector.
+Custom errors of the IPOR Fusion contracts and the libraries they import
+(OpenZeppelin included) decode by name, so a simulated or sent call that reverts
+reads `AccessManagedUnauthorized(0x...)`, `UnsupportedFuse()` or
+`NavSettledStale(8453)` in `SimulationResult.revert_reason` and `TransactionError`
+instead of a bare selector. Importing `ipor_fusion.crosschain` also registers
+`CROSSCHAIN_ERROR_SIGNATURES`.
 `register_custom_errors([...])` adds your own, and `SimulationResult.raise_for_failure()`
 raises `SimulationError` naming the first failed call.
 

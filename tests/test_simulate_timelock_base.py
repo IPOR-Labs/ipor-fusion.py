@@ -35,7 +35,7 @@ def test_schedule_wait_and_execute_a_delayed_call(web3_base):
     assert scheduled.success
     assert not too_early.success
     assert too_early.error is not None
-    assert "0x18cb6b7a" in too_early.error  # AccessManagerNotReady(bytes32)
+    assert "AccessManagerNotReady(0x" in too_early.error
 
     # Once ready, the vault consumes the schedule on a direct call from the
     # atomist, or the manager relays it.
