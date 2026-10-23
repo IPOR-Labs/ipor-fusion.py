@@ -816,6 +816,64 @@ class TestUniversalTokenSwapperFuse:
         assert decoded_tuple[3] == 4900
         assert decoded_tuple[4][1][0] == b"\xaa\xbb"
 
+    def test_swap_tokens_to_return_abi(self):
+        """The Arbitrum fuses of the 2026-10-21 release (markets 12 and 1202,
+        0xD42940B4… and 0x9d74A79b…) carry only this selector."""
+        action = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.TOKENS_TO_RETURN
+        ).swap(
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            amount_in=5000,
+            targets=[TOKEN_A],
+            data=[b"\xaa\xbb"],
+            min_amount_out=4900,
+            tokens_to_return=[TOKEN_B],
+        )
+        signature = (
+            "enter((address,address,uint256,uint256,(address[],bytes[],address[])))"
+        )
+        assert action.data[:4] == _selector(signature)
+        assert _selector(signature).hex() == "3b2607a8"
+        (decoded_tuple,) = decode(
+            ["(address,address,uint256,uint256,(address[],bytes[],address[]))"],
+            action.data[4:],
+        )
+        assert decoded_tuple[3] == 4900
+        assert decoded_tuple[4][1][0] == b"\xaa\xbb"
+        assert [t.lower() for t in decoded_tuple[4][2]] == [TOKEN_B_LOW]
+        empty = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.TOKENS_TO_RETURN
+        ).swap(
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            amount_in=1,
+            targets=[],
+            data=[],
+            min_amount_out=0,
+        )
+        assert (
+            decode(
+                ["(address,address,uint256,uint256,(address[],bytes[],address[]))"],
+                empty.data[4:],
+            )[0][4][2]
+            == ()
+        )
+
+    def test_tokens_to_return_needs_its_abi(self):
+        with pytest.raises(ValueError, match="TOKENS_TO_RETURN"):
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
+            ).swap(
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=1,
+                targets=[],
+                data=[],
+                min_amount_out=0,
+                tokens_to_return=[TOKEN_B],
+            )
+
     def test_swap_min_amount_out_zero_allowed(self):
         action = UniversalTokenSwapperFuse(
             FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
