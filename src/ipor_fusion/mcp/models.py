@@ -1199,3 +1199,59 @@ class ServerInfoResponse(_Base):
         "crosschain and HyperCore). Everything the package ships outside these "
         "is production.",
     )
+
+
+class PreflightActionModel(_Base):
+    index: int
+    fuse: str
+    registered: bool = Field(description="Whether the vault lists the fuse.")
+    market_id: int | None = Field(
+        description="The fuse's MARKET_ID(); null when it does not answer."
+    )
+    candidates: list[str] = Field(
+        description="SDK fuse classes encoding this selector; several when shapes "
+        "are shared, empty when no SDK encoder builds it."
+    )
+
+
+class PreflightFindingModel(_Base):
+    check: Literal[
+        "execute_permission",
+        "fuse_not_registered",
+        "fuse_market_unreadable",
+        "no_balance_fuse",
+        "simulation_failed",
+        "simulation_unavailable",
+    ]
+    severity: Severity
+    message: str
+
+
+class PreflightSimulationModel(_Base):
+    success: bool
+    revert_reason: str | None
+    gas_used: int
+    total_assets_before: int | None = Field(description="Raw, asset decimals.")
+    total_assets_after: int | None = Field(description="Raw, asset decimals.")
+
+
+class ExecutePreflightResponse(_Base):
+    """An execute batch checked as its sender would send it, at one block."""
+
+    vault: str
+    chain_id: ChainId
+    block_number: int
+    sender: str
+    verdict: Verdict
+    execute_immediate: bool = Field(
+        description="The sender may call execute now (canCall immediate)."
+    )
+    execute_delay: int = Field(
+        description="Seconds the sender's call must be scheduled ahead; 0 when "
+        "immediate or not allowed at all."
+    )
+    actions: list[PreflightActionModel]
+    findings: list[PreflightFindingModel]
+    simulation: PreflightSimulationModel | None = Field(
+        description="null when not simulated (simulate=false or no eth_simulateV1)."
+    )

@@ -293,6 +293,11 @@ class MorphoApiError(IporFusionError, RuntimeError):
     addresses or market ids). Also a RuntimeError, its base before 4.0."""
 
 
+class ExecutePreflightError(IporFusionError, RuntimeError):
+    """A preflight of a `PlasmaVault.execute` batch found a critical problem:
+    `ExecutePreflight.raise_for_failure` lists them."""
+
+
 class CrosschainDiscoveryError(IporFusionError):
     """A crosschain vault's on-chain configuration is not one discovery can
     use: a malformed or unexpected market grant, an executor managed by another
