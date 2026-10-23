@@ -8,7 +8,7 @@ from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractLogicError
-from web3.types import LogReceipt
+from web3.types import LogReceipt, Timestamp
 
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.context import Web3Context
@@ -46,6 +46,30 @@ class RoleStatus:
 
     is_member: bool
     execution_delay: Period
+
+
+@dataclass(frozen=True, slots=True)
+class CallPermission:
+    """`AccessManager.canCall`: whether ``caller`` may call ``selector`` on ``target``.
+
+    ``immediate`` is a call allowed now; a member with an execution delay gets
+    ``immediate=False`` and that ``delay`` (it must schedule the call first). A closed
+    target or a non-member answers ``(False, 0)``. This is the role check only: the
+    IPOR manager's redemption lock and the target's own logic can still revert.
+    """
+
+    immediate: bool
+    delay: Period
+
+    @property
+    def allowed(self) -> bool:
+        """Allowed now or after scheduling."""
+        return self.immediate or self.delay > 0
+
+
+def _call_permission_decoder(values: tuple[bool, int]) -> CallPermission:
+    immediate, delay = values
+    return CallPermission(immediate=immediate, delay=Period(delay))
 
 
 @dataclass(slots=True)
@@ -157,6 +181,38 @@ class AccessManager(ContractWrapper):
             account,
             output_types=["bool", "uint32"],
             decoder=_role_status_decoder,
+        )
+
+    def can_call(
+        self, caller: ChecksumAddress, target: ChecksumAddress, selector: bytes
+    ) -> Call[CallPermission]:
+        """`canCall(caller, target, selector)`: the closed-target check, the
+        function's role and the caller's membership and delay in one read."""
+        return self._view(
+            "canCall(address,address,bytes4)",
+            caller,
+            target,
+            selector,
+            output_types=["bool", "uint32"],
+            decoder=_call_permission_decoder,
+        )
+
+    def is_target_closed(self, target: ChecksumAddress) -> Call[bool]:
+        """Whether the admin closed ``target``: every restricted call to it fails."""
+        return self._view(
+            "isTargetClosed(address)", target, output_types=["bool"], decoder=bool
+        )
+
+    def get_account_lock_time(self, account: ChecksumAddress) -> Call[Timestamp]:
+        """Unix time until which ``account``, as the caller, cannot withdraw, redeem
+        or transfer shares (IPOR redemption delay). A deposit, mint or
+        ``depositWithPermit`` sets it for its caller, not for the share receiver;
+        a time ``<= block.timestamp`` is unlocked."""
+        return self._view(
+            "getAccountLockTime(address)",
+            account,
+            output_types=["uint256"],
+            decoder=Timestamp,
         )
 
     # ── Composite reads on ``ctx``: event replay + batched hasRole reads ───
