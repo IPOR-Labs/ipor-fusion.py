@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import InsufficientDataBytes
@@ -66,6 +66,33 @@ class CallPermission:
     def allowed(self) -> bool:
         """Allowed now or after scheduling."""
         return self.immediate or self.delay > 0
+
+
+# schedule(when=0): as soon as the sender's execution delay allows.
+_ASAP = Timestamp(0)
+
+CallPlanKind = Literal["immediate", "schedule", "waiting", "ready", "forbidden"]
+
+
+@dataclass(frozen=True, slots=True)
+class CallPlan:
+    """How ``caller`` gets a restricted call through the access manager now.
+
+    - ``immediate``: send the call itself (``next_call``).
+    - ``schedule``: the caller has an execution delay and nothing is scheduled;
+      ``next_call`` schedules it, executable ``delay`` seconds after it lands.
+    - ``waiting``: scheduled, executable at ``scheduled_at``; nothing to send yet.
+    - ``ready``: scheduled and executable; ``next_call`` is the call itself (or
+      the manager's ``execute`` with ``via_manager``), valid until the schedule
+      expires a week after ``scheduled_at``; an expired one plans ``schedule``.
+    - ``forbidden``: the caller has no role for it, or the target is closed.
+    """
+
+    kind: CallPlanKind
+    permission: CallPermission
+    operation: ScheduleId
+    scheduled_at: Timestamp | None
+    next_call: Call[None] | None
 
 
 def _call_permission_decoder(values: tuple[bool, int]) -> CallPermission:
@@ -203,6 +230,82 @@ class AccessManager(ContractWrapper):
         return ScheduleId(
             Web3.keccak(encode(["address", "address", "bytes"], [caller, target, data]))
         )
+
+    def schedule(
+        self, target: ChecksumAddress, data: bytes, when: Timestamp = _ASAP
+    ) -> Call[None]:
+        """Schedule ``data`` on ``target`` for the sender, executable at ``when``;
+        0 means as soon as the sender's execution delay allows, and a nonzero
+        time before that reverts."""
+        return self._write("schedule(address,bytes,uint48)", target, data, when)
+
+    def execute(self, target: ChecksumAddress, data: bytes) -> Call[None]:
+        """Run ``data`` on ``target`` through the manager: an immediate call, or
+        the sender's scheduled operation once it is executable (it is consumed)."""
+        return self._write("execute(address,bytes)", target, data)
+
+    def cancel(
+        self, caller: ChecksumAddress, target: ChecksumAddress, data: bytes
+    ) -> Call[None]:
+        """Cancel ``caller``'s scheduled ``data`` on ``target``: the caller itself,
+        an ADMIN_ROLE member, or the guardian of the role ``target`` maps the
+        function's selector to may."""
+        return self._write("cancel(address,address,bytes)", caller, target, data)
+
+    def read_call_plan(
+        self,
+        ctx: Web3Context,
+        call: Call[object],
+        *,
+        caller: ChecksumAddress,
+        via_manager: bool = False,
+    ) -> CallPlan:
+        """What ``caller`` sends now to get ``call`` executed: an access and
+        timelock plan from ``canCall`` and, for a delayed caller, the schedule of
+        exactly ``call``'s calldata, all read at the block ``ctx.default_block``
+        names (a number, hash or tag, resolved once). It does not run the target's own checks
+        (redemption lock, pre-hooks, balances): simulate the call for those.
+
+        A ready operation is sent as ``call`` itself, from ``caller``: the target
+        consumes the schedule and still sees ``caller`` as the sender, which
+        deposits, withdrawals and other sender-dependent calls need.
+        ``via_manager`` sends it through the manager's ``execute`` instead, for a
+        target that does not consume schedules; the manager is then the sender.
+
+        Raises ``ValueError`` for a call on the access manager itself: its
+        authorization is function-specific (role grants depend on the role's
+        admin, target configuration on the target's admin delay, and the IPOR
+        manager's own restricted functions on ``canCall``), which this plan does
+        not model.
+        """
+        if call.to == self.address:
+            raise ValueError(
+                "read_call_plan does not plan calls on the access manager itself:"
+                " their authorization is function-specific"
+            )
+        block = ctx.web3.eth.get_block(ctx.default_block)
+        ctx = ctx.at_block(block["number"])
+        selector = bytes(call.data[:4])
+        permission = self.can_call(caller, call.to, selector).call(ctx)
+        operation = self.hash_operation(caller, call.to, call.data)
+        direct = Call[None](to=call.to, data=call.data)
+        if permission.immediate:
+            return CallPlan("immediate", permission, operation, None, direct)
+        if permission.delay == 0:
+            return CallPlan("forbidden", permission, operation, None, None)
+        scheduled_at = self.get_schedule(operation).call(ctx)
+        if scheduled_at == 0:
+            return CallPlan(
+                "schedule",
+                permission,
+                operation,
+                None,
+                self.schedule(call.to, call.data),
+            )
+        if scheduled_at > block["timestamp"]:
+            return CallPlan("waiting", permission, operation, scheduled_at, None)
+        ready = self.execute(call.to, call.data) if via_manager else direct
+        return CallPlan("ready", permission, operation, scheduled_at, ready)
 
     def can_call(
         self, caller: ChecksumAddress, target: ChecksumAddress, selector: bytes

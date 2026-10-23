@@ -427,7 +427,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw, previews, fuse, market, fee and limit configuration |
 | `VaultSimulator` | Batch `execute` + reads through `eth_simulateV1`, multi-block, no local node |
 | `FusionFactory` | Deploy a new vault (`clone`, `clone_supervised`) |
-| `AccessManager` | Role-based access control |
+| `AccessManager` | Role-based access control; `read_call_plan(ctx, call, caller=)` says whether a restricted call goes now, must be scheduled (execution delay), waits, is ready or is forbidden, and gives the call to send now; `schedule`, `execute` and `cancel` build the timelock calls |
 | `RewardsManager` | Claim and vest rewards |
 | `WithdrawManager` | Time-windowed withdrawal requests |
 | `FeeManager` | Deposit, performance, and management fee configuration and harvesting |
