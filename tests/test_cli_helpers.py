@@ -1494,6 +1494,21 @@ class TestPrintLendingHealth:
         assert "AAVE_V3 (1):" in out
         assert "Health Factor:" in out
 
+    def test_euler_health_renders_under_its_sub_account(self, capsys):
+        sub_account = "0x" + "3e" * 20
+        m = _make_lending_market(
+            protocol="euler_v2",
+            market_id=MarketId(11),
+            substrate_id=sub_account,
+            health_factor=1.17,
+        )
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        _print_lending_health(data)
+        out = capsys.readouterr().out
+        assert "EULER_V2 (11):" in out
+        assert f"sub-account {sub_account}:" in out
+        assert "Health Factor:" in out
+
     def test_orphan_health_critical_status_colored(self, capsys):
         m = _make_lending_market(health_factor=1.03)
         m.protocol = "aave_v3"
