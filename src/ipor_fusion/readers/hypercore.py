@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import TypeVar
 
-from eth_abi import encode
+from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -41,7 +41,7 @@ from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.errors import HyperCoreValuationError
+from ipor_fusion.errors import HyperCoreValuationError, UnsupportedContractVersionError
 from ipor_fusion.fuses.hypercore import (
     NATIVE_PERP_DEX,
     SUPPORTED_HIP3_DEXES,
@@ -432,6 +432,20 @@ def _decode_pending_state(
     )
 
 
+_PENDING_STATE_SIZE = 23 * 32
+
+
+def _decode_pending_payload(data: bytes) -> HyperCorePendingState:
+    if len(data) != _PENDING_STATE_SIZE:
+        raise UnsupportedContractVersionError(
+            f"HyperCorePendingReader.pendingState() returned {len(data)} bytes, "
+            f"not the {_PENDING_STATE_SIZE} of the released reader "
+            f"({HYPERCORE_PENDING_READERS[HYPEREVM_CHAIN_ID]})"
+        )
+    (values,) = decode([PENDING_STATE_TYPE], data)
+    return _decode_pending_state(values)
+
+
 class HyperCorePendingReader:
     """``HyperCorePendingReader`` through the vault's ``UniversalReader``.
 
@@ -448,11 +462,10 @@ class HyperCorePendingReader:
         self._reader = reader
 
     def pending_state(self) -> Call[HyperCorePendingState]:
-        return self._vault.universal_read_decoded(
-            self._reader,
-            _PENDING_STATE_SELECTOR,
-            output_types=[PENDING_STATE_TYPE],
-            decoder=_decode_pending_state,
+        """Raises ``UnsupportedContractVersionError`` for a payload that is
+        not the released reader's 23 words (the earlier reader returns 18)."""
+        return self._vault.universal_read(self._reader, _PENDING_STATE_SELECTOR).map(
+            _decode_pending_payload
         )
 
     def is_action_pending(self) -> Call[bool]:

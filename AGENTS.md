@@ -198,7 +198,7 @@ the lifecycle matrix follows that.
   subpackages do not list them). Their exceptions stay in `errors` and the top
   level. `ipor_fusion.guide` keeps its own namespace. The
   public modules (`about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`,
-  `field_docs`, `market_ids`, `market_info`, `morpho_api`, `substrates`, `types`,
+  `field_docs`, `market_ids`, `market_info`, `morpho_api`, `registry`, `substrates`, `types`,
   `validation`, `vault_data`, `vault_info`) stay importable for the names they
   define and the moved names README lists; `cli`, `mcp`, every other module and
   every submodule of a public subpackage (`core.contract`, `fuses.base`, ...) are
@@ -221,7 +221,7 @@ the lifecycle matrix follows that.
 | `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors An id sourced from a contracts feature branch ahead of the pinned ref goes in the test's `_AHEAD_OF_UPSTREAM` allowlist and is removed when the ref catches up |
 | substrate decoders | `substrates.py` registry mirrors each market's `contracts/fuses/<protocol>/*SubstrateLib.sol` or `*FuseLib.sol` |
 | `vault_info` / `fusion market` JSON shapes | the builders and their TypedDicts (`VaultInfoJson`, `MorphoBlueMarketJson`, `MetaMorphoV1Json` / `MetaMorphoV2Json`) in `vault_info.py` / `market_info.py`, models in `mcp/models.py` (`extra="forbid"`, the published schema), the `VaultInfoJson`-typed `_full_vault_info_dict` fixture in `test_mcp_models.py` |
-| CLI command set | every CLI command has a matching tool in `mcp/server.py` with the same arguments (`changelog` maps to `server_info`; `--json` and display filters are CLI-only); `tests/test_cli_mcp_parity.py` enforces it, and both resolve chain and provider through `cli/config_store.resolve_chain_id` |
+| CLI command set | every CLI command has a matching tool in `mcp/server.py` with the same arguments (`changelog` maps to `server_info`; `--json` and display filters are CLI-only); `tests/test_cli_mcp_parity.py` enforces it, and the RPC-backed commands resolve chain and provider through `cli/config_store.resolve_chain_id` (`fusion address` reads no RPC: an omitted chain means every registry chain) |
 
 ## Layout (`src/ipor_fusion/`)
 
@@ -258,6 +258,9 @@ the lifecycle matrix follows that.
   `ctx.cache` (`Web3Context(cache=...)`, default `default_contract_cache()` under
   `$XDG_CACHE_HOME/ipor-fusion/`) or `get_contract_name(cache=...)`. Never cache an
   absence (no code, no answer): it can change at a later block.
+  `registry.py` the ipor-abi address registry (`fetch_address_registry` →
+  `AddressRegistry`, one raw-GitHub file per chain in `REGISTRY_CHAIN_IDS`, cached ten
+  minutes in the process, for good at a commit ref) and the `fusion address` documents;
   `morpho_api.py` the Morpho public GraphQL API client (`fetch_market`, `fetch_vault`,
   `PUBLIC_ALLOCATOR_ADDRESSES`; it narrows the GraphQL body from `object`);
   `market_info.py` — `build_morpho_blue_market_json`, `build_meta_morpho_json`, the
@@ -481,6 +484,7 @@ byte, e.g. Ebisu ZAPPER/REGISTRY).
 
 ## CLI and MCP
 
+`fusion address` (lookup, names, list; the ipor-abi registry through `registry.py`),
 `fusion config` (set-provider, set-etherscan-key, show), `fusion market`
 (morpho-blue, meta-morpho), `fusion vault` (add, remove, list, info, validate,
 role-accounts, oracle-mapping). `vault info` runs independent fetch pipelines
@@ -498,7 +502,8 @@ inject a cache.
 Every CLI command has an MCP tool (`fusion changelog` maps to `server_info`;
 the rest share names). Read-only: `vault_info`, `vault_validate`,
 `vault_list`, `vault_role_accounts`, `vault_oracle_mapping`, `market_morpho_blue`,
-`market_meta_morpho`, `config_show`, `server_info`. Mutating: `vault_add`,
+`market_meta_morpho`, `address_lookup`, `address_names`, `address_list`,
+`config_show`, `server_info`. Mutating: `vault_add`,
 `vault_remove`, `config_set_provider`, `config_set_etherscan_key`. Every new
 CLI command gets a matching MCP tool with the same argument names; an optional
 chain or block is `None` when omitted (`ChainArg`, `BlockArg`), never a `0`

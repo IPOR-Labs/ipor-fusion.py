@@ -1211,3 +1211,44 @@ class ServerInfoResponse(_Base):
         "crosschain and HyperCore). Everything the package ships outside these "
         "is production.",
     )
+
+
+class AddressMatch(_Base):
+    chain_id: ChainId
+    chain: str
+    name: str = Field(description="Contract name in the ipor-abi registry.")
+    address: str
+
+
+class AddressLookupResponse(_Base):
+    """Registry entries matching a name substring or an address."""
+
+    query: str
+    query_type: Literal["address", "name"] = Field(
+        description="'address' for 0x and 40 hex digits (exact match), else 'name' "
+        "(case-insensitive substring)."
+    )
+    match_count: int
+    matches: list[AddressMatch]
+
+
+class AddressName(_Base):
+    name: str
+    chain_ids: list[ChainId] = Field(description="Chains registering this name.")
+
+
+class AddressNamesResponse(_Base):
+    """Every contract name in the registries read."""
+
+    chain_ids: list[ChainId] = Field(description="Chains whose registry was read.")
+    names: list[AddressName]
+
+
+class AddressListResponse(_Base):
+    """One chain's full ``{name: address}`` registry."""
+
+    chain_id: ChainId
+    chain: str
+    ref: str = Field(description="ipor-abi git ref the map was read at.")
+    count: int
+    addresses: dict[str, str]

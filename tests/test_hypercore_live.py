@@ -21,7 +21,7 @@ from click.testing import CliRunner
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import ERC20, PlasmaVault
+from ipor_fusion import ERC20, PlasmaVault, UnsupportedContractVersionError
 from ipor_fusion.cli import vault_cmd
 from ipor_fusion.cli.config_store import FusionConfig
 from ipor_fusion.cli.main import cli
@@ -34,6 +34,7 @@ from ipor_fusion.fuses.hypercore import (
     precompile_index_of,
 )
 from ipor_fusion.hypercore import (
+    HYPERCORE_PENDING_READERS,
     HyperCoreCancelFuse,
     HyperCoreDepositFuse,
     HyperCoreOrderFuse,
@@ -47,7 +48,6 @@ from ipor_fusion.hypercore import (
     read_hypercore_vault_state,
 )
 from ipor_fusion.mcp import server
-from ipor_fusion.readers.hypercore import HYPERCORE_PENDING_READERS
 from ipor_fusion.types import MarketId
 
 FIXTURE = json.loads(
@@ -127,6 +127,14 @@ def test_pending_state_reads_through_the_vault(
     assert state.pending == pending.is_action_pending().call(ctx)
     assert isinstance(pending.is_order_in_flight().call(ctx), bool)
     assert state.pending or state.settled
+
+
+def test_the_earlier_reader_is_refused_by_name(ctx: Web3Context):
+    """The earlier market-55 reader returns 18 words; the SDK reads only the
+    released 23-word layout and names the mismatch instead of misreading."""
+    earlier = HyperCorePendingReader(VAULT, CREATED["HyperCorePendingReader"])
+    with pytest.raises(UnsupportedContractVersionError, match="returned 576 bytes"):
+        earlier.pending_state().call(ctx)
 
 
 def test_precompiles_batch_through_multicall3(ctx: Web3Context):

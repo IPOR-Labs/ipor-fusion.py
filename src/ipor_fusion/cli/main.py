@@ -5,6 +5,7 @@ import sys
 
 import click
 
+from ipor_fusion.cli.address_cmd import address
 from ipor_fusion.cli.changelog_cmd import changelog
 from ipor_fusion.cli.config_cmd import config
 from ipor_fusion.cli.market_cmd import market
@@ -29,6 +30,7 @@ def cli(ctx: click.Context, verbose: bool, quiet: bool, no_color: bool) -> None:
         ctx.obj["no_color"] = False
 
 
+cli.add_command(address)
 cli.add_command(changelog)
 cli.add_command(config)
 cli.add_command(market)

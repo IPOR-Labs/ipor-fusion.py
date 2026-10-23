@@ -14,7 +14,11 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import HyperCoreValuationError, PlasmaVault
+from ipor_fusion import (
+    HyperCoreValuationError,
+    PlasmaVault,
+    UnsupportedContractVersionError,
+)
 from ipor_fusion.hypercore import (
     HyperCoreActionClass,
     HyperCoreEffectKind,
@@ -257,6 +261,12 @@ class TestUniversalRead:
             [(_pending_action(), True, False, 1, 2, True)],
         )
         assert len(inner) == 23 * 32
+
+    def test_the_earlier_eighteen_word_payload_is_refused_by_name(self):
+        ctx = _ctx()
+        ctx.call.return_value = encode(["(bytes)"], [(b"\x00" * 18 * 32,)])
+        with pytest.raises(UnsupportedContractVersionError, match="576 bytes"):
+            HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
 
     def test_a_pending_margin_transfer_without_an_effect_stays_pending(self):
         ctx = _ctx()

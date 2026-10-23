@@ -24,6 +24,9 @@ from ipor_fusion import (
     DOCS,
     PREVIEW_FEATURES,
     AccessManagerAddress,
+    AddressListJson,
+    AddressLookupJson,
+    AddressNamesJson,
     AmountJson,
     ChainId,
     Decimals,
@@ -48,6 +51,9 @@ from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.hypercore import HyperCoreActionId, HyperCoreAsset, HyperCoreTokenIndex
 from ipor_fusion.mcp import models as mcp_models
 from ipor_fusion.mcp.models import (
+    AddressListResponse,
+    AddressLookupResponse,
+    AddressNamesResponse,
     Amount,
     ConfigShowResponse,
     FeesSection,
@@ -689,6 +695,11 @@ class TestTypedDocumentsMirrorModels:
 
     def test_morpho_blue_market(self):
         _assert_mirrors(MorphoBlueMarketJson, MorphoBlueMarketResponse, "market")
+
+    def test_address_registry(self):
+        _assert_mirrors(AddressLookupJson, AddressLookupResponse, "address_lookup")
+        _assert_mirrors(AddressNamesJson, AddressNamesResponse, "address_names")
+        _assert_mirrors(AddressListJson, AddressListResponse, "address_list")
 
     def test_meta_morpho_versions_share_one_model(self):
         v1 = MetaMorphoV1Json.__required_keys__
