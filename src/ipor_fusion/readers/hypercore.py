@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import TypeVar
 
-from eth_abi import encode
+from eth_abi import decode, encode
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -41,7 +41,7 @@ from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.errors import HyperCoreValuationError
+from ipor_fusion.errors import HyperCoreValuationError, UnsupportedContractVersionError
 from ipor_fusion.fuses.hypercore import (
     NATIVE_PERP_DEX,
     SUPPORTED_HIP3_DEXES,
@@ -71,13 +71,17 @@ T = TypeVar("T")
 HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
 #: The only chain with the HyperCore precompiles.
 HYPEREVM_CHAIN_ID = ChainId(999)
-#: Known ``HyperCorePendingReader`` deployments per chain. The reader is a
-#: stateless helper and any deployment serves any vault. The market-55 reader
-#: is pinned in ``tests/fixtures/hypercore_market55.json`` until ``ipor-abi``
-#: publishes it.
+#: The ``HyperCorePendingReader`` ``ipor-abi`` lists per chain. The reader
+#: runs the pending-action library in the vault's storage, so it must come from
+#: the build of the vault's HyperCore fuses and pre-hooks. A vault deployed
+#: before that build (the HyperEVM market-55 vault
+#: ``0xB8De01Ca5ca57A14671E1c696337134a02B4A478``) needs its own reader,
+#: ``0x83F54bc9eA4Dd19cb579Daa70368562C7a7534C4``, passed explicitly: the current
+#: one reads its storage the same but settles its reported-mode orders by time
+#: alone.
 HYPERCORE_PENDING_READERS: dict[ChainId, ChecksumAddress] = {
     HYPEREVM_CHAIN_ID: Web3.to_checksum_address(
-        "0x83F54bc9eA4Dd19cb579Daa70368562C7a7534C4"
+        "0x1EFFb12434f5fb59a636C54D8CBaC93b13DF1A9E"
     ),
 }
 WAD_DECIMALS = 18
@@ -363,22 +367,58 @@ class HyperCorePendingState:
     l1_block_available: bool
 
 
-_PENDING_ACTION_TYPE = "(uint64,uint64,uint64,uint8,uint8,uint8,uint64,uint24,bytes32,bool,uint256,uint256)"
-PENDING_STATE_TYPE = f"({_PENDING_ACTION_TYPE},bool,bool,bool,uint64,uint64,bool)"
+_PENDING_ACTION_PREFIX = (
+    "uint64,uint64,uint64,uint8,uint8,uint8,uint64,uint24,bytes32,bool,uint256,uint256"
+)
+_PENDING_ACTION_TYPE = (
+    f"({_PENDING_ACTION_PREFIX},uint8,uint64,address,uint64,uint256,uint64)"
+)
+#: ``pendingState()`` of the current reader.
+PENDING_STATE_TYPE = f"({_PENDING_ACTION_TYPE},bool,bool,uint64,uint64,bool)"
+#: ``pendingState()`` of the earlier reader: the 12-field struct and a
+#: ``refreshing`` predicate. Both tuples are static, so the payload length
+#: tells the two apart.
+LEGACY_PENDING_STATE_TYPE = (
+    f"(({_PENDING_ACTION_PREFIX}),bool,bool,bool,uint64,uint64,bool)"
+)
+_PENDING_STATE_SIZE = 23 * 32
+_LEGACY_PENDING_STATE_SIZE = 18 * 32
 _PENDING_STATE_SELECTOR = function_signature_to_4byte_selector("pendingState()")
-_IS_PENDING_SELECTOR = function_signature_to_4byte_selector("isPending()")
 
 
 # pendingUntil, enqueuedL1Block, enqueuedEvmBlock, actionClass, settlementMode,
 # reportedResult, resultL1Block, actionId, payloadHash, stateRefreshing,
-# cachedValueWad, actionNonce.
+# cachedValueWad, actionNonce: the struct prefix both readers share.
 _PendingAction = tuple[int, int, int, int, int, int, int, int, bytes, bool, int, int]
 
 
-def _decode_pending_state(
-    values: tuple[_PendingAction, bool, bool, bool, int, int, bool],
+def _decode_pending_payload(data: bytes) -> HyperCorePendingState:
+    if len(data) == _PENDING_STATE_SIZE:
+        state, pending, settled, l1_block, timestamp, l1_available = decode(
+            [PENDING_STATE_TYPE], data
+        )[0]
+        refreshing = False
+    elif len(data) == _LEGACY_PENDING_STATE_SIZE:
+        state, pending, settled, refreshing, l1_block, timestamp, l1_available = decode(
+            [LEGACY_PENDING_STATE_TYPE], data
+        )[0]
+    else:
+        raise UnsupportedContractVersionError(
+            f"HyperCorePendingReader.pendingState() returned {len(data)} bytes, "
+            f"not {_PENDING_STATE_SIZE} or {_LEGACY_PENDING_STATE_SIZE}"
+        )
+    return _pending_state(
+        state[:12],
+        (bool(pending), bool(settled), bool(refreshing)),
+        (l1_block, timestamp, bool(l1_available)),
+    )
+
+
+def _pending_state(
+    state: _PendingAction,
+    predicates: tuple[bool, bool, bool],
+    l1: tuple[int, int, bool],
 ) -> HyperCorePendingState:
-    state, pending, settled, refreshing, l1_block, timestamp, l1_available = values
     (
         pending_until,
         enqueued_l1_block,
@@ -393,6 +433,8 @@ def _decode_pending_state(
         cached_value_wad,
         action_nonce,
     ) = state
+    pending, settled, refreshing = predicates
+    l1_block, timestamp, l1_available = l1
     return HyperCorePendingState(
         pending_until=Timestamp(pending_until),
         enqueued_l1_block=enqueued_l1_block,
@@ -403,22 +445,23 @@ def _decode_pending_state(
         result_l1_block=result_l1_block,
         action_id=HyperCoreActionId(action_id),
         payload_hash=PayloadHash(bytes(payload_hash)),
-        refreshing=bool(refreshing or state_refreshing),
+        refreshing=refreshing or bool(state_refreshing),
         cached_value_wad=cached_value_wad,
         action_nonce=action_nonce,
-        pending=bool(pending),
-        settled=bool(settled),
+        pending=pending,
+        settled=settled,
         current_l1_block=l1_block,
         current_timestamp=Timestamp(timestamp),
-        l1_block_available=bool(l1_available),
+        l1_block_available=l1_available,
     )
 
 
 class HyperCorePendingReader:
     """``HyperCorePendingReader`` through the vault's ``UniversalReader``.
 
-    ``reader`` is the deployed helper (one per chain, never called directly);
-    the vault delegatecalls it so it sees the vault's pending slot. Keepers
+    ``reader`` is the deployed helper from the vault's build (never called
+    directly; see :data:`HYPERCORE_PENDING_READERS`); the vault delegatecalls
+    it so it sees the vault's pending slot. Keepers
     gate every action on :meth:`is_pending`: the pending-action pre-hook
     reverts ``execute`` and ``updateMarketsBalances`` while it is true.
     """
@@ -428,17 +471,17 @@ class HyperCorePendingReader:
         self._reader = reader
 
     def pending_state(self) -> Call[HyperCorePendingState]:
-        return self._vault.universal_read_decoded(
-            self._reader,
-            _PENDING_STATE_SELECTOR,
-            output_types=[PENDING_STATE_TYPE],
-            decoder=_decode_pending_state,
+        """``pendingState()`` of either reader build, told apart by the
+        payload length."""
+        return self._vault.universal_read(self._reader, _PENDING_STATE_SELECTOR).map(
+            _decode_pending_payload
         )
 
     def is_pending(self) -> Call[bool]:
-        return self._vault.universal_read_decoded(
-            self._reader, _IS_PENDING_SELECTOR, output_types=["bool"], decoder=bool
-        )
+        """The ``pending`` predicate of :meth:`pending_state`: the readers
+        name the standalone getter differently (``isPending()`` /
+        ``isActionPending()``)."""
+        return self.pending_state().map(lambda state: state.pending)
 
 
 def convert_to_wad_int(value: int, decimals: int) -> int:
