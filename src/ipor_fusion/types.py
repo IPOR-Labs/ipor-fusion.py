@@ -199,7 +199,8 @@ def parse_access_manager_address(value: str | bytes) -> AccessManagerAddress:
     return AccessManagerAddress(_checksum(value))
 
 
-_DECIMAL_TEXT = re.compile(r"(\d*)(?:\.(\d*))?")
+# ASCII digits only: ``\d`` would also take other scripts' digits, which int() reads.
+_DECIMAL_TEXT = re.compile(r"([0-9]*)(?:\.([0-9]*))?")
 
 
 def _parse_units(text: str, decimals: Decimals, what: str) -> int:

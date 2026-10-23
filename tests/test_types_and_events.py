@@ -184,7 +184,21 @@ class TestAmountText:
 
     @pytest.mark.parametrize(
         "text",
-        ["", ".", "-1", "+1", "1e6", "1,000", "1_000", "1.5.0", "0x10", "1 0", "nan"],
+        [
+            "",
+            ".",
+            "-1",
+            "+1",
+            "1e6",
+            "1,000",
+            "1_000",
+            "1.5.0",
+            "0x10",
+            "1 0",
+            "nan",
+            "\u0663",
+            "\uff11.5",
+        ],
     )
     def test_parse_amount_rejects_anything_but_plain_decimal_text(self, text):
         from ipor_fusion import parse_amount
