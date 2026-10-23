@@ -7,10 +7,10 @@ exist and each has its own supply and command fuse (``stargate`` and ``ccip``
 next to this module); the claim fuse and the substrates are shared. Names,
 methods and parameters follow ``contracts/fuses/crosschain/**``.
 
-Every fuse is bound to one market id at construction (``MARKET_ID``), and the
-deployments so far were built with a keccak-derived id rather than the
-library constant, so the market id is a parameter here, never an assumption
-(see :func:`crosschain_market_id`).
+Every fuse is bound to one market id at construction (``MARKET_ID``). The
+released deployment uses ``IporFusionMarkets.CROSSCHAIN`` (54); a fuse built
+with another id (see :func:`crosschain_market_id`) is still addressed by it, so
+the market id is a parameter here, never an assumption.
 
 ``CrosschainSupplyFuse`` and ``CrosschainCommandFuse`` are the SDK's
 transport-agnostic layer (the contracts have none): the operations both

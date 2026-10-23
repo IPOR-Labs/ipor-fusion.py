@@ -1,8 +1,7 @@
 """Offline tests for the crosschain fuses, substrates and wire codecs.
 
-Live fixtures: the substrates granted on the mainnet POC vault (Ethereum
-0x0Aa75BfD…, market keccak256("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1"),
-read on 2026-09-24) and the well-known LayerZero option blobs.
+Fixtures: substrate words in the CrosschainSubstrateLib layout, as granted on
+a mainnet vault on 2026-09-24, and the well-known LayerZero option blobs.
 """
 
 from __future__ import annotations
@@ -79,7 +78,7 @@ WITHDRAW_MANAGER = Web3.to_checksum_address(
 )
 RECEIVER = Web3.to_checksum_address("0x3333333333333333333333333333333333333333")
 
-# Live grants on the POC vault: one EXECUTOR and two chain-bound REMOTE_VAULTs.
+# Granted substrate words: one EXECUTOR and two chain-bound REMOTE_VAULTs.
 LIVE_EXECUTOR_SUBSTRATE = (
     "0x0100000000000000000000001d5c9d44f8d556ec7f557ae992401cc770937e6e"
 )
@@ -89,7 +88,6 @@ LIVE_REMOTE_VAULT_BASE = (
 LIVE_REMOTE_VAULT_ARB = (
     "0x02000000000000000000a4b1174bfa12935ac416caa7d27397bd4f3b15175980"
 )
-POC_MARKET_ID = crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")
 
 
 def _decoded(action, signature: str) -> tuple:
@@ -249,7 +247,7 @@ class TestCrosschainSubstrateLib:
         assert info.type_label == "EXECUTOR"
         assert info.address == EXECUTOR.lower()
         assert info.extra == {}
-        info = decode_substrate(LIVE_REMOTE_VAULT_BASE, market_id=POC_MARKET_ID)
+        info = decode_substrate(LIVE_REMOTE_VAULT_BASE, market_id=54)
         assert info.type_label == "REMOTE_VAULT"
         assert info.address == REMOTE_VAULT_BASE.lower()
         assert info.extra == {"chain_id": "8453"}
@@ -279,10 +277,16 @@ class TestCrosschainSubstrateLib:
         assert info.is_error is True
         assert info.extra == {"chain_id": str(substrate.chain_id)}
 
-    def test_poc_market_id_matches_deployment_manifest(self):
-        assert POC_MARKET_ID == int(
+    def test_crosschain_market_id_is_the_keccak_of_its_preimage(self):
+        assert crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1") == int(
             "0x3698b2215fdb7b90ebd6e623939afe7a334e14147954f78e1a42ddcbcbc9b576", 16
         )
+
+    def test_only_the_canonical_crosschain_market_decodes(self):
+        market = crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")
+        info = decode_substrate(LIVE_REMOTE_VAULT_BASE, market_id=market)
+        assert info.type_label == "no_decoder(UNKNOWN)"
+        assert info.address is None
 
 
 # ── Fuses ──────────────────────────────────────────────────────────────────
