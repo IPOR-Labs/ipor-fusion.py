@@ -204,8 +204,10 @@ class AccessManager(ContractWrapper):
         )
 
     def get_account_lock_time(self, account: ChecksumAddress) -> Call[Timestamp]:
-        """Unix time until which ``account`` cannot withdraw or redeem (IPOR
-        redemption delay, set on deposit and mint); 0 or a past time is unlocked."""
+        """Unix time until which ``account``, as the caller, cannot withdraw, redeem
+        or transfer shares (IPOR redemption delay). A deposit, mint or
+        ``depositWithPermit`` sets it for its caller, not for the share receiver;
+        a time ``<= block.timestamp`` is unlocked."""
         return self._view(
             "getAccountLockTime(address)",
             account,
