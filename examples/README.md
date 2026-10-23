@@ -38,6 +38,17 @@ transaction.
   brings the margin home and releases it for a user's scheduled withdrawal, then
   demonstrates the executor rejecting a confirmation that does not match its
   proposal.
+- [`crosschain_ccip_usdc_arbitrum_hyperevm.py`](crosschain_ccip_usdc_arbitrum_hyperevm.py) --
+  a crosschain vault on the released CCIP contracts as they are deployed: an
+  Arbitrum hub vault, a HyperEVM spoke vault and USDC over Chainlink CCIP. It
+  configures the deployed (unconfigured) factory pair as its owner would --
+  creation codes, asset, route, dispatcher deployment gas limit through the
+  factory's 24 h timelock, the creator allowlist -- creates both vaults and the
+  executor, wires the crosschain market (the four fuses, the executor and
+  spoke-vault substrates, the NAV pre-hook), deploys the dispatcher through the
+  factory's deployment ticket, then drives supply, two-key attestation, DEPOSIT,
+  REDEEM, recall and claim. The crosschain SDK is a preview feature. It has
+  extra prerequisites, listed below.
 - [`hypercore_vault_official_deployment_hyperevm.py`](hypercore_vault_official_deployment_hyperevm.py) --
   a vault that is itself a Hyperliquid Core account (HyperCore, market 55; a
   preview feature). No live vault uses the official HyperCore contracts yet, so
@@ -69,6 +80,21 @@ transaction.
   your Arbitrum archive RPC endpoint. Never commit it or share it.
 - `HYPEREVM_PROVIDER_URL` (required by the crosschain example) -- your HyperEVM
   archive RPC endpoint. Never commit it or share it.
+- `CCIP_EXECUTOR_CREATION_CODE_FILE` and `CCIP_DISPATCHER_CREATION_CODE_FILE`
+  (required by the crosschain example) -- files holding the hex creation code of
+  `CcipCrosschainExecutor` and `CcipCrosschainDispatcher`, built with Foundry
+  (`forge`) in a checkout of
+  [ipor-fusion](https://github.com/IPOR-Labs/ipor-fusion) at the release commit
+  the example pins (`RELEASE_COMMIT`), after `npm ci`. Run the example without
+  them and it prints the two `forge inspect` commands, which link the deployed
+  release libraries; it refuses codes whose hashes differ from the release's.
+
+The crosschain example's own test (`tests/test_simulate_examples_crosschain.py`)
+builds those codes itself, so it needs `ARBITRUM_PROVIDER_URL`,
+`HYPEREVM_PROVIDER_URL`, `forge` and `IPOR_FUSION_CONTRACTS_DIR` -- that checkout
+-- (plus `IPOR_FUSION_FOUNDRY_REMAPPINGS` when it has no `node_modules`). Pull
+request CI supplies neither the HyperEVM RPC nor the checkout, so it skips there;
+run it locally.
 
 ## Running
 

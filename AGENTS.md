@@ -79,6 +79,11 @@ supports only that release, so there is no live-pair generation. It needs
 `IPOR_FUSION_CONTRACTS_DIR` at that revision; a checkout without `node_modules` also
 needs `IPOR_FUSION_FOUNDRY_REMAPPINGS` for OpenZeppelin. `test_crosschain_ccip_events.py`
 mirrors the CCIP event registry from a checkout at its own `CONTRACTS_REVISION`.
+`test_simulate_examples_crosschain.py` runs the crosschain example against the deployed
+(unconfigured) release factory and fuses: it builds the executor and dispatcher creation
+codes from the same checkout, linked against the example's `RELEASE_LIBRARIES`, proves the
+deployed runtimes are that build, and needs `ARBITRUM_PROVIDER_URL`,
+`HYPEREVM_PROVIDER_URL` and `IPOR_FUSION_CONTRACTS_DIR` (a missing one is an `_live` skip).
 `test_solidity_compiler.py` unit-tests that compiler helper (`tests/_foundry.py`)
 offline, with `forge` and `git` mocked. The checkout-based tests above skip when their
 external prerequisites are unavailable. `test_hypercore_live.py`,
