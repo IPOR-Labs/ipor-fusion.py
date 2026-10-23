@@ -35,6 +35,7 @@ from ipor_fusion.types import (
     ZERO_ADDRESS,
     Amount,
     ChainId,
+    CustodianMarker,
     Period,
     PlasmaVaultAddress,
     ProposalHash,
@@ -146,7 +147,7 @@ class ExternalStateVaultState:
 
     executor: ChecksumAddress | None
     last_total_balance: Amount
-    last_checked_custodian_marker: int
+    last_checked_custodian_marker: CustodianMarker
     paused: bool
     block: int
 
@@ -162,7 +163,7 @@ class BalanceFuseSnapshot:
 
     total_balance: Amount
     big_change_bps: int
-    custodian_marker: int
+    custodian_marker: CustodianMarker
 
 
 def _storage_word(raw: bytes) -> int:
@@ -234,7 +235,7 @@ def read_external_state(
     return ExternalStateVaultState(
         executor=Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None,
         last_total_balance=Amount(words[1]),
-        last_checked_custodian_marker=words[2],
+        last_checked_custodian_marker=CustodianMarker(words[2]),
         paused=words[3] == 1,
         block=block,
     )
@@ -360,16 +361,18 @@ class ExternalStateExecutor(ContractWrapper):
             output_types=["uint256", "uint256", "uint256"],
         ).map(
             lambda values: BalanceFuseSnapshot(
-                Amount(values[0]), int(values[1]), int(values[2])
+                Amount(values[0]), int(values[1]), CustodianMarker(values[2])
             )
         )
 
-    def confirm_count(self) -> Call[int]:
+    def confirm_count(self) -> Call[CustodianMarker]:
         """Executors of the 2026-10-21 contracts release only: the count of
         confirmed custodian updates across every balance account, the marker
         `get_balance_fuse_snapshot` reports. An earlier executor has no such
         function and the call reverts."""
-        return self._view("confirmCount()", output_types=["uint256"])
+        return self._view(
+            "confirmCount()", output_types=["uint256"], decoder=CustodianMarker
+        )
 
     def last_custodian_update_timestamp(self) -> Call[Timestamp]:
         """Block timestamp of the last confirmed custodian update on any

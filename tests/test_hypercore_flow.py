@@ -34,7 +34,6 @@ from ipor_fusion.hypercore import (
     HyperCoreOrderFuse,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
-    SettlementMode,
     TimeInForce,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -153,9 +152,7 @@ MARKET_54_GRANTS = [
     HyperCoreSubstrates.config(
         HyperCoreConfigKey.MAX_USD_CLASS_TRANSFER_USD6, 40_000_000
     ),
-    HyperCoreSubstrates.config(
-        HyperCoreConfigKey.SETTLEMENT_MODE, SettlementMode.TIMING
-    ),
+    HyperCoreSubstrates.config(HyperCoreConfigKey.SETTLEMENT_MODE, 1),
     HyperCoreSubstrates.config(HyperCoreConfigKey.SPOT_SEND_BRIDGE_ENABLED, 1),
     HyperCoreSubstrates.config(HyperCoreConfigKey.PERP_DEX_IDS, 1 << XYZ_DEX),
     HyperCoreSubstrates.builder(BUILDER, 1),
@@ -362,7 +359,7 @@ def test_granted_words_decode_as_hypercore():
         "SpotSendBridgeEnabled",
         "PerpDexIds",
     ]
-    assert infos[8].extra["mode"] == "TIMING"
+    assert infos[8].extra["reserved"] == "true"
     assert infos[10].extra["value"] == str(1 << XYZ_DEX)
     assert infos[11].address == BUILDER.lower()
     assert all(not i.is_error for i in infos)
