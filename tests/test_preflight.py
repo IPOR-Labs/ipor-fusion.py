@@ -4,7 +4,7 @@ simulation result becomes findings."""
 from unittest.mock import MagicMock
 
 import pytest
-from _multicall import multicall_aware
+from _multicall import decode_aggregate3, is_aggregate3, multicall_aware
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -37,6 +37,12 @@ def _sel(signature: str) -> bytes:
 
 
 NOW = 50_000
+
+
+def _sub_calls(call) -> list[tuple[str, bytes]]:
+    """The (target, calldata) pairs one ctx.call carried, unpacking Multicall3."""
+    to, data = call.args[0], bytes(call.args[1])
+    return decode_aggregate3(data) if is_aggregate3(to, data) else [(to, data)]
 
 
 def _ctx(
@@ -162,6 +168,21 @@ def test_dependency_markets_need_balance_fuses_once_each():
         " execute reverts AddressEmptyCode after the actions",
         "market 3, a balance dependency of market 1, has no balance fuse;"
         " execute reverts AddressEmptyCode after the actions",
+    ]
+
+
+def test_market_zero_is_never_followed_in_the_dependency_graph():
+    ctx = _ctx(graph={1: [0], 0: [2]})
+    result = preflight_execute(ctx, VAULT, [_supply()], sender=SENDER, simulate=False)
+    assert result.findings == ()
+    graph_reads = [
+        data
+        for call in ctx.call.call_args_list
+        for _, data in _sub_calls(call)
+        if data[:4] == _sel("getDependencyBalanceGraph(uint256)")
+    ]
+    assert graph_reads == [
+        _sel("getDependencyBalanceGraph(uint256)") + encode(["uint256"], [1])
     ]
 
 

@@ -197,7 +197,8 @@ def _dependency_closure(
         frontier = []
         for market, dependencies in reads:
             for dependency in dependencies.value:
-                if dependency not in reached:
+                # Like the vault, never follow market 0 or read its graph.
+                if dependency != _NO_MARKET and dependency not in reached:
                     reached[dependency] = reached[market]
                     frontier.append(dependency)
     return reached
@@ -214,7 +215,7 @@ def _dependency_findings(
             " balance fuse; execute reverts AddressEmptyCode after the actions",
         )
         for market, origin in sorted(reached.items())
-        if market != origin and market != _NO_MARKET and market not in balance_markets
+        if market != origin and market not in balance_markets
     ]
 
 
