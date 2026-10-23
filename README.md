@@ -391,13 +391,14 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 |--------|---------|
 | `Web3Context` | Provider connection, signing, tx dispatch, gas estimation |
 | `Call` | Pre-encoded contract call; `.call(ctx)`, `.send(ctx)`, `.calldata`, `.build_transaction(ctx)` |
-| `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw, fuse and market configuration |
+| `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw, previews, fuse, market, fee and limit configuration |
 | `VaultSimulator` | Batch `execute` + reads through `eth_simulateV1`, multi-block, no local node |
 | `FusionFactory` | Deploy a new vault (`clone`, `clone_supervised`) |
 | `AccessManager` | Role-based access control |
 | `RewardsManager` | Claim and vest rewards |
 | `WithdrawManager` | Time-windowed withdrawal requests |
-| `FeeManager` | Deposit, performance, and management fee configuration |
+| `FeeManager` | Deposit, performance, and management fee configuration and harvesting |
+| `ContextManager` | Run calls on approved context-aware targets on the caller's behalf |
 | `FeeAccount` | Fee escrow account, resolves its `FeeManager` |
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |

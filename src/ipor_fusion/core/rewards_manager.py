@@ -7,7 +7,7 @@ from web3.types import Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.fuse_action import FuseAction
-from ipor_fusion.types import Amount, FuseAddress
+from ipor_fusion.types import Amount, FuseAddress, Period
 
 
 @dataclass(slots=True)
@@ -76,3 +76,16 @@ class RewardsManager(ContractWrapper):
 
     def update_balance(self) -> Call[None]:
         return self._write("updateBalance()")
+
+    def transfer_vested_tokens_to_vault(self) -> Call[None]:
+        """Move the vested part (`balance_of`) to the vault; a no-op at zero."""
+        return self._write("transferVestedTokensToVault()")
+
+    def remove_reward_fuses(self, fuses: Sequence[FuseAddress]) -> Call[None]:
+        return self._write("removeRewardFuses(address[])", fuses)
+
+    def setup_vesting_time(self, vesting_time: Period) -> Call[None]:
+        """The vesting duration of claimed rewards. Mid-vesting it reverts
+        ``UnsafeVestingTime`` when the new duration would vest less than was
+        already transferred; `update_balance` first resets the curve."""
+        return self._write("setupVestingTime(uint256)", vesting_time)

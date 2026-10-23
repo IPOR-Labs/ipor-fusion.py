@@ -72,6 +72,15 @@ class WithdrawManager(ContractWrapper):
     def update_withdraw_window(self, window: Period) -> Call[None]:
         return self._write("updateWithdrawWindow(uint256)", window)
 
+    def update_withdraw_fee(self, fee: Fee) -> Call[None]:
+        """The instant-exit fee, WAD (``10**18`` is 100%, above it reverts)."""
+        return self._write("updateWithdrawFee(uint256)", fee)
+
+    def update_request_fee(self, fee: Fee) -> Call[None]:
+        """The scheduled-exit fee charged on `request_shares`, WAD (``10**18``
+        is 100%, above it reverts)."""
+        return self._write("updateRequestFee(uint256)", fee)
+
     def update_plasma_vault_address(self, vault: PlasmaVaultAddress) -> Call[None]:
         return self._write("updatePlasmaVaultAddress(address)", vault)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
@@ -7,7 +8,7 @@ from web3 import Web3
 from web3.types import Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.types import Fee, Period
+from ipor_fusion.types import Fee, Period, Shares
 
 
 @dataclass(slots=True)
@@ -78,6 +79,64 @@ class FeeManager(ContractWrapper):
     (1e18 = 100%), the totals and recipient splits use 2 decimals
     (10000 = 100%).
     """
+
+    def harvest_all_fees(self) -> Call[None]:
+        """Distribute the collected management and performance fees to their
+        recipients (public)."""
+        return self._write("harvestAllFees()")
+
+    def harvest_management_fee(self) -> Call[None]:
+        return self._write("harvestManagementFee()")
+
+    def harvest_performance_fee(self) -> Call[None]:
+        return self._write("harvestPerformanceFee()")
+
+    def update_management_fee(self, recipients: Sequence[RecipientFee]) -> Call[None]:
+        """Replace the management fee recipients; each ``fee_value`` in percent
+        with 2 decimals (10000 = 100%)."""
+        return self._write(
+            "updateManagementFee((address,uint256)[])",
+            [(r.recipient, r.fee_value) for r in recipients],
+        )
+
+    def update_performance_fee(self, recipients: Sequence[RecipientFee]) -> Call[None]:
+        """Replace the performance fee recipients; each ``fee_value`` in percent
+        with 2 decimals (10000 = 100%)."""
+        return self._write(
+            "updatePerformanceFee((address,uint256)[])",
+            [(r.recipient, r.fee_value) for r in recipients],
+        )
+
+    def set_ipor_dao_fee_recipient_address(
+        self, recipient: ChecksumAddress
+    ) -> Call[None]:
+        return self._write("setIporDaoFeeRecipientAddress(address)", recipient)
+
+    def set_deposit_fee(self, fee: Fee) -> Call[None]:
+        """WAD (``10**18`` is 100%), as `get_deposit_fee` reports it."""
+        return self._write("setDepositFee(uint256)", fee)
+
+    def update_high_water_mark_performance_fee(self) -> Call[None]:
+        """Reset the high-water mark to the current exchange rate."""
+        return self._write("updateHighWaterMarkPerformanceFee()")
+
+    def update_interval_high_water_mark_performance_fee(
+        self, interval: Period
+    ) -> Call[None]:
+        """The least time between automatic high-water-mark resets; zero
+        disables them."""
+        return self._write(
+            "updateIntervalHighWaterMarkPerformanceFee(uint32)", interval
+        )
+
+    def calculate_deposit_fee(self, shares: Shares) -> Call[Shares]:
+        """The fee part, in shares, of a deposit minting ``shares``."""
+        return self._view(
+            "calculateDepositFee(uint256)",
+            shares,
+            output_types=["uint256"],
+            decoder=Shares,
+        )
 
     def get_deposit_fee(self) -> Call[Fee]:
         """WAD (1e18 = 100%). Reverts on FeeManager deployments predating

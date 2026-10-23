@@ -269,7 +269,7 @@ the lifecycle matrix follows that.
   TypedDict's `__optional_keys__` is right at run time.
   None of them imports `cli/` (`tests/test_sdk_layering.py`)
 - `config/roles.py` — `Roles` IntEnum
-- `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
+- `core/` — `context` (`Web3Context`), `context_manager` (`ContextManager`), `contract` (`Call`, `ContractWrapper`),
   `multicall` (`Multicall3`), `logs` (`get_logs_adaptive`: every event scan pages
   `eth_getLogs` within the provider's caps from the contract's creation block, within a
   time and request budget, and raises `LogScanError` rather than return partial logs;
