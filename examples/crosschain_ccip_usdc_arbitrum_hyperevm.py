@@ -1000,10 +1000,14 @@ def _open(web3_arb: Web3, web3_hype: Web3, codes: CreationCodes) -> _Flow:
     check_creation_codes(codes)
 
     # Previews (eth_call, no state change): the vault stacks the two clones
-    # create and the executor's CREATE3 address. Nothing else touches either
-    # FusionFactory in between, so the simulated clones land at these
-    # addresses. The executor address depends only on the factory, the creator
-    # and the salt, so the live factory answers it before any configuration.
+    # create and the executor's CREATE3 address.
+    # SIMULATION ONLY: nothing else touches either FusionFactory in this pinned
+    # replay, so the simulated clones land at the predicted stacks. Live, another
+    # clone between the preview and your transaction moves them: send the clone
+    # first, take each stack from FusionFactory.decode_clone_receipt(receipt) and
+    # build the configuration calls from those addresses.
+    # The executor address depends only on the factory, the creator and the
+    # salt, so its prediction holds live too, before any configuration.
     hub_instance = hub_clone(FusionFactory(ARBITRUM_FUSION_FACTORY)).call(hub_ctx)
     spoke_instance = spoke_clone(FusionFactory(HYPEREVM_FUSION_FACTORY)).call(spoke_ctx)
     executor = (
