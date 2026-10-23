@@ -9,9 +9,10 @@ Maintained by <a href="https://ipor.io">IPOR Labs AG</a>.
 
 > **Preview, not production:** the crosschain market (54: Stargate and CCIP executors,
 > dispatchers, lanes, fuses) and the HyperCore market (55: fuses, readers, events) are
-> under active development. Their contracts are not production releases, the mainnet
-> deployments are a proof of concept and IPOR Labs canaries, and their interfaces may
-> change between minor versions. Route no production capital through them. Everything
+> under active development. The SDK follows their official deployment (the 2026-10-21
+> contracts release, listed in ipor-abi) and nothing earlier, and their interfaces may
+> change or be removed between minor versions, with no backward compatibility. Route
+> no production capital through them. Everything
 > else in the package is production. `server_info` and `fusion changelog` list the same
 > status (`PREVIEW_FEATURES`).
 

@@ -7,7 +7,7 @@ transport and lane. This namespace exports all of it; the transport
 subpackages export only their codecs and wrappers, because the encoders import
 those and a package's ``__init__`` runs before any of its modules.
 
-Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
+Status: preview, not production. The contracts behind it are under active development, the SDK follows only their official deployment, and interfaces may change or be removed between minor versions, with no backward compatibility; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
 
 from ipor_fusion.crosschain.ccip.chainlink import (

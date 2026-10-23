@@ -23,9 +23,9 @@ class PreviewFeature:
 
 # Stated once here and surfaced by `server_info`, `fusion changelog`, the
 # README and the module docstrings, so no reader can miss it: the contracts
-# behind these are under active development, their mainnet deployments are
-# a proof of concept and IPOR Labs canaries, and their interfaces may change
-# between minor versions. Nothing under these names should route production
+# behind these are under active development, the SDK follows only their
+# official deployment, and their interfaces may change or be removed between
+# minor versions. Nothing under these names should route production
 # capital. Every other feature of the package is production.
 PREVIEW_FEATURES: tuple[PreviewFeature, ...] = (
     PreviewFeature(
@@ -40,9 +40,8 @@ PREVIEW_FEATURES: tuple[PreviewFeature, ...] = (
 )
 PREVIEW_STATEMENT = (
     "Preview, not production: the contracts are under active development, the "
-    "mainnet deployments are a proof of concept and IPOR Labs canaries, and "
-    "interfaces may change or be removed between minor versions, with no "
-    "backward compatibility."
+    "SDK follows only their official deployment, and interfaces may change or "
+    "be removed between minor versions, with no backward compatibility."
 )
 
 _DISTRIBUTION = "ipor-fusion"
