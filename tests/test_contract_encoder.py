@@ -113,6 +113,7 @@ def test_call_carries_no_context():
         "data",
         "output_types",
         "decoder",
+        "decode_error",
     ]
 
 

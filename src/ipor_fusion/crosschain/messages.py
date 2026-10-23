@@ -22,9 +22,9 @@ from ipor_fusion.core.address import _validate_not_zero_address
 from ipor_fusion.types import Amount, CommandId, PlasmaVaultAddress, Shares
 
 #: ``CrosschainConstants.CODEC_VERSION`` -- the Stargate/LayerZero envelope version.
-CODEC_VERSION = 3
+CODEC_VERSION = 4
 #: ``CcipMessages.VERSION`` -- the CCIP envelope version.
-CCIP_VERSION = 1
+CCIP_VERSION = 3
 
 
 class BusinessAction(IntEnum):
@@ -104,7 +104,7 @@ class DeploymentStatus(IntEnum):
 _ACTION_TYPES: dict[BusinessAction, list[str]] = {
     BusinessAction.DEPOSIT: ["address", "uint256", "uint256"],
     BusinessAction.REDEEM: ["address", "uint256", "uint256"],
-    BusinessAction.REQUEST_SHARES: ["address", "address", "uint256"],
+    BusinessAction.REQUEST_SHARES: ["address", "address", "uint256", "uint256"],
     BusinessAction.REDEEM_FROM_REQUEST: [
         "address",
         "address",
@@ -126,7 +126,14 @@ _ZERO_AMOUNT = Amount(0)
 _ZERO_SHARES = Shares(0)
 
 #: Solidity tuple type of ``Command`` as it appears inside fuse enter data.
-COMMAND_TUPLE_TYPE = "(bytes32,uint64,uint64,uint8,bytes)"
+COMMAND_TUPLE_TYPE = "(bytes32,uint64,uint64,uint8,uint64,bytes)"
+
+#: ``CrosschainConstants.MAX_COMMAND_EXECUTION_GAS``: the largest
+#: ``min_execution_gas`` a command may request.
+MAX_COMMAND_EXECUTION_GAS = 14_000_000
+
+#: ``type(uint256).max``: no ceiling on the REQUEST_SHARES fee.
+NO_FEE_CEILING = Shares((1 << 256) - 1)
 
 
 # The zero command id: no command, or one not yet assigned by the executor.
@@ -144,6 +151,13 @@ class Command:
     executor allocates ``command_id``, ``sequence`` and ``command_config_epoch``
     when it sends, so a fresh command leaves them zero; the CCIP retry and
     cancel operations address an existing command by its ``command_id``.
+
+    ``min_execution_gas`` is the dispatcher-side gas the command needs (0 =
+    the lane default). On CCIP it is a check only: above the budget the route
+    delivers the executor reverts ``CommandBudgetAboveLane``, above
+    :data:`MAX_COMMAND_EXECUTION_GAS` ``CommandBudgetAboveMax``; a retry or
+    cancel ignores it. On Stargate a non-zero value on RETRY_COMMAND raises the
+    stored command's budget.
     """
 
     action: BusinessAction
@@ -151,30 +165,39 @@ class Command:
     command_id: CommandId = NO_COMMAND_ID
     sequence: int = 0
     command_config_epoch: int = 0
+    min_execution_gas: int = 0
 
     def __post_init__(self) -> None:
         if len(self.command_id) != 32:
             raise ValueError(f"command_id must be 32 bytes, got {len(self.command_id)}")
+        if not 0 <= self.min_execution_gas <= MAX_COMMAND_EXECUTION_GAS:
+            raise ValueError(
+                f"min_execution_gas must be 0..{MAX_COMMAND_EXECUTION_GAS}, "
+                f"got {self.min_execution_gas}"
+            )
 
-    def as_tuple(self) -> tuple[bytes, int, int, int, bytes]:
-        """``(commandId, sequence, commandConfigEpoch, action, actionData)``."""
+    def as_tuple(self) -> tuple[bytes, int, int, int, int, bytes]:
+        """``(commandId, sequence, commandConfigEpoch, action,
+        minExecutionGas, actionData)``."""
         return (
             self.command_id,
             self.sequence,
             self.command_config_epoch,
             int(self.action),
+            self.min_execution_gas,
             self.action_data,
         )
 
     @classmethod
-    def from_tuple(cls, values: tuple[bytes, int, int, int, bytes]) -> Command:
-        command_id, sequence, config_epoch, action, action_data = values
+    def from_tuple(cls, values: tuple[bytes, int, int, int, int, bytes]) -> Command:
+        command_id, sequence, config_epoch, action, min_gas, action_data = values
         return cls(
             action=BusinessAction(action),
             action_data=bytes(action_data),
             command_id=CommandId(bytes(command_id)),
             sequence=int(sequence),
             command_config_epoch=int(config_epoch),
+            min_execution_gas=int(min_gas),
         )
 
     @property
@@ -237,15 +260,20 @@ class Command:
         withdraw_manager: ChecksumAddress,
         plasma_vault: PlasmaVaultAddress,
         shares: Shares,
+        max_fee_shares: Shares,
     ) -> Command:
-        """``encodeRequestSharesAction(withdrawManager, plasmaVault, shares)``:
-        enter the remote PlasmaVault's scheduled-withdrawal queue."""
+        """``encodeRequestSharesAction(withdrawManager, plasmaVault, shares,
+        maxFeeShares)``: enter the remote PlasmaVault's scheduled-withdrawal
+        queue. ``max_fee_shares`` caps the request fee in share units
+        (:data:`NO_FEE_CEILING` for none); above it the dispatcher reverts
+        ``RequestSharesFeeExceeded``. Shares are never rescaled by decimals."""
         _validate_not_zero_address(withdraw_manager, "withdraw_manager")
         _validate_not_zero_address(plasma_vault, "plasma_vault")
         return cls(
             BusinessAction.REQUEST_SHARES,
             _encode_action(
-                BusinessAction.REQUEST_SHARES, [withdraw_manager, plasma_vault, shares]
+                BusinessAction.REQUEST_SHARES,
+                [withdraw_manager, plasma_vault, shares, max_fee_shares],
             ),
         )
 
@@ -307,6 +335,17 @@ def decode_command(data: bytes) -> Command:
     ``COMMAND`` envelope's inner data."""
     (values,) = decode([COMMAND_TUPLE_TYPE], data)
     return Command.from_tuple(values)
+
+
+class TrackedVaultPricing(IntEnum):
+    """``TrackedVaultPricingLib`` outcome of one tracked vault in a dispatcher
+    observation: priced, or why its value is left out of the accounted
+    balance."""
+
+    PRICED = 0
+    BALANCE_OF_FAILED = 1
+    CONVERT_TO_ASSETS_FAILED = 2
+    ASSET_DRIFT = 3
 
 
 class CrosschainTransportKind(IntEnum):

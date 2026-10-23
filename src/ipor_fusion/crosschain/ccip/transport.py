@@ -14,6 +14,7 @@ from ipor_fusion.crosschain.ccip.codec import (
     Any2EVMMessage,
     CcipMessageSent,
     EVMTokenAmount,
+    MessageV1,
     ccip_receive_calldata,
     evm_address,
 )
@@ -28,6 +29,7 @@ from ipor_fusion.crosschain.transport import (
     CrosschainTransport,
     DeliveryCall,
     OutboundMessage,
+    gas_for_exact_call,
     transfer_call,
 )
 from ipor_fusion.types import Amount, CcipChainSelector, ChainId, Decimals
@@ -158,20 +160,32 @@ class CcipTransport(CrosschainTransport):
                 )
             )
             token_amounts = (EVMTokenAmount(dst.token, message.token_amount),)
+        data = ccip_receive_calldata(
+            Any2EVMMessage(
+                message_id=message.message_id,
+                source_chain_selector=src.chain_selector,
+                sender=message.sender,
+                data=message.payload,
+                dest_token_amounts=token_amounts,
+            )
+        )
         calls.append(
             DeliveryCall(
                 to=message.receiver,
-                data=ccip_receive_calldata(
-                    Any2EVMMessage(
-                        message_id=message.message_id,
-                        source_chain_selector=src.chain_selector,
-                        sender=message.sender,
-                        data=message.payload,
-                        dest_token_amounts=token_amounts,
-                    )
-                ),
+                data=data,
                 from_=dst.router,
                 label=f"ccip_receive:{message.message_id.hex()[:8]}",
+                gas=_receive_gas(message, data),
             )
         )
         return calls
+
+
+def _receive_gas(message: OutboundMessage, data: bytes) -> int:
+    """The Router calls ``ccipReceive`` with exactly the message's
+    ``ccipReceiveGasLimit`` (``Router.routeMessage``, exact-gas call), and the
+    receivers derive their command gas budgets from it, so the node's default
+    call gas would make a delivery pass or fail by what else shares its block."""
+    if not isinstance(message.raw, MessageV1):
+        raise TypeError("a CCIP delivery needs the decoded MessageV1 as raw")
+    return gas_for_exact_call(message.raw.ccip_receive_gas_limit, data)

@@ -37,21 +37,28 @@ PEER = Web3.to_checksum_address("0x0Aa75BfD30Ae2d4061FF8261453b933Ab5959991")
 ROUTE = "(uint64,address,address,uint96,uint96,uint256,bool)"
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_]\w*$")
-_ABI_TYPE = re.compile(r"^(u?int\d+|bytes32|address|bool|\((\w+,)*\w+\))$")
+_ABI_TYPE = re.compile(r"^(u?int\d+|bytes\d+|address|bool|\((\w+,)*\w+\))$")
 
 # Signatures whose field names matter to readers, with their fields.
 KNOWN_FIELDS = {
-    "ReturnFinalized(uint256,bytes32,uint256,uint256)": (
+    "ReturnFinalized(uint256,bytes32,uint256,uint256,uint256)": (
         "chainId",
         "operationId",
         "sentSD",
         "received",
+        "debitedSD",
     ),
-    "LateReturnFinalized(uint256,bytes32,uint256,uint256)": (
+    "LateReturnFinalized(uint256,bytes32,uint256,uint256,uint256)": (
         "chainId",
         "operationId",
         "sentSD",
         "received",
+        "debitedSD",
+    ),
+    "SharesRequested(address,uint256,uint256)": (
+        "vault",
+        "pendingShares",
+        "feeShares",
     ),
     "CommandAcknowledged(uint256,bytes32,uint64,uint64,int256,uint8,uint64)": (
         "srcChainId",
@@ -80,7 +87,7 @@ KNOWN_FIELDS = {
         "chainId",
         "operationId",
         "sentSD",
-        "maxAccounted",
+        "bound",
     ),
     "SettledCreditClamped(uint256,bytes32,uint256,uint256)": (
         "chainId",
@@ -126,8 +133,8 @@ def _sample(abi_type: str) -> object:
     """A distinctive value of each ABI type; addresses are checksummed."""
     if abi_type == "address":
         return PEER
-    if abi_type == "bytes32":
-        return b"\x07" * 32
+    if abi_type.startswith("bytes"):
+        return b"\x07" * int(abi_type[5:])
     if abi_type == "bool":
         return True
     if abi_type.startswith("int"):
@@ -155,7 +162,7 @@ def _sample_log(signature: str) -> tuple[CcipEventSpec, tuple, dict]:
 
 
 def test_every_spec_parses_and_has_a_unique_topic():
-    assert len(CCIP_EVENTS) == 72
+    assert len(CCIP_EVENTS) == 93
     for spec in CCIP_EVENTS:
         assert _IDENTIFIER.fullmatch(spec.name), spec
         assert len(spec.fields) == len(spec.types), spec
@@ -199,7 +206,9 @@ def test_every_spec_round_trips_through_a_simulate_log(signature: str):
 
 
 def test_bytes_valued_log_fields_decode_too():
-    spec, values, _ = _sample_log("ReturnFinalized(uint256,bytes32,uint256,uint256)")
+    spec, values, _ = _sample_log(
+        "ReturnFinalized(uint256,bytes32,uint256,uint256,uint256)"
+    )
     event = decode_ccip_event(_log(spec, values, as_bytes=True))
     assert event is not None
     assert event.values == {
@@ -207,6 +216,7 @@ def test_bytes_valued_log_fields_decode_too():
         "operationId": b"\x07" * 32,
         "sentSD": 12345,
         "received": 12345,
+        "debitedSD": 12345,
     }
 
 
@@ -237,7 +247,9 @@ def test_decoded_values_are_read_only():
 def _mixed_logs() -> list[dict]:
     _, _, ready = _sample_log("DispatcherReady(uint256)")
     _, _, settled = _sample_log("AssetSettled(uint256,bytes32,uint256)")
-    _, _, returned = _sample_log("ReturnFinalized(uint256,bytes32,uint256,uint256)")
+    _, _, returned = _sample_log(
+        "ReturnFinalized(uint256,bytes32,uint256,uint256,uint256)"
+    )
     transfer = {
         "address": ADDR,
         "topics": [keccak(text="Transfer(address,address,uint256)")],
@@ -254,7 +266,13 @@ def test_ccip_events_keeps_log_order_and_skips_unknown_logs():
 def test_find_ccip_events_selects_by_name():
     logs = _mixed_logs()
     (returned,) = find_ccip_events(logs, "ReturnFinalized")
-    assert sorted(returned.values) == ["chainId", "operationId", "received", "sentSD"]
+    assert sorted(returned.values) == [
+        "chainId",
+        "debitedSD",
+        "operationId",
+        "received",
+        "sentSD",
+    ]
     assert len(find_ccip_events(logs, "DispatcherReady")) == 1
     assert find_ccip_events(logs, "AssetClaimed") == []
 
@@ -288,10 +306,12 @@ def test_accounting_readers_encode_selector_and_decode_return(
 
 # --- mirrored from a contracts checkout ------------------------------------------
 
-#: The v3 factory pair's source: the ticket's own gas limit on the pilot-v2
-#: revision ``810e260``.
-CONTRACTS_REVISION = "84c1923408d8aec4b6c2f769567798c716cc8b4c"
-CCIP_SOURCES = "contracts/crosschain/ccip"
+#: The released contracts (2026-10-21), the source of the deployment
+#: ipor-abi publishes.
+CONTRACTS_REVISION = "10f0f8e4031980b6f130d4f6460c6f8edfbcab32"
+#: The CCIP contracts and the shared crosschain libraries they link: the
+#: executor and dispatcher emit the shared rescue and tracked-vault events.
+CCIP_SOURCES = ("contracts/crosschain/ccip", "contracts/crosschain/lib")
 # Stripped before parsing, as tests/test_solidity_mirrors.py does: a trailing
 # `// note` would otherwise become a member and a `)` inside prose would
 # truncate a body.
@@ -324,8 +344,8 @@ def _ccip_sources() -> list[str]:
             f"IPOR_FUSION_CONTRACTS_DIR is at {revision!r}; "
             f"the event registry pins {CONTRACTS_REVISION}"
         )
-    paths = sorted((root / CCIP_SOURCES).rglob("*.sol"))
-    assert paths, f"no Solidity sources under {root / CCIP_SOURCES}"
+    paths = sorted(p for d in CCIP_SOURCES for p in (root / d).rglob("*.sol"))
+    assert paths, f"no Solidity sources under {root}"
     return [_COMMENT_RE.sub("", path.read_text()) for path in paths]
 
 

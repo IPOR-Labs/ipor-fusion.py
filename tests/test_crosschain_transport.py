@@ -4,6 +4,7 @@ provider driving ``CrosschainSimulator.relay`` across two chains."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 import pytest
@@ -392,8 +393,10 @@ class TestCcipTransport:
         # CCIP chains in the fixtures name no holder: the synthetic source pays.
         assert credit.from_ == SYNTHETIC_TOKEN_SOURCE
         assert credit.to == BASE_USDC
+        assert credit.gas is None
         assert receive.to == STARGATE_EXECUTOR
         assert receive.from_ == BASE_CCIP_ROUTER
+        assert receive.gas is not None and receive.gas > 1_000_000
         (delivered,) = decode(
             ["(bytes32,uint64,bytes,bytes,(address,uint256)[])"], receive.data[4:]
         )
@@ -428,6 +431,13 @@ class TestCcipTransport:
             if False
             else receive.from_ == transport.chain(ETHEREUM).router
         )
+        # The Router forwards exactly ccipReceiveGasLimit (1,000,000 in the
+        # fixture); the transaction adds the calldata's intrinsic gas on top.
+        zeros = receive.data.count(0)
+        intrinsic = 21_000 + 4 * zeros + 16 * (len(receive.data) - zeros)
+        assert receive.gas == 1_000_000 + intrinsic
+        with pytest.raises(TypeError, match="decoded MessageV1"):
+            transport.delivery_calls(replace(outbound, raw=None))
 
     def test_rejects_token_transfer_between_different_decimals(self):
         from ipor_fusion.crosschain import CcipChain, CcipTransport
@@ -645,6 +655,7 @@ class ScriptedTransport(CrosschainTransport):
                 b"\xde\xad" + message.message_id,
                 SENDER,
                 f"deliver:{message.message_id[:1].hex()}",
+                gas=50_000,
             )
         ]
 
@@ -746,6 +757,8 @@ class TestCrosschainSimulator:
             "stateOverrides"
         ]
         assert overrides[RECEIVER] == {"balance": hex(10**18)}
+        (delivery,) = web3_b.provider.payloads[0][0]["blockStateCalls"][0]["calls"]
+        assert delivery["gas"] == hex(50_000)
         assert sim.results is results or dict(sim.results) == results
         assert (
             sim.transport.transport_kind == CrosschainTransportKind.STARGATE_LAYERZERO

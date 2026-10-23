@@ -17,8 +17,13 @@ from ipor_fusion.crosschain.contracts import (
     CrosschainExecutor,
     CrosschainFactory,
     _address,
+    _earlier_observation,
 )
-from ipor_fusion.crosschain.messages import CommandStatus, CrosschainTransportKind
+from ipor_fusion.crosschain.messages import (
+    CommandStatus,
+    CrosschainTransportKind,
+    TrackedVaultPricing,
+)
 from ipor_fusion.types import (
     Amount,
     AssetId,
@@ -37,7 +42,10 @@ from ipor_fusion.types import (
 
 @dataclass(frozen=True, slots=True)
 class CcipObservation:
-    """``CcipCrosschainDispatcher.CcipObservation`` (amounts in shared decimals)."""
+    """``CcipCrosschainDispatcher.CcipObservation`` (amounts in shared
+    decimals). ``unpriced_count`` tracked vaults could not be priced and their
+    value is NOT in ``accounted_balance``; :meth:`unpriced_reason` says why for
+    each ``trackedVaults`` index."""
 
     accounted_balance: Amount
     tracked_idle: Amount
@@ -45,6 +53,14 @@ class CcipObservation:
     state_version: int
     command_config_epoch: int
     tracked_position_set_hash: PositionSetHash
+    unpriced_count: int
+    unpriced_codes: int
+
+    def unpriced_reason(self, index: int) -> TrackedVaultPricing:
+        """The pricing outcome of tracked vault ``index`` (2 bits each)."""
+        if not 0 <= index < 128:
+            raise ValueError(f"tracked vault index must be 0..127, got {index}")
+        return TrackedVaultPricing((self.unpriced_codes >> (2 * index)) & 0b11)
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +214,18 @@ class CcipCrosschainExecutor(CrosschainExecutor):
             decoder=lambda v: OperationId(bytes(v)),
         )
 
+    def last_value_moving_receipt_at(self, chain_id: ChainId) -> Call[Timestamp]:
+        """Hub time of the last value-moving receipt from ``chain_id``
+        (transfer settled or credited, return transfer, force-resolve,
+        force-set). A proposal or approval whose ``remoteTimestamp`` is not
+        strictly later reverts ``ObservationPredatesValueMovingReceipt``."""
+        return self._view(
+            "lastValueMovingReceiptAt(uint256)",
+            chain_id,
+            output_types=["uint64"],
+            decoder=Timestamp,
+        )
+
     def active_command(self, chain_id: ChainId) -> Call[CommandId]:
         """The active command id for the chain, or 32 zero bytes."""
         return self._view(
@@ -308,8 +336,11 @@ class CcipCrosschainDispatcher(CrosschainDispatcher):
     def observation(self) -> Call[CcipObservation]:
         return self._view(
             "observation()",
-            output_types=["(uint256,uint256,uint256,uint64,uint64,bytes32)"],
+            output_types=[
+                "(uint256,uint256,uint256,uint64,uint64,bytes32,uint256,uint256)"
+            ],
             decoder=_ccip_observation_decoder,
+            decode_error=_earlier_observation,
         )
 
     def accounted_balance(self) -> Call[Amount]:
@@ -357,9 +388,9 @@ class CcipCrosschainDispatcher(CrosschainDispatcher):
 
 
 def _ccip_observation_decoder(
-    values: tuple[int, int, int, int, int, bytes],
+    values: tuple[int, int, int, int, int, bytes, int, int],
 ) -> CcipObservation:
-    accounted, idle, queued, version, epoch, set_hash = values
+    accounted, idle, queued, version, epoch, set_hash, unpriced, codes = values
     return CcipObservation(
         accounted_balance=Amount(accounted),
         tracked_idle=Amount(idle),
@@ -367,6 +398,8 @@ def _ccip_observation_decoder(
         state_version=int(version),
         command_config_epoch=int(epoch),
         tracked_position_set_hash=PositionSetHash(bytes(set_hash)),
+        unpriced_count=int(unpriced),
+        unpriced_codes=int(codes),
     )
 
 

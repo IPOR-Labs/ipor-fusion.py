@@ -16,6 +16,7 @@ from ipor_fusion.crosschain.contracts import (
     CrosschainFactory,
     _address,
     _address_list,
+    _earlier_observation,
 )
 from ipor_fusion.crosschain.messages import CommandStatus, DeploymentStatus
 from ipor_fusion.types import (
@@ -51,7 +52,10 @@ class ActiveCommand:
 @dataclass(frozen=True, slots=True)
 class Observation:
     """``ICrosschainDispatcher.Observation``: the canonical dispatcher snapshot
-    attestations are derived from (amounts in local asset decimals)."""
+    attestations are derived from (amounts in local asset decimals).
+    ``vault_valued[i]`` is False for a tracked vault that could not be priced
+    (its ``vault_asset_values`` entry is 0 and not counted); ``unpriced_count``
+    is how many."""
 
     tracked_idle: Amount
     tracked_vaults: list[ChecksumAddress]
@@ -59,6 +63,8 @@ class Observation:
     state_version: int
     command_config_epoch: int
     tracked_position_set_hash: PositionSetHash
+    vault_valued: list[bool]
+    unpriced_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,8 +300,11 @@ class StargateCrosschainDispatcher(CrosschainDispatcher):
         tracked vault position, at one EVM state snapshot."""
         return self._view(
             "observation()",
-            output_types=["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
+            output_types=[
+                "(uint256,address[],uint256[],uint64,uint64,bytes32,bool[],uint256)"
+            ],
             decoder=_observation_decoder,
+            decode_error=_earlier_observation,
         )
 
     def get_allowed_vaults(self) -> Call[list[ChecksumAddress]]:
@@ -318,9 +327,11 @@ class StargateCrosschainDispatcher(CrosschainDispatcher):
 
 
 def _observation_decoder(
-    values: tuple[int, tuple[str, ...], tuple[int, ...], int, int, bytes],
+    values: tuple[
+        int, tuple[str, ...], tuple[int, ...], int, int, bytes, tuple[bool, ...], int
+    ],
 ) -> Observation:
-    idle, vaults, asset_values, version, epoch, set_hash = values
+    idle, vaults, asset_values, version, epoch, set_hash, valued, unpriced = values
     return Observation(
         tracked_idle=Amount(idle),
         tracked_vaults=_address_list(list(vaults)),
@@ -328,6 +339,8 @@ def _observation_decoder(
         state_version=int(version),
         command_config_epoch=int(epoch),
         tracked_position_set_hash=PositionSetHash(bytes(set_hash)),
+        vault_valued=[bool(v) for v in valued],
+        unpriced_count=int(unpriced),
     )
 
 

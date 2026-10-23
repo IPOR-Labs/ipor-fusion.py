@@ -56,12 +56,17 @@ class OutboundMessage:
 
 @dataclass(frozen=True, slots=True)
 class DeliveryCall:
-    """One call to queue on the destination chain to deliver a message."""
+    """One call to queue on the destination chain to deliver a message.
+
+    ``gas`` is the transaction gas limit of the call; ``None`` leaves it to the
+    node, whose default depends on the other calls in the block (reth splits
+    the unclaimed block gas evenly between the calls that name none)."""
 
     to: ChecksumAddress
     data: bytes
     from_: ChecksumAddress
     label: str
+    gas: int | None = None
 
 
 class CrosschainTransport(ABC):
@@ -115,3 +120,11 @@ def transfer_call(
         from_=source,
         label=f"token_credit:{to}",
     )
+
+
+def gas_for_exact_call(call_gas: int, data: bytes) -> int:
+    """The transaction gas limit that leaves exactly ``call_gas`` to the
+    callee's top-level frame: ``call_gas`` plus the intrinsic gas of ``data``
+    (21,000 plus 4 per zero and 16 per nonzero calldata byte, EIP-2028)."""
+    zeros = data.count(0)
+    return call_gas + 21_000 + 4 * zeros + 16 * (len(data) - zeros)

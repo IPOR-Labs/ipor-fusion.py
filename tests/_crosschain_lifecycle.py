@@ -1,8 +1,8 @@
-"""Full crosschain lifecycle between a deployment's hub vault and one spoke,
-on every transport, through the transport-agnostic ``CrosschainLane`` and the
-``CrosschainSimulator`` relay (``eth_simulateV1``, no bridge: the LayerZero
-endpoint or the CCIP Router is impersonated on delivery and the Stargate USDC
-pools stand in for the token release). Parametrized over ``LIFECYCLES``.
+"""Full crosschain lifecycle between a hub vault and one spoke through the
+transport-agnostic ``CrosschainLane`` and the ``CrosschainSimulator`` relay
+(``eth_simulateV1``, no bridge: the CCIP Router is impersonated on delivery).
+The CCIP rehearsal builds the ``Run`` from a factory pair compiled from the
+released contracts.
 
 1. ``lane.supply``: USDC leaves the vault, the transport credits the
    dispatcher a couple of minutes later, the settlement receipt fills the
@@ -36,19 +36,17 @@ from dataclasses import dataclass, field, replace
 from typing import TypeVar
 
 from _crosschain import (
-    Deployment,
-    Spoke,
     assert_relay_success,
 )
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
+from web3.types import Timestamp
 
 from ipor_fusion import (
     ERC20,
     PlasmaVault,
     SimulationObservation,
     VaultSimulator,
-    Web3Context,
 )
 from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
 from ipor_fusion.crosschain import (
@@ -58,8 +56,6 @@ from ipor_fusion.crosschain import (
     CrosschainSimulator,
     CrosschainTransportKind,
     LaneObservation,
-    discover_deployment,
-    open_lane,
 )
 from ipor_fusion.types import Amount, ChainId, MarketId
 
@@ -208,107 +204,6 @@ def assert_reverted(call: SimulatedCallResult, error_signature: str) -> None:
     )
 
 
-def prepare_deployed_run(
-    web3_hub, web3_spoke, dep: Deployment, spoke: Spoke, transport_kind
-) -> Run:
-    hub_ctx = Web3Context(web3=web3_hub, chain_id=dep.hub.chain_id).at_block(
-        dep.hub.block
-    )
-    spoke_ctx = Web3Context(web3=web3_spoke, chain_id=spoke.chain_id).at_block(
-        spoke.chain.block
-    )
-    remote_vault = spoke.remote_vault
-    assert remote_vault is not None
-
-    # Discovery exercised for real: transport detection plus the fuses found on
-    # the vault by market id and selector must equal the pinned addresses.
-    lane = open_lane(
-        hub_ctx,
-        spoke_ctx,
-        executor=dep.executor(transport_kind),
-        market_id=dep.market_id,
-    )
-    assert lane.transport_kind == transport_kind
-    assert lane.fuses == dep.lane_fuses(transport_kind)
-    # Drift guards: the executor generation the wrappers mirror comes from this
-    # factory, and it must be bound to the hub vault.
-    assert lane.executor.factory().call(hub_ctx) == dep.factory(transport_kind)
-    assert lane.executor.manager().call(hub_ctx) == dep.vault
-    # The spoke side really is this executor's dispatcher: same CREATE3 address
-    # (the lane enforces it), created by the same factory, pointing at the hub.
-    assert lane.dispatcher.executor_chain_id().call(spoke_ctx) == dep.hub.chain_id
-    assert lane.dispatcher.factory().call(spoke_ctx) == dep.factory(transport_kind)
-    assert lane.executor.has_dispatcher(spoke.chain_id).call(hub_ctx)
-    # Discovery from the vault alone must describe the pinned deployment.
-    deployment = discover_deployment(hub_ctx, dep.vault, dep.market_id)
-    assert {e.transport_kind for e in deployment.executors} == set(dep.transports)
-    info = deployment.executor(transport_kind)
-    assert info.address == dep.executor(transport_kind)
-    assert info.factory == dep.factory(transport_kind)
-    assert info.fuses == dep.lane_fuses(transport_kind)
-    assert (info.balance_proposer, info.balance_approver) == (
-        dep.balance_proposer,
-        dep.balance_approver,
-    )
-    assert spoke.chain_id in info.spoke_chain_ids
-    assert deployment.remote_vaults[spoke.chain_id] == (remote_vault,)
-
-    csim = CrosschainSimulator(dep.transport(transport_kind))
-    hub = csim.add_chain(
-        dep.hub.chain_id,
-        web3_hub,
-        block=dep.hub.block,
-        vault=dep.vault,
-        alpha=dep.owner,
-    )
-    spoke_sim = csim.add_chain(spoke.chain_id, web3_spoke, block=spoke.chain.block)
-    # A block override carries into every later block of the simulation.
-    for simulator, chain in ((hub, dep.hub), (spoke_sim, spoke.chain)):
-        if chain.simulated_gas_limit:
-            simulator.with_block_override(gasLimit=chain.simulated_gas_limit)
-    csim.fund_native(dep.hub.chain_id, lane.executor_address, NATIVE_BUDGET)
-    csim.fund_native(spoke.chain_id, lane.executor_address, NATIVE_BUDGET)
-    hub_start = int(web3_hub.eth.get_block(dep.hub.block)["timestamp"])
-    spoke_start = int(web3_spoke.eth.get_block(spoke.chain.block)["timestamp"])
-    run = Run(
-        hub_chain_id=ChainId(dep.hub.chain_id),
-        spoke_chain_id=ChainId(spoke.chain_id),
-        spoke_name=spoke.name,
-        hub_vault_address=dep.vault,
-        hub_asset_address=dep.hub.usdc,
-        market_id=dep.market_id,
-        owner=dep.owner,
-        balance_proposer=dep.balance_proposer,
-        balance_approver=dep.balance_approver,
-        transport_kind=transport_kind,
-        lane=lane,
-        csim=csim,
-        hub=hub,
-        spoke_sim=spoke_sim,
-        vault=PlasmaVault(dep.vault),
-        remote_vault=PlasmaVault(remote_vault),
-        hub_asset=ERC20(dep.hub.usdc),
-        amount=SUPPLY_AMOUNT[transport_kind],
-        hub_start=hub_start,
-        staleness_max=lane.staleness_max().call(hub_ctx),
-        ccip_debits_sent_amount=dep.ccip_debits_sent_amount,
-        attestation_zero_dust_sd=dep.attestation_zero_dust_sd,
-        min_update_interval=lane.executor.min_update_interval().call(hub_ctx),
-    )
-    run.log(
-        "open_lane",
-        executor=lane.executor_address,
-        staleness_max=run.staleness_max,
-        supply_fuse=lane.fuses.supply,
-        command_fuse=lane.fuses.command,
-        claim_fuse=lane.fuses.claim,
-        hub_block=dep.hub.block,
-        spoke_block=spoke.chain.block,
-        pin_offset_s=hub_start - spoke_start,
-    )
-    return run
-
-
 def supply(run: Run) -> int:
     """Bridge to the spoke; returns the amount credited to the dispatcher."""
     lane = run.lane
@@ -356,6 +251,9 @@ def supply(run: Run) -> int:
     else:
         assert outbound == credited
 
+    # a keeper observes after the receipt is visible: one block later, so the
+    # observation strictly follows the executor's value-moving receipt
+    run.advance(1)
     run.settled_after_settle = settled_after_settle = run.csim.observe(
         run.hub_chain_id, lane.settled_remote_balance()
     )
@@ -393,6 +291,9 @@ def _observation(
         remote_block=run.spoke_block,
         remote_timestamp=run.spoke_now,
         expiry=run.hub_now + PROPOSAL_TTL,
+        # the run keeps the spoke clock ahead of the hub's, so the executor's
+        # own ordering check is what the rehearsal exercises
+        receipt_at=Timestamp(0),
     )
     return replace(proposal, state_version=state_version)
 
@@ -514,7 +415,8 @@ def _deposit(run: Run, credited: int) -> int:
     assert shares > 0
     assert after.tracked_idle == 0
     assert abs(after.accounted_balance - credited) <= credited // 1000
-    assert after.state_version == before.state_version + 1
+    # value-neutral for the version: the ACK carries the current one
+    assert after.state_version == before.state_version
     assert active_after_ack.value is False
     run.log(
         "deposit acked",
@@ -528,7 +430,7 @@ def _deposit(run: Run, credited: int) -> int:
 
 def _renew_after_gap(run: Run, credited: int) -> int:
     """Past ``STALENESS_MAX`` the settled bucket closes NAV; a keeper re-attests
-    from a fresh observation at the post-DEPOSIT state version. Returns the
+    from a fresh observation at the state version the DEPOSIT left unchanged. Returns the
     newly attested settled value."""
     lane = run.lane
     before = required(run.observation_after_settle).value
@@ -546,7 +448,7 @@ def _renew_after_gap(run: Run, credited: int) -> int:
         NAV_STALE_ERROR[run.transport_kind],
     )
     after = observation_after_gap.value
-    assert after.state_version == before.state_version + 1
+    assert after.state_version == before.state_version
     assert remote_version_after_gap.value == after.state_version
     run.log(
         "gap",
@@ -559,7 +461,8 @@ def _renew_after_gap(run: Run, credited: int) -> int:
         run,
         tag="renewed",
         observed=observation_after_gap,
-        old_version=before.state_version,
+        # an earlier version than the one observed must be refused
+        old_version=after.state_version - 1,
     )
     assert abs(settled - credited) <= credited // 1000
     return settled
@@ -579,6 +482,7 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int) -> int:
     )
     run.relay()
     assert remote_max_withdraw.value > 0
+    run.advance(1)
     observation_after_redeem = run.csim.observe(run.spoke_chain_id, lane.observation())
     shares_after_redeem = run.csim.observe(
         run.spoke_chain_id,
@@ -625,6 +529,7 @@ def redeem_and_recall(run: Run, shares: int, *, credited: int) -> int:
     remote_version_after_return = run.csim.observe(
         run.hub_chain_id, lane.remote_state_version()
     )
+    run.advance(1)
     run.observation_after_return = observation_after_return = run.csim.observe(
         run.spoke_chain_id, lane.observation()
     )

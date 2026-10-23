@@ -3,9 +3,7 @@
 `ipor-fusion` is the Python SDK for IPOR Fusion Plasma Vaults: typed fuse
 encoders, on-chain readers, and a `fusion` CLI plus `fusion-mcp` MCP server
 built on the same SDK. Published to PyPI. It is a library and inspection
-tooling, not an automation service. `scripts/crosschain_readiness.py` is a
-read-only diagnostic run on demand, not a keeper or production monitor; any
-scheduled run of it belongs to the monitoring repository.
+tooling, not an automation service.
 
 Related repositories (siblings, referenced by name; clone paths vary):
 - [ipor-fusion](https://github.com/IPOR-Labs/ipor-fusion) — Solidity contracts, the source of truth for market ids, roles and substrates.
@@ -29,8 +27,6 @@ uv run ruff check ./                                          # lint: bandit S, 
 uv run pyright                                                # types, basic mode, src + tests + examples + scripts
 uv run pytest                                                 # all tests + coverage gate (fail_under = 98, mcp/ included)
 uv run pytest -m "cli or mcp" --no-cov                        # CLI/MCP subset (the full suite is mostly offline too)
-uv run pytest --run-readiness -m readiness --no-cov -rA       # opt-in live Ethereum-hub POC checks
-uv run python scripts/crosschain_readiness.py --output /tmp/crosschain-readiness.json # live Arbitrum/HyperEVM report
 uv run pytest tests/test_fuse_encoding.py -k aave --no-cov    # single file / test
 UPDATE_GOLDEN=1 uv run pytest -k golden --no-cov              # rewrite pinned CLI/MCP output (tests/fixtures/*_golden/)
 uv lock --check                                               # uv.lock in sync with pyproject.toml
@@ -74,14 +70,13 @@ public Solidity sources from GitHub). Skip only for an unavailable source; an
 exception from the
 SDK is a test failure, never a skip. Never print `.env` or a provider URL: they
 embed API keys, so skip and fail messages carry the exception type only.
-`HYPEREVM_PROVIDER_URL` is used by the HyperEVM lifecycle/deployment tests and
-the readiness script; general PR CI does not supply it.
-`test_simulate_crosschain_hyperevm.py` rehearses Arbitrum → HyperEVM on pinned blocks,
-parametrized by `generation`: `v2` and `v3` run the live factory pairs (`FactoryPair`:
-address, pins, creation-code hashes, route and dispatcher deployment gas limits) with
-executors from the creation code they store; `source` builds a factory pair from
-`FUSE_SOURCE_REVISION` inside the simulation. All need `IPOR_FUSION_CONTRACTS_DIR` at
-that revision (the fuses are compiled from it); a checkout without `node_modules` also
+`HYPEREVM_PROVIDER_URL` is used by the Arbitrum → HyperEVM rehearsal and the
+HyperCore tests; general PR CI does not supply it.
+`test_simulate_crosschain_hyperevm.py` rehearses Arbitrum → HyperEVM on pinned blocks
+with a CCIP factory pair compiled from `FUSE_SOURCE_REVISION` (the contracts release
+the official deployment was built from) and built inside the simulation; the SDK
+supports only that release, so there is no live-pair generation. It needs
+`IPOR_FUSION_CONTRACTS_DIR` at that revision; a checkout without `node_modules` also
 needs `IPOR_FUSION_FOUNDRY_REMAPPINGS` for OpenZeppelin. `test_crosschain_ccip_events.py`
 mirrors the CCIP event registry from a checkout at its own `CONTRACTS_REVISION`.
 `test_solidity_compiler.py` unit-tests that compiler helper (`tests/_foundry.py`)
@@ -89,18 +84,6 @@ offline, with `forge` and `git` mocked. The checkout-based tests above skip when
 external prerequisites are unavailable. `test_hypercore_live.py`,
 `test_hypercore_deployment.py` and `test_hypercore_simulation.py` need
 `HYPEREVM_PROVIDER_URL` as well.
-`test_simulate_crosschain_lifecycle.py` drives the mainnet POC deployment from
-Ethereum to every spoke on every transport through `CrosschainLane` and
-`CrosschainSimulator`; the fixtures (`Chain`, `Deployment`, `Spoke`, pinned
-blocks) live in `tests/_crosschain.py`. A planned spoke (HyperEVM) is a
-`pending` chain there and an `xfail(strict=True)` param until it is wired.
-`test_simulate_crosschain_canary.py` runs the same lifecycle on `CANARY` and
-`CANARY_V3`, the live Arbitrum → HyperEVM USDC canaries on the pilot-v2 and v3 CCIP
-factory pairs, each pinned right after its last transaction, then checks the final gates and every delivery's receiver
-gas against its route limit; a `Chain.simulated_gas_limit` lifts HyperEVM's 3 M
-small-block pin to 30 M and `Deployment.ccip_debits_sent_amount` /
-`attestation_zero_dust_sd` carry the executor generation's accounting into `Run`.
-It needs `ARBITRUM_PROVIDER_URL` and `HYPEREVM_PROVIDER_URL`.
 HyperCore (market 55) cannot be simulated directly: the HyperEVM RPC ignores code
 overrides at the precompile addresses `0x800`–`0x813`, and the public Hyperliquid RPC
 has no `eth_simulateV1`. `tests/_hypercore_shadow.py` therefore compiles the HyperCore
@@ -110,33 +93,8 @@ CoreWriter constants redirected to ordinary addresses, proves the rest is identi
 the deployed runtimes, and `tests/_hypercore_model.py` answers those addresses through
 `VaultSimulator.with_state_override_provider`. Core never applies anything there: the
 tests prove EVM validation under supplied Core state. `test_hypercore_simulation.py`
-runs one vault cycle; `test_simulate_crosschain_hypercore.py` runs the composed flow
-(v3 canary hub → CCIP → the market-55 vault → a trade → recall → claim) and holds every
-CCIP delivery to its route gas limit. Both skip without the source directory;
-`test_hypercore_simulation.py` also needs `HYPEREVM_PROVIDER_URL`, the composed flow
-`ARBITRUM_PROVIDER_URL` as well.
-`test_crosschain_readiness.py` checks the Ethereum-hub POC's live bridge and IPOR
-preconditions. Its `readiness` marker requires `--run-readiness`: ordinary runs
-exclude it even with `-m sdk`. Known HyperEVM gaps are non-strict xfails restricted
-to assertion failures, so availability improving is an XPASS, not broken CI.
-Readiness RPC clients fail on missing/unreachable providers or wrong chain IDs;
-they pin a snapshot per chain and do not require `eth_simulateV1`.
-`scripts/crosschain_readiness.py` separately reports both Arbitrum/HyperEVM USDC
-directions and the v3 factory pair's configuration (creation codes, routes, the
-dispatcher deployment gas limit, the canary creator's allowance, balance and HyperEVM
-big-block flag) with snapshot block numbers/hashes/timestamps. `hyperevm_delivery`
-flags manual execution into HyperEVM per message kind: `manual_execution_required` for
-commands and recalls (the hub route's `messageGasLimit`) and `dispatcher_deployment_manual`
-for the one-time deployment ticket. A delivery above the 3 M small block is manual
-unless every Chainlink executor seen delivering on HyperEVM's CCIP 2.0 OffRamp over
-the last ~2 weeks (`chainlink_executors`: `ExecutionStateChanged` senders from every
-source, the canary EOA excluded, at least 20 executions) sends into big blocks; a
-ticket below a dispatcher creation's gas is manual regardless. The executor set is
-derived on every run; `eth_usingBigBlocks` is read at the latest block.
-Blocked availability is a successful observation, not acceptance; incomplete probes
-fail. There is no GitHub workflow for it in this repository: run it locally with
-the Arbitrum and HyperEVM provider URLs from `.env`. A `Spoke` declares which transports reach it;
-the lifecycle matrix follows that.
+runs one vault cycle; it skips without the source directory and needs
+`HYPEREVM_PROVIDER_URL`.
 
 ## Conventions
 

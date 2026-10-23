@@ -39,11 +39,18 @@ class CcipSendParams(SendParams):
     """Transport parameters of one CCIP send: ``maxFee`` caps the router quote
     and must not exceed the route ceiling, ``feeToken`` must equal the route's
     (zero address for native), ``gasLimit`` is the destination ``ccipReceive``
-    gas. Every CCIP fuse operation that sends a message takes them."""
+    gas (0 = the route policy; above it is clamped, below it reverts
+    ``CcipGasLimitBelowRoutePolicy``). Every CCIP fuse operation that sends a
+    message takes them. ``min_delivered`` is read on the supply ``enter`` only:
+    the floor, in local asset decimals, on what the destination must receive
+    (0 = none; at most the amount sent, else ``InvalidMinDelivered``). A token
+    pool fee can deliver less than was sent; a miss does not revert the send,
+    it surfaces at settlement as ``SettledBelowMinDelivered``."""
 
     max_fee: int
     gas_limit: int
     fee_token: ChecksumAddress = ZERO_ADDRESS
+    min_delivered: Amount = Amount(0)
 
     @classmethod
     def from_route(cls, route: CcipRouteConfig, *, token: bool) -> CcipSendParams:
@@ -70,7 +77,7 @@ class CcipCrosschainSupplyFuse(CrosschainSupplyFuse):
     a ``CcipSendParams`` (``CcipSendParams.from_route(route, token=True)`` for
     ``enter``, ``token=False`` for ``exit``)."""
 
-    _ENTER = "enter((address,address,uint256,uint256,uint256,address,uint256))"
+    _ENTER = "enter((address,address,uint256,uint256,uint256,address,uint256,uint256))"
     _EXIT = "exit((address,uint256,uint256,uint256,uint256,address,uint256))"
     SIGNATURES = (_ENTER, _EXIT)
 
@@ -86,6 +93,11 @@ class CcipCrosschainSupplyFuse(CrosschainSupplyFuse):
         params = _ccip_send(send, self)
         self._validate_enter(executor, asset, dst_chain_id, amount)
         _validate_ccip_send(self, params)
+        self._validate_non_negative(params.min_delivered, "min_delivered")
+        if params.min_delivered > amount:
+            raise ValueError(
+                f"min_delivered {params.min_delivered} exceeds amount {amount}"
+            )
         return self._action_raw(
             self._ENTER,
             [
@@ -97,6 +109,7 @@ class CcipCrosschainSupplyFuse(CrosschainSupplyFuse):
                     params.max_fee,
                     params.fee_token,
                     params.gas_limit,
+                    params.min_delivered,
                 ]
             ],
         )
@@ -146,6 +159,7 @@ class CcipCommandType(IntEnum):
     CANCEL_RETURN = 6
     RETRY_COMMAND = 7
     CANCEL_COMMAND = 8
+    CANCEL_DEPLOYMENT = 9
 
 
 _EMPTY_ROUTE = CcipRouteConfig(
@@ -269,7 +283,11 @@ class CcipCrosschainCommandFuse(CrosschainCommandFuse):
         - SEND_COMMAND: ``command`` with a business action.
         - REFRESH_BALANCE: no extra input.
         - CANCEL_RETURN: no extra input, no message sent.
-        - RETRY_COMMAND / CANCEL_COMMAND: ``command`` carrying the ``command_id``.
+        - RETRY_COMMAND / CANCEL_COMMAND: ``command`` carrying the ``command_id``
+          (its ``min_execution_gas`` is ignored: a retry re-runs the stored budget).
+        - CANCEL_DEPLOYMENT: no extra input; cancels the executor's expired
+          dispatcher deployment for ``chain_id`` through the factory, from the
+          vault (the executor's manager), inside the manager's cancel window.
         """
         command_type = CcipCommandType(command_type)
         self._validate_address(executor, "executor")

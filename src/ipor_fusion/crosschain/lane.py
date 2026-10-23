@@ -69,13 +69,15 @@ class LaneObservation:
     """The dispatcher snapshot an attestation is derived from, the same shape
     on every transport, in the executor's local asset decimals.
     ``accounted_balance`` is tracked idle plus every tracked vault position:
-    the value the proposer marks as the chain's settled balance."""
+    the value the proposer marks as the chain's settled balance.
+    ``unpriced_count`` tracked vaults could not be priced and are NOT in it."""
 
     tracked_idle: Amount
     accounted_balance: Amount
     state_version: int
     command_config_epoch: int
     tracked_position_set_hash: PositionSetHash
+    unpriced_count: int = 0
 
 
 # Block tags that name a block number which moves between two reads; a read
@@ -97,6 +99,7 @@ class LaneHubState:
     dispatcher_ready: bool
     chain_blocked: bool
     last_approved_observed_at: Timestamp
+    last_value_moving_receipt_at: Timestamp
     staleness_max: Period
     remote_state_version: int
     has_active_command: bool
@@ -248,6 +251,12 @@ class CrosschainLane(ABC):
         measured from; 0 before the first attestation."""
         return self.executor.last_approved_observed_at(self.spoke_chain_id)
 
+    def last_value_moving_receipt_at(self) -> Call[Timestamp] | None:
+        """Hub time of the last value-moving receipt from the spoke, which an
+        attestation's remote timestamp must strictly follow; ``None`` on a
+        transport whose executor has no such rule (Stargate)."""
+        return None
+
     # ── eager reads: each runs on the context the lane owns for it ────────
 
     def read_hub_state(self) -> LaneHubState:
@@ -266,6 +275,8 @@ class CrosschainLane(ABC):
         dispatcher_ready = batch.add(self.is_dispatcher_ready())
         chain_blocked = batch.add(self.chain_blocked())
         last_approved_observed_at = batch.add(self.last_approved_observed_at())
+        receipt_call = self.last_value_moving_receipt_at()
+        receipt_at = batch.add(receipt_call) if receipt_call is not None else None
         staleness_max = batch.add(self.staleness_max())
         remote_state_version = batch.add(self.remote_state_version())
         has_active_command = batch.add(self.has_active_command())
@@ -278,6 +289,9 @@ class CrosschainLane(ABC):
             dispatcher_ready=dispatcher_ready.value,
             chain_blocked=chain_blocked.value,
             last_approved_observed_at=last_approved_observed_at.value,
+            last_value_moving_receipt_at=(
+                receipt_at.value if receipt_at is not None else Timestamp(0)
+            ),
             staleness_max=staleness_max.value,
             remote_state_version=remote_state_version.value,
             has_active_command=has_active_command.value,
@@ -297,12 +311,30 @@ class CrosschainLane(ABC):
         remote_block: int,
         remote_timestamp: Timestamp,
         expiry: Timestamp,
+        receipt_at: Timestamp,
     ) -> BalanceObservation:
         """The proposal for ``observation``, read on the spoke at
         ``remote_block`` / ``remote_timestamp`` and valid on the hub until
         ``expiry``: the dispatcher's accounted balance marked at its state
         version, which must equal ``remote_state_version`` when proposed and
-        when approved."""
+        when approved. ``receipt_at`` is
+        :attr:`LaneHubState.last_value_moving_receipt_at`: ``remote_timestamp``
+        must be strictly later, or the executor reverts
+        ``ObservationPredatesValueMovingReceipt`` (take a fresh observation
+        after the receipt). Raises ``ValueError`` in that case and while a
+        tracked vault is unpriced: its value is missing from the accounted
+        balance, so the proposal would understate the chain."""
+        if receipt_at and remote_timestamp <= receipt_at:
+            raise ValueError(
+                f"observation at {remote_timestamp} does not follow the last "
+                f"value-moving receipt at {receipt_at}: observe again"
+            )
+        if observation.unpriced_count:
+            raise ValueError(
+                f"{observation.unpriced_count} tracked vault(s) on chain "
+                f"{self.spoke_chain_id} are unpriced; their value is not in the "
+                "accounted balance"
+            )
         return BalanceObservation(
             chain_id=self.spoke_chain_id,
             settled_balance=observation.accounted_balance,

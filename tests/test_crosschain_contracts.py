@@ -27,10 +27,12 @@ from ipor_fusion.crosschain import (
     StargateCrosschainDispatcher,
     StargateCrosschainExecutor,
     StargateCrosschainFactory,
+    TrackedVaultPricing,
 )
 
 ADDR = Web3.to_checksum_address("0x1d5c9d44f8d556ec7f557ae992401cc770937e6e")
 VAULT = Web3.to_checksum_address("0x0Aa75BfD30Ae2d4061FF8261453b933Ab5959991")
+PEER = Web3.to_checksum_address("0x" + "11" * 20)
 POOL = Web3.to_checksum_address("0xc026395860Db2d07ee33e05fE50ed7bD583189C7")
 ASSET_ID = b"\xd6" + b"\x00" * 31
 
@@ -664,15 +666,6 @@ _VIEWS = [
     ),
     (
         StargateCrosschainDispatcher,
-        "pending_request_shares",
-        (VAULT,),
-        "pendingRequestShares(address)",
-        ["uint256"],
-        (0,),
-        0,
-    ),
-    (
-        StargateCrosschainDispatcher,
         "command_status",
         (ASSET_ID,),
         "commandStatus(bytes32)",
@@ -1054,19 +1047,36 @@ def test_struct_views():
 
     dispatcher, ctx = _wrapper(
         StargateCrosschainDispatcher,
-        ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
-        ((999_414, [VAULT.lower()], [999_414], 5, 1, ASSET_ID),),
+        ["(uint256,address[],uint256[],uint64,uint64,bytes32,bool[],uint256)"],
+        (
+            (
+                999_414,
+                [VAULT.lower(), PEER.lower()],
+                [999_414, 0],
+                5,
+                1,
+                ASSET_ID,
+                [True, False],
+                1,
+            ),
+        ),
     )
     call = dispatcher.observation()
     _selector(call, "observation()")
-    assert call.call(ctx) == Observation(999_414, [VAULT], [999_414], 5, 1, ASSET_ID)
+    assert call.call(ctx) == Observation(
+        999_414, [VAULT, PEER], [999_414, 0], 5, 1, ASSET_ID, [True, False], 1
+    )
 
+    # vault 0 priced, vault 1 asset() drifted (2 bits per index)
     ccip, ctx = _wrapper(
         CcipCrosschainDispatcher,
-        ["(uint256,uint256,uint256,uint64,uint64,bytes32)"],
-        ((3, 1, 2, 4, 1, ASSET_ID),),
+        ["(uint256,uint256,uint256,uint64,uint64,bytes32,uint256,uint256)"],
+        ((3, 1, 2, 4, 1, ASSET_ID, 1, 0b1100),),
     )
-    assert ccip.observation().call(ctx) == CcipObservation(3, 1, 2, 4, 1, ASSET_ID)
+    observation = ccip.observation().call(ctx)
+    assert observation == CcipObservation(3, 1, 2, 4, 1, ASSET_ID, 1, 0b1100)
+    assert observation.unpriced_reason(0) is TrackedVaultPricing.PRICED
+    assert observation.unpriced_reason(1) is TrackedVaultPricing.ASSET_DRIFT
 
     route_raw = (
         15971525489660198786,
@@ -1312,3 +1322,24 @@ def test_writes_encode_arguments():
         ccip_factory.cancel_expired_deployment(ADDR, 8453),
         "cancelExpiredDeployment(address,uint256)",
     )
+
+
+def test_an_earlier_generation_observation_is_refused_by_name():
+    """The pilot-v2 and v3 canary dispatchers return the six-field layout;
+    the SDK reads only the released eight fields and names the mismatch."""
+    from ipor_fusion import UnsupportedContractVersionError
+
+    ccip, ctx = _wrapper(
+        CcipCrosschainDispatcher,
+        ["(uint256,uint256,uint256,uint64,uint64,bytes32)"],
+        ((3, 1, 2, 4, 1, ASSET_ID),),
+    )
+    with pytest.raises(UnsupportedContractVersionError, match="earlier-generation"):
+        ccip.observation().call(ctx)
+    stargate, ctx = _wrapper(
+        StargateCrosschainDispatcher,
+        ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
+        ((7, [VAULT.lower()], [7], 3, 1, ASSET_ID),),
+    )
+    with pytest.raises(UnsupportedContractVersionError, match="earlier-generation"):
+        stargate.observation().map(lambda o: o.tracked_idle).call(ctx)

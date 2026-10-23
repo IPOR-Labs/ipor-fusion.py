@@ -1,9 +1,12 @@
-"""Pinned Arbitrum-to-HyperEVM CCIP factory and deployment rehearsal.
+"""Pinned Arbitrum-to-HyperEVM CCIP rehearsal of the released contracts.
 
-The lifecycle relay impersonates the CCIP Router, and synthetic storage funding
-stands in for destination token-pool release. It proves that the IPOR contracts, fuses
-and SDK compose end to end; pinned readiness tests separately verify the live
-CCIP lanes and pools, but this simulation does not prove their liveness.
+A factory pair compiled from the released source (FUSE_SOURCE_REVISION) is
+built and configured inside ``eth_simulateV1`` on live Arbitrum and HyperEVM
+state; the lifecycle relay impersonates the CCIP Router, and synthetic storage
+funding stands in for destination token-pool release. It proves that the
+released IPOR contracts, fuses and SDK compose end to end; it does not prove
+the liveness of the CCIP lanes and pools, which ``test_ccip_assets_travel_both_ways``
+only reads at its pins.
 
 The module requires both RPCs and skips in CI until ``HYPEREVM_PROVIDER_URL``
 is configured there.
@@ -19,7 +22,6 @@ from pathlib import Path
 import pytest
 from _crosschain_lifecycle import (
     Run,
-    assert_reverted,
     attest,
     required,
     run_lifecycle,
@@ -68,6 +70,7 @@ from ipor_fusion.crosschain import (
     OutboundMessage,
     SafetyConfig,
     ccip_token_lane,
+    find_ccip_events,
 )
 from ipor_fusion.crosschain.logs import log_bytes, log_topic0
 from ipor_fusion.types import Amount, ChainId, MarketId, Shares
@@ -80,78 +83,14 @@ ARBITRUM_SELECTOR = 4949039107694359620
 HYPEREVM_SELECTOR = 2442541497099098535
 ARBITRUM_ROUTER = Web3.to_checksum_address("0x141fa059441E0ca23ce184B6A78bafD2A517DdE8")
 HYPEREVM_ROUTER = Web3.to_checksum_address("0x13b3332b66389B1467CA6eBd6fa79775CCeF65ec")
-#: The canary's creator EOA, allowed on both deployed factory pairs (creation
-#: is restricted there); executors are predicted from it, not from the owner.
-CREATOR = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
-
-@dataclass(frozen=True)
-class FactoryPair:
-    """A CCIP factory pair the contracts team deployed at one CREATE3 address
-    on Arbitrum and HyperEVM, pinned after its owner configured it (creation
-    codes, assets, routes, the canary creator)."""
-
-    name: str
-    address: ChecksumAddress
-    blocks: tuple[int, int]
-    executor_creation_keccak: bytes
-    dispatcher_creation_keccak: bytes
-    message_gas_limit: int
-    token_gas_limit: int
-    #: ``dispatcherDeploymentGasLimit`` toward the other chain; ``None`` on a
-    #: build without that getter, whose ticket carries ``message_gas_limit``.
-    dispatcher_deployment_gas_limit: int | None
-    #: keccak of the factory's own runtime code, Arbitrum then HyperEVM (the
-    #: router is an immutable, so the two differ). The stored creation codes
-    #: say which executors it deploys; this says which factory build answers.
-    runtime_keccak: tuple[bytes, bytes]
-
-    @property
-    def ticket_gas_limit(self) -> int:
-        return self.dispatcher_deployment_gas_limit or self.message_gas_limit
-
-
-# Source `810e260` on `827ada0` plus the three 5-minute patches (2026-10-01).
-V2 = FactoryPair(
-    "v2",
-    Web3.to_checksum_address("0x3BB74623A229Ff463bDe6B5b267B7c8d9086fd4b"),
-    (510_724_267, 47_394_896),
-    bytes.fromhex("11e28748e1cda094e2b80620b85bfb01e008172a69f2592be72493caad285cd1"),
-    bytes.fromhex("cc2edfa5791f504e730114ed80fcd535a927e5e11e53045a2584bb1e161d5e03"),
-    6_000_000,
-    1_000_000,
-    None,
-    (
-        bytes.fromhex(
-            "f8741f0b7849f691bd5a6fff24810aa72186b3e87c362ad0f4ae561e88315474"
-        ),
-        bytes.fromhex(
-            "731f64e351cebcc611c7e0e1c4a70d140e3cfa0eee3a7bac6339888d8faa9b9f"
-        ),
-    ),
-)
-# Source `84c1923` (`810e260` plus the ticket's own gas limit) plus the same
-# patches (2026-10-02). Commands carry 2 M, which fits HyperEVM's 3 M small
-# blocks with the OffRamp's overhead; the ticket carries 6 M.
-V3 = FactoryPair(
-    "v3",
-    Web3.to_checksum_address("0x048A95955De3A5d837FE2861a34A9c2DDcb964CD"),
-    (510_945_976, 47_455_435),
-    bytes.fromhex("a97dc5b70d6d455a09693a0f8da6c5b684e616ef2a4edd24f5fb3d69be3cf865"),
-    bytes.fromhex("5adc3c16319f2863f9f2cc16b699eda0b4770c433e59396c4cd89b211b9f79a3"),
-    2_000_000,
-    1_000_000,
-    6_000_000,
-    (
-        bytes.fromhex(
-            "50ae01dc5a81bd4c81e50d450f4ae8aabc37114356b8f453e847a14e531be422"
-        ),
-        bytes.fromhex(
-            "7c5bcfd813c6b2a3422e4635c9b8ac5ec11bc8137fde445f93aab6d4dec68cc0"
-        ),
-    ),
-)
-FACTORY_PAIRS = {pair.name: pair for pair in (V2, V3)}
+#: The source pair's route policy. Commands carry 2.7 M, the minimum the
+#: released CCIP README sets for `messageGasLimit` (a DEPOSIT's budget alone
+#: needs about 1.84 M of route gas, per the released CCIP README); token deliveries 1 M; the
+#: dispatcher deployment ticket 6 M (a big block on HyperEVM).
+MESSAGE_GAS_LIMIT = 2_700_000
+TOKEN_GAS_LIMIT = 1_000_000
+TICKET_GAS_LIMIT = 6_000_000
 #: The per-message fee caps of the deployed routes, Arbitrum then HyperEVM.
 ROUTE_MAX_FEES = (10**16, 10**18)
 ARBITRUM_FUSION_FACTORY = Web3.to_checksum_address(
@@ -222,12 +161,11 @@ FUSE_CONTRACTS = (
         "CrosschainBalanceFuse",
     ),
 )
-# The checkout every compiled contract comes from: the v3 pair's source. On
-# the deployed generations only the four fuses are compiled (the executors and
-# dispatchers come from the creation code the live factories store); on
-# `source` the whole CCIP core is. Bump deliberately, with the fuse ABI
-# re-checked against the encoders.
-FUSE_SOURCE_REVISION = "84c1923408d8aec4b6c2f769567798c716cc8b4c"
+# The checkout every compiled contract comes from: the contracts release the
+# official deployment (ipor-abi) was built from. The whole CCIP core is
+# compiled and the factory pair built inside the simulation; bump deliberately,
+# with the fuse ABI re-checked against the encoders.
+FUSE_SOURCE_REVISION = "10f0f8e4031980b6f130d4f6460c6f8edfbcab32"
 CROSSCHAIN_MARKET = MarketId(54)
 
 # The CCIP core of the source generation: libraries in link order
@@ -254,6 +192,7 @@ CORE_LIBRARIES = (
         "contracts/crosschain/lib/CrosschainVaultActionLib.sol",
         "CrosschainVaultActionLib",
     ),
+    FoundryContract(f"{_CCIP_LIB}/CcipDispatcherLib.sol", "CcipDispatcherLib"),
 )
 FACTORY_CONTRACT = FoundryContract(
     "contracts/crosschain/ccip/CcipCrosschainFactory.sol", "CcipCrosschainFactory"
@@ -267,10 +206,6 @@ DISPATCHER_CONTRACT = FoundryContract(
 )
 #: `CrosschainConstants.ATTESTATION_ZERO_DUST_SD` of the new accounting.
 ATTESTATION_ZERO_DUST_SD = 10_000
-#: `v2`, `v3`: the live factory pairs, pinned at their blocks. `source`: a
-#: factory pair built from FUSE_SOURCE_REVISION inside the simulation. All
-#: three debit a recall by the sent amount and attest dust to zero.
-GENERATIONS = ("v2", "v3", "source")
 
 
 @dataclass(frozen=True)
@@ -534,7 +469,7 @@ def _configure_source_factory(
     )
     chain.add_call(
         factory.schedule_dispatcher_deployment_gas_limit(
-            peer_chain_id, V3.ticket_gas_limit
+            peer_chain_id, TICKET_GAS_LIMIT
         ),
         from_=OWNER,
         label="schedule_dispatcher_deployment_gas_limit",
@@ -554,7 +489,7 @@ def _configure_source_factory(
     )
     chain.add_call(
         factory.execute_dispatcher_deployment_gas_limit(
-            peer_chain_id, V3.ticket_gas_limit
+            peer_chain_id, TICKET_GAS_LIMIT
         ),
         from_=OWNER,
         label="execute_dispatcher_deployment_gas_limit",
@@ -563,14 +498,14 @@ def _configure_source_factory(
 
 
 def _source_route(peer_selector: int, max_fee: int) -> CcipRouteConfig:
-    """The v3 pair's factory route toward ``peer_selector``; the peer is set to
+    """The source pair's factory route toward ``peer_selector``; the peer is set to
     the factory being configured."""
     return CcipRouteConfig(
         chain_selector=peer_selector,
         peer=ZERO_ADDRESS,
         fee_token=ZERO_ADDRESS,
-        message_gas_limit=V3.message_gas_limit,
-        token_gas_limit=V3.token_gas_limit,
+        message_gas_limit=MESSAGE_GAS_LIMIT,
+        token_gas_limit=TOKEN_GAS_LIMIT,
         max_fee=max_fee,
         enabled=True,
     )
@@ -585,8 +520,8 @@ def _deploy_source_generation(
     artifacts: dict[FoundryContract, SolidityArtifact],
     asset: RehearsalAsset,
 ) -> ChecksumAddress:
-    """A factory pair from the source generation, configured like the v3 pair
-    for ``asset`` and for each other, verified after one relay; returns the
+    """A factory pair from the source generation, configured with the route
+    policy above for ``asset`` and for each other, verified after one relay; returns the
     factory address (the same on both chains)."""
     factory_address, libraries = _deploy_source_core(
         hub, artifacts, router=ARBITRUM_ROUTER
@@ -653,7 +588,7 @@ def _deploy_source_generation(
         ]
         assert creation_codes.value is True
         assert code_hash.value == executor_code_hash
-        assert gas_limit.value == V3.ticket_gas_limit
+        assert gas_limit.value == TICKET_GAS_LIMIT
         assert factory_asset.value == (
             asset.tokens[index],
             asset.decimals,
@@ -825,121 +760,12 @@ def test_simulate_clone_htest_vault(
     assert vault_access_manager.value == preview.access_manager
 
 
-def _asset_for(asset: RehearsalAsset, generation: str) -> RehearsalAsset:
-    """The asset at the pins its generation needs: a deployed pair exists, and
-    is configured, only from its own pins on."""
-    pair = FACTORY_PAIRS.get(generation)
-    return replace(asset, blocks=pair.blocks) if pair else asset
-
-
-@pytest.mark.parametrize("generation", GENERATIONS)
 @pytest.mark.parametrize("asset", REHEARSAL_ASSETS, ids=lambda asset: asset.symbol)
-def test_simulate_configured_asset_lane(web3_arb, web3_hyperevm, asset, generation):
-    asset = _asset_for(asset, generation)
+def test_simulate_configured_asset_lane(web3_arb, web3_hyperevm, asset):
     _require_token_lanes(web3_arb, web3_hyperevm, asset)
-    run = _prepare_asset_run(web3_arb, web3_hyperevm, asset, generation=generation)
+    run = _prepare_asset_run(web3_arb, web3_hyperevm, asset)
     run_lifecycle(run)
     _assert_token_deliveries_within_gas_limit(run)
-
-
-@pytest.mark.parametrize("pair", (V2, V3), ids=lambda pair: pair.name)
-@pytest.mark.parametrize("index", (0, 1), ids=("arbitrum", "hyperevm"))
-def test_deployed_factory_pair_identity(web3_arb, web3_hyperevm, index, pair):
-    """A live pair as the contracts team reported it, at its pins: same address
-    and creation codes on both chains, the canary creator allowed, routes to
-    each other, USDC and HTEST enabled, and the ticket's own gas limit on v3."""
-    web3 = (web3_arb, web3_hyperevm)[index]
-    chain = (ARBITRUM, HYPEREVM)[index]
-    peer = (HYPEREVM, ARBITRUM)[index]
-    ctx = _ctx(web3, chain, pair.blocks[index])
-    factory = CcipCrosschainFactory(pair.address)
-
-    runtime = web3.eth.get_code(pair.address, block_identifier=pair.blocks[index])
-    assert bytes(Web3.keccak(runtime)) == pair.runtime_keccak[index]
-    assert factory.factory_interface_version().call(ctx) == 1
-    assert factory.ccip_router().call(ctx) == (ARBITRUM_ROUTER, HYPEREVM_ROUTER)[index]
-    assert factory.owner().call(ctx) == OWNER
-    assert factory.config_delay().call(ctx) == 300
-    assert factory.creation_codes_configured().call(ctx)
-    assert factory.creation_restricted().call(ctx)
-    assert factory.is_allowed_creator(CREATOR).call(ctx)
-    assert (
-        factory.executor_creation_code_hash().call(ctx) == pair.executor_creation_keccak
-    )
-    assert (
-        factory.dispatcher_creation_code_hash().call(ctx)
-        == pair.dispatcher_creation_keccak
-    )
-    route = factory.ccip_route(peer).call(ctx)
-    assert route.enabled
-    assert route.peer == pair.address
-    assert route.chain_selector == (HYPEREVM_SELECTOR, ARBITRUM_SELECTOR)[index]
-    assert factory.chain_id_of_selector(route.chain_selector).call(ctx) == peer
-    assert (route.message_gas_limit, route.token_gas_limit) == (
-        pair.message_gas_limit,
-        pair.token_gas_limit,
-    )
-    if pair.dispatcher_deployment_gas_limit is not None:
-        assert (
-            factory.dispatcher_deployment_gas_limit(peer).call(ctx)
-            == pair.dispatcher_deployment_gas_limit
-        )
-    for asset in REHEARSAL_ASSETS:
-        assert factory.asset_config(asset.asset_id).call(ctx) == (
-            asset.tokens[index],
-            asset.decimals,
-            True,
-        )
-
-
-def test_deployed_pairs_run_distinct_builds():
-    assert V2.executor_creation_keccak != V3.executor_creation_keccak
-    assert V2.dispatcher_creation_keccak != V3.dispatcher_creation_keccak
-    assert set(V2.runtime_keccak).isdisjoint(V3.runtime_keccak)
-
-
-def test_simulate_v3_dispatcher_deployment_gas_governance(web3_arb):
-    """The owner's timelock for the ticket's gas limit, run on the deployed v3
-    factory: a schedule is cancelled by the SDK's commitment (so it matches
-    the contract byte for byte), an execute before ``CONFIG_DELAY`` reverts,
-    and an execute after it writes the getter."""
-    block = V3.blocks[0]
-    factory = CcipCrosschainFactory(V3.address)
-    new_limit = 4_000_000
-    simulator = VaultSimulator(web3_arb, vault=V3.address, alpha=OWNER, block=block)
-    simulator.with_state_override(OWNER, balance=hex(10**18))
-    schedule = factory.schedule_dispatcher_deployment_gas_limit(HYPEREVM, new_limit)
-    execute = factory.execute_dispatcher_deployment_gas_limit(HYPEREVM, new_limit)
-    commitment = CcipCrosschainFactory.dispatcher_deployment_gas_limit_commitment(
-        HYPEREVM, new_limit
-    )
-    simulator.add_call(schedule, from_=OWNER, label="schedule")
-    simulator.add_call(
-        factory.cancel_scheduled_config(commitment), from_=OWNER, label="cancel"
-    )
-    simulator.add_call(schedule, from_=OWNER, label="reschedule")
-    simulator.add_call(execute, from_=OWNER, label="execute_early")
-    simulator.next_block(time_shift_seconds=300 + 1)
-    simulator.add_call(execute, from_=OWNER, label="execute")
-    limit = simulator.observe(
-        factory.dispatcher_deployment_gas_limit(HYPEREVM), label="limit"
-    )
-
-    result = simulator.run()
-
-    outcome = {call.label: call.success for call in result.calls if call.label}
-    assert outcome == {
-        "schedule": True,
-        "cancel": True,
-        "reschedule": True,
-        "execute_early": False,
-        "execute": True,
-        "limit": True,
-    }
-    early = next(call for call in result.calls if call.label == "execute_early")
-    assert_reverted(early, "ConfigNotReady(bytes32,uint256)")
-    assert V3.dispatcher_deployment_gas_limit != new_limit
-    assert limit.value == new_limit
 
 
 def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
@@ -955,11 +781,10 @@ def test_simulate_source_factory_pair(web3_arb, web3_hyperevm):
     hub.with_block_override(gasLimit=30_000_000)
     spoke.with_block_override(gasLimit=30_000_000)
 
-    factory = _deploy_source_generation(
+    _deploy_source_generation(
         simulator, hub, spoke, arb_ctx, hyper_ctx, artifacts, USDC
     )
 
-    assert factory not in (V2.address, V3.address)
     governance = [
         "configure_creation_codes",
         "schedule_factory_asset",
@@ -1021,7 +846,6 @@ def _assert_token_deliveries_within_gas_limit(run: Run) -> None:
 @pytest.mark.parametrize("cancel", (False, True), ids=("retry", "cancel"))
 @pytest.mark.parametrize("asset", REHEARSAL_ASSETS, ids=lambda asset: asset.symbol)
 def test_simulate_failed_asset_deposit_recovery(web3_arb, web3_hyperevm, asset, cancel):
-    asset = _asset_for(asset, V3.name)
     _require_token_lanes(web3_arb, web3_hyperevm, asset)
     run = _prepare_asset_run(
         web3_arb, web3_hyperevm, asset, whitelist_dispatcher=cancel
@@ -1031,76 +855,32 @@ def test_simulate_failed_asset_deposit_recovery(web3_arb, web3_hyperevm, asset, 
 
 @pytest.mark.parametrize("asset", REHEARSAL_ASSETS, ids=lambda asset: asset.symbol)
 def test_simulate_unfunded_asset_return_recovery(web3_arb, web3_hyperevm, asset):
-    asset = _asset_for(asset, V3.name)
     _require_token_lanes(web3_arb, web3_hyperevm, asset)
     run_unfunded_return_recovery(_prepare_asset_run(web3_arb, web3_hyperevm, asset))
 
 
-@pytest.mark.parametrize("index", (0, 1), ids=("arbitrum", "hyperevm"))
-def test_usdc_pinned_prerequisites(web3_arb, web3_hyperevm, index):
-    web3 = (web3_arb, web3_hyperevm)[index]
-    chain = (ARBITRUM, HYPEREVM)[index]
-    usdc = _asset_for(USDC, V3.name)
-    ctx = _ctx(web3, chain, usdc.blocks[index])
-    token = ERC20(usdc.tokens[index])
-    assert token.symbol().call(ctx) == "USDC"
-    assert token.decimals().call(ctx) == 6
-    factory = CcipCrosschainFactory(V3.address)
-    assert factory.asset_config(usdc.asset_id).call(ctx) == (
-        usdc.tokens[index],
-        usdc.decimals,
-        True,
-    )
-    feed = usdc.feeds[index]
-    assert _feed_read(ctx, feed, "description()", ["string"]) == "USDC / USD"
-    assert _feed_read(ctx, feed, "decimals()", ["uint8"]) == 8
-    round_id, answer, _, updated_at, answered_in_round = _feed_read(
-        ctx,
-        feed,
-        "latestRoundData()",
-        ["uint80", "int256", "uint256", "uint256", "uint80"],
-    )
-    assert 99_000_000 <= answer <= 101_000_000
-    assert round_id > 0 and answered_in_round >= round_id
-    assert (
-        0 <= web3.eth.get_block(usdc.blocks[index])["timestamp"] - updated_at <= 86400
-    )
-    lane = ccip_token_lane(
-        ctx,
-        (ARBITRUM_ROUTER, HYPEREVM_ROUTER)[index],
-        usdc.tokens[index],
-        (HYPEREVM_SELECTOR, ARBITRUM_SELECTOR)[index],
-    )
-    assert lane.message_lane
-    assert lane.pool_version == "USDCTokenPoolProxy 2.0.0"
-    assert lane.token_lane
-
-
 def test_simulate_usdc_configuration_and_rounding(web3_arb, web3_hyperevm):
     """USDC deployment/pricing and local rounding, not CCIP acceptance."""
-    usdc = _asset_for(USDC, V3.name)
+    usdc = USDC
     run = _prepare_asset_run(web3_arb, web3_hyperevm, usdc)
     _check_hub_usdc_roundtrip(run, usdc)
     _check_spoke_usdc_rounding(run, web3_hyperevm, usdc)
 
 
-@pytest.mark.parametrize("generation", GENERATIONS)
 @pytest.mark.parametrize("fee_raw_units", (0, 24), ids=("no-fee-control", "cctp-fee"))
 def test_simulate_usdc_cctp_fee_in_both_directions(
-    web3_arb, web3_hyperevm, fee_raw_units, generation
+    web3_arb, web3_hyperevm, fee_raw_units
 ):
     """A full recall after the management fee has been re-attested leaves
     nothing in ``settled``: the recall debits the sent amount, so a CCTP fee is
     a realized loss in the idle, flagged by ``ReturnBelowMinimumCredited``."""
-    asset = _asset_for(replace(USDC, blocks=(510_124_921, 47_228_089)), generation)
+    asset = replace(USDC, blocks=(510_124_921, 47_228_089))
     base = _asset_transport(asset)
     transport = _CctpFeeTransport(
         (base.chain(chain) for chain in (ARBITRUM, HYPEREVM)),
         fee_raw_units=fee_raw_units,
     )
-    run = _prepare_asset_run(
-        web3_arb, web3_hyperevm, asset, transport=transport, generation=generation
-    )
+    run = _prepare_asset_run(web3_arb, web3_hyperevm, asset, transport=transport)
     run.recall_min_return_bps = 10_000
 
     run_lifecycle(run)
@@ -1158,29 +938,29 @@ def test_simulate_usdc_cctp_fee_in_both_directions(
 
 
 def _assert_return_finalized(hub, *, sent: int, received: int) -> None:
-    """The one ``ReturnFinalized(chainId, operationId, sentSD, received)`` of
-    the run."""
-    types = ["uint256", "bytes32", "uint256", "uint256"]
-    topic = Web3.keccak(text=f"ReturnFinalized({','.join(types)})")
-    (log,) = [
-        log for call in hub.calls for log in call.logs if log_topic0(log) == topic
-    ]
-    chain_id, _operation_id, sent_sd, credited = decode(types, log_bytes(log["data"]))
-    assert (chain_id, sent_sd, credited) == (HYPEREVM, sent, received)
+    """The one ``ReturnFinalized`` of the run, decoded through the SDK's
+    event registry: the recall debits the sent amount."""
+    (event,) = find_ccip_events(
+        [log for call in hub.calls for log in call.logs], "ReturnFinalized"
+    )
+    values = event.values
+    assert (values["chainId"], values["sentSD"], values["received"]) == (
+        HYPEREVM,
+        sent,
+        received,
+    )
+    assert values["debitedSD"] == sent
 
 
-@pytest.mark.parametrize("generation", GENERATIONS)
-def test_simulate_usdc_cctp_fee_alone(web3_arb, web3_hyperevm, generation):
+def test_simulate_usdc_cctp_fee_alone(web3_arb, web3_hyperevm):
     """Without a spoke vault deposit only the return token-pool fee is lost:
     a realized loss in the idle, never settled value the attesters must clear."""
-    asset = _asset_for(replace(USDC, blocks=(510_124_921, 47_228_089)), generation)
+    asset = replace(USDC, blocks=(510_124_921, 47_228_089))
     base = _asset_transport(asset)
     transport = _CctpFeeTransport(
         (base.chain(chain) for chain in (ARBITRUM, HYPEREVM)), fee_raw_units=24
     )
-    run = _prepare_asset_run(
-        web3_arb, web3_hyperevm, asset, transport=transport, generation=generation
-    )
+    run = _prepare_asset_run(web3_arb, web3_hyperevm, asset, transport=transport)
     credited = supply(run)
     attest(run, tag="initial", observed=required(run.observation_after_settle))
 
@@ -1276,10 +1056,7 @@ def _prepare_asset_run(
     *,
     whitelist_dispatcher=True,
     transport: CcipTransport | None = None,
-    generation: str = V3.name,
 ) -> Run:
-    if generation not in GENERATIONS:
-        raise ValueError(f"unknown generation {generation!r}")
     artifacts = _compile_crosschain_contracts()
     arb_ctx = _ctx(web3_arb, ARBITRUM, asset.blocks[0])
     hyper_ctx = _ctx(web3_hyperevm, HYPEREVM, asset.blocks[1])
@@ -1314,43 +1091,30 @@ def _prepare_asset_run(
     spoke = simulator.add_chain(HYPEREVM, web3_hyperevm, block=asset.blocks[1])
     hub.with_block_time_shift(60).with_block_override(gasLimit=30_000_000)
     spoke.with_block_override(gasLimit=30_000_000)
-    creator = OWNER if generation == "source" else CREATOR
-    if generation == "source":
-        # A fresh factory pair exists only inside the simulation, so its reads
-        # are observations, not live calls.
-        factory_address = _deploy_source_generation(
-            simulator, hub, spoke, arb_ctx, hyper_ctx, artifacts, asset
-        )
-        # The lifecycle starts in a fresh block, as on the deployed path: the
-        # vault clone needs ~9 M gas and, queued uncapped behind the governance
-        # calls on HyperEVM, it was starved.
-        hub.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
-        spoke.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
-        ccip_factory = CcipCrosschainFactory(factory_address)
-        source_executor_address = simulator.observe(
-            ARBITRUM,
-            ccip_factory.compute_executor_address(OWNER, user_salt),
-        )
-        source_executor_route = simulator.observe(
-            ARBITRUM, ccip_factory.ccip_route(HYPEREVM)
-        )
-        results = simulator.relay()
-        results[ARBITRUM].raise_for_failure()
-        executor = source_executor_address.value
-        route = replace(source_executor_route.value, peer=executor)
-        first_fuse_nonce = len(CORE_LIBRARIES) + 1
-    else:
-        pair = FACTORY_PAIRS[generation]
-        if asset.blocks != pair.blocks:
-            raise ValueError(f"{asset.symbol} is not pinned at the {pair.name} pins")
-        factory_address = pair.address
-        ccip_factory = CcipCrosschainFactory(factory_address)
-        executor = ccip_factory.compute_executor_address(creator, user_salt).call(
-            arb_ctx
-        )
-        route = replace(ccip_factory.ccip_route(HYPEREVM).call(arb_ctx), peer=executor)
-        hub.with_state_override(SIMULATED_DEPLOYER, balance=hex(10**18), nonce=hex(0))
-        first_fuse_nonce = 0
+    creator = OWNER
+    # A fresh factory pair exists only inside the simulation, so its reads
+    # are observations, not live calls.
+    factory_address = _deploy_source_generation(
+        simulator, hub, spoke, arb_ctx, hyper_ctx, artifacts, asset
+    )
+    # The lifecycle starts in a fresh block, as on the deployed path: the
+    # vault clone needs ~9 M gas and, queued uncapped behind the governance
+    # calls on HyperEVM, it was starved.
+    hub.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
+    spoke.next_block(time_shift_seconds=1).with_block_override(gasLimit=30_000_000)
+    ccip_factory = CcipCrosschainFactory(factory_address)
+    source_executor_address = simulator.observe(
+        ARBITRUM,
+        ccip_factory.compute_executor_address(OWNER, user_salt),
+    )
+    source_executor_route = simulator.observe(
+        ARBITRUM, ccip_factory.ccip_route(HYPEREVM)
+    )
+    results = simulator.relay()
+    results[ARBITRUM].raise_for_failure()
+    executor = source_executor_address.value
+    route = replace(source_executor_route.value, peer=executor)
+    first_fuse_nonce = len(CORE_LIBRARIES) + 1
 
     fuse_addresses = {
         contract.name: hub.deploy_contract(
@@ -1558,6 +1322,13 @@ def _prepare_asset_run(
         factory_address,
     )
 
+    # The released executor accepts an observation only between its last
+    # value-moving receipt (strictly later) and its own block time:
+    # run both chains on one clock, as a keeper observes the spoke after the
+    # receipt is visible on the hub; advance() then moves both clocks alike.
+    lag = hub.current_time - spoke.current_time
+    if lag > 0:
+        spoke.next_block(time_shift_seconds=lag)
     hub_start = hub.current_time
     return Run(
         hub_chain_id=ARBITRUM,
@@ -1584,64 +1355,6 @@ def _prepare_asset_run(
         attestation_zero_dust_sd=ATTESTATION_ZERO_DUST_SD,
         min_update_interval=_safety_config().min_update_interval,
     )
-
-
-def _simulate_factory_deployment(web3_arb, web3_hyperevm, *, big_block: bool):
-    """``createExecutor`` → ``registerExecutorRoute`` → ``requestDispatcher``
-    on the v3 pair at its pins, relayed once: the ticket's delivery on
-    HyperEVM and, when it succeeds, the DEPLOYMENT_ACK back on Arbitrum."""
-    arb_block, hyper_block = V3.blocks
-    arb_ctx = _ctx(web3_arb, ARBITRUM, arb_block)
-    hyper_ctx = _ctx(web3_hyperevm, HYPEREVM, hyper_block)
-    arb_factory = CcipCrosschainFactory(V3.address)
-    asset_id = Web3.keccak(text="HTEST")
-    user_salt = Web3.keccak(text="ipor-fusion.py Arbitrum HyperEVM rehearsal")
-    executor = arb_factory.compute_executor_address(CREATOR, user_salt).call(arb_ctx)
-    route = replace(arb_factory.ccip_route(HYPEREVM).call(arb_ctx), peer=executor)
-    transport = CcipTransport(
-        (
-            CcipChain(
-                ARBITRUM,
-                ARBITRUM_SELECTOR,
-                ARBITRUM_ROUTER,
-                ASSETS["HTEST"][0],
-                18,
-                OWNER,
-            ),
-            CcipChain(
-                HYPEREVM,
-                HYPEREVM_SELECTOR,
-                HYPEREVM_ROUTER,
-                ASSETS["HTEST"][1],
-                18,
-                OWNER,
-            ),
-        )
-    )
-    simulator = CrosschainSimulator(transport)
-    arb = simulator.add_chain(ARBITRUM, web3_arb, block=arb_block)
-    hyper = simulator.add_chain(HYPEREVM, web3_hyperevm, block=hyper_block)
-    if big_block:
-        # A manual execution from an EOA with big blocks: HyperEVM's 30 M block.
-        hyper.with_block_override(gasLimit=30_000_000)
-    simulator.fund_native(ARBITRUM, V3.address, route.max_fee)
-    simulator.fund_native(ARBITRUM, CREATOR, 10**18)
-    arb.add_call(
-        arb_factory.create_executor(user_salt, asset_id, CREATOR, _safety_config()),
-        from_=CREATOR,
-        label="create_executor",
-    )
-    arb.add_call(
-        arb_factory.register_executor_route(executor, HYPEREVM, route),
-        from_=CREATOR,
-        label="register_executor_route",
-    )
-    arb.add_call(
-        arb_factory.request_dispatcher(executor, HYPEREVM, [], route.max_fee),
-        from_=CREATOR,
-        label="request_dispatcher",
-    )
-    return simulator, simulator.relay(), executor, arb_ctx, hyper_ctx
 
 
 def test_hyperevm_one_value_feed_is_ready(web3_hyperevm):
@@ -1671,79 +1384,24 @@ def test_hyperevm_one_value_feed_is_ready(web3_hyperevm):
 
 @pytest.mark.parametrize(("symbol", "tokens"), ASSETS.items())
 def test_ccip_assets_travel_both_ways(web3_arb, web3_hyperevm, symbol, tokens):
-    """Every test asset is enabled on the v3 pair at 18 decimals and has an
-    open CCIP token lane both ways at its pins."""
-    asset_id = Web3.keccak(text=symbol)
+    """Every test asset has an open CCIP token lane both ways at its pins."""
     specs = (
         (
-            _ctx(web3_arb, ARBITRUM, V3.blocks[0]),
+            _ctx(web3_arb, ARBITRUM, ARBITRUM_BLOCK),
             ARBITRUM_ROUTER,
             tokens[0],
             HYPEREVM_SELECTOR,
         ),
         (
-            _ctx(web3_hyperevm, HYPEREVM, V3.blocks[1]),
+            _ctx(web3_hyperevm, HYPEREVM, HYPEREVM_BLOCK),
             HYPEREVM_ROUTER,
             tokens[1],
             ARBITRUM_SELECTOR,
         ),
     )
     for ctx, router, token, peer_selector in specs:
-        factory = CcipCrosschainFactory(V3.address)
-        assert factory.asset_config(asset_id).call(ctx) == (token, 18, True)
         lane = ccip_token_lane(ctx, router, token, peer_selector)
         assert lane.message_lane
         assert lane.on_ramp_version is not None
         assert lane.on_ramp_version.startswith("OnRamp 2.")
         assert lane.token_lane
-
-
-def test_dispatcher_deployment_needs_a_hyperevm_big_block(web3_arb, web3_hyperevm):
-    """The ticket's dispatcher creation does not fit HyperEVM's 3 M small
-    block: Chainlink's executors there never deliver it, and anyone executing
-    it manually needs big blocks."""
-    _, results, _, _, _ = _simulate_factory_deployment(
-        web3_arb, web3_hyperevm, big_block=False
-    )
-    results[ARBITRUM].raise_for_failure()
-    (failure,) = results[HYPEREVM].failed_calls
-    assert failure.label is not None and failure.label.startswith("ccip_receive:")
-    assert_reverted(failure, "InitializationFailed()")
-    assert web3_hyperevm.eth.get_block(V3.blocks[1])["gasLimit"] == 3_000_000
-
-
-def test_simulate_executor_and_dispatcher_deployment(web3_arb, web3_hyperevm):
-    """On v3 the ticket carries the factory's dispatcher deployment gas limit
-    and the DEPLOYMENT_ACK the route's message gas limit; each delivery fits
-    the gas it was given."""
-    simulator, results, executor, arb_ctx, hyper_ctx = _simulate_factory_deployment(
-        web3_arb, web3_hyperevm, big_block=True
-    )
-    for result in results.values():
-        result.raise_for_failure()
-    ticket, ack = simulator.delivered
-    assert (ticket.dst_chain_id, ack.dst_chain_id) == (HYPEREVM, ARBITRUM)
-    assert _ccip_message(ticket).ccip_receive_gas_limit == V3.ticket_gas_limit
-    assert _ccip_message(ack).ccip_receive_gas_limit == V3.message_gas_limit
-    for message, limit in ((ticket, V3.ticket_gas_limit), (ack, V3.message_gas_limit)):
-        label = f"ccip_receive:{message.message_id.hex()[:8]}"
-        delivery = next(
-            call for call in results[message.dst_chain_id].calls if call.label == label
-        )
-        assert 0 < delivery.gas_used <= limit
-        if message is ticket:
-            assert delivery.gas_used > 3_000_000
-
-    dispatcher_ready = simulator.observe(
-        ARBITRUM,
-        CcipCrosschainExecutor(executor).has_dispatcher(HYPEREVM),
-    )
-    dispatcher_registered = simulator.observe(
-        HYPEREVM,
-        CcipCrosschainFactory(V3.address).is_dispatcher(executor),
-    )
-    results = simulator.relay()
-    for result in results.values():
-        result.raise_for_failure()
-    assert dispatcher_ready.value is True
-    assert dispatcher_registered.value is True

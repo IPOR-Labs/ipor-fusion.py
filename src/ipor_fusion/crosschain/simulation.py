@@ -162,6 +162,9 @@ class CrosschainSimulator:
             )
         for step in self._transport.delivery_calls(message):
             destination.add_call(
-                Call(to=step.to, data=step.data), from_=step.from_, label=step.label
+                Call(to=step.to, data=step.data),
+                from_=step.from_,
+                label=step.label,
+                gas=step.gas,
             )
         self._delivered[message.message_id] = message

@@ -343,24 +343,11 @@ ever signed or broadcast.
 - [External-state margin leg](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/external_state_margin_leg_base.py) — a vault whose capital
   sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
   the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
-- [Crosschain CCIP lifecycle](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) (preview feature) — a vault
-  whose capital works on another chain: supply USDC from an Arbitrum hub to a HyperEVM spoke
-  over CCIP, attest the remote balance with two keys, deposit and redeem on the spoke, recall
-  and claim, driven through `CrosschainLane` and relayed by `CrosschainSimulator`.
-- [Composed HyperCore flow](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/composed_hypercore_flow_arbitrum_hyperevm.py) (preview feature) — the
-  same hub funding a HyperCore vault (market 55) that trades on Hyperliquid Core: the Core leg
-  (bridge, dex transfer, order, close, exit) built from the vault's substrate grants and estimated
-  with `eth_estimateGas` at head (EVM acceptance only, Core executes later), the REDEEM sized by the vault's EVM exit ceiling behind the executor's
-  fee gate, then recall, residual attestation and claim replayed in `CrosschainSimulator` at
-  blocks pinned inside the second live cycle.
-
 ```bash
 export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
 uv run python examples/advanced_euler_v2_credit_market_base.py
 uv run python examples/external_state_margin_leg_base.py
-uv run python examples/crosschain_ccip_usdc_arbitrum_hyperevm.py  # needs ARBITRUM_PROVIDER_URL and HYPEREVM_PROVIDER_URL
-uv run python examples/composed_hypercore_flow_arbitrum_hyperevm.py  # same two providers
 ```
 
 No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs the examples out of
@@ -481,12 +468,12 @@ the pilot executors and factories). Pin an exact version if you depend on them.
 | Crosschain fuses (market 54): `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse`; transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` | `ipor_fusion.crosschain` |
 | HyperCore fuses (market 55): `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` | `ipor_fusion.hypercore`, with `HyperCoreReader`, `read_hypercore_vault_state` and the event decoders |
 
-The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Pass
-`market_id=crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` to `open_lane`
-/ `discover_deployment` for that deployment. Both require it explicitly:
-`discover_deployment` reads the market's executor grants; `open_lane` takes an executor
-address and uses the market ID to find the vault's matching fuses unless they are
-passed.
+The crosschain API supports only the contracts of the 2026-10-21 release; earlier
+deployments are unreadable (`MIGRATION_4.md`). `open_lane` and `discover_deployment`
+take the market ID explicitly (54, or a keccak-derived one from
+`crosschain_market_id(name)` for a vault built with its own): `discover_deployment`
+reads the market's executor grants; `open_lane` takes an executor address and uses the
+market ID to find the vault's matching fuses unless they are passed.
 
 ### Readers (`ipor_fusion.readers`)
 

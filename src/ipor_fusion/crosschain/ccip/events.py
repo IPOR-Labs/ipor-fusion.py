@@ -1,12 +1,11 @@
 """Topic-keyed decoder for the events of the Chainlink CCIP crosschain
 contracts: ``CcipCrosschainExecutor``, ``CcipCrosschainDispatcher``,
-``CcipCrosschainFactory``, their libraries (``contracts/crosschain/ccip/lib``)
-and ``CcipAppBase``.
+``CcipCrosschainFactory``, their libraries (``contracts/crosschain/ccip/lib``,
+the shared ``contracts/crosschain/lib``) and ``CcipAppBase``.
 
-The registry mirrors the contracts source the SDK pins (see
-:data:`CCIP_EVENTS`). The deployed pilot-v2 and v3 factory pairs share every
-event; v3 adds the two ``DispatcherDeploymentGasLimit*`` factory events, which
-a v2 factory simply never emits.
+The registry mirrors the released contracts source (see :data:`CCIP_EVENTS`);
+logs of the earlier pilot and canary deployments are not decoded where their
+signatures differ.
 
 No CCIP event has an ``indexed`` parameter: topic0 is the only topic and every
 value is ABI-encoded in the log data. Enum parameters (``CcipMsgType``) are
@@ -70,11 +69,13 @@ def _event(name: str, *params: str) -> CcipEventSpec:
     return CcipEventSpec(name, tuple(fields), tuple(types))
 
 
-#: Every event, one spec per signature, sorted by signature. Mirrored from
-#: ``contracts/crosschain/ccip/**/*.sol`` at the contracts revision
-#: ``84c1923`` (the v3 factory pair's source) and held to it by
+#: Every event the CCIP executor, dispatcher and factory emit (their own and
+#: their libraries'), one spec per signature, sorted by signature. Mirrored
+#: from ``contracts/crosschain`` at the contracts release ``10f0f8e4``
+#: (2026-10-21, the deployment ipor-abi publishes) and held to it by
 #: ``tests/test_crosschain_ccip_events.py``.
 CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
+    _event("AllRescuesVetoed", "uint256 newVetoEpoch"),
     _event("AssetClaimed", "address manager", "uint256 amount"),
     _event(
         "AssetConfigExecuted",
@@ -97,18 +98,15 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "uint256 amount",
     ),
     _event(
-        "AssetSettled",
-        "uint256 chainId",
-        "bytes32 operationId",
-        "uint256 received",
+        "AssetSettled", "uint256 chainId", "bytes32 operationId", "uint256 received"
     ),
     _event("AttestationAnchorRebased", "uint256 chainId", "uint256 principalSD"),
     _event("AttestationAnchorUpdated", "uint256 chainId", "uint256 principalSD"),
     _event(
-        "BalanceApproved",
-        "uint256 proposalId",
-        "uint256 chainId",
-        "uint256 balance",
+        "AttestationNetPrincipalUpdated", "uint256 chainId", "uint256 netPrincipalSD"
+    ),
+    _event(
+        "BalanceApproved", "uint256 proposalId", "uint256 chainId", "uint256 balance"
     ),
     _event(
         "BalanceProposed",
@@ -120,10 +118,14 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
     ),
     _event("BalanceRejectedAndBlocked", "uint256 proposalId", "uint256 chainId"),
     _event(
-        "CcipMessageReceived",
-        "bytes32 messageId",
+        "CancelCommandExpiredIgnored",
         "uint256 srcChainId",
-        "address peer",
+        "bytes32 commandId",
+        "uint64 sequence",
+        "uint64 deadline",
+    ),
+    _event(
+        "CcipMessageReceived", "bytes32 messageId", "uint256 srcChainId", "address peer"
     ),
     _event(
         "CcipMessageSent",
@@ -134,12 +136,7 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
     ),
     _event("CcipRoutePolicySynced", "address app", "uint256 chainId"),
     _event("CcipRoutePolicyUpdated", "uint256 chainId", f"{_ROUTE_CONFIG} route"),
-    _event(
-        "CcipRouteRegistered",
-        "uint256 chainId",
-        "uint64 selector",
-        "address peer",
-    ),
+    _event("CcipRouteRegistered", "uint256 chainId", "uint64 selector", "address peer"),
     _event("ChainUnblockedByApproval", "uint256 chainId", "uint256 proposalId"),
     _event(
         "CommandAbandoned",
@@ -160,13 +157,14 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
     ),
     _event("CommandCancelRequested", "uint256 chainId", "bytes32 commandId"),
     _event("CommandCancelled", "bytes32 commandId", "uint64 sequence"),
-    _event("CommandFailed", "bytes32 commandId", "uint64 sequence"),
     _event(
-        "CommandFailed",
+        "CommandExpiryReleased",
         "uint256 chainId",
         "bytes32 commandId",
         "uint64 sequence",
     ),
+    _event("CommandFailed", "bytes32 commandId", "uint64 sequence"),
+    _event("CommandFailed", "uint256 chainId", "bytes32 commandId", "uint64 sequence"),
     _event(
         "CommandLaneRealigned",
         "uint256 chainId",
@@ -201,10 +199,7 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "uint64 commandConfigEpoch",
     ),
     _event(
-        "CommandSucceeded",
-        "bytes32 commandId",
-        "uint64 sequence",
-        "int256 valueDelta",
+        "CommandSucceeded", "bytes32 commandId", "uint64 sequence", "int256 valueDelta"
     ),
     _event("ConfigCancelled", "bytes32 commitment"),
     _event(
@@ -221,8 +216,15 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
     ),
     _event("CreationRestrictionUpdated", "bool restricted"),
     _event("CreatorAllowanceUpdated", "address creator", "bool allowed"),
+    _event("DeploymentAttemptsReset", "address executor", "uint256 dstChainId"),
     _event(
         "DeploymentCancelled",
+        "address executor",
+        "uint256 dstChainId",
+        "bytes32 ticketHash",
+    ),
+    _event(
+        "DeploymentLateAcked",
         "address executor",
         "uint256 dstChainId",
         "bytes32 ticketHash",
@@ -251,17 +253,20 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "uint256 dstChainId",
         "bytes32 messageId",
     ),
-    _event(
-        "ExecutorCreated",
-        "address manager",
-        "address executor",
-        "bytes32 salt",
-    ),
+    _event("ExecutorCreated", "address manager", "address executor", "bytes32 salt"),
     _event(
         "FactoryRouteScheduled",
         "uint256 chainId",
         f"{_ROUTE_CONFIG} route",
         "uint256 executableAt",
+    ),
+    _event("ForceResolveConsumed", "uint256 rescueId", "bytes32 commitment"),
+    _event(
+        "ForceResolveScheduled",
+        "uint256 rescueId",
+        "bytes32 commitment",
+        "uint256 executableAt",
+        "uint256 vetoEpoch",
     ),
     _event(
         "InboundMessageIgnored",
@@ -270,10 +275,20 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "bytes32 reason",
     ),
     _event(
-        "InboundSettled",
-        "bytes32 operationId",
-        "uint256 amount",
-        "uint64 stateVersion",
+        "InboundSettled", "bytes32 operationId", "uint256 amount", "uint64 stateVersion"
+    ),
+    _event(
+        "LateReceiptEpochAdopted",
+        "uint256 chainId",
+        "uint64 sequence",
+        "uint64 previousEpoch",
+        "uint64 newEpoch",
+    ),
+    _event(
+        "LateReceiptRetiredPendingReplacement",
+        "uint256 chainId",
+        "uint64 sequence",
+        "bytes32 retiredCommandId",
     ),
     _event(
         "LateReturnFinalized",
@@ -281,6 +296,13 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "bytes32 operationId",
         "uint256 sentSD",
         "uint256 received",
+        "uint256 debitedSD",
+    ),
+    _event(
+        "LateSettlementAlreadyAttested",
+        "uint256 chainId",
+        "bytes32 operationId",
+        "uint64 stateVersion",
     ),
     _event("NativeSwept", "address to", "uint256 amount"),
     _event(
@@ -307,14 +329,36 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "uint256 balance",
         "uint64 stateVersion",
     ),
+    _event("RescueCancelled", "uint256 rescueId", "address canceller"),
+    _event(
+        "RescueExecuted",
+        "uint256 rescueId",
+        "address target",
+        "uint256 value",
+        "bytes32 commitment",
+    ),
+    _event(
+        "RescueScheduled",
+        "uint256 rescueId",
+        "address target",
+        "uint256 value",
+        "bytes32 commitment",
+        "uint256 executableAt",
+        "uint256 vetoEpoch",
+    ),
+    _event("ResponseCoalesced", "uint64 responseId"),
     _event("ResponseDispatched", "uint64 responseId", "bytes32 messageId"),
     _event(
-        "ResponseQueued",
-        "uint64 responseId",
-        "uint8 messageType",
-        "uint256 tokenAmount",
+        "ResponseQueued", "uint64 responseId", "uint8 messageType", "uint256 amountLD"
     ),
-    _event("ResponseSkipped", "uint64 responseId", "uint256 tokenAmount"),
+    _event("ResponseSkipped", "uint64 responseId", "uint256 amountLD"),
+    _event(
+        "ReturnAboveLocalPoolCapacity",
+        "bytes32 operationId",
+        "uint256 amount",
+        "uint256 capacity",
+        "uint64 responseId",
+    ),
     _event(
         "ReturnBelowMinimumCredited",
         "uint256 chainId",
@@ -328,7 +372,7 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "uint256 chainId",
         "bytes32 operationId",
         "uint256 sentSD",
-        "uint256 maxAccounted",
+        "uint256 bound",
     ),
     _event(
         "ReturnFinalized",
@@ -336,32 +380,26 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "bytes32 operationId",
         "uint256 sentSD",
         "uint256 received",
+        "uint256 debitedSD",
     ),
     _event(
-        "ReturnQueued",
-        "bytes32 operationId",
-        "uint256 amount",
-        "uint64 responseId",
+        "ReturnQueued", "bytes32 operationId", "uint256 amount", "uint64 responseId"
     ),
     _event(
-        "ReturnRejected",
-        "bytes32 operationId",
-        "uint8 reason",
-        "uint64 responseId",
+        "ReturnRejected", "bytes32 operationId", "uint8 reason", "uint64 responseId"
     ),
+    _event("ReturnRejected", "uint256 chainId", "bytes32 operationId", "uint8 reason"),
     _event(
-        "ReturnRejected",
-        "uint256 chainId",
-        "bytes32 operationId",
-        "uint8 reason",
-    ),
-    _event(
-        "ReturnRequested",
-        "uint256 chainId",
-        "bytes32 operationId",
-        "uint256 amount",
+        "ReturnRequested", "uint256 chainId", "bytes32 operationId", "uint256 amount"
     ),
     _event("SettledBalanceForceSet", "uint256 chainId", "uint256 newSettled"),
+    _event(
+        "SettledBelowMinDelivered",
+        "uint256 chainId",
+        "bytes32 operationId",
+        "uint256 minDeliveredSD",
+        "uint256 receivedSD",
+    ),
     _event(
         "SettledCreditClamped",
         "uint256 chainId",
@@ -369,7 +407,16 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "uint256 reported",
         "uint256 credited",
     ),
-    _event("SharesRequested", "address vault", "uint256 pendingShares"),
+    _event(
+        "SettledCreditShortfall",
+        "uint256 chainId",
+        "bytes32 operationId",
+        "uint256 amountSD",
+        "uint256 receivedSD",
+    ),
+    _event(
+        "SharesRequested", "address vault", "uint256 pendingShares", "uint256 feeShares"
+    ),
     _event(
         "StaleRemoteBalanceIgnored",
         "uint256 chainId",
@@ -383,6 +430,21 @@ CCIP_EVENTS: tuple[CcipEventSpec, ...] = (
         "uint64 newVersion",
     ),
     _event("TokenSwept", "address token", "address to", "uint256 amount"),
+    _event(
+        "TrackedVaultSweepResidual",
+        "address vault",
+        "uint256 sharesLeft",
+        "uint8 reason",
+        "bytes4 redeemError",
+        "bool untracked",
+    ),
+    _event(
+        "TrackedVaultSwept",
+        "address vault",
+        "uint256 sharesRedeemed",
+        "uint256 assetsLD",
+    ),
+    _event("TrackedVaultUnpriced", "address vault", "uint8 reason"),
     _event("VaultAllowed", "address vault", "bool allowed"),
     _event("VaultTracked", "address vault"),
     _event("VaultUntracked", "address vault"),

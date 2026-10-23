@@ -303,15 +303,15 @@ class TestReads:
     def test_observation_is_normalized(self):
         ctx = MagicMock()
         ctx.call.return_value = encode(
-            ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
-            [(100, [REMOTE_VAULT.lower()], [900], 5, 1, HASH)],
+            ["(uint256,address[],uint256[],uint64,uint64,bytes32,bool[],uint256)"],
+            [(100, [REMOTE_VAULT.lower()], [900], 5, 1, HASH, [True], 0)],
         )
         assert _stargate_lane(spoke_ctx=ctx).observation().call(ctx) == LaneObservation(
             100, 1000, 5, 1, HASH
         )
         ctx.call.return_value = encode(
-            ["(uint256,uint256,uint256,uint64,uint64,bytes32)"],
-            [(1000, 100, 0, 4, 1, HASH)],
+            ["(uint256,uint256,uint256,uint64,uint64,bytes32,uint256,uint256)"],
+            [(1000, 100, 0, 4, 1, HASH, 0, 0)],
         )
         lane = _ccip_lane(spoke_ctx=ctx, rate=10**12)
         observation = lane.observation().call(ctx)
@@ -322,9 +322,44 @@ class TestReads:
                 remote_block=51_723_200,
                 remote_timestamp=1_790_235_747,
                 expiry=1_790_237_651,
+                receipt_at=1_790_235_700,
             ).settled_balance
             == 1000 * 10**12
         )
+
+    def test_an_observation_not_after_the_last_receipt_is_refused(self):
+        lane = _ccip_lane()
+        observation = LaneObservation(1, 999_700, 6, 2, HASH)
+        with pytest.raises(ValueError, match="does not follow"):
+            lane.attestation(
+                observation,
+                remote_block=1,
+                remote_timestamp=1_790_235_747,
+                expiry=1_790_237_651,
+                receipt_at=1_790_235_747,
+            )
+        assert _sel(lane.last_value_moving_receipt_at()) == selector(
+            "lastValueMovingReceiptAt(uint256)"
+        )
+        assert _stargate_lane().last_value_moving_receipt_at() is None
+
+    def test_an_unpriced_vault_blocks_the_attestation(self):
+        ctx = MagicMock()
+        ctx.call.return_value = encode(
+            ["(uint256,uint256,uint256,uint64,uint64,bytes32,uint256,uint256)"],
+            [(1000, 100, 0, 4, 1, HASH, 1, 0b01)],
+        )
+        lane = _ccip_lane(spoke_ctx=ctx, rate=10**12)
+        observation = lane.observation().call(ctx)
+        assert observation.unpriced_count == 1
+        with pytest.raises(ValueError, match="unpriced"):
+            lane.attestation(
+                observation,
+                remote_block=51_723_200,
+                remote_timestamp=1_790_235_747,
+                expiry=1_790_237_651,
+                receipt_at=0,
+            )
 
 
 class TestAttestation:
@@ -570,6 +605,7 @@ class TestLaneParts:
             remote_block=51_723_200,
             remote_timestamp=1_790_235_747,
             expiry=1_790_237_651,
+            receipt_at=0,
         ) == BalanceObservation(
             SPOKE, 999_700, 6, 51_723_200, 1_790_235_747, 1_790_237_651, HASH
         )
@@ -935,6 +971,10 @@ class TestContextOwnership:
             selector("activeCommand(uint256)"): active_command,
             _sel(probe.pending_transfer_count()): encode(["uint256"], [2]),
         }
+        if factory is _ccip_lane:
+            answers[selector("lastValueMovingReceiptAt(uint256)")] = encode(
+                ["uint64"], [4]
+            )
         hub = _chain_ctx(1)
         hub.default_block = 7
         hub.call.side_effect = multicall_aware(lambda _to, data: answers[data[:4]])
@@ -949,6 +989,7 @@ class TestContextOwnership:
             dispatcher_ready=True,
             chain_blocked=False,
             last_approved_observed_at=8,
+            last_value_moving_receipt_at=4 if factory is _ccip_lane else 0,
             staleness_max=3_600,
             remote_state_version=9,
             has_active_command=True,
@@ -1006,8 +1047,10 @@ class TestContextOwnership:
         spoke = _ctx_answering(
             {
                 selector("observation()"): encode(
-                    ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
-                    [(7, [], [], 3, 1, HASH)],
+                    [
+                        "(uint256,address[],uint256[],uint64,uint64,bytes32,bool[],uint256)"
+                    ],
+                    [(7, [], [], 3, 1, HASH, [], 0)],
                 )
             },
             chain_id=SPOKE,
@@ -1023,8 +1066,10 @@ class TestContextOwnership:
         spoke = _ctx_answering(
             {
                 selector("observation()"): encode(
-                    ["(uint256,address[],uint256[],uint64,uint64,bytes32)"],
-                    [(7, [], [], 3, 1, HASH)],
+                    [
+                        "(uint256,address[],uint256[],uint64,uint64,bytes32,bool[],uint256)"
+                    ],
+                    [(7, [], [], 3, 1, HASH, [], 0)],
                 )
             },
             chain_id=SPOKE,
