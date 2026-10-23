@@ -221,6 +221,17 @@ class TestAmountText:
             parse_amount(1.5, Decimals(6))  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="decimals"):
             parse_amount("1", Decimals(-1))
+        with pytest.raises(ValueError, match="0..255"):
+            parse_amount("1", Decimals(256))
+
+    def test_parse_amount_bounds_digits_before_converting(self):
+        from ipor_fusion import parse_amount
+
+        # Leading zeros are not significant, past Python's int() digit limit too.
+        assert parse_amount("0" * 5000 + "1", Decimals(0)) == 1
+        with pytest.raises(ValueError, match="exceeds uint256"):
+            parse_amount("1" * 5000, Decimals(0))
+        assert parse_amount("0." + "0" * 254 + "1", Decimals(255)) == 1
 
     @pytest.mark.parametrize(
         ("raw", "decimals", "text"),
@@ -244,11 +255,16 @@ class TestAmountText:
         assert format_amount(Amount(raw), Decimals(decimals)) == text
         assert parse_amount(text, Decimals(decimals)) == raw
 
-    def test_format_amount_rejects_negative(self):
-        from ipor_fusion import format_amount
+    @pytest.mark.parametrize("raw", [-1, MAX_UINT256 + 1])
+    def test_format_amount_rejects_values_outside_uint256(self, raw):
+        from ipor_fusion import format_amount, format_shares
 
-        with pytest.raises(ValueError, match="non-negative"):
-            format_amount(Amount(-1), Decimals(6))
+        with pytest.raises(ValueError, match="within uint256"):
+            format_amount(Amount(raw), Decimals(6))
+        with pytest.raises(ValueError, match="within uint256"):
+            format_shares(Shares(raw), Decimals(6))
+        with pytest.raises(ValueError, match="0..255"):
+            format_amount(Amount(1), Decimals(256))
 
     def test_shares_pair_mirrors_amounts(self):
         from ipor_fusion import format_shares, parse_shares

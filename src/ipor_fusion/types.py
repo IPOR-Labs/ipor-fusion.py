@@ -203,33 +203,42 @@ def parse_access_manager_address(value: str | bytes) -> AccessManagerAddress:
 _DECIMAL_TEXT = re.compile(r"([0-9]*)(?:\.([0-9]*))?")
 
 
+_UINT256_DIGITS = len(str(MAX_UINT256))
+
+
+def _check_decimals(decimals: Decimals) -> None:
+    if not 0 <= decimals <= 255:
+        raise ValueError(f"decimals must be 0..255 (ERC-20 uint8), got {decimals}")
+
+
 def _parse_units(text: str, decimals: Decimals, what: str) -> int:
     if not isinstance(text, str):
         raise TypeError(
             f"{what} must be text, not {type(text).__name__}: floats lose precision"
         )
-    if decimals < 0:
-        raise ValueError(f"decimals must be non-negative, got {decimals}")
+    _check_decimals(decimals)
     match = _DECIMAL_TEXT.fullmatch(text.strip())
     if match is None or not (match.group(1) or match.group(2)):
         raise ValueError(f"not a decimal {what}: {text!r}")
-    whole, fraction = match.group(1) or "0", match.group(2) or ""
+    whole, fraction = match.group(1).lstrip("0"), match.group(2) or ""
     if len(fraction) > decimals:
         raise ValueError(
             f"{what} {text!r} has {len(fraction)} fractional digits,"
             f" more than the {decimals} the token carries"
         )
-    value = int(whole) * 10**decimals + int(fraction.ljust(decimals, "0") or "0")
+    # Bounded before int(): a longer whole part overflows uint256 at any scale.
+    if len(whole) > _UINT256_DIGITS:
+        raise ValueError(f"{what} {text!r} exceeds uint256")
+    value = int(whole + fraction.ljust(decimals, "0") or "0")
     if value > MAX_UINT256:
         raise ValueError(f"{what} {text!r} exceeds uint256")
     return value
 
 
 def _format_units(value: int, decimals: Decimals, what: str) -> str:
-    if value < 0:
-        raise ValueError(f"{what} must be non-negative, got {value}")
-    if decimals < 0:
-        raise ValueError(f"decimals must be non-negative, got {decimals}")
+    if not 0 <= value <= MAX_UINT256:
+        raise ValueError(f"{what} must be within uint256, got {value}")
+    _check_decimals(decimals)
     whole, fraction = divmod(value, 10**decimals)
     if fraction == 0:
         return str(whole)
@@ -241,9 +250,9 @@ def parse_amount(text: str, decimals: Decimals) -> Amount:
     ``parse_amount("1.5", Decimals(6))`` is ``Amount(1_500_000)``.
 
     ``text`` is digits with at most one ``.`` (surrounding whitespace ignored);
-    no sign, exponent or separators. Raises ``ValueError`` for anything else,
-    for more fractional digits than ``decimals`` (nothing is rounded) and for a
-    value above uint256; ``TypeError`` for a non-string, so a float is never
+    no sign, exponent or separators. ``decimals`` is 0..255, an ERC-20 uint8.
+    Raises ``ValueError`` for anything else, for more fractional digits than
+    ``decimals`` (nothing is rounded) and for a value above uint256; ``TypeError`` for a non-string, so a float is never
     accepted. Inverse of `format_amount`.
     """
     return Amount(_parse_units(text, decimals, "amount"))
@@ -258,8 +267,8 @@ def parse_shares(text: str, decimals: Decimals) -> Shares:
 def format_amount(amount: Amount, decimals: Decimals) -> str:
     """``amount`` in token units as exact decimal text, no trailing zeros:
     ``format_amount(Amount(1_500_000), Decimals(6))`` is ``"1.5"``; a whole
-    number has no ``.``. Raises ``ValueError`` on a negative amount. Inverse of
-    `parse_amount`."""
+    number has no ``.``. Raises ``ValueError`` on an amount outside uint256 or
+    ``decimals`` outside 0..255. Inverse of `parse_amount`."""
     return _format_units(amount, decimals, "amount")
 
 
