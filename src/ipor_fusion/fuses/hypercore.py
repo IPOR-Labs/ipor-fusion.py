@@ -21,9 +21,6 @@ index_in_dex`` instead (:func:`precompile_index_of`). Amounts are Core integers:
 ``limit_px`` and ``sz`` carry 8 implied decimals, ``usd6`` 6, and
 ``amount_wei`` is Core wei (8 decimals for USDC).
 
-The settlement fuse is not encoded here: only the vault's settlement reporter
-contract may call it, from its own address.
-
 ABI (one struct argument per method)::
 
     HyperCoreDepositFuse.enter((uint64 tokenIndex, uint256 amount))

@@ -49,6 +49,21 @@ transaction.
   factory's deployment ticket, then drives supply, two-key attestation, DEPOSIT,
   REDEEM, recall and claim. The crosschain SDK is a preview feature. It has
   extra prerequisites, listed below.
+- [`hypercore_vault_official_deployment_hyperevm.py`](hypercore_vault_official_deployment_hyperevm.py) --
+  a vault that is itself a Hyperliquid Core account (HyperCore, market 55; a
+  preview feature). No live vault uses the official HyperCore contracts yet, so
+  it clones a USDC vault from the official HyperEVM factory, wires the published
+  HyperCore fuses, balance fuse and pre-hooks with narrow market-55 grants, reads
+  the post-deployment checklist back, checks its constants against live Core
+  metadata at head, and builds the Core leg (EVM -> Core bridge, spot -> xyz dex,
+  an IOC order and its reduce-only close, dex -> spot, Core -> EVM) as unsigned
+  `execute` calldata. Core execution is never simulated, and the HyperCore read
+  precompiles do not run in `eth_simulateV1`: the default run stops before the
+  Core leg. Its RPC-gated test runs the Core leg too, with the fuses recompiled
+  from source against stand-in precompile answers (EVM acceptance only); it needs
+  `HYPEREVM_PROVIDER_URL`, `IPOR_FUSION_HYPERCORE_SOURCE_DIR` (an ipor-fusion
+  checkout at the release the deployment was built from) and `forge`, and skips
+  without them, which is how pull-request CI runs it.
 
 ## Prerequisites
 

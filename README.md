@@ -347,6 +347,11 @@ ever signed or broadcast.
   the released crosschain contracts as deployed: configure the CCIP factory pair as its owner,
   create both vaults and the executor, wire the crosschain market and NAV pre-hook, deploy the
   dispatcher, then supply → attest → DEPOSIT → REDEEM → recall → claim USDC (preview feature).
+- [HyperCore vault on the official deployment](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/hypercore_vault_official_deployment_hyperevm.py) —
+  a HyperEVM vault that trades on Hyperliquid Core (market 55, preview): wiring the published
+  HyperCore fuses, pre-hooks and grants on a factory clone, and building the Core leg (bridge,
+  dex transfers, an order and its reduce-only close, Core → EVM) as unsigned `execute` calldata.
+  Core execution is never simulated; see the example for what is.
 ```bash
 export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
@@ -368,6 +373,13 @@ uv run python examples/crosschain_ccip_usdc_arbitrum_hyperevm.py
 No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs the examples out of
 the box — it supports `eth_simulateV1` and serves their pinned blocks. It is rate-limited, so use a
 dedicated archive node for repeated or CI runs.
+
+The HyperCore example runs on HyperEVM:
+
+```bash
+export HYPEREVM_PROVIDER_URL="https://YOUR_HYPEREVM_ARCHIVE_NODE"
+uv run python examples/hypercore_vault_official_deployment_hyperevm.py
+```
 
 ## Public API and stability
 
