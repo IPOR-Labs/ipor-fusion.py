@@ -200,6 +200,11 @@ runs one vault cycle; it skips without the source directory and needs
 
 - `chains.py` chain registry; `market_ids.py` `IporFusionMarkets`; `types.py`; `errors.py`
   defines every SDK exception class (`tests/test_error_hierarchy.py` pins it)
+- `fusion_errors.py` — `FUSION_ERROR_SIGNATURES`, every custom error of the
+  ipor-fusion contracts and their imports, registered by `errors.py` so reverts
+  decode by name; generated, never edited by hand: `uv run python
+  scripts/fusion_error_signatures.py ../ipor-fusion --source <commit>` (needs the
+  checkout's `npm ci`)
 - `about.py` — package version, repository URL, CHANGELOG parsing (`fusion changelog`,
   `server_info`); `field_docs.py` — `DOCS`, the JSON field descriptions shared by CLI
   output and MCP models

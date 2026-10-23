@@ -10,6 +10,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import TxParams, TxReceipt
 
+from ipor_fusion.fusion_errors import FUSION_ERROR_SIGNATURES
 from ipor_fusion.types import TxHash
 
 log = logging.getLogger(__name__)
@@ -48,6 +49,9 @@ def register_custom_errors(signatures: Iterable[str]) -> None:
         types = tuple(param for param in params.split(",") if param)
         canonical = f"{name}({','.join(types)})"
         CUSTOM_ERRORS[function_signature_to_4byte_selector(canonical)] = (name, types)
+
+
+register_custom_errors(FUSION_ERROR_SIGNATURES)
 
 
 def decode_custom_error(selector: bytes, payload: bytes) -> str | None:
