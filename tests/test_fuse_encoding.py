@@ -47,7 +47,6 @@ from ipor_fusion.fuses.hypercore import (
     HyperCoreOrderFuse,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
-    SettlementMode,
     TimeInForce,
     hip3_action_asset,
     is_hip3_asset,
@@ -2373,8 +2372,17 @@ class TestHyperCoreFuses:
             "0504000000000000000000000000000000000000000000000000000000000002"
         )
         assert HyperCoreSubstrates.config(
-            HyperCoreConfigKey.SETTLEMENT_MODE, SettlementMode.TIMING
+            HyperCoreConfigKey.SETTLEMENT_MODE, 1
         ).hex() == ("0505000000000000000000000000000000000000000000000000000000000001")
+        assert HyperCoreSubstrates.config(
+            HyperCoreConfigKey.NAV_JUMP_FLOOR_USD6, 7
+        ).hex() == ("050b000000000000000000000000000000000000000000000000000000000007")
+        # HyperCoreSubstrateLib.encodePerpPositionCap(110_002, 25_000_000_000)
+        assert HyperCoreSubstrates.perp_position_cap(110_002, 25_000_000_000).hex() == (
+            "07" + f"{110_002:08x}" + f"{25_000_000_000:022x}" + "00" * 16
+        )
+        with pytest.raises(ValueError, match="max_position_notional_usd6"):
+            HyperCoreSubstrates.perp_position_cap(1, 1 << 88)
         assert HyperCoreSubstrates.builder(
             Web3.to_checksum_address("0xcee5c4272e246a424aede992c987966736e0f63b"), 1
         ).hex() == ("040000000000000000000001cee5c4272e246a424aede992c987966736e0f63b")

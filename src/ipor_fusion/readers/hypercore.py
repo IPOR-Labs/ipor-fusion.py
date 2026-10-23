@@ -45,7 +45,6 @@ from ipor_fusion.errors import HyperCoreValuationError, UnsupportedContractVersi
 from ipor_fusion.fuses.hypercore import (
     NATIVE_PERP_DEX,
     SUPPORTED_HIP3_DEXES,
-    SettlementMode,
     perp_dex_of,
     precompile_index_of,
 )
@@ -71,14 +70,10 @@ T = TypeVar("T")
 HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
 #: The only chain with the HyperCore precompiles.
 HYPEREVM_CHAIN_ID = ChainId(999)
-#: The ``HyperCorePendingReader`` ``ipor-abi`` lists per chain. The reader
-#: runs the pending-action library in the vault's storage, so it must come from
-#: the build of the vault's HyperCore fuses and pre-hooks. A vault deployed
-#: before that build (the HyperEVM market-55 vault
-#: ``0xB8De01Ca5ca57A14671E1c696337134a02B4A478``) needs its own reader,
-#: ``0x83F54bc9eA4Dd19cb579Daa70368562C7a7534C4``, passed explicitly: the current
-#: one reads its storage the same but settles its reported-mode orders by time
-#: alone.
+#: ``HyperCorePendingReader`` per chain, as ``ipor-abi`` publishes it. The
+#: reader is a stateless helper the vault delegatecalls, so one deployment
+#: serves every vault of the same contracts build (a vault of the earlier
+#: build only while nothing is in flight: its hooks write no effect fields).
 HYPERCORE_PENDING_READERS: dict[ChainId, ChecksumAddress] = {
     HYPEREVM_CHAIN_ID: Web3.to_checksum_address(
         "0x1EFFb12434f5fb59a636C54D8CBaC93b13DF1A9E"
@@ -330,36 +325,42 @@ class HyperCoreActionClass(IntEnum):
     ORDER = 2
 
 
-class HyperCoreReportedResult(IntEnum):
-    """``HyperCorePendingLib`` reported result of a REPORTED-mode order."""
+class HyperCoreEffectKind(IntEnum):
+    """``HyperCorePendingLib.EFFECT_*``: the balance a transfer waits for
+    before it counts as settled."""
 
     NONE = 0
-    EXECUTED = 1
-    REJECTED = 2
+    CORE_SPOT = 1
+    EVM_BALANCE = 2
 
 
 @dataclass(frozen=True, slots=True)
 class HyperCorePendingState:
-    """``HyperCorePendingReader.pendingState()``: the raw ``PendingAction``
-    struct and the predicates derived from it.
+    """``HyperCorePendingReader.pendingState()``: the ``PendingAction`` struct
+    and the predicates the pre-hooks apply.
 
-    Only ``pending`` and ``settled`` are authoritative: a TIMING-settled action
-    leaves the raw fields in place until the next enqueue, so the struct alone
-    cannot tell "pending" from "settled, not yet cleared".
+    Only ``pending`` and ``settled`` are authoritative: a settled action keeps
+    its fields until the next enqueue. A transfer with an effect settles once
+    the window has passed and the Core L1 block moved past the enqueue, and
+    then only when the expected balance is observed (``expected_balance`` of
+    ``effect_token_index`` on Core spot, or of ``effect_evm_asset`` on the
+    EVM) or ``timeout_at`` has passed.
     """
 
     pending_until: Timestamp
     enqueued_l1_block: int
     enqueued_evm_block: int
     action_class: HyperCoreActionClass
-    settlement_mode: SettlementMode | None
-    reported_result: HyperCoreReportedResult
-    result_l1_block: int
     action_id: HyperCoreActionId
     payload_hash: PayloadHash
-    refreshing: bool
     cached_value_wad: int
     action_nonce: int
+    effect_kind: HyperCoreEffectKind
+    effect_token_index: HyperCoreTokenIndex
+    effect_evm_asset: ChecksumAddress
+    timeout_at: Timestamp
+    expected_balance: int
+    last_order_l1_block: int
     pending: bool
     settled: bool
     current_l1_block: int
@@ -367,103 +368,93 @@ class HyperCorePendingState:
     l1_block_available: bool
 
 
-_PENDING_ACTION_PREFIX = (
-    "uint64,uint64,uint64,uint8,uint8,uint8,uint64,uint24,bytes32,bool,uint256,uint256"
-)
+# The four deprecated fields (settlement mode, reported result, result L1
+# block, refreshing) keep their slots and are never written.
 _PENDING_ACTION_TYPE = (
-    f"({_PENDING_ACTION_PREFIX},uint8,uint64,address,uint64,uint256,uint64)"
+    "(uint64,uint64,uint64,uint8,uint8,uint8,uint64,uint24,bytes32,bool,uint256,"
+    "uint256,uint8,uint64,address,uint64,uint256,uint64)"
 )
-#: ``pendingState()`` of the current reader.
 PENDING_STATE_TYPE = f"({_PENDING_ACTION_TYPE},bool,bool,uint64,uint64,bool)"
-#: ``pendingState()`` of the earlier reader: the 12-field struct and a
-#: ``refreshing`` predicate. Both tuples are static, so the payload length
-#: tells the two apart.
-LEGACY_PENDING_STATE_TYPE = (
-    f"(({_PENDING_ACTION_PREFIX}),bool,bool,bool,uint64,uint64,bool)"
-)
-_PENDING_STATE_SIZE = 23 * 32
-_LEGACY_PENDING_STATE_SIZE = 18 * 32
 _PENDING_STATE_SELECTOR = function_signature_to_4byte_selector("pendingState()")
+_IS_ACTION_PENDING_SELECTOR = function_signature_to_4byte_selector("isActionPending()")
+_IS_ORDER_IN_FLIGHT_SELECTOR = function_signature_to_4byte_selector("isOrderInFlight()")
+
+_PendingAction = tuple[
+    int, int, int, int, int, int, int, int, bytes, bool, int, int,
+    int, int, str, int, int, int,
+]  # fmt: skip
 
 
-# pendingUntil, enqueuedL1Block, enqueuedEvmBlock, actionClass, settlementMode,
-# reportedResult, resultL1Block, actionId, payloadHash, stateRefreshing,
-# cachedValueWad, actionNonce: the struct prefix both readers share.
-_PendingAction = tuple[int, int, int, int, int, int, int, int, bytes, bool, int, int]
-
-
-def _decode_pending_payload(data: bytes) -> HyperCorePendingState:
-    if len(data) == _PENDING_STATE_SIZE:
-        state, pending, settled, l1_block, timestamp, l1_available = decode(
-            [PENDING_STATE_TYPE], data
-        )[0]
-        refreshing = False
-    elif len(data) == _LEGACY_PENDING_STATE_SIZE:
-        state, pending, settled, refreshing, l1_block, timestamp, l1_available = decode(
-            [LEGACY_PENDING_STATE_TYPE], data
-        )[0]
-    else:
-        raise UnsupportedContractVersionError(
-            f"HyperCorePendingReader.pendingState() returned {len(data)} bytes, "
-            f"not {_PENDING_STATE_SIZE} or {_LEGACY_PENDING_STATE_SIZE}"
-        )
-    return _pending_state(
-        state[:12],
-        (bool(pending), bool(settled), bool(refreshing)),
-        (l1_block, timestamp, bool(l1_available)),
-    )
-
-
-def _pending_state(
-    state: _PendingAction,
-    predicates: tuple[bool, bool, bool],
-    l1: tuple[int, int, bool],
+def _decode_pending_state(
+    values: tuple[_PendingAction, bool, bool, int, int, bool],
 ) -> HyperCorePendingState:
+    state, pending, settled, l1_block, timestamp, l1_available = values
     (
         pending_until,
         enqueued_l1_block,
         enqueued_evm_block,
         action_class,
-        settlement_mode,
-        reported_result,
-        result_l1_block,
+        _settlement_mode,
+        _reported_result,
+        _result_l1_block,
         action_id,
         payload_hash,
-        state_refreshing,
+        _refreshing,
         cached_value_wad,
         action_nonce,
+        effect_kind,
+        effect_token_index,
+        effect_evm_asset,
+        timeout_at,
+        expected_balance,
+        last_order_l1_block,
     ) = state
-    pending, settled, refreshing = predicates
-    l1_block, timestamp, l1_available = l1
     return HyperCorePendingState(
         pending_until=Timestamp(pending_until),
         enqueued_l1_block=enqueued_l1_block,
         enqueued_evm_block=enqueued_evm_block,
         action_class=HyperCoreActionClass(action_class),
-        settlement_mode=SettlementMode(settlement_mode) if settlement_mode else None,
-        reported_result=HyperCoreReportedResult(reported_result),
-        result_l1_block=result_l1_block,
         action_id=HyperCoreActionId(action_id),
         payload_hash=PayloadHash(bytes(payload_hash)),
-        refreshing=refreshing or bool(state_refreshing),
         cached_value_wad=cached_value_wad,
         action_nonce=action_nonce,
-        pending=pending,
-        settled=settled,
+        effect_kind=HyperCoreEffectKind(effect_kind),
+        effect_token_index=HyperCoreTokenIndex(effect_token_index),
+        effect_evm_asset=Web3.to_checksum_address(effect_evm_asset),
+        timeout_at=Timestamp(timeout_at),
+        expected_balance=expected_balance,
+        last_order_l1_block=last_order_l1_block,
+        pending=bool(pending),
+        settled=bool(settled),
         current_l1_block=l1_block,
         current_timestamp=Timestamp(timestamp),
-        l1_block_available=l1_available,
+        l1_block_available=bool(l1_available),
     )
+
+
+_PENDING_STATE_SIZE = 23 * 32
+
+
+def _decode_pending_payload(data: bytes) -> HyperCorePendingState:
+    if len(data) != _PENDING_STATE_SIZE:
+        raise UnsupportedContractVersionError(
+            f"HyperCorePendingReader.pendingState() returned {len(data)} bytes, "
+            f"not the {_PENDING_STATE_SIZE} of the released reader "
+            f"({HYPERCORE_PENDING_READERS[HYPEREVM_CHAIN_ID]})"
+        )
+    (values,) = decode([PENDING_STATE_TYPE], data)
+    return _decode_pending_state(values)
 
 
 class HyperCorePendingReader:
     """``HyperCorePendingReader`` through the vault's ``UniversalReader``.
 
-    ``reader`` is the deployed helper from the vault's build (never called
-    directly; see :data:`HYPERCORE_PENDING_READERS`); the vault delegatecalls
-    it so it sees the vault's pending slot. Keepers
-    gate every action on :meth:`is_pending`: the pending-action pre-hook
-    reverts ``execute`` and ``updateMarketsBalances`` while it is true.
+    ``reader`` is the deployed helper (one per chain, never called directly);
+    the vault delegatecalls it so it sees the vault's pending slot. Keepers
+    gate every action on :meth:`is_action_pending`: the pending-action
+    pre-hook reverts ``execute`` and ``updateMarketsBalances`` while it is
+    true. :meth:`is_order_in_flight` is the order rate limit: an order placed
+    in the current Core L1 block blocks the next one.
     """
 
     def __init__(self, vault: PlasmaVaultAddress, reader: ChecksumAddress):
@@ -471,17 +462,27 @@ class HyperCorePendingReader:
         self._reader = reader
 
     def pending_state(self) -> Call[HyperCorePendingState]:
-        """``pendingState()`` of either reader build, told apart by the
-        payload length."""
+        """Raises ``UnsupportedContractVersionError`` for a payload that is
+        not the released reader's 23 words (the earlier reader returns 18)."""
         return self._vault.universal_read(self._reader, _PENDING_STATE_SELECTOR).map(
             _decode_pending_payload
         )
 
-    def is_pending(self) -> Call[bool]:
-        """The ``pending`` predicate of :meth:`pending_state`: the readers
-        name the standalone getter differently (``isPending()`` /
-        ``isActionPending()``)."""
-        return self.pending_state().map(lambda state: state.pending)
+    def is_action_pending(self) -> Call[bool]:
+        return self._vault.universal_read_decoded(
+            self._reader,
+            _IS_ACTION_PENDING_SELECTOR,
+            output_types=["bool"],
+            decoder=bool,
+        )
+
+    def is_order_in_flight(self) -> Call[bool]:
+        return self._vault.universal_read_decoded(
+            self._reader,
+            _IS_ORDER_IN_FLIGHT_SELECTOR,
+            output_types=["bool"],
+            decoder=bool,
+        )
 
 
 def convert_to_wad_int(value: int, decimals: int) -> int:

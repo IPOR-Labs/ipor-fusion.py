@@ -10,12 +10,26 @@ from web3 import Web3
 from ipor_fusion import PlasmaVault
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.hypercore import HyperCoreSubstrates
+from ipor_fusion.readers.hypercore import HYPERCORE_PENDING_READERS
 from ipor_fusion.types import MarketId
 
 FIXTURE = json.loads(
     (Path(__file__).parent / "fixtures" / "hypercore_market55.json").read_text()
 )
 FUSE_NAMES = frozenset(name for name in FIXTURE["contracts"] if name.endswith("Fuse"))
+
+
+OFFICIAL = json.loads(
+    (Path(__file__).parent / "fixtures" / "hypercore_official.json").read_text()
+)
+
+
+def test_default_pending_reader_is_the_published_one() -> None:
+    """The default reader is the one ipor-abi publishes, not the reader of
+    the earlier market-55 deployment this fixture pins."""
+    expected = OFFICIAL["contracts"]["HyperCorePendingReader"]
+    assert HYPERCORE_PENDING_READERS[OFFICIAL["chain_id"]] == expected
+    assert expected != FIXTURE["contracts"]["HyperCorePendingReader"]["address"]
 
 
 def _read_address(web3: Web3, target: str, signature: str, block: int) -> str:
