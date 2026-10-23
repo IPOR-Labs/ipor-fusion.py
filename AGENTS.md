@@ -449,8 +449,9 @@ or examples.
   (`PlasmaVault.get_fuses()`) and its market granted substrates before an
   action can succeed.
 - Adding a protocol: new module in `fuses/` whose classes list every Solidity
-  function they encode in `SIGNATURES` (`tests/conftest.py` fails any encoded call
-  a class does not declare), re-export from `fuses/__init__.py`
+  function they encode in `SIGNATURES` (`tests/conftest.py` fails any call an
+  encoder builds under test that its class does not declare; it cannot catch an
+  extra or never-exercised entry), re-export from `fuses/__init__.py`
   and the top-level `__all__` (and both snapshots in `test_public_api.py`),
   encoding test in `test_fuse_encoding.py`, and a row in the README protocol
   table.

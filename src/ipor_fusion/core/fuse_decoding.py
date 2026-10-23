@@ -27,7 +27,9 @@ _BATCH_SELECTORS = {
 @dataclass(frozen=True)
 class DecodedFuseAction:
     """A `FuseAction` read as one call of ``fuse_class``: the Solidity
-    ``signature`` it encodes and the ABI-decoded ``args`` (tuples for structs)."""
+    ``signature`` it encodes and the ``args`` as eth_abi decodes them (tuples for
+    structs and arrays, lowercase address strings, ``bytes`` for byte values).
+    The class is the caller's reading; nothing checks the deployed contract."""
 
     fuse: FuseAddress
     fuse_class: type[Fuse]

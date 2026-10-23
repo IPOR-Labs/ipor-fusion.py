@@ -156,10 +156,16 @@ Read a batch back from calldata, e.g. to review a multisig transaction:
 ```python
 from ipor_fusion import AaveV3SupplyFuse, decode_execute_calldata, decode_fuse_action, fuse_classes_for
 
-for action in decode_execute_calldata(payload):   # execute / claimRewards calldata
-    print(action.fuse, [cls.__name__ for cls in fuse_classes_for(action)])
-decoded = decode_fuse_action(action, AaveV3SupplyFuse)  # the class settles shared shapes
-print(decoded.label, decoded.args)                      # AaveV3SupplyFuse.enter ((asset, amount, e_mode),)
+# The class behind each fuse address you know (from the registry or your config);
+# fuse_classes_for(action) lists the candidates when you do not.
+known = {fuse.address: AaveV3SupplyFuse}
+for action in decode_execute_calldata(payload):  # execute / claimRewards calldata
+    cls = known.get(action.fuse)
+    if cls is None:
+        print(action.fuse, "one of", [c.__name__ for c in fuse_classes_for(action)])
+        continue
+    decoded = decode_fuse_action(action, cls)
+    print(decoded.label, decoded.args)  # AaveV3SupplyFuse.enter ((asset, amount, e_mode),)
 ```
 
 ## CLI Quickstart

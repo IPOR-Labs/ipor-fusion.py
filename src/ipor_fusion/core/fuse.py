@@ -31,7 +31,8 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
 
     ``SIGNATURES`` lists the Solidity functions a class's own methods encode;
     `signatures` adds the inherited ones. The decoder reads them to recognize an
-    action, and the test suite checks every encoded call against them.
+    action; the test suite fails any call an encoder builds under test that its
+    class does not declare.
     """
 
     SIGNATURES: ClassVar[tuple[str, ...]] = ()
