@@ -94,24 +94,13 @@ def test_market_substrates_decode_to_the_intended_grants(load_example):
     ]
 
 
-def test_pre_hook_wiring_covers_the_eight_selectors_once(load_example):
+def test_pre_hooks_wire_each_published_hook_by_role(load_example):
     mod = load_example(EXAMPLE)
-    selectors, implementations, substrates = mod.pre_hook_wiring()
-    assert [s.hex() for s in selectors] == [
-        "6e553f65",
-        "50921b23",
-        "94bf804d",
-        "b460af94",
-        "ba087652",
-        "a64099d2",
-        "baae8abf",
-        "e9a2e778",
-    ]
+    contracts = OFFICIAL["contracts"]
+    assert mod.PRE_HOOKS.capital_flow_hook == contracts["HyperCoreCapitalFlowPreHook"]
     assert (
-        implementations
-        == [mod.CAPITAL_FLOW_PRE_HOOK] * 6 + [mod.PENDING_ACTION_PRE_HOOK] * 2
+        mod.PRE_HOOKS.pending_action_hook == contracts["HyperCorePendingActionPreHook"]
     )
-    assert substrates == [[]] * 8
 
 
 def test_core_steps_encode_the_granted_route(load_example):

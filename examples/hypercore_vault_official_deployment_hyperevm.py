@@ -110,6 +110,7 @@ from ipor_fusion.hypercore import (
     HyperCorePendingReader,
     HyperCorePendingState,
     HyperCorePerpAssetInfo,
+    HyperCorePreHookWiring,
     HyperCoreReader,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
@@ -234,22 +235,10 @@ MAX_ORDER_NOTIONAL_USD6 = 15_000_000
 SEND_CAP_WEI = 10_000_000_000  # 100 USDC
 NAV_JUMP_FLOOR_USD6 = 1_000_000  # 1 USD; the runbook sizes it per vault TVL
 
-# The six share-priced entry points and the two operator entry points of a
-# Plasma Vault: the HyperCore pre-hooks are wired per selector.
-CAPITAL_FLOW_SELECTORS = tuple(
-    function_signature_to_4byte_selector(signature)
-    for signature in (
-        "deposit(uint256,address)",
-        "depositWithPermit(uint256,address,uint256,uint8,bytes32,bytes32)",
-        "mint(uint256,address)",
-        "withdraw(uint256,address,address)",
-        "redeem(uint256,address,address)",
-        "redeemFromRequest(uint256,address,address)",
-    )
-)
-PENDING_ACTION_SELECTORS = tuple(
-    function_signature_to_4byte_selector(signature)
-    for signature in ("execute((address,bytes)[])", "updateMarketsBalances(uint256[])")
+# This deployment's two pre-hooks.
+PRE_HOOKS = HyperCorePreHookWiring(
+    capital_flow_hook=CAPITAL_FLOW_PRE_HOOK,
+    pending_action_hook=PENDING_ACTION_PRE_HOOK,
 )
 
 
@@ -338,18 +327,6 @@ def market_substrates(vault: PlasmaVaultAddress) -> list[bytes]:
             HyperCoreConfigKey.NAV_JUMP_FLOOR_USD6, NAV_JUMP_FLOOR_USD6
         ),
     ]
-
-
-def pre_hook_wiring() -> tuple[list[bytes], list[ChecksumAddress], list[list[bytes]]]:
-    """``setPreHookImplementations`` arguments: the capital-flow hook on the six
-    share-priced selectors, the pending-action hook on ``execute`` and
-    ``updateMarketsBalances``; neither hook takes substrates. A selector appears
-    once: a duplicate in one call silently keeps the last value."""
-    selectors = [*CAPITAL_FLOW_SELECTORS, *PENDING_ACTION_SELECTORS]
-    implementations = [CAPITAL_FLOW_PRE_HOOK] * len(CAPITAL_FLOW_SELECTORS) + [
-        PENDING_ACTION_PRE_HOOK
-    ] * len(PENDING_ACTION_SELECTORS)
-    return selectors, implementations, [[] for _ in selectors]
 
 
 def core_to_evm_amount(spot_total_wei: int) -> int:
@@ -675,9 +652,8 @@ def run_simulation(
 
     # 3. The pre-hooks. The deposit fuse and opening orders revert unless all
     #    six share-priced selectors carry the capital-flow hook.
-    selectors, implementations, hook_substrates = pre_hook_wiring()
     sim.add_call(
-        vault.set_pre_hook_implementations(selectors, implementations, hook_substrates),
+        PRE_HOOKS.set_pre_hook_implementations(vault),
         from_=OWNER,
         label="set pre-hooks",
         gas=CALL_GAS,
@@ -686,8 +662,10 @@ def run_simulation(
 
     # The post-deployment checklist, read back from the wired vault.
     wired_hooks = [
-        (selector, sim.observe(vault.get_pre_hook_implementation(selector)))
-        for selector in selectors
+        (selector, expected, sim.observe(vault.get_pre_hook_implementation(selector)))
+        for selector, expected in zip(
+            PRE_HOOKS.selectors, PRE_HOOKS.implementations, strict=True
+        )
     ]
     vault_refresh_role = sim.observe(
         access_manager.has_role(Roles.UPDATE_MARKETS_BALANCES_ROLE, vault_address)
@@ -719,12 +697,7 @@ def run_simulation(
     result = sim.run()
     _assert_all_success(result)
 
-    for selector, implementation in wired_hooks:
-        expected = (
-            CAPITAL_FLOW_PRE_HOOK
-            if selector in CAPITAL_FLOW_SELECTORS
-            else PENDING_ACTION_PRE_HOOK
-        )
+    for selector, expected, implementation in wired_hooks:
         _check(
             implementation.value == expected,
             f"selector 0x{selector.hex()} runs {implementation.value}, not {expected}",
