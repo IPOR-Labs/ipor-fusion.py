@@ -2,7 +2,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TypedDict
 
-from eth_abi import decode
+from eth_abi import decode, encode
 from eth_abi.exceptions import InsufficientDataBytes
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
@@ -27,6 +27,7 @@ from ipor_fusion.types import (
     Period,
     PlasmaVaultAddress,
     RoleId,
+    ScheduleId,
 )
 
 
@@ -181,6 +182,26 @@ class AccessManager(ContractWrapper):
             account,
             output_types=["bool", "uint32"],
             decoder=_role_status_decoder,
+        )
+
+    def get_schedule(self, operation: ScheduleId) -> Call[Timestamp]:
+        """When the scheduled ``operation`` becomes executable; 0 when it is not
+        scheduled, was executed or cancelled, or expired (a week after that time)."""
+        return self._view(
+            "getSchedule(bytes32)",
+            operation,
+            output_types=["uint48"],
+            decoder=Timestamp,
+        )
+
+    @staticmethod
+    def hash_operation(
+        caller: ChecksumAddress, target: ChecksumAddress, data: bytes
+    ) -> ScheduleId:
+        """The id `schedule` and `get_schedule` use for ``caller`` calling
+        ``target`` with ``data``, computed offline as the manager does."""
+        return ScheduleId(
+            Web3.keccak(encode(["address", "address", "bytes"], [caller, target, data]))
         )
 
     def can_call(

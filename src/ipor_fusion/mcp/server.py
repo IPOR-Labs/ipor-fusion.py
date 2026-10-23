@@ -40,6 +40,7 @@ from ipor_fusion.mcp.models import (
     ActionResult,
     ChangelogEntryModel,
     ConfigShowResponse,
+    ExecutePreflightResponse,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     OracleMappingResponse,
@@ -54,6 +55,11 @@ from ipor_fusion.morpho_api import (
     MorphoApiError,
     fetch_market,
     fetch_vault,
+)
+from ipor_fusion.preflight import (
+    build_execute_preflight_json,
+    parse_execute_actions,
+    preflight_execute,
 )
 from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
@@ -278,6 +284,49 @@ def vault_validate(
             validation, CHAIN_NAMES.get(chain_id, str(chain_id))
         )
     )
+
+
+@mcp.tool()
+def vault_preflight(
+    vault_address: Annotated[str, Field(description="Plasma Vault address.")],
+    calldata: Annotated[
+        str, Field(description="execute((address,bytes)[]) calldata, hex.")
+    ],
+    sender: Annotated[
+        str, Field(description="The account that will send execute (an ALPHA).")
+    ],
+    chain_id: ChainArg = None,
+    block_number: BlockArg = None,
+    simulate: Annotated[
+        bool,
+        Field(
+            description="Run the batch through eth_simulateV1; false: static checks."
+        ),
+    ] = True,
+) -> ExecutePreflightResponse:
+    """Check an execute batch before it is signed: the sender's permission (or a
+    ready scheduled operation), each fuse's registration, the balance fuses of
+    every touched and dependent market, and a simulation of the calldata on top
+    of the base block. Read-only; a pass is evidence for that state, not a promise."""
+    try:
+        actions = parse_execute_actions(calldata)
+    except ValueError as exc:
+        raise ValueError(f"calldata: {exc}") from exc
+    if not actions:
+        raise ValueError("calldata: the batch has no actions")
+    cfg = load_config()
+    checksum = _vault_arg(vault_address)
+    chain_id = _resolve_chain_id(cfg, checksum, chain_id)
+    ensure_supported_chain(chain_id)
+    ctx, _ = _build_ctx(cfg, chain_id, block_number)
+    result = preflight_execute(
+        ctx,
+        checksum,
+        actions,
+        sender=Web3.to_checksum_address(sender),
+        simulate=simulate,
+    )
+    return ExecutePreflightResponse.model_validate(build_execute_preflight_json(result))
 
 
 # Static mirror of Roles member names: pyright rejects a dynamically built

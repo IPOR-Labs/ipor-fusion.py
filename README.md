@@ -190,6 +190,9 @@ fusion vault validate 0xB8a451107A9f87FDe481D4D686247D6e43Ed715e --chain-id ethe
 # List saved vaults
 fusion vault list
 
+# Check an execute batch before signing it (role, fuses, balance fuses, simulation)
+fusion vault preflight 0xVAULT_ADDRESS --calldata 0xEXECUTE_CALLDATA --sender 0xALPHA
+
 # Inspect a Morpho Blue market or MetaMorpho vault
 fusion market morpho-blue 0xMARKET_ID --chain ethereum
 fusion market meta-morpho 0xVAULT_ADDRESS --chain ethereum
@@ -252,6 +255,7 @@ Available tools:
 | `config_set_etherscan_key` | Set Etherscan API key (enables contract name resolution) |
 | `vault_info` | Full on-chain vault state — assets, fuses, balances, fees, lending health, reconciliation |
 | `vault_validate` | Health verdict (ok / warning / critical) with the reconciliation, lending-health and ERC20 numbers behind it |
+| `vault_preflight` | Check execute calldata as its sender would send it: permission, fuses, balance fuses, simulation |
 | `vault_role_accounts` | Accounts holding each AccessManager role on a vault |
 | `vault_oracle_mapping` | Price-oracle sources per asset for a vault |
 | `vault_list` | List all saved vaults |

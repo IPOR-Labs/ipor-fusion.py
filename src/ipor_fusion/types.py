@@ -15,6 +15,8 @@ Tick = NewType("Tick", int)
 Liquidity = NewType("Liquidity", int)
 RoleId = NewType("RoleId", int)
 ChainId = NewType("ChainId", int)
+# An AccessManager operation id: keccak256(abi.encode(caller, target, calldata)).
+ScheduleId = NewType("ScheduleId", bytes)
 # A Morpho Blue market id (bytes32) in its canonical spelling: "0x" and 64
 # lowercase hex digits, as the Morpho API reports it. Build one with
 # parse_morpho_market_id.
