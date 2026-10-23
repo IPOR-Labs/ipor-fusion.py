@@ -1777,6 +1777,13 @@ class TestExternalStateOperationFuse:
                 actions=[(ZERO_ADDRESS, b"\x00")],
             )
 
+    def test_sweep_surplus_encodes_the_asset(self):
+        action = ExternalStateOperationFuse(FUSE_ADDR).sweep_surplus(TOKEN_A)
+        assert action.data[:4] == _selector("sweepSurplus(address)")
+        assert decode(["address"], action.data[4:])[0].lower() == TOKEN_A.lower()
+        with pytest.raises(ValueError, match="asset"):
+            ExternalStateOperationFuse(FUSE_ADDR).sweep_surplus(ZERO_ADDRESS)
+
     def test_create_executor_is_bare_selector(self):
         action = ExternalStateOperationFuse(FUSE_ADDR).create_executor()
         assert action.fuse == FUSE_ADDR

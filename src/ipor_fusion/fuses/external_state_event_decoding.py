@@ -66,6 +66,10 @@ EXTERNAL_STATE_EVENT_SPECS: tuple[ExternalStateEventSpec, ...] = (
         (("uint256", "oldTimestamp"), ("uint256", "newTimestamp")),
     ),
     ExternalStateEventSpec(
+        "ExternalStateBalanceFuseLastCustodianConfirmCountUpdated",
+        (("uint256", "oldConfirmCount"), ("uint256", "newConfirmCount")),
+    ),
+    ExternalStateEventSpec(
         "ExternalStateBalanceFuseLastTotalBalanceUpdated",
         (("uint256", "oldTotalBalance"), ("uint256", "newTotalBalance")),
     ),
@@ -106,6 +110,10 @@ EXTERNAL_STATE_EVENT_SPECS: tuple[ExternalStateEventSpec, ...] = (
             ("uint256", "actionsCount"),
         ),
     ),
+    ExternalStateEventSpec(
+        "ExternalStateOperationFuseSweepSurplus",
+        (("address", "version"), ("address", "asset"), ("uint256", "amount")),
+    ),
     # ExternalStateExecutorStorageLib
     ExternalStateEventSpec(
         "ExternalStateExecutorDeployed",
@@ -125,6 +133,24 @@ class ExternalStateCustodianTimestampUpdatedArgs(TypedDict):
 
     oldTimestamp: Timestamp
     newTimestamp: Timestamp
+
+
+class ExternalStateCustodianConfirmCountUpdatedArgs(TypedDict):
+    """``ExternalStateBalanceFuseLastCustodianConfirmCountUpdated`` (balance
+    fuses of the 2026-10-21 contracts release; earlier ones emit the
+    timestamp event)."""
+
+    oldConfirmCount: int
+    newConfirmCount: int
+
+
+class ExternalStateOperationFuseSweepSurplusArgs(TypedDict):
+    """``ExternalStateOperationFuseSweepSurplus``: ``amount`` of ``asset``
+    swept from the executor to the vault."""
+
+    version: FuseAddress
+    asset: ChecksumAddress
+    amount: Amount
 
 
 class ExternalStateTotalBalanceUpdatedArgs(TypedDict):
@@ -214,6 +240,24 @@ class ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent(
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateBalanceFuseLastCustodianConfirmCountUpdatedEvent(
+    _ExternalStateEventBase
+):
+    name: Literal["ExternalStateBalanceFuseLastCustodianConfirmCountUpdated"] = (
+        "ExternalStateBalanceFuseLastCustodianConfirmCountUpdated"
+    )
+    args: ExternalStateCustodianConfirmCountUpdatedArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExternalStateOperationFuseSweepSurplusEvent(_ExternalStateEventBase):
+    name: Literal["ExternalStateOperationFuseSweepSurplus"] = (
+        "ExternalStateOperationFuseSweepSurplus"
+    )
+    args: ExternalStateOperationFuseSweepSurplusArgs
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent(_ExternalStateEventBase):
     name: Literal["ExternalStateBalanceFuseLastTotalBalanceUpdated"] = (
         "ExternalStateBalanceFuseLastTotalBalanceUpdated"
@@ -262,6 +306,8 @@ class ExternalStateExecutorDeployedEvent(_ExternalStateEventBase):
 ExternalStateEvent: TypeAlias = (
     ExternalStateBigChangeDetectedEvent
     | ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent
+    | ExternalStateBalanceFuseLastCustodianConfirmCountUpdatedEvent
+    | ExternalStateOperationFuseSweepSurplusEvent
     | ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent
     | ExternalStateUnpausedEvent
     | ExternalStateAssetRescuedEvent
@@ -275,6 +321,8 @@ ExternalStateEvent: TypeAlias = (
 EXTERNAL_STATE_EVENT_CLASSES: dict[str, type[ExternalStateEvent]] = {
     "ExternalStateBigChangeDetected": ExternalStateBigChangeDetectedEvent,
     "ExternalStateBalanceFuseLastCustodianTimestampUpdated": ExternalStateBalanceFuseLastCustodianTimestampUpdatedEvent,
+    "ExternalStateBalanceFuseLastCustodianConfirmCountUpdated": ExternalStateBalanceFuseLastCustodianConfirmCountUpdatedEvent,
+    "ExternalStateOperationFuseSweepSurplus": ExternalStateOperationFuseSweepSurplusEvent,
     "ExternalStateBalanceFuseLastTotalBalanceUpdated": ExternalStateBalanceFuseLastTotalBalanceUpdatedEvent,
     "ExternalStateUnpaused": ExternalStateUnpausedEvent,
     "ExternalStateAssetRescued": ExternalStateAssetRescuedEvent,

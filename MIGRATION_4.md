@@ -427,6 +427,28 @@ the modules are internal.
   `MAX_MARK_ORACLE_DEVIATION_BPS`, `NAV_JUMP_FLOOR_USD6` (7..11); `decode_substrate`
   decodes them instead of flagging them as errors.
 
+#### ExternalState: two executor builds, one custodian marker
+
+The 2026-10-21 contracts release (on Arbitrum in `ipor-abi`) changes what the
+balance fuse and the pre-hook compare to detect an unprocessed custodian
+update: the executor's confirm count instead of the last confirmed update's
+timestamp. HyperEVM, Base and Ethereum still publish the earlier build, so both
+exist; the comparison is equality either way.
+
+- `ExternalStateVaultState.last_checked_custodian_timestamp` is
+  `last_checked_custodian_marker` and `BalanceFuseSnapshot.last_custodian_update_timestamp`
+  is `custodian_marker`, both a `CustodianMarker` (an opaque value the
+  contracts only compare for equality): a timestamp on an earlier executor, the
+  confirm count on a released one. `ExternalStateExecutor.confirm_count()`
+  exists only on the released executor (it reverts on an earlier one), and
+  `last_custodian_update_timestamp()` reads the timestamp on both.
+- New on the released build: `ExternalStateExecutor.unforwarded_credit(asset)`,
+  `proposal_base_balance(account)`, `ExternalStateOperationFuse.sweep_surplus(asset)`,
+  and the events `ExternalStateBalanceFuseLastCustodianConfirmCountUpdated` and
+  `ExternalStateOperationFuseSweepSurplus` (the released balance fuse no longer
+  emits `...LastCustodianTimestampUpdated`; it stays registered for the earlier
+  build).
+
 **Removed.**
 
 - `IporFusionMarkets.RWA`: market 50 is `IporFusionMarkets.EXTERNAL_STATE`.

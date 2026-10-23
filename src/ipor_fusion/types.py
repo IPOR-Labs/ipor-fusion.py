@@ -17,6 +17,11 @@ RoleId = NewType("RoleId", int)
 ChainId = NewType("ChainId", int)
 # An 18-decimal fixed-point fraction: 10**18 is 1, i.e. 100% (a market limit).
 Wad = NewType("Wad", int)
+# The ExternalState executor's custodian marker the balance fuse and pre-hook
+# compare for equality only: the last confirmed update's block timestamp on an
+# executor before the 2026-10-21 contracts release, the confirm count on one of
+# that release. Opaque: never compare it with a clock or do arithmetic on it.
+CustodianMarker = NewType("CustodianMarker", int)
 # A Morpho Blue market id (bytes32) in its canonical spelling: "0x" and 64
 # lowercase hex digits, as the Morpho API reports it. Build one with
 # parse_morpho_market_id.

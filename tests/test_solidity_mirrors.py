@@ -22,8 +22,9 @@ from ipor_fusion.core.external_state_executor import ExternalStateExecutor
 from ipor_fusion.fuses import ExternalStateOperationFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 
-# IPOR-Labs/ipor-fusion main as of 2026-09-10
-IPOR_FUSION_REF = "a1f79d6c3d0d426ace4df55ed0fb8ea340580739"
+# IPOR-Labs/ipor-fusion main as of 2026-10-21 (the contracts release
+# ipor-abi publishes)
+IPOR_FUSION_REF = "10f0f8e4031980b6f130d4f6460c6f8edfbcab32"
 
 _RAW_URL = "https://raw.githubusercontent.com/IPOR-Labs/ipor-fusion/{ref}/{path}"
 _LIBRARIES = "contracts/libraries"
@@ -50,12 +51,13 @@ def _parse_solidity_int(value: str) -> int:
 
 
 @cache
-def _solidity_source(path: str) -> str:
-    """The contract at `path` (repo-relative), at the pinned upstream commit.
+def _solidity_source(path: str, ref: str = IPOR_FUSION_REF) -> str:
+    """The contract at `path` (repo-relative), at the pinned upstream commit
+    (or ``ref``).
 
     Cached so gates reading the same file share one fetch; `cache` stores
     nothing on a raising path, so a transient failure still re-tries."""
-    url = _RAW_URL.format(ref=IPOR_FUSION_REF, path=path)
+    url = _RAW_URL.format(ref=ref, path=path)
     try:
         resp = requests.get(url, timeout=15)
     except requests.RequestException as exc:
@@ -82,7 +84,7 @@ def _solidity_constants(file_name: str) -> dict[str, int]:
 # a live deployment or a contracts feature branch). Each must be ABSENT
 # upstream at the pinned ref; once it lands, drop it here and bump
 # IPOR_FUSION_REF in the same change.
-_AHEAD_OF_UPSTREAM = {"CROSSCHAIN": 54, "HYPERCORE": 55}
+_AHEAD_OF_UPSTREAM: dict[str, int] = {}
 
 
 def _member_words(body: str) -> list[list[str]]:

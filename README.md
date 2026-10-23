@@ -414,7 +414,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
 | `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50); the executor's thresholds (`staleness_max`, `big_change_bps`, `dust_threshold`, `min_update_interval`), the live aggregate (`get_balance_fuse_snapshot`) and the pre-hook's staleness clock (`get_oldest_update_timestamp`) |
-| `read_external_state`, `ExternalStateVaultState` | The market's vault-scoped state from the vault's ERC-7201 storage at one block: executor, the balance fuse's cached total, the custodian timestamp it last checked and the pause flag the pre-hook enforces (no getter exposes them) |
+| `read_external_state`, `ExternalStateVaultState` | The market's vault-scoped state from the vault's ERC-7201 storage at one block: executor, the balance fuse's cached total, the custodian marker it last checked (a timestamp on the earlier executor build, the confirm count on the 2026-10-21 one) and the pause flag the pre-hook enforces (no getter exposes them) |
 | `decode_external_state_event`, `EXTERNAL_STATE_TOPICS` | The ExternalState events the vault emits (big change, cache updates, unpause, rescue, executor creation and deployment, operation enter/exit), decoded by topic with their raw log identity; a malformed listed log raises |
 | `erc20_balance_slot`, `VaultSimulator.with_erc20_balance` | Fund any address with any ERC-20 in a simulation by a storage override (slot found by probing), no holder to impersonate |
 | `ERC20` | Token reads and approvals |
