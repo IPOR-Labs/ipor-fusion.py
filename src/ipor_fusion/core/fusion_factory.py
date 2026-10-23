@@ -1,16 +1,16 @@
 """IporFusionFactoryProxy wrapper — deploys a full Fusion vault stack
 (plasmaVault + accessManager + 6 managers) in a single tx.
 
-Deployed signature on BASE (verified 2026-05-12 against impl bytecode):
+Deployed signature on BASE (verified against the impl bytecode on 2026-05-12,
+and on 2026-10-23 for the upgraded impl 0x378fEb2E96082FB965E2BB922AEE484d07c14014):
   clone(string assetName_, string assetSymbol_, address underlyingToken_,
         uint256 redemptionDelayInSeconds_, address owner_,
         uint256 daoFeePackageIndex_) → FusionInstance
 
-Note: the ipor-abi registry publishes a 5-arg shape (no daoFeePackageIndex);
-that's stale — the deployed factory impl at
-0x610152a79be7f2aa3aa70520c9331c18fe8d33b7 only exposes the 6-arg variant
-(selector 0x8697b10a). Always trust the impl bytecode over the registry
-when they disagree.
+Note: the ipor-abi registry has published a 5-arg shape (no
+daoFeePackageIndex); both the earlier impl 0x610152a79be7f2aa3aa70520c9331c18fe8d33b7
+and the current one expose only the 6-arg variant (selector 0x8697b10a). Always
+trust the impl bytecode over the registry when they disagree.
 
 `clone()` is a write — call `.send(ctx)` for a real tx, then decode the
 created addresses from its receipt with `factory.decode_clone_receipt(receipt)`.
