@@ -1176,8 +1176,9 @@ class PreviewFeatureModel(_Base):
         default="preview",
         description="Always 'preview': not production. The contracts are under "
         "active development, the mainnet deployments are a proof of concept "
-        "and IPOR Labs canaries, and interfaces may change between minor "
-        "versions. Route no production capital through these features.",
+        "and IPOR Labs canaries, and interfaces may change or be removed "
+        "between minor versions, with no backward compatibility. Route no "
+        "production capital through these features.",
     )
 
 

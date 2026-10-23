@@ -41,7 +41,8 @@ PREVIEW_FEATURES: tuple[PreviewFeature, ...] = (
 PREVIEW_STATEMENT = (
     "Preview, not production: the contracts are under active development, the "
     "mainnet deployments are a proof of concept and IPOR Labs canaries, and "
-    "interfaces may change between minor versions."
+    "interfaces may change or be removed between minor versions, with no "
+    "backward compatibility."
 )
 
 _DISTRIBUTION = "ipor-fusion"
