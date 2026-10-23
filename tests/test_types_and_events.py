@@ -218,7 +218,7 @@ class TestAmountText:
         with pytest.raises(ValueError, match="exceeds uint256"):
             parse_amount(str(MAX_UINT256 + 1), Decimals(0))
         with pytest.raises(TypeError, match="floats lose precision"):
-            parse_amount(1.5, Decimals(6))  # type: ignore[arg-type]
+            parse_amount(1.5, Decimals(6))
         with pytest.raises(ValueError, match="decimals"):
             parse_amount("1", Decimals(-1))
         with pytest.raises(ValueError, match="0..255"):
