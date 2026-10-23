@@ -109,24 +109,18 @@ CHAIN = ChainType()
 
 
 class BlockNumberType(click.IntRange):
-    """A positive block number. 0 is refused rather than read as block 0:
-    some callers still pass it meaning "latest"."""
+    """A block number, 0 meaning the latest block like an omitted option:
+    callers fill optional integers with 0, and genesis never holds a vault."""
 
     name = "block"
 
     def __init__(self) -> None:
-        super().__init__(min=1)
+        super().__init__(min=0)
 
     def convert(
         self, value: object, param: click.Parameter | None, ctx: click.Context | None
-    ) -> int:
-        if value in (0, "0"):
-            self.fail(
-                "0 is not a block selector: omit --block-number for the latest block",
-                param,
-                ctx,
-            )
-        return super().convert(value, param, ctx)
+    ) -> int | None:
+        return super().convert(value, param, ctx) or None
 
 
 BLOCK_NUMBER = BlockNumberType()

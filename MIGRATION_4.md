@@ -1130,12 +1130,12 @@ are listed with a link.
 - **The CLI and the MCP tools take the same arguments.**
   - **MCP inputs:** the vault tools' `chain_id` and every `block_number` are
     optional and omitted means auto-detected / latest; `market_morpho_blue` and
-    `market_meta_morpho` still require a positive `chain_id`. The `0` sentinel is
-    gone: an optional `0` is rejected with an error naming the argument to omit (it
-    is never read as chain or block 0), so a client that passed `0` omits the
-    argument instead; the market tools' required `chain_id` rejects `0` too and
-    needs the real chain id. The CLI refuses `--block-number 0` and `--chain-id 0`
-    the same way. `server_info(changelog_since=)` is `server_info(since=)` as in
+    `market_meta_morpho` still require a positive `chain_id`. A `chain_id` of `0`
+    no longer means auto-detection: it is rejected with an error naming the
+    argument to omit, and the market tools' required `chain_id` needs the real
+    chain id. A `block_number` of `0` still means the latest block, like an
+    omitted one (genesis never holds a vault). The CLI follows the same rules:
+    `--chain-id 0` is refused, `--block-number 0` reads the latest block. `server_info(changelog_since=)` is `server_info(since=)` as in
     `fusion changelog --since`, and `vault_oracle_mapping` takes `max_depth` like
     `--max-depth`.
   - **Chain auto-detection:** the vault commands and tools use the saved vault's
