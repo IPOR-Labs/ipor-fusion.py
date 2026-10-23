@@ -497,8 +497,9 @@ the rest share names). Read-only: `vault_info`, `vault_validate`, `vault_preflig
 `config_show`, `server_info`. Mutating: `vault_add`,
 `vault_remove`, `config_set_provider`, `config_set_etherscan_key`. Every new
 CLI command gets a matching MCP tool with the same argument names; an optional
-chain or block is `None` when omitted (`ChainArg`, `BlockArg`), never a `0`
-sentinel. Put every fact in its structured home:
+chain or block is `None` when omitted (`ChainArg`, `BlockArg`); a chain of
+`0` is refused, a block of `0` reads as latest (clients fill optional integers
+with `0`; genesis never holds a vault). Put every fact in its structured home:
 the return shape is the Pydantic return type (it becomes `outputSchema`),
 per-argument semantics go in `Annotated[..., Field(description=...)]`, closed
 value sets are `Literal` enums. The docstring keeps only what has no

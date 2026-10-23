@@ -9,7 +9,7 @@ from functools import partial
 from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import BeforeValidator, Field
+from pydantic import AfterValidator, BeforeValidator, Field
 from web3 import Web3
 
 from ipor_fusion.about import (
@@ -144,32 +144,31 @@ def _build_ctx(
 
 
 def _no_zero_sentinel(
-    name: str, omitted: str | None = None
+    name: str, omitted: str = "auto-detection"
 ) -> Callable[[object], object]:
-    """Refuse 0 with an explicit message: clients built against the 3.x tools
-    still send it meaning auto / latest, and reading it as block or chain 0
-    would answer with genesis-block data instead of an error."""
+    """Refuse a chain of 0 with an explicit message: clients built against the
+    3.x tools still send it meaning auto-detection, and reading it as chain 0
+    would fail later with a less helpful error."""
 
     def check(value: object) -> object:
         if value == 0 and not isinstance(value, bool):
             raise ValueError(
-                f"{name}=0 is not a sentinel any more: omit {name} for "
-                + (
-                    omitted
-                    or (
-                        "the latest block"
-                        if name == "block_number"
-                        else "auto-detection"
-                    )
-                )
+                f"{name}=0 is not a sentinel any more: omit {name} for {omitted}"
             )
         return value
 
     return check
 
 
+def _zero_block_is_latest(value: int | None) -> int | None:
+    """Read block 0 as the latest block: many clients fill an optional integer
+    with 0, and genesis never holds a vault, so 0 has no other useful meaning."""
+    return value or None
+
+
 # Shared argument types, so every tool takes chain and block as the CLI does:
-# omitted means auto-detected / latest, never a 0 sentinel.
+# omitted means auto-detected / latest. A chain of 0 is refused; a block of 0
+# reads as latest.
 ChainArg = Annotated[
     ChainId | None,
     Field(
@@ -190,8 +189,8 @@ RegistryChainArg = Annotated[
 ]
 BlockArg = Annotated[
     int | None,
-    Field(description="Block number (positive); omitted: latest.", ge=1),
-    BeforeValidator(_no_zero_sentinel("block_number")),
+    Field(description="Block number; 0 or omitted: latest.", ge=0),
+    AfterValidator(_zero_block_is_latest),
 ]
 
 
