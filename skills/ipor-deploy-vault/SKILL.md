@@ -231,9 +231,11 @@ slot was read on chain and matches the registry's `IporFusionFactoryImpl`;
 The factory implementations are upgraded in place, so the implementation
 column changes with releases while the proxy stays.
 
-Fuse addresses are not in the SDK. Resolve them by registry name and chain
-in `ipor-abi` (`SupplyFuseAaveV3`, `BalanceFuseAaveV3`, ...), or with the
-hosted server's `fusion_address_lookup(name, chain_id=...)`. The SDK class
+Resolve fuse addresses by registry name and chain from `ipor-abi`
+(`SupplyFuseAaveV3`, `BalanceFuseAaveV3`, ...):
+`fetch_address_registry(ChainId(8453)).address("SupplyFuseAaveV3")` in the SDK,
+`fusion address lookup SupplyFuseAaveV3 --chain base`, or the MCP tool
+`address_lookup` (the hosted server's `fusion_address_lookup`). The SDK class
 for a registry name swaps the parts: `SupplyFuseAaveV3` is `AaveV3SupplyFuse`.
 
 ## Pointers
