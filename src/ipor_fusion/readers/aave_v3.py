@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
@@ -174,26 +175,80 @@ class AaveV3Reader(ContractWrapper):
         zero when `asset` is not listed on this Pool.
         """
         tokens = self.reserve_tokens(asset).call(ctx)
-        reserve_tokens = (
+        listed = _listed_tokens(tokens)
+        balances = Multicall3(ctx).aggregate(
+            [ERC20(token).balance_of(user) for token in listed]
+        )
+        return _position_breakdown(
+            asset, tokens, dict(zip(listed, balances, strict=True))
+        )
+
+    def read_position_breakdowns(
+        self,
+        ctx: Web3Context,
+        assets: Sequence[ChecksumAddress],
+        user: ChecksumAddress,
+    ) -> list[AaveV3PositionBreakdown | None]:
+        """:meth:`read_position_breakdown` for every asset in two Multicall3 round
+        trips (every reserve's tokens, then every balance), in ``assets`` order.
+
+        ``None`` for an asset whose reserve data or a balance reverts, returns no
+        data or cannot be decoded; a transport error raises.
+        """
+        multicall = Multicall3(ctx)
+        reserves = multicall.try_aggregate([self.reserve_tokens(a) for a in assets])
+        listed = {
+            token
+            for tokens in reserves
+            if tokens is not None
+            for token in _listed_tokens(tokens)
+        }
+        ordered = sorted(listed)
+        read = multicall.try_aggregate(
+            [ERC20(token).balance_of(user) for token in ordered]
+        )
+        balances = {
+            token: balance
+            for token, balance in zip(ordered, read, strict=True)
+            if balance is not None
+        }
+        return [
+            _position_breakdown(asset, tokens, balances)
+            if tokens is not None
+            and all(token in balances for token in _listed_tokens(tokens))
+            else None
+            for asset, tokens in zip(assets, reserves, strict=True)
+        ]
+
+
+def _listed_tokens(tokens: AaveV3ReserveTokens) -> list[ChecksumAddress]:
+    return [
+        token
+        for token in (
             tokens.a_token,
             tokens.variable_debt_token,
             tokens.stable_debt_token,
         )
-        listed = [token for token in reserve_tokens if token.lower() != ZERO_ADDRESS]
-        balances = iter(
-            Multicall3(ctx).aggregate(
-                [ERC20(token).balance_of(user) for token in listed]
-            )
-        )
-        supply, variable_debt, stable_debt = (
-            next(balances) if token in listed else Amount(0) for token in reserve_tokens
-        )
-        return AaveV3PositionBreakdown(
-            asset=asset,
-            a_token=tokens.a_token,
-            variable_debt_token=tokens.variable_debt_token,
-            stable_debt_token=tokens.stable_debt_token,
-            supply=supply,
-            variable_debt=variable_debt,
-            stable_debt=stable_debt,
-        )
+        if token.lower() != ZERO_ADDRESS
+    ]
+
+
+def _position_breakdown(
+    asset: ChecksumAddress,
+    tokens: AaveV3ReserveTokens,
+    balances: dict[ChecksumAddress, Amount],
+) -> AaveV3PositionBreakdown:
+    """A zero token address counts as a zero balance."""
+
+    def balance(token: ChecksumAddress) -> Amount:
+        return Amount(0) if token.lower() == ZERO_ADDRESS else balances[token]
+
+    return AaveV3PositionBreakdown(
+        asset=asset,
+        a_token=tokens.a_token,
+        variable_debt_token=tokens.variable_debt_token,
+        stable_debt_token=tokens.stable_debt_token,
+        supply=balance(tokens.a_token),
+        variable_debt=balance(tokens.variable_debt_token),
+        stable_debt=balance(tokens.stable_debt_token),
+    )

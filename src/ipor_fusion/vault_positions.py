@@ -51,7 +51,6 @@ def _collect_morpho_substrates(
 
 def _fetch_morpho_positions(
     ctx: Web3Context,
-    pool: ThreadPoolExecutor,
     vault_addr: ChecksumAddress,
     market_substrates: dict[MarketId, list[bytes]],
     unread: list[str],
@@ -62,35 +61,34 @@ def _fetch_morpho_positions(
     Each IPOR Morpho market (MORPHO_MARKET_IDS) can hold multiple morpho
     market_id substrates; each substrate has an independent position. The
     on-chain balance fuse reports a single netted number per IPOR market —
-    this helper exposes the three-way decomposition behind that number.
+    this helper exposes the three-way decomposition behind that number. Every
+    substrate of every market is read in one batch; a transport error leaves
+    them all unread.
     """
     per_market_substrates = _collect_morpho_substrates(market_substrates)
     if not per_market_substrates:
         return None
 
     reader = MorphoReader(morpho_blue_address(ctx.chain_id))
-    futures: dict[MarketId, list[Future[MorphoPositionBreakdown | None]]] = {
-        mid: [
-            pool.submit(
-                _safe_call,
-                lambda mid_hex=morpho_mid: reader.read_position_breakdown(
-                    ctx, mid_hex, vault_addr
-                ),
-            )
-            for morpho_mid in morpho_mids
-        ]
-        for mid, morpho_mids in per_market_substrates.items()
-    }
+    flat = [
+        morpho_mid
+        for morpho_mids in per_market_substrates.values()
+        for morpho_mid in morpho_mids
+    ]
+    reads = iter(
+        _safe_call(partial(reader.read_position_breakdowns, ctx, flat, vault_addr))
+        or [None] * len(flat)
+    )
 
     result: dict[MarketId, list[MorphoPositionBreakdown]] = {}
-    for mid, per_market in futures.items():
-        reads = [fut.result() for fut in per_market]
+    for mid, morpho_mids in per_market_substrates.items():
+        per_market = [next(reads) for _ in morpho_mids]
         unread += [
             f"Morpho position in market {morpho_mid}"
-            for morpho_mid, bd in zip(per_market_substrates[mid], reads, strict=True)
+            for morpho_mid, bd in zip(morpho_mids, per_market, strict=True)
             if bd is None
         ]
-        breakdowns = [bd for bd in reads if bd is not None]
+        breakdowns = [bd for bd in per_market if bd is not None]
         if breakdowns:
             result[mid] = breakdowns
     return result or None
@@ -165,8 +163,8 @@ def _fetch_aave_positions(
 
     The on-chain `getUserAccountData` aggregates all reserves into a single
     base-currency total — this helper exposes the per-asset decomposition.
-    Each market is read from its own Pool (`aave_pools`); markets without one
-    are skipped. Empty positions (vault allows the asset but holds none of it)
+    Each market is read from its own Pool (`aave_pools`), its assets in two
+    batches; markets without one are skipped. Empty positions (vault allows the asset but holds none of it)
     are dropped.
     """
     per_market_assets = {
@@ -177,24 +175,23 @@ def _fetch_aave_positions(
     if not per_market_assets:
         return None
 
-    readers = {mid: AaveV3Reader(aave_pools[mid]) for mid in per_market_assets}
-    futures: dict[MarketId, list[Future[AaveV3PositionBreakdown | None]]] = {
-        mid: [
-            pool.submit(
-                _safe_call,
-                partial(readers[mid].read_position_breakdown, ctx, asset, vault_addr),
-            )
-            for asset in assets
-        ]
+    futures: dict[MarketId, Future[list[AaveV3PositionBreakdown | None] | None]] = {
+        mid: pool.submit(
+            _safe_call,
+            partial(
+                AaveV3Reader(aave_pools[mid]).read_position_breakdowns,
+                ctx,
+                assets,
+                vault_addr,
+            ),
+        )
         for mid, assets in per_market_assets.items()
     }
 
     result: dict[MarketId, list[AaveV3PositionBreakdown]] = {}
-    for mid, per_market in futures.items():
+    for mid, future in futures.items():
         breakdowns = [
-            bd
-            for fut in per_market
-            if (bd := fut.result()) is not None and not bd.is_empty
+            bd for bd in future.result() or [] if bd is not None and not bd.is_empty
         ]
         if breakdowns:
             result[mid] = breakdowns

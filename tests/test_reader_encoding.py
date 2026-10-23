@@ -3,10 +3,11 @@
 from unittest.mock import MagicMock
 
 import pytest
-from _multicall import sequenced
+from _multicall import multicall_aware, sequenced
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
 from ipor_fusion.errors import MorphoMarketNotFoundError, UnsupportedChainError
 from ipor_fusion.readers.aave_v3 import (
@@ -292,6 +293,46 @@ class TestAaveV3ReaderPositionBreakdown:
         assert breakdown.is_empty
         ctx.call.assert_called_once()
 
+    def test_position_breakdowns_read_every_asset_in_two_round_trips(self):
+        """Reserve tokens for every asset, then every balance: two eth_calls. An
+        asset whose reserve data or a balance fails is None, the rest stand."""
+        reader, ctx = _make_reader(AaveV3Reader)
+        broken_a_token = Web3.to_checksum_address("0x" + "55" * 20)
+        reserve = function_signature_to_4byte_selector("getReserveData(address)")
+        balance_of = function_signature_to_4byte_selector("balanceOf(address)")
+        balances = {self.A_TOKEN: 7, self.VARIABLE_DEBT: 3}
+
+        def handler(to: str, data: bytes) -> bytes:
+            if data[:4] == reserve:
+                asset = Web3.to_checksum_address(data[16:36])
+                if asset == TOKEN_A:
+                    return self._reserve_data(
+                        self.ZERO, self.A_TOKEN, self.VARIABLE_DEBT
+                    )
+                if asset == TOKEN_B:
+                    return self._reserve_data(
+                        self.ZERO, broken_a_token, self.VARIABLE_DEBT
+                    )
+                raise ContractLogicError("execution reverted")
+            assert data[:4] == balance_of
+            if to not in balances:
+                raise ContractLogicError("execution reverted")
+            return encode(["uint256"], [balances[to]])
+
+        ctx.call.side_effect = multicall_aware(handler)
+
+        breakdowns = reader.read_position_breakdowns(
+            ctx, [TOKEN_A, TOKEN_B, ORACLE], USER_ADDR
+        )
+
+        assert ctx.call.call_count == 2
+        first, second, third = breakdowns
+        assert first is not None
+        assert (first.supply, first.variable_debt, first.stable_debt) == (7, 3, 0)
+        assert first == reader.read_position_breakdown(ctx, TOKEN_A, USER_ADDR)
+        assert second is None  # its aToken balance failed
+        assert third is None  # its reserve data failed
+
 
 class TestAaveV3FuseReaderPool:
     PROVIDER = Web3.to_checksum_address("0x3030303030303030303030303030303030303030")
@@ -367,6 +408,37 @@ class TestMorphoReaderPositionBreakdown:
         assert result.borrow_assets == 0
         assert result.supply_assets == 0
         assert result.collateral == 0
+
+    def test_position_breakdowns_read_every_market_in_one_round_trip(self):
+        reader, ctx = _make_reader(MorphoReader)
+        broken = "0x" + "b" * 64
+        market_sel = function_signature_to_4byte_selector("market(bytes32)")
+
+        def handler(_to: str, data: bytes) -> bytes:
+            if data[:4] == market_sel and data[4:36] == bytes.fromhex("b" * 64):
+                raise ContractLogicError("execution reverted")
+            if data[:4] == market_sel:
+                return encode(["uint128"] * 6, [2_000, 2_000 * 10**6, 0, 0, 0, 0])
+            if data[:4] == function_signature_to_4byte_selector(
+                "idToMarketParams(bytes32)"
+            ):
+                return encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE, IRM, 0],
+                )
+            return encode(["uint256", "uint128", "uint128"], [10**6, 0, 5])
+
+        ctx.call.side_effect = multicall_aware(handler)
+        good = "0x" + MARKET_ID
+
+        breakdowns = reader.read_position_breakdowns(ctx, [good, broken], USER_ADDR)
+
+        assert ctx.call.call_count == 1
+        first, second = breakdowns
+        assert first == reader.read_position_breakdown(ctx, good, USER_ADDR)
+        assert first is not None and first.supply_assets == 1  # 1e6 * 2001 // 2001e6
+        assert first.collateral == 5
+        assert second is None
 
 
 class TestMorphoBlueAddress:
