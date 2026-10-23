@@ -10,7 +10,14 @@ from _euler_v2 import BASE_FUSION_FACTORY
 from _guide import GUIDE_ADDRESSES
 from addresses import BASE_USDC
 
-from ipor_fusion import ERC20, AccessManager, Call, PlasmaVault
+from ipor_fusion import (
+    CHAIN_NAMES,
+    ERC20,
+    SUPPORTED_CHAIN_IDS,
+    AccessManager,
+    Call,
+    PlasmaVault,
+)
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.fuses import AaveV3SupplyFuse
 from ipor_fusion.guide import (
@@ -21,6 +28,7 @@ from ipor_fusion.guide import (
     RESOURCES,
     guide_text,
 )
+from ipor_fusion.types import ChainId
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = REPO_ROOT / "skills" / "ipor-deploy-vault"
@@ -49,6 +57,11 @@ PUBLIC_REPOS = {
 _URL = re.compile(r"https?://([A-Za-z0-9.-]+)(?::\d+)?(/[^\s)`>\"']*)?")
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _PY_BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
+_FACTORY_ROW = re.compile(
+    r"^\| (\w+) \| (\d+) \| `(0x[0-9a-fA-F]{40})` \| `(0x[0-9a-fA-F]{40})` \| "
+    r"(validated|factory only) \| (implementation slot|registry only) \|$",
+    re.MULTILINE,
+)
 
 
 def _public_texts() -> dict[str, str]:
@@ -88,6 +101,16 @@ class TestResources:
         assert GUIDE_ADDRESSES["FACTORY_PROXY"] == BASE_FUSION_FACTORY
         assert GUIDE_ADDRESSES["USDC"] == BASE_USDC
         assert {"SUPPLY_FUSE", "BALANCE_FUSE"} <= set(GUIDE_ADDRESSES)
+
+    def test_factory_table_tooling_column_is_the_supported_chain_set(self):
+        rows = _FACTORY_ROW.findall(QUICKSTART.text)
+        assert rows, "factory table not found"
+        ids = [int(row[1]) for row in rows]
+        assert ids == sorted(set(ids)), "one row per chain, by chain id"
+        for name, chain_id, *_ in rows:
+            assert CHAIN_NAMES[ChainId(int(chain_id))] == name.lower()
+        validated = {int(row[1]) for row in rows if row[4] == "validated"}
+        assert validated == set(SUPPORTED_CHAIN_IDS)
 
     def test_invariants_name_every_deploy_path_revert(self):
         text = INVARIANTS.text
