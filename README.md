@@ -119,7 +119,8 @@ receipt = vault.execute([action]).send(ctx)
 ```
 
 Fuse, factory and manager addresses per chain are published in
-[ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`).
+[ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`);
+`fetch_address_registry(chain_id).address("SupplyFuseAaveV3")` reads them by name (`ipor_fusion.registry`).
 A fuse must also be registered on the vault; `vault.get_fuses().call(ctx)` lists the registered ones.
 
 Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK scales by decimals
@@ -176,6 +177,10 @@ fusion vault list
 # Inspect a Morpho Blue market or MetaMorpho vault
 fusion market morpho-blue 0xMARKET_ID --chain ethereum
 fusion market meta-morpho 0xVAULT_ADDRESS --chain ethereum
+
+# Find IPOR Fusion contracts in the ipor-abi registry
+fusion address lookup SupplyFuseAaveV3 --chain base
+fusion address list --chain base
 ```
 
 ## MCP Server
@@ -242,6 +247,9 @@ Available tools:
 | `vault_remove` | Remove a vault from the local config |
 | `market_morpho_blue` | Morpho Blue market parameters and state |
 | `market_meta_morpho` | MetaMorpho V1 or Morpho Vault V2 allocations and caps (Morpho API) |
+| `address_lookup` | IPOR Fusion contracts by name substring or address (ipor-abi registry) |
+| `address_names` | Contract names in the registry, with the chains that have them |
+| `address_list` | One chain's full `{name: address}` registry |
 
 Configure providers and vaults via `fusion config` or the MCP config tools first.
 
