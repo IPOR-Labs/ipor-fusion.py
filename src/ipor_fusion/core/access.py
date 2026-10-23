@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import InsufficientDataBytes
@@ -66,6 +66,32 @@ class CallPermission:
     def allowed(self) -> bool:
         """Allowed now or after scheduling."""
         return self.immediate or self.delay > 0
+
+
+# schedule(when=0): as soon as the sender's execution delay allows.
+_ASAP = Timestamp(0)
+
+CallPlanKind = Literal["immediate", "schedule", "waiting", "ready", "forbidden"]
+
+
+@dataclass(frozen=True, slots=True)
+class CallPlan:
+    """How ``caller`` gets a restricted call through the access manager now.
+
+    - ``immediate``: send the call itself (``next_call``).
+    - ``schedule``: the caller has an execution delay and nothing is scheduled;
+      ``next_call`` schedules it, executable ``delay`` seconds after it lands.
+    - ``waiting``: scheduled, executable at ``scheduled_at``; nothing to send yet.
+    - ``ready``: scheduled and executable; ``next_call`` runs it through the
+      manager's ``execute`` (before it expires, a week after ``scheduled_at``).
+    - ``forbidden``: the caller has no role for it, or the target is closed.
+    """
+
+    kind: CallPlanKind
+    permission: CallPermission
+    operation: ScheduleId
+    scheduled_at: Timestamp | None
+    next_call: Call[None] | None
 
 
 def _call_permission_decoder(values: tuple[bool, int]) -> CallPermission:
@@ -202,6 +228,59 @@ class AccessManager(ContractWrapper):
         ``target`` with ``data``, computed offline as the manager does."""
         return ScheduleId(
             Web3.keccak(encode(["address", "address", "bytes"], [caller, target, data]))
+        )
+
+    def schedule(
+        self, target: ChecksumAddress, data: bytes, when: Timestamp = _ASAP
+    ) -> Call[None]:
+        """Schedule ``data`` on ``target`` for the sender, executable at ``when``
+        or, when 0 or earlier, as soon as the sender's execution delay allows."""
+        return self._write("schedule(address,bytes,uint48)", target, data, when)
+
+    def execute(self, target: ChecksumAddress, data: bytes) -> Call[None]:
+        """Run ``data`` on ``target`` through the manager: an immediate call, or
+        the sender's scheduled operation once it is executable (it is consumed)."""
+        return self._write("execute(address,bytes)", target, data)
+
+    def cancel(
+        self, caller: ChecksumAddress, target: ChecksumAddress, data: bytes
+    ) -> Call[None]:
+        """Cancel ``caller``'s scheduled ``data`` on ``target``: the caller itself,
+        an admin, or the guardian of the function's role may."""
+        return self._write("cancel(address,address,bytes)", caller, target, data)
+
+    def read_call_plan(
+        self, ctx: Web3Context, call: Call[object], *, caller: ChecksumAddress
+    ) -> CallPlan:
+        """What ``caller`` sends now to get ``call`` executed, from ``canCall``
+        and, for a delayed caller, the schedule of exactly ``call``'s calldata
+        at ``ctx``'s block (two reads at most)."""
+        selector = bytes(call.data[:4])
+        permission = self.can_call(caller, call.to, selector).call(ctx)
+        operation = self.hash_operation(caller, call.to, call.data)
+        direct = Call[None](to=call.to, data=call.data)
+        if permission.immediate:
+            return CallPlan("immediate", permission, operation, None, direct)
+        if permission.delay == 0:
+            return CallPlan("forbidden", permission, operation, None, None)
+        scheduled_at = self.get_schedule(operation).call(ctx)
+        if scheduled_at == 0:
+            return CallPlan(
+                "schedule",
+                permission,
+                operation,
+                None,
+                self.schedule(call.to, call.data),
+            )
+        now = ctx.web3.eth.get_block(ctx.default_block)["timestamp"]
+        if scheduled_at > now:
+            return CallPlan("waiting", permission, operation, scheduled_at, None)
+        return CallPlan(
+            "ready",
+            permission,
+            operation,
+            scheduled_at,
+            self.execute(call.to, call.data),
         )
 
     def can_call(

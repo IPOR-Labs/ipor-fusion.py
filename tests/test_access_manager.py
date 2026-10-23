@@ -15,8 +15,10 @@ from ipor_fusion import (
     ContractNotFoundError,
     NotPlasmaVaultError,
     OwnerNotFoundError,
+    PlasmaVault,
     RoleAccount,
     parse_access_manager_address,
+    parse_plasma_vault_address,
     resolve_access_manager,
     role_account_sort_key,
 )
@@ -317,3 +319,75 @@ def test_hash_operation_matches_the_deployed_manager():
     assert AccessManager.hash_operation(caller, vault, data).hex() == (
         "449c1b0678d9666078c86be94b86c7f4bfe8fe012bdacb56246db911e78b7ebb"
     )
+
+
+class TestCallPlan:
+    manager = AccessManager(parse_access_manager_address(MANAGER_ADDR))
+    target_call = PlasmaVault(parse_plasma_vault_address(VAULT_ADDR)).execute([])
+    NOW = 10_000
+
+    def _ctx(self, *, immediate: bool, delay: int, scheduled: int = 0):
+        def handler(_to: str, data: bytes) -> bytes:
+            selector = bytes(data[:4])
+            if selector == Web3.keccak(text="canCall(address,address,bytes4)")[:4]:
+                return encode(["bool", "uint32"], [immediate, delay])
+            assert selector == Web3.keccak(text="getSchedule(bytes32)")[:4]
+            return encode(["uint48"], [scheduled])
+
+        ctx = MagicMock()
+        ctx.call.side_effect = multicall_aware(handler)
+        ctx.web3.eth.get_block.return_value = {"timestamp": self.NOW}
+        return ctx
+
+    def _plan(self, **kwargs):
+        return self.manager.read_call_plan(
+            self._ctx(**kwargs), self.target_call, caller=ALICE
+        )
+
+    def test_immediate_sends_the_call_itself(self):
+        plan = self._plan(immediate=True, delay=0)
+        assert plan.kind == "immediate"
+        assert plan.next_call is not None
+        assert (plan.next_call.to, plan.next_call.data) == (
+            self.target_call.to,
+            self.target_call.data,
+        )
+
+    def test_forbidden_sends_nothing(self):
+        plan = self._plan(immediate=False, delay=0)
+        assert (plan.kind, plan.next_call) == ("forbidden", None)
+
+    def test_a_delayed_caller_schedules_first(self):
+        plan = self._plan(immediate=False, delay=3600)
+        assert plan.kind == "schedule"
+        assert plan.next_call is not None
+        assert plan.next_call.data == Web3.keccak(
+            text="schedule(address,bytes,uint48)"
+        )[:4] + encode(
+            ["address", "bytes", "uint48"],
+            [self.target_call.to, self.target_call.data, 0],
+        )
+        assert plan.operation == AccessManager.hash_operation(
+            ALICE, self.target_call.to, self.target_call.data
+        )
+
+    def test_waiting_then_ready_through_the_manager(self):
+        waiting = self._plan(immediate=False, delay=3600, scheduled=self.NOW + 1)
+        assert (waiting.kind, waiting.scheduled_at, waiting.next_call) == (
+            "waiting",
+            self.NOW + 1,
+            None,
+        )
+        ready = self._plan(immediate=False, delay=3600, scheduled=self.NOW)
+        assert ready.kind == "ready"
+        assert ready.next_call is not None
+        assert ready.next_call.to == MANAGER_ADDR
+        assert ready.next_call.data == Web3.keccak(text="execute(address,bytes)")[
+            :4
+        ] + encode(["address", "bytes"], [self.target_call.to, self.target_call.data])
+
+    def test_cancel_encodes_caller_target_and_data(self):
+        call = self.manager.cancel(ALICE, VAULT_ADDR, b"\x01")
+        assert call.data == Web3.keccak(text="cancel(address,address,bytes)")[
+            :4
+        ] + encode(["address", "address", "bytes"], [ALICE, VAULT_ADDR, b"\x01"])
