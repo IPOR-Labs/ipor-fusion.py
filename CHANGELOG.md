@@ -2,6 +2,650 @@
 
 <!-- version list -->
 
+## v4.0.0 (2026-10-23)
+
+### Bug Fixes
+
+- **mcp**: Accept vault addresses in any 3.x spelling
+  ([`18ebb0b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/18ebb0b3592d0999e5c70e261d1b60e28abc3930))
+
+- **mcp**: Resolve the saved vault's chain from the normalized address
+  ([`11d45fc`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/11d45fc2c0510d652fddf6b2a50f927e88a82add))
+
+- **sdk**: Accept only ASCII digits in parse_amount
+  ([`90ab2c5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/90ab2c500d78bb6e916d7a9a0779484f759141c2))
+
+- **sdk**: Accept ready scheduled operations, skip market 0 and check dependency markets in the
+  preflight
+  ([`4c70cc5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4c70cc52f07699ebbf1a7e2bf9e958f1e24eb276))
+
+- **sdk**: Accept Roles in the role delay setter and state the transfer switch exactly
+  ([`5f7b380`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5f7b3803a106aa34475182b9ddfbe59450c68196))
+
+- **sdk**: Always set the error of a failed simulated call
+  ([`c083505`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c083505fdd4f39e83c4cbd5827271aa114f2b6d7))
+
+- **sdk**: Bound the amount converters to uint256 and uint8 decimals before converting
+  ([`abc1af3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/abc1af3a142a204068e600ed55bba51958f481a4))
+
+- **sdk**: Build Call[T](...) on early 3.11 and 3.12 patch releases
+  ([`d20dce8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d20dce8a189c4513d6a9cdd48cc79828293671a3))
+
+- **sdk**: Build the snapshot's token batch from address-only wrappers
+  ([`5b159ea`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5b159ea620d14c2e36870bcc7d36fdcfc9d78b5b))
+
+- **sdk**: Checksum the addresses decoded from the position events
+  ([`e61acba`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e61acba883e9b67b1e789e3b22af5d3f7283224a))
+
+- **sdk**: Compare fuses on state kept in __slots__ too
+  ([`2654610`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/26546105a7f6311d56ec3929d7593a2d22967e99))
+
+- **sdk**: Compare fuses on their full state and move the base to core
+  ([`e62b7cb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e62b7cbe1ef354119c9d633a98c220b853705d5b))
+
+- **sdk**: Convert Morpho shares to assets with SharesMathLib math
+  ([`1ade450`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1ade450e26fbb5b641d45f7b750ceac601afd158))
+
+- **sdk**: Count the rewards claim manager in the reconciliation
+  ([`14337d2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/14337d2411a65136895613f179b68d4437a876e8))
+
+- **sdk**: Decide the totalAssets formula from the stored global market total
+  ([`204c7e3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/204c7e3899e69385991d7957a567bbea3be74fb5))
+
+- **sdk**: Decode crosschain substrates only under market 54
+  ([`a629f39`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a629f393aaf562474cdf7bf9fe6a83d6bae03e57))
+
+- **sdk**: Decode every verifiable market and gate the registry's completeness
+  ([`215fa62`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/215fa62dfafa10e4bff3de28707839845b71236e))
+
+- **sdk**: Decode HyperCore logs under the ExternalState contract
+  ([`8ba582f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8ba582f967ebcf5e884404a80cb14a02cd20ceac))
+
+- **sdk**: Decode the newly registered markets strictly
+  ([`55d5c02`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/55d5c0280af4e9d590a0c8fea53f263dc0146346))
+
+- **sdk**: Denominate the supply cap and vault transfers in shares
+  ([`ddae05e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ddae05e1aac355a628cd1c53f5a949748c485260))
+
+- **sdk**: Fail closed when a lending validation input cannot be read
+  ([`6add890`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6add890d50052a9e90b524477bf3237ad94ca629))
+
+- **sdk**: Find fuse slot storage from the member descriptors
+  ([`546577b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/546577be976dafb8625fb1ebb5f6d6384c69bd4f))
+
+- **sdk**: Freeze simulation result records
+  ([`65a5310`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/65a53103eff8390c011d6263dd8603d72038827c))
+
+- **sdk**: Keep cached registries read-only and download each one once
+  ([`0ff4f86`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0ff4f86db037784d4fd11ad56de9c52740b7d95a))
+
+- **sdk**: Keep the hub's block tag when pinning the lane snapshot
+  ([`fc75f6b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fc75f6b898592c7137ac49466a74a6af487564ec))
+
+- **sdk**: Key the on-disk caches by the lowercased address
+  ([`4d8fc35`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4d8fc3539ee01f21580fe828a0f64868d84b2f71))
+
+- **sdk**: Limit requests at the provider call and count batches
+  ([`7dc517e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7dc517e8b9a0b695fe4710b240ec6b82c40668eb))
+
+- **sdk**: List every subpackage-defined export in its __all__
+  ([`3622af1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3622af10652ff2c1717141b779cfdcb9a045120e))
+
+- **sdk**: Make the MCP validation output the builder's document key for key
+  ([`acd884f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/acd884f3693ca00ad0252a71161ef442888f061c))
+
+- **sdk**: Name contracts only through the context's cache
+  ([`8f348d5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8f348d5c9e9821670126a865975baab9937c8a49))
+
+- **sdk**: Name every type argument in the SDK's signatures
+  ([`ce57f4d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ce57f4d82b9841b75cc7cdc7547cadd197d95a50))
+
+- **sdk**: Name the contract error only for limits above 100%
+  ([`057843c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/057843ca051cabfd684286a0ca2b6358340a5fc4))
+
+- **sdk**: Name the swapper revision in the missing min_amount_out error
+  ([`7636304`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7636304e1ecf98933673362a1f0faf2191a91d65))
+
+- **sdk**: Never follow market 0 in the preflight's dependency walk
+  ([`333890f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/333890f18de05776801faa13bec2a027e1bd7cc2))
+
+- **sdk**: Parse addresses and hashes strictly and take build_vault_info_json's chain by keyword
+  ([`ba10851`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ba10851890e37a9b70010b7ea83885307188a877))
+
+- **sdk**: Parse the remaining Morpho API addresses and validate vault_add first
+  ([`c4fa577`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c4fa5778090fb7381f6b94caf16f3ddd4889ce1c))
+
+- **sdk**: Pin the call plan to the block the context names and describe manager calls exactly
+  ([`032bd88`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/032bd8861e5e82f438d4d1965cb7166199e6fcb9))
+
+- **sdk**: Pin the lane hub snapshot and type proposal timestamps
+  ([`67b1984`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/67b1984823eef67e6c1bfcbcffa7d45f034297b9))
+
+- **sdk**: Pin the preflight to the block the context names and keep optional batch reads None for
+  named decode errors
+  ([`ce9180f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ce9180f0c81bce10e3986a7aa5d1dbd7b0a7483d))
+
+- **sdk**: Publish simulation observations only from a complete run
+  ([`40fd727`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/40fd727df0cdee11174fc135b01d427ac4040e16))
+
+- **sdk**: Read both HyperCorePendingReader builds and default to the ipor-abi one
+  ([`69ccaf8`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/69ccaf8bf7669cc976a28c4e4ba841bb66190f9f))
+
+- **sdk**: Read each slot through its declaring class's descriptor
+  ([`6885c70`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6885c70761ab00f3a016184dbe7a6648ae0b1a52))
+
+- **sdk**: Read the pending-request time and bytecode at the pinned block
+  ([`6e3d8f0`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6e3d8f0755659c506da6b090b547108aa4b2ecc6))
+
+- **sdk**: Recognise only Call.decode's own translation as a failed optional read
+  ([`1b65d5a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1b65d5abc59f39b166ce9329c3868e074fde19c0))
+
+- **sdk**: Reconcile against the vault's own totalAssets formula
+  ([`0ced874`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0ced874d62b889e6f4f2d3bdb12f7b4dc31949e9))
+
+- **sdk**: Refuse a CCIP lane to a spoke the executor has no route to
+  ([`9ce70ec`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9ce70ecb992f7ff4a822902330d832c00f503cc9))
+
+- **sdk**: Refuse the old 0 sentinel for chain and block instead of reading genesis
+  ([`ac4ac24`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ac4ac245b0c448f408eb720f3fbe005178c1c907))
+
+- **sdk**: Reject an indexer answer without a CCV array
+  ([`a12f92d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a12f92d5c10e9b817c08b351f573521d8d507d36))
+
+- **sdk**: Reject chain 0 in set-provider and word the chain error for every config
+  ([`bbfe416`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bbfe416d1275e0dd50d8c9f67210bf40724b4b73))
+
+- **sdk**: Render canonical Morpho ids once and match API ids in any spelling
+  ([`5d7785f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5d7785f25dba96635b51b4f15a4dd2e40a5df7a9))
+
+- **sdk**: Report substrates the unpriceable-token check could not cover
+  ([`56221be`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/56221be288dd0c1b901f17dbbb48fbe5f9fbfb23))
+
+- **sdk**: Require a call status in eth_simulateV1 results
+  ([`837c8f1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/837c8f10a470424b47edf238c9431f3d6c30f1f3))
+
+- **sdk**: Require a positive chain on the market tools
+  ([`ee01e3d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ee01e3d9193727ede0b71e21ef8cb4e7a0237181))
+
+- **sdk**: Require certifi>=2026.10.19 (eMudhra CA compromise)
+  ([`f0a1281`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f0a1281506d6abd8840cc90d8cee4497b52c9360))
+
+- **sdk**: Resolve the legacy rewards manager getter and keep an unknown balance unknown
+  ([`dbb2fa9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dbb2fa9be23a9bdc8db185c8bf10170fcbbde395))
+
+- **sdk**: Send ready operations directly, refuse manager-targeted plans and pin the plan's block
+  ([`fffde9c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fffde9c52e79bd32709f5ab1e683c77caa539f40))
+
+- **sdk**: Take market limits as WAD shares of total assets
+  ([`bbaf532`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bbaf5323146e5e558bfb02395684678a2870bc77))
+
+- **sdk**: Take the simulator label by keyword everywhere
+  ([`f3064e9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f3064e9eb69cd5d429aff13a56dca815883c1d55))
+
+- **sdk**: Type the crosschain getters whose results feed the typed writes
+  ([`f460a38`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f460a387dbdd40f93426269e56c3e64ba82e083e))
+
+### Build System
+
+- Declare requests and eth-account as direct dependencies
+  ([`7688a1f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7688a1fcc56184564b4263d87d6ec67138c91bde))
+
+### Chores
+
+- Drop references to other repositories from comments
+  ([`908c588`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/908c588fbb9f406b15847326c30d2a5de0b73fe8))
+
+- Drop two leftover lint comments from SDK signatures
+  ([`8b0b842`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8b0b842231a442ac6b4d1d9550ea46c44ca22036))
+
+### Code Style
+
+- Format FusionInstance.from_dict
+  ([`6e25f9b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6e25f9be37863035d4d290d140c8cb05de6d39a2))
+
+### Continuous Integration
+
+- Check commits and PRs for internal references
+  ([`da7231f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/da7231f04aef00f68fb7b449b315e9d085201adb))
+
+- Check staged lines locally and ignore the commit -v diff
+  ([`3759ee2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3759ee24e1f8cdcb3614f854ae0772fc94e04bb6))
+
+- Fail closed on bad leak patterns and keep dev runs independent
+  ([`d95cab5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d95cab5ff115be5d22ce4b4111c2c813e5c8bbe4))
+
+- Lint commit subjects and the PR title
+  ([`ab395c9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ab395c9768088ddbdbb1f2d5ee70512a258c3ee6))
+
+- Name coverage artifacts per job and probe historical state before live tests
+  ([`30510d7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/30510d744df240455496b33fb4fdc81be5907277))
+
+- Publish a dev build of the next version on every push to main
+  ([`42c03d9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/42c03d9fe0ea02b5b014eea835697120fa4f101f))
+
+- Publish dev builds through release.yml
+  ([`754de7a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/754de7ab9b5f0e26a3da2982bb2e7714f39e0249))
+
+- Run offline on every supported Python and fail live checks that skip
+  ([`b062724`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b062724c6e58442de0607bdbf43a91026f7687f4))
+
+- Type-check before publishing a release or dev build
+  ([`fbf9676`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fbf9676240309d5f6308ac7250c15331973752ab))
+
+- Verify the commit range with one revision per call
+  ([`8569b6c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8569b6c63d2ffd89d371eab54c4737030822eafb))
+
+### Documentation
+
+- Correct the AGENTS.md and README statements that drifted from the code
+  ([`f7a7a73`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f7a7a73a6a714dbbc2b6471ebd7198fc56b25407))
+
+- Decode each action with its own class and state the decoder's limits
+  ([`bb18e12`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bb18e1222fad70d4e8bca96eaa995c4226d92785))
+
+- Describe the ExternalState custodian marker in the README
+  ([`b6cffa5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b6cffa5c0cd0bf416a631bd7ebb91321066670fe))
+
+- Describe the full scope of the redemption lock getter
+  ([`51ec303`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/51ec30369e0a416e3005257ed3c20f6689bb5d0c))
+
+- Describe the live-test prerequisites and the POC market id exactly
+  ([`f0a4c9d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f0a4c9d4bea8d0b4f145e212ef6c9ce599a44f40))
+
+- Describe the Morpho share conversion change precisely
+  ([`aa6d6a5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/aa6d6a5a5d1855a05886f4f7466b89dd40564df3))
+
+- Describe the preview packages by the official deployment, not the pilot
+  ([`00c4cca`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/00c4cca96f975536c5e71f1812583aab8b71cd8a))
+
+- Describe the preview packages by their official deployment everywhere
+  ([`dc48f24`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dc48f2439e1cfe37203130632259580d5b28fe4c))
+
+- Document context-free wrappers and the 4.0 migration
+  ([`cbe535c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cbe535cca7a5702b41f845e545dffcd98144c6eb))
+
+- Make conventional commit subjects mandatory in AGENTS.md
+  ([`94a3879`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/94a3879b07ebc27be2c7a990bb9c368986508bcb))
+
+- Make the factory table test complete and date the factory impl note
+  ([`0af4f31`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0af4f317ac0291425b84643b946040c2802da769))
+
+- Put imports and the simulator first in the 4.0 migration
+  ([`3f4c91c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3f4c91cf4f7ed158548f082d64c89d48a3dfeff2))
+
+- Qualify the MCP outputSchema migration note
+  ([`bc611e5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bc611e5d0d575731c5b41031d46b6c45aad50dd2))
+
+- Reconcile MIGRATION_4, README and AGENTS with the released crosschain and HyperCore code
+  ([`e451143`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e4511433e1bf4a11ef6e1b988075b50d54a5118a))
+
+- Require updating examples superseded by SDK changes
+  ([`0bc93eb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0bc93ebcd3160e48515403c1bbb454df34680786))
+
+- Restore the reconciliation bullet the merge cut
+  ([`498808d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/498808d203305ea4aeabce0394e0e72bceebea59))
+
+- Say which commit footers actually reach the release notes
+  ([`37bf3c6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/37bf3c65166f45ed0f9b0d6161ee6912e0391197))
+
+- Separate deployed factories from validated tooling in the factory table
+  ([`95f7adf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/95f7adfdb1ed144bf3154c528e73ea37f1dac6e0))
+
+- Separate executor discovery from fuse discovery in the POC note
+  ([`aacf64b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/aacf64b8d401dab439f89d3ee5185d862286ae7e))
+
+- State that the preview packages keep no backward compatibility
+  ([`a4d52dc`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a4d52dc3abd87dd6e50345e13524d085b64af253))
+
+- State the batch cost and failure scope of the position reads exactly
+  ([`7656f44`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7656f447f1fc8659eab7d929a9b2410108428de3))
+
+- **sdk**: Add a crosschain CCIP example on the released contracts
+  ([`287adf7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/287adf78620742f3975c5cf74fd9c23627cac745))
+
+- **sdk**: Add a HyperCore example on the official deployment
+  ([`9f31dde`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9f31dde3f59f79f7751a08e11b4e7d6c81c21463))
+
+- **sdk**: Cite ipor-abi addresses.json for the crosschain example
+  ([`ad6de09`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ad6de097ecf307cdf8200aa7652eef221f08e751))
+
+- **sdk**: Correct the 4.0 guide's import paths and compatibility claims
+  ([`469e036`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/469e036eab60d531db3ebeaa6e4c5d08a8710674))
+
+- **sdk**: Correct the 4.0 migration guide for untyped callers and missing helpers
+  ([`e3c7f4e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e3c7f4e0b40a1f30b8aef6e20761602d2f0fa8a1))
+
+- **sdk**: Correct the Morpho allocator and unpriceable-token migration notes
+  ([`ec0377a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ec0377a1b45bca49cef5ad8815411532ca3a9be5))
+
+- **sdk**: Describe HyperCore by the released contracts only
+  ([`aff29b9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/aff29b9c3f8401a5b320deb51682d373039ab34c))
+
+- **sdk**: Describe the event decoder module rename precisely
+  ([`df0d252`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/df0d252db6189af0f6831b34ee2334cba8985d24))
+
+- **sdk**: Describe which incomplete Morpho API answers raise KeyError
+  ([`94813da`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/94813dabe676e662c58e322299e94584fe4aab73))
+
+- **sdk**: Drop an issue-tracker key from a storage slot comment
+  ([`e23c500`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e23c500c50f775b5ecdcb33c1645ebe4aae519f4))
+
+- **sdk**: Drop the earlier crosschain deployment recipe from the README
+  ([`8a30841`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8a3084110a37ec540661af3368439d5fabee3d3b))
+
+- **sdk**: Lead the 4.0 migration with a start-here checklist
+  ([`e4728da`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e4728daa12c17a0aad5b7943cd160459cadcc4a6))
+
+- **sdk**: Point build_oracle_mapping callers at ctx.at_block
+  ([`db77095`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/db77095563507182c24e243ec64db82606740115))
+
+- **sdk**: Scope metadata=False to the display metadata
+  ([`71b0c34`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/71b0c34161200e22bb9b54826eb1b8afb3edff78))
+
+- **sdk**: Ship a 4.0 migration guide and complete the breaking-change notes
+  ([`2a80770`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2a8077056cd89d6e1404ab63a76c1c061b9ae4b0))
+
+- **sdk**: Spell out HyperCore id semantics and the constructor migrations
+  ([`122f6dc`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/122f6dcba85a1ff048fd0c5d95465764d26fed13))
+
+- **sdk**: State the earlier-build HyperCore read limit
+  ([`68c8bcb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/68c8bcbdf87f26d42b10789ad3651fe1986b377e))
+
+- **sdk**: State the strict input contract in the role parser docstrings
+  ([`dbed986`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dbed98613b211251314755310987ed2a4bd19fcb))
+
+- **sdk**: Take live clone addresses from the receipt in both examples
+  ([`755ede2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/755ede27387585b7d8452c59e67a3c4608875ed0))
+
+### Features
+
+- **sdk**: Bound the RPC requests a context keeps in flight
+  ([`1db299b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1db299bc0a0dc9545a05e45b869586713c6d2787))
+
+- **sdk**: Declare the public API and export it from the top level
+  ([`9517382`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/95173821f583ac3c77cc8418fe3eb2facf24b2f2))
+
+- **sdk**: Decode execute calldata and fuse actions back into the calls their fuses encode
+  ([`2a98348`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2a983483c9165877dd19272b15b9323fbffd7fb7))
+
+- **sdk**: Decode the IPOR Fusion contracts' custom errors by name
+  ([`a1dbd4c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a1dbd4c8a76ff3d91aa9238787643a4fd01ad574))
+
+- **sdk**: Encode the UniversalTokenSwapperFuse tokensToReturn revision
+  ([`babc5f3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/babc5f384109c72a79b6b6da0471e2e7b5173ffd))
+
+- **sdk**: Export every type public signatures use and a shareable InFlightLimit
+  ([`b6171d6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b6171d6fbc53579dfb68084b6c7b5b6c1bfddfcb))
+
+- **sdk**: Follow the released crosschain contracts
+  ([`495f20f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/495f20faad1d112043696ae5642e48d4f7e7ec13))
+
+- **sdk**: Follow the released HyperCore contracts
+  ([`0e045bb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0e045bb5973fd02ccadecc9b92b1c777d02467c0))
+
+- **sdk**: Make the simulator's vault optional and parse stored factory instances
+  ([`71e605e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/71e605e9cbc06726fb46321077d45aad54af0559))
+
+- **sdk**: Parse and format token amounts and shares exactly at the boundary
+  ([`682fc17`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/682fc177bb4beb43cfca41bea39bce4ae557f97e))
+
+- **sdk**: Plan, schedule, execute and cancel timelocked AccessManager operations
+  ([`159c287`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/159c287e6af9e20669ae85f48324ec32aee41bf5))
+
+- **sdk**: Preflight an execute batch as its sender would send it, with fusion vault preflight and
+  an MCP tool
+  ([`c936764`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c936764ad715ce44f7d5f0fb9e43327e0ae5b2a6))
+
+- **sdk**: Read both ExternalState executor builds through one custodian marker
+  ([`7d86589`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7d86589e3c48c33b8235013ef2e8e56f1f29d1b1))
+
+- **sdk**: Read canCall, isTargetClosed and getAccountLockTime from the AccessManager
+  ([`7ba10f7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7ba10f714d8fc32b3ebe065c4645a5cead8b5025))
+
+- **sdk**: Read IPOR Fusion addresses by name from the ipor-abi registry, with fusion address
+  commands and MCP tools
+  ([`3d0fd60`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3d0fd609cf32455df6b029b5ff3b3b6106352098))
+
+- **sdk**: Read whether an ExternalState custodian marker is a timestamp or a confirm count
+  ([`064f3f3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/064f3f323b0fe61ac072c80f535ddd75d752799f))
+
+- **sdk**: Support Ink and Robinhood in the vault tooling
+  ([`3d3d48f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3d3d48f75d26a88c5aa18a1f84164fd7eb30539a))
+
+- **sdk**: Wrap the governance, fee, rewards, withdraw and context manager functions the SDK lacked
+  ([`627efcf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/627efcfe7642560f60c894c159be7dade1a3a41c))
+
+### Performance Improvements
+
+- **sdk**: Batch the snapshot's token metadata and probe the oracle once
+  ([`dec8d16`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dec8d1610b1dab36dee71dea1c4cf3ee33f5b1af))
+
+- **sdk**: Read the Morpho and Aave V3 position breakdowns in batches across substrates
+  ([`2732a47`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2732a47c482f5a7f96b8d5a1745cf074756d9a70))
+
+### Refactoring
+
+- Keep the readiness report's factory owner as decoded
+  ([`57ad4ad`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/57ad4adfb40b4d97568ac6bc14da83ee1ae51d01))
+
+- Type the crosschain readiness script without Any
+  ([`b8db008`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b8db008b9a41be9138a00a8b91acab4c8662378f))
+
+- **cli**: Split vault_cmd.py into commands, options and views
+  ([`a9f54eb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a9f54eb5a946008bbf23fb8cf5bec3e22b66e0c6))
+
+- **sdk**: Apply the error model SDK-wide
+  ([`1624710`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/16247100b3c7735731ca824db117497b19f75941))
+
+- **sdk**: Build context-free wrappers and execute Calls on an explicit context
+  ([`1b8744f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1b8744f1cc1493abbea918eb8ce5c3ddc19c1e0a))
+
+- **sdk**: Build offline wrappers through their constructors and give fuses value equality
+  ([`e8cdd83`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e8cdd83506f7e49e62e71346e488eca06350549e))
+
+- **sdk**: Discriminated ExternalState and HyperCore events
+  ([`9ec7d10`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9ec7d108724c0e843223e1146ef0b6c68d8452a8))
+
+- **sdk**: Export the preview features only from their subpackages
+  ([`5ed6f2e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5ed6f2ef112314df90a86575640e83028049d1b7))
+
+- **sdk**: Give Morpho Blue market ids one canonical spelling
+  ([`25773f2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/25773f2c3297aac66e5777a159dbdd055946f93c))
+
+- **sdk**: Give the CLI commands and MCP tools the same arguments
+  ([`87a162e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/87a162e6bcb63af9736e467338d6f9781b95c538))
+
+- **sdk**: Hold every public id and address to its nominal type
+  ([`8536059`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8536059dfb748af28b3952c0865d6e4e9bbe11bd))
+
+- **sdk**: Inject a chain-keyed contract cache through Web3Context
+  ([`83f6dc3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/83f6dc3ace41290c9f1034b0a977f3f21a6eea09))
+
+- **sdk**: Inline find_balance_proposed's no-match helpers
+  ([`968be50`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/968be50d039f34a4d59c10710cb3176c1229df3e))
+
+- **sdk**: Keep crosschain ERC4626 destinations generic and type reward fuses
+  ([`6b804ea`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6b804ea0addd6da4e9e0beb49627cd67c1eab0c0))
+
+- **sdk**: Keep nominal types and keyword options across wrappers and readers
+  ([`bae2fe9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bae2fe9299ae6ca2f7261632cf3e9803d300fe85))
+
+- **sdk**: Key the chain registry by ChainId and drop deprecated aliases
+  ([`206c320`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/206c320361cc840f05485bd8d6cfa88ea6b1b93c))
+
+- **sdk**: Move FuseAction and the zero-address helpers below fuses
+  ([`f68498d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f68498d97e73d53103d7b4cbfbf5187dc17dbec9))
+
+- **sdk**: Move the crosschain fuse encoders into ipor_fusion.crosschain.fuses
+  ([`ddadb6c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ddadb6c9bedeae96413f10d595a3a1a04d6e0386))
+
+- **sdk**: Move the remaining preview constants and ids to their subpackages
+  ([`b3684c6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b3684c6e163dbc5d84033ae40dfdb05e9dd8e4d1))
+
+- **sdk**: Name the oracle keyword of fetch_unpriceable_priced_tokens `price_oracle`
+  ([`57ad96d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/57ad96d2307893bc5de55349fd4c4dd0012c341c))
+
+- **sdk**: One error model rooted at IporFusionError
+  ([`00e30fc`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/00e30fc8db3d673be845432caca961f57a07b14e))
+
+- **sdk**: Parse external addresses into ChecksumAddress at the boundary
+  ([`024be20`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/024be209f83f92d733a1ba2606f44b7dd9d66228))
+
+- **sdk**: Publish one vault validate document from the CLI and MCP
+  ([`231820f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/231820f48d2c804f37655d7e3e44c6002390a74f))
+
+- **sdk**: Re-export FeeData and WithdrawManagerData explicitly from vault_data
+  ([`91667a4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/91667a46522b9243ecae571ac9c76c3e0d284b16))
+
+- **sdk**: Read ERC20 symbols only with snapshot metadata, name vault params `vault`
+  ([`09ca374`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/09ca374adfa89ad0bcde1b20edae93fe4611e2da))
+
+- **sdk**: Read the vault as one pinned snapshot and render from it
+  ([`3d11b88`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3d11b88241b3520be89272890c38d2676391eefd))
+
+- **sdk**: Remove ExternalStateExecutor.mark_nav and NavMark
+  ([`8dd8bb9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8dd8bb9ce19828d57fa2ad74d771da9a4c45eadf))
+
+- **sdk**: Remove the remaining Any from the public surface
+  ([`2bd66b7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2bd66b7a9c384a9d0d581e98da2e89c55c19ba80))
+
+- **sdk**: Report Morpho numeric overflow as MorphoApiError and scope the error rule
+  ([`94b07e1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/94b07e1d0ef82bcabdc2d65f85581b1b9b5d8454))
+
+- **sdk**: Return LayerZeroEid from eid_of
+  ([`f7ddd99`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f7ddd9982bad81e9f3dddbcc8c3d371b2ab22b51))
+
+- **sdk**: Split build_vault_info_json and _print_vault_info into section helpers
+  ([`7f6bafc`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7f6bafc87aaf3e813076ab06ac387f4023aa8a39))
+
+- **sdk**: Split the oracle mapping into reader, nodes and resolution modules
+  ([`dc5df67`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dc5df675b670b0a2556c68a1b0d6fd12d83c31b3))
+
+- **sdk**: Split the vault read into batch, manager and position modules
+  ([`aafad21`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/aafad21c2846d12a1ed8c3ca54e4bba2b9b8cc11))
+
+- **sdk**: Stop the receipt decoders hiding their modules
+  ([`7aaa9ba`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7aaa9babbd7bdae48bba22172fa3c841cb222013))
+
+- **sdk**: Take the transaction hash as a TxHash in get_revert_reason
+  ([`64fd0cf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/64fd0cfaba7ee897c70a48b68874887ace8a5d48))
+
+- **sdk**: Type chain and market ids in the public API as ChainId and MarketId
+  ([`f0ec6b5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f0ec6b56cd1851ca106cde1106d7c34a5d4e6d19))
+
+- **sdk**: Type chain and role ids in the CLI, MCP and readers as ChainId and RoleId
+  ([`2f66173`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2f6617303600eda3be6d3b3f8178241833adc256))
+
+- **sdk**: Type crosschain ids as nominal types
+  ([`d1bec7e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d1bec7ee048201d422e2971bd60b3e93e1036b8b))
+
+- **sdk**: Type crosschain, external-state and reader units
+  ([`402d020`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/402d0208ce72d2904faafcae665beb47a3a6c4a8))
+
+- **sdk**: Type HyperCore, external-state and transaction ids
+  ([`0cd6e17`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0cd6e170bf323294532923ce5cce615080d5c6bf))
+
+- **sdk**: Type lane times, reconciliation amounts and factory decimals
+  ([`15027e0`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/15027e06df43be96cfb7d73f4acf08d135018aa5))
+
+- **sdk**: Type Plasma Vault, fuse and access-manager addresses by role
+  ([`7331f79`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7331f798aee4b16bc713f831c3da99cd2d31507d))
+
+- **sdk**: Type SDK address parameters as HexAddress and ChecksumAddress
+  ([`d71f2fd`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d71f2fdbcb0726d710fab36aafb283c4bf287abf))
+
+- **sdk**: Type the ERC4626 conversion and Aave V4 oracle decimals
+  ([`606f029`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/606f029d07d99268a8d846454de3f1388c20672d))
+
+- **sdk**: Type the explorer's supported chains as ChainId
+  ([`afaabe9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/afaabe9a657f0e508f6e390af3fde4eca4a62ac3))
+
+- **sdk**: Type the remaining vault addresses and replace HexStr casts with parsers
+  ([`f704a9e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f704a9eeedb374e49bd8220c6dd45eefffcdf86e))
+
+- **sdk**: Type the vault snapshot's amounts, shares, decimals and times
+  ([`65b9dd7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/65b9dd73933d6b856f4d0db544d168551f5589ca))
+
+- **sdk**: Type transactions, LayerZero endpoint ids and the zero address
+  ([`b54f663`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b54f66350075435314f15cce36ce9aa3faacdda5))
+
+- **sdk**: Typed event args and oracle-mapping documents
+  ([`7ff418c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7ff418ccbf7ba93215e8af7bf5bea2ae5ab74e19))
+
+- **sdk**: Typed JSON documents and parsing boundaries
+  ([`922fd34`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/922fd34d9069498c22e637d1c1162ba87b7e78bd))
+
+- **sdk**: Typed multicall batches and simulation observations
+  ([`6eb6833`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6eb6833a3611e41eac50c7e553ebf07106bbae09))
+
+- **sdk**: Use IporFusionMarkets members as MarketId directly
+  ([`edfdb52`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/edfdb5273e419dee683539658182d301e04c7ea8))
+
+### Testing
+
+- **sdk**: Add the new error exports to the public API snapshot
+  ([`1e12f01`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1e12f017533f5f33c37ff818f5ff55a75b65e94c))
+
+- **sdk**: Build the decode-error call from a checksum address
+  ([`ada5d90`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ada5d905c741eabfbc82871985389e6568f50419))
+
+- **sdk**: Check the patched config loader's signature
+  ([`1563a41`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1563a416eda9d1efb042268a05950b5a0e863346))
+
+- **sdk**: Drop the earlier market-55 vault cycle for the official example
+  ([`708bc8d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/708bc8d50cc2708afe710acb60613be5fb7f5869))
+
+- **sdk**: Drop the needless type ignore in the float rejection test
+  ([`1e7583b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1e7583bfbe40528ca53d85abce28a0baf3b6ea92))
+
+- **sdk**: Enumerate oracle source types from their defining module
+  ([`442c15d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/442c15dd882f9e2b77bd30434dc0f01d997351c3))
+
+- **sdk**: Expect the decoded names in the live revert assertions
+  ([`c2bfc05`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c2bfc05ea8581caecd3db9a71c2ee03e2b8bcdcf))
+
+- **sdk**: Force overlapping registry misses and an expired failed refresh
+  ([`7fc0cea`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7fc0cea4a06b967cab43796425bd109fcec4869c))
+
+- **sdk**: Hold preview-module names out of every stable package
+  ([`75dda78`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/75dda78ff3c083d54687b1e02549653631045a6f))
+
+- **sdk**: Mirror the ExternalState events of both published builds and list the new exports
+  ([`ca3c6ae`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ca3c6ae48e6a4c8c6f4037fbdd3a1f8c26cc8b91))
+
+- **sdk**: Pin context-free API misuse as typed-client negatives
+  ([`ab9a03e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ab9a03eb645847beef68ed2964b27489a62ad775))
+
+- **sdk**: Pin that a registered HyperCore topic needs its 0x prefix
+  ([`1520e19`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1520e190800feba488e143391d347a17f6ddfdc7))
+
+- **sdk**: Pin the CLI and MCP JSON documents in golden files
+  ([`3dc6a74`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3dc6a7475b869ca5e3d261d8a7975d5955db7a69))
+
+- **sdk**: Pin the uncovered-substrate path through the snapshot to the verdict
+  ([`ff27e0f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ff27e0f8f07ab2d777cf915f4b57aae5f1c74179))
+
+- **sdk**: Pin vault info end to end over a fake JSON-RPC chain
+  ([`88e1bdf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/88e1bdf66c1e942e97751a3fe08164c291c01f8e))
+
+- **sdk**: Resolve relative imports in the crosschain layering import graph
+  ([`2afb5e6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2afb5e6da7a75f8534fcf7c13ff9e02364c12a92))
+
+- **sdk**: Walk generic origins and callback parameters for type reachability
+  ([`c16ce1f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c16ce1fd6baf028476c8d52bd44b19a6379fd3d9))
+
+- **sdk**: Write through a cast instead of a type ignore
+  ([`f1890bc`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f1890bc232fa54a9be178fcc8ea3f2385ff46c0e))
+
+### Breaking Changes
+
+- **sdk**: The vault validate document lists every check in findings (the CLI criticals / warnings /
+  ok and the MCP criticals / warnings / passed lists are gone), carries the ERC20 holdings under
+  erc20 (CLI erc20_balances is erc20.tokens), and the MCP tool's reconciliation, lending health and
+  amounts take the vault info shapes (delta.percent, separator-formatted amounts) and gain
+  block_timestamp.
+
+
 ## v3.16.0 (2026-10-14)
 
 ### Features
