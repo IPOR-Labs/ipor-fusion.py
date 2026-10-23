@@ -70,7 +70,7 @@ SUPPLY_AMOUNT = {
 NATIVE_BUDGET = 10**18  # executor and dispatcher pay bridge fees themselves
 
 # Simulated schedule. The freshness window itself (``staleness_max``, 1 h on
-# the POC executors) is read from the lane; MIN_UPDATE_INTERVAL is 60 s and a
+# the released executors) is read from the lane; MIN_UPDATE_INTERVAL is 60 s and a
 # proposal needs a 15 min approval window.
 BRIDGE_LATENCY = 2 * 60
 APPROVAL_DELAY = 5 * 60

@@ -16,7 +16,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from eth_typing import HexAddress
-from eth_utils import keccak
 
 from ipor_fusion.fuses.hypercore import (
     is_hip3_asset,
@@ -634,17 +633,9 @@ _register_markets([40], _decode_async_action)
 _register_markets([50], _decode_external_state)
 # Uniswap V4 (id 53 per IporFusionMarkets.sol): PoolId or pool currency.
 _register_markets([53], _decode_uniswap_v4)
-# Crosschain (id 54 on the contracts' crosschain branch): EXECUTOR /
-# REMOTE_VAULT typed substrates per CrosschainSubstrateLib.sol. The mainnet
-# POC vault (Ethereum 0x0Aa75BfD…) granted the same layout under the
-# keccak-derived market id its fuses were built with, so that id decodes too.
-_register_markets(
-    [
-        54,
-        int.from_bytes(keccak(text="IPOR_FUSION_CROSSCHAIN_USDC_POC_V1"), "big"),
-    ],
-    _decode_crosschain,
-)
+# Crosschain (54): EXECUTOR / REMOTE_VAULT typed substrates per
+# CrosschainSubstrateLib.sol.
+_register_markets([54], _decode_crosschain)
 # HyperCore (55): typed substrates per HyperCoreSubstrateLib.sol, verified
 # against the 12 words granted on the first HyperEVM test vault (see
 # tests/fixtures/hypercore_hip3_flow.json; that run used id 54 before the
