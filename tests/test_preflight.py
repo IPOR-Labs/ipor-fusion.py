@@ -85,7 +85,7 @@ def _ctx(
     ctx.chain_id = 8453
     ctx.at_block.return_value = ctx
     ctx.call.side_effect = multicall_aware(handler)
-    ctx.web3.eth.get_block.return_value = {"timestamp": NOW}
+    ctx.web3.eth.get_block.return_value = {"number": BLOCK, "timestamp": NOW}
     return ctx
 
 
@@ -229,6 +229,22 @@ class _FakeSimulator:
 
     def run(self):
         return self.outcome
+
+
+@pytest.mark.parametrize("named", ["finalized", "safe", "0x" + "ab" * 32, "latest"])
+def test_the_block_the_context_names_is_resolved_and_pinned(monkeypatch, named):
+    monkeypatch.setattr(preflight_module, "is_simulate_v1_supported", lambda w3: True)
+    monkeypatch.setattr(preflight_module, "VaultSimulator", _FakeSimulator)
+    ctx = _ctx()
+    ctx.default_block = named
+
+    result = preflight_execute(ctx, VAULT, [_supply()], sender=SENDER)
+
+    ctx.web3.eth.get_block.assert_called_once_with(named)
+    ctx.at_block.assert_called_once_with(BLOCK)
+    # _FakeSimulator asserts it was built with block=BLOCK: the simulation
+    # runs on top of the resolved block, not the latest.
+    assert result.block_number == BLOCK
 
 
 def test_the_simulation_reports_total_assets_and_a_revert(monkeypatch):
