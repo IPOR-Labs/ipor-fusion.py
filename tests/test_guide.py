@@ -57,6 +57,23 @@ PUBLIC_REPOS = {
 _URL = re.compile(r"https?://([A-Za-z0-9.-]+)(?::\d+)?(/[^\s)`>\"']*)?")
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _PY_BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
+# Chains with an IporFusionFactoryProxy in ipor-abi (mainnet-<chain>-fusion).
+FACTORY_CHAINS = {
+    1,
+    14,
+    130,
+    143,
+    239,
+    999,
+    3637,
+    4663,
+    8453,
+    9745,
+    42161,
+    43114,
+    57073,
+    747474,
+}
 _FACTORY_ROW = re.compile(
     r"^\| (\w+) \| (\d+) \| `(0x[0-9a-fA-F]{40})` \| `(0x[0-9a-fA-F]{40})` \| "
     r"(validated|factory only) \| (implementation slot|registry only) \|$",
@@ -103,8 +120,15 @@ class TestResources:
         assert {"SUPPLY_FUSE", "BALANCE_FUSE"} <= set(GUIDE_ADDRESSES)
 
     def test_factory_table_tooling_column_is_the_supported_chain_set(self):
-        rows = _FACTORY_ROW.findall(QUICKSTART.text)
-        assert rows, "factory table not found"
+        section = QUICKSTART.text.split("## Factory proxies per chain", 1)[1]
+        body = [
+            line
+            for line in section.splitlines()
+            if line.startswith("| ") and not line.startswith("| Chain |")
+        ]
+        rows = _FACTORY_ROW.findall("\n".join(body))
+        assert len(rows) == len(body), "every table row parses"
+        assert {int(row[1]) for row in rows} == FACTORY_CHAINS
         ids = [int(row[1]) for row in rows]
         assert ids == sorted(set(ids)), "one row per chain, by chain id"
         for name, chain_id, *_ in rows:
