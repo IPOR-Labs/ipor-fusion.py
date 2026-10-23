@@ -636,10 +636,8 @@ _register_markets([53], _decode_uniswap_v4)
 # Crosschain (54): EXECUTOR / REMOTE_VAULT typed substrates per
 # CrosschainSubstrateLib.sol.
 _register_markets([54], _decode_crosschain)
-# HyperCore (55): typed substrates per HyperCoreSubstrateLib.sol, verified
-# against the 12 words granted on the first HyperEVM test vault (see
-# tests/fixtures/hypercore_hip3_flow.json; that run used id 54 before the
-# renumbering). Numeric 54 is the crosschain market, registered above.
+# HyperCore (55): typed substrates per HyperCoreSubstrateLib.sol at the
+# release the official deployment was built from.
 _register_markets([55], _decode_hypercore)
 
 

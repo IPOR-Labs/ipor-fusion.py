@@ -100,18 +100,11 @@ class IporFusionMarkets:
     # on other chains through an executor (Stargate/LayerZero or Chainlink
     # CCIP). Substrate type: CrosschainSubstrateLib (1 EXECUTOR, 2 REMOTE_VAULT
     # bound to a chain id).
-    # A legacy HyperEVM HyperCore test vault also uses 54 until it is
-    # redeployed on HyperCore's assigned market 55; do not interpret that
-    # vault's market-54 substrates as crosschain configuration.
     CROSSCHAIN = MarketId(54)
     # HyperCore market (id 55): a HyperEVM PlasmaVault trading on Hyperliquid
     # Core through delegatecalled fuses (CoreWriter actions, precompile reads).
     # Substrate type: HyperCoreSubstrateLib (1 SpotToken, 2 PerpMarket,
-    # 3 Destination, 4 Builder, 5 Config, 6 SendCap). Ahead of the public
-    # contracts repo; the mirror test allowlists it until the constant lands.
-    # The first HyperEVM test deployment ran on id 54 before the contracts
-    # team assigned 54 to crosschain and moved HyperCore to 55; that vault's
-    # market 54 is pre-renumbering HyperCore wiring, not a crosschain market.
+    # 3 Destination, 4 Builder, 5 Config, 6 SendCap, 7 PerpPositionCap).
     HYPERCORE = MarketId(55)
     # POL unstaking via sPOLController. The out-of-band id is baked into the
     # deployed fuses as an immutable (424243 = 0x67933), so it must match the
