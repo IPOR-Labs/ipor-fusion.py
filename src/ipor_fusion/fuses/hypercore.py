@@ -206,6 +206,8 @@ class HyperCoreDepositFuse(Fuse):
     """EVM -> Core deposit of a granted spot token (CoreWriter-free: the
     token's verified route, the CoreDepositWallet for Circle USDC)."""
 
+    SIGNATURES = ("enter((uint64,uint256))",)
+
     def enter(self, *, token_index: HyperCoreTokenIndex, amount: Amount) -> FuseAction:
         """Deposit up to ``amount`` (ERC-20 units) of Core token
         ``token_index``; the fuse caps it at the vault's balance. A fresh Core
@@ -220,6 +222,8 @@ class HyperCoreDepositFuse(Fuse):
 class HyperCoreMarginFuse(Fuse):
     """USD class transfer (action 7) between spot and the native perp dex."""
 
+    SIGNATURES = ("enter((uint64,bool))",)
+
     def enter(self, *, usd6: int, to_perp: bool) -> FuseAction:
         """Move ``usd6`` (USD, 6 decimals) spot -> native perp when ``to_perp``,
         back otherwise. HIP-3 dexes are reached with ``sendAsset`` instead."""
@@ -229,6 +233,11 @@ class HyperCoreMarginFuse(Fuse):
 
 class HyperCoreSendFuse(Fuse):
     """``spotSend`` (action 6) and ``sendAsset`` (action 13)."""
+
+    SIGNATURES = (
+        "enterSendAsset((address,uint32,uint32,uint64,uint64))",
+        "enterSpotSend((address,uint64,uint64))",
+    )
 
     def spot_send(
         self,
@@ -279,6 +288,8 @@ class HyperCoreSendFuse(Fuse):
 class HyperCoreOrderFuse(Fuse):
     """Limit order (action 1) on a granted PerpMarket."""
 
+    SIGNATURES = ("enter((uint32,bool,uint64,uint64,bool,uint8,uint128))",)
+
     def enter(
         self,
         *,
@@ -307,6 +318,11 @@ class HyperCoreOrderFuse(Fuse):
 class HyperCoreCancelFuse(Fuse):
     """Cancel by oid (action 10) or by cloid (action 11)."""
 
+    SIGNATURES = (
+        "enterCancelByCloid((uint32,uint128))",
+        "enterCancelByOid((uint32,uint64))",
+    )
+
     def cancel_by_oid(
         self, *, asset: HyperCoreAsset, oid: HyperCoreOrderId
     ) -> FuseAction:
@@ -326,6 +342,8 @@ class HyperCoreCancelFuse(Fuse):
 
 class HyperCoreBuilderFeeFuse(Fuse):
     """Builder-fee approval (action 12) for a granted Builder."""
+
+    SIGNATURES = ("enter((address,uint64))",)
 
     def enter(
         self, *, builder: ChecksumAddress, max_fee_rate_decibps: int

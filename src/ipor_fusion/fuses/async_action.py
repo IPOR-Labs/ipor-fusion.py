@@ -37,6 +37,7 @@ class AsyncActionFuse(Fuse):
 
     _ENTER_TUPLE = "(address,uint256,address[],bytes[],uint256[],address[])"
     _EXIT_TUPLE = "(address[],bytes[])"
+    SIGNATURES = (f"enter({_ENTER_TUPLE})", f"exit({_EXIT_TUPLE})")
     _BALANCE_OF_SELECTOR = function_signature_to_4byte_selector("balanceOf(address)")
 
     @staticmethod

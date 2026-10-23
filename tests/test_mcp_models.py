@@ -30,6 +30,7 @@ from ipor_fusion import (
     AmountJson,
     ChainId,
     Decimals,
+    ExecutePreflightJson,
     Fee,
     FuseAddress,
     MarketId,
@@ -56,6 +57,7 @@ from ipor_fusion.mcp.models import (
     AddressNamesResponse,
     Amount,
     ConfigShowResponse,
+    ExecutePreflightResponse,
     FeesSection,
     HyperCoreSection,
     MetaMorphoVaultResponse,
@@ -695,6 +697,11 @@ class TestTypedDocumentsMirrorModels:
 
     def test_morpho_blue_market(self):
         _assert_mirrors(MorphoBlueMarketJson, MorphoBlueMarketResponse, "market")
+
+    def test_execute_preflight(self):
+        _assert_mirrors(
+            ExecutePreflightJson, ExecutePreflightResponse, "vault_preflight"
+        )
 
     def test_address_registry(self):
         _assert_mirrors(AddressLookupJson, AddressLookupResponse, "address_lookup")

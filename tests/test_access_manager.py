@@ -301,3 +301,19 @@ class TestPermissionReads:
             :4
         ] + encode(["address"], [ALICE])
         assert call.decode(encode(["uint256"], [1_700_000_000])) == 1_700_000_000
+
+
+def test_hash_operation_matches_the_deployed_manager():
+    # hashOperation(caller, vault, execute([]) ++ 0x0102) as the Base manager of
+    # vault 0xc4c00d8b... answered it, read with eth_call on 2026-10-23.
+    vault = Web3.to_checksum_address("0xc4c00d8b323f37527eeda27c87412378be9f68ec")
+    caller = Web3.to_checksum_address("0x48d3615d78B152819ea0367adF7b9944e399ac9a")
+    data = bytes.fromhex(
+        "baae8abf"  # execute((address,bytes)[])
+        "0000000000000000000000000000000000000000000000000000000000000020"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0102"
+    )
+    assert AccessManager.hash_operation(caller, vault, data).hex() == (
+        "449c1b0678d9666078c86be94b86c7f4bfe8fe012bdacb56246db911e78b7ebb"
+    )

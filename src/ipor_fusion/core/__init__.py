@@ -36,6 +36,12 @@ from ipor_fusion.core.fuse import (
 from ipor_fusion.core.fuse_action import (
     FuseAction,
 )
+from ipor_fusion.core.fuse_decoding import (
+    DecodedFuseAction,
+    decode_execute_calldata,
+    decode_fuse_action,
+    fuse_classes_for,
+)
 from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInstance
 from ipor_fusion.core.logs import (
     LogSource,
@@ -87,6 +93,10 @@ from ipor_fusion.core.withdraw_manager import (
 __all__ = [
     "Web3Context",
     "InFlightLimit",
+    "DecodedFuseAction",
+    "decode_execute_calldata",
+    "decode_fuse_action",
+    "fuse_classes_for",
     "ContextManager",
     "Multicall3",
     "Multicall3Batch",

@@ -12,6 +12,8 @@ from ipor_fusion.types import Amount, Fee, Liquidity, Tick, TokenId
 class UniswapV3SwapFuse(Fuse):
     """Fuse for executing token swaps on Uniswap V3."""
 
+    SIGNATURES = ("enter((uint256,uint256,bytes))",)
+
     def swap(
         self,
         *,
@@ -35,6 +37,11 @@ class UniswapV3SwapFuse(Fuse):
 
 class UniswapV3NewPositionFuse(Fuse):
     """Fuse for minting and closing liquidity positions on Uniswap V3."""
+
+    SIGNATURES = (
+        "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256))",
+        "exit((uint256[]))",
+    )
 
     def new_position(
         self,
@@ -79,6 +86,11 @@ class UniswapV3NewPositionFuse(Fuse):
 
 class UniswapV3ModifyPositionFuse(Fuse):
     """Fuse for increasing and decreasing liquidity on Uniswap V3 positions."""
+
+    SIGNATURES = (
+        "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))",
+        "exit((uint256,uint128,uint256,uint256,uint256))",
+    )
 
     def increase_liquidity(
         self,
@@ -132,6 +144,8 @@ class UniswapV3ModifyPositionFuse(Fuse):
 
 class UniswapV3CollectFuse(Fuse):
     """Fuse for collecting accrued fees from Uniswap V3 positions."""
+
+    SIGNATURES = ("enter((uint256[]))",)
 
     def collect(self, token_ids: list[TokenId]) -> FuseAction:
         self._validate_non_empty_list(token_ids, "token_ids")

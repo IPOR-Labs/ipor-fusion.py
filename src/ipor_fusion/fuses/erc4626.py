@@ -7,6 +7,11 @@ from ipor_fusion.types import Amount
 class ERC4626SupplyFuse(Fuse):
     """Fuse for depositing and withdrawing from ERC-4626 tokenized vaults."""
 
+    SIGNATURES = (
+        "enter((address,uint256))",
+        "exit((address,uint256))",
+    )
+
     def supply(self, *, vault_address: ChecksumAddress, amount: Amount) -> FuseAction:
         self._validate_address(vault_address, "vault_address")
         self._validate_amount(amount, "amount")

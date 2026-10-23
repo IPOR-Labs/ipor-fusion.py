@@ -40,6 +40,12 @@ class ExternalStateOperationFuse(Fuse):
     """Fuse for moving off-vault capital via the per-vault ExternalStateExecutor."""
 
     _TUPLE = "(address,uint256,address,(address,bytes)[])"
+    SIGNATURES = (
+        "createExecutor()",
+        f"enter({_TUPLE})",
+        f"exit({_TUPLE})",
+        "sweepSurplus(address)",
+    )
 
     def enter(
         self,

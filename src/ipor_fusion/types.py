@@ -15,6 +15,8 @@ Tick = NewType("Tick", int)
 Liquidity = NewType("Liquidity", int)
 RoleId = NewType("RoleId", int)
 ChainId = NewType("ChainId", int)
+# An AccessManager operation id: keccak256(abi.encode(caller, target, calldata)).
+ScheduleId = NewType("ScheduleId", bytes)
 # An 18-decimal fixed-point fraction: 10**18 is 1, i.e. 100% (a market limit).
 Wad = NewType("Wad", int)
 # The ExternalState executor's custodian marker the balance fuse and pre-hook

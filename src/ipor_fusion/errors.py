@@ -293,6 +293,11 @@ class MorphoApiError(IporFusionError, RuntimeError):
     addresses or market ids). Also a RuntimeError, its base before 4.0."""
 
 
+class ExecutePreflightError(IporFusionError, RuntimeError):
+    """A preflight of a `PlasmaVault.execute` batch found a critical problem:
+    `ExecutePreflight.raise_for_failure` lists them."""
+
+
 class AddressRegistryError(IporFusionError, RuntimeError):
     """The ipor-abi address registry is unreachable or its file does not parse
     as a ``{name: address}`` map."""

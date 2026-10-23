@@ -207,7 +207,7 @@ the lifecycle matrix follows that.
   subpackages do not list them). Their exceptions stay in `errors` and the top
   level. `ipor_fusion.guide` keeps its own namespace. The
   public modules (`about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`,
-  `field_docs`, `market_ids`, `market_info`, `morpho_api`, `registry`, `substrates`, `types`,
+  `field_docs`, `market_ids`, `market_info`, `morpho_api`, `preflight`, `registry`, `substrates`, `types`,
   `validation`, `vault_data`, `vault_info`) stay importable for the names they
   define and the moved names README lists; `cli`, `mcp`, every other module and
   every submodule of a public subpackage (`core.contract`, `fuses.base`, ...) are
@@ -268,6 +268,9 @@ the lifecycle matrix follows that.
   `ctx.cache` (`Web3Context(cache=...)`, default `default_contract_cache()` under
   `$XDG_CACHE_HOME/ipor-fusion/`) or `get_contract_name(cache=...)`. Never cache an
   absence (no code, no answer): it can change at a later block.
+  `preflight.py` — `preflight_execute`: an execute batch checked as its sender would
+  send it (canCall, registered fuses, MARKET_ID, balance fuses, one eth_simulateV1
+  run), `ExecutePreflight` and the `fusion vault preflight` document;
   `registry.py` the ipor-abi address registry (`fetch_address_registry` →
   `AddressRegistry`, one raw-GitHub file per chain in `REGISTRY_CHAIN_IDS`, cached ten
   minutes in the process, for good at a commit ref) and the `fusion address` documents;
@@ -295,7 +298,9 @@ the lifecycle matrix follows that.
   of the node's response), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`, `fuse_action`
   (`FuseAction`), `fuse` (the `Fuse` base, `StakeFuse`, the shared validators and
-  substrate packers), `address` (`_validate_not_zero_address`). `core` imports neither
+  substrate packers), `fuse_decoding` (`decode_execute_calldata`, `decode_fuse_action`,
+  `fuse_classes_for`: an action back to the function its class encoded, from each
+  class's `SIGNATURES`), `address` (`_validate_not_zero_address`). `core` imports neither
   `fuses` nor `crosschain` (`tests/test_sdk_layering.py`)
 - `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3,
   erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
@@ -459,7 +464,10 @@ or examples.
   `ipor-abi` `addresses.json`; a fuse must be registered on the vault
   (`PlasmaVault.get_fuses()`) and its market granted substrates before an
   action can succeed.
-- Adding a protocol: new module in `fuses/`, re-export from `fuses/__init__.py`
+- Adding a protocol: new module in `fuses/` whose classes list every Solidity
+  function they encode in `SIGNATURES` (`tests/conftest.py` fails any call an
+  encoder builds under test that its class does not declare; it cannot catch an
+  extra or never-exercised entry), re-export from `fuses/__init__.py`
   and the top-level `__all__` (and both snapshots in `test_public_api.py`),
   encoding test in `test_fuse_encoding.py`, and a row in the README protocol
   table.
@@ -497,7 +505,7 @@ byte, e.g. Ebisu ZAPPER/REGISTRY).
 `fusion address` (lookup, names, list; the ipor-abi registry through `registry.py`),
 `fusion config` (set-provider, set-etherscan-key, show), `fusion market`
 (morpho-blue, meta-morpho), `fusion vault` (add, remove, list, info, validate,
-role-accounts, oracle-mapping). `vault info` runs independent fetch pipelines
+role-accounts, oracle-mapping, preflight). `vault info` runs independent fetch pipelines
 (vault/asset, fees, WithdrawManager, markets, roles) concurrently on a
 `ThreadPoolExecutor`, each a short chain of `Multicall3` batches; keep new
 reads inside a batch rather than adding per-call round trips. A `from_url` context
@@ -510,7 +518,7 @@ keys); tests redirect it with `monkeypatch.setenv("XDG_CACHE_HOME", ...)` or
 inject a cache.
 
 Every CLI command has an MCP tool (`fusion changelog` maps to `server_info`;
-the rest share names). Read-only: `vault_info`, `vault_validate`,
+the rest share names). Read-only: `vault_info`, `vault_validate`, `vault_preflight`,
 `vault_list`, `vault_role_accounts`, `vault_oracle_mapping`, `market_morpho_blue`,
 `market_meta_morpho`, `address_lookup`, `address_names`, `address_list`,
 `config_show`, `server_info`. Mutating: `vault_add`,

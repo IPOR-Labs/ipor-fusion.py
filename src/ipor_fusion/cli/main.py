@@ -9,6 +9,7 @@ from ipor_fusion.cli.address_cmd import address
 from ipor_fusion.cli.changelog_cmd import changelog
 from ipor_fusion.cli.config_cmd import config
 from ipor_fusion.cli.market_cmd import market
+from ipor_fusion.cli.preflight_cmd import preflight
 from ipor_fusion.cli.vault_cmd import vault
 
 
@@ -35,6 +36,7 @@ cli.add_command(changelog)
 cli.add_command(config)
 cli.add_command(market)
 cli.add_command(vault)
+vault.add_command(preflight)
 
 
 def main() -> None:

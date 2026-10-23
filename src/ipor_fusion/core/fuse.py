@@ -9,6 +9,7 @@ without importing that package, whose ``__init__`` loads every encoder.
 from abc import ABC
 from collections.abc import Sequence
 from types import MemberDescriptorType
+from typing import ClassVar
 
 from eth_abi import encode
 from eth_typing import ChecksumAddress
@@ -27,7 +28,14 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
     same class and carry the same constructor state (the fuse address, plus e.g.
     a `StakeFuse`'s staking contract), so a subclass that stores more state is
     compared on it without overriding anything. That state must be hashable.
+
+    ``SIGNATURES`` lists the Solidity functions a class's own methods encode;
+    `signatures` adds the inherited ones. The decoder reads them to recognize an
+    action; the test suite fails any call an encoder builds under test that its
+    class does not declare.
     """
+
+    SIGNATURES: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, address: FuseAddress):
         _validate_not_zero_address(address, "fuse address")
@@ -36,6 +44,15 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
     @property
     def address(self) -> FuseAddress:
         return self._address
+
+    @classmethod
+    def signatures(cls) -> tuple[str, ...]:
+        """Every Solidity function this class encodes, inherited ones included."""
+        seen: dict[str, None] = {}
+        for klass in reversed(cls.__mro__):
+            for signature in vars(klass).get("SIGNATURES", ()):
+                seen[signature] = None
+        return tuple(seen)
 
     @staticmethod
     def _validate_amount(value: Amount, name: str) -> None:
@@ -93,6 +110,11 @@ class Fuse(ABC):  # noqa: B024  # ABC marks intent; no shared abstract method
 
 class StakeFuse(Fuse):
     """Base fuse for stake/unstake operations on a staking contract."""
+
+    SIGNATURES = (
+        "enter((uint256,address))",
+        "exit((uint256,address))",
+    )
 
     def __init__(self, fuse_address: FuseAddress, staking_address: ChecksumAddress):
         super().__init__(fuse_address)

@@ -80,6 +80,7 @@ class StargateCrosschainSupplyFuse(CrosschainSupplyFuse):
 
     _ENTER = "enter((address,address,uint256,uint256,uint256,bytes))"
     _EXIT = "exit((address,uint256,uint256,uint256,uint128,bytes))"
+    SIGNATURES = (_ENTER, _EXIT)
 
     def enter(
         self,
@@ -157,6 +158,7 @@ class StargateCrosschainCommandFuse(CrosschainCommandFuse):
         "enter((uint8,address,uint256,uint32,bytes,address[],uint256,"
         f"{COMMAND_TUPLE_TYPE}))"
     )
+    SIGNATURES = (_ENTER,)
     _CHAIN_SCOPED = frozenset(
         {
             StargateCrosschainCommandType.REGISTER_CHAIN,
