@@ -1,6 +1,11 @@
 {
   "_source": "ipor-abi mainnet/mainnet-hyperevm-fusion/addresses.json at 5bb6913 (2026-10-22), contracts release 2026-10-21",
   "chain_id": 999,
+  "build": {
+    "_note": "The deployed executable bytecode of every contract below reproduces from this ipor-fusion revision with optimizer runs of 100000 or more; the checkout's default profile (2 runs) does not.",
+    "source_revision": "10f0f8e4",
+    "optimizer_runs": 1000000
+  },
   "contracts": {
     "HyperCoreBalanceFuse": "0xbEd25202529DCD2a05f7D8944B10779b6dbc6Fa6",
     "HyperCoreBuilderFeeFuse": "0xf6dF3B5D427E9B46C5D14684512E467C9B71AD6c",

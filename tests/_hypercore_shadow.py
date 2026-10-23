@@ -38,13 +38,23 @@ _CORE_WRITER = bytes.fromhex("33" * 20)
 _SHADOW_WRITER = bytes.fromhex("44" * 20)
 
 
-def _contracts() -> tuple[FoundryContract, ...]:
-    return tuple(
-        FoundryContract(f"contracts/fuses/hypercore/{name}.sol", name)
-        for name in _FUSES
-    ) + tuple(
-        FoundryContract(f"contracts/handlers/pre_hooks/pre_hooks/{name}.sol", name)
-        for name in _HOOKS
+_PENDING_READER = FoundryContract(
+    "contracts/fuses/hypercore/HyperCorePendingReader.sol", "HyperCorePendingReader"
+)
+
+
+def _contracts(pending_reader: bool) -> tuple[FoundryContract, ...]:
+    reader = (_PENDING_READER,) if pending_reader else ()
+    return (
+        reader
+        + tuple(
+            FoundryContract(f"contracts/fuses/hypercore/{name}.sol", name)
+            for name in _FUSES
+        )
+        + tuple(
+            FoundryContract(f"contracts/handlers/pre_hooks/pre_hooks/{name}.sol", name)
+            for name in _HOOKS
+        )
     )
 
 
@@ -105,10 +115,12 @@ def _bound_runtime(
     deployed: bytes,
 ) -> bytes:
     _assert_only_address_redirects(original.runtime_code, shadow.runtime_code)
+    # Only the executable part is compared: the metadata suffix depends on the
+    # profile's bytecode_hash and source paths, not on what the code does.
     end = _executable_end(original.runtime_code)
-    if len(deployed) != len(original.runtime_code) or _executable_end(deployed) != end:
+    if _executable_end(deployed) != end:
         raise ValueError(
-            "deployed HyperCore runtime length differs from compiled source"
+            "deployed HyperCore executable length differs from compiled source"
         )
     immutable_bytes = {
         index
@@ -135,17 +147,34 @@ def compile_hypercore_shadow_runtimes(
     addresses: dict[str, ChecksumAddress],
     block: int,
     remappings: Sequence[str] = (),
+    *,
+    pending_reader: bool = False,
+    optimizer_runs: int | None = None,
 ) -> dict[ChecksumAddress, bytes]:
-    """Compile both sources and bind shadow code only after deployed-code proof."""
-    contracts = _contracts()
+    """Compile both sources and bind shadow code only after deployed-code proof.
+
+    ``pending_reader`` adds ``HyperCorePendingReader``: its settlement predicate
+    reads the L1 block through ``HyperCoreLib``, so a simulation that reads the
+    pending state of a record needs it redirected too. ``optimizer_runs``
+    reproduces a deployment built with other settings than the checkout's
+    default profile."""
+    contracts = _contracts(pending_reader)
     original = compile_foundry_contracts(
-        source_root, contracts, remappings=remappings, timeout=300
+        source_root,
+        contracts,
+        remappings=remappings,
+        optimizer_runs=optimizer_runs,
+        timeout=300,
     )
     with TemporaryDirectory(prefix="hypercore-shadow-") as directory:
         target_root = Path(directory)
         _redirect_source(source_root, target_root)
         shadow = compile_foundry_contracts(
-            target_root, contracts, remappings=remappings, timeout=300
+            target_root,
+            contracts,
+            remappings=remappings,
+            optimizer_runs=optimizer_runs,
+            timeout=300,
         )
     result = {}
     for contract in contracts:

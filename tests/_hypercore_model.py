@@ -20,6 +20,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from web3 import Web3
 
+from ipor_fusion import AccountOverride, StateOverrideProvider
 from ipor_fusion.readers.hypercore import (
     HyperCoreAccountMarginSummary,
     HyperCorePerpAssetInfo,
@@ -113,14 +114,12 @@ class HyperCoreSimulationModel:
     oracle_prices: dict[int, int] = field(default_factory=dict)
     mark_prices: dict[int, int] = field(default_factory=dict)
 
-    def provider(self):
+    def provider(self) -> StateOverrideProvider:
         """A ``VaultSimulator`` state-override provider: the ``n``-th sent
         block of the run sees L1 block ``l1_block_number + n``."""
         return lambda n: self.state_overrides(self.l1_block_number + n)
 
-    def state_overrides(
-        self, l1_block_number: int
-    ) -> dict[ChecksumAddress, dict[str, str]]:
+    def state_overrides(self, l1_block_number: int) -> dict[str, AccountOverride]:
         """Runtime-code overrides for the ordinary shadow addresses."""
         cases: dict[int, list[tuple[bytes, bytes]]] = {key: [] for key in _PRECOMPILES}
         for (user, token), value in self.spot_balances.items():
@@ -211,7 +210,7 @@ class HyperCoreSimulationModel:
                     (_abi(["uint32"], (index,)), _abi(["uint64"], (price,)))
                 )
         cases[0x809].append((b"", _abi(["uint64"], (l1_block_number,))))
-        overrides = {
+        overrides: dict[str, AccountOverride] = {
             hypercore_shadow_address(precompile): {
                 "code": "0x" + _runtime(entries).hex()
             }

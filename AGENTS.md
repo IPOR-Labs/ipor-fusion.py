@@ -94,7 +94,12 @@ the deployed runtimes, and `tests/_hypercore_model.py` answers those addresses t
 `VaultSimulator.with_state_override_provider`. Core never applies anything there: the
 tests prove EVM validation under supplied Core state. `test_hypercore_simulation.py`
 runs one vault cycle; it skips without the source directory and needs
-`HYPEREVM_PROVIDER_URL`.
+`HYPEREVM_PROVIDER_URL`. `test_simulate_examples_hyperevm.py` runs the HyperCore
+example on the official deployment (`fixtures/hypercore_official.json`) at its pinned
+block: the wiring needs only `HYPEREVM_PROVIDER_URL`; the Core leg also needs the source
+directory at the fixture's `build.source_revision` and compiles with its
+`build.optimizer_runs` (the deployed set reproduces only with that setting, not the
+checkout's default profile), the pending reader included.
 
 ## Conventions
 

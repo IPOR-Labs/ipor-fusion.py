@@ -111,12 +111,24 @@ class SolidityArtifact:
         return actual == expected
 
 
+def _build_options(
+    offline: bool, remappings: Sequence[str], optimizer_runs: int | None
+) -> list[str]:
+    options = ["--offline"] if offline else []
+    if remappings:
+        options.extend(("--remappings", *remappings))
+    if optimizer_runs is not None:
+        options.extend(("--optimizer-runs", str(optimizer_runs)))
+    return options
+
+
 def compile_foundry_contracts(
     project_root: str | Path,
     contracts: Sequence[FoundryContract],
     *,
     profile: str | None = None,
     remappings: Sequence[str] = (),
+    optimizer_runs: int | None = None,
     forge_binary: str = "forge",
     offline: bool = True,
     timeout: float = 120.0,
@@ -126,7 +138,8 @@ def compile_foundry_contracts(
     Sources must be relative files inside ``project_root``. The compiler and
     project dependencies must already be installed when ``offline`` is true.
     Multiple contracts are compiled in one invocation so their settings and
-    dependency graph cannot drift between artifacts.
+    dependency graph cannot drift between artifacts. ``optimizer_runs``
+    overrides the profile's value, for a deployment built with other settings.
     """
     root = Path(project_root).expanduser().resolve()
     if not root.is_dir():
@@ -152,10 +165,7 @@ def compile_foundry_contracts(
             "--cache-path",
             str(work / "cache"),
         ]
-        if offline:
-            command.append("--offline")
-        if remappings:
-            command.extend(("--remappings", *remappings))
+        command.extend(_build_options(offline, remappings, optimizer_runs))
         command.append("--")
         command.extend(source.relative_to(root).as_posix() for source in sources)
         environment = {
