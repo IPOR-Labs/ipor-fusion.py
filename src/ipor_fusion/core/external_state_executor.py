@@ -127,10 +127,15 @@ class ExternalStateVaultState:
     `last_total_balance` is the balance fuse's cache of the executor's total in
     raw underlying units, as of the fuse's last refresh -- not the live total,
     which `ExternalStateExecutor.get_balance_fuse_snapshot` reads;
-    `last_checked_custodian_timestamp` is the executor custodian timestamp the
-    balance fuse last processed -- not necessarily the latest custodian update
+    `last_checked_custodian_marker` is the executor's custodian marker the
+    balance fuse last processed -- the last confirmed custodian update's block
+    timestamp on executors of the contracts before the 2026-10-21 release, the
+    executor's confirm count (`ExternalStateExecutor.confirm_count`) on the
+    executors of that release; either way not necessarily the latest update
     and not the pre-hook's staleness clock, which is
-    `ExternalStateExecutor.get_oldest_update_timestamp`; `paused` is the flag
+    `ExternalStateExecutor.get_oldest_update_timestamp`. The fuse and the
+    pre-hook only compare it for equality with
+    `BalanceFuseSnapshot.custodian_marker`; `paused` is the flag
     the balance fuse sets on a big change and `ExternalStateUnpauseFuse` clears
     with an atomist signature. `ExternalStatePausePreHook` blocks the vault's
     gated user operations while the flag is set, and also, flag or not, while
@@ -141,7 +146,7 @@ class ExternalStateVaultState:
 
     executor: ChecksumAddress | None
     last_total_balance: Amount
-    last_checked_custodian_timestamp: Timestamp
+    last_checked_custodian_marker: int
     paused: bool
     block: int
 
@@ -150,11 +155,14 @@ class ExternalStateVaultState:
 class BalanceFuseSnapshot:
     """`ExternalStateExecutor.getBalanceFuseSnapshot()`: the live sum of the
     tracked balances in raw underlying units, the cached big-change threshold
-    in basis points and the timestamp of the last confirmed custodian update."""
+    in basis points and the custodian marker: the last confirmed custodian
+    update's timestamp on executors before the 2026-10-21 contracts release,
+    the confirm count on the executors of that release (two confirms in one
+    block then still differ)."""
 
     total_balance: Amount
     big_change_bps: int
-    last_custodian_update_timestamp: Timestamp
+    custodian_marker: int
 
 
 def _storage_word(raw: bytes) -> int:
@@ -226,7 +234,7 @@ def read_external_state(
     return ExternalStateVaultState(
         executor=Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None,
         last_total_balance=Amount(words[1]),
-        last_checked_custodian_timestamp=Timestamp(words[2]),
+        last_checked_custodian_marker=words[2],
         paused=words[3] == 1,
         block=block,
     )
@@ -344,16 +352,59 @@ class ExternalStateExecutor(ContractWrapper):
 
     def get_balance_fuse_snapshot(self) -> Call[BalanceFuseSnapshot]:
         """The live aggregate the balance fuse reads: the sum of the tracked
-        balances, the big-change threshold and the last confirmed custodian
-        update timestamp, in one call. Pin the context's block to the one
+        balances, the big-change threshold and the custodian marker, in one
+        call. Pin the context's block to the one
         `read_external_state` returned to compare live against cached."""
         return self._view(
             "getBalanceFuseSnapshot()",
             output_types=["uint256", "uint256", "uint256"],
         ).map(
             lambda values: BalanceFuseSnapshot(
-                Amount(values[0]), int(values[1]), Timestamp(values[2])
+                Amount(values[0]), int(values[1]), int(values[2])
             )
+        )
+
+    def confirm_count(self) -> Call[int]:
+        """Executors of the 2026-10-21 contracts release only: the count of
+        confirmed custodian updates across every balance account, the marker
+        `get_balance_fuse_snapshot` reports. An earlier executor has no such
+        function and the call reverts."""
+        return self._view("confirmCount()", output_types=["uint256"])
+
+    def last_custodian_update_timestamp(self) -> Call[Timestamp]:
+        """Block timestamp of the last confirmed custodian update on any
+        balance account."""
+        return self._view(
+            "lastCustodianUpdateTimestamp()",
+            output_types=["uint256"],
+            decoder=Timestamp,
+        )
+
+    def unforwarded_credit(self, asset: ChecksumAddress) -> Call[Amount]:
+        """Executors of the 2026-10-21 contracts release only: tokens of
+        `asset` credited through the vault path that have not left the
+        executor. The executor's `asset` balance above it is surplus (a
+        donation or a payout sent straight to the executor):
+        `ExternalStateOperationFuse.sweep_surplus` moves it to the vault, and
+        custodians should not propose while it exists unless they know whether
+        their report counts it."""
+        return self._view(
+            "unforwardedCredit(address)",
+            asset,
+            output_types=["uint256"],
+            decoder=Amount,
+        )
+
+    def proposal_base_balance(self, balance_account: ChecksumAddress) -> Call[Amount]:
+        """Executors of the 2026-10-21 contracts release only: the account
+        balance when the pending proposal was made. `confirmBalance` reverts
+        `ExternalStateExecutorBalanceChangedSinceProposal` once the balance
+        differs from it (an alpha flow ran in between): propose again."""
+        return self._view(
+            "proposalBaseBalance(address)",
+            balance_account,
+            output_types=["uint256"],
+            decoder=Amount,
         )
 
     def get_oldest_update_timestamp(self) -> Call[Timestamp]:

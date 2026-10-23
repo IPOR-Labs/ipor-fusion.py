@@ -1203,7 +1203,7 @@ class TestReadExternalState:
 
         assert state.executor == EXECUTOR_ADDR
         assert state.last_total_balance == 32_928_135
-        assert state.last_checked_custodian_timestamp == 1_791_458_983
+        assert state.last_checked_custodian_marker == 1_791_458_983
         assert state.paused is True
         assert state.block == 4_805_000  # "latest" resolved once, before the reads
         assert [c.args for c in ctx.get_storage_at.call_args_list] == [
@@ -1256,7 +1256,7 @@ class TestReadExternalState:
             self._ctx([0, (1 << 256) - 1, (1 << 256) - 1, 0]), VAULT_ADDR
         )
         assert top.last_total_balance == (1 << 256) - 1
-        assert top.last_checked_custodian_timestamp == (1 << 256) - 1
+        assert top.last_checked_custodian_marker == (1 << 256) - 1
 
     def test_a_pinned_context_block_is_used_as_is(self):
         from ipor_fusion import read_external_state
@@ -1267,7 +1267,7 @@ class TestReadExternalState:
 
         assert state.block == 4_700_000
         assert state.executor is None and state.paused is False
-        assert (state.last_total_balance, state.last_checked_custodian_timestamp) == (
+        assert (state.last_total_balance, state.last_checked_custodian_marker) == (
             0,
             0,
         )
@@ -1292,7 +1292,7 @@ class TestReadExternalState:
             5,
             True,
         )
-        assert state.last_checked_custodian_timestamp == 0
+        assert state.last_checked_custodian_marker == 0
 
     def test_malformed_words_raise_instead_of_passing_as_values(self):
         from ipor_fusion import read_external_state
@@ -1320,6 +1320,8 @@ class TestExecutorViews:
             ("dust_threshold", "dustThreshold()"),
             ("min_update_interval", "minUpdateInterval()"),
             ("get_oldest_update_timestamp", "getOldestUpdateTimestamp()"),
+            ("confirm_count", "confirmCount()"),
+            ("last_custodian_update_timestamp", "lastCustodianUpdateTimestamp()"),
         ],
     )
     def test_uint256_views(self, method, signature):
@@ -1338,3 +1340,18 @@ class TestExecutorViews:
         assert call.decoder is not None
         snap = call.decoder((32_928_135, 50_000, 1_791_458_983))
         assert snap == BalanceFuseSnapshot(32_928_135, 50_000, 1_791_458_983)
+        # a 2026-10-21 executor reports its confirm count in the same slot
+        assert call.decoder((32_928_135, 50_000, 7)).custodian_marker == 7
+
+    @pytest.mark.parametrize(
+        ("method", "signature"),
+        [
+            ("unforwarded_credit", "unforwardedCredit(address)"),
+            ("proposal_base_balance", "proposalBaseBalance(address)"),
+        ],
+    )
+    def test_released_executor_per_address_views(self, method, signature):
+        executor = ExternalStateExecutor(EXECUTOR_ADDR)
+        call = getattr(executor, method)(EXECUTOR_ADDR)
+        assert bytes(call.data)[:4] == Web3.keccak(text=signature)[:4]
+        assert call.output_types == ("uint256",)
