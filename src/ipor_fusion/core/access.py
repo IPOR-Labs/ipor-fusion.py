@@ -262,8 +262,8 @@ class AccessManager(ContractWrapper):
     ) -> CallPlan:
         """What ``caller`` sends now to get ``call`` executed: an access and
         timelock plan from ``canCall`` and, for a delayed caller, the schedule of
-        exactly ``call``'s calldata, read at one block (``ctx.default_block`` when
-        it is a number, else the latest). It does not run the target's own checks
+        exactly ``call``'s calldata, all read at the block ``ctx.default_block``
+        names (a number, hash or tag, resolved once). It does not run the target's own checks
         (redemption lock, pre-hooks, balances): simulate the call for those.
 
         A ready operation is sent as ``call`` itself, from ``caller``: the target
@@ -272,20 +272,19 @@ class AccessManager(ContractWrapper):
         ``via_manager`` sends it through the manager's ``execute`` instead, for a
         target that does not consume schedules; the manager is then the sender.
 
-        Raises ``ValueError`` for a call on the access manager itself (role
-        grants, target configuration): their authorization depends on the
-        arguments, which ``canCall`` does not see; use `schedule` and `execute`.
+        Raises ``ValueError`` for a call on the access manager itself: its
+        authorization is function-specific (role grants depend on the role's
+        admin, target configuration on the target's admin delay, and the IPOR
+        manager's own restricted functions on ``canCall``), which this plan does
+        not model.
         """
         if call.to == self.address:
             raise ValueError(
                 "read_call_plan does not plan calls on the access manager itself:"
-                " their authorization depends on the arguments; use schedule and"
-                " execute directly"
+                " their authorization is function-specific"
             )
-        default = ctx.default_block
-        ctx = ctx.at_block(
-            default if isinstance(default, int) else ctx.web3.eth.block_number
-        )
+        block = ctx.web3.eth.get_block(ctx.default_block)
+        ctx = ctx.at_block(block["number"])
         selector = bytes(call.data[:4])
         permission = self.can_call(caller, call.to, selector).call(ctx)
         operation = self.hash_operation(caller, call.to, call.data)
@@ -303,8 +302,7 @@ class AccessManager(ContractWrapper):
                 None,
                 self.schedule(call.to, call.data),
             )
-        now = ctx.web3.eth.get_block(ctx.default_block)["timestamp"]
-        if scheduled_at > now:
+        if scheduled_at > block["timestamp"]:
             return CallPlan("waiting", permission, operation, scheduled_at, None)
         ready = self.execute(call.to, call.data) if via_manager else direct
         return CallPlan("ready", permission, operation, scheduled_at, ready)

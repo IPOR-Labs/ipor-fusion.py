@@ -336,10 +336,10 @@ class TestCallPlan:
             return encode(["uint48"], [scheduled])
 
         ctx = MagicMock()
-        ctx.default_block = 777
+        ctx.default_block = "finalized"
         ctx.at_block.return_value = ctx
         ctx.call.side_effect = multicall_aware(handler)
-        ctx.web3.eth.get_block.return_value = {"timestamp": self.NOW}
+        ctx.web3.eth.get_block.return_value = {"number": 777, "timestamp": self.NOW}
         return ctx
 
     def _plan(self, *, via_manager: bool = False, **kwargs):
@@ -355,6 +355,12 @@ class TestCallPlan:
             self.target_call.to,
             self.target_call.data,
         )
+
+    def test_the_block_the_context_names_is_resolved_once_and_pinned(self):
+        ctx = self._ctx(immediate=False, delay=3600, scheduled=self.NOW)
+        self.manager.read_call_plan(ctx, self.target_call, caller=ALICE)
+        ctx.web3.eth.get_block.assert_called_once_with("finalized")
+        ctx.at_block.assert_called_once_with(777)
 
     def test_forbidden_sends_nothing(self):
         plan = self._plan(immediate=False, delay=0)
