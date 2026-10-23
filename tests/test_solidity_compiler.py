@@ -51,6 +51,7 @@ def test_compile_foundry_contracts_and_encode_constructor(tmp_path, monkeypatch)
         (contract,),
         profile="crosschain_deploy",
         remappings=("@example/=vendor/example/",),
+        optimizer_runs=1_000_000,
     )
 
     artifact = artifacts[contract]
@@ -62,6 +63,8 @@ def test_compile_foundry_contracts_and_encode_constructor(tmp_path, monkeypatch)
     command = captured["command"]
     assert command[0:2] == ["/usr/bin/forge", "build"]
     assert "--offline" in command
+    runs = command.index("--optimizer-runs")
+    assert command[runs + 1] == "1000000"
     assert command[-2] == "--"
     assert command[-1] == contract.source
     assert captured["kwargs"]["env"]["FOUNDRY_PROFILE"] == "crosschain_deploy"

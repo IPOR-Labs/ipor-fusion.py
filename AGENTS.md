@@ -82,8 +82,7 @@ mirrors the CCIP event registry from a checkout at its own `CONTRACTS_REVISION`.
 `test_solidity_compiler.py` unit-tests that compiler helper (`tests/_foundry.py`)
 offline, with `forge` and `git` mocked. The checkout-based tests above skip when their
 external prerequisites are unavailable. `test_hypercore_live.py`,
-`test_hypercore_deployment.py` and `test_hypercore_simulation.py` need
-`HYPEREVM_PROVIDER_URL` as well.
+and `test_hypercore_deployment.py` need `HYPEREVM_PROVIDER_URL` as well.
 HyperCore (market 55) cannot be simulated directly: the HyperEVM RPC ignores code
 overrides at the precompile addresses `0x800`–`0x813`, and the public Hyperliquid RPC
 has no `eth_simulateV1`. `tests/_hypercore_shadow.py` therefore compiles the HyperCore
@@ -93,8 +92,12 @@ CoreWriter constants redirected to ordinary addresses, proves the rest is identi
 the deployed runtimes, and `tests/_hypercore_model.py` answers those addresses through
 `VaultSimulator.with_state_override_provider`. Core never applies anything there: the
 tests prove EVM validation under supplied Core state. `test_hypercore_simulation.py`
-runs one vault cycle; it skips without the source directory and needs
-`HYPEREVM_PROVIDER_URL`.
+pins the shadow guard offline. `test_simulate_examples_hyperevm.py` runs the HyperCore
+example on the official deployment (`fixtures/hypercore_official.json`) at its pinned
+block: the wiring needs only `HYPEREVM_PROVIDER_URL`; the Core leg also needs the source
+directory at the fixture's `build.source_revision` and compiles with its
+`build.optimizer_runs` (the deployed set reproduces only with that setting, not the
+checkout's default profile), the pending reader included.
 
 ## Conventions
 
