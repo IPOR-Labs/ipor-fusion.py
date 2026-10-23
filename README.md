@@ -466,12 +466,12 @@ the pilot executors and factories). Pin an exact version if you depend on them.
 | Crosschain fuses (market 54): `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse`; transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` | `ipor_fusion.crosschain` |
 | HyperCore fuses (market 55): `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` | `ipor_fusion.hypercore`, with `HyperCoreReader`, `read_hypercore_vault_state` and the event decoders |
 
-The mainnet crosschain POC vault uses a keccak-derived market ID, not 54. Pass
-`market_id=crosschain_market_id("IPOR_FUSION_CROSSCHAIN_USDC_POC_V1")` to `open_lane`
-/ `discover_deployment` for that deployment. Both require it explicitly:
-`discover_deployment` reads the market's executor grants; `open_lane` takes an executor
-address and uses the market ID to find the vault's matching fuses unless they are
-passed.
+The crosschain API supports only the contracts of the 2026-10-21 release; earlier
+deployments are unreadable (`MIGRATION_4.md`). `open_lane` and `discover_deployment`
+take the market ID explicitly (54, or a keccak-derived one from
+`crosschain_market_id(name)` for a vault built with its own): `discover_deployment`
+reads the market's executor grants; `open_lane` takes an executor address and uses the
+market ID to find the vault's matching fuses unless they are passed.
 
 ### Readers (`ipor_fusion.readers`)
 
