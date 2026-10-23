@@ -1,4 +1,5 @@
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from eth_abi import encode
@@ -225,21 +226,44 @@ class MorphoReader(ContractWrapper):
         market_read = batch.add(self.market(market_id))
         params_read = batch.add(self.market_params(market_id))
         batch.run()
-        pos, market, params = pos_read.value, market_read.value, params_read.value
-        borrow_assets = to_assets_up(
-            pos.borrow_shares, market.total_borrow_assets, market.total_borrow_shares
+        return _position_breakdown(
+            market_id, pos_read.value, market_read.value, params_read.value
         )
-        supply_assets = to_assets_down(
-            pos.supply_shares, market.total_supply_assets, market.total_supply_shares
-        )
-        return MorphoPositionBreakdown(
-            market_id=market_id,
-            loan_token=params.loan_token,
-            collateral_token=params.collateral_token,
-            collateral=pos.collateral,
-            borrow_assets=Amount(borrow_assets),
-            supply_assets=Amount(supply_assets),
-        )
+
+    def read_position_breakdowns(
+        self,
+        ctx: Web3Context,
+        market_ids: Sequence[MorphoBlueMarketId],
+        user: ChecksumAddress,
+    ) -> list[MorphoPositionBreakdown | None]:
+        """:meth:`read_position_breakdown` for every market in one Multicall3
+        batch (one round trip per batch size, or one read per call without
+        Multicall3), in ``market_ids`` order.
+
+        ``None`` for a market whose position, state or params read reverts,
+        returns no data or cannot be decoded; a transport error raises.
+        """
+        batch = Multicall3(ctx).batch()
+        reads = [
+            (
+                batch.try_add(self.position(market_id, user)),
+                batch.try_add(self.market(market_id)),
+                batch.try_add(self.market_params(market_id)),
+            )
+            for market_id in market_ids
+        ]
+        batch.run()
+        breakdowns: list[MorphoPositionBreakdown | None] = []
+        for market_id, (pos, market, params) in zip(market_ids, reads, strict=True):
+            if pos.value is None or market.value is None or params.value is None:
+                breakdowns.append(None)
+            else:
+                breakdowns.append(
+                    _position_breakdown(
+                        market_id, pos.value, market.value, params.value
+                    )
+                )
+        return breakdowns
 
     def market_params(self, market_id: MorphoBlueMarketId) -> Call[MorphoMarketParams]:
         return self._view(
@@ -352,3 +376,31 @@ def _irm_borrow_rate_view(
         to=params.irm, data=selector + payload, output_types=["uint256"]
     )
     return call.call(ctx)
+
+
+def _position_breakdown(
+    market_id: MorphoBlueMarketId,
+    pos: MorphoPosition,
+    market: MorphoMarket,
+    params: MorphoMarketParams,
+) -> MorphoPositionBreakdown:
+    return MorphoPositionBreakdown(
+        market_id=market_id,
+        loan_token=params.loan_token,
+        collateral_token=params.collateral_token,
+        collateral=pos.collateral,
+        borrow_assets=Amount(
+            to_assets_up(
+                pos.borrow_shares,
+                market.total_borrow_assets,
+                market.total_borrow_shares,
+            )
+        ),
+        supply_assets=Amount(
+            to_assets_down(
+                pos.supply_shares,
+                market.total_supply_assets,
+                market.total_supply_shares,
+            )
+        ),
+    )
