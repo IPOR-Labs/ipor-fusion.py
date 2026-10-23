@@ -72,7 +72,8 @@ HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
 HYPEREVM_CHAIN_ID = ChainId(999)
 #: ``HyperCorePendingReader`` per chain, as ``ipor-abi`` publishes it. The
 #: reader is a stateless helper the vault delegatecalls, so one deployment
-#: serves every vault of the same contracts build.
+#: serves every vault of the same contracts build (a vault of the earlier
+#: build only while nothing is in flight: its hooks write no effect fields).
 HYPERCORE_PENDING_READERS: dict[ChainId, ChecksumAddress] = {
     HYPEREVM_CHAIN_ID: Web3.to_checksum_address(
         "0x1EFFb12434f5fb59a636C54D8CBaC93b13DF1A9E"

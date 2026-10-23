@@ -400,8 +400,12 @@ the modules are internal.
   is gone (the released reader has no `isPending()`): call `is_action_pending()`,
   and `is_order_in_flight()` for the order rate limit. `pending_state()` decodes
   the released 23-word tuple only; the earlier reader `0x83F54bc9…` returns 18
-  words and is no longer supported. The released reader serves a vault of the
-  earlier build too: the struct only grew.
+  words and is no longer supported. A vault of the earlier build (its pre-hooks
+  predate the transfer effect) reads through the released reader only while
+  nothing is in flight: the struct only grew, so a settled state decodes the same,
+  but during an action the released reader derives `pending`/`settled` from effect
+  fields the earlier hooks never write, so it can disagree with what that vault
+  enforces.
 - **`HyperCorePendingState`.** Removed: `settlement_mode`, `reported_result`,
   `result_l1_block`, `refreshing` (the contracts no longer write them). Added:
   `effect_kind` (`HyperCoreEffectKind`), `effect_token_index`, `effect_evm_asset`,
