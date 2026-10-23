@@ -860,6 +860,20 @@ class TestUniversalTokenSwapperFuse:
             == ()
         )
 
+    def test_tokens_to_return_abi_requires_min_amount_out(self):
+        with pytest.raises(
+            ValueError, match="abi=UniversalTokenSwapperAbi.TOKENS_TO_RETURN"
+        ):
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.TOKENS_TO_RETURN
+            ).swap(
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=1,
+                targets=[],
+                data=[],
+            )
+
     def test_tokens_to_return_needs_its_abi(self):
         with pytest.raises(ValueError, match="TOKENS_TO_RETURN"):
             UniversalTokenSwapperFuse(
