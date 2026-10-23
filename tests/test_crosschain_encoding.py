@@ -16,6 +16,7 @@ from ipor_fusion.crosschain import (
     CCIP_VERSION,
     CODEC_VERSION,
     EMPTY_COMMAND,
+    NO_FEE_CEILING,
     Any2EVMMessage,
     BusinessAction,
     CcipMessageSent,
@@ -108,7 +109,7 @@ class TestCommand:
         assert cmd.action_data == encode(
             ["address", "uint256", "uint256"], [REMOTE_VAULT_BASE, 999_414, 1]
         )
-        assert cmd.as_tuple() == (bytes(32), 0, 0, 1, cmd.action_data)
+        assert cmd.as_tuple() == (bytes(32), 0, 0, 1, 0, cmd.action_data)
         assert cmd.target_vault == REMOTE_VAULT_BASE
 
     def test_redeem_and_request_and_redeem_from_request(self):
@@ -118,8 +119,19 @@ class TestCommand:
             299_734_249,
             2_990_000,
         )
-        request = Command.request_shares(WITHDRAW_MANAGER, REMOTE_VAULT_ARB, 5)
+        request = Command.request_shares(WITHDRAW_MANAGER, REMOTE_VAULT_ARB, 5, 1)
         assert request.target_vault == REMOTE_VAULT_ARB
+        # CrosschainMessages.encodeRequestSharesAction(wm, vault, shares, maxFeeShares)
+        assert request.action_data == encode(
+            ["address", "address", "uint256", "uint256"],
+            [WITHDRAW_MANAGER, REMOTE_VAULT_ARB, 5, 1],
+        )
+        assert (
+            Command.request_shares(
+                WITHDRAW_MANAGER, REMOTE_VAULT_ARB, 5, NO_FEE_CEILING
+            ).decode_action_data()[-1]
+            == (1 << 256) - 1
+        )
         claim = Command.redeem_from_request(
             WITHDRAW_MANAGER, REMOTE_VAULT_ARB, 5, 4, RECEIVER
         )
@@ -135,20 +147,24 @@ class TestCommand:
             command_id=b"\x01" * 32,
             sequence=3,
             command_config_epoch=1,
+            min_execution_gas=2_500_000,
         )
         assert Command.from_tuple(stamped.as_tuple()) == stamped
-        inner = encode(["(bytes32,uint64,uint64,uint8,bytes)"], [stamped.as_tuple()])
+        # CrosschainMessages.Command: minExecutionGas sits before actionData
+        inner = encode(
+            ["(bytes32,uint64,uint64,uint8,uint64,bytes)"], [stamped.as_tuple()]
+        )
         assert decode_command(inner) == stamped
-        envelope = encode(["uint8", "uint8", "bytes"], [3, int(MsgType.COMMAND), inner])
+        envelope = encode(["uint8", "uint8", "bytes"], [4, int(MsgType.COMMAND), inner])
         assert decode_envelope(envelope) == (MsgType.COMMAND, inner)
-        ccip = encode(["uint8", "uint8", "bytes"], [1, int(CcipMsgType.COMMAND), inner])
+        ccip = encode(["uint8", "uint8", "bytes"], [3, int(CcipMsgType.COMMAND), inner])
         assert decode_ccip_envelope(ccip) == (CcipMsgType.COMMAND, inner)
 
     def test_envelope_version_mismatch_rejected(self):
         with pytest.raises(ValueError, match="codec version"):
-            decode_envelope(encode(["uint8", "uint8", "bytes"], [2, 9, b""]))
+            decode_envelope(encode(["uint8", "uint8", "bytes"], [3, 9, b""]))
         with pytest.raises(ValueError, match="CCIP codec version"):
-            decode_ccip_envelope(encode(["uint8", "uint8", "bytes"], [3, 5, b""]))
+            decode_ccip_envelope(encode(["uint8", "uint8", "bytes"], [1, 5, b""]))
 
     @pytest.mark.parametrize("msg_type", [0, 15])
     def test_invalid_envelope_message_type_rejected(self, msg_type):
@@ -181,6 +197,8 @@ class TestCommand:
     def test_validation(self):
         with pytest.raises(ValueError, match="command_id must be 32 bytes"):
             Command(BusinessAction.DEPOSIT, b"", command_id=b"\x00")
+        with pytest.raises(ValueError, match="min_execution_gas"):
+            Command(BusinessAction.DEPOSIT, b"", min_execution_gas=14_000_001)
         with pytest.raises(ValueError, match="vault"):
             Command.deposit(ZERO_ADDRESS, 1)  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="carries no action data"):
@@ -367,7 +385,7 @@ class TestStargateCrosschainSupplyFuse:
 class TestStargateCrosschainCommandFuse:
     SIG = (
         "enter((uint8,address,uint256,uint32,bytes,address[],uint256,"
-        "(bytes32,uint64,uint64,uint8,bytes)))"
+        "(bytes32,uint64,uint64,uint8,uint64,bytes)))"
     )
 
     def test_register_chain_mirrors_script(self):
@@ -398,7 +416,7 @@ class TestStargateCrosschainCommandFuse:
             enforced,
             (),
             0,
-            (bytes(32), 0, 0, 0, b""),
+            (bytes(32), 0, 0, 0, 0, b""),
         )
         (params,) = decode(["(uint32,uint16,bytes)[]"], enforced)
         assert params == (
@@ -415,7 +433,7 @@ class TestStargateCrosschainCommandFuse:
         )
         values = _decoded(action, self.SIG)
         assert values[0] == 4
-        assert values[7] == (bytes(32), 0, 0, 1, cmd.action_data)
+        assert values[7] == (bytes(32), 0, 0, 1, 0, cmd.action_data)
 
     def test_vault_list_and_request_id_operations(self):
         fuse = StargateCrosschainCommandFuse(FUSE)
@@ -483,10 +501,13 @@ class TestCcipCrosschainSupplyFuse:
             asset=USDC,
             dst_chain_id=8453,
             amount=100_000,
-            send=CcipSendParams(max_fee=10**16, gas_limit=1_000_000),
+            send=CcipSendParams(
+                max_fee=10**16, gas_limit=1_000_000, min_delivered=99_500
+            ),
         )
         assert _decoded(
-            action, "enter((address,address,uint256,uint256,uint256,address,uint256))"
+            action,
+            "enter((address,address,uint256,uint256,uint256,address,uint256,uint256))",
         ) == (
             EXECUTOR.lower(),
             USDC.lower(),
@@ -495,7 +516,18 @@ class TestCcipCrosschainSupplyFuse:
             10**16,
             ZERO_ADDRESS,
             1_000_000,
+            99_500,
         )
+        with pytest.raises(ValueError, match="min_delivered"):
+            fuse.enter(
+                executor=EXECUTOR,
+                asset=USDC,
+                dst_chain_id=8453,
+                amount=100_000,
+                send=CcipSendParams(
+                    max_fee=10**16, gas_limit=1_000_000, min_delivered=100_001
+                ),
+            )
         action = fuse.exit(
             executor=EXECUTOR,
             dst_chain_id=8453,
@@ -553,12 +585,12 @@ class TestTransportAgnosticCommandOperations:
         if False
         else (
             "enter((uint8,address,uint256,uint32,bytes,address[],uint256,"
-            "(bytes32,uint64,uint64,uint8,bytes)))"
+            "(bytes32,uint64,uint64,uint8,uint64,bytes)))"
         )
     )
     CCIP_SIG = (
         "enter((uint8,address,uint256,(uint64,address,address,uint96,uint96,uint256,bool),"
-        "address[],bool,bool,(bytes32,uint64,uint64,uint8,bytes),uint256,address,uint256))"
+        "address[],bool,bool,(bytes32,uint64,uint64,uint8,uint64,bytes),uint256,address,uint256))"
     )
 
     def test_bases_are_abstract(self):
@@ -659,7 +691,7 @@ class TestTransportAgnosticCommandOperations:
 class TestCcipCrosschainCommandFuse:
     SIG = (
         "enter((uint8,address,uint256,(uint64,address,address,uint96,uint96,uint256,bool),"
-        "address[],bool,bool,(bytes32,uint64,uint64,uint8,bytes),uint256,address,uint256))"
+        "address[],bool,bool,(bytes32,uint64,uint64,uint8,uint64,bytes),uint256,address,uint256))"
     )
     ROUTE = CcipRouteConfig(
         chain_selector=15971525489660198786,
@@ -1106,3 +1138,25 @@ class TestCcipCodecs:
             b"\x06",
             ((USDC.lower(), 100_000),),
         )
+
+
+# ── Released selectors ─────────────────────────────────────────────────────
+
+# The enter/exit selectors present in the runtime code of the crosschain fuses
+# ipor-abi publishes (identical on Arbitrum and HyperEVM, contracts 10f0f8e4).
+RELEASED_SELECTORS = {
+    (CcipCrosschainSupplyFuse, "_ENTER"): "63c30bbb",
+    (CcipCrosschainSupplyFuse, "_EXIT"): "fba2df16",
+    (CcipCrosschainCommandFuse, "_ENTER"): "9414ef9a",
+    (StargateCrosschainCommandFuse, "_ENTER"): "c264184b",
+    (StargateCrosschainSupplyFuse, "_ENTER"): "a8830a46",
+    (StargateCrosschainSupplyFuse, "_EXIT"): "4609f8c9",
+}
+
+
+@pytest.mark.parametrize(
+    ("fuse", "attr"), list(RELEASED_SELECTORS), ids=lambda v: getattr(v, "__name__", v)
+)
+def test_encoders_target_the_released_selectors(fuse, attr):
+    selector = function_signature_to_4byte_selector(getattr(fuse, attr)).hex()
+    assert selector == RELEASED_SELECTORS[(fuse, attr)]

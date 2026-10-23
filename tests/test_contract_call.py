@@ -131,3 +131,22 @@ def _sdk_modules() -> list[str]:
         info.name
         for info in pkgutil.walk_packages(ipor_fusion.__path__, "ipor_fusion.")
     ]
+
+
+def test_decode_error_names_a_layout_mismatch_and_survives_map():
+    from eth_abi import encode as abi_encode
+
+    from ipor_fusion.core.contract import Call
+
+    class Named(Exception):
+        pass
+
+    call = Call(
+        to="0x" + "11" * 20,  # type: ignore[arg-type]
+        data=b"",
+        output_types=["(uint256,uint256,uint256)"],
+        decode_error=lambda exc: Named(str(exc)),
+    ).map(lambda values: values[0])
+    with pytest.raises(Named):
+        call.decode(abi_encode(["uint256"], [1]))
+    assert call.decode(abi_encode(["(uint256,uint256,uint256)"], [(1, 2, 3)])) == 1

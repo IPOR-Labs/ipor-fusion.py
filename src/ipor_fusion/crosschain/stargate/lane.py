@@ -130,4 +130,5 @@ def _to_lane(observation: Observation) -> LaneObservation:
         state_version=observation.state_version,
         command_config_epoch=observation.command_config_epoch,
         tracked_position_set_hash=observation.tracked_position_set_hash,
+        unpriced_count=observation.unpriced_count,
     )

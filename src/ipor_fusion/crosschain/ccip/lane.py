@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from eth_typing import ChecksumAddress
 from eth_utils import keccak
+from web3.types import Timestamp
 
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
@@ -155,6 +156,9 @@ class CcipLane(CrosschainLane):
             lambda observation: _to_lane(observation, rate)
         )
 
+    def last_value_moving_receipt_at(self) -> Call[Timestamp]:
+        return self.executor.last_value_moving_receipt_at(self.spoke_chain_id)
+
     def propose_balance(self, observation: BalanceObservation) -> Call[ProposalId]:
         """Returns the proposal id (the function's return value)."""
         self._require_spoke(observation)
@@ -168,6 +172,7 @@ def _to_lane(observation: CcipObservation, rate: int) -> LaneObservation:
         state_version=observation.state_version,
         command_config_epoch=observation.command_config_epoch,
         tracked_position_set_hash=observation.tracked_position_set_hash,
+        unpriced_count=observation.unpriced_count,
     )
 
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar, cast
 
 from eth_abi import decode, encode
+from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -53,6 +54,9 @@ class Call(Generic[T_co]):
     data: bytes
     output_types: Sequence[str] | None = None
     decoder: Callable[..., T_co] | None = None
+    #: Turns an ABI decoding failure of the return data into a named error
+    #: (for a contract build whose return layout differs); ``None`` re-raises.
+    decode_error: Callable[[DecodingError], Exception] | None = None
 
     def __post_init__(self) -> None:
         if self.output_types is not None:
@@ -81,6 +85,7 @@ class Call(Generic[T_co]):
             data=self.data,
             output_types=self.output_types,
             decoder=mapped,
+            decode_error=self.decode_error,
         )
 
     def call(self, ctx: Web3Context, *, block: BlockIdentifier | None = None) -> T_co:
@@ -112,7 +117,12 @@ class Call(Generic[T_co]):
         of `.call(ctx)`, for return data fetched elsewhere (e.g. `Multicall3`)."""
         if not self.output_types:
             raise ValueError("Call.decode() on a write-only Call.")
-        values = tuple(decode(self.output_types, bytes(raw)))
+        try:
+            values = tuple(decode(self.output_types, bytes(raw)))
+        except DecodingError as exc:
+            if self.decode_error is None:
+                raise
+            raise self.decode_error(exc) from exc
         single: object = values[0] if len(values) == 1 else values
         if self.decoder is not None:
             return self.decoder(single)
@@ -163,12 +173,14 @@ class ContractWrapper:
         *args: object,
         output_types: Sequence[str],
         decoder: Callable[..., T] | None = None,
+        decode_error: Callable[[DecodingError], Exception] | None = None,
     ) -> Call[T]:
         return Call(
             to=self._address,
             data=_encode_calldata(signature, *args),
             output_types=output_types,
             decoder=decoder,
+            decode_error=decode_error,
         )
 
     def _write(self, signature: str, *args: object) -> Call[None]:

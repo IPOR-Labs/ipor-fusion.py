@@ -503,6 +503,55 @@ fails at run time:
   `dataclasses.asdict` form) with every field parsed; use it instead of
   `FusionInstance(**data)`, which passes raw strings into the role-typed fields.
 
+#### Crosschain follows the released contracts
+
+4.0 encodes and decodes the crosschain contracts of the 2026-10-21 contracts
+release (`ipor-abi`: the CCIP and Stargate factories, fuses and NAV pre-hook at
+one CREATE3 address on Arbitrum and HyperEVM). Earlier crosschain deployments
+are not supported: their fuses reject the new calldata, their envelopes fail
+the version check, and their dispatcher `observation()` raises
+`UnsupportedContractVersionError`, so an earlier-generation lane is unreadable
+on the spoke side.
+
+- **Envelopes.** `CODEC_VERSION` is 4 (Stargate), `CCIP_VERSION` 3.
+- **`Command`.** New `min_execution_gas` before `action_data` (0 = the lane's
+  default, at most `MAX_COMMAND_EXECUTION_GAS`); `as_tuple()` / `from_tuple()`
+  have six members and `COMMAND_TUPLE_TYPE` is
+  `(bytes32,uint64,uint64,uint8,uint64,bytes)`.
+- **REQUEST_SHARES.** `Command.request_shares(withdraw_manager, vault, shares,
+  max_fee_shares)`: the fee ceiling in shares is required (`NO_FEE_CEILING` for
+  none).
+- **CCIP supply.** `CcipSendParams.min_delivered` is the delivered-amount floor
+  the supply `enter` carries (0 = none, at most the amount).
+  `CcipCommandType.CANCEL_DEPLOYMENT` cancels an expired dispatcher deployment.
+- **Observations.** `CcipObservation` gains `unpriced_count` and
+  `unpriced_codes` (`unpriced_reason(index)` returns a `TrackedVaultPricing`); the
+  Stargate `Observation` gains `vault_valued` and `unpriced_count`;
+  `LaneObservation` gains `unpriced_count`.
+- **Attestation.** `CrosschainLane.attestation(...)` takes `receipt_at`, the hub's
+  `LaneHubState.last_value_moving_receipt_at` (0 on Stargate). The executor
+  refuses an observation that is not strictly later than its last value-moving
+  receipt; the method raises `ValueError` for it and while a tracked vault is
+  unpriced. New: `LaneHubState.last_value_moving_receipt_at`,
+  `CrosschainLane.last_value_moving_receipt_at()` (`None` on Stargate) and
+  `CcipCrosschainExecutor.last_value_moving_receipt_at`.
+- **Core.** `Call` gains an optional `decode_error` field: a wrapper maps an
+  undecodable answer to a named SDK exception (the earlier-generation
+  `observation()` raises `UnsupportedContractVersionError` this way), and it
+  survives `Call.map()`.
+- **Removed.** `CrosschainDispatcher.pending_request_shares` (neither released
+  dispatcher has it). From the repository: `scripts/crosschain_readiness.py`, the
+  pytest `--run-readiness` option and `readiness` marker, and the examples
+  `crosschain_ccip_usdc_arbitrum_hyperevm.py` and
+  `composed_hypercore_flow_arbitrum_hyperevm.py`, which drove an earlier
+  deployment.
+- **Events and errors.** `CCIP_EVENTS` mirrors the released contracts:
+  `ReturnFinalized` / `LateReturnFinalized` gain `debitedSD`, `SharesRequested`
+  gains `feeShares`, and new events are registered. The crosschain error registry
+  decodes every error the released contracts declare.
+- **Routes.** The released CCIP README requires a route `messageGasLimit` of at
+  least 2.7 M for commands.
+
 ## Errors
 
 Every exception class the SDK defines now derives from `IporFusionError` and is

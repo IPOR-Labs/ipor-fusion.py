@@ -341,24 +341,11 @@ ever signed or broadcast.
 - [External-state margin leg](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/external_state_margin_leg_base.py) — a vault whose capital
   sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
   the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
-- [Crosschain CCIP lifecycle](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) (preview feature) — a vault
-  whose capital works on another chain: supply USDC from an Arbitrum hub to a HyperEVM spoke
-  over CCIP, attest the remote balance with two keys, deposit and redeem on the spoke, recall
-  and claim, driven through `CrosschainLane` and relayed by `CrosschainSimulator`.
-- [Composed HyperCore flow](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/composed_hypercore_flow_arbitrum_hyperevm.py) (preview feature) — the
-  same hub funding a HyperCore vault (market 55) that trades on Hyperliquid Core: the Core leg
-  (bridge, dex transfer, order, close, exit) built from the vault's substrate grants and estimated
-  with `eth_estimateGas` at head (EVM acceptance only, Core executes later), the REDEEM sized by the vault's EVM exit ceiling behind the executor's
-  fee gate, then recall, residual attestation and claim replayed in `CrosschainSimulator` at
-  blocks pinned inside the second live cycle.
-
 ```bash
 export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
 uv run python examples/advanced_euler_v2_credit_market_base.py
 uv run python examples/external_state_margin_leg_base.py
-uv run python examples/crosschain_ccip_usdc_arbitrum_hyperevm.py  # needs ARBITRUM_PROVIDER_URL and HYPEREVM_PROVIDER_URL
-uv run python examples/composed_hypercore_flow_arbitrum_hyperevm.py  # same two providers
 ```
 
 No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs the examples out of

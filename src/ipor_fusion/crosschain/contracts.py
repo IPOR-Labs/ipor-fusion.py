@@ -21,6 +21,7 @@ from web3.types import Timestamp
 
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.crosschain.messages import CommandStatus
+from ipor_fusion.errors import UnsupportedContractVersionError
 from ipor_fusion.types import (
     Amount,
     AssetId,
@@ -31,7 +32,6 @@ from ipor_fusion.types import (
     PlasmaVaultAddress,
     PositionSetHash,
     ProposalId,
-    Shares,
 )
 
 
@@ -231,14 +231,6 @@ class CrosschainDispatcher(ContractWrapper):
     def is_tracked_vault(self, vault: ChecksumAddress) -> Call[bool]:
         return self._view("isTrackedVault(address)", vault, output_types=["bool"])
 
-    def pending_request_shares(self, vault: PlasmaVaultAddress) -> Call[Shares]:
-        return self._view(
-            "pendingRequestShares(address)",
-            vault,
-            output_types=["uint256"],
-            decoder=Shares,
-        )
-
     def command_status(self, command_id: CommandId) -> Call[CommandStatus]:
         return self._view(
             "commandStatus(bytes32)",
@@ -292,3 +284,14 @@ class CrosschainFactory(ContractWrapper):
 
     def creation_codes_configured(self) -> Call[bool]:
         return self._view("creationCodesConfigured()", output_types=["bool"])
+
+
+def _earlier_observation(exc: Exception) -> Exception:
+    """``observation()`` of a dispatcher that predates the 2026-10-21
+    contracts release returns six fields where the released one returns
+    eight; this SDK reads only the released layout."""
+    return UnsupportedContractVersionError(
+        "dispatcher observation() does not decode as the released 8-field "
+        f"layout ({exc}): an earlier-generation dispatcher (pilot or canary "
+        "lane) is not supported"
+    )

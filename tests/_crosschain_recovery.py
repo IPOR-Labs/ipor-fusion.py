@@ -251,8 +251,12 @@ def run_failed_deposit_recovery(run: Run, *, cancel: bool) -> None:
     assert recovered.active == bytes(32)
     assert recovered.sequence == recovered.remote_sequence == before.sequence + 1
     assert recovered.epoch == recovered.remote_epoch == before.epoch
-    assert recovered.version == before.version + 1
-    assert recovered.observation.state_version == before.observation.state_version + 1
+    # A resolution is value-neutral for the version: the success and
+    # cancel ACKs carry the current stateVersion as evidence, only
+    # TRANSFER_SETTLED / RETURN_TRANSFER bump it (CcipCrosschainDispatcher.sol
+    # `_completeCommand` and `_cancelCommand`).
+    assert recovered.version == before.version
+    assert recovered.observation.state_version == before.observation.state_version
     run.advance(3600)
     observation_recovered = run.spoke_sim.observe(lane.observation())
     run.relay()
@@ -260,7 +264,7 @@ def run_failed_deposit_recovery(run: Run, *, cancel: bool) -> None:
         run,
         tag="recovered",
         observed=observation_recovered,
-        old_version=before.version,
+        old_version=before.version - 1,
     )
     if cancel:
         assert recovered.shares == 0
