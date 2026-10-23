@@ -3,7 +3,7 @@
 not import the encoders back: the transport and lane (``ccip.transport``,
 ``ccip.lane``) are exported from :mod:`ipor_fusion.crosschain` instead.
 
-Status: preview, not production. The contracts behind it are under active development, the mainnet deployments are a proof of concept and IPOR Labs canaries, and interfaces may change between minor versions; see ``ipor_fusion.about.PREVIEW_FEATURES``.
+Status: preview, not production. The contracts behind it are under active development, the SDK follows only their official deployment, and interfaces may change or be removed between minor versions, with no backward compatibility; see ``ipor_fusion.about.PREVIEW_FEATURES``.
 """
 
 from ipor_fusion.crosschain.ccip.chainlink import (
