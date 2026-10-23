@@ -579,6 +579,11 @@ def run_simulation(
         "the SDK's default HyperCorePendingReader is not the published one",
     )
 
+    # SIMULATION ONLY: the pinned replay has no other clone between this
+    # preview and the simulated one, so the predicted stack is the created one.
+    # Live, another clone in between moves it: send the clone first, take the
+    # stack from factory.decode_clone_receipt(receipt) and build the
+    # configuration and operation calldata from those addresses.
     preview = factory.clone(**clone_args()).call(ctx)
     vault_address = preview.plasma_vault
     log.info("predicted vault=%s (factory version %d)", vault_address, preview.version)

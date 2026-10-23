@@ -343,6 +343,10 @@ ever signed or broadcast.
 - [External-state margin leg](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/external_state_margin_leg_base.py) — a vault whose capital
   sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
   the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
+- [Crosschain CCIP vault, Arbitrum hub and HyperEVM spoke](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/crosschain_ccip_usdc_arbitrum_hyperevm.py) —
+  the released crosschain contracts as deployed: configure the CCIP factory pair as its owner,
+  create both vaults and the executor, wire the crosschain market and NAV pre-hook, deploy the
+  dispatcher, then supply → attest → DEPOSIT → REDEEM → recall → claim USDC (preview feature).
 - [HyperCore vault on the official deployment](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/hypercore_vault_official_deployment_hyperevm.py) —
   a HyperEVM vault that trades on Hyperliquid Core (market 55, preview): wiring the published
   HyperCore fuses, pre-hooks and grants on a factory clone, and building the Core leg (bridge,
@@ -353,6 +357,17 @@ export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
 uv run python examples/advanced_euler_v2_credit_market_base.py
 uv run python examples/external_state_margin_leg_base.py
+```
+
+The crosschain example needs Arbitrum and HyperEVM archive RPCs and the executor and dispatcher
+creation codes built with Foundry from the contracts release it pins; run without them, it prints
+the `forge inspect` commands that build them:
+
+```bash
+export ARBITRUM_PROVIDER_URL="https://arb-mainnet.g.alchemy.com/v2/YOUR_KEY"
+export HYPEREVM_PROVIDER_URL="https://YOUR_HYPEREVM_ARCHIVE_NODE"
+export CCIP_EXECUTOR_CREATION_CODE_FILE=executor.hex CCIP_DISPATCHER_CREATION_CODE_FILE=dispatcher.hex
+uv run python examples/crosschain_ccip_usdc_arbitrum_hyperevm.py
 ```
 
 No RPC key? `BASE_PROVIDER_URL=https://mainnet.base.org` (Base's public RPC) runs the examples out of
