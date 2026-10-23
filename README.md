@@ -9,9 +9,10 @@ Maintained by <a href="https://ipor.io">IPOR Labs AG</a>.
 
 > **Preview, not production:** the crosschain market (54: Stargate and CCIP executors,
 > dispatchers, lanes, fuses) and the HyperCore market (55: fuses, readers, events) are
-> under active development. Their contracts are not production releases, the mainnet
-> deployments are a proof of concept and IPOR Labs canaries, and their interfaces may
-> change between minor versions. Route no production capital through them. Everything
+> under active development. The SDK follows their official deployment (the 2026-10-21
+> contracts release, listed in ipor-abi) and nothing earlier, and their interfaces may
+> change or be removed between minor versions, with no backward compatibility. Route
+> no production capital through them. Everything
 > else in the package is production. `server_info` and `fusion changelog` list the same
 > status (`PREVIEW_FEATURES`).
 
@@ -491,7 +492,7 @@ the pilot executors and factories). Pin an exact version if you depend on them.
 | `discover_deployment`, `open_lanes` | Read a vault's crosschain market from the hub alone (executors with transport, factory, fuses, attestation keys and spokes served; remote vaults per spoke) and open every lane; `LANES` maps a transport kind to its lane class |
 | `CrosschainSimulator` | Multi-chain `eth_simulateV1` relay: replays LayerZero and CCIP messages between pinned chains by impersonating the endpoint or router on delivery, no bridge needed |
 | `ccip_token_lane` | Whether a CCIP message lane exists from a chain and whether a token's pool serves it, read on Chainlink's Router, OnRamp, TokenAdminRegistry and pool |
-| `decode_hypercore_event`, `hypercore_events` | The HyperCore fuse, pending-library, settlement and reporter events, decoded by topic with their raw log identity under the same input contract as `decode_external_state_event`; a malformed listed log raises `HyperCoreEventDecodeError` |
+| `decode_hypercore_event`, `hypercore_events` | The HyperCore fuse events and the pending library's `HyperCoreActionEnqueued` / `HyperCoreActionSettled`, decoded by topic with their raw log identity under the same input contract as `decode_external_state_event`; a malformed listed log raises `HyperCoreEventDecodeError` |
 | Crosschain fuses (market 54): `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse`; transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` | `ipor_fusion.crosschain` |
 | HyperCore fuses (market 55): `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` | `ipor_fusion.hypercore`, with `HyperCoreReader`, `read_hypercore_vault_state` and the event decoders |
 

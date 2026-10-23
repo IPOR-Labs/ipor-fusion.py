@@ -346,12 +346,12 @@ could not hold. 4.0 exports them only from their subpackages.
   `CrosschainSimulator`. It also covers the crosschain ids (`AssetId`, `CommandId`,
   `MessageId`, `LayerZeroEid`, `CcipChainSelector`, ...), which still import from
   `ipor_fusion.types` too.
-- **HyperCore:** the 97 HyperCore names import from the new
+- **HyperCore:** the HyperCore names import from the new
   `ipor_fusion.hypercore`. That covers the fuses and `HyperCoreSubstrates`, the
   readers and `read_hypercore_*`, the event classes, specs and decoders, and the
   ids (`HyperCoreAsset`, `HyperCoreTokenIndex`, `MarginTableId`, `PayloadHash`,
   ...). It also covers the constants and helpers (`SPOT_DEX`, `USDC_TOKEN_INDEX`,
-  `USDC_SYSTEM_ADDRESS`, `system_address`, `precompile_index_of`, `SettlementMode`,
+  `USDC_SYSTEM_ADDRESS`, `system_address`, `precompile_index_of`,
   `TimeInForce`, `TransferDirection`, ...). `HYPEREVM_CHAIN_ID` stays a top-level
   chain constant. `ipor_fusion.fuses`
   and `ipor_fusion.readers` no longer list them; the ids still import from
@@ -540,11 +540,12 @@ on the spoke side.
   `observation()` raises `UnsupportedContractVersionError` this way), and it
   survives `Call.map()`.
 - **Removed.** `CrosschainDispatcher.pending_request_shares` (neither released
-  dispatcher has it). From the repository: `scripts/crosschain_readiness.py`, the
-  pytest `--run-readiness` option and `readiness` marker, and the examples
-  `crosschain_ccip_usdc_arbitrum_hyperevm.py` and
-  `composed_hypercore_flow_arbitrum_hyperevm.py`, which drove an earlier
-  deployment.
+  dispatcher has it). From the repository: `scripts/crosschain_readiness.py` and the
+  pytest `--run-readiness` option and `readiness` marker. The example
+  `crosschain_ccip_usdc_arbitrum_hyperevm.py` is rewritten for the released
+  contracts under the same name, and `composed_hypercore_flow_arbitrum_hyperevm.py`,
+  which drove an earlier deployment, is replaced by
+  `hypercore_vault_official_deployment_hyperevm.py`.
 - **Events and errors.** `CCIP_EVENTS` mirrors the released contracts:
   `ReturnFinalized` / `LateReturnFinalized` gain `debitedSD`, `SharesRequested`
   gains `feeShares`, and new events are registered. The crosschain error registry
@@ -851,7 +852,7 @@ oracle-mapping readers, `read_external_state`, `VaultSimulator(vault=)`,
 `CrosschainSimulator`, crosschain discovery, the hub-manager inputs
 (`ExecutorInitParams.manager`, `create_executor(manager=)`, `executors_of(manager=)`),
 the async command helpers `Command.request_shares` / `redeem_from_request`,
-`pending_request_shares` and `WithdrawManager.update_plasma_vault_address` take a
+and `WithdrawManager.update_plasma_vault_address` take a
 `PlasmaVaultAddress`; `.address`, `FusionInstance.plasma_vault` and the executor's
 `manager()` return one. Crosschain deposit and redeem destinations stay
 `ChecksumAddress`: `Command.deposit` / `redeem`, `is_allowed_vault`,
@@ -928,8 +929,7 @@ and `pending_deployment_created_at()` return a `Timestamp`. Decimals are
 `shared_decimals` of `CcipCrosschainFactory.asset_config()`, `schedule_asset` and
 `execute_asset`. Token amounts are `Amount` (`EVMTokenAmount.amount`,
 `TokenTransferV1.amount`, `TaxiMessage.amount_sd`, `OutboundMessage.token_amount`,
-`StargateChain.to_local_decimals`), and `pending_request_shares()` returns
-`Shares`. Counters, sequences, epochs, versions, bps and gas limits stay `int`.
+`StargateChain.to_local_decimals`). Counters, sequences, epochs, versions, bps and gas limits stay `int`.
 Decoded event values
 (`ccip_events` → `CcipEvent.values`) stay a generic mapping: convert a value
 before passing it on.

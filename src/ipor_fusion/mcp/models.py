@@ -1175,9 +1175,8 @@ class PreviewFeatureModel(_Base):
     status: Literal["preview"] = Field(
         default="preview",
         description="Always 'preview': not production. The contracts are under "
-        "active development, the mainnet deployments are a proof of concept "
-        "and IPOR Labs canaries, and interfaces may change or be removed "
-        "between minor versions, with no backward compatibility. Route no "
+        "active development, the SDK follows only their official deployment, "
+        "and interfaces may change or be removed between minor versions, with no backward compatibility. Route no "
         "production capital through these features.",
     )
 
