@@ -238,6 +238,8 @@ class CrosschainClaimFuse(Fuse):
     """``CrosschainClaimFuse``: pull settled idle executor assets back into the
     vault. Transport-agnostic."""
 
+    SIGNATURES = ("enter((address,uint256))",)
+
     def enter(self, *, executor: ChecksumAddress, amount: Amount) -> FuseAction:
         """Claim up to ``amount`` (capped at the executor's idle ledger) of the
         executor's asset. The measured receipt is what the balance fuse removes

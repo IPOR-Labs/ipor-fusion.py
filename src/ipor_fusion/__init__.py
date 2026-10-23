@@ -52,6 +52,12 @@ from ipor_fusion.core.fee_manager import (
     HighWaterMarkPerformanceFee,
     RecipientFee,
 )
+from ipor_fusion.core.fuse_decoding import (
+    DecodedFuseAction,
+    decode_execute_calldata,
+    decode_fuse_action,
+    fuse_classes_for,
+)
 from ipor_fusion.core.fusion_factory import CloneArgs, FusionFactory, FusionInstance
 from ipor_fusion.core.logs import (
     LogSource,
@@ -449,6 +455,10 @@ __all__ = [
     "repository_url",
     "Web3Context",
     "InFlightLimit",
+    "DecodedFuseAction",
+    "decode_execute_calldata",
+    "decode_fuse_action",
+    "fuse_classes_for",
     "ContextManager",
     "Call",
     "get_logs_adaptive",

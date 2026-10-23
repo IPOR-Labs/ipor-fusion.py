@@ -282,7 +282,9 @@ the lifecycle matrix follows that.
   of the node's response), `oracle`, `fusion_factory`,
   `external_state_executor` (NAV marks for market 50), `erc20`, `fuse_action`
   (`FuseAction`), `fuse` (the `Fuse` base, `StakeFuse`, the shared validators and
-  substrate packers), `address` (`_validate_not_zero_address`). `core` imports neither
+  substrate packers), `fuse_decoding` (`decode_execute_calldata`, `decode_fuse_action`,
+  `fuse_classes_for`: an action back to the function its class encoded, from each
+  class's `SIGNATURES`), `address` (`_validate_not_zero_address`). `core` imports neither
   `fuses` nor `crosschain` (`tests/test_sdk_layering.py`)
 - `fuses/` — per-protocol fuse encoders (aave_v3, async_action, compound_v3,
   erc4626, euler_v2, external_state, fluid_instadapp, gearbox_v3, merkl, morpho, ramses_v2,
@@ -446,7 +448,9 @@ or examples.
   `ipor-abi` `addresses.json`; a fuse must be registered on the vault
   (`PlasmaVault.get_fuses()`) and its market granted substrates before an
   action can succeed.
-- Adding a protocol: new module in `fuses/`, re-export from `fuses/__init__.py`
+- Adding a protocol: new module in `fuses/` whose classes list every Solidity
+  function they encode in `SIGNATURES` (`tests/conftest.py` fails any encoded call
+  a class does not declare), re-export from `fuses/__init__.py`
   and the top-level `__all__` (and both snapshots in `test_public_api.py`),
   encoding test in `test_fuse_encoding.py`, and a row in the README protocol
   table.

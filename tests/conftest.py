@@ -41,6 +41,24 @@ def pytest_addoption(parser):
     )
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _fuse_signatures_are_declared():
+    """Every call an encoder builds anywhere in the suite must be one its class
+    declares in ``SIGNATURES``, so the action decoder can name it."""
+    from ipor_fusion.core.fuse import Fuse
+
+    encode = Fuse._action_raw
+
+    def checked(self, signature, values):
+        assert signature in type(self).signatures(), (
+            f"{type(self).__name__} encodes {signature}, missing from its SIGNATURES"
+        )
+        return encode(self, signature, values)
+
+    with patch.object(Fuse, "_action_raw", checked):
+        yield
+
+
 @pytest.fixture
 def sequential_multicall():
     """Run the vault fetch's batched reads one `Call` at a time, for tests that

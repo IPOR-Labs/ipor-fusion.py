@@ -151,6 +151,17 @@ if result.all_success:
     print(after.value - before.value)
 ```
 
+Read a batch back from calldata, e.g. to review a multisig transaction:
+
+```python
+from ipor_fusion import AaveV3SupplyFuse, decode_execute_calldata, decode_fuse_action, fuse_classes_for
+
+for action in decode_execute_calldata(payload):   # execute / claimRewards calldata
+    print(action.fuse, [cls.__name__ for cls in fuse_classes_for(action)])
+decoded = decode_fuse_action(action, AaveV3SupplyFuse)  # the class settles shared shapes
+print(decoded.label, decoded.args)                      # AaveV3SupplyFuse.enter ((asset, amount, e_mode),)
+```
+
 ## CLI Quickstart
 
 The SDK ships with a `fusion` CLI for inspecting and managing Plasma Vaults from the terminal.

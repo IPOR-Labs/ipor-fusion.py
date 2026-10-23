@@ -11,6 +11,11 @@ from ipor_fusion.types import Amount, Fee, Liquidity, Tick, TokenId
 class RamsesV2NewPositionFuse(Fuse):
     """Fuse for minting and closing liquidity positions on Ramses V2."""
 
+    SIGNATURES = (
+        "enter((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,uint256,uint256))",
+        "exit((uint256[]))",
+    )
+
     def new_position(
         self,
         *,
@@ -56,6 +61,11 @@ class RamsesV2NewPositionFuse(Fuse):
 
 class RamsesV2ModifyPositionFuse(Fuse):
     """Fuse for increasing and decreasing liquidity on Ramses V2 positions."""
+
+    SIGNATURES = (
+        "enter((address,address,uint256,uint256,uint256,uint256,uint256,uint256))",
+        "exit((uint256,uint128,uint256,uint256,uint256))",
+    )
 
     def increase_liquidity(
         self,
@@ -110,6 +120,8 @@ class RamsesV2ModifyPositionFuse(Fuse):
 class RamsesV2CollectFuse(Fuse):
     """Fuse for collecting accrued fees from Ramses V2 positions."""
 
+    SIGNATURES = ("enter((uint256[]))",)
+
     def collect(self, token_ids: list[TokenId]) -> FuseAction:
         self._validate_non_empty_list(token_ids, "token_ids")
         return self._action_raw("enter((uint256[]))", [[token_ids]])
@@ -117,6 +129,8 @@ class RamsesV2CollectFuse(Fuse):
 
 class RamsesClaimFuse(Fuse):
     """Fuse for claiming veRAM reward tokens from Ramses V2 gauges."""
+
+    SIGNATURES = ("claim(uint256[],address[][])",)
 
     def claim(
         self, *, token_ids: list[TokenId], token_rewards: list[list[str]]

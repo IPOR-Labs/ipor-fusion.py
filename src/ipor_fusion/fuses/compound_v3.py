@@ -7,6 +7,11 @@ from ipor_fusion.types import Amount
 class CompoundV3SupplyFuse(Fuse):
     """Fuse for supplying and withdrawing assets on Compound V3."""
 
+    SIGNATURES = (
+        "enter((address,uint256))",
+        "exit((address,uint256))",
+    )
+
     def supply(self, *, asset: ChecksumAddress, amount: Amount) -> FuseAction:
         self._validate_address(asset, "asset")
         self._validate_amount(amount, "amount")

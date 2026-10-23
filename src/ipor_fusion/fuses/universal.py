@@ -56,6 +56,11 @@ class UniversalTokenSwapperSubstrates:
 class UniversalTokenSwapperFuse(Fuse):
     """Fuse for executing arbitrary token swaps through whitelisted DEX targets."""
 
+    SIGNATURES = (
+        "enter((address,address,uint256,(address[],bytes[])))",
+        "enter((address,address,uint256,uint256,(address[],bytes[])))",
+    )
+
     def __init__(
         self,
         address: FuseAddress,

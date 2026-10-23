@@ -25,6 +25,8 @@ class MerklClaimWrapperFuse(Fuse):
         with a configured RewardsClaimManager.
     """
 
+    SIGNATURES = ("claim(address[],uint256[],bytes32[][],address[])",)
+
     def claim(
         self,
         *,

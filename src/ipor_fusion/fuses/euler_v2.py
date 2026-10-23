@@ -139,6 +139,11 @@ class EulerSwapInitialState:
 class EulerV2SupplyFuse(Fuse):
     """Fuse for supplying/withdrawing collateral on an Euler V2 vault sub-account."""
 
+    SIGNATURES = (
+        "enter((address,uint256,bytes1))",
+        "exit((address,uint256,bytes1))",
+    )
+
     def supply(
         self,
         *,
@@ -169,6 +174,11 @@ class EulerV2SupplyFuse(Fuse):
 class EulerV2CollateralFuse(Fuse):
     """Fuse for enabling/disabling an Euler V2 vault as EVC collateral for a sub-account."""
 
+    SIGNATURES = (
+        "enter((address,bytes1))",
+        "exit((address,bytes1))",
+    )
+
     def enable_collateral(
         self, *, euler_vault: ChecksumAddress, sub_account: int
     ) -> FuseAction:
@@ -191,6 +201,11 @@ class EulerV2CollateralFuse(Fuse):
 class EulerV2ControllerFuse(Fuse):
     """Fuse for enabling/disabling an Euler V2 vault as the EVC controller for a sub-account."""
 
+    SIGNATURES = (
+        "enter((address,bytes1))",
+        "exit((address,bytes1))",
+    )
+
     def enable_controller(
         self, *, euler_vault: ChecksumAddress, sub_account: int
     ) -> FuseAction:
@@ -212,6 +227,11 @@ class EulerV2ControllerFuse(Fuse):
 
 class EulerV2BorrowFuse(Fuse):
     """Fuse for borrowing/repaying an Euler V2 vault's underlying asset on a sub-account."""
+
+    SIGNATURES = (
+        "enter((address,uint256,bytes1))",
+        "exit((address,uint256,bytes1))",
+    )
 
     def borrow(
         self,
@@ -246,6 +266,11 @@ class EulerV2SwapDeployFuse(Fuse):
     `deploy` installs the (CREATE2-predicted) pool as the EVC account operator
     and deploys it via the factory; `decommission` removes that authorization.
     """
+
+    SIGNATURES = (
+        "enter(((address,address,address,address,address,address),(uint112,uint112,uint112,uint112,uint80,uint80,uint64,uint64,uint64,uint64,uint40,uint8,address),(uint112,uint112),bytes32,address,bytes1))",
+        "exit((address,bytes1))",
+    )
 
     _ENTER_SIGNATURE = (
         "enter("
@@ -305,6 +330,10 @@ class EulerV2SwapReconfigureFuse(Fuse):
     Reconfiguration is one-directional: there is no `exit` (decommissioning is
     handled by `EulerV2SwapDeployFuse.decommission`).
     """
+
+    SIGNATURES = (
+        "enter((address,bytes1,(uint112,uint112,uint112,uint112,uint80,uint80,uint64,uint64,uint64,uint64,uint40,uint8,address),(uint112,uint112)))",
+    )
 
     _ENTER_SIGNATURE = (
         "enter("
@@ -368,6 +397,8 @@ class EulerV2BatchFuse(Fuse):
     to zero after (e.g. to let an eVault pull the asset on deposit/repay).
     """
 
+    SIGNATURES = ("enter(((address,bytes1,bytes)[],address[],address[]))",)
+
     _ENTER_SIGNATURE = "enter(((address,bytes1,bytes)[],address[],address[]))"
 
     def batch(
@@ -399,6 +430,11 @@ class EulerV2SwapRegistryFuse(Fuse):
     first (via `EulerV2SwapDeployFuse.decommission`), otherwise the live registry
     reverts `OldOperatorStillInstalled`.
     """
+
+    SIGNATURES = (
+        "enter((address,bytes1))",
+        "exit((address,bytes1))",
+    )
 
     _ENTER_SIGNATURE = "enter((address,bytes1))"
     _EXIT_SIGNATURE = "exit((address,bytes1))"

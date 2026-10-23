@@ -72,6 +72,7 @@ class CcipCrosschainSupplyFuse(CrosschainSupplyFuse):
 
     _ENTER = "enter((address,address,uint256,uint256,uint256,address,uint256))"
     _EXIT = "exit((address,uint256,uint256,uint256,uint256,address,uint256))"
+    SIGNATURES = (_ENTER, _EXIT)
 
     def enter(
         self,
@@ -169,6 +170,7 @@ class CcipCrosschainCommandFuse(CrosschainCommandFuse):
         "enter((uint8,address,uint256,(uint64,address,address,uint96,uint96,uint256,bool),"
         f"address[],bool,bool,{COMMAND_TUPLE_TYPE},uint256,address,uint256))"
     )
+    SIGNATURES = (_ENTER,)
     _WITH_COMMAND = frozenset(
         {
             CcipCommandType.SEND_COMMAND,
