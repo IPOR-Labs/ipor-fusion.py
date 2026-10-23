@@ -62,8 +62,8 @@ def _fetch_morpho_positions(
     market_id substrates; each substrate has an independent position. The
     on-chain balance fuse reports a single netted number per IPOR market —
     this helper exposes the three-way decomposition behind that number. Every
-    substrate of every market is read in one batch; a transport error leaves
-    them all unread.
+    substrate of every market is read in one batch; a batch failure that
+    ``_safe_call`` suppresses (an RPC error or timeout) leaves them all unread.
     """
     per_market_substrates = _collect_morpho_substrates(market_substrates)
     if not per_market_substrates:

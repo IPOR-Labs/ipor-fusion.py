@@ -237,7 +237,8 @@ class MorphoReader(ContractWrapper):
         user: ChecksumAddress,
     ) -> list[MorphoPositionBreakdown | None]:
         """:meth:`read_position_breakdown` for every market in one Multicall3
-        round trip (per batch size), in ``market_ids`` order.
+        batch (one round trip per batch size, or one read per call without
+        Multicall3), in ``market_ids`` order.
 
         ``None`` for a market whose position, state or params read reverts,
         returns no data or cannot be decoded; a transport error raises.

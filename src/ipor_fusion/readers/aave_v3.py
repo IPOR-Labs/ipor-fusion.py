@@ -189,8 +189,9 @@ class AaveV3Reader(ContractWrapper):
         assets: Sequence[ChecksumAddress],
         user: ChecksumAddress,
     ) -> list[AaveV3PositionBreakdown | None]:
-        """:meth:`read_position_breakdown` for every asset in two Multicall3 round
-        trips (every reserve's tokens, then every balance), in ``assets`` order.
+        """:meth:`read_position_breakdown` for every asset in two Multicall3 batches
+        (every reserve's tokens, then every balance), each one round trip per
+        batch size, or one read per call without Multicall3; in ``assets`` order.
 
         ``None`` for an asset whose reserve data or a balance reverts, returns no
         data or cannot be decoded; a transport error raises.
