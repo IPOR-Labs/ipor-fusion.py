@@ -68,3 +68,14 @@ def test_a_chain_without_a_registry_is_a_usage_error():
 
 def test_list_needs_a_chain():
     assert _run("list").exit_code == 2
+
+
+def test_an_unreachable_registry_is_a_usage_error(monkeypatch):
+    def down(_url, _t):
+        raise registry_module.AddressRegistryError("registry down")
+
+    monkeypatch.setattr(registry_module, "_download", down)
+    for args in (("lookup", "x"), ("names",), ("list", "--chain", "base")):
+        result = _run(*args)
+        assert result.exit_code == 2
+        assert "registry down" in result.output

@@ -137,7 +137,9 @@ def _build_ctx(
     return ctx, block_number
 
 
-def _no_zero_sentinel(name: str) -> Callable[[object], object]:
+def _no_zero_sentinel(
+    name: str, omitted: str | None = None
+) -> Callable[[object], object]:
     """Refuse 0 with an explicit message: clients built against the 3.x tools
     still send it meaning auto / latest, and reading it as block or chain 0
     would answer with genesis-block data instead of an error."""
@@ -146,7 +148,14 @@ def _no_zero_sentinel(name: str) -> Callable[[object], object]:
         if value == 0 and not isinstance(value, bool):
             raise ValueError(
                 f"{name}=0 is not a sentinel any more: omit {name} for "
-                + ("the latest block" if name == "block_number" else "auto-detection")
+                + (
+                    omitted
+                    or (
+                        "the latest block"
+                        if name == "block_number"
+                        else "auto-detection"
+                    )
+                )
             )
         return value
 
@@ -171,7 +180,7 @@ RequiredChainArg = Annotated[ChainId, Field(description="Chain ID.", gt=0)]
 RegistryChainArg = Annotated[
     ChainId | None,
     Field(description="Chain ID; omitted: every chain with a deployment file.", gt=0),
-    BeforeValidator(_no_zero_sentinel("chain_id")),
+    BeforeValidator(_no_zero_sentinel("chain_id", "every chain")),
 ]
 BlockArg = Annotated[
     int | None,

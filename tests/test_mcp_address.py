@@ -60,5 +60,14 @@ def test_list_requires_a_chain_and_returns_the_map():
 
 
 def test_zero_is_no_sentinel_for_all_chains():
-    with pytest.raises(ToolError, match="chain_id=0"):
+    with pytest.raises(ToolError, match="omit chain_id for every chain"):
         _call("address_lookup", query="x", chain_id=0)
+
+
+def test_an_unreachable_registry_is_a_tool_error(monkeypatch):
+    def down(_url, _t):
+        raise registry_module.AddressRegistryError("registry down")
+
+    monkeypatch.setattr(registry_module, "_download", down)
+    with pytest.raises(ToolError, match="registry down"):
+        _call("address_list", chain_id=8453)

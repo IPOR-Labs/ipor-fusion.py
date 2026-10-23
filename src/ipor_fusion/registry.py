@@ -12,6 +12,7 @@ from collections.abc import Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from http.client import HTTPException
+from types import MappingProxyType
 from typing import Literal, TypedDict
 from urllib.request import urlopen
 
@@ -59,11 +60,16 @@ _ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}")
 
 @dataclass(frozen=True)
 class AddressRegistry:
-    """One chain's ``{contract name: address}`` map at registry ``ref``."""
+    """One chain's ``{contract name: address}`` map at registry ``ref``, read-only:
+    the instance keeps its own copy, so neither the caller's dict nor a cached
+    registry can be changed."""
 
     chain_id: ChainId
     ref: str
     addresses: Mapping[str, ChecksumAddress]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "addresses", MappingProxyType(dict(self.addresses)))
 
     def address(self, name: str) -> ChecksumAddress:
         """The address named exactly ``name``; raises
@@ -89,6 +95,8 @@ class AddressRegistry:
 
 _cache: dict[tuple[ChainId, str], tuple[float, AddressRegistry]] = {}
 _cache_lock = threading.Lock()
+# One lock per (chain, ref): concurrent misses download once, in order.
+_key_locks: dict[tuple[ChainId, str], threading.Lock] = {}
 
 
 def registry_url(chain_id: ChainId, ref: str = "main") -> str:
@@ -121,15 +129,18 @@ def fetch_address_registry(
     url = registry_url(chain_id, ref)
     key = (chain_id, ref)
     with _cache_lock:
-        cached = _cache.get(key)
-    if cached is not None and (
-        _COMMIT.fullmatch(ref) or time.monotonic() - cached[0] < _MOVING_REF_TTL
-    ):
-        return cached[1]
-    registry = AddressRegistry(chain_id, ref, _parse(_download(url, timeout), url))
-    with _cache_lock:
-        _cache[key] = (time.monotonic(), registry)
-    return registry
+        key_lock = _key_locks.setdefault(key, threading.Lock())
+    with key_lock:
+        with _cache_lock:
+            cached = _cache.get(key)
+        if cached is not None and (
+            _COMMIT.fullmatch(ref) or time.monotonic() - cached[0] < _MOVING_REF_TTL
+        ):
+            return cached[1]
+        registry = AddressRegistry(chain_id, ref, _parse(_download(url, timeout), url))
+        with _cache_lock:
+            _cache[key] = (time.monotonic(), registry)
+        return registry
 
 
 def _download(url: str, timeout: float) -> bytes:

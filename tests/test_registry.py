@@ -1,6 +1,7 @@
 """The ipor-abi address registry client, offline: downloads are faked."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from web3 import Web3
@@ -171,3 +172,37 @@ def test_list_is_the_sorted_map(downloads):
     assert document["ref"] == "main"
     assert document["count"] == 2
     assert list(document["addresses"]) == ["IporFusionFactoryProxy", "SupplyFuseAaveV3"]
+
+
+def test_a_registry_cannot_be_changed_through_its_map_or_its_source(downloads):
+    source = {"X": Web3.to_checksum_address(PROXY)}
+    registry = AddressRegistry(BASE, "main", source)
+    source["X"] = Web3.to_checksum_address(FUSE)
+    assert registry.address("X") == Web3.to_checksum_address(PROXY)
+    cached = fetch_address_registry(BASE)
+    with pytest.raises(TypeError):
+        cached.addresses["IporFusionFactoryProxy"] = FUSE  # type: ignore[index]
+    assert fetch_address_registry(BASE).address(
+        "IporFusionFactoryProxy"
+    ) == Web3.to_checksum_address(PROXY)
+
+
+def test_concurrent_misses_download_once(downloads):
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda _: fetch_address_registry(BASE), range(16)))
+    assert len(downloads) == 1
+
+
+def test_a_failed_refresh_is_not_cached(monkeypatch):
+    calls = []
+
+    def flaky(_url, _t):
+        calls.append(1)
+        if len(calls) == 1:
+            raise AddressRegistryError("down")
+        return json.dumps({"X": PROXY}).encode()
+
+    monkeypatch.setattr(registry_module, "_download", flaky)
+    with pytest.raises(AddressRegistryError):
+        fetch_address_registry(BASE)
+    assert fetch_address_registry(BASE).address("X")
