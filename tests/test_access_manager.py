@@ -17,6 +17,7 @@ from ipor_fusion import (
     OwnerNotFoundError,
     PlasmaVault,
     RoleAccount,
+    Roles,
     parse_access_manager_address,
     parse_plasma_vault_address,
     resolve_access_manager,
@@ -335,13 +336,15 @@ class TestCallPlan:
             return encode(["uint48"], [scheduled])
 
         ctx = MagicMock()
+        ctx.default_block = 777
+        ctx.at_block.return_value = ctx
         ctx.call.side_effect = multicall_aware(handler)
         ctx.web3.eth.get_block.return_value = {"timestamp": self.NOW}
         return ctx
 
-    def _plan(self, **kwargs):
+    def _plan(self, *, via_manager: bool = False, **kwargs):
         return self.manager.read_call_plan(
-            self._ctx(**kwargs), self.target_call, caller=ALICE
+            self._ctx(**kwargs), self.target_call, caller=ALICE, via_manager=via_manager
         )
 
     def test_immediate_sends_the_call_itself(self):
@@ -381,10 +384,25 @@ class TestCallPlan:
         ready = self._plan(immediate=False, delay=3600, scheduled=self.NOW)
         assert ready.kind == "ready"
         assert ready.next_call is not None
-        assert ready.next_call.to == MANAGER_ADDR
-        assert ready.next_call.data == Web3.keccak(text="execute(address,bytes)")[
+        # Sent as the call itself, so the target consumes the schedule and still
+        # sees the caller as the sender.
+        assert (ready.next_call.to, ready.next_call.data) == (
+            self.target_call.to,
+            self.target_call.data,
+        )
+        relayed = self._plan(
+            immediate=False, delay=3600, scheduled=self.NOW, via_manager=True
+        )
+        assert relayed.next_call is not None
+        assert relayed.next_call.to == MANAGER_ADDR
+        assert relayed.next_call.data == Web3.keccak(text="execute(address,bytes)")[
             :4
         ] + encode(["address", "bytes"], [self.target_call.to, self.target_call.data])
+
+    def test_calls_on_the_manager_itself_are_not_planned(self):
+        grant = self.manager.grant_role(Roles.ALPHA_ROLE, ALICE, Period(0))
+        with pytest.raises(ValueError, match="access manager itself"):
+            self.manager.read_call_plan(MagicMock(), grant, caller=ALICE)
 
     def test_cancel_encodes_caller_target_and_data(self):
         call = self.manager.cancel(ALICE, VAULT_ADDR, b"\x01")

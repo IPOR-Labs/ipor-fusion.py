@@ -28,19 +28,24 @@ def test_schedule_wait_and_execute_a_delayed_call(web3_base):
     assert plan.next_call is not None
 
     early = VaultSimulator(web3_base, block=BLOCK)
-    early.add_call(plan.next_call, from_=ATOMIST)
+    early.add_call(plan.next_call, from_=ATOMIST, label="schedule")
     early.next_block(3600)
-    early.add_call(manager.execute(cap.to, cap.data), from_=ATOMIST, label="early")
-    assert not early.run().calls[-1].success
+    early.add_call(cap, from_=ATOMIST, label="early")
+    scheduled, too_early = early.run().calls
+    assert scheduled.success
+    assert not too_early.success
+    assert too_early.error is not None
+    assert "0x18cb6b7a" in too_early.error  # AccessManagerNotReady(bytes32)
 
-    sim = VaultSimulator(web3_base, block=BLOCK)
-    sim.add_call(plan.next_call, from_=ATOMIST)
-    scheduled = sim.observe(manager.get_schedule(plan.operation))
-    sim.next_block(int(plan.permission.delay) + 1)
-    sim.add_call(manager.execute(cap.to, cap.data), from_=ATOMIST)
-    after = sim.observe(vault.get_total_supply_cap())
-    result = sim.run()
-
-    assert result.all_success
-    assert scheduled.value > 0
-    assert after.value == NEW_CAP
+    # Once ready, the vault consumes the schedule on a direct call from the
+    # atomist, or the manager relays it.
+    for ready in (cap, manager.execute(cap.to, cap.data)):
+        sim = VaultSimulator(web3_base, block=BLOCK)
+        sim.add_call(plan.next_call, from_=ATOMIST)
+        when = sim.observe(manager.get_schedule(plan.operation))
+        sim.next_block(int(plan.permission.delay) + 1)
+        sim.add_call(ready, from_=ATOMIST)
+        after = sim.observe(vault.get_total_supply_cap())
+        assert sim.run().all_success
+        assert when.value > 0
+        assert after.value == NEW_CAP

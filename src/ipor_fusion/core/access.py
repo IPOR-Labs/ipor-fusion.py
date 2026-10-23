@@ -82,8 +82,9 @@ class CallPlan:
     - ``schedule``: the caller has an execution delay and nothing is scheduled;
       ``next_call`` schedules it, executable ``delay`` seconds after it lands.
     - ``waiting``: scheduled, executable at ``scheduled_at``; nothing to send yet.
-    - ``ready``: scheduled and executable; ``next_call`` runs it through the
-      manager's ``execute`` (before it expires, a week after ``scheduled_at``).
+    - ``ready``: scheduled and executable; ``next_call`` is the call itself (or
+      the manager's ``execute`` with ``via_manager``), valid until the schedule
+      expires a week after ``scheduled_at``; an expired one plans ``schedule``.
     - ``forbidden``: the caller has no role for it, or the target is closed.
     """
 
@@ -233,8 +234,9 @@ class AccessManager(ContractWrapper):
     def schedule(
         self, target: ChecksumAddress, data: bytes, when: Timestamp = _ASAP
     ) -> Call[None]:
-        """Schedule ``data`` on ``target`` for the sender, executable at ``when``
-        or, when 0 or earlier, as soon as the sender's execution delay allows."""
+        """Schedule ``data`` on ``target`` for the sender, executable at ``when``;
+        0 means as soon as the sender's execution delay allows, and a nonzero
+        time before that reverts."""
         return self._write("schedule(address,bytes,uint48)", target, data, when)
 
     def execute(self, target: ChecksumAddress, data: bytes) -> Call[None]:
@@ -246,15 +248,44 @@ class AccessManager(ContractWrapper):
         self, caller: ChecksumAddress, target: ChecksumAddress, data: bytes
     ) -> Call[None]:
         """Cancel ``caller``'s scheduled ``data`` on ``target``: the caller itself,
-        an admin, or the guardian of the function's role may."""
+        an ADMIN_ROLE member, or the guardian of the role ``target`` maps the
+        function's selector to may."""
         return self._write("cancel(address,address,bytes)", caller, target, data)
 
     def read_call_plan(
-        self, ctx: Web3Context, call: Call[object], *, caller: ChecksumAddress
+        self,
+        ctx: Web3Context,
+        call: Call[object],
+        *,
+        caller: ChecksumAddress,
+        via_manager: bool = False,
     ) -> CallPlan:
-        """What ``caller`` sends now to get ``call`` executed, from ``canCall``
-        and, for a delayed caller, the schedule of exactly ``call``'s calldata
-        at ``ctx``'s block (two reads at most)."""
+        """What ``caller`` sends now to get ``call`` executed: an access and
+        timelock plan from ``canCall`` and, for a delayed caller, the schedule of
+        exactly ``call``'s calldata, read at one block (``ctx.default_block`` when
+        it is a number, else the latest). It does not run the target's own checks
+        (redemption lock, pre-hooks, balances): simulate the call for those.
+
+        A ready operation is sent as ``call`` itself, from ``caller``: the target
+        consumes the schedule and still sees ``caller`` as the sender, which
+        deposits, withdrawals and other sender-dependent calls need.
+        ``via_manager`` sends it through the manager's ``execute`` instead, for a
+        target that does not consume schedules; the manager is then the sender.
+
+        Raises ``ValueError`` for a call on the access manager itself (role
+        grants, target configuration): their authorization depends on the
+        arguments, which ``canCall`` does not see; use `schedule` and `execute`.
+        """
+        if call.to == self.address:
+            raise ValueError(
+                "read_call_plan does not plan calls on the access manager itself:"
+                " their authorization depends on the arguments; use schedule and"
+                " execute directly"
+            )
+        default = ctx.default_block
+        ctx = ctx.at_block(
+            default if isinstance(default, int) else ctx.web3.eth.block_number
+        )
         selector = bytes(call.data[:4])
         permission = self.can_call(caller, call.to, selector).call(ctx)
         operation = self.hash_operation(caller, call.to, call.data)
@@ -275,13 +306,8 @@ class AccessManager(ContractWrapper):
         now = ctx.web3.eth.get_block(ctx.default_block)["timestamp"]
         if scheduled_at > now:
             return CallPlan("waiting", permission, operation, scheduled_at, None)
-        return CallPlan(
-            "ready",
-            permission,
-            operation,
-            scheduled_at,
-            self.execute(call.to, call.data),
-        )
+        ready = self.execute(call.to, call.data) if via_manager else direct
+        return CallPlan("ready", permission, operation, scheduled_at, ready)
 
     def can_call(
         self, caller: ChecksumAddress, target: ChecksumAddress, selector: bytes
