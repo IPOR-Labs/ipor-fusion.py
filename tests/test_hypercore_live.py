@@ -34,6 +34,7 @@ from ipor_fusion.fuses.hypercore import (
     precompile_index_of,
 )
 from ipor_fusion.hypercore import (
+    HYPERCORE_PENDING_READERS,
     HyperCoreCancelFuse,
     HyperCoreDepositFuse,
     HyperCoreOrderFuse,
@@ -123,6 +124,21 @@ def test_pending_state_reads_through_the_vault(
     assert state.current_timestamp > 0
     assert state.pending == pending.is_pending().call(ctx)
     assert state.pending or state.settled
+
+
+def test_both_reader_builds_read_the_same_pending_slot(
+    ctx: Web3Context, pending: HyperCorePendingReader
+):
+    legacy = pending.pending_state().call(ctx)
+    current = (
+        HyperCorePendingReader(VAULT, HYPERCORE_PENDING_READERS[999])
+        .pending_state()
+        .call(ctx)
+    )
+    shared = ("action_nonce", "action_class", "pending_until", "cached_value_wad")
+    assert [getattr(current, f) for f in shared] == [getattr(legacy, f) for f in shared]
+    assert current.payload_hash == legacy.payload_hash
+    assert current.l1_block_available and current.current_l1_block > 0
 
 
 def test_precompiles_batch_through_multicall3(ctx: Web3Context):

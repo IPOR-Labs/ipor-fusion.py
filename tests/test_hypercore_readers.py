@@ -14,7 +14,11 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
-from ipor_fusion import HyperCoreValuationError, PlasmaVault
+from ipor_fusion import (
+    HyperCoreValuationError,
+    PlasmaVault,
+    UnsupportedContractVersionError,
+)
 from ipor_fusion.hypercore import (
     HyperCoreActionClass,
     HyperCoreNav,
@@ -32,6 +36,7 @@ from ipor_fusion.readers.hypercore import (
     ACCOUNT_MARGIN_SUMMARY_PRECOMPILE,
     CORE_USER_EXISTS_PRECOMPILE,
     L1_BLOCK_NUMBER_PRECOMPILE,
+    LEGACY_PENDING_STATE_TYPE,
     PENDING_STATE_TYPE,
     PERP_ASSET_INFO_PRECOMPILE,
     POSITION_PRECOMPILE,
@@ -154,32 +159,47 @@ class TestPrecompileCalls:
             self.reader.perp_asset_info(1 << 32)
 
 
-def _pending_state_raw(*, pending: bool, settled: bool) -> bytes:
-    state = (
-        1_790_609_642,
-        1_164_341_828,
-        47_125_670,
-        1,  # Transfer
-        0,  # settlement mode unset for a transfer
-        0,
-        0,
-        13,  # sendAsset
-        b"\x30" * 32,
-        False,
-        10**16,
-        32,
-    )
-    inner = encode(
-        [PENDING_STATE_TYPE],
-        [(state, pending, settled, False, 1_168_823_034, 1_790_931_001, True)],
-    )
+_STATE_PREFIX = (
+    1_790_609_642,
+    1_164_341_828,
+    47_125_670,
+    1,  # Transfer
+    0,  # settlement mode unset for a transfer
+    0,
+    0,
+    13,  # sendAsset
+    b"\x30" * 32,
+    False,
+    10**16,
+    32,
+)
+# effectKind, effectTokenIndex, effectEvmAsset, timeoutAt, expectedBalance,
+# lastOrderL1Block: appended by the current build.
+_EFFECT_FIELDS = (1, 0, "0x" + "00" * 20, 1_790_609_702, 10**6, 1_164_341_800)
+
+
+def _pending_state_raw(*, pending: bool, settled: bool, legacy: bool) -> bytes:
+    l1 = (1_168_823_034, 1_790_931_001, True)
+    if legacy:
+        inner = encode(
+            [LEGACY_PENDING_STATE_TYPE],
+            [(_STATE_PREFIX, pending, settled, False, *l1)],
+        )
+    else:
+        inner = encode(
+            [PENDING_STATE_TYPE],
+            [(_STATE_PREFIX + _EFFECT_FIELDS, pending, settled, *l1)],
+        )
     return encode(["(bytes)"], [(inner,)])
 
 
 class TestUniversalRead:
-    def test_pending_state_reads_through_the_vault(self):
+    @pytest.mark.parametrize("legacy", [False, True])
+    def test_pending_state_reads_through_the_vault(self, legacy: bool):
         ctx = _ctx()
-        ctx.call.return_value = _pending_state_raw(pending=False, settled=True)
+        ctx.call.return_value = _pending_state_raw(
+            pending=False, settled=True, legacy=legacy
+        )
         reader = HyperCorePendingReader(VAULT, READER)
 
         state = reader.pending_state().call(ctx)
@@ -203,13 +223,29 @@ class TestUniversalRead:
             1_168_823_034,
             True,
         )
+        assert state.current_timestamp == 1_790_931_001
         assert state.payload_hash == b"\x30" * 32
 
-    def test_is_pending_and_balance_fuse_value_decode_their_payloads(self):
+    @pytest.mark.parametrize("legacy", [False, True])
+    def test_is_pending_is_the_pending_state_predicate(self, legacy: bool):
+        ctx = _ctx()
+        ctx.call.return_value = _pending_state_raw(
+            pending=True, settled=False, legacy=legacy
+        )
+        assert HyperCorePendingReader(VAULT, READER).is_pending().call(ctx) is True
+        assert ctx.call.call_args.args[1][4:] == encode(
+            ["address", "bytes"], [READER, _selector("pendingState()")]
+        )
+
+    def test_unknown_payload_size_is_refused(self):
+        ctx = _ctx()
+        ctx.call.return_value = encode(["(bytes)"], [(b"\x00" * 32 * 20,)])
+        with pytest.raises(UnsupportedContractVersionError, match="640 bytes"):
+            HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
+
+    def test_balance_fuse_value_and_raw_read_decode_their_payloads(self):
         ctx = _ctx()
         vault = PlasmaVault(VAULT)
-        ctx.call.return_value = encode(["(bytes)"], [(encode(["bool"], [True]),)])
-        assert HyperCorePendingReader(VAULT, READER).is_pending().call(ctx) is True
         ctx.call.return_value = encode(
             ["(bytes)"], [(encode(["uint256"], [8_245_000_000_000_000]),)]
         )
@@ -226,7 +262,9 @@ class TestUniversalRead:
     def test_reported_order_state_maps_the_enums(self):
         ctx = _ctx()
         state = (0, 0, 0, 2, 2, 2, 5, 1, b"\x00" * 32, True, 0, 1)
-        inner = encode([PENDING_STATE_TYPE], [(state, True, False, True, 0, 0, False)])
+        inner = encode(
+            [LEGACY_PENDING_STATE_TYPE], [(state, True, False, True, 0, 0, False)]
+        )
         ctx.call.return_value = encode(["(bytes)"], [(inner,)])
         decoded = HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
         assert decoded.action_class is HyperCoreActionClass.ORDER
@@ -258,7 +296,7 @@ def _universal_read(data: bytes) -> bytes:
     """`PlasmaVault.read` double: the pending reader or the balance fuse."""
     target, inner = decode(["address", "bytes"], data[4:])
     if Web3.to_checksum_address(target) == READER:
-        return _pending_state_raw(pending=False, settled=True)
+        return _pending_state_raw(pending=False, settled=True, legacy=False)
     assert Web3.to_checksum_address(target) == BALANCE_FUSE
     assert bytes(inner) == _selector("balanceOf()")
     return encode(["(bytes)"], [(encode(["uint256"], [8_245_000_000_000_000]),)])
