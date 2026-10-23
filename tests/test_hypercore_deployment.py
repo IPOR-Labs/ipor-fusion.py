@@ -19,9 +19,17 @@ FIXTURE = json.loads(
 FUSE_NAMES = frozenset(name for name in FIXTURE["contracts"] if name.endswith("Fuse"))
 
 
-def test_default_pending_reader_matches_broadcast() -> None:
-    expected = FIXTURE["contracts"]["HyperCorePendingReader"]["address"]
-    assert HYPERCORE_PENDING_READERS[FIXTURE["chain_id"]] == expected
+OFFICIAL = json.loads(
+    (Path(__file__).parent / "fixtures" / "hypercore_official.json").read_text()
+)
+
+
+def test_default_pending_reader_is_the_published_one() -> None:
+    """The default reader is the one ipor-abi publishes, not the reader of
+    the earlier market-55 deployment this fixture pins."""
+    expected = OFFICIAL["contracts"]["HyperCorePendingReader"]
+    assert HYPERCORE_PENDING_READERS[OFFICIAL["chain_id"]] == expected
+    assert expected != FIXTURE["contracts"]["HyperCorePendingReader"]["address"]
 
 
 def _read_address(web3: Web3, target: str, signature: str, block: int) -> str:

@@ -14,6 +14,7 @@ from ipor_fusion import (
     ChainId,
     ExternalStateEvent,
     ExternalStateExecutor,
+    MarketId,
     MorphoBlueMarketJson,
     Multicall3,
     PlasmaVault,
@@ -74,6 +75,8 @@ def roles_do_not_mix(ctx: Web3Context, vault: PlasmaVaultAddress) -> None:
     pv = PlasmaVault(vault)
     pv.configure_instant_withdrawal_fuses([(pv.address, [])])  # pyright: ignore[reportArgumentType]
     HyperCorePendingReader(pv, pv.address)  # pyright: ignore[reportArgumentType]
+    # A market limit is a WAD share of total assets, not an asset amount.
+    pv.setup_markets_limits([(MarketId(1), Amount(10**6))])  # pyright: ignore[reportArgumentType]
 
 
 def selectors_are_not_chain_ids(factory: CcipCrosschainFactory) -> None:

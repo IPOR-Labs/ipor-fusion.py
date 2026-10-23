@@ -18,13 +18,15 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from enum import Enum
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
-from eth_utils import keccak
+from eth_utils import function_signature_to_4byte_selector, keccak
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.types import BlockIdentifier, Timestamp
 
 from ipor_fusion.core.context import Web3Context
@@ -35,6 +37,7 @@ from ipor_fusion.types import (
     ZERO_ADDRESS,
     Amount,
     ChainId,
+    CustodianMarker,
     Period,
     PlasmaVaultAddress,
     ProposalHash,
@@ -117,6 +120,35 @@ def _require_matching_hash(
         )
 
 
+class CustodianMarkerKind(Enum):
+    """What an executor's custodian marker counts: the last confirmed update's
+    unix timestamp (executors before the 2026-10-21 contracts release) or the
+    number of confirmed updates (executors of that release)."""
+
+    TIMESTAMP = "timestamp"
+    CONFIRM_COUNT = "confirm_count"
+
+
+_CONFIRM_COUNT_SELECTOR = function_signature_to_4byte_selector("confirmCount()")
+
+
+def _read_marker_kind(
+    ctx: Web3Context, executor: ChecksumAddress, block: BlockIdentifier
+) -> CustodianMarkerKind:
+    """Decided from the executor, not guessed from a value: a released
+    executor answers ``confirmCount()``, an earlier one has no such function
+    and the call reverts. Any other failure raises."""
+    try:
+        raw = ctx.call(executor, _CONFIRM_COUNT_SELECTOR, block)
+    except ContractLogicError:
+        return CustodianMarkerKind.TIMESTAMP
+    if len(raw) != 32:
+        raise ExternalStateError(
+            f"confirmCount() of {executor} returned {len(raw)} bytes, not a uint256"
+        )
+    return CustodianMarkerKind.CONFIRM_COUNT
+
+
 @dataclass(frozen=True, slots=True)
 class ExternalStateVaultState:
     """The external-state market's vault-scoped state, read from the vault's
@@ -127,10 +159,17 @@ class ExternalStateVaultState:
     `last_total_balance` is the balance fuse's cache of the executor's total in
     raw underlying units, as of the fuse's last refresh -- not the live total,
     which `ExternalStateExecutor.get_balance_fuse_snapshot` reads;
-    `last_checked_custodian_timestamp` is the executor custodian timestamp the
-    balance fuse last processed -- not necessarily the latest custodian update
+    `last_checked_custodian_marker` is the executor's custodian marker the
+    balance fuse last processed -- the last confirmed custodian update's block
+    timestamp on executors of the contracts before the 2026-10-21 release, the
+    executor's confirm count (`ExternalStateExecutor.confirm_count`) on the
+    executors of that release; either way not necessarily the latest update
     and not the pre-hook's staleness clock, which is
-    `ExternalStateExecutor.get_oldest_update_timestamp`; `paused` is the flag
+    `ExternalStateExecutor.get_oldest_update_timestamp`. The fuse and the
+    pre-hook only compare it for equality with
+    `BalanceFuseSnapshot.custodian_marker`. `custodian_marker_kind` says
+    which, read from the executor at the same block (``None`` without an
+    executor); `paused` is the flag
     the balance fuse sets on a big change and `ExternalStateUnpauseFuse` clears
     with an atomist signature. `ExternalStatePausePreHook` blocks the vault's
     gated user operations while the flag is set, and also, flag or not, while
@@ -141,7 +180,8 @@ class ExternalStateVaultState:
 
     executor: ChecksumAddress | None
     last_total_balance: Amount
-    last_checked_custodian_timestamp: Timestamp
+    last_checked_custodian_marker: CustodianMarker
+    custodian_marker_kind: CustodianMarkerKind | None
     paused: bool
     block: int
 
@@ -150,11 +190,14 @@ class ExternalStateVaultState:
 class BalanceFuseSnapshot:
     """`ExternalStateExecutor.getBalanceFuseSnapshot()`: the live sum of the
     tracked balances in raw underlying units, the cached big-change threshold
-    in basis points and the timestamp of the last confirmed custodian update."""
+    in basis points and the custodian marker: the last confirmed custodian
+    update's timestamp on executors before the 2026-10-21 contracts release,
+    the confirm count on the executors of that release (two confirms in one
+    block then still differ)."""
 
     total_balance: Amount
     big_change_bps: int
-    last_custodian_update_timestamp: Timestamp
+    custodian_marker: CustodianMarker
 
 
 def _storage_word(raw: bytes) -> int:
@@ -223,10 +266,14 @@ def read_external_state(
         raise ExternalStateError(
             f"malformed pause flag in the external-state storage of {checksum}"
         )
+    executor = Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None
     return ExternalStateVaultState(
-        executor=Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None,
+        executor=executor,
         last_total_balance=Amount(words[1]),
-        last_checked_custodian_timestamp=Timestamp(words[2]),
+        last_checked_custodian_marker=CustodianMarker(words[2]),
+        custodian_marker_kind=(
+            _read_marker_kind(ctx, executor, read_at) if executor else None
+        ),
         paused=words[3] == 1,
         block=block,
     )
@@ -344,16 +391,66 @@ class ExternalStateExecutor(ContractWrapper):
 
     def get_balance_fuse_snapshot(self) -> Call[BalanceFuseSnapshot]:
         """The live aggregate the balance fuse reads: the sum of the tracked
-        balances, the big-change threshold and the last confirmed custodian
-        update timestamp, in one call. Pin the context's block to the one
+        balances, the big-change threshold and the custodian marker, in one
+        call. Pin the context's block to the one
         `read_external_state` returned to compare live against cached."""
         return self._view(
             "getBalanceFuseSnapshot()",
             output_types=["uint256", "uint256", "uint256"],
         ).map(
             lambda values: BalanceFuseSnapshot(
-                Amount(values[0]), int(values[1]), Timestamp(values[2])
+                Amount(values[0]), int(values[1]), CustodianMarker(values[2])
             )
+        )
+
+    def read_custodian_marker_kind(self, ctx: Web3Context) -> CustodianMarkerKind:
+        """Whether this executor's custodian marker is a timestamp or a
+        confirm count, at ``ctx``'s default block (see `CustodianMarkerKind`)."""
+        return _read_marker_kind(ctx, self._require_address(), ctx.default_block)
+
+    def confirm_count(self) -> Call[CustodianMarker]:
+        """Executors of the 2026-10-21 contracts release only: the count of
+        confirmed custodian updates across every balance account, the marker
+        `get_balance_fuse_snapshot` reports. An earlier executor has no such
+        function and the call reverts."""
+        return self._view(
+            "confirmCount()", output_types=["uint256"], decoder=CustodianMarker
+        )
+
+    def last_custodian_update_timestamp(self) -> Call[Timestamp]:
+        """Block timestamp of the last confirmed custodian update on any
+        balance account."""
+        return self._view(
+            "lastCustodianUpdateTimestamp()",
+            output_types=["uint256"],
+            decoder=Timestamp,
+        )
+
+    def unforwarded_credit(self, asset: ChecksumAddress) -> Call[Amount]:
+        """Executors of the 2026-10-21 contracts release only: tokens of
+        `asset` credited through the vault path that have not left the
+        executor. The executor's `asset` balance above it is surplus (a
+        donation or a payout sent straight to the executor):
+        `ExternalStateOperationFuse.sweep_surplus` moves it to the vault, and
+        custodians should not propose while it exists unless they know whether
+        their report counts it."""
+        return self._view(
+            "unforwardedCredit(address)",
+            asset,
+            output_types=["uint256"],
+            decoder=Amount,
+        )
+
+    def proposal_base_balance(self, balance_account: ChecksumAddress) -> Call[Amount]:
+        """Executors of the 2026-10-21 contracts release only: the account
+        balance when the pending proposal was made. `confirmBalance` reverts
+        `ExternalStateExecutorBalanceChangedSinceProposal` once the balance
+        differs from it (an alpha flow ran in between): propose again."""
+        return self._view(
+            "proposalBaseBalance(address)",
+            balance_account,
+            output_types=["uint256"],
+            decoder=Amount,
         )
 
     def get_oldest_update_timestamp(self) -> Call[Timestamp]:

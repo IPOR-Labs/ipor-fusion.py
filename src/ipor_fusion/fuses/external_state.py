@@ -40,7 +40,12 @@ class ExternalStateOperationFuse(Fuse):
     """Fuse for moving off-vault capital via the per-vault ExternalStateExecutor."""
 
     _TUPLE = "(address,uint256,address,(address,bytes)[])"
-    SIGNATURES = ("createExecutor()", f"enter({_TUPLE})", f"exit({_TUPLE})")
+    SIGNATURES = (
+        "createExecutor()",
+        f"enter({_TUPLE})",
+        f"exit({_TUPLE})",
+        "sweepSurplus(address)",
+    )
 
     def enter(
         self,
@@ -92,6 +97,17 @@ class ExternalStateOperationFuse(Fuse):
         blocks the transaction may need a large-block mechanism.
         """
         return self._action_raw("createExecutor()", [])
+
+    def sweep_surplus(self, asset: ChecksumAddress) -> FuseAction:
+        """Operation fuses of the 2026-10-21 contracts release only: move to
+        the vault the executor's ``asset`` balance above its unforwarded
+        credit (tokens that did not arrive through the vault path, such as a
+        donation), emitting ``ExternalStateOperationFuseSweepSurplus``. The
+        swept tokens enter NAV at once only when ``asset`` is the underlying.
+        Use it for tokens the confirmed custodian report no longer counts; a
+        payout it still counts is booked with ``exit`` instead."""
+        self._validate_address(asset, "asset")
+        return self._action_raw("sweepSurplus(address)", [asset])
 
     def _build(
         self,

@@ -119,7 +119,8 @@ receipt = vault.execute([action]).send(ctx)
 ```
 
 Fuse, factory and manager addresses per chain are published in
-[ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`).
+[ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`);
+`fetch_address_registry(chain_id).address("SupplyFuseAaveV3")` reads them by name (`ipor_fusion.registry`).
 A fuse must also be registered on the vault; `vault.get_fuses().call(ctx)` lists the registered ones.
 
 Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK scales by decimals
@@ -196,6 +197,10 @@ fusion vault preflight 0xVAULT_ADDRESS --calldata 0xEXECUTE_CALLDATA --sender 0x
 # Inspect a Morpho Blue market or MetaMorpho vault
 fusion market morpho-blue 0xMARKET_ID --chain ethereum
 fusion market meta-morpho 0xVAULT_ADDRESS --chain ethereum
+
+# Find IPOR Fusion contracts in the ipor-abi registry
+fusion address lookup SupplyFuseAaveV3 --chain base
+fusion address list --chain base
 ```
 
 ## MCP Server
@@ -263,6 +268,9 @@ Available tools:
 | `vault_remove` | Remove a vault from the local config |
 | `market_morpho_blue` | Morpho Blue market parameters and state |
 | `market_meta_morpho` | MetaMorpho V1 or Morpho Vault V2 allocations and caps (Morpho API) |
+| `address_lookup` | IPOR Fusion contracts by name substring or address (ipor-abi registry) |
+| `address_names` | Contract names in the registry, with the chains that have them |
+| `address_list` | One chain's full `{name: address}` registry |
 
 Configure providers and vaults via `fusion config` or the MCP config tools first.
 
@@ -382,7 +390,8 @@ release; adding one does not.
 - **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`) export only
   from their own subpackages, `ipor_fusion.crosschain` (with `crosschain.fuses`,
   `crosschain.ccip` and `crosschain.stargate`) and `ipor_fusion.hypercore`, never
-  from the top level, and may change in a minor release. Their exception classes
+  from the top level, and keep no backward compatibility: a minor release may
+  change or remove them (see [Preview features](#preview-features-ipor_fusioncrosschain-ipor_fusionhypercore)). Their exception classes
   stay in `ipor_fusion.errors`, and the `vault info` document's HyperCore blocks
   (`HyperCoreJson`, ...) stay with the document.
 - **Third-party types** are not re-exported: import `ChecksumAddress` and
@@ -427,7 +436,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |
 | `ExternalStateExecutor` | NAV propose/confirm for off-vault capital (market 50); the executor's thresholds (`staleness_max`, `big_change_bps`, `dust_threshold`, `min_update_interval`), the live aggregate (`get_balance_fuse_snapshot`) and the pre-hook's staleness clock (`get_oldest_update_timestamp`) |
-| `read_external_state`, `ExternalStateVaultState` | The market's vault-scoped state from the vault's ERC-7201 storage at one block: executor, the balance fuse's cached total, the custodian timestamp it last checked and the pause flag the pre-hook enforces (no getter exposes them) |
+| `read_external_state`, `ExternalStateVaultState` | The market's vault-scoped state from the vault's ERC-7201 storage at one block: executor, the balance fuse's cached total, the custodian marker it last checked (a timestamp on the earlier executor build, the confirm count on the 2026-10-21 one) and the pause flag the pre-hook enforces (no getter exposes them) |
 | `decode_external_state_event`, `EXTERNAL_STATE_TOPICS` | The ExternalState events the vault emits (big change, cache updates, unpause, rescue, executor creation and deployment, operation enter/exit), decoded by topic with their raw log identity; a malformed listed log raises |
 | `erc20_balance_slot`, `VaultSimulator.with_erc20_balance` | Fund any address with any ERC-20 in a simulation by a storage override (slot found by probing), no holder to impersonate |
 | `ERC20` | Token reads and approvals |
@@ -452,7 +461,10 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 ### Preview features (`ipor_fusion.crosschain`, `ipor_fusion.hypercore`)
 
 Not production (see the note at the top) and outside the stable top level:
-import these from their subpackage, and expect changes in a minor release.
+import these from their subpackage. They track the current official contracts
+only, with no backward compatibility: from 4.1 on, a minor release may change or
+remove any of these names and drops support for retired deployments (such as
+the pilot executors and factories). Pin an exact version if you depend on them.
 
 | Name | Purpose |
 |------|---------|

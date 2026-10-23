@@ -17,12 +17,16 @@ from pathlib import Path
 import pytest
 from eth_typing import ChecksumAddress, HexAddress, HexStr
 from pydantic import BaseModel, ValidationError
+from web3 import Web3
 from web3.types import Timestamp
 
 from ipor_fusion import (
     DOCS,
     PREVIEW_FEATURES,
     AccessManagerAddress,
+    AddressListJson,
+    AddressLookupJson,
+    AddressNamesJson,
     AmountJson,
     ChainId,
     Decimals,
@@ -48,6 +52,9 @@ from ipor_fusion.core.access import RoleAccount
 from ipor_fusion.hypercore import HyperCoreActionId, HyperCoreAsset, HyperCoreTokenIndex
 from ipor_fusion.mcp import models as mcp_models
 from ipor_fusion.mcp.models import (
+    AddressListResponse,
+    AddressLookupResponse,
+    AddressNamesResponse,
     Amount,
     ConfigShowResponse,
     ExecutePreflightResponse,
@@ -412,10 +419,7 @@ def _full_vault_info_dict() -> VaultInfoJson:
             "pending": {
                 "pending": False,
                 "settled": True,
-                "refreshing": False,
                 "action_class": "TRANSFER",
-                "settlement_mode": None,
-                "reported_result": "NONE",
                 "action_id": HyperCoreActionId(13),
                 "action_nonce": 32,
                 "pending_until": Timestamp(1_790_609_642),
@@ -423,6 +427,12 @@ def _full_vault_info_dict() -> VaultInfoJson:
                 "enqueued_l1_block": 1_164_341_828,
                 "enqueued_evm_block": 47_125_670,
                 "cached_value_wad": 10**16,
+                "effect_kind": "NONE",
+                "effect_token_index": HyperCoreTokenIndex(0),
+                "effect_evm_asset": Web3.to_checksum_address("0x" + "00" * 20),
+                "expected_balance": 0,
+                "timeout_at": Timestamp(0),
+                "last_order_l1_block": 0,
                 "current_l1_block": 1_168_823_034,
                 "current_timestamp": Timestamp(1_790_931_001),
                 "l1_block_available": True,
@@ -692,6 +702,11 @@ class TestTypedDocumentsMirrorModels:
         _assert_mirrors(
             ExecutePreflightJson, ExecutePreflightResponse, "vault_preflight"
         )
+
+    def test_address_registry(self):
+        _assert_mirrors(AddressLookupJson, AddressLookupResponse, "address_lookup")
+        _assert_mirrors(AddressNamesJson, AddressNamesResponse, "address_names")
+        _assert_mirrors(AddressListJson, AddressListResponse, "address_list")
 
     def test_meta_morpho_versions_share_one_model(self):
         v1 = MetaMorphoV1Json.__required_keys__

@@ -298,6 +298,15 @@ class ExecutePreflightError(IporFusionError, RuntimeError):
     `ExecutePreflight.raise_for_failure` lists them."""
 
 
+class AddressRegistryError(IporFusionError, RuntimeError):
+    """The ipor-abi address registry is unreachable or its file does not parse
+    as a ``{name: address}`` map."""
+
+
+class AddressNotInRegistryError(IporFusionError, LookupError):
+    """A chain's address registry has no contract by the requested name."""
+
+
 class CrosschainDiscoveryError(IporFusionError):
     """A crosschain vault's on-chain configuration is not one discovery can
     use: a malformed or unexpected market grant, an executor managed by another

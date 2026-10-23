@@ -381,10 +381,7 @@ class HyperCorePendingJson(TypedDict):
 
     pending: bool
     settled: bool
-    refreshing: bool
     action_class: str
-    settlement_mode: str | None
-    reported_result: str
     action_id: HyperCoreActionId
     action_nonce: int
     pending_until: Timestamp
@@ -392,6 +389,12 @@ class HyperCorePendingJson(TypedDict):
     enqueued_l1_block: int
     enqueued_evm_block: int
     cached_value_wad: int
+    effect_kind: str
+    effect_token_index: HyperCoreTokenIndex
+    effect_evm_asset: ChecksumAddress
+    expected_balance: int
+    timeout_at: Timestamp
+    last_order_l1_block: int
     current_l1_block: int
     current_timestamp: Timestamp
     l1_block_available: bool
@@ -1299,12 +1302,7 @@ def _hypercore_pending_json(pending: HyperCorePendingState) -> HyperCorePendingJ
     return {
         "pending": pending.pending,
         "settled": pending.settled,
-        "refreshing": pending.refreshing,
         "action_class": pending.action_class.name,
-        "settlement_mode": (
-            pending.settlement_mode.name if pending.settlement_mode else None
-        ),
-        "reported_result": pending.reported_result.name,
         "action_id": pending.action_id,
         "action_nonce": pending.action_nonce,
         "pending_until": pending.pending_until,
@@ -1312,6 +1310,12 @@ def _hypercore_pending_json(pending: HyperCorePendingState) -> HyperCorePendingJ
         "enqueued_l1_block": pending.enqueued_l1_block,
         "enqueued_evm_block": pending.enqueued_evm_block,
         "cached_value_wad": pending.cached_value_wad,
+        "effect_kind": pending.effect_kind.name,
+        "effect_token_index": pending.effect_token_index,
+        "effect_evm_asset": pending.effect_evm_asset,
+        "expected_balance": pending.expected_balance,
+        "timeout_at": pending.timeout_at,
+        "last_order_l1_block": pending.last_order_l1_block,
         "current_l1_block": pending.current_l1_block,
         "current_timestamp": pending.current_timestamp,
         "l1_block_available": pending.l1_block_available,

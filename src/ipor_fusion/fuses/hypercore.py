@@ -95,15 +95,12 @@ class TimeInForce(IntEnum):
     IOC = 3
 
 
-class SettlementMode(IntEnum):
-    """``Config{SettlementMode}``: how a pending action is cleared."""
-
-    TIMING = 1
-    REPORTED = 2
-
-
 class HyperCoreConfigKey(IntEnum):
-    """``HyperCoreSubstrateLib.ConfigKey`` (the Undefined member is invalid)."""
+    """``HyperCoreSubstrateLib.ConfigKey`` (the Undefined member is invalid).
+
+    The numbering is stable: ``WINDOW_ORDER_SECONDS`` (2) and
+    ``SETTLEMENT_MODE`` (5) are reserved and ignored by the fuses; orders
+    settle by time and the observed effect only."""
 
     WINDOW_TRANSFER_SECONDS = 1
     WINDOW_ORDER_SECONDS = 2
@@ -111,6 +108,17 @@ class HyperCoreConfigKey(IntEnum):
     PERP_DEX_IDS = 4
     SETTLEMENT_MODE = 5
     SPOT_SEND_BRIDGE_ENABLED = 6
+    TRANSFER_TIMEOUT_SECONDS = 7
+    ACTIVATION_FEE_ALLOWANCE_USDC_WEI = 8
+    MAX_NAV_JUMP_BPS = 9
+    MAX_MARK_ORACLE_DEVIATION_BPS = 10
+    NAV_JUMP_FLOOR_USD6 = 11
+
+
+#: Config keys the fuses ignore (kept for their stable numbering).
+RESERVED_HYPERCORE_CONFIG_KEYS = frozenset(
+    {HyperCoreConfigKey.WINDOW_ORDER_SECONDS, HyperCoreConfigKey.SETTLEMENT_MODE}
+)
 
 
 def hip3_action_asset(dex: int, index_in_dex: int) -> HyperCoreAsset:
@@ -365,11 +373,13 @@ class HyperCoreSubstrates:
     (at most one when any of them is HIP-3), Destinations for ``sendAsset`` /
     ``spotSend`` (only the vault itself and, for the Core -> EVM route, the
     token's :func:`system_address` are accepted by the fuses), a SendCap per
-    token (mandatory: a token without one cannot be sent), Builders, and the
-    Config keys. ``WINDOW_ORDER_SECONDS`` and ``SETTLEMENT_MODE`` are required
-    before any order or cancel, ``MAX_USD_CLASS_TRANSFER_USD6`` before a margin
-    transfer; ``WINDOW_TRANSFER_SECONDS`` defaults to 2 s and
-    ``SPOT_SEND_BRIDGE_ENABLED`` to disabled. :func:`ipor_fusion.decode_substrate`
+    token (mandatory: a token without one cannot be sent), Builders, a
+    PerpPositionCap per market whose open position is capped, and the Config
+    keys. ``MAX_USD_CLASS_TRANSFER_USD6`` is required before a margin transfer;
+    ``WINDOW_TRANSFER_SECONDS`` defaults to 2 s, ``SPOT_SEND_BRIDGE_ENABLED`` to
+    disabled, ``TRANSFER_TIMEOUT_SECONDS`` to 600 s (at least 60),
+    ``MAX_NAV_JUMP_BPS`` to 5000 and ``MAX_MARK_ORACLE_DEVIATION_BPS`` to 500;
+    the reserved keys are ignored. :func:`ipor_fusion.decode_substrate`
     inverts these.
     """
 
@@ -412,7 +422,9 @@ class HyperCoreSubstrates:
     @staticmethod
     def config(key: HyperCoreConfigKey, value: int) -> bytes:
         """One Config key; ``PERP_DEX_IDS`` is a bitmap (bit i enables perp
-        dex i, bit 0 stays clear), ``SETTLEMENT_MODE`` a :class:`SettlementMode`."""
+        dex i, bit 0 stays clear). The reserved keys
+        (:data:`RESERVED_HYPERCORE_CONFIG_KEYS`) encode but the fuses ignore
+        them."""
         key = HyperCoreConfigKey(key)
         _validate_uint(value, 240, "value")
         return _word(5, (int(key) << 240) | value)
@@ -423,3 +435,14 @@ class HyperCoreSubstrates:
         _validate_uint(token_index, 64, "token_index")
         _validate_uint(max_wei, 128, "max_wei")
         return _word(6, (token_index << 128) | max_wei)
+
+    @staticmethod
+    def perp_position_cap(
+        asset: HyperCoreAsset, max_position_notional_usd6: int
+    ) -> bytes:
+        """Cap on the open position notional of action asset ``asset`` in USD
+        (6 decimals); the order fuse reverts
+        ``HyperCoreOrderFusePositionCapExceeded`` above it."""
+        _validate_uint(asset, 32, "asset")
+        _validate_uint(max_position_notional_usd6, 88, "max_position_notional_usd6")
+        return _word(7, (asset << 216) | (max_position_notional_usd6 << 128))

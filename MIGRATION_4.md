@@ -390,6 +390,69 @@ module was renamed to match. Import the decoders with `from ipor_fusion import
 external_state_events` and `from ipor_fusion.hypercore import hypercore_events`;
 the modules are internal.
 
+#### HyperCore follows the released contracts
+
+4.0 reads and encodes the HyperCore contracts `ipor-abi` publishes on HyperEVM
+(contracts release 2026-10-21), not the earlier market-55 test deployment.
+
+- **Pending reader.** `HYPERCORE_PENDING_READERS[999]` is
+  `0x1EFFb12434f5fb59a636C54D8CBaC93b13DF1A9E`. `HyperCorePendingReader.is_pending()`
+  is gone (the released reader has no `isPending()`): call `is_action_pending()`,
+  and `is_order_in_flight()` for the order rate limit. `pending_state()` decodes
+  the released 23-word tuple only; the earlier reader `0x83F54bc9…` returns 18
+  words and is no longer supported. A vault of the earlier build (its pre-hooks
+  predate the transfer effect) reads through the released reader only while
+  nothing is in flight: the struct only grew, so a settled state decodes the same,
+  but during an action the released reader derives `pending`/`settled` from effect
+  fields the earlier hooks never write, so it can disagree with what that vault
+  enforces.
+- **`HyperCorePendingState`.** Removed: `settlement_mode`, `reported_result`,
+  `result_l1_block`, `refreshing` (the contracts no longer write them). Added:
+  `effect_kind` (`HyperCoreEffectKind`), `effect_token_index`, `effect_evm_asset`,
+  `expected_balance`, `timeout_at`, `last_order_l1_block`. A transfer with an effect
+  settles when the expected balance is observed or `timeout_at` passes.
+- **`vault info` / `vault_info`.** `hypercore.pending` drops `refreshing`,
+  `settlement_mode`, `reported_result` and gains the six fields above.
+- **Settlement mode removed.** `SettlementMode` and `HyperCoreReportedResult` are
+  gone, and so are the settlement fuse and reporter events
+  (`HyperCoreReportedActionSettled`, `ReportSubmitted`, `ObserverSetProposed`,
+  `ObserverSetChanged`, `RecoveryProposed`, `RecoveryExecuted` and their `*Args`
+  / `*Event` classes): orders settle by time, transfers by time and effect.
+  `HyperCoreConfigKey.WINDOW_ORDER_SECONDS` and `SETTLEMENT_MODE` keep their
+  numbers but are reserved and ignored (`RESERVED_HYPERCORE_CONFIG_KEYS`); a
+  decoded substrate of either carries `extra["reserved"] == "true"`.
+- **New substrates.** `HyperCoreSubstrates.perp_position_cap(asset,
+  max_position_notional_usd6)` (type 7) and `HyperCoreConfigKey`
+  `TRANSFER_TIMEOUT_SECONDS`, `ACTIVATION_FEE_ALLOWANCE_USDC_WEI`, `MAX_NAV_JUMP_BPS`,
+  `MAX_MARK_ORACLE_DEVIATION_BPS`, `NAV_JUMP_FLOOR_USD6` (7..11); `decode_substrate`
+  decodes them instead of flagging them as errors.
+
+#### ExternalState: two executor builds, one custodian marker
+
+The 2026-10-21 contracts release (on Arbitrum in `ipor-abi`) changes what the
+balance fuse and the pre-hook compare to detect an unprocessed custodian
+update: the executor's confirm count instead of the last confirmed update's
+timestamp. HyperEVM, Base and Ethereum still publish the earlier build, so both
+exist; the comparison is equality either way.
+
+- `ExternalStateVaultState.last_checked_custodian_timestamp` is
+  `last_checked_custodian_marker` and `BalanceFuseSnapshot.last_custodian_update_timestamp`
+  is `custodian_marker`, both a `CustodianMarker` (an opaque value the
+  contracts only compare for equality): a unix timestamp on an earlier
+  executor, a confirmation count on a released one.
+  `ExternalStateVaultState.custodian_marker_kind` (`CustodianMarkerKind`, read
+  from the executor at the snapshot block; `None` without an executor) and
+  `ExternalStateExecutor.read_custodian_marker_kind(ctx)` say which; never
+  compare a count with a clock. `ExternalStateExecutor.confirm_count()`
+  exists only on the released executor (it reverts on an earlier one), and
+  `last_custodian_update_timestamp()` reads the timestamp on both.
+- New on the released build: `ExternalStateExecutor.unforwarded_credit(asset)`,
+  `proposal_base_balance(account)`, `ExternalStateOperationFuse.sweep_surplus(asset)`,
+  and the events `ExternalStateBalanceFuseLastCustodianConfirmCountUpdated` and
+  `ExternalStateOperationFuseSweepSurplus` (the released balance fuse no longer
+  emits `...LastCustodianTimestampUpdated`; it stays registered for the earlier
+  build).
+
 **Removed.**
 
 - `IporFusionMarkets.RWA`: market 50 is `IporFusionMarkets.EXTERNAL_STATE`.
@@ -647,6 +710,7 @@ label values; they do not validate byte widths or address spelling.
 | `MarketId` | an `IporFusionMarkets` member, or `MarketId(n)` |
 | `RoleId` | a `Roles` member (accepted as is), or `RoleId(n)`; `Roles.resolve(name)` returns one |
 | `Decimals`, `Period`, `Amount`, `Shares`, ... | `Decimals(8)`, `Period(0)`, `Amount(n)`, `Shares(n)` |
+| `Wad` | `Wad(6 * 10**17)` (60%): an 18-decimal fraction, `10**18` is 100% |
 | `ChecksumAddress` | `Web3.to_checksum_address(value)` |
 | `HexAddress` | any `ChecksumAddress`, or `parse_hex_address(value)` (20 bytes or `0x`/`0X`-prefixed hex in any case → lowercase `0x` form) |
 | `MorphoBlueMarketId` | `parse_morpho_market_id(value)`: 32 bytes or hex in any spelling, always `0x` + 64 lowercase digits |
@@ -686,6 +750,8 @@ converted amounts `Amount`. A custom `VaultState` annotates the same.
 `PlasmaVault.total_supply()`, `balance_of()` and `get_total_supply_cap()` return
 `Shares` (vault shares), and `transfer` / `approve` / `transfer_from` /
 `set_total_supply_cap` take `Shares`; `ERC20` keeps `Amount`.
+`PlasmaVault.setup_markets_limits` takes `Sequence[tuple[MarketId, Wad]]`: each
+limit is a share of total assets, not an asset amount (see Behavior changes).
 `Reconciliation` amounts (`balance_fuses_total`, `underlying_on_vault`,
 `rewards_manager_balance`, `erc20_direct_total`, `sum`, `on_chain_total_assets`, `delta`,
 `pending_withdrawals`, `implied_market_total`, `market_storage_divergence`) are
@@ -1000,6 +1066,17 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
+
+- **`PlasmaVault.setup_markets_limits` takes WAD shares and validates them.** The
+  contract (`AssetDistributionProtectionLib.MarketLimit.limitInPercentage`) reads each
+  limit as the most of the vault's total assets the market may hold, `10**18` being
+  100%; 3.x typed it as an `Amount` and documented it as an asset amount, so a limit
+  set "in asset units" (`1_000_000` for 1 USDC) became a near-zero share that blocks
+  the market once limits are activated. It now takes `Wad` and raises `ValueError`
+  before building the call for a limit outside `0..10**18`: a negative one is no
+  uint256, and above 100% the vault reverts `MarketLimitSetupInPercentageIsTooHigh`. Pass the share: `Wad(6 * 10**17)` for 60%. Check limits
+  set with 3.x with `PlasmaVault.get_market_limit(market).call(ctx)`, which
+  returns the `Wad` share.
 
 - **The CLI and the MCP tools take the same arguments.**
   - **MCP inputs:** the vault tools' `chain_id` and every `block_number` are

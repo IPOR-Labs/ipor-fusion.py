@@ -161,7 +161,21 @@ def test_decodes_fuse_and_library_events_from_data_alone():
 
 
 def test_every_spec_has_a_distinct_topic():
-    assert len(HYPERCORE_EVENTS) == 16
+    """The event declarations of contracts/fuses/hypercore and its pre-hooks
+    at the 2026-10-21 contracts release; the settlement fuse and reporter
+    events left with those contracts."""
+    assert {spec.name for spec in HYPERCORE_EVENTS.values()} == {
+        "HyperCoreDepositFuseEnter",
+        "HyperCoreMarginFuseEnter",
+        "HyperCoreSendFuseSpotSend",
+        "HyperCoreSendFuseSendAsset",
+        "HyperCoreOrderFuseEnter",
+        "HyperCoreCancelFuseCancelByOid",
+        "HyperCoreCancelFuseCancelByCloid",
+        "HyperCoreBuilderFeeFuseEnter",
+        "HyperCoreActionEnqueued",
+        "HyperCoreActionSettled",
+    }
 
 
 @pytest.mark.parametrize("spec", HYPERCORE_EVENT_SPECS, ids=lambda spec: spec.name)

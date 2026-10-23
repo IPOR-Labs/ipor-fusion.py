@@ -31,6 +31,7 @@ classifiers = [
     "Natural Language :: English",
 ]
 dependencies = [
+    "certifi>=2026.10.19",
     "eth-account>=0.13,<1",
     "eth-typing>=6.0.0,<7",
     "eth-abi>=5.1.0,<6",
