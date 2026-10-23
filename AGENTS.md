@@ -419,7 +419,9 @@ or examples.
   round re-resolves it. Labels only name calls in `result.calls` and failures.
   Integration tests and examples use it instead of a local node.
 - Amounts are raw on-chain integers; `types.py` `NewType`s (`Amount`, `Shares`,
-  `MarketId`, ...) name the unit, and nothing scales by decimals.
+  `MarketId`, ...) name the unit, and nothing scales by decimals except the exact
+  boundary converters `parse_amount` / `format_amount` (and the `*_shares` pair):
+  decimal text in, raw integer out, no float ever.
 - Three address roles are nominal: `PlasmaVaultAddress`, `FuseAddress` and
   `AccessManagerAddress` (NewTypes of `ChecksumAddress`). Their wrappers, getters and
   records return them, so a vault, a fuse and an access manager cannot be passed for
