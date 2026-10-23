@@ -365,14 +365,16 @@ class PlasmaVault(ContractWrapper):
         market may hold, as a `Wad` share (``Wad(6 * 10**17)`` is 60%), enforced
         once `activate_markets_limits` is on (AssetDistributionProtectionLib).
 
-        Raises ``ValueError`` for a limit outside ``0..10**18``, which the vault
-        rejects with ``MarketLimitSetupInPercentageIsTooHigh``.
+        Raises ``ValueError`` for a limit outside ``0..10**18``: a negative one is
+        no uint256, and the vault reverts ``MarketLimitSetupInPercentageIsTooHigh``
+        above 100%.
         """
         for market, limit in limits:
             if not 0 <= limit <= WAD:
                 raise ValueError(
-                    f"market {market} limit {limit} is outside 0..10**18 (100%): the"
-                    " vault reverts MarketLimitSetupInPercentageIsTooHigh"
+                    f"market {market} limit {limit}: expected a WAD share in"
+                    " 0..10**18; above 100% the vault reverts"
+                    " MarketLimitSetupInPercentageIsTooHigh"
                 )
         return self._write("setupMarketsLimits((uint256,uint256)[])", list(limits))
 

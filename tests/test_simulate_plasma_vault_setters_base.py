@@ -109,8 +109,8 @@ def test_setup_markets_limits_calldata_selector_and_roundtrip():
 
 
 @pytest.mark.parametrize("limit", [10**18 + 1, -1])
-def test_setup_markets_limits_rejects_a_limit_the_vault_reverts_on(limit):
-    with pytest.raises(ValueError, match="MarketLimitSetupInPercentageIsTooHigh"):
+def test_setup_markets_limits_rejects_a_limit_outside_a_wad_share(limit):
+    with pytest.raises(ValueError, match="expected a WAD share in 0..10"):
         _bare_vault().setup_markets_limits([(1, 10**17), (2, limit)])
 
 

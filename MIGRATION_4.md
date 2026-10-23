@@ -1010,8 +1010,8 @@ are listed with a link.
   100%; 3.x typed it as an `Amount` and documented it as an asset amount, so a limit
   set "in asset units" (`1_000_000` for 1 USDC) became a near-zero share that blocks
   the market once limits are activated. It now takes `Wad` and raises `ValueError`
-  for a limit outside `0..10**18` (the vault's `MarketLimitSetupInPercentageIsTooHigh`)
-  before building the call. Pass the share: `Wad(6 * 10**17)` for 60%. Check limits
+  before building the call for a limit outside `0..10**18`: a negative one is no
+  uint256, and above 100% the vault reverts `MarketLimitSetupInPercentageIsTooHigh`. Pass the share: `Wad(6 * 10**17)` for 60%. Check limits
   set with 3.x through `getMarketLimit` on chain.
 
 - **The CLI and the MCP tools take the same arguments.**
