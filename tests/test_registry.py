@@ -3,6 +3,7 @@
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import cast
 
 import pytest
 from web3 import Web3
@@ -182,7 +183,8 @@ def test_a_registry_cannot_be_changed_through_its_map_or_its_source(downloads):
     assert registry.address("X") == Web3.to_checksum_address(PROXY)
     cached = fetch_address_registry(BASE)
     with pytest.raises(TypeError):
-        cached.addresses["IporFusionFactoryProxy"] = FUSE  # type: ignore[index]
+        # Writing through a cast: the static type already forbids it.
+        cast("dict[str, str]", cached.addresses)["IporFusionFactoryProxy"] = FUSE
     assert fetch_address_registry(BASE).address(
         "IporFusionFactoryProxy"
     ) == Web3.to_checksum_address(PROXY)
