@@ -36,7 +36,7 @@ CHAIN_NAME_TO_ID: dict[str, ChainId] = {name: cid for cid, name in CHAIN_NAMES.i
 # with none yet (Ink, Robinhood), on a vault cloned through its FusionFactory.
 SUPPORTED_CHAIN_IDS: frozenset[ChainId] = frozenset(
     ChainId(cid)
-    for cid in (1, 130, 143, 999, 4663, 8453, 9745, 42161, 43114, 57073, 747474)
+    for cid in (1, 130, 143, 239, 999, 4663, 8453, 9745, 42161, 43114, 57073, 747474)
 )
 
 # First eth_getLogs page size, in blocks, on chains whose providers cap the
