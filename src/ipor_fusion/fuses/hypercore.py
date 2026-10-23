@@ -1,6 +1,5 @@
 """HyperCore fuses (market 55): a HyperEVM PlasmaVault trading on Hyperliquid
-Core through delegatecalled fuses. (The first HyperEVM test vault ran on
-market 54, since reassigned to the crosschain market.)
+Core through delegatecalled fuses.
 
 The vault is the Core account: the fuses read the HyperCore precompiles and
 queue CoreWriter actions from the vault's own address, so no external position
