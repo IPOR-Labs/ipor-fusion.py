@@ -438,8 +438,12 @@ exist; the comparison is equality either way.
 - `ExternalStateVaultState.last_checked_custodian_timestamp` is
   `last_checked_custodian_marker` and `BalanceFuseSnapshot.last_custodian_update_timestamp`
   is `custodian_marker`, both a `CustodianMarker` (an opaque value the
-  contracts only compare for equality): a timestamp on an earlier executor, the
-  confirm count on a released one. `ExternalStateExecutor.confirm_count()`
+  contracts only compare for equality): a unix timestamp on an earlier
+  executor, a confirmation count on a released one.
+  `ExternalStateVaultState.custodian_marker_kind` (`CustodianMarkerKind`, read
+  from the executor at the snapshot block; `None` without an executor) and
+  `ExternalStateExecutor.read_custodian_marker_kind(ctx)` say which; never
+  compare a count with a clock. `ExternalStateExecutor.confirm_count()`
   exists only on the released executor (it reverts on an earlier one), and
   `last_custodian_update_timestamp()` reads the timestamp on both.
 - New on the released build: `ExternalStateExecutor.unforwarded_credit(asset)`,
