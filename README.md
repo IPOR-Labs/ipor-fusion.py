@@ -123,6 +123,8 @@ Fuse, factory and manager addresses per chain are published in
 A fuse must also be registered on the vault; `vault.get_fuses().call(ctx)` lists the registered ones.
 
 Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK never scales by decimals.
+`parse_amount("1.5", Decimals(6))` and `format_amount(Amount(1_500_000), Decimals(6))` convert exactly at the
+boundary (no floats, no rounding; `parse_shares` / `format_shares` for shares at the share token's decimals).
 
 ### Read, send, or simulate
 

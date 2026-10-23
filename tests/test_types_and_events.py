@@ -6,7 +6,7 @@ from hexbytes import HexBytes
 from web3 import Web3
 
 from ipor_fusion.fuses.events import extract_events
-from ipor_fusion.types import Amount, Decimals, Price
+from ipor_fusion.types import MAX_UINT256, Amount, Decimals, Price, Shares
 
 ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 
@@ -155,3 +155,89 @@ class TestRoleParsers:
         assert parser(bytes.fromhex(self.LOWER[2:])) == checksum
         with pytest.raises(ValueError):
             parser("0x1234")
+
+
+class TestAmountText:
+    @pytest.mark.parametrize(
+        ("text", "decimals", "raw"),
+        [
+            ("1.5", 6, 1_500_000),
+            ("0.000001", 6, 1),
+            ("1", 18, 10**18),
+            ("1.", 6, 1_000_000),
+            (".5", 6, 500_000),
+            (" 42 ", 0, 42),
+            ("0", 6, 0),
+            ("1.000000", 6, 1_000_000),
+            (str(MAX_UINT256), 0, MAX_UINT256),
+            (
+                "115792089237316195423570985008687907853269984665640564039457.584007913129639935",
+                18,
+                MAX_UINT256,
+            ),
+        ],
+    )
+    def test_parse_amount_is_exact(self, text, decimals, raw):
+        from ipor_fusion import parse_amount
+
+        assert parse_amount(text, Decimals(decimals)) == raw
+
+    @pytest.mark.parametrize(
+        "text",
+        ["", ".", "-1", "+1", "1e6", "1,000", "1_000", "1.5.0", "0x10", "1 0", "nan"],
+    )
+    def test_parse_amount_rejects_anything_but_plain_decimal_text(self, text):
+        from ipor_fusion import parse_amount
+
+        with pytest.raises(ValueError, match="not a decimal amount"):
+            parse_amount(text, Decimals(6))
+
+    def test_parse_amount_never_rounds(self):
+        from ipor_fusion import parse_amount
+
+        with pytest.raises(ValueError, match="7 fractional digits"):
+            parse_amount("1.0000001", Decimals(6))
+
+    def test_parse_amount_rejects_uint256_overflow_and_floats(self):
+        from ipor_fusion import parse_amount
+
+        with pytest.raises(ValueError, match="exceeds uint256"):
+            parse_amount(str(MAX_UINT256 + 1), Decimals(0))
+        with pytest.raises(TypeError, match="floats lose precision"):
+            parse_amount(1.5, Decimals(6))  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="decimals"):
+            parse_amount("1", Decimals(-1))
+
+    @pytest.mark.parametrize(
+        ("raw", "decimals", "text"),
+        [
+            (1_500_000, 6, "1.5"),
+            (1, 6, "0.000001"),
+            (10**18, 18, "1"),
+            (0, 6, "0"),
+            (42, 0, "42"),
+            (123_456_789, 4, "12345.6789"),
+            (
+                MAX_UINT256,
+                18,
+                "115792089237316195423570985008687907853269984665640564039457.584007913129639935",
+            ),
+        ],
+    )
+    def test_format_amount_round_trips(self, raw, decimals, text):
+        from ipor_fusion import format_amount, parse_amount
+
+        assert format_amount(Amount(raw), Decimals(decimals)) == text
+        assert parse_amount(text, Decimals(decimals)) == raw
+
+    def test_format_amount_rejects_negative(self):
+        from ipor_fusion import format_amount
+
+        with pytest.raises(ValueError, match="non-negative"):
+            format_amount(Amount(-1), Decimals(6))
+
+    def test_shares_pair_mirrors_amounts(self):
+        from ipor_fusion import format_shares, parse_shares
+
+        assert parse_shares("2.5", Decimals(8)) == Shares(250_000_000)
+        assert format_shares(Shares(250_000_000), Decimals(8)) == "2.5"

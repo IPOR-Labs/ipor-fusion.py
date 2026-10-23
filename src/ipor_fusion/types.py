@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import ClassVar, Literal, NewType, TypeAlias
 
@@ -196,3 +197,71 @@ def parse_fuse_address(value: str | bytes) -> FuseAddress:
 def parse_access_manager_address(value: str | bytes) -> AccessManagerAddress:
     """An access manager's address, checksummed; see `parse_plasma_vault_address`."""
     return AccessManagerAddress(_checksum(value))
+
+
+_DECIMAL_TEXT = re.compile(r"(\d*)(?:\.(\d*))?")
+
+
+def _parse_units(text: str, decimals: Decimals, what: str) -> int:
+    if not isinstance(text, str):
+        raise TypeError(
+            f"{what} must be text, not {type(text).__name__}: floats lose precision"
+        )
+    if decimals < 0:
+        raise ValueError(f"decimals must be non-negative, got {decimals}")
+    match = _DECIMAL_TEXT.fullmatch(text.strip())
+    if match is None or not (match.group(1) or match.group(2)):
+        raise ValueError(f"not a decimal {what}: {text!r}")
+    whole, fraction = match.group(1) or "0", match.group(2) or ""
+    if len(fraction) > decimals:
+        raise ValueError(
+            f"{what} {text!r} has {len(fraction)} fractional digits,"
+            f" more than the {decimals} the token carries"
+        )
+    value = int(whole) * 10**decimals + int(fraction.ljust(decimals, "0") or "0")
+    if value > MAX_UINT256:
+        raise ValueError(f"{what} {text!r} exceeds uint256")
+    return value
+
+
+def _format_units(value: int, decimals: Decimals, what: str) -> str:
+    if value < 0:
+        raise ValueError(f"{what} must be non-negative, got {value}")
+    if decimals < 0:
+        raise ValueError(f"decimals must be non-negative, got {decimals}")
+    whole, fraction = divmod(value, 10**decimals)
+    if fraction == 0:
+        return str(whole)
+    return f"{whole}.{str(fraction).zfill(decimals).rstrip('0')}"
+
+
+def parse_amount(text: str, decimals: Decimals) -> Amount:
+    """The raw `Amount` of ``text`` token units at ``decimals``, exactly:
+    ``parse_amount("1.5", Decimals(6))`` is ``Amount(1_500_000)``.
+
+    ``text`` is digits with at most one ``.`` (surrounding whitespace ignored);
+    no sign, exponent or separators. Raises ``ValueError`` for anything else,
+    for more fractional digits than ``decimals`` (nothing is rounded) and for a
+    value above uint256; ``TypeError`` for a non-string, so a float is never
+    accepted. Inverse of `format_amount`.
+    """
+    return Amount(_parse_units(text, decimals, "amount"))
+
+
+def parse_shares(text: str, decimals: Decimals) -> Shares:
+    """`parse_amount` for vault shares at the share token's ``decimals``
+    (`PlasmaVault.decimals`, not the asset's)."""
+    return Shares(_parse_units(text, decimals, "shares"))
+
+
+def format_amount(amount: Amount, decimals: Decimals) -> str:
+    """``amount`` in token units as exact decimal text, no trailing zeros:
+    ``format_amount(Amount(1_500_000), Decimals(6))`` is ``"1.5"``; a whole
+    number has no ``.``. Raises ``ValueError`` on a negative amount. Inverse of
+    `parse_amount`."""
+    return _format_units(amount, decimals, "amount")
+
+
+def format_shares(shares: Shares, decimals: Decimals) -> str:
+    """`format_amount` for vault shares."""
+    return _format_units(shares, decimals, "shares")
