@@ -125,7 +125,7 @@ registry is the source of truth and is regenerated on release.
 | Flare | 14 | `0xE75F3565D67645775351A9886F2b598f07d1860B` | `0x6C1ff6eBf5e92Dbc5591E7cCF455829De9C46579` | factory only | implementation slot |
 | Unichain | 130 | `0xC9b4E839e86284C558791C13Bda97999fc49aF63` | `0x73c7CA802403BB21e9608C937c556C04d5eeBAD6` | validated | implementation slot |
 | Monad | 143 | `0x62DFfe8bCaaf7960f858a4f7dDC83cc98F04cEDC` | `0x1017f0032460B3c8FBB92Bfd350F708Ff6229137` | validated | implementation slot |
-| TAC | 239 | `0x26b5561E2E0e7d7977431E92740903Ef3cB7194b` | `0x7DDd0bBB59eFB4b7791cE5E1Cf1587F083aE4Ef5` | factory only | implementation slot |
+| TAC | 239 | `0x26b5561E2E0e7d7977431E92740903Ef3cB7194b` | `0x7DDd0bBB59eFB4b7791cE5E1Cf1587F083aE4Ef5` | validated | implementation slot |
 | HyperEVM | 999 | `0x6bBc827F34b4e862d15215ABd4AC0E3886181665` | `0x010430cbdE2Bb8ACC48D7aDfbEb99812E83f1156` | validated | implementation slot |
 | Botanix | 3637 | `0x7c9857f22D0cc6523C8e88BFDCbf411AB8300fF5` | `0xddb0EFB2a7a5C02e01b5A1f85C0a1110d68EeC26` | factory only | registry only |
 | Robinhood | 4663 | `0xDF7A590b60072476E355A8EfF33e4872440bDc7C` | `0x9d897beA78F8747d8f9C45d5734089ca7225AE90` | validated | implementation slot |

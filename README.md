@@ -528,6 +528,7 @@ validated on every live vault of these chains (`SUPPORTED_CHAIN_IDS`):
 - **Avalanche** C-Chain
 - **Katana**
 - **Monad**
+- **TAC**
 - **Ink** and **Robinhood**, which have no live vault yet: validated on a vault freshly
   cloned through their FusionFactory on a fork
 
