@@ -159,7 +159,8 @@ checkout's default profile), the pending reader included.
 - No AI attribution trailers or "generated with" lines in commits or PRs.
 - Branch and open a PR; `main` only moves through PRs and the release workflow.
 - Dependencies: `>=x,<next-major` ranges in `pyproject.toml`, resolved by
-  `uv.lock`; `pyright` is pinned exactly.
+  `uv.lock`; `pyright` is pinned exactly. `certifi` is the deliberate exception: it
+  is calendar-versioned, and its floor only forces a CA bundle with recent revocations.
 - English only, US spelling, in code, comments, docstrings and user-facing
   strings (`field_docs.py` ships as API documentation). Comments only for edge
   cases and non-obvious logic.
@@ -304,7 +305,8 @@ checkout's default profile), the pending reader included.
   `ccip/quote` (`quote_ccip_native_fee`: the exact native fee of a send, from a
   simulation with the payer's balance at zero);
   `ccip/events` decodes the executor/dispatcher/factory events by topic (one
-  registry, mirrored from the v3 source; the v2 pair emits a subset of it);
+  registry, mirrored from the released contracts; earlier deployments' events
+  are not decoded where their signatures differ);
   `ccip/chainlink` also wraps the 2.0 OffRamp, verifier resolver and committee verifier
   (`CcipOffRamp.execute` is the permissionless delivery) and `ccip/indexer` fetches a
   message's verifier result from Chainlink's public indexers and builds that
