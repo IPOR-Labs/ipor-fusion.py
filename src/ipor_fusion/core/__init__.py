@@ -18,6 +18,7 @@ from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.external_state_executor import (
     BalanceFuseSnapshot,
     BalanceProposal,
+    CustodianMarkerKind,
     ExternalStateExecutor,
     ExternalStateVaultState,
     read_external_state,
@@ -122,6 +123,7 @@ __all__ = [
     "BalanceFuseSnapshot",
     "BalanceProposal",
     "ExternalStateExecutor",
+    "CustodianMarkerKind",
     "ExternalStateVaultState",
     "read_external_state",
     "Fuse",
