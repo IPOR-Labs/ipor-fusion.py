@@ -632,12 +632,9 @@
       }
     ],
     "pending": {
-      "pending": false,
-      "settled": true,
-      "refreshing": false,
+      "action_pending": false,
+      "action_settled": true,
       "action_class": "TRANSFER",
-      "settlement_mode": null,
-      "reported_result": "NONE",
       "action_id": 13,
       "action_nonce": 32,
       "pending_until": 1790609642,
@@ -645,6 +642,13 @@
       "enqueued_l1_block": 1164341828,
       "enqueued_evm_block": 47125670,
       "cached_value_wad": 10000000000000000,
+      "effect_kind": "CORE_SPOT",
+      "effect_token_index": 0,
+      "effect_evm_asset": "0x0000000000000000000000000000000000000000",
+      "expected_balance": 5000000000,
+      "timeout_at": 1790609822,
+      "timeout_at_utc": "2026-09-28T15:37:02Z",
+      "last_order_l1_block": 1164341700,
       "current_l1_block": 1168823034,
       "current_timestamp": 1790931001,
       "l1_block_available": true
@@ -658,7 +662,7 @@
     "native_perp_note": "Account value on Hyperliquid's native perp dex (USD, 6 decimals, signed): margin, PnL, funding and fees already netted.",
     "hip3_note": "Account value per HIP-3 perp dex the PerpDexIds config enables, in the valuation library's fixed order (xyz, abcd, para, mkts, io).",
     "perp_markets_note": "Granted PerpMarket substrates: action asset, HIP-3 dex and read index, the perpAssetInfo coin name, the per-order notional cap (USD, 6 decimals) and whether only reduce-only orders are admitted.",
-    "pending_note": "HyperCorePendingReader.pendingState(): whether a HyperCore action blocks execute and updateMarketsBalances, the settled predicate, and the raw last action (class, id, nonce, window). Null when no reader is known for the chain."
+    "pending_note": "HyperCorePendingReader.pendingState(): whether a HyperCore transfer blocks execute and updateMarketsBalances, the settled predicate, the raw last transfer (class, id, nonce, window, the balance effect it waits for and its timeout) and the Core L1 block of the last order. Null when no reader of the vault's build is listed for the chain, or when its read fails."
   },
   "health_check": {
     "ok": [

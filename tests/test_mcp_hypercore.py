@@ -10,15 +10,15 @@ from web3 import Web3
 from ipor_fusion.mcp.models import HyperCoreSection, VaultInfoResponse
 from ipor_fusion.readers.hypercore import (
     HyperCoreActionClass,
+    HyperCoreEffectKind,
     HyperCoreNav,
     HyperCorePendingState,
     HyperCorePerpLeg,
     HyperCorePerpMarket,
-    HyperCoreReportedResult,
     HyperCoreSpotLeg,
     HyperCoreVaultState,
 )
-from ipor_fusion.types import Amount, Decimals, MarketId, Price
+from ipor_fusion.types import ZERO_ADDRESS, Amount, Decimals, MarketId, Price
 from ipor_fusion.vault_info import (
     _build_hypercore_json,
 )
@@ -63,16 +63,18 @@ PENDING = HyperCorePendingState(
     enqueued_l1_block=1_164_341_828,
     enqueued_evm_block=47_125_670,
     action_class=HyperCoreActionClass.TRANSFER,
-    settlement_mode=None,
-    reported_result=HyperCoreReportedResult.NONE,
-    result_l1_block=0,
     action_id=13,
     payload_hash=b"\x30" * 32,
-    refreshing=False,
     cached_value_wad=10**16,
     action_nonce=32,
-    pending=False,
-    settled=True,
+    effect_kind=HyperCoreEffectKind.NONE,
+    effect_token_index=0,
+    effect_evm_asset=ZERO_ADDRESS,
+    timeout_at=0,
+    expected_balance=0,
+    last_order_l1_block=0,
+    action_pending=False,
+    action_settled=True,
     current_l1_block=1_168_823_034,
     current_timestamp=1_790_931_001,
     l1_block_available=True,
@@ -91,7 +93,8 @@ def test_producer_dict_validates_against_the_model():
     assert section.perp_markets[0].coin == "xyz:NVDA"
     assert section.pending is not None
     assert section.pending.action_class == "TRANSFER"
-    assert section.pending.settlement_mode is None
+    assert section.pending.effect_kind == "NONE"
+    assert section.pending.timeout_at_utc is None
     assert section.pending.pending_until_utc == "2026-09-28T15:34:02Z"
 
 

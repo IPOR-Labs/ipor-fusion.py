@@ -1172,15 +1172,13 @@ class HyperCorePerpMarketEntry(_Base):
 
 
 class HyperCorePendingEntry(_Base):
-    """HyperCorePendingReader.pendingState(): `pending` and `settled` are the
-    authoritative predicates; the raw fields stay after a TIMING settlement."""
+    """HyperCorePendingReader.pendingState(): `action_pending` and
+    `action_settled` are the authoritative predicates; the raw fields stay
+    after settlement until a pre-hook clears them."""
 
-    pending: bool
-    settled: bool
-    refreshing: bool
+    action_pending: bool
+    action_settled: bool
     action_class: Literal["NONE", "TRANSFER", "ORDER"]
-    settlement_mode: Literal["TIMING", "REPORTED"] | None
-    reported_result: Literal["NONE", "EXECUTED", "REJECTED"]
     action_id: int
     action_nonce: int
     pending_until: int
@@ -1188,6 +1186,27 @@ class HyperCorePendingEntry(_Base):
     enqueued_l1_block: int
     enqueued_evm_block: int
     cached_value_wad: int
+    effect_kind: Literal["NONE", "CORE_SPOT", "EVM_BALANCE"] = Field(
+        description="The balance a pending transfer waits for before it settles."
+    )
+    effect_token_index: int = Field(
+        description="Core spot token (CORE_SPOT); else 0, which is also "
+        "USDC's index: read effect_kind first."
+    )
+    effect_evm_asset: str = Field(
+        description="ERC-20 asset (EVM_BALANCE); else the zero address."
+    )
+    expected_balance: int = Field(
+        description="Core wei (CORE_SPOT) or ERC-20 units (EVM_BALANCE)."
+    )
+    timeout_at: int = Field(
+        description="A transfer with an effect settles at this time even without it."
+    )
+    timeout_at_utc: str | None = Field(description="Null when timeout_at is 0.")
+    last_order_l1_block: int = Field(
+        description="Core L1 block of the last order; the vault's share-priced "
+        "flows (deposit, mint, withdraw, redeem) wait for a later block."
+    )
     current_l1_block: int = Field(
         description="0 when the L1 precompile was unavailable."
     )

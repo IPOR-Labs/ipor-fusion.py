@@ -133,6 +133,7 @@ HyperCore (HYPERCORE (55)):
   HIP-3 dex 1: -0.000005 USD
   Perp market xyz:NVDA (asset 110002, dex 1, read index 10002): cap 15.00 USD, reduce-only optional
   Pending action: none (last TRANSFER #32 settled); L1 block 1168823034
+  Last order: L1 block 1164341700
 
 Health Check:
 [32m  Morpho wstETH/USDC: LTV 0.5000/0.8600 (58.1% usage), health_factor=1.7200[0m

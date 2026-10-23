@@ -27,7 +27,11 @@ from ipor_fusion.core.access import RoleAccountJson
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.fee_manager import RecipientFee
 from ipor_fusion.explorer import get_contract_name
-from ipor_fusion.readers.hypercore import HyperCorePendingState
+from ipor_fusion.readers.hypercore import (
+    HyperCoreActionClass,
+    HyperCoreEffectKind,
+    HyperCorePendingState,
+)
 from ipor_fusion.substrates import (
     format_market_label,
 )
@@ -343,19 +347,49 @@ def _print_hypercore(data: VaultData) -> None:
 def _print_hypercore_pending(pending: HyperCorePendingState | None) -> None:
     if pending is None:
         click.echo(
-            "  Pending action: unknown (no HyperCorePendingReader known on this chain)"
+            "  Pending action: unknown (no HyperCorePendingReader of this vault's"
+            " build is listed for the chain, or its read failed)"
         )
         return
+    click.echo(
+        f"  Pending action: {_pending_action_text(pending)};"
+        f" L1 block {pending.current_l1_block}"
+    )
+    if last := pending.last_order_l1_block:
+        in_flight = pending.l1_block_available and pending.current_l1_block <= last
+        click.echo(
+            f"  Last order: L1 block {last}{' (in flight)' if in_flight else ''}"
+        )
+
+
+def _pending_action_text(pending: HyperCorePendingState) -> str:
     last = f"{pending.action_class.name} #{pending.action_nonce}"
-    if pending.pending:
-        click.echo(
-            f"  Pending action: {last} (id {pending.action_id}) until"
-            f" {_unix_to_iso(pending.pending_until)}; L1 block {pending.current_l1_block}"
+    if pending.action_pending:
+        return (
+            f"{last} (id {pending.action_id}) until"
+            f" {_unix_to_iso(pending.pending_until)}{_pending_effect_suffix(pending)}"
         )
+    if pending.action_nonce == 0:
+        return "none (no action yet)"
+    if pending.action_class is HyperCoreActionClass.NONE:
+        # The pre-hooks clear a settled record but keep its nonce.
+        return f"none (last action #{pending.action_nonce} cleared)"
+    return f"none (last {last} settled)"
+
+
+def _pending_effect_suffix(pending: HyperCorePendingState) -> str:
+    if pending.effect_kind is HyperCoreEffectKind.NONE:
+        return ""
+    if pending.effect_kind is HyperCoreEffectKind.CORE_SPOT:
+        target = f"Core spot token {pending.effect_token_index}"
+        unit = "wei"
     else:
-        click.echo(
-            f"  Pending action: none (last {last} settled); L1 block {pending.current_l1_block}"
-        )
+        target = f"EVM {pending.effect_evm_asset}"
+        unit = "units"
+    return (
+        f", awaiting {target} >= {pending.expected_balance} {unit}"
+        f" or timeout {_unix_to_iso(pending.timeout_at)}"
+    )
 
 
 def _print_pending_requests(data: VaultData) -> None:

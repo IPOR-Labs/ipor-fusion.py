@@ -27,8 +27,8 @@ def _snapshot(**changes: object) -> HyperCoreTransferSnapshot:
         token_index=0,
         evm_token=USDC,
         action_nonce=7,
-        pending=False,
-        settled=True,
+        action_pending=False,
+        action_settled=True,
         core_user_exists=True,
         core_total_wei=1_400_986_500,
         core_hold_wei=0,
@@ -91,7 +91,7 @@ def test_first_deposit_reports_activation_even_if_fee_consumes_credit() -> None:
     [
         ({"block_number": 101}, HyperCoreTransferStatus.NOT_ENQUEUED),
         (
-            {"block_number": 101, "action_nonce": 8, "pending": True},
+            {"block_number": 101, "action_nonce": 8, "action_pending": True},
             HyperCoreTransferStatus.PENDING,
         ),
         ({"block_number": 101, "action_nonce": 9}, HyperCoreTransferStatus.SUPERSEDED),
@@ -129,6 +129,6 @@ def test_snapshots_must_track_one_action_and_one_vault() -> None:
 
 
 def test_snapshot_on_a_chain_without_a_pending_reader_is_unsupported() -> None:
-    ctx = Web3Context(MagicMock(), ChainId(1)).at_block(100)
+    ctx = Web3Context(MagicMock(), ChainId(999)).at_block(100)
     with pytest.raises(UnsupportedChainError, match="no HyperCorePendingReader"):
         read_hypercore_transfer_snapshot(ctx, VAULT, USDC)

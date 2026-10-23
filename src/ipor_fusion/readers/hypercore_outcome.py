@@ -47,8 +47,8 @@ class HyperCoreTransferSnapshot:
     token_index: HyperCoreTokenIndex
     evm_token: ChecksumAddress
     action_nonce: int
-    pending: bool
-    settled: bool
+    action_pending: bool
+    action_settled: bool
     core_user_exists: bool
     core_total_wei: int
     core_hold_wei: int
@@ -60,7 +60,8 @@ class HyperCoreTransferOutcome:
     """Observed transfer result after one pending window.
 
     ``DROPPED`` means no Core credit or account activation for an EVM deposit,
-    or neither a Core debit nor EVM credit for a Core withdrawal.
+    or neither a Core debit nor EVM credit for a Core withdrawal: the transfer
+    settled on its timeout, without the balance effect it waited for.
     ``IN_TRANSIT`` means Core was debited but EVM was not credited yet. These
     are inferences, valid only without concurrent Core or ERC-20 movements.
     """
@@ -141,8 +142,8 @@ def read_hypercore_transfer_snapshot(
         token_index=token_index,
         evm_token=evm_token,
         action_nonce=pending.action_nonce,
-        pending=pending.pending,
-        settled=pending.settled,
+        action_pending=pending.action_pending,
+        action_settled=pending.action_settled,
         core_user_exists=exists.value,
         core_total_wei=spot.total,
         core_hold_wei=spot.hold,
@@ -170,7 +171,7 @@ def compare_hypercore_transfer(
         raise ValueError("transfer snapshots must observe the same vault and token")
     if after.block_number <= before.block_number:
         raise ValueError("after snapshot must be from a later block")
-    if before.pending:
+    if before.action_pending:
         raise ValueError("before snapshot must precede an action")
     if direction not in ("evm_to_core", "core_to_evm"):
         raise ValueError(f"unsupported transfer direction: {direction}")
@@ -194,9 +195,9 @@ def _pending_status(
         return HyperCoreTransferStatus.NOT_ENQUEUED
     if after.action_nonce > before.action_nonce + 1:
         return HyperCoreTransferStatus.SUPERSEDED
-    if after.pending:
+    if after.action_pending:
         return HyperCoreTransferStatus.PENDING
-    if not after.settled:
+    if not after.action_settled:
         return HyperCoreTransferStatus.INDETERMINATE
     return None
 

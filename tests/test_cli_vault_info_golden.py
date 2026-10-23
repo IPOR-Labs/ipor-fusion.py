@@ -13,6 +13,7 @@ an output change is intended (see `tests/_golden.py`).
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -24,6 +25,7 @@ from _multicall import multicall_aware
 from click.testing import CliRunner
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
+from test_mcp_hypercore import PENDING
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 from web3.types import Timestamp
@@ -52,12 +54,10 @@ from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.mcp.models import VaultInfoResponse
 from ipor_fusion.readers.aave_v3 import AaveV3PositionBreakdown
 from ipor_fusion.readers.hypercore import (
-    HyperCoreActionClass,
+    HyperCoreEffectKind,
     HyperCoreNav,
-    HyperCorePendingState,
     HyperCorePerpLeg,
     HyperCorePerpMarket,
-    HyperCoreReportedResult,
     HyperCoreSpotLeg,
     HyperCoreVaultState,
 )
@@ -373,24 +373,12 @@ def _hypercore() -> HyperCoreVaultState:
         balance_fuse=FUSE_HYPERCORE,  # type: ignore[arg-type]
         nav=nav,
         balance_fuse_value_wad=nav.value_wad,
-        pending=HyperCorePendingState(
-            pending_until=1_790_609_642,
-            enqueued_l1_block=1_164_341_828,
-            enqueued_evm_block=47_125_670,
-            action_class=HyperCoreActionClass.TRANSFER,
-            settlement_mode=None,
-            reported_result=HyperCoreReportedResult.NONE,
-            result_l1_block=0,
-            action_id=13,
-            payload_hash=b"\x30" * 32,
-            refreshing=False,
-            cached_value_wad=10**16,
-            action_nonce=32,
-            pending=False,
-            settled=True,
-            current_l1_block=1_168_823_034,
-            current_timestamp=1_790_931_001,
-            l1_block_available=True,
+        pending=replace(
+            PENDING,
+            effect_kind=HyperCoreEffectKind.CORE_SPOT,
+            timeout_at=1_790_609_822,
+            expected_balance=5_000_000_000,
+            last_order_l1_block=1_164_341_700,
         ),
         perp_markets=(
             HyperCorePerpMarket(110_002, 1, 10_002, "xyz:NVDA", 15_000_000, False),

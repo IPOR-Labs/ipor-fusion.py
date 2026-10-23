@@ -133,10 +133,12 @@ DOCS: dict[str, dict[str, str]] = {
             "(USD, 6 decimals) and whether only reduce-only orders are admitted."
         ),
         "pending": (
-            "HyperCorePendingReader.pendingState(): whether a HyperCore action "
-            "blocks execute and updateMarketsBalances, the settled predicate, and "
-            "the raw last action (class, id, nonce, window). Null when no reader "
-            "is known for the chain."
+            "HyperCorePendingReader.pendingState(): whether a HyperCore transfer "
+            "blocks execute and updateMarketsBalances, the settled predicate, the "
+            "raw last transfer (class, id, nonce, window, the balance effect it "
+            "waits for and its timeout) and the Core L1 block of the last order. "
+            "Null when no reader of the vault's build is listed for the chain, or "
+            "when its read fails."
         ),
     },
     "withdraw_manager_details": {

@@ -10,8 +10,13 @@ the CoreDepositWallet), a USD class transfer between spot and the native perp
 dex (action 7), ``spotSend`` (6) and ``sendAsset`` (13), a limit order (1), a
 cancel (10 by oid, 11 by cloid) or a builder-fee approval (12). HyperCore
 executes the queued action in a later L1 block, so the EVM receipt is not a
-Core execution receipt, and only one action may be pending per vault at a
-time; ``execute`` and the balance refresh revert while one is.
+Core execution receipt. A transfer (deposit, margin, send, builder fee) is
+recorded as pending, one per vault at a time; ``execute`` and the balance
+refresh revert while one is. An EVM -> Core deposit and the Core -> EVM bridge
+stay pending until their balance lands or a timeout passes. Orders and cancels
+create no pending record: an order only blocks the vault's share-priced flows
+(deposit, mint, withdraw, redeem) until a later Core L1 block, and admits no
+second order within that block.
 
 Identifiers (HyperCoreLib.sol): the spot "dex" is :data:`SPOT_DEX` and the
 native perp dex is 0. A HIP-3 builder-deployed market is addressed by its

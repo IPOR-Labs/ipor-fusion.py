@@ -31,6 +31,7 @@ from enum import IntEnum
 from typing import TypeVar
 
 from eth_abi import encode
+from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -45,7 +46,6 @@ from ipor_fusion.errors import HyperCoreValuationError
 from ipor_fusion.fuses.hypercore import (
     NATIVE_PERP_DEX,
     SUPPORTED_HIP3_DEXES,
-    SettlementMode,
     perp_dex_of,
     precompile_index_of,
 )
@@ -66,20 +66,18 @@ from ipor_fusion.types import (
 )
 
 T = TypeVar("T")
+_E = TypeVar("_E", bound=IntEnum)
 
 #: New HyperCore vaults use market 55; the abandoned pilot still keys 54.
 HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
 #: The only chain with the HyperCore precompiles.
 HYPEREVM_CHAIN_ID = ChainId(999)
-#: Known ``HyperCorePendingReader`` deployments per chain. The reader is a
-#: stateless helper and any deployment serves any vault. The market-55 reader
-#: is pinned in ``tests/fixtures/hypercore_market55.json`` until ``ipor-abi``
-#: publishes it.
-HYPERCORE_PENDING_READERS: dict[ChainId, ChecksumAddress] = {
-    HYPEREVM_CHAIN_ID: Web3.to_checksum_address(
-        "0x83F54bc9eA4Dd19cb579Daa70368562C7a7534C4"
-    ),
-}
+#: Known ``HyperCorePendingReader`` deployments of the build this module
+#: decodes, per chain. The reader is a stateless helper and any such deployment
+#: serves any vault of that build. Pass ``pending_reader=`` for a chain not
+#: listed. A reader of another build evaluates its own predicates on the
+#: vault's slot, so it never belongs here.
+HYPERCORE_PENDING_READERS: dict[ChainId, ChecksumAddress] = {}
 WAD_DECIMALS = 18
 #: ``accountMarginSummary`` reports USD with 6 decimals.
 USD6_DECIMALS = 6
@@ -321,72 +319,113 @@ class HyperCoreReportedResult(IntEnum):
     REJECTED = 2
 
 
+class HyperCoreEffectKind(IntEnum):
+    """``HyperCorePendingLib`` ``EFFECT_*``: the balance a pending Transfer
+    waits for before it settles."""
+
+    #: Settles by time only.
+    NONE = 0
+    #: The vault's Core spot balance of ``effect_token_index`` reaches
+    #: ``expected_balance`` (an EVM -> Core deposit).
+    CORE_SPOT = 1
+    #: The vault's ERC-20 balance of ``effect_evm_asset`` reaches
+    #: ``expected_balance`` (a Core -> EVM bridge).
+    EVM_BALANCE = 2
+
+
 @dataclass(frozen=True, slots=True)
 class HyperCorePendingState:
     """``HyperCorePendingReader.pendingState()``: the raw ``PendingAction``
     struct and the predicates derived from it.
 
-    Only ``pending`` and ``settled`` are authoritative: a TIMING-settled action
-    leaves the raw fields in place until the next enqueue, so the struct alone
-    cannot tell "pending" from "settled, not yet cleared".
+    Only ``action_pending`` and ``action_settled`` are authoritative: a settled
+    action keeps its raw fields until a pre-hook clears them, so the struct
+    alone cannot tell "pending" from "settled, not yet cleared". Orders create
+    no record; ``last_order_l1_block`` alone gates them (see
+    :meth:`HyperCorePendingReader.is_order_in_flight`).
     """
 
     pending_until: Timestamp
     enqueued_l1_block: int
     enqueued_evm_block: int
     action_class: HyperCoreActionClass
-    settlement_mode: SettlementMode | None
-    reported_result: HyperCoreReportedResult
-    result_l1_block: int
     action_id: HyperCoreActionId
     payload_hash: PayloadHash
-    refreshing: bool
     cached_value_wad: int
     action_nonce: int
-    pending: bool
-    settled: bool
+    effect_kind: HyperCoreEffectKind
+    effect_token_index: HyperCoreTokenIndex
+    effect_evm_asset: ChecksumAddress
+    #: A Transfer with an effect settles at this timestamp even without it.
+    timeout_at: Timestamp
+    #: Core wei or ERC-20 units, as ``effect_kind`` says.
+    expected_balance: int
+    last_order_l1_block: int
+    action_pending: bool
+    action_settled: bool
     current_l1_block: int
     current_timestamp: Timestamp
     l1_block_available: bool
 
 
-_PENDING_ACTION_TYPE = "(uint64,uint64,uint64,uint8,uint8,uint8,uint64,uint24,bytes32,bool,uint256,uint256)"
-PENDING_STATE_TYPE = f"({_PENDING_ACTION_TYPE},bool,bool,bool,uint64,uint64,bool)"
+# The deprecated* members (REPORTED settlement) keep their slots in the struct.
+_PENDING_ACTION_TYPE = (
+    "(uint64,uint64,uint64,uint8,uint8,uint8,uint64,uint24,bytes32,bool,uint256,"
+    "uint256,uint8,uint64,address,uint64,uint256,uint64)"
+)
+PENDING_STATE_TYPE = f"({_PENDING_ACTION_TYPE},bool,bool,uint64,uint64,bool)"
 _PENDING_STATE_SELECTOR = function_signature_to_4byte_selector("pendingState()")
-_IS_PENDING_SELECTOR = function_signature_to_4byte_selector("isPending()")
+_IS_ACTION_PENDING_SELECTOR = function_signature_to_4byte_selector("isActionPending()")
+_IS_ORDER_IN_FLIGHT_SELECTOR = function_signature_to_4byte_selector("isOrderInFlight()")
+
+
+def _member(enum: type[_E], value: int) -> _E:
+    # A DecodingError, not the ValueError, so a batched read degrades to None.
+    try:
+        return enum(value)
+    except ValueError as e:
+        raise DecodingError(f"{enum.__name__} has no member {value}") from e
 
 
 def _decode_pending_state(values: tuple) -> HyperCorePendingState:
-    state, pending, settled, refreshing, l1_block, timestamp, l1_available = values
+    state, action_pending, action_settled, l1_block, timestamp, l1_available = values
     (
         pending_until,
         enqueued_l1_block,
         enqueued_evm_block,
         action_class,
-        settlement_mode,
-        reported_result,
-        result_l1_block,
+        _settlement_mode,
+        _reported_result,
+        _result_l1_block,
         action_id,
         payload_hash,
-        state_refreshing,
+        _refreshing,
         cached_value_wad,
         action_nonce,
+        effect_kind,
+        effect_token_index,
+        effect_evm_asset,
+        timeout_at,
+        expected_balance,
+        last_order_l1_block,
     ) = state
     return HyperCorePendingState(
         pending_until=pending_until,
         enqueued_l1_block=enqueued_l1_block,
         enqueued_evm_block=enqueued_evm_block,
-        action_class=HyperCoreActionClass(action_class),
-        settlement_mode=SettlementMode(settlement_mode) if settlement_mode else None,
-        reported_result=HyperCoreReportedResult(reported_result),
-        result_l1_block=result_l1_block,
+        action_class=_member(HyperCoreActionClass, action_class),
         action_id=HyperCoreActionId(action_id),
         payload_hash=PayloadHash(bytes(payload_hash)),
-        refreshing=bool(refreshing or state_refreshing),
         cached_value_wad=cached_value_wad,
         action_nonce=action_nonce,
-        pending=bool(pending),
-        settled=bool(settled),
+        effect_kind=_member(HyperCoreEffectKind, effect_kind),
+        effect_token_index=HyperCoreTokenIndex(effect_token_index),
+        effect_evm_asset=Web3.to_checksum_address(effect_evm_asset),
+        timeout_at=timeout_at,
+        expected_balance=expected_balance,
+        last_order_l1_block=last_order_l1_block,
+        action_pending=bool(action_pending),
+        action_settled=bool(action_settled),
         current_l1_block=l1_block,
         current_timestamp=timestamp,
         l1_block_available=bool(l1_available),
@@ -396,10 +435,12 @@ def _decode_pending_state(values: tuple) -> HyperCorePendingState:
 class HyperCorePendingReader:
     """``HyperCorePendingReader`` through the vault's ``UniversalReader``.
 
-    ``reader`` is the deployed helper (one per chain, never called directly);
-    the vault delegatecalls it so it sees the vault's pending slot. Keepers
-    gate every action on :meth:`is_pending`: the pending-action pre-hook
-    reverts ``execute`` and ``updateMarketsBalances`` while it is true.
+    ``reader`` is the deployed helper (never called directly; it must be of
+    the vault's build); the vault delegatecalls it so it sees the vault's
+    pending slot. Keepers gate every action on :meth:`is_action_pending`: the
+    pending-action pre-hook reverts ``execute`` and ``updateMarketsBalances``
+    while it is true. :meth:`is_order_in_flight` is the separate gate on
+    capital flows after an order.
     """
 
     def __init__(self, vault: PlasmaVaultAddress, reader: ChecksumAddress):
@@ -414,9 +455,19 @@ class HyperCorePendingReader:
             decoder=_decode_pending_state,
         )
 
-    def is_pending(self) -> Call[bool]:
+    def is_action_pending(self) -> Call[bool]:
+        return self._bool_read(_IS_ACTION_PENDING_SELECTOR)
+
+    def is_order_in_flight(self) -> Call[bool]:
+        """Whether an order sent in the current Core L1 block is still
+        unprocessed; the capital-flow pre-hook reverts the vault's
+        share-priced flows (deposit, mint, withdraw, redeem), and the order
+        fuse a second order, while it is true."""
+        return self._bool_read(_IS_ORDER_IN_FLIGHT_SELECTOR)
+
+    def _bool_read(self, selector: bytes) -> Call[bool]:
         return self._vault.universal_read_decoded(
-            self._reader, _IS_PENDING_SELECTOR, output_types=["bool"], decoder=bool
+            self._reader, selector, output_types=["bool"], decoder=bool
         )
 
 

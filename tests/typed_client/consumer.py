@@ -305,7 +305,8 @@ def producers_feed_consumers(ctx: Web3Context, oracle: ChecksumAddress) -> None:
     vault.configure_instant_withdrawal_fuses(
         [(fuse, [bytes(32)]) for fuse in vault.get_instant_withdrawal_fuses().call(ctx)]
     )
-    HyperCorePendingReader(vault.address, oracle).is_pending().call(ctx)
+    HyperCorePendingReader(vault.address, oracle).is_action_pending().call(ctx)
+    HyperCorePendingReader(vault.address, oracle).is_order_in_flight().call(ctx)
 
 
 def ccip_selectors_round_trip(ctx: Web3Context, factory: CcipCrosschainFactory) -> None:

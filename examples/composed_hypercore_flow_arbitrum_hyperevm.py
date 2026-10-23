@@ -490,10 +490,11 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
     #    hold (the spot check uses total - hold), the dex-1 account value (the
     #    HIP-3 check uses equity in USD6), the token's Core wei decimals (the
     #    Core -> EVM amount must be representable on the EVM), the mark, and
-    #    the pending gate: only one Core action may be pending per vault.
+    #    the pending gate: only one Core action may be pending per vault
+    #    (``None`` when no reader of this vault's build is listed).
     state = read_hypercore_vault_state(ctx, HYPERCORE_VAULT, HYPERCORE_BALANCE_FUSE)
     reader = HyperCoreReader()
-    pending = bool(state.pending and state.pending.pending)
+    pending = state.pending.action_pending if state.pending else None
     spot = reader.spot_balance(HYPERCORE_VAULT, USDC_TOKEN_INDEX).call(ctx)
     spot_available = _available_spot_wei(spot.total, spot.hold)
     usdc_info = reader.token_info(USDC_TOKEN_INDEX).call(ctx)
@@ -524,7 +525,12 @@ def core_leg_previews(web3_hype: Web3) -> list[Preview]:
         sz_decimals,
         mark,
     )
-    _check(not pending, "a Core action is pending; previews would all revert")
+    if pending is None:
+        log.warning(
+            "pending gate UNCHECKED: no HyperCorePendingReader of this vault's build;"
+            " a pending transfer or an order in flight makes the previews revert"
+        )
+    _check(pending is not True, "a Core action is pending; previews would all revert")
 
     previews: list[Preview] = []
     # A1. EVM -> Core: the vault holds little USDC at head, so the preview

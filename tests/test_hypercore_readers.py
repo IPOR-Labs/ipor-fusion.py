@@ -10,22 +10,22 @@ from unittest.mock import MagicMock
 import pytest
 from _multicall import multicall_aware
 from eth_abi import decode, encode
+from eth_abi.exceptions import DecodingError
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion import (
     HyperCoreActionClass,
+    HyperCoreEffectKind,
     HyperCoreNav,
     HyperCorePendingReader,
     HyperCorePendingState,
     HyperCoreReader,
-    HyperCoreReportedResult,
     HyperCoreSpotBalance,
     HyperCoreTokenInfo,
     HyperCoreValuationError,
     PlasmaVault,
-    SettlementMode,
     convert_to_wad_int,
     read_hypercore_nav,
 )
@@ -41,10 +41,11 @@ from ipor_fusion.readers.hypercore import (
     HyperCoreVaultState,
     read_hypercore_vault_state,
 )
-from ipor_fusion.types import MarketId
+from ipor_fusion.types import ZERO_ADDRESS, MarketId
 
 VAULT = Web3.to_checksum_address("0x41c46c328036fa7865d5cb15d531d7c5120f05c8")
 READER = Web3.to_checksum_address("0x01fcd96f5049946bd10396b86e0b3d3ae7fff539")
+UNKNOWN_EFFECT_READER = Web3.to_checksum_address("0x" + "ee" * 20)
 BALANCE_FUSE = Web3.to_checksum_address("0x66f605b579dbe23c552edcf480de71198f3c4cd1")
 ORACLE = Web3.to_checksum_address("0x310ab1069ef88bc7752f3a64299cbdc80cc223f7")
 USDC = Web3.to_checksum_address("0xb88339cb7199b77e23db6e890353e22632ba630f")
@@ -155,24 +156,30 @@ class TestPrecompileCalls:
             self.reader.perp_asset_info(1 << 32)
 
 
-def _pending_state_raw(*, pending: bool, settled: bool) -> bytes:
+def _pending_state_raw(*, pending: bool, settled: bool, effect_kind: int = 1) -> bytes:
     state = (
         1_790_609_642,
         1_164_341_828,
         47_125_670,
         1,  # Transfer
-        0,  # settlement mode unset for a transfer
-        0,
-        0,
+        0,  # deprecatedSettlementMode
+        0,  # deprecatedReportedResult
+        0,  # deprecatedResultL1Block
         13,  # sendAsset
         b"\x30" * 32,
-        False,
+        False,  # deprecatedRefreshing
         10**16,
         32,
+        effect_kind,  # 1: EFFECT_CORE_SPOT
+        0,  # USDC
+        ZERO_ADDRESS,
+        1_790_609_822,
+        5_000_000_000,
+        1_164_341_700,
     )
     inner = encode(
         [PENDING_STATE_TYPE],
-        [(state, pending, settled, False, 1_168_823_034, 1_790_931_001, True)],
+        [(state, pending, settled, 1_168_823_034, 1_790_931_001, True)],
     )
     return encode(["(bytes)"], [(inner,)])
 
@@ -192,25 +199,43 @@ class TestUniversalRead:
         )
         assert isinstance(state, HyperCorePendingState)
         assert state.action_class is HyperCoreActionClass.TRANSFER
-        assert state.settlement_mode is None
-        assert state.reported_result is HyperCoreReportedResult.NONE
         assert (state.action_id, state.action_nonce, state.cached_value_wad) == (
             13,
             32,
             10**16,
         )
-        assert (state.pending, state.settled, state.refreshing) == (False, True, False)
+        assert state.effect_kind is HyperCoreEffectKind.CORE_SPOT
+        assert (state.effect_token_index, state.expected_balance) == (0, 5_000_000_000)
+        assert (state.timeout_at, state.last_order_l1_block) == (
+            1_790_609_822,
+            1_164_341_700,
+        )
+        assert (state.action_pending, state.action_settled) == (False, True)
         assert (state.current_l1_block, state.l1_block_available) == (
             1_168_823_034,
             True,
         )
         assert state.payload_hash == b"\x30" * 32
 
-    def test_is_pending_and_balance_fuse_value_decode_their_payloads(self):
+    @pytest.mark.parametrize(
+        ("method", "signature"),
+        [
+            ("is_action_pending", "isActionPending()"),
+            ("is_order_in_flight", "isOrderInFlight()"),
+        ],
+    )
+    def test_boolean_predicates_read_through_the_vault(self, method, signature):
+        ctx = _ctx()
+        ctx.call.return_value = encode(["(bytes)"], [(encode(["bool"], [True]),)])
+        call = getattr(HyperCorePendingReader(VAULT, READER), method)()
+        assert call.call(ctx) is True
+        assert ctx.call.call_args.args[1][4:] == encode(
+            ["address", "bytes"], [READER, _selector(signature)]
+        )
+
+    def test_balance_fuse_value_and_universal_read_decode_their_payloads(self):
         ctx = _ctx()
         vault = PlasmaVault(VAULT)
-        ctx.call.return_value = encode(["(bytes)"], [(encode(["bool"], [True]),)])
-        assert HyperCorePendingReader(VAULT, READER).is_pending().call(ctx) is True
         ctx.call.return_value = encode(
             ["(bytes)"], [(encode(["uint256"], [8_245_000_000_000_000]),)]
         )
@@ -224,17 +249,30 @@ class TestUniversalRead:
             vault.universal_read(READER, b"\xaa\xbb\xcc\xdd").call(ctx) == b"\x01\x02"
         )
 
-    def test_reported_order_state_maps_the_enums(self):
+    def test_deprecated_slots_are_skipped_and_the_evm_effect_decodes(self):
         ctx = _ctx()
-        state = (0, 0, 0, 2, 2, 2, 5, 1, b"\x00" * 32, True, 0, 1)
-        inner = encode([PENDING_STATE_TYPE], [(state, True, False, True, 0, 0, False)])
+        # Deprecated slots may hold nonzero values; they must not shift the
+        # members after them.
+        state = (
+            *(0, 0, 0, 1, 2, 2, 5, 1, b"\x00" * 32, True, 0, 1),
+            *(2, 0, USDC.lower(), 0, 7, 0),
+        )
+        inner = encode([PENDING_STATE_TYPE], [(state, True, False, 0, 0, False)])
         ctx.call.return_value = encode(["(bytes)"], [(inner,)])
         decoded = HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
-        assert decoded.action_class is HyperCoreActionClass.ORDER
-        assert decoded.settlement_mode is SettlementMode.REPORTED
-        assert decoded.reported_result is HyperCoreReportedResult.REJECTED
-        assert decoded.refreshing and decoded.pending and not decoded.settled
+        assert decoded.effect_kind is HyperCoreEffectKind.EVM_BALANCE
+        assert decoded.effect_evm_asset == USDC
+        assert (decoded.expected_balance, decoded.last_order_l1_block) == (7, 0)
+        assert decoded.action_pending and not decoded.action_settled
         assert not decoded.l1_block_available
+
+    def test_an_unknown_effect_kind_fails_the_decode(self):
+        ctx = _ctx()
+        state = (*(0,) * 8, b"\x00" * 32, False, 0, 1, 3, 0, ZERO_ADDRESS, 0, 0, 0)
+        inner = encode([PENDING_STATE_TYPE], [(state, False, True, 0, 0, True)])
+        ctx.call.return_value = encode(["(bytes)"], [(inner,)])
+        with pytest.raises(DecodingError, match="HyperCoreEffectKind has no member 3"):
+            HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
 
 
 @pytest.mark.parametrize(
@@ -260,6 +298,8 @@ def _universal_read(data: bytes) -> bytes:
     target, inner = decode(["address", "bytes"], data[4:])
     if Web3.to_checksum_address(target) == READER:
         return _pending_state_raw(pending=False, settled=True)
+    if Web3.to_checksum_address(target) == UNKNOWN_EFFECT_READER:
+        return _pending_state_raw(pending=False, settled=True, effect_kind=3)
     assert Web3.to_checksum_address(target) == BALANCE_FUSE
     assert bytes(inner) == _selector("balanceOf()")
     return encode(["(bytes)"], [(encode(["uint256"], [8_245_000_000_000_000]),)])
@@ -414,9 +454,19 @@ class TestVaultState:
         assert (market.coin, market.max_notional_usd6) == ("xyz:NVDA", 15_000_000)
         assert market.reduce_only_required is False
 
+    def test_an_undecodable_pending_state_leaves_the_rest_of_the_state(self):
+        ctx = _ctx()
+        ctx.chain_id = 999
+        ctx.call.side_effect = multicall_aware(_vault_state_handler(xyz_value=0))
+        state = read_hypercore_vault_state(
+            ctx, VAULT, BALANCE_FUSE, MARKET, pending_reader=UNKNOWN_EFFECT_READER
+        )
+        assert state.pending is None and state.nav_matches_balance_fuse is True
+        assert len(state.perp_markets) == 1
+
     def test_without_a_known_reader_the_pending_state_is_none(self):
         ctx = _ctx()
-        ctx.chain_id = 1
+        ctx.chain_id = 999
         ctx.call.side_effect = multicall_aware(_vault_state_handler(xyz_value=0))
         state = read_hypercore_vault_state(ctx, VAULT, BALANCE_FUSE, MARKET)
         assert state.pending is None and state.nav_matches_balance_fuse is True

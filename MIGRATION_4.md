@@ -426,7 +426,9 @@ is the wrong one.
   oracle does not price, a price overflow and an unsupported HIP-3 dex bitmap;
   `HyperCoreNav.balance_wad` raises it for a negative NAV.
 - `read_hypercore_transfer_snapshot` raises `UnsupportedChainError` (still a
-  `ValueError`) on a chain with no known `HyperCorePendingReader` when none is passed.
+  `ValueError`) when no `pending_reader` is passed and `HYPERCORE_PENDING_READERS`
+  lists none for the chain. It lists none for any chain, so pass one (see
+  [HyperCore pending state](#behavior-changes) under Behavior changes).
 - `fetch_verifier_result` no longer leaks `KeyError`, `TypeError` or `ValueError` from
   an indexer answer it cannot read (not JSON, a missing or mistyped field, invalid hex
   or address, an empty or non-array CCV list, or a result for a different message id,
@@ -806,7 +808,9 @@ oracle node's `source_detail`, the Morpho `asset`, `adapters`, `caps`,
 
 The JSON document builders return `TypedDict`s instead of `dict[str, Any]`; the
 documents themselves (keys, values, order, the MCP schemas) are unchanged, so
-untyped code needs none of this section.
+untyped code needs none of this section. The one exception is the `vault info`
+`hypercore.pending` block (see the HyperCore pending state under
+[Behavior changes](#behavior-changes)).
 
 | Builder | Returns |
 |---|---|
@@ -968,5 +972,22 @@ are listed with a link.
   `dataclasses.replace(result, ...)` (a failed call's `error` is completed again).
   Both stay unhashable (`__hash__` is `None`, as before). The freeze is shallow:
   the `logs` / `calls` lists themselves can still be mutated.
+- **HyperCore pending state (preview) follows the current contracts.**
+  `HyperCorePendingReader` decodes the current build's `pendingState()`, which a
+  reader of the earlier build does not answer, so pass a reader of the vault's build.
+  - `HyperCorePendingReader.is_pending()` is `is_action_pending()`; new:
+    `is_order_in_flight()`, the gate on share-priced flows after an order.
+  - `HyperCorePendingState.pending` / `settled` are `action_pending` /
+    `action_settled`, and so are those of `HyperCoreTransferSnapshot`.
+  - `HyperCorePendingState.settlement_mode`, `reported_result`, `result_l1_block`
+    and `refreshing` are removed: the contract keeps their slots as deprecated.
+  - New fields: `effect_kind` (`HyperCoreEffectKind`), `effect_token_index`,
+    `effect_evm_asset`, `timeout_at`, `expected_balance` and `last_order_l1_block`.
+    An unknown `action_class` or `effect_kind` raises `eth_abi`'s `DecodingError`.
+  - The `vault info` `hypercore.pending` block (CLI `--json` and MCP) changes the same
+    way, plus `timeout_at_utc` (`null` when `timeout_at` is 0).
+  - `HYPERCORE_PENDING_READERS` lists no reader: pass `pending_reader=` to
+    `read_hypercore_vault_state` and `read_hypercore_transfer_snapshot`.
+    `vault info` passes none, so its `pending` block is `null`.
 - Saved config entries are checksummed when loaded; the MCP `vault_add` tool rejects
   a value that is not an address.

@@ -66,7 +66,7 @@ from ipor_fusion.readers.oracle_mapping import (
     OracleNode,
     OraclePrice,
 )
-from ipor_fusion.types import Period, RoleId
+from ipor_fusion.types import ZERO_ADDRESS, Period, RoleId
 
 
 def _amount(raw: int = 0, formatted: str = "0") -> AmountJson:
@@ -394,12 +394,9 @@ def _full_vault_info_dict() -> VaultInfoJson:
                 }
             ],
             "pending": {
-                "pending": False,
-                "settled": True,
-                "refreshing": False,
+                "action_pending": False,
+                "action_settled": True,
                 "action_class": "TRANSFER",
-                "settlement_mode": None,
-                "reported_result": "NONE",
                 "action_id": HyperCoreActionId(13),
                 "action_nonce": 32,
                 "pending_until": Timestamp(1_790_609_642),
@@ -407,6 +404,13 @@ def _full_vault_info_dict() -> VaultInfoJson:
                 "enqueued_l1_block": 1_164_341_828,
                 "enqueued_evm_block": 47_125_670,
                 "cached_value_wad": 10**16,
+                "effect_kind": "CORE_SPOT",
+                "effect_token_index": HyperCoreTokenIndex(0),
+                "effect_evm_asset": ZERO_ADDRESS,
+                "expected_balance": 5_000_000_000,
+                "timeout_at": Timestamp(1_790_609_822),
+                "timeout_at_utc": "2026-09-28T15:37:02Z",
+                "last_order_l1_block": 1_164_341_700,
                 "current_l1_block": 1_168_823_034,
                 "current_timestamp": Timestamp(1_790_931_001),
                 "l1_block_available": True,
