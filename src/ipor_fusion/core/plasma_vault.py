@@ -13,6 +13,7 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 from web3.types import LogReceipt, Timestamp
 
+from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.fuse_action import FuseAction
@@ -25,7 +26,9 @@ from ipor_fusion.types import (
     Fee,
     FuseAddress,
     MarketId,
+    Period,
     PlasmaVaultAddress,
+    RoleId,
     Shares,
 )
 
@@ -401,6 +404,162 @@ class PlasmaVault(ContractWrapper):
     def max_withdraw(self, account: ChecksumAddress) -> Call[Amount]:
         return self._view(
             "maxWithdraw(address)", account, output_types=["uint256"], decoder=Amount
+        )
+
+    def max_redeem(self, account: ChecksumAddress) -> Call[Shares]:
+        return self._view(
+            "maxRedeem(address)", account, output_types=["uint256"], decoder=Shares
+        )
+
+    def max_deposit(self, receiver: ChecksumAddress) -> Call[Amount]:
+        """Assets ``receiver`` can still deposit under the total supply cap."""
+        return self._view(
+            "maxDeposit(address)", receiver, output_types=["uint256"], decoder=Amount
+        )
+
+    def max_mint(self, receiver: ChecksumAddress) -> Call[Shares]:
+        """Shares ``receiver`` can still mint under the total supply cap."""
+        return self._view(
+            "maxMint(address)", receiver, output_types=["uint256"], decoder=Shares
+        )
+
+    def preview_deposit(self, assets: Amount) -> Call[Shares]:
+        """Shares a deposit of ``assets`` mints, after the deposit fee."""
+        return self._view(
+            "previewDeposit(uint256)", assets, output_types=["uint256"], decoder=Shares
+        )
+
+    def preview_mint(self, shares: Shares) -> Call[Amount]:
+        """Assets a mint of ``shares`` takes, the deposit fee included."""
+        return self._view(
+            "previewMint(uint256)", shares, output_types=["uint256"], decoder=Amount
+        )
+
+    def preview_withdraw(self, assets: Amount) -> Call[Shares]:
+        """Shares an instant withdrawal of ``assets`` burns, the withdraw fee
+        included."""
+        return self._view(
+            "previewWithdraw(uint256)", assets, output_types=["uint256"], decoder=Shares
+        )
+
+    def preview_redeem(self, shares: Shares) -> Call[Amount]:
+        """Assets an instant redemption of ``shares`` pays, after the withdraw fee."""
+        return self._view(
+            "previewRedeem(uint256)", shares, output_types=["uint256"], decoder=Amount
+        )
+
+    def deposit_with_permit(
+        self,
+        assets: Amount,
+        receiver: ChecksumAddress,
+        deadline: Timestamp,
+        v: int,
+        r: bytes,
+        s: bytes,
+    ) -> Call[None]:
+        """`deposit` with an EIP-2612 permit of the asset signed by the caller.
+        The vault deposits even when the permit call fails (an allowance already
+        in place, or a front-run permit)."""
+        return self._write(
+            "depositWithPermit(uint256,address,uint256,uint8,bytes32,bytes32)",
+            assets,
+            receiver,
+            deadline,
+            v,
+            r,
+            s,
+        )
+
+    def is_fuse_supported(self, fuse: FuseAddress) -> Call[bool]:
+        """Whether ``fuse`` is registered (`add_fuses`), so `execute` may call it."""
+        return self._view(
+            "isFuseSupported(address)", fuse, output_types=["bool"], decoder=bool
+        )
+
+    def is_balance_fuse_supported(
+        self, market: MarketId, fuse: FuseAddress
+    ) -> Call[bool]:
+        """Whether ``fuse`` is the balance fuse of ``market``."""
+        return self._view(
+            "isBalanceFuseSupported(uint256,address)",
+            market,
+            fuse,
+            output_types=["bool"],
+            decoder=bool,
+        )
+
+    def is_market_substrate_granted(
+        self, market: MarketId, substrate: bytes
+    ) -> Call[bool]:
+        """Whether the 32-byte ``substrate`` is granted on ``market``."""
+        if len(substrate) != 32:
+            raise ValueError(f"substrate must be 32 bytes, got {len(substrate)}")
+        return self._view(
+            "isMarketSubstrateGranted(uint256,bytes32)",
+            market,
+            substrate,
+            output_types=["bool"],
+            decoder=bool,
+        )
+
+    def is_markets_limits_activated(self) -> Call[bool]:
+        return self._view(
+            "isMarketsLimitsActivated()", output_types=["bool"], decoder=bool
+        )
+
+    def get_market_limit(self, market: MarketId) -> Call[int]:
+        """The most of the vault's total assets ``market`` may hold, as a WAD
+        share (``10**18`` is 100%), enforced only while limits are activated."""
+        return self._view(
+            "getMarketLimit(uint256)", market, output_types=["uint256"], decoder=int
+        )
+
+    def activate_markets_limits(self) -> Call[None]:
+        return self._write("activateMarketsLimits()")
+
+    def deactivate_markets_limits(self) -> Call[None]:
+        return self._write("deactivateMarketsLimits()")
+
+    def set_price_oracle_middleware(self, middleware: ChecksumAddress) -> Call[None]:
+        """The vault rejects a middleware whose quote currency differs from the
+        current one."""
+        return self._write("setPriceOracleMiddleware(address)", middleware)
+
+    def configure_performance_fee(
+        self, fee_account: ChecksumAddress, fee: Fee
+    ) -> Call[None]:
+        """``fee`` in percent with 2 decimals (10000 = 100%), as
+        `get_performance_fee_data` reports it."""
+        return self._write("configurePerformanceFee(address,uint256)", fee_account, fee)
+
+    def configure_management_fee(
+        self, fee_account: ChecksumAddress, fee: Fee
+    ) -> Call[None]:
+        """``fee`` in percent with 2 decimals (10000 = 100%), as
+        `get_management_fee_data` reports it."""
+        return self._write("configureManagementFee(address,uint256)", fee_account, fee)
+
+    def set_rewards_claim_manager_address(
+        self, rewards_claim_manager: ChecksumAddress
+    ) -> Call[None]:
+        return self._write(
+            "setRewardsClaimManagerAddress(address)", rewards_claim_manager
+        )
+
+    def enable_transfer_shares(self) -> Call[None]:
+        """Make share `transfer` and `transferFrom` public (PUBLIC_ROLE on both
+        selectors); only an access manager admin can map them back."""
+        return self._write("enableTransferShares()")
+
+    def set_minimal_execution_delays_for_roles(
+        self, delays: Sequence[tuple[RoleId | Roles, Period]]
+    ) -> Call[None]:
+        """The floor of each role's execution delay; the access manager refuses
+        to grant the role with a shorter one."""
+        return self._write(
+            "setMinimalExecutionDelaysForRoles(uint64[],uint256[])",
+            [role for role, _ in delays],
+            [delay for _, delay in delays],
         )
 
     def convert_to_shares(self, amount: Amount) -> Call[Shares]:

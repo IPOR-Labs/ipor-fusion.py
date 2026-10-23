@@ -120,6 +120,12 @@ def access(ctx: Web3Context, am: AccessManager, account: ChecksumAddress) -> Non
     am.read_accounts_with_role(ctx, Roles.resolve("ATOMIST"))
 
 
+def governance(vault: PlasmaVault) -> None:
+    vault.set_minimal_execution_delays_for_roles(
+        [(Roles.ALPHA_ROLE, Period.HOUR), (RoleId(100), Period(0))]
+    )
+
+
 def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     ensure_supported_chain(ETHEREUM)
     data = fetch_vault_data(ctx, vault.address, block=1, lending=False)

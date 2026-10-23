@@ -36,6 +36,7 @@ from ipor_fusion.core.access import (
     role_account_sort_key,
 )
 from ipor_fusion.core.context import InFlightLimit, Web3Context
+from ipor_fusion.core.context_manager import ContextManager
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.external_state_executor import (
@@ -448,6 +449,7 @@ __all__ = [
     "repository_url",
     "Web3Context",
     "InFlightLimit",
+    "ContextManager",
     "Call",
     "get_logs_adaptive",
     "find_creation_block",
