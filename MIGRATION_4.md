@@ -20,8 +20,9 @@ the details, and each change is described once, in its section.
 >   checker cannot see the calls made through them;
 > - run the reads against a provider, not only the test suite.
 
-Work through these in order; each is what breaks first at run time after the one
-before it is fixed.
+Work through these in order. Removed imports fail first, at import; the rest is
+the recommended order, roughly what fails next at run time (a positional option
+such as `Web3Context.from_url(url, key)` can fail before any wrapper is built).
 
 1. **Removed and renamed imports fail first, at import.** The preview features
    left the top level: crosschain names import from `ipor_fusion.crosschain`,
@@ -47,8 +48,9 @@ before it is fixed.
    raises `AttributeError`. See [Vault reads and validation](#vault-reads-and-validation).
 5. **The vault read is one snapshot.** `fetch_vault_data(ctx, vault, *, block=None,
    lending=True, metadata=True)` takes the vault address and the chain from `ctx`;
-   `validate_vault_state(state)` and `build_vault_info_json(data, *,
-   resolve_name=None)` are pure. See [Vault reads and validation](#vault-reads-and-validation).
+   `validate_vault_state(state)` reads nothing, and `build_vault_info_json(data, *,
+   resolve_name=None)` reads no vault state (contract names come from
+   `resolve_name`, the deployment age from the wall clock). See [Vault reads and validation](#vault-reads-and-validation).
 6. **Simulations return typed observations.** `sim.observe("label", call)` raises
    `TypeError`: `read = sim.observe(call, label="label")` returns a
    `SimulationObservation`, read as `read.value` after `run()`;
@@ -282,7 +284,8 @@ The vault read is one pinned snapshot, and the chain is always the context's:
   `VaultState` also provides `vault`, `chain_id`, `market_balances`, `erc20` and the
   queue's `shares_to_release_assets`.
 - `build_vault_info_json(data, *, resolve_name=None)` renders from the snapshot and
-  reads nothing; the chain and its label come from `data.chain_id`. Without
+  reads no vault state (`resolve_name`, which may look names up, and the deployment
+  age, computed from the wall clock, are its only other inputs); the chain and its label come from `data.chain_id`. Without
   `resolve_name` it names no contract (see
   [Contract cache and request limit](#contract-cache-and-request-limit)).
 - `fetch_deployment_info(ctx, vault, *, api_key=None)` and
@@ -301,14 +304,16 @@ The vault read is one pinned snapshot, and the chain is always the context's:
 
 **Public API.** 4.0 declares it: `ipor_fusion.__all__`, which now also exports the
 names earlier reachable only by module path (`FusionFactory`, `FusionInstance`,
-`fetch_market`, `resolve_token_symbol`, the crosschain codecs, ...). Import from
+`fetch_market`, `resolve_token_symbol`, ...); the preview features are exported only
+from their subpackages (see below). Import from
 `ipor_fusion`: a module path outside the README's list (*Public API and stability*)
 still works but is internal. Every project type a public signature or field uses is
 exported too, among them `AaveV3PositionBreakdown`, `AaveV3ReserveTokens`,
-`AccountRequest`, `StateOverrideProvider`, `TransferDirection` and the validation
+`AccountRequest`, `StateOverrideProvider` and the validation
 vocabulary `Severity`, `Verdict` and `Check`. Also new: `InFlightLimit` (see
-[Contract cache and request limit](#contract-cache-and-request-limit)) and
-`log_bytes`, the hex-or-bytes log field helper the crosschain decoders use.
+[Contract cache and request limit](#contract-cache-and-request-limit)), and in
+`ipor_fusion.crosschain` `log_bytes`, the hex-or-bytes log field helper the
+crosschain decoders use.
 
 **Crosschain fuse encoders moved.** The crosschain market encoders moved from
 `ipor_fusion.fuses.crosschain` into the crosschain package, and
@@ -391,9 +396,9 @@ the modules are internal.
 - `MORPHO_BLUE_ADDRESS`: use `morpho_blue_address(chain_id)`. `BLOCK_EXPLORER_URLS`,
   `MORPHO_BLUE_ADDRESSES`, `AAVE_V3_POOL` and `explorer.SUPPORTED_CHAINS` are
   internal. Import `CHAIN_NAMES`, `CHAIN_NAME_TO_ID`, `SUPPORTED_CHAIN_IDS`,
-  `GET_LOGS_RANGE_HINTS`, `PUBLIC_ALLOCATOR_ADDRESSES`, `HYPERCORE_PENDING_READERS`,
-  `HYPEREVM_CHAIN_ID` and `HYPERCORE_MARKET` from `ipor_fusion` (the HyperCore ones
-  also from `ipor_fusion.readers`).
+  `GET_LOGS_RANGE_HINTS`, `PUBLIC_ALLOCATOR_ADDRESSES` and `HYPEREVM_CHAIN_ID` from
+  `ipor_fusion` (`HYPEREVM_CHAIN_ID` also from `ipor_fusion.readers`), and
+  `HYPERCORE_PENDING_READERS` and `HYPERCORE_MARKET` from `ipor_fusion.hypercore`.
 - `read_erc20_holdings`: the holdings are `VaultData.erc20`.
 - `ExternalStateExecutor.mark_nav` and `NavMark`: send `propose_balance` and
   `confirm_balance` from separate custodians, then
@@ -626,7 +631,10 @@ typed client with pyright's `reportArgumentType`. Other fields keep their types
 the SDK returns already carry their type and go back in unwrapped.
 
 The SDK's own types are importable from `ipor_fusion` (and the public module
-`ipor_fusion.types`), as are `USDC_TOKEN_INDEX` and `hip3_action_asset`. Third-party
+`ipor_fusion.types`), except the preview features' ids, which come from their
+subpackages: the crosschain ids (`CommandId`, ...) from `ipor_fusion.crosschain`, the
+HyperCore ids (`HyperCoreAsset`, ...), `USDC_TOKEN_INDEX` and `hip3_action_asset`
+from `ipor_fusion.hypercore`. Third-party
 types are not re-exported: `ChecksumAddress` and `HexAddress` come from `eth_typing`,
 and `BlockIdentifier`, `Timestamp` and `TxParams` from `web3.types`. The wrappers
 label values; they do not validate byte widths or address spelling.
@@ -890,8 +898,10 @@ oracle node's `source_detail`, the Morpho `asset`, `adapters`, `caps`,
 ## Typed JSON documents
 
 The JSON document builders return `TypedDict`s instead of `dict[str, Any]`; the
-documents themselves (keys, values, order, the MCP schemas) are unchanged, so
-untyped code needs none of this section.
+typing itself changes no document (keys, values, order); the documents' own 4.0
+changes are listed under [Behavior changes](#behavior-changes) (the validation
+document, reconciliation and lending-health fields, MCP null keys, addresses,
+supply cap).
 
 | Builder | Returns |
 |---|---|
@@ -968,8 +978,9 @@ class. An event's args TypedDict is its class's `args` annotation:
 `typing.get_type_hints(EXTERNAL_STATE_EVENT_CLASSES[name])["args"]`. Values carry
 nominal types (`Amount`, `MarketId`, `FuseAddress`, `HyperCoreTokenIndex`,
 `PayloadHash`, web3's `Timestamp`, ...), and `HyperCoreEvent.fuse` is a
-`FuseAddress | None` on every event. Every name is importable from `ipor_fusion` and
-from `ipor_fusion.fuses`.
+`FuseAddress | None` on every event. The ExternalState names are importable from
+`ipor_fusion` and `ipor_fusion.fuses`; the HyperCore ones (preview) only from
+`ipor_fusion.hypercore`.
 
 The two families share one input contract. `decode_external_state_event(log)` and
 `decode_hypercore_event(log)` take a web3 receipt log or a raw JSON-RPC / indexer
@@ -991,15 +1002,20 @@ These apply to every caller, type-checked or not. Changes described in full abov
 are listed with a link.
 
 - **The CLI and the MCP tools take the same arguments.**
-  - **MCP inputs:** `chain_id` and `block_number` are optional and omitted means
-    auto-detected / latest. The `0` sentinel is gone, and `0` is now rejected with
-    an error naming the argument to omit (it is never read as chain or block 0);
-    a client that passed `0` must omit the argument instead. The CLI refuses
-    `--block-number 0` and `--chain-id 0` the same way. `server_info(changelog_since=)` is `server_info(since=)` as in
+  - **MCP inputs:** the vault tools' `chain_id` and every `block_number` are
+    optional and omitted means auto-detected / latest; `market_morpho_blue` and
+    `market_meta_morpho` still require a positive `chain_id`. The `0` sentinel is
+    gone: an optional `0` is rejected with an error naming the argument to omit (it
+    is never read as chain or block 0), so a client that passed `0` omits the
+    argument instead; the market tools' required `chain_id` rejects `0` too and
+    needs the real chain id. The CLI refuses `--block-number 0` and `--chain-id 0`
+    the same way. `server_info(changelog_since=)` is `server_info(since=)` as in
     `fusion changelog --since`, and `vault_oracle_mapping` takes `max_depth` like
     `--max-depth`.
-  - **Chain auto-detection:** both surfaces use the saved vault's chain, else the
-    chain of the only configured provider. The CLI used only the saved vault.
+  - **Chain auto-detection:** the vault commands and tools use the saved vault's
+    chain, else the chain of the only configured provider (the CLI used only the
+    saved vault); `vault_add` uses the only configured provider, and
+    `config_set_provider` asks the provider (`eth_chainId`).
   - **CLI options:** every `--block-number` rejects a negative block, and
     `fusion market morpho-blue --block` is `--block-number` (`--block` still
     works).
@@ -1104,8 +1120,8 @@ are listed with a link.
   and small or empty markets could be off by orders of magnitude: expect materially
   different numbers where they were wrong.
 
-- **MCP `outputSchema` describes every nested block.** The tool output is
-  byte-identical; the schemas of `vault_info`, `vault_oracle_mapping`,
+- **MCP `outputSchema` describes every nested block.** This change alone keeps the
+  tool output byte-identical (the other changes in this list still apply); the schemas of `vault_info`, `vault_oracle_mapping`,
   `market_morpho_blue` and `market_meta_morpho` replace each free-form object with
   the block's own definition: `links` (`VaultLinks`), `deployment`
   (`DeploymentModel` or `DeploymentErrorModel`), `share_price` (`SharePriceModel`),
@@ -1192,4 +1208,6 @@ are listed with a link.
   Both stay unhashable (`__hash__` is `None`, as before). The freeze is shallow:
   the `logs` / `calls` lists themselves can still be mutated.
 - Saved config entries are checksummed when loaded; the MCP `vault_add` tool rejects
-  a value that is not an address.
+  a value that is not an address. The MCP vault tools accept a vault address as 3.x
+  did (any letter case, with or without `0x`, surrounding whitespace) and normalize
+  it before the strict SDK parser; only the SDK's `parse_*` functions are strict.

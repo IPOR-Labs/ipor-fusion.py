@@ -26,6 +26,7 @@ from ipor_fusion.mcp.models import (
     WithdrawManagerDetails,
 )
 from ipor_fusion.mcp.server import (
+    _vault_arg,
     config_set_etherscan_key,
     config_set_provider,
     config_show,
@@ -39,6 +40,7 @@ from ipor_fusion.mcp.server import (
     vault_oracle_mapping,
     vault_remove,
     vault_role_accounts,
+    vault_validate,
 )
 from ipor_fusion.morpho_api import (
     MorphoApiError,
@@ -1082,3 +1084,77 @@ class TestMarketMetaMorpho:
     def test_unknown_vault_errors(self, _fetch):
         with pytest.raises(MorphoApiError, match="not found"):
             market_meta_morpho(vault_address=_VAULT, chain_id=1)
+
+
+class TestVaultAddressArgument:
+    """Tool callers send addresses as 3.x accepted them; the server normalizes
+    before the strict SDK parser."""
+
+    VAULT = "0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2"
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            VAULT,
+            VAULT.upper().replace("0X", "0x"),
+            VAULT[2:],
+            f"  {VAULT}  ",
+            Web3.to_checksum_address(VAULT),
+        ],
+    )
+    def test_accepts_any_spelling(self, raw: str):
+        assert _vault_arg(raw) == Web3.to_checksum_address(self.VAULT)
+
+    @pytest.mark.parametrize("raw", ["", "0x1234", "not an address", "0x" + "g" * 40])
+    def test_rejects_non_addresses(self, raw: str):
+        with pytest.raises(ValueError):
+            _vault_arg(raw)
+
+
+class TestVaultAddressResolvesSavedChain:
+    """Every spelling the tools accept finds the saved vault's chain."""
+
+    @staticmethod
+    def _config(providers: list[int]):
+        from ipor_fusion.cli.config_store import FusionConfig, VaultEntry
+
+        return FusionConfig(
+            providers={str(c): "https://rpc.example.com" for c in providers},
+            vaults=[VaultEntry(address=_SAVED_VAULT, label="Test", chain_id=1)],
+        )
+
+    @pytest.mark.parametrize(
+        "spelling", [f"  {_SAVED_VAULT}  ", _SAVED_VAULT[2:], _SAVED_VAULT.upper()]
+    )
+    @pytest.mark.parametrize(
+        "tool", [vault_info, vault_validate, vault_role_accounts, vault_oracle_mapping]
+    )
+    def test_saved_chain_wins_over_other_providers(self, tool, spelling: str):
+        seen: list[int] = []
+
+        def stop(_cfg, chain_id, _block):
+            seen.append(chain_id)
+            raise RuntimeError("stop")
+
+        with (
+            patch(
+                "ipor_fusion.mcp.server.load_config",
+                autospec=True,
+                return_value=self._config([1, 8453]),
+            ),
+            patch("ipor_fusion.mcp.server._build_ctx", autospec=True, side_effect=stop),
+            pytest.raises(RuntimeError, match="stop"),
+        ):
+            tool(spelling)
+        assert seen == [1]
+
+    def test_missing_saved_chain_provider_is_reported_not_substituted(self):
+        with (
+            patch(
+                "ipor_fusion.mcp.server.load_config",
+                autospec=True,
+                return_value=self._config([8453]),
+            ),
+            pytest.raises(ValueError, match="No provider for chain 1"),
+        ):
+            vault_info(f"  {_SAVED_VAULT[2:]}  ")
