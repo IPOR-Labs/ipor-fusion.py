@@ -141,8 +141,9 @@ def _market_id_call(fuse: FuseAddress) -> Call[MarketId]:
 
 
 def _pinned(ctx: Web3Context) -> tuple[Web3Context, int]:
-    default = ctx.default_block
-    block = default if isinstance(default, int) else ctx.web3.eth.block_number
+    """``ctx`` pinned to the number of the block it names (a number, hash or tag
+    such as ``finalized``), resolved once."""
+    block = int(ctx.web3.eth.get_block(ctx.default_block)["number"])
     return ctx.at_block(block), block
 
 
@@ -321,7 +322,8 @@ def preflight_execute(
     simulate: bool = True,
 ) -> ExecutePreflight:
     """Check ``actions`` as ``sender``'s `PlasmaVault.execute` on the state of one
-    base block (``ctx.default_block`` when it is a number, else the latest).
+    base block: the one ``ctx.default_block`` names (a number, hash or tag),
+    resolved once.
 
     The static checks take a few Multicall3 batches (one per dependency-graph
     level), the ``canCall`` read, the balance-fuse storage reads and, for a

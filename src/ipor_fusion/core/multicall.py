@@ -226,6 +226,13 @@ class Multicall3Batch:
             settle(result)
 
 
+def _translated_decode_failure(exc: Exception) -> bool:
+    """Whether ``exc`` is a `Call.decode_error` translation of an undecodable
+    answer: it names the failure for required reads, while an optional read of
+    the same answer is ``None``."""
+    return isinstance(exc.__cause__, DecodingError)
+
+
 def _try_decode(call: Call[T], ok: bool, data: bytes) -> T | None:
     if not ok or not data:
         return None
@@ -233,6 +240,10 @@ def _try_decode(call: Call[T], ok: bool, data: bytes) -> T | None:
         return call.decode(data)
     except DecodingError:
         return None
+    except Exception as exc:
+        if _translated_decode_failure(exc):
+            return None
+        raise
 
 
 def _try_call(call: Call[T], ctx: Web3Context) -> T | None:
@@ -240,3 +251,7 @@ def _try_call(call: Call[T], ctx: Web3Context) -> T | None:
         return call.call(ctx)
     except _CALL_FAILURES:
         return None
+    except Exception as exc:
+        if _translated_decode_failure(exc):
+            return None
+        raise
