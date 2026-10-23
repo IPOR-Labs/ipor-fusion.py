@@ -189,8 +189,7 @@ HYPEREVM_FUSION_FACTORY = Web3.to_checksum_address(
 
 # The released crosschain contracts. Every one sits at the same address on
 # Arbitrum and HyperEVM and is recorded under the name in its comment in
-# ipor-abi pull request #297
-# (mainnet/mainnet-arbitrum-fusion/addresses.json and
+# ipor-abi (mainnet/mainnet-arbitrum-fusion/addresses.json and
 # mainnet/mainnet-hyperevm-fusion/addresses.json). The SDK's live test of this
 # example also proves each runtime is the build of RELEASE_COMMIT.
 RELEASE_COMMIT = "10f0f8e4031980b6f130d4f6460c6f8edfbcab32"
