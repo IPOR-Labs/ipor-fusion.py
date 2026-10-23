@@ -85,13 +85,8 @@ _MARKET = "0x" + "ab" * 32
 @pytest.mark.parametrize(
     ("tool", "arguments", "name"),
     [
-        ("vault_info", {"vault_address": _VAULT, "block_number": 0}, "block_number"),
+        ("vault_info", {"vault_address": _VAULT, "chain_id": 0}, "chain_id"),
         ("vault_validate", {"vault_address": _VAULT, "chain_id": 0}, "chain_id"),
-        (
-            "market_morpho_blue",
-            {"market_id": _MARKET, "chain_id": 1, "block_number": 0},
-            "block_number",
-        ),
         (
             "config_set_provider",
             {"url": "https://rpc.example.com", "chain_id": 0},
@@ -102,8 +97,8 @@ _MARKET = "0x" + "ab" * 32
 def test_mcp_refuses_the_old_zero_sentinel(
     tool: str, arguments: dict[str, object], name: str
 ) -> None:
-    """0 used to mean latest / auto: read as block or chain 0 it would answer
-    silently with genesis data, so it is an error naming the fix."""
+    """0 used to mean auto-detection: read as chain 0 it would fail later and
+    less clearly, so it is an error naming the fix."""
     with (
         patch("ipor_fusion.mcp.server.load_config", autospec=True) as load,
         pytest.raises(ToolError, match=f"omit {name}"),
@@ -130,11 +125,45 @@ def test_a_required_chain_is_positive(tool: str, arguments: dict[str, object]) -
     fetch.assert_not_called()
 
 
-def test_the_block_schema_requires_a_positive_block() -> None:
+def test_the_block_schema_accepts_zero_for_latest() -> None:
     props = {t.name: t for t in asyncio.run(server.mcp.list_tools())}[
         "vault_info"
     ].inputSchema["properties"]["block_number"]
-    assert {"type": "integer", "minimum": 1} in props["anyOf"]
+    assert {"type": "integer", "minimum": 0} in props["anyOf"]
+
+
+@pytest.mark.parametrize(("block", "expected"), [(0, None), (123, 123)])
+def test_block_zero_reads_the_latest_block(block: int, expected: int | None) -> None:
+    with (
+        patch("ipor_fusion.mcp.server.load_config", autospec=True),
+        patch(
+            "ipor_fusion.mcp.server._build_ctx",
+            autospec=True,
+            side_effect=RuntimeError("stop"),
+        ) as build_ctx,
+        pytest.raises(ToolError, match="stop"),
+    ):
+        asyncio.run(
+            server.mcp.call_tool(
+                "vault_info",
+                {"vault_address": _VAULT, "chain_id": 1, "block_number": block},
+            )
+        )
+    assert build_ctx.call_args.args[2] == expected
+
+
+def test_a_negative_block_is_rejected() -> None:
+    with (
+        patch("ipor_fusion.mcp.server.load_config", autospec=True) as load,
+        pytest.raises(ToolError, match="block_number"),
+    ):
+        asyncio.run(
+            server.mcp.call_tool(
+                "vault_info",
+                {"vault_address": _VAULT, "chain_id": 1, "block_number": -1},
+            )
+        )
+    load.assert_not_called()
 
 
 @pytest.mark.parametrize(
