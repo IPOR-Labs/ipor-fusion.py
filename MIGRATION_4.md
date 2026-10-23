@@ -647,6 +647,7 @@ label values; they do not validate byte widths or address spelling.
 | `MarketId` | an `IporFusionMarkets` member, or `MarketId(n)` |
 | `RoleId` | a `Roles` member (accepted as is), or `RoleId(n)`; `Roles.resolve(name)` returns one |
 | `Decimals`, `Period`, `Amount`, `Shares`, ... | `Decimals(8)`, `Period(0)`, `Amount(n)`, `Shares(n)` |
+| `Wad` | `Wad(6 * 10**17)` (60%): an 18-decimal fraction, `10**18` is 100% |
 | `ChecksumAddress` | `Web3.to_checksum_address(value)` |
 | `HexAddress` | any `ChecksumAddress`, or `parse_hex_address(value)` (20 bytes or `0x`/`0X`-prefixed hex in any case → lowercase `0x` form) |
 | `MorphoBlueMarketId` | `parse_morpho_market_id(value)`: 32 bytes or hex in any spelling, always `0x` + 64 lowercase digits |
@@ -686,6 +687,8 @@ converted amounts `Amount`. A custom `VaultState` annotates the same.
 `PlasmaVault.total_supply()`, `balance_of()` and `get_total_supply_cap()` return
 `Shares` (vault shares), and `transfer` / `approve` / `transfer_from` /
 `set_total_supply_cap` take `Shares`; `ERC20` keeps `Amount`.
+`PlasmaVault.setup_markets_limits` takes `Sequence[tuple[MarketId, Wad]]`: each
+limit is a share of total assets, not an asset amount (see Behavior changes).
 `Reconciliation` amounts (`balance_fuses_total`, `underlying_on_vault`,
 `rewards_manager_balance`, `erc20_direct_total`, `sum`, `on_chain_total_assets`, `delta`,
 `pending_withdrawals`, `implied_market_total`, `market_storage_divergence`) are
@@ -1000,6 +1003,17 @@ and `log_index` was passed through as given (a hex string from a raw log); the e
 
 These apply to every caller, type-checked or not. Changes described in full above
 are listed with a link.
+
+- **`PlasmaVault.setup_markets_limits` takes WAD shares and validates them.** The
+  contract (`AssetDistributionProtectionLib.MarketLimit.limitInPercentage`) reads each
+  limit as the most of the vault's total assets the market may hold, `10**18` being
+  100%; 3.x typed it as an `Amount` and documented it as an asset amount, so a limit
+  set "in asset units" (`1_000_000` for 1 USDC) became a near-zero share that blocks
+  the market once limits are activated. It now takes `Wad` and raises `ValueError`
+  before building the call for a limit outside `0..10**18`: a negative one is no
+  uint256, and above 100% the vault reverts `MarketLimitSetupInPercentageIsTooHigh`. Pass the share: `Wad(6 * 10**17)` for 60%. Check limits
+  set with 3.x with `PlasmaVault.get_market_limit(market).call(ctx)`, which
+  returns the `Wad` share.
 
 - **The CLI and the MCP tools take the same arguments.**
   - **MCP inputs:** the vault tools' `chain_id` and every `block_number` are

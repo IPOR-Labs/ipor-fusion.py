@@ -30,9 +30,12 @@ from ipor_fusion.types import (
     PlasmaVaultAddress,
     RoleId,
     Shares,
+    Wad,
 )
 
 T = TypeVar("T")
+
+WAD = Wad(10**18)
 
 _BALANCE_FUSE_ADDED_TOPIC = HexBytes(
     Web3.keccak(text="BalanceFuseAdded(uint256,address)")
@@ -358,8 +361,24 @@ class PlasmaVault(ContractWrapper):
             bytes(selector),
         )
 
-    def setup_markets_limits(self, limits: list[tuple[MarketId, Amount]]) -> Call[None]:
-        """ATOMIST-only: set per-market cap in the underlying asset's smallest unit."""
+    def setup_markets_limits(
+        self, limits: Sequence[tuple[MarketId, Wad]]
+    ) -> Call[None]:
+        """Set each market's limit: the most of the vault's total assets the
+        market may hold, as a `Wad` share (``Wad(6 * 10**17)`` is 60%), enforced
+        once `activate_markets_limits` is on (AssetDistributionProtectionLib).
+
+        Raises ``ValueError`` for a limit outside ``0..10**18``: a negative one is
+        no uint256, and the vault reverts ``MarketLimitSetupInPercentageIsTooHigh``
+        above 100%.
+        """
+        for market, limit in limits:
+            if not 0 <= limit <= WAD:
+                raise ValueError(
+                    f"market {market} limit {limit}: expected a WAD share in"
+                    " 0..10**18; above 100% the vault reverts"
+                    " MarketLimitSetupInPercentageIsTooHigh"
+                )
         return self._write("setupMarketsLimits((uint256,uint256)[])", list(limits))
 
     def update_markets_balances(self, market_ids: list[MarketId]) -> Call[None]:
@@ -507,11 +526,12 @@ class PlasmaVault(ContractWrapper):
             "isMarketsLimitsActivated()", output_types=["bool"], decoder=bool
         )
 
-    def get_market_limit(self, market: MarketId) -> Call[int]:
-        """The most of the vault's total assets ``market`` may hold, as a WAD
-        share (``10**18`` is 100%), enforced only while limits are activated."""
+    def get_market_limit(self, market: MarketId) -> Call[Wad]:
+        """The most of the vault's total assets ``market`` may hold, as a `Wad`
+        share (``10**18`` is 100%), enforced only while limits are activated;
+        `setup_markets_limits` sets it."""
         return self._view(
-            "getMarketLimit(uint256)", market, output_types=["uint256"], decoder=int
+            "getMarketLimit(uint256)", market, output_types=["uint256"], decoder=Wad
         )
 
     def activate_markets_limits(self) -> Call[None]:
