@@ -37,8 +37,9 @@ you break it.
 3. Know what is preview: crosschain (market 54) and HyperCore (market 55) — \
 `server_info`, where this server has it, lists them as `preview_features`. \
 Their contracts are under active \
-development and their mainnet deployments are a proof of concept and canaries; \
-treat their interfaces as unstable and route no production capital through them.
+development, the SDK follows only their official deployment, and their \
+interfaces may change or be removed between minor versions, with no backward \
+compatibility; route no production capital through them.
 
 What this server does: read-only inspection. Start by listing vaults \
 (`vault_list` or `vaults_list`, whichever this server has), then \
