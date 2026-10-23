@@ -53,7 +53,10 @@ def _read_calldata(calldata: str) -> str:
     "--chain-id", type=CHAIN, default=None, help="Chain ID or name (e.g. 1, ethereum)."
 )
 @click.option(
-    "--block-number", type=BLOCK_NUMBER, default=None, help="Block (default: latest)."
+    "--block-number",
+    type=BLOCK_NUMBER,
+    default=None,
+    help="Block (0 or omitted: latest).",
 )
 @click.option(
     "--simulate/--no-simulate",

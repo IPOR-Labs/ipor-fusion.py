@@ -166,18 +166,31 @@ def test_a_negative_block_is_rejected() -> None:
     load.assert_not_called()
 
 
+@pytest.mark.parametrize(("raw", "expected"), [("0", None), ("123", 123)])
+def test_cli_block_zero_reads_the_latest_block(raw: str, expected: int | None) -> None:
+    with patch(
+        "ipor_fusion.cli.vault_cmd._build_ctx",
+        autospec=True,
+        side_effect=RuntimeError("stop"),
+    ) as build_ctx:
+        CliRunner().invoke(
+            cli, ["vault", "info", _VAULT, "--chain-id", "1", "--block-number", raw]
+        )
+    assert build_ctx.call_args.args[3] == expected
+
+
 @pytest.mark.parametrize(
     "args",
     [
-        ["vault", "info", _VAULT, "--block-number", "0"],
-        ["vault", "validate", _VAULT, "--block-number", "0"],
-        ["market", "morpho-blue", _MARKET, "--chain", "1", "--block", "0"],
+        ["vault", "info", _VAULT, "--block-number", "-1"],
+        ["vault", "validate", _VAULT, "--block-number", "-1"],
+        ["market", "morpho-blue", _MARKET, "--chain", "1", "--block", "-1"],
     ],
 )
-def test_cli_refuses_block_zero(args: list[str]) -> None:
+def test_cli_rejects_a_negative_block(args: list[str]) -> None:
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 2
-    assert "omit --block-number" in result.output
+    assert "-1 is not in the range x>=0" in result.output
 
 
 def test_cli_refuses_chain_zero() -> None:

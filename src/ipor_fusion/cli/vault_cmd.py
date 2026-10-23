@@ -188,7 +188,7 @@ vault.add_command(list_vaults, "ls")
     "--block-number",
     type=BLOCK_NUMBER,
     default=None,
-    help="Block number (default: latest).",
+    help="Block number (0 or omitted: latest).",
 )
 @click.option(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
@@ -233,7 +233,7 @@ def info(
     "--block-number",
     type=BLOCK_NUMBER,
     default=None,
-    help="Block number (default: latest).",
+    help="Block number (0 or omitted: latest).",
 )
 @click.option(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
@@ -294,7 +294,7 @@ def validate(
     "--block-number",
     type=BLOCK_NUMBER,
     default=None,
-    help="Block number (default: latest).",
+    help="Block number (0 or omitted: latest).",
 )
 @click.option(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
@@ -355,7 +355,7 @@ def role_accounts(
     "--block-number",
     type=BLOCK_NUMBER,
     default=None,
-    help="Block number (default: latest).",
+    help="Block number (0 or omitted: latest).",
 )
 @click.option(
     "--max-depth",

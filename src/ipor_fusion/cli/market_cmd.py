@@ -87,7 +87,7 @@ def market() -> None:
     "block_number",
     type=BLOCK_NUMBER,
     default=None,
-    help="Block number for on-chain reads (default: latest).",
+    help="Block number for on-chain reads (0 or omitted: latest).",
 )
 @click.option(
     "--no-api",
