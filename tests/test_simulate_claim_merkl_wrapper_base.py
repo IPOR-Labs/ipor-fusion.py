@@ -231,7 +231,9 @@ def test_simulate_merkl_wrapper_claim_rejects_ungranted_received_token(web3_base
     log.info("revert_reason=%s", result.revert_reason)
 
     assert result.success is False
-    assert result.revert_reason == f"custom error 0x{UNSUPPORTED_TOKEN_SELECTOR}"
+    assert result.revert_reason == (
+        f"MerklClaimWrapperFuseUnsupportedReceivedToken({WRAPPER})"
+    )
 
     # The provider reports the failure as an error object with the revert
     # payload in error.data — the simulator must surface it as the failed
