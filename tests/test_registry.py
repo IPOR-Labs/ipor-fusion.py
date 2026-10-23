@@ -1,6 +1,7 @@
 """The ipor-abi address registry client, offline: downloads are faked."""
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -187,22 +188,38 @@ def test_a_registry_cannot_be_changed_through_its_map_or_its_source(downloads):
     ) == Web3.to_checksum_address(PROXY)
 
 
-def test_concurrent_misses_download_once(downloads):
-    with ThreadPoolExecutor(8) as pool:
-        list(pool.map(lambda _: fetch_address_registry(BASE), range(16)))
-    assert len(downloads) == 1
-
-
-def test_a_failed_refresh_is_not_cached(monkeypatch):
+def test_concurrent_misses_download_once(monkeypatch):
     calls = []
 
-    def flaky(_url, _t):
+    def slow(_url, _t):
         calls.append(1)
-        if len(calls) == 1:
-            raise AddressRegistryError("down")
+        time.sleep(0.05)  # every thread arrives while the first downloads
         return json.dumps({"X": PROXY}).encode()
 
-    monkeypatch.setattr(registry_module, "_download", flaky)
+    monkeypatch.setattr(registry_module, "_download", slow)
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda _: fetch_address_registry(BASE), range(16)))
+    assert len(calls) == 1
+
+
+def test_an_expired_entry_whose_refresh_fails_raises_and_recovers(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(registry_module.time, "monotonic", lambda: now[0])
+    answers: list[bytes | Exception] = [
+        json.dumps({"X": PROXY}).encode(),
+        AddressRegistryError("down"),
+        json.dumps({"X": FUSE}).encode(),
+    ]
+
+    def download(_url, _t):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(registry_module, "_download", download)
+    fetch_address_registry(BASE)
+    now[0] += 601
     with pytest.raises(AddressRegistryError):
         fetch_address_registry(BASE)
-    assert fetch_address_registry(BASE).address("X")
+    assert fetch_address_registry(BASE).address("X") == Web3.to_checksum_address(FUSE)
