@@ -252,10 +252,8 @@ class PlasmaVault(ContractWrapper):
         """PRE_HOOKS_MANAGER-only configuration call: route each vault function
         selector to a pre-hook implementation (the zero address removes the
         hook) with that hook's bytes32 substrates. One implementation and one
-        substrate list per selector, in the same order; a HyperCore vault, for
-        example, puts the pending-action hook on ``execute`` and
-        ``updateMarketsBalances`` and the capital-flow hook on the deposit,
-        mint, withdraw and redeem entry points."""
+        substrate list per selector, in the same order. A HyperCore vault's
+        wiring is ``ipor_fusion.hypercore.HyperCorePreHookWiring``."""
         if not (len(selectors) == len(implementations) == len(substrates)):
             raise ValueError(
                 "selectors, implementations and substrates must have equal length"

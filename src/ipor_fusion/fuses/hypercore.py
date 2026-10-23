@@ -20,6 +20,9 @@ index_in_dex`` instead (:func:`precompile_index_of`). Amounts are Core integers:
 ``limit_px`` and ``sz`` carry 8 implied decimals, ``usd6`` 6, and
 ``amount_wei`` is Core wei (8 decimals for USDC).
 
+:class:`HyperCorePreHookWiring` builds the call that installs the two pre-hooks
+the market needs.
+
 ABI (one struct argument per method)::
 
     HyperCoreDepositFuse.enter((uint64 tokenIndex, uint256 amount))
@@ -41,11 +44,14 @@ Status: preview, not production. The contracts behind it are under active develo
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import IntEnum
 
 from eth_typing import ChecksumAddress
-from eth_utils import to_checksum_address
+from eth_utils import function_signature_to_4byte_selector, to_checksum_address
 
+from ipor_fusion.core.contract import Call
+from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.fuses.base import (
     Fuse,
     FuseAction,
@@ -58,6 +64,7 @@ from ipor_fusion.types import (
     HyperCoreClientOrderId,
     HyperCoreOrderId,
     HyperCoreTokenIndex,
+    parse_hex_address,
 )
 
 #: ``HyperCoreLib.SPOT_DEX``: the spot account in ``sendAsset`` routes.
@@ -442,3 +449,80 @@ class HyperCoreSubstrates:
         _validate_uint(asset, 32, "asset")
         _validate_uint(max_position_notional_usd6, 88, "max_position_notional_usd6")
         return _word(7, (asset << 216) | (max_position_notional_usd6 << 128))
+
+
+def _selectors(*signatures: str) -> tuple[bytes, ...]:
+    return tuple(function_signature_to_4byte_selector(s) for s in signatures)
+
+
+#: PlasmaVault selectors ``HyperCorePendingActionPreHook`` is wired on.
+HYPERCORE_PENDING_ACTION_SELECTORS: tuple[bytes, ...] = _selectors(
+    "execute((address,bytes)[])",
+    "updateMarketsBalances(uint256[])",
+)
+#: PlasmaVault selectors ``HyperCoreCapitalFlowPreHook`` is wired on: the
+#: share-priced deposit and exit entry points.
+HYPERCORE_CAPITAL_FLOW_SELECTORS: tuple[bytes, ...] = _selectors(
+    "deposit(uint256,address)",
+    "depositWithPermit(uint256,address,uint256,uint8,bytes32,bytes32)",
+    "mint(uint256,address)",
+    "withdraw(uint256,address,address)",
+    "redeem(uint256,address,address)",
+    "redeemFromRequest(uint256,address,address)",
+)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HyperCorePreHookWiring:
+    """The two pre-hooks of a HyperCore vault, each on its own selectors.
+
+    Each hook reverts ``HyperCorePreHookWrongSelector`` under the other's
+    selectors. A deposit or exit selector without the capital-flow hook runs no
+    HyperCore code, so the action fuses refuse to open Core exposure. Neither
+    hook reads substrates. The hook addresses are per deployment (``ipor-abi``).
+
+    The capital-flow hook refreshes the market through the vault's own
+    ``updateMarketsBalances``: the vault must hold
+    ``Roles.UPDATE_MARKETS_BALANCES_ROLE`` itself, with no execution delay, or
+    every deposit and exit reverts, and the deposit and exit selectors must not
+    be routed through the ContextManager, whose sender substitution breaks that
+    nested call.
+    """
+
+    capital_flow_hook: ChecksumAddress
+    pending_action_hook: ChecksumAddress
+
+    def __post_init__(self) -> None:
+        # Parsed first, so the zero check and the comparison see every
+        # spelling of an address in one canonical form.
+        for name in ("capital_flow_hook", "pending_action_hook"):
+            value = getattr(self, name)
+            try:
+                hook = to_checksum_address(parse_hex_address(value))
+            except (ValueError, TypeError) as exc:
+                raise ValueError(f"{name} is not an address: {value!r}") from exc
+            _validate_not_zero_address(hook, name)
+            object.__setattr__(self, name, hook)
+        if self.capital_flow_hook == self.pending_action_hook:
+            raise ValueError("capital_flow_hook and pending_action_hook must differ")
+
+    @property
+    def selectors(self) -> tuple[bytes, ...]:
+        """The pending-action selectors, then the capital-flow ones."""
+        return HYPERCORE_PENDING_ACTION_SELECTORS + HYPERCORE_CAPITAL_FLOW_SELECTORS
+
+    @property
+    def implementations(self) -> tuple[ChecksumAddress, ...]:
+        """The hook of each of :attr:`selectors`, in the same order."""
+        return (self.pending_action_hook,) * len(HYPERCORE_PENDING_ACTION_SELECTORS) + (
+            self.capital_flow_hook,
+        ) * len(HYPERCORE_CAPITAL_FLOW_SELECTORS)
+
+    def set_pre_hook_implementations(self, vault: PlasmaVault) -> Call[None]:
+        """``setPreHookImplementations`` installing both hooks on ``vault``
+        (PRE_HOOKS_MANAGER only). A selector holds one pre-hook, so this
+        replaces any hook already on :attr:`selectors`."""
+        selectors = self.selectors
+        return vault.set_pre_hook_implementations(
+            list(selectors), list(self.implementations), [[] for _ in selectors]
+        )

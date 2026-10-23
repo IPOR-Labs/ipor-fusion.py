@@ -8,6 +8,8 @@ with no backward compatibility, which is why they live here rather than in
 """
 
 from ipor_fusion.fuses.hypercore import (
+    HYPERCORE_CAPITAL_FLOW_SELECTORS,
+    HYPERCORE_PENDING_ACTION_SELECTORS,
     RESERVED_HYPERCORE_CONFIG_KEYS,
     SPOT_DEX,
     USDC_SYSTEM_ADDRESS,
@@ -18,6 +20,7 @@ from ipor_fusion.fuses.hypercore import (
     HyperCoreDepositFuse,
     HyperCoreMarginFuse,
     HyperCoreOrderFuse,
+    HyperCorePreHookWiring,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
     TimeInForce,
@@ -110,10 +113,12 @@ __all__ = [
     "TransferDirection",
     "USDC_SYSTEM_ADDRESS",
     "USDC_TOKEN_INDEX",
+    "HYPERCORE_CAPITAL_FLOW_SELECTORS",
     "HYPERCORE_EVENTS",
     "HYPERCORE_EVENT_CLASSES",
     "HYPERCORE_EVENT_SPECS",
     "HYPERCORE_MARKET",
+    "HYPERCORE_PENDING_ACTION_SELECTORS",
     "HYPERCORE_PENDING_READERS",
     "HyperCoreAccountMarginSummary",
     "HyperCoreActionClass",
@@ -154,6 +159,7 @@ __all__ = [
     "HyperCorePerpLeg",
     "HyperCorePerpMarket",
     "HyperCorePosition",
+    "HyperCorePreHookWiring",
     "HyperCoreReader",
     "HyperCoreEffectKind",
     "HyperCoreSendFuse",

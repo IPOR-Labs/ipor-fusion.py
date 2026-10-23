@@ -450,10 +450,12 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
     ),
     "ipor_fusion.hypercore": frozenset(
         {
+            "HYPERCORE_CAPITAL_FLOW_SELECTORS",
             "HYPERCORE_EVENTS",
             "HYPERCORE_EVENT_CLASSES",
             "HYPERCORE_EVENT_SPECS",
             "HYPERCORE_MARKET",
+            "HYPERCORE_PENDING_ACTION_SELECTORS",
             "HYPERCORE_PENDING_READERS",
             "RESERVED_HYPERCORE_CONFIG_KEYS",
             "HyperCoreAccountMarginSummary",
@@ -496,6 +498,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "HyperCorePerpLeg",
             "HyperCorePerpMarket",
             "HyperCorePosition",
+            "HyperCorePreHookWiring",
             "HyperCoreReader",
             "HyperCoreSendFuse",
             "HyperCoreSendFuseSendAssetArgs",
