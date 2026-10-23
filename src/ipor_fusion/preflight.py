@@ -2,12 +2,17 @@
 each fuse's registration and market, and an `eth_simulateV1` run of the batch.
 
 The static checks mirror what `PlasmaVault.execute` requires on chain: the
-caller may call ``execute`` now, every fuse is registered (``UnsupportedFuse``),
-answers ``MARKET_ID()``, and every touched market has a balance fuse (the vault
-delegatecalls it after the actions; without one it reverts ``AddressEmptyCode``).
-The simulation runs the exact batch from the caller and reads ``totalAssets``
-before and after. Passing is evidence for that block, not a guarantee for the
-block the transaction lands in.
+caller may call ``execute`` now, or has a ready scheduled operation for exactly
+this calldata; every fuse is registered (``UnsupportedFuse``) and answers
+``MARKET_ID()``; and every touched market but 0, with the markets its balance
+dependency graph reaches, has a balance fuse (the vault delegatecalls each after
+the actions; without one it reverts ``AddressEmptyCode``).
+
+The static reads are at the base block; the simulation runs the batch from the
+caller in the next block, 12 seconds later, and reads ``totalAssets`` before and
+after. A pass is evidence for that state, not a guarantee for the block the
+transaction lands in, and it covers what the static checks do not (substrates,
+pre-hooks, market limits, protocol rules).
 """
 
 from __future__ import annotations
@@ -24,11 +29,12 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.core.fuse_decoding import decode_execute_calldata, fuse_classes_for
-from ipor_fusion.core.multicall import Multicall3
+from ipor_fusion.core.multicall import Multicall3, Multicall3Batch
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.simulation import VaultSimulator, is_simulate_v1_supported
 from ipor_fusion.errors import ExecutePreflightError
 from ipor_fusion.types import (
+    AccessManagerAddress,
     Amount,
     ChainId,
     FuseAddress,
@@ -37,6 +43,9 @@ from ipor_fusion.types import (
     Severity,
     Verdict,
 )
+
+# Market 0 is no market: the vault skips it when it updates balances.
+_NO_MARKET = MarketId(0)
 
 PreflightCheck = Literal[
     "execute_permission",
@@ -87,6 +96,7 @@ class ExecutePreflight:
     block_number: int
     sender: ChecksumAddress
     permission: CallPermission
+    scheduled_at: int | None
     actions: tuple[PreflightAction, ...]
     findings: tuple[PreflightFinding, ...]
     simulation: PreflightSimulation | None
@@ -106,7 +116,9 @@ class ExecutePreflight:
 def parse_execute_actions(calldata: str | bytes) -> list[FuseAction]:
     """The actions of `PlasmaVault.execute` calldata given as bytes or hex (with
     or without ``0x``); raises ``ValueError`` for anything else, ``claimRewards``
-    calldata included."""
+    calldata included, and for an encoding the SDK would not produce (trailing
+    bytes, non-canonical offsets): the preflight re-encodes the actions, so it
+    checks only calldata it reproduces byte for byte."""
     if isinstance(calldata, str):
         digits = calldata.strip().removeprefix("0x").removeprefix("0X")
         try:
@@ -115,7 +127,11 @@ def parse_execute_actions(calldata: str | bytes) -> list[FuseAction]:
             raise ValueError("calldata is not hex") from None
     if bytes(calldata[:4]) != _EXECUTE_SELECTOR:
         raise ValueError("calldata is not a PlasmaVault.execute call")
-    return decode_execute_calldata(calldata)
+    actions = decode_execute_calldata(calldata)
+    canonical = FuseAction.encode_execute_payload(actions, "execute((address,bytes)[])")
+    if canonical != bytes(calldata):
+        raise ValueError("calldata is not canonically encoded; re-encode it")
+    return actions
 
 
 def _market_id_call(fuse: FuseAddress) -> Call[MarketId]:
@@ -131,17 +147,28 @@ def _pinned(ctx: Web3Context) -> tuple[Web3Context, int]:
 
 
 def _permission_finding(
-    sender: ChecksumAddress, permission: CallPermission
+    sender: ChecksumAddress,
+    permission: CallPermission,
+    scheduled_at: int | None,
+    now: int | None,
 ) -> list[PreflightFinding]:
     if permission.immediate:
         return []
     if permission.delay > 0:
+        if scheduled_at and now is not None and scheduled_at <= now:
+            return []
+        state = (
+            f"it is scheduled for {scheduled_at}, after this block ({now})"
+            if scheduled_at
+            else "no ready schedule exists for this calldata (absent, executed,"
+            " cancelled or expired)"
+        )
         return [
             PreflightFinding(
                 "execute_permission",
                 "critical",
-                f"{sender} must schedule execute through the access manager first"
-                f" (execution delay {permission.delay}s); a direct call reverts",
+                f"{sender} has an execution delay of {permission.delay}s and {state};"
+                " a direct call reverts until the operation is scheduled and ready",
             )
         ]
     return [
@@ -151,6 +178,43 @@ def _permission_finding(
             f"{sender} may not call execute (no role, or the vault is closed):"
             " the call reverts AccessManagedUnauthorized",
         )
+    ]
+
+
+def _dependency_closure(
+    ctx: Web3Context, vault: PlasmaVault, markets: set[MarketId]
+) -> dict[MarketId, MarketId]:
+    """Every market the balance dependency graph reaches from ``markets``,
+    mapped to the touched market it was reached from (one batch per level)."""
+    reached = {market: market for market in markets}
+    frontier = sorted(markets)
+    while frontier:
+        batch: Multicall3Batch = Multicall3(ctx).batch()
+        reads = [
+            (m, batch.add(vault.get_dependency_balance_graph(m))) for m in frontier
+        ]
+        batch.run()
+        frontier = []
+        for market, dependencies in reads:
+            for dependency in dependencies.value:
+                if dependency not in reached:
+                    reached[dependency] = reached[market]
+                    frontier.append(dependency)
+    return reached
+
+
+def _dependency_findings(
+    reached: dict[MarketId, MarketId], balance_markets: set[MarketId]
+) -> list[PreflightFinding]:
+    return [
+        PreflightFinding(
+            "no_balance_fuse",
+            "critical",
+            f"market {market}, a balance dependency of market {origin}, has no"
+            " balance fuse; execute reverts AddressEmptyCode after the actions",
+        )
+        for market, origin in sorted(reached.items())
+        if market != origin and market != _NO_MARKET and market not in balance_markets
     ]
 
 
@@ -177,7 +241,7 @@ def _action_findings(
                     f"{where}: MARKET_ID() does not answer; execute reverts",
                 )
             )
-        elif action.market_id not in balance_markets:
+        elif action.market_id != _NO_MARKET and action.market_id not in balance_markets:
             findings.append(
                 PreflightFinding(
                     "no_balance_fuse",
@@ -187,6 +251,25 @@ def _action_findings(
                 )
             )
     return findings
+
+
+def _schedule(
+    ctx: Web3Context,
+    manager: AccessManagerAddress,
+    sender: ChecksumAddress,
+    vault: PlasmaVaultAddress,
+    actions: Sequence[FuseAction],
+    permission: CallPermission,
+) -> tuple[int | None, int | None]:
+    """When a delayed sender's operation for this exact calldata becomes ready,
+    and the base block's time; ``(None, None)`` when no schedule applies."""
+    if permission.immediate or permission.delay == 0:
+        return None, None
+    calldata = PlasmaVault(vault).execute(list(actions)).calldata
+    operation = AccessManager.hash_operation(sender, vault, calldata)
+    scheduled = AccessManager(manager).get_schedule(operation).call(ctx)
+    now = ctx.web3.eth.get_block(ctx.default_block)["timestamp"]
+    return int(scheduled), int(now)
 
 
 def _simulate(
@@ -204,6 +287,7 @@ def _simulate(
                 "the provider does not support eth_simulateV1: the batch was not run",
             )
         ]
+    # The block is the parent: the batch runs in a new block on top of it.
     simulator = VaultSimulator(ctx.web3, vault=vault.address, alpha=sender, block=block)
     before = simulator.observe(vault.total_assets(), label="totalAssets before")
     simulator.execute(list(actions))
@@ -235,11 +319,14 @@ def preflight_execute(
     sender: ChecksumAddress,
     simulate: bool = True,
 ) -> ExecutePreflight:
-    """Check ``actions`` as ``sender``'s `PlasmaVault.execute` at one block
-    (``ctx.default_block`` when it is a number, else the latest).
+    """Check ``actions`` as ``sender``'s `PlasmaVault.execute` on the state of one
+    base block (``ctx.default_block`` when it is a number, else the latest).
 
-    Two Multicall3 batches and the balance-fuse storage reads cover the static
-    checks; ``simulate`` adds one ``eth_simulateV1`` request. Read-only.
+    The static checks take a few Multicall3 batches (one per dependency-graph
+    level), the ``canCall`` read, the balance-fuse storage reads and, for a
+    caller with an execution delay, the schedule of this exact calldata;
+    ``simulate`` adds a capability probe and one ``eth_simulateV1`` request.
+    Read-only.
     """
     if not actions:
         raise ValueError("preflight needs at least one action")
@@ -256,6 +343,9 @@ def preflight_execute(
         .can_call(sender, vault, _EXECUTE_SELECTOR)
         .call(ctx)
     )
+    scheduled_at, now = _schedule(
+        ctx, manager.value, sender, vault, actions, permission
+    )
     balance_markets = {bf.market_id for bf in plasma_vault.read_balance_fuses(ctx)}
     registered = set(fuses.value)
     preflight_actions = tuple(
@@ -268,8 +358,17 @@ def preflight_execute(
         )
         for index, action in enumerate(actions)
     )
-    findings = _permission_finding(sender, permission) + _action_findings(
-        preflight_actions, balance_markets
+    touched = {
+        a.market_id
+        for a in preflight_actions
+        if a.market_id is not None and a.market_id != _NO_MARKET
+    }
+    findings = (
+        _permission_finding(sender, permission, scheduled_at, now)
+        + _action_findings(preflight_actions, balance_markets)
+        + _dependency_findings(
+            _dependency_closure(ctx, plasma_vault, touched), balance_markets
+        )
     )
     simulation, simulated = (
         _simulate(ctx, plasma_vault, actions, sender, block) if simulate else (None, [])
@@ -280,6 +379,7 @@ def preflight_execute(
         block_number=block,
         sender=sender,
         permission=permission,
+        scheduled_at=scheduled_at,
         actions=preflight_actions,
         findings=tuple(findings + simulated),
         simulation=simulation,
@@ -319,6 +419,7 @@ class ExecutePreflightJson(TypedDict):
     verdict: Verdict
     execute_immediate: bool
     execute_delay: int
+    execute_scheduled_at: int | None
     actions: list[PreflightActionJson]
     findings: list[PreflightFindingJson]
     simulation: PreflightSimulationJson | None
@@ -335,6 +436,7 @@ def build_execute_preflight_json(preflight: ExecutePreflight) -> ExecutePrefligh
         verdict=preflight.verdict,
         execute_immediate=preflight.permission.immediate,
         execute_delay=int(preflight.permission.delay),
+        execute_scheduled_at=preflight.scheduled_at,
         actions=[
             PreflightActionJson(
                 index=a.index,

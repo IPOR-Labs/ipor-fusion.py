@@ -1236,11 +1236,14 @@ class PreflightSimulationModel(_Base):
 
 
 class ExecutePreflightResponse(_Base):
-    """An execute batch checked as its sender would send it, at one block."""
+    """An execute batch checked as its sender would send it."""
 
     vault: str
     chain_id: ChainId
-    block_number: int
+    block_number: int = Field(
+        description="Base block of the static reads; the simulation runs in the "
+        "next block, 12 seconds later."
+    )
     sender: str
     verdict: Verdict
     execute_immediate: bool = Field(
@@ -1249,6 +1252,10 @@ class ExecutePreflightResponse(_Base):
     execute_delay: int = Field(
         description="Seconds the sender's call must be scheduled ahead; 0 when "
         "immediate or not allowed at all."
+    )
+    execute_scheduled_at: int | None = Field(
+        description="For a delayed sender: when the operation for this exact "
+        "calldata becomes executable (0: not scheduled or expired); null otherwise."
     )
     actions: list[PreflightActionModel]
     findings: list[PreflightFindingModel]

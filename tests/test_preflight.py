@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from _multicall import multicall_aware
-from eth_abi import encode
+from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -13,6 +13,7 @@ from web3.exceptions import ContractLogicError
 import ipor_fusion.preflight as preflight_module
 from ipor_fusion import (
     AaveV3SupplyFuse,
+    AccessManager,
     BalanceFuse,
     ExecutePreflightError,
     PlasmaVault,
@@ -35,8 +36,20 @@ def _sel(signature: str) -> bytes:
     return function_signature_to_4byte_selector(signature)
 
 
-def _ctx(*, immediate=True, delay=0, fuses=(FUSE,), markets=None):
+NOW = 50_000
+
+
+def _ctx(
+    *,
+    immediate=True,
+    delay=0,
+    fuses=(FUSE,),
+    markets=None,
+    graph=None,
+    scheduled=0,
+):
     markets = {FUSE: 1} if markets is None else markets
+    graph = graph or {}
 
     def handler(to: str, data: bytes) -> bytes:
         selector = bytes(data[:4])
@@ -50,6 +63,15 @@ def _ctx(*, immediate=True, delay=0, fuses=(FUSE,), markets=None):
             return encode(["uint256"], [markets[to]])
         if selector == _sel("canCall(address,address,bytes4)"):
             return encode(["bool", "uint32"], [immediate, delay])
+        if selector == _sel("getDependencyBalanceGraph(uint256)"):
+            (market,) = decode(["uint256"], data[4:])
+            return encode(["uint256[]"], [graph.get(market, [])])
+        if selector == _sel("getSchedule(bytes32)"):
+            (operation,) = decode(["bytes32"], data[4:])
+            expected = AccessManager.hash_operation(
+                SENDER, VAULT, PlasmaVault(VAULT).execute([_supply()]).calldata
+            )
+            return encode(["uint48"], [scheduled if operation == expected else 0])
         raise AssertionError(f"unexpected call to {to}: 0x{selector.hex()}")
 
     ctx = MagicMock()
@@ -57,6 +79,7 @@ def _ctx(*, immediate=True, delay=0, fuses=(FUSE,), markets=None):
     ctx.chain_id = 8453
     ctx.at_block.return_value = ctx
     ctx.call.side_effect = multicall_aware(handler)
+    ctx.web3.eth.get_block.return_value = {"timestamp": NOW}
     return ctx
 
 
@@ -88,12 +111,16 @@ def test_a_clean_batch_passes_the_static_checks():
 
 
 @pytest.mark.parametrize(
-    ("immediate", "delay", "message"),
-    [(False, 3600, "must schedule execute"), (False, 0, "may not call execute")],
+    ("delay", "scheduled", "message"),
+    [
+        (3600, 0, "no ready schedule exists"),
+        (3600, NOW + 1, f"scheduled for {NOW + 1}, after this block"),
+        (0, 0, "may not call execute"),
+    ],
 )
-def test_the_sender_must_be_allowed_now(immediate, delay, message):
+def test_the_sender_must_be_allowed_now(delay, scheduled, message):
     result = preflight_execute(
-        _ctx(immediate=immediate, delay=delay),
+        _ctx(immediate=False, delay=delay, scheduled=scheduled),
         VAULT,
         [_supply()],
         sender=SENDER,
@@ -103,6 +130,39 @@ def test_the_sender_must_be_allowed_now(immediate, delay, message):
     assert message in result.findings[0].message
     with pytest.raises(ExecutePreflightError, match=message):
         result.raise_for_failure()
+
+
+def test_a_ready_scheduled_operation_may_be_executed_directly():
+    result = preflight_execute(
+        _ctx(immediate=False, delay=3600, scheduled=NOW),
+        VAULT,
+        [_supply()],
+        sender=SENDER,
+        simulate=False,
+    )
+    assert result.findings == ()
+    assert result.scheduled_at == NOW
+    assert build_execute_preflight_json(result)["execute_scheduled_at"] == NOW
+
+
+def test_market_zero_needs_no_balance_fuse():
+    result = preflight_execute(
+        _ctx(markets={FUSE: 0}), VAULT, [_supply()], sender=SENDER, simulate=False
+    )
+    assert result.findings == ()
+
+
+def test_dependency_markets_need_balance_fuses_once_each():
+    graph = {1: [2, 0], 2: [3, 1], 3: [2]}
+    result = preflight_execute(
+        _ctx(graph=graph), VAULT, [_supply()], sender=SENDER, simulate=False
+    )
+    assert [f.message for f in result.findings] == [
+        "market 2, a balance dependency of market 1, has no balance fuse;"
+        " execute reverts AddressEmptyCode after the actions",
+        "market 3, a balance dependency of market 1, has no balance fuse;"
+        " execute reverts AddressEmptyCode after the actions",
+    ]
 
 
 def test_an_unregistered_fuse_without_market_or_balance_fuse_is_critical():
@@ -138,6 +198,9 @@ class _FakeSimulator:
         self._values = list(self.values)
 
     def observe(self, call, *, label):
+        assert call == PlasmaVault(VAULT).total_assets()
+        expected = "before" if len(self._values) == 2 else "after"
+        assert label == f"totalAssets {expected}"
         return _FakeObservation(self._values.pop(0))
 
     def execute(self, actions):
@@ -194,3 +257,5 @@ def test_execute_calldata_parses_from_hex_or_bytes():
     claims = calldata.replace(calldata[:4], _sel("claimRewards((address,bytes)[])"), 1)
     with pytest.raises(ValueError, match="not a PlasmaVault.execute call"):
         parse_execute_actions(claims)
+    with pytest.raises(ValueError, match="not canonically encoded"):
+        parse_execute_actions(calldata + b"\x00")

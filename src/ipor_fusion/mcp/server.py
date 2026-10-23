@@ -304,9 +304,10 @@ def vault_preflight(
         ),
     ] = True,
 ) -> ExecutePreflightResponse:
-    """Check an execute batch before it is signed: the sender's permission, each
-    fuse's registration and balance fuse, and a simulation of the exact calldata
-    at one block. Read-only; a pass is evidence for that block, not a promise."""
+    """Check an execute batch before it is signed: the sender's permission (or a
+    ready scheduled operation), each fuse's registration, the balance fuses of
+    every touched and dependent market, and a simulation of the calldata on top
+    of the base block. Read-only; a pass is evidence for that state, not a promise."""
     try:
         actions = parse_execute_actions(calldata)
     except ValueError as exc:

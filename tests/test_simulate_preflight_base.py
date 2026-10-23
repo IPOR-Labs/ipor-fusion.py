@@ -1,7 +1,7 @@
 """preflight_execute against a live Base vault at a pinned block: its alpha
-passes the static checks and a stranger is refused; the simulation surfaces
-the revert either way. Skipped without an archive ``BASE_PROVIDER_URL`` that
-serves ``eth_simulateV1``."""
+passes the static checks, and a stranger is refused both statically and by the
+simulated revert. Skipped without an archive ``BASE_PROVIDER_URL`` that serves
+``eth_simulateV1``."""
 
 from _live import archive_context
 from constants import BASE_AAVE_V3_SUPPLY_FUSE

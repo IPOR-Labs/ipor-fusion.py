@@ -42,6 +42,7 @@ def _result(findings=()):
         block_number=99,
         sender=SENDER,
         permission=CallPermission(immediate=True, delay=Period(0)),
+        scheduled_at=None,
         actions=(PreflightAction(0, FUSE, True, MarketId(1), ("AaveV3SupplyFuse",)),),
         findings=tuple(findings),
         simulation=PreflightSimulation(True, None, 21000, Amount(5), Amount(6)),

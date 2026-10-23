@@ -51,6 +51,7 @@ def preflight():
             block_number=99,
             sender=SENDER,
             permission=CallPermission(immediate=False, delay=Period(60)),
+            scheduled_at=1000,
             actions=(PreflightAction(0, FUSE, True, MarketId(1), ()),),
             findings=(),
             simulation=None,
@@ -70,6 +71,7 @@ def test_returns_the_document(preflight):
     result = _call(vault_address=VAULT, calldata=CALLDATA, sender=SENDER.lower())
     assert result["execute_immediate"] is False
     assert result["execute_delay"] == 60
+    assert result["execute_scheduled_at"] == 1000
     assert result["simulation"] is None
     assert preflight.call_args.args[2] == [ACTION]
     assert preflight.call_args.kwargs == {"sender": SENDER, "simulate": True}
