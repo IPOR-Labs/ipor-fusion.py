@@ -13,6 +13,7 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 from web3.types import LogReceipt, Timestamp
 
+from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.fuse_action import FuseAction
@@ -546,11 +547,12 @@ class PlasmaVault(ContractWrapper):
         )
 
     def enable_transfer_shares(self) -> Call[None]:
-        """One-way switch: make share `transfer` and `transferFrom` public."""
+        """Make share `transfer` and `transferFrom` public (PUBLIC_ROLE on both
+        selectors); only an access manager admin can map them back."""
         return self._write("enableTransferShares()")
 
     def set_minimal_execution_delays_for_roles(
-        self, delays: Sequence[tuple[RoleId, Period]]
+        self, delays: Sequence[tuple[RoleId | Roles, Period]]
     ) -> Call[None]:
         """The floor of each role's execution delay; the access manager refuses
         to grant the role with a shorter one."""
