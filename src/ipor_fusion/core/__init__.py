@@ -1,5 +1,6 @@
 from ipor_fusion.core.access import (
     AccessManager,
+    CallPermission,
     RoleAccount,
     RoleAccountJson,
     RoleAccountsJson,
@@ -92,6 +93,7 @@ __all__ = [
     "AccessManager",
     "RoleAccount",
     "RoleAccountJson",
+    "CallPermission",
     "RoleStatus",
     "RewardsManager",
     "VestingData",

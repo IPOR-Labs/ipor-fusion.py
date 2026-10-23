@@ -26,6 +26,7 @@ from ipor_fusion.chains import (
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import (
     AccessManager,
+    CallPermission,
     RoleAccount,
     RoleAccountJson,
     RoleAccountsJson,
@@ -464,6 +465,7 @@ __all__ = [
     "AccessManager",
     "RoleAccount",
     "RoleAccountJson",
+    "CallPermission",
     "RoleStatus",
     "resolve_access_manager",
     "role_account_sort_key",
