@@ -14,6 +14,8 @@ Tick = NewType("Tick", int)
 Liquidity = NewType("Liquidity", int)
 RoleId = NewType("RoleId", int)
 ChainId = NewType("ChainId", int)
+# An 18-decimal fixed-point fraction: 10**18 is 1, i.e. 100% (a market limit).
+Wad = NewType("Wad", int)
 # A Morpho Blue market id (bytes32) in its canonical spelling: "0x" and 64
 # lowercase hex digits, as the Morpho API reports it. Build one with
 # parse_morpho_market_id.

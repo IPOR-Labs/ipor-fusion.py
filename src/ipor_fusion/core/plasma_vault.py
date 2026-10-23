@@ -27,9 +27,12 @@ from ipor_fusion.types import (
     MarketId,
     PlasmaVaultAddress,
     Shares,
+    Wad,
 )
 
 T = TypeVar("T")
+
+WAD = Wad(10**18)
 
 _BALANCE_FUSE_ADDED_TOPIC = HexBytes(
     Web3.keccak(text="BalanceFuseAdded(uint256,address)")
@@ -355,8 +358,22 @@ class PlasmaVault(ContractWrapper):
             bytes(selector),
         )
 
-    def setup_markets_limits(self, limits: list[tuple[MarketId, Amount]]) -> Call[None]:
-        """ATOMIST-only: set per-market cap in the underlying asset's smallest unit."""
+    def setup_markets_limits(
+        self, limits: Sequence[tuple[MarketId, Wad]]
+    ) -> Call[None]:
+        """Set each market's limit: the most of the vault's total assets the
+        market may hold, as a `Wad` share (``Wad(6 * 10**17)`` is 60%), enforced
+        once `activate_markets_limits` is on (AssetDistributionProtectionLib).
+
+        Raises ``ValueError`` for a limit outside ``0..10**18``, which the vault
+        rejects with ``MarketLimitSetupInPercentageIsTooHigh``.
+        """
+        for market, limit in limits:
+            if not 0 <= limit <= WAD:
+                raise ValueError(
+                    f"market {market} limit {limit} is outside 0..10**18 (100%): the"
+                    " vault reverts MarketLimitSetupInPercentageIsTooHigh"
+                )
         return self._write("setupMarketsLimits((uint256,uint256)[])", list(limits))
 
     def update_markets_balances(self, market_ids: list[MarketId]) -> Call[None]:

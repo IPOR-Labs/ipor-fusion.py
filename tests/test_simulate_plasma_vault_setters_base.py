@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from eth_abi import decode as abi_decode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -97,13 +98,20 @@ def test_grant_market_substrates_calldata_selector_and_roundtrip():
 
 
 def test_setup_markets_limits_calldata_selector_and_roundtrip():
-    pairs = [(1, 1_000_000_000_000), (2, 500_000_000_000)]
+    # MarketLimit(AAVE_V3_MARKET_ID, 6e17) // 60%, as in the contracts' PlasmaVaultBasic test.
+    pairs = [(1, 6 * 10**17), (2, 10**18), (3, 0)]
     calldata = _bare_vault().setup_markets_limits(pairs).calldata
     assert calldata[:4] == function_signature_to_4byte_selector(
         "setupMarketsLimits((uint256,uint256)[])"
     )
     (decoded,) = abi_decode(["(uint256,uint256)[]"], calldata[4:])
     assert [(int(mkt), int(cap)) for mkt, cap in decoded] == pairs
+
+
+@pytest.mark.parametrize("limit", [10**18 + 1, -1])
+def test_setup_markets_limits_rejects_a_limit_the_vault_reverts_on(limit):
+    with pytest.raises(ValueError, match="MarketLimitSetupInPercentageIsTooHigh"):
+        _bare_vault().setup_markets_limits([(1, 10**17), (2, limit)])
 
 
 def test_configure_instant_withdrawal_fuses_calldata_selector_and_roundtrip():
