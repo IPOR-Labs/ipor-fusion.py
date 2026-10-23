@@ -56,6 +56,7 @@ from ipor_fusion import (
     TransactionError,
     VaultInfoJson,
     VaultSimulator,
+    Wad,
     Web3Context,
     build_meta_morpho_json,
     build_morpho_blue_market_json,
@@ -118,6 +119,10 @@ def access(ctx: Web3Context, am: AccessManager, account: ChecksumAddress) -> Non
     am.grant_role(Roles.ALPHA_ROLE, account, Period(0))
     am.revoke_role(Roles.ALPHA_ROLE, account)
     am.read_accounts_with_role(ctx, Roles.resolve("ATOMIST"))
+
+
+def market_limits(vault: PlasmaVault) -> None:
+    vault.setup_markets_limits([(IporFusionMarkets.AAVE_V3, Wad(6 * 10**17))])
 
 
 def governance(vault: PlasmaVault) -> None:
@@ -315,7 +320,7 @@ def producers_feed_consumers(ctx: Web3Context, oracle: ChecksumAddress) -> None:
     vault.configure_instant_withdrawal_fuses(
         [(fuse, [bytes(32)]) for fuse in vault.get_instant_withdrawal_fuses().call(ctx)]
     )
-    HyperCorePendingReader(vault.address, oracle).is_pending().call(ctx)
+    HyperCorePendingReader(vault.address, oracle).is_action_pending().call(ctx)
 
 
 def ccip_selectors_round_trip(ctx: Web3Context, factory: CcipCrosschainFactory) -> None:

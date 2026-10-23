@@ -47,7 +47,6 @@ from ipor_fusion.fuses.hypercore import (
     HyperCoreOrderFuse,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
-    SettlementMode,
     TimeInForce,
     hip3_action_asset,
     is_hip3_asset,
@@ -815,6 +814,78 @@ class TestUniversalTokenSwapperFuse:
         assert decoded_tuple[2] == 5000
         assert decoded_tuple[3] == 4900
         assert decoded_tuple[4][1][0] == b"\xaa\xbb"
+
+    def test_swap_tokens_to_return_abi(self):
+        """The Arbitrum fuses of the 2026-10-21 release (markets 12 and 1202,
+        0xD42940B4… and 0x9d74A79b…) carry only this selector."""
+        action = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.TOKENS_TO_RETURN
+        ).swap(
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            amount_in=5000,
+            targets=[TOKEN_A],
+            data=[b"\xaa\xbb"],
+            min_amount_out=4900,
+            tokens_to_return=[TOKEN_B],
+        )
+        signature = (
+            "enter((address,address,uint256,uint256,(address[],bytes[],address[])))"
+        )
+        assert action.data[:4] == _selector(signature)
+        assert _selector(signature).hex() == "3b2607a8"
+        (decoded_tuple,) = decode(
+            ["(address,address,uint256,uint256,(address[],bytes[],address[]))"],
+            action.data[4:],
+        )
+        assert decoded_tuple[3] == 4900
+        assert decoded_tuple[4][1][0] == b"\xaa\xbb"
+        assert [t.lower() for t in decoded_tuple[4][2]] == [TOKEN_B_LOW]
+        empty = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.TOKENS_TO_RETURN
+        ).swap(
+            token_in=TOKEN_A,
+            token_out=TOKEN_B,
+            amount_in=1,
+            targets=[],
+            data=[],
+            min_amount_out=0,
+        )
+        assert (
+            decode(
+                ["(address,address,uint256,uint256,(address[],bytes[],address[]))"],
+                empty.data[4:],
+            )[0][4][2]
+            == ()
+        )
+
+    def test_tokens_to_return_abi_requires_min_amount_out(self):
+        with pytest.raises(
+            ValueError, match="abi=UniversalTokenSwapperAbi.TOKENS_TO_RETURN"
+        ):
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.TOKENS_TO_RETURN
+            ).swap(
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=1,
+                targets=[],
+                data=[],
+            )
+
+    def test_tokens_to_return_needs_its_abi(self):
+        with pytest.raises(ValueError, match="TOKENS_TO_RETURN"):
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
+            ).swap(
+                token_in=TOKEN_A,
+                token_out=TOKEN_B,
+                amount_in=1,
+                targets=[],
+                data=[],
+                min_amount_out=0,
+                tokens_to_return=[TOKEN_B],
+            )
 
     def test_swap_min_amount_out_zero_allowed(self):
         action = UniversalTokenSwapperFuse(
@@ -1706,6 +1777,13 @@ class TestExternalStateOperationFuse:
                 actions=[(ZERO_ADDRESS, b"\x00")],
             )
 
+    def test_sweep_surplus_encodes_the_asset(self):
+        action = ExternalStateOperationFuse(FUSE_ADDR).sweep_surplus(TOKEN_A)
+        assert action.data[:4] == _selector("sweepSurplus(address)")
+        assert decode(["address"], action.data[4:])[0].lower() == TOKEN_A.lower()
+        with pytest.raises(ValueError, match="asset"):
+            ExternalStateOperationFuse(FUSE_ADDR).sweep_surplus(ZERO_ADDRESS)
+
     def test_create_executor_is_bare_selector(self):
         action = ExternalStateOperationFuse(FUSE_ADDR).create_executor()
         assert action.fuse == FUSE_ADDR
@@ -2301,8 +2379,17 @@ class TestHyperCoreFuses:
             "0504000000000000000000000000000000000000000000000000000000000002"
         )
         assert HyperCoreSubstrates.config(
-            HyperCoreConfigKey.SETTLEMENT_MODE, SettlementMode.TIMING
+            HyperCoreConfigKey.SETTLEMENT_MODE, 1
         ).hex() == ("0505000000000000000000000000000000000000000000000000000000000001")
+        assert HyperCoreSubstrates.config(
+            HyperCoreConfigKey.NAV_JUMP_FLOOR_USD6, 7
+        ).hex() == ("050b000000000000000000000000000000000000000000000000000000000007")
+        # HyperCoreSubstrateLib.encodePerpPositionCap(110_002, 25_000_000_000)
+        assert HyperCoreSubstrates.perp_position_cap(110_002, 25_000_000_000).hex() == (
+            "07" + f"{110_002:08x}" + f"{25_000_000_000:022x}" + "00" * 16
+        )
+        with pytest.raises(ValueError, match="max_position_notional_usd6"):
+            HyperCoreSubstrates.perp_position_cap(1, 1 << 88)
         assert HyperCoreSubstrates.builder(
             Web3.to_checksum_address("0xcee5c4272e246a424aede992c987966736e0f63b"), 1
         ).hex() == ("040000000000000000000001cee5c4272e246a424aede992c987966736e0f63b")

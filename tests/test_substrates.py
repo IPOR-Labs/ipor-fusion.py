@@ -473,7 +473,23 @@ def test_hypercore_typed_substrates():
     assert dex_ids.extra == {"key": "PerpDexIds", "value": "2"}
 
     mode = decode_substrate(HYPERCORE_WORDS["config_mode"], market_id=market)
-    assert mode.extra == {"key": "SettlementMode", "value": "1", "mode": "TIMING"}
+    assert mode.extra == {"key": "SettlementMode", "value": "1", "reserved": "true"}
+
+    timeout = decode_substrate("0x0507" + "00" * 28 + f"{600:04x}", market_id=market)
+    assert timeout.extra == {"key": "TransferTimeoutSeconds", "value": "600"}
+    floor = decode_substrate("0x050b" + "00" * 28 + "0007", market_id=market)
+    assert floor.extra == {"key": "NavJumpFloorUsd6", "value": "7"}
+    assert decode_substrate("0x050c" + "00" * 30, market_id=market).is_error
+
+    cap_word = "0x07" + f"{110_002:08x}" + f"{25_000_000_000:022x}" + "00" * 16
+    pos_cap = decode_substrate(cap_word, market_id=market)
+    assert pos_cap.type_label == "PERP_POSITION_CAP" and not pos_cap.is_error
+    assert pos_cap.extra == {
+        "asset": "110002",
+        "max_position_notional_usd6": "25000000000",
+    }
+    assert decode_substrate(cap_word[:-2] + "01", market_id=market).is_error
+    assert decode_substrate("0x08" + "00" * 31, market_id=market).is_error
 
     builder = decode_substrate(HYPERCORE_WORDS["builder"], market_id=market)
     assert builder.address == "0xcee5c4272e246a424aede992c987966736e0f63b"
@@ -518,9 +534,9 @@ def test_hypercore_typed_substrates():
         ),
         # tags the library has no member for
         ("0x00" + "00" * 31, "type=0"),
-        ("0x07" + "00" * 31, "type=7"),
+        ("0x08" + "00" * 31, "type=8"),
         # a config key outside 1..6
-        ("0x0509" + "00" * 30, "CONFIG key=9"),
+        ("0x050c" + "00" * 30, "CONFIG key=12"),
     ],
 )
 def test_hypercore_words_the_library_rejects_are_errors(word, label):

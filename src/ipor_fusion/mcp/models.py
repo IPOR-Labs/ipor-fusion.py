@@ -972,14 +972,12 @@ class HyperCorePerpMarketEntry(_Base):
 
 class HyperCorePendingEntry(_Base):
     """HyperCorePendingReader.pendingState(): `pending` and `settled` are the
-    authoritative predicates; the raw fields stay after a TIMING settlement."""
+    authoritative predicates; the raw fields stay after a settlement until the
+    next enqueue."""
 
     pending: bool
     settled: bool
-    refreshing: bool
     action_class: Literal["NONE", "TRANSFER", "ORDER"]
-    settlement_mode: Literal["TIMING", "REPORTED"] | None
-    reported_result: Literal["NONE", "EXECUTED", "REJECTED"]
     action_id: int
     action_nonce: int
     pending_until: int
@@ -992,6 +990,20 @@ class HyperCorePendingEntry(_Base):
     )
     current_timestamp: int
     l1_block_available: bool
+    effect_kind: Literal["NONE", "CORE_SPOT", "EVM_BALANCE"] = Field(
+        description="The balance a transfer waits for before it settles."
+    )
+    effect_token_index: int = Field(description="Core token of a CORE_SPOT effect.")
+    effect_evm_asset: str = Field(description="ERC-20 of an EVM_BALANCE effect.")
+    expected_balance: int = Field(
+        description="Balance (Core wei or token units) that settles the transfer."
+    )
+    timeout_at: int = Field(
+        description="Unix time after which the transfer settles without the effect."
+    )
+    last_order_l1_block: int = Field(
+        description="Core L1 block of the last order; another waits for the next."
+    )
 
 
 class HyperCoreSection(_Base):
@@ -1164,8 +1176,9 @@ class PreviewFeatureModel(_Base):
         default="preview",
         description="Always 'preview': not production. The contracts are under "
         "active development, the mainnet deployments are a proof of concept "
-        "and IPOR Labs canaries, and interfaces may change between minor "
-        "versions. Route no production capital through these features.",
+        "and IPOR Labs canaries, and interfaces may change or be removed "
+        "between minor versions, with no backward compatibility. Route no "
+        "production capital through these features.",
     )
 
 
@@ -1262,3 +1275,44 @@ class ExecutePreflightResponse(_Base):
     simulation: PreflightSimulationModel | None = Field(
         description="null when not simulated (simulate=false or no eth_simulateV1)."
     )
+
+
+class AddressMatch(_Base):
+    chain_id: ChainId
+    chain: str
+    name: str = Field(description="Contract name in the ipor-abi registry.")
+    address: str
+
+
+class AddressLookupResponse(_Base):
+    """Registry entries matching a name substring or an address."""
+
+    query: str
+    query_type: Literal["address", "name"] = Field(
+        description="'address' for 0x and 40 hex digits (exact match), else 'name' "
+        "(case-insensitive substring)."
+    )
+    match_count: int
+    matches: list[AddressMatch]
+
+
+class AddressName(_Base):
+    name: str
+    chain_ids: list[ChainId] = Field(description="Chains registering this name.")
+
+
+class AddressNamesResponse(_Base):
+    """Every contract name in the registries read."""
+
+    chain_ids: list[ChainId] = Field(description="Chains whose registry was read.")
+    names: list[AddressName]
+
+
+class AddressListResponse(_Base):
+    """One chain's full ``{name: address}`` registry."""
+
+    chain_id: ChainId
+    chain: str
+    ref: str = Field(description="ipor-abi git ref the map was read at.")
+    count: int
+    addresses: dict[str, str]

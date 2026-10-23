@@ -38,6 +38,9 @@ from ipor_fusion.market_info import (
 from ipor_fusion.mcp.guide import register_guide
 from ipor_fusion.mcp.models import (
     ActionResult,
+    AddressListResponse,
+    AddressLookupResponse,
+    AddressNamesResponse,
     ChangelogEntryModel,
     ConfigShowResponse,
     ExecutePreflightResponse,
@@ -63,6 +66,13 @@ from ipor_fusion.preflight import (
 )
 from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
+from ipor_fusion.registry import (
+    build_address_list_json,
+    build_address_lookup_json,
+    build_address_names_json,
+    fetch_address_registries,
+    fetch_address_registry,
+)
 from ipor_fusion.types import (
     ChainId,
     PlasmaVaultAddress,
@@ -133,7 +143,9 @@ def _build_ctx(
     return ctx, block_number
 
 
-def _no_zero_sentinel(name: str) -> Callable[[object], object]:
+def _no_zero_sentinel(
+    name: str, omitted: str | None = None
+) -> Callable[[object], object]:
     """Refuse 0 with an explicit message: clients built against the 3.x tools
     still send it meaning auto / latest, and reading it as block or chain 0
     would answer with genesis-block data instead of an error."""
@@ -142,7 +154,14 @@ def _no_zero_sentinel(name: str) -> Callable[[object], object]:
         if value == 0 and not isinstance(value, bool):
             raise ValueError(
                 f"{name}=0 is not a sentinel any more: omit {name} for "
-                + ("the latest block" if name == "block_number" else "auto-detection")
+                + (
+                    omitted
+                    or (
+                        "the latest block"
+                        if name == "block_number"
+                        else "auto-detection"
+                    )
+                )
             )
         return value
 
@@ -164,6 +183,11 @@ ChainArg = Annotated[
 
 # The market tools need the chain: no auto-detection, so no omission either.
 RequiredChainArg = Annotated[ChainId, Field(description="Chain ID.", gt=0)]
+RegistryChainArg = Annotated[
+    ChainId | None,
+    Field(description="Chain ID; omitted: every chain with a deployment file.", gt=0),
+    BeforeValidator(_no_zero_sentinel("chain_id", "every chain")),
+]
 BlockArg = Annotated[
     int | None,
     Field(description="Block number (positive); omitted: latest.", ge=1),
@@ -728,6 +752,35 @@ def market_meta_morpho(
     info = fetch_vault(Web3.to_checksum_address(vault_address), chain_id)
     payload = build_meta_morpho_json(info, chain_id)
     return MetaMorphoVaultResponse.model_validate(payload)
+
+
+@mcp.tool()
+def address_lookup(
+    query: str, chain_id: RegistryChainArg = None
+) -> AddressLookupResponse:
+    """Find IPOR Fusion contracts in the ipor-abi registry by name substring, or
+    the names of an address. Reads one file per chain (cached ten minutes)."""
+    registries = fetch_address_registries(None if chain_id is None else [chain_id])
+    return AddressLookupResponse.model_validate(
+        build_address_lookup_json(query, registries)
+    )
+
+
+@mcp.tool()
+def address_names(chain_id: RegistryChainArg = None) -> AddressNamesResponse:
+    """List the contract names in the ipor-abi registry, with the chains that
+    have each; use them with address_lookup."""
+    registries = fetch_address_registries(None if chain_id is None else [chain_id])
+    return AddressNamesResponse.model_validate(build_address_names_json(registries))
+
+
+@mcp.tool()
+def address_list(chain_id: RequiredChainArg) -> AddressListResponse:
+    """One chain's full {name: address} registry: hundreds of entries;
+    address_lookup is cheaper for one contract."""
+    return AddressListResponse.model_validate(
+        build_address_list_json(fetch_address_registry(chain_id))
+    )
 
 
 def main() -> None:

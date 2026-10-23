@@ -7,7 +7,7 @@ import re
 import pytest
 from _event_args import assert_event_class_mirrors_spec
 from eth_abi import encode
-from test_solidity_mirrors import _solidity_source
+from test_solidity_mirrors import IPOR_FUSION_REF, _solidity_source
 from web3 import Web3
 
 from ipor_fusion import (
@@ -28,6 +28,17 @@ _SOURCES = (
     "contracts/fuses/external_state/ExternalStateOperationFuse.sol",
     "contracts/fuses/external_state/lib/ExternalStateExecutorStorageLib.sol",
 )
+# Both published builds: the release pinned in test_solidity_mirrors (Arbitrum)
+# and the earlier one HyperEVM, Base and Ethereum still publish. The released
+# balance fuse declares its events in a library of its own.
+_EARLIER_REF = "a1f79d6c3d0d426ace4df55ed0fb8ea340580739"
+_BUILDS = (
+    (
+        IPOR_FUSION_REF,
+        (*_SOURCES, "contracts/fuses/external_state/lib/ExternalStateBigChangeLib.sol"),
+    ),
+    (_EARLIER_REF, _SOURCES),
+)
 _EVENT_RE = re.compile(r"\bevent\s+(\w+)\s*\(([^)]*)\)\s*;", re.S)
 
 VAULT = "0xdBEe6621Febce4C51Fa9DD1dB12dCd9d4CC3e7b9"
@@ -35,9 +46,18 @@ SIGNER = "0x00000000000000000000000000000000000000a5"
 
 
 def _declared():
+    """Every event either build declares; a name both declare must agree."""
     out = {}
-    for path in _SOURCES:
-        for name, body in _EVENT_RE.findall(_solidity_source(path)):
+    for ref, paths in _BUILDS:
+        for name, params in _declared_at(ref, paths).items():
+            assert out.setdefault(name, params) == params, name
+    return out
+
+
+def _declared_at(ref, paths):
+    out = {}
+    for path in paths:
+        for name, body in _EVENT_RE.findall(_solidity_source(path, ref)):
             params = []
             for raw in [p.strip() for p in body.split(",") if p.strip()]:
                 words = raw.split()
