@@ -18,13 +18,15 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from enum import Enum
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
-from eth_utils import keccak
+from eth_utils import function_signature_to_4byte_selector, keccak
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.types import BlockIdentifier, Timestamp
 
 from ipor_fusion.core.context import Web3Context
@@ -118,6 +120,35 @@ def _require_matching_hash(
         )
 
 
+class CustodianMarkerKind(Enum):
+    """What an executor's custodian marker counts: the last confirmed update's
+    unix timestamp (executors before the 2026-10-21 contracts release) or the
+    number of confirmed updates (executors of that release)."""
+
+    TIMESTAMP = "timestamp"
+    CONFIRM_COUNT = "confirm_count"
+
+
+_CONFIRM_COUNT_SELECTOR = function_signature_to_4byte_selector("confirmCount()")
+
+
+def _read_marker_kind(
+    ctx: Web3Context, executor: ChecksumAddress, block: BlockIdentifier
+) -> CustodianMarkerKind:
+    """Decided from the executor, not guessed from a value: a released
+    executor answers ``confirmCount()``, an earlier one has no such function
+    and the call reverts. Any other failure raises."""
+    try:
+        raw = ctx.call(executor, _CONFIRM_COUNT_SELECTOR, block)
+    except ContractLogicError:
+        return CustodianMarkerKind.TIMESTAMP
+    if len(raw) != 32:
+        raise ExternalStateError(
+            f"confirmCount() of {executor} returned {len(raw)} bytes, not a uint256"
+        )
+    return CustodianMarkerKind.CONFIRM_COUNT
+
+
 @dataclass(frozen=True, slots=True)
 class ExternalStateVaultState:
     """The external-state market's vault-scoped state, read from the vault's
@@ -136,7 +167,9 @@ class ExternalStateVaultState:
     and not the pre-hook's staleness clock, which is
     `ExternalStateExecutor.get_oldest_update_timestamp`. The fuse and the
     pre-hook only compare it for equality with
-    `BalanceFuseSnapshot.custodian_marker`; `paused` is the flag
+    `BalanceFuseSnapshot.custodian_marker`. `custodian_marker_kind` says
+    which, read from the executor at the same block (``None`` without an
+    executor); `paused` is the flag
     the balance fuse sets on a big change and `ExternalStateUnpauseFuse` clears
     with an atomist signature. `ExternalStatePausePreHook` blocks the vault's
     gated user operations while the flag is set, and also, flag or not, while
@@ -148,6 +181,7 @@ class ExternalStateVaultState:
     executor: ChecksumAddress | None
     last_total_balance: Amount
     last_checked_custodian_marker: CustodianMarker
+    custodian_marker_kind: CustodianMarkerKind | None
     paused: bool
     block: int
 
@@ -232,10 +266,14 @@ def read_external_state(
         raise ExternalStateError(
             f"malformed pause flag in the external-state storage of {checksum}"
         )
+    executor = Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None
     return ExternalStateVaultState(
-        executor=Web3.to_checksum_address(f"0x{words[0]:040x}") if words[0] else None,
+        executor=executor,
         last_total_balance=Amount(words[1]),
         last_checked_custodian_marker=CustodianMarker(words[2]),
+        custodian_marker_kind=(
+            _read_marker_kind(ctx, executor, read_at) if executor else None
+        ),
         paused=words[3] == 1,
         block=block,
     )
@@ -364,6 +402,11 @@ class ExternalStateExecutor(ContractWrapper):
                 Amount(values[0]), int(values[1]), CustodianMarker(values[2])
             )
         )
+
+    def read_custodian_marker_kind(self, ctx: Web3Context) -> CustodianMarkerKind:
+        """Whether this executor's custodian marker is a timestamp or a
+        confirm count, at ``ctx``'s default block (see `CustodianMarkerKind`)."""
+        return _read_marker_kind(ctx, self._require_address(), ctx.default_block)
 
     def confirm_count(self) -> Call[CustodianMarker]:
         """Executors of the 2026-10-21 contracts release only: the count of

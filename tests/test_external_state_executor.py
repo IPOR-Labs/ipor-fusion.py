@@ -13,6 +13,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import keccak
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 from web3.types import Timestamp
 
 from ipor_fusion.core.external_state_executor import (
@@ -1182,8 +1183,12 @@ class TestReadExternalState:
     BLOCKS = {"safe": 4_804_990, "finalized": 4_804_900, "earliest": 0}
     HASH = "0x" + "ab" * 32
 
-    def _ctx(self, words, default_block="latest", head=4_805_000):
+    def _ctx(self, words, default_block="latest", head=4_805_000, confirm_count=None):
         ctx = MagicMock()
+        if confirm_count is None:
+            ctx.call.side_effect = ContractLogicError("execution reverted")
+        else:
+            ctx.call.return_value = HexBytes(confirm_count.to_bytes(32, "big"))
         ctx.default_block = default_block
         blocks = dict(self.BLOCKS, latest=head)
         blocks[self.HASH] = 4_700_123
@@ -1193,6 +1198,30 @@ class TestReadExternalState:
         }
         ctx.get_storage_at.side_effect = lambda vault, slot, block=None: by_slot[slot]
         return ctx
+
+    def test_the_marker_kind_is_read_from_the_executor_at_the_same_block(self):
+        from ipor_fusion import CustodianMarkerKind, read_external_state
+
+        earlier = read_external_state(
+            self._ctx([int(EXECUTOR_ADDR, 16), 1, 1_791_458_983, 0]), VAULT_ADDR
+        )
+        assert earlier.custodian_marker_kind is CustodianMarkerKind.TIMESTAMP
+        ctx = self._ctx([int(EXECUTOR_ADDR, 16), 1, 7, 0], confirm_count=7)
+        released = read_external_state(ctx, VAULT_ADDR)
+        assert released.custodian_marker_kind is CustodianMarkerKind.CONFIRM_COUNT
+        to, data, block = ctx.call.call_args.args
+        assert data == Web3.keccak(text="confirmCount()")[:4]
+        assert block == 4_805_000
+        none = read_external_state(self._ctx([0, 0, 0, 0]), VAULT_ADDR)
+        assert none.custodian_marker_kind is None
+
+    def test_a_failed_kind_read_raises(self):
+        from ipor_fusion import read_external_state
+
+        ctx = self._ctx([int(EXECUTOR_ADDR, 16), 1, 7, 0])
+        ctx.call.side_effect = ConnectionError("rpc down")
+        with pytest.raises(ConnectionError):
+            read_external_state(ctx, VAULT_ADDR)
 
     def test_reads_the_four_slots_at_one_resolved_block(self):
         from ipor_fusion import read_external_state
