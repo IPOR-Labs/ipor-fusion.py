@@ -19,6 +19,12 @@ T_co = TypeVar("T_co", covariant=True)
 U = TypeVar("U")
 
 
+class _AbiDecodeFailure(DecodingError):
+    """The cause `Call.decode` chains a ``decode_error`` translation from, so an
+    optional batch read can tell an undecodable answer (``None``) apart from any
+    other error a decoder raises."""
+
+
 # No ``slots=True``: on early 3.11 and 3.12 patch releases (3.11.1, 3.12.0 and
 # 3.12.1 checked) ``Call[int](...)`` on a slotted frozen generic dataclass
 # raises ``TypeError`` when typing sets ``__orig_class__`` on the instance.
@@ -122,7 +128,9 @@ class Call(Generic[T_co]):
         except DecodingError as exc:
             if self.decode_error is None:
                 raise
-            raise self.decode_error(exc) from exc
+            marker = _AbiDecodeFailure(str(exc))
+            marker.__cause__ = exc
+            raise self.decode_error(exc) from marker
         single: object = values[0] if len(values) == 1 else values
         if self.decoder is not None:
             return self.decoder(single)

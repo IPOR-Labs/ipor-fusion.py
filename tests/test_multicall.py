@@ -417,3 +417,38 @@ class TestNamedDecodeErrors:
             mapped = batch.try_add(self._observation().map(lambda o: o))
             batch.run()
             assert (read.value, mapped.value) == (None, None)
+
+    def test_other_decoder_errors_still_propagate_from_optional_reads(self):
+        from eth_abi.exceptions import DecodingError
+
+        def buggy(_value: object) -> object:
+            raise ValueError("decoder bug") from DecodingError("inner")
+
+        def translate(exc: Exception) -> Exception:
+            return RuntimeError(f"named: {exc}")
+
+        valid = encode(["uint256"], [7])
+        decoded_badly = Call(
+            to=self.DISPATCHER,
+            data=SELECTOR,
+            output_types=["uint256"],
+            decoder=buggy,
+            decode_error=translate,
+        )
+        mapped_badly = Call(
+            to=self.DISPATCHER,
+            data=SELECTOR,
+            output_types=["uint256"],
+            decode_error=translate,
+        ).map(buggy)
+        for ctx in [
+            _ctx(lambda _to, _data: valid),
+            TestWithoutMulticall3._ctx_without_multicall(lambda _to, _data: valid),
+        ]:
+            for call in (decoded_badly, mapped_badly):
+                with pytest.raises(ValueError, match="decoder bug"):
+                    Multicall3(ctx).try_aggregate([call])
+                batch = Multicall3(ctx).batch()
+                batch.try_add(call)
+                with pytest.raises(ValueError, match="decoder bug"):
+                    batch.run()

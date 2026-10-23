@@ -9,7 +9,7 @@ from web3 import Web3
 from web3.exceptions import ContractLogicError
 
 from ipor_fusion.core.context import Web3Context
-from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.core.contract import Call, ContractWrapper, _AbiDecodeFailure
 from ipor_fusion.errors import EmptyCallResultError
 
 T = TypeVar("T")
@@ -230,7 +230,7 @@ def _translated_decode_failure(exc: Exception) -> bool:
     """Whether ``exc`` is a `Call.decode_error` translation of an undecodable
     answer: it names the failure for required reads, while an optional read of
     the same answer is ``None``."""
-    return isinstance(exc.__cause__, DecodingError)
+    return isinstance(exc.__cause__, _AbiDecodeFailure)
 
 
 def _try_decode(call: Call[T], ok: bool, data: bytes) -> T | None:
