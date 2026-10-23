@@ -122,7 +122,10 @@ Fuse, factory and manager addresses per chain are published in
 [ipor-abi](https://github.com/IPOR-Labs/ipor-abi) (`mainnet/mainnet-<chain>-fusion/addresses.json`).
 A fuse must also be registered on the vault; `vault.get_fuses().call(ctx)` lists the registered ones.
 
-Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK never scales by decimals.
+Amounts are raw on-chain integers (`Amount`, `Shares` in `ipor_fusion.types`); the SDK scales by decimals
+only in explicit boundary converters.
+`parse_amount("1.5", Decimals(6))` and `format_amount(Amount(1_500_000), Decimals(6))` convert exactly at the
+boundary (no floats, no rounding; `parse_shares` / `format_shares` for shares at the share token's decimals).
 
 ### Read, send, or simulate
 
@@ -277,7 +280,7 @@ Reverts on the deploy-and-configure path, keyed by selector so a failed transact
 | `0x8745fbfd` | `DaoFeePackagesArrayEmpty()` | `clone()` was sent to `IporFusionFactoryImpl` | Send it to `IporFusionFactoryProxy` for that chain |
 | `0x9996b315` | `AddressEmptyCode(address)` | `execute()` touched a market with no balance fuse | `add_balance_fuse(market_id, balance_fuse)` before the first `execute` on that market |
 | `0x4bf4de4e` | `HandlerNotFound()` | A protocol called back into the vault during `execute()` (a flash loan) and no handler is registered for its address and selector | `update_callback_handler(handler, sender, selector)` before the first `execute` that triggers the callback |
-| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`, `update_callback_handler`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, Period(0))` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
+| `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`, `update_callback_handler`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | Check first with `AccessManager.can_call(caller, target, selector).call(ctx)` (a closed target or a missing role answers `immediate=False, delay=0`; a role with an execution delay answers its `delay`). `AccessManager.grant_role(role, account, Period(0))` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
 | `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send(ctx)` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
 
 `clone()` grants the owner only `Roles.OWNER_ROLE` (1). OWNER grants `Roles.ATOMIST_ROLE` (100), which administers `Roles.FUSE_MANAGER_ROLE` (300, configuration), `Roles.ALPHA_ROLE` (200, `execute`) and `Roles.WHITELIST_ROLE` (800, `deposit` on a private vault).
@@ -391,13 +394,14 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 |--------|---------|
 | `Web3Context` | Provider connection, signing, tx dispatch, gas estimation |
 | `Call` | Pre-encoded contract call; `.call(ctx)`, `.send(ctx)`, `.calldata`, `.build_transaction(ctx)` |
-| `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw, fuse and market configuration |
+| `PlasmaVault` | ERC-4626 vault — execute, deposit, withdraw, previews, fuse, market, fee and limit configuration |
 | `VaultSimulator` | Batch `execute` + reads through `eth_simulateV1`, multi-block, no local node |
 | `FusionFactory` | Deploy a new vault (`clone`, `clone_supervised`) |
 | `AccessManager` | Role-based access control |
 | `RewardsManager` | Claim and vest rewards |
 | `WithdrawManager` | Time-windowed withdrawal requests |
-| `FeeManager` | Deposit, performance, and management fee configuration |
+| `FeeManager` | Deposit, performance, and management fee configuration and harvesting |
+| `ContextManager` | Run calls on approved context-aware targets on the caller's behalf |
 | `FeeAccount` | Fee escrow account, resolves its `FeeManager` |
 | `PriceOracleMiddleware` | Asset price feeds |
 | `PriceOracleMiddlewareManager` | Per-vault price-source overrides |

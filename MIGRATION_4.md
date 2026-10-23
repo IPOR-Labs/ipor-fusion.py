@@ -1012,7 +1012,8 @@ are listed with a link.
   the market once limits are activated. It now takes `Wad` and raises `ValueError`
   before building the call for a limit outside `0..10**18`: a negative one is no
   uint256, and above 100% the vault reverts `MarketLimitSetupInPercentageIsTooHigh`. Pass the share: `Wad(6 * 10**17)` for 60%. Check limits
-  set with 3.x through `getMarketLimit` on chain.
+  set with 3.x with `PlasmaVault.get_market_limit(market).call(ctx)`, which
+  returns the `Wad` share.
 
 - **The CLI and the MCP tools take the same arguments.**
   - **MCP inputs:** the vault tools' `chain_id` and every `block_number` are

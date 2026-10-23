@@ -125,6 +125,12 @@ def market_limits(vault: PlasmaVault) -> None:
     vault.setup_markets_limits([(IporFusionMarkets.AAVE_V3, Wad(6 * 10**17))])
 
 
+def governance(vault: PlasmaVault) -> None:
+    vault.set_minimal_execution_delays_for_roles(
+        [(Roles.ALPHA_ROLE, Period.HOUR), (RoleId(100), Period(0))]
+    )
+
+
 def vault_reads(ctx: Web3Context, vault: PlasmaVault) -> None:
     ensure_supported_chain(ETHEREUM)
     data = fetch_vault_data(ctx, vault.address, block=1, lending=False)

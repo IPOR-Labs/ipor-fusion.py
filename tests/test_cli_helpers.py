@@ -1896,9 +1896,9 @@ class TestFetchAavePositions:
     @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_drops_empty_breakdowns(self, mock_reader_cls):
         mock_reader = MagicMock()
-        mock_reader.read_position_breakdown.return_value = _aave_breakdown(
-            supply=0, variable_debt=0, stable_debt=0
-        )
+        mock_reader.read_position_breakdowns.return_value = [
+            _aave_breakdown(supply=0, variable_debt=0, stable_debt=0)
+        ]
         mock_reader_cls.return_value = mock_reader
 
         with ThreadPoolExecutor() as pool:
@@ -1914,7 +1914,7 @@ class TestFetchAavePositions:
     @patch("ipor_fusion.vault_positions.AaveV3Reader")
     def test_returns_breakdowns_for_active_positions(self, mock_reader_cls):
         mock_reader = MagicMock()
-        mock_reader.read_position_breakdown.return_value = _aave_breakdown(supply=42)
+        mock_reader.read_position_breakdowns.return_value = [_aave_breakdown(supply=42)]
         mock_reader_cls.return_value = mock_reader
 
         with ThreadPoolExecutor() as pool:
@@ -1933,8 +1933,8 @@ class TestFetchAavePositions:
         breakdown comes from that market's Pool, never another market's."""
         supply_in_pool = {pool: i for i, pool in enumerate(_AAVE_POOLS.values(), 1)}
         mock_reader_cls.side_effect = lambda aave_pool: MagicMock(
-            read_position_breakdown=MagicMock(
-                return_value=_aave_breakdown(supply=supply_in_pool[aave_pool])
+            read_position_breakdowns=MagicMock(
+                return_value=[_aave_breakdown(supply=supply_in_pool[aave_pool])]
             )
         )
 
@@ -1956,24 +1956,20 @@ class TestFetchAavePositions:
 class TestFetchMorphoPositions:
     @patch("ipor_fusion.vault_positions.MorphoReader")
     def test_returns_none_when_no_morpho_substrates(self, _mock_reader_cls):
-        with ThreadPoolExecutor() as pool:
-            result = _fetch_morpho_positions(MagicMock(), pool, _VAULT_ADDR, {}, [])
+        result = _fetch_morpho_positions(MagicMock(), _VAULT_ADDR, {}, [])
         assert result is None
 
     @patch("ipor_fusion.vault_positions.MorphoReader")
     def test_returns_breakdowns_for_morpho_substrates(self, mock_reader_cls):
         mock_reader = MagicMock()
-        mock_reader.read_position_breakdown.return_value = _morpho_breakdown()
+        mock_reader.read_position_breakdowns.return_value = [_morpho_breakdown()]
         mock_reader_cls.return_value = mock_reader
 
         ctx = MagicMock()
         ctx.chain_id = 42161
         morpho_sub = bytes.fromhex("ab" * 32)
-        with ThreadPoolExecutor() as pool:
-            unread: list[str] = []
-            result = _fetch_morpho_positions(
-                ctx, pool, _VAULT_ADDR, {14: [morpho_sub]}, unread
-            )
+        unread: list[str] = []
+        result = _fetch_morpho_positions(ctx, _VAULT_ADDR, {14: [morpho_sub]}, unread)
         assert result == {14: [_morpho_breakdown()]}
         assert unread == []
         # Arbitrum has its own Morpho deployment — never the Ethereum address.
@@ -1981,23 +1977,38 @@ class TestFetchMorphoPositions:
 
     @patch("ipor_fusion.vault_positions.MorphoReader")
     def test_a_failed_substrate_is_named_and_the_rest_kept(self, mock_reader_cls):
-        good, bad = bytes.fromhex("ab" * 32), bytes.fromhex("cd" * 32)
-
-        def read(_ctx, market_id, _vault):
-            if market_id.endswith("cd" * 32):
-                raise Web3RPCError("rate limited")
-            return _morpho_breakdown()
-
-        mock_reader_cls.return_value.read_position_breakdown.side_effect = read
+        good, bad, other = (bytes.fromhex(h * 32) for h in ("ab", "cd", "ef"))
+        mock_reader_cls.return_value.read_position_breakdowns.return_value = [
+            _morpho_breakdown(),
+            None,
+            _morpho_breakdown(),
+        ]
         ctx = MagicMock()
         ctx.chain_id = 42161
         unread: list[str] = []
-        with ThreadPoolExecutor() as pool:
-            result = _fetch_morpho_positions(
-                ctx, pool, _VAULT_ADDR, {14: [good, bad]}, unread
-            )
-        assert result == {14: [_morpho_breakdown()]}
+        result = _fetch_morpho_positions(
+            ctx, _VAULT_ADDR, {14: [good, bad, other]}, unread
+        )
+        assert result == {14: [_morpho_breakdown(), _morpho_breakdown()]}
         assert unread == [f"Morpho position in market 0x{'cd' * 32}"]
+        # One batch for every substrate, in order.
+        (_ctx, market_ids, _vault), _ = (
+            mock_reader_cls.return_value.read_position_breakdowns.call_args
+        )
+        assert market_ids == [f"0x{h * 32}" for h in ("ab", "cd", "ef")]
+
+    @patch("ipor_fusion.vault_positions.MorphoReader")
+    def test_a_transport_error_leaves_every_substrate_unread(self, mock_reader_cls):
+        mock_reader_cls.return_value.read_position_breakdowns.side_effect = (
+            Web3RPCError("rate limited")
+        )
+        ctx = MagicMock()
+        ctx.chain_id = 42161
+        unread: list[str] = []
+        subs = [bytes.fromhex("ab" * 32), bytes.fromhex("cd" * 32)]
+        result = _fetch_morpho_positions(ctx, _VAULT_ADDR, {14: subs}, unread)
+        assert result is None
+        assert unread == [f"Morpho position in market 0x{h * 32}" for h in ("ab", "cd")]
 
 
 class TestBreakdownTokenPrices:

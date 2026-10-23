@@ -1,5 +1,6 @@
 from ipor_fusion.core.access import (
     AccessManager,
+    CallPermission,
     RoleAccount,
     RoleAccountJson,
     RoleAccountsJson,
@@ -9,6 +10,7 @@ from ipor_fusion.core.access import (
     role_account_sort_key,
 )
 from ipor_fusion.core.context import InFlightLimit, Web3Context
+from ipor_fusion.core.context_manager import ContextManager
 from ipor_fusion.core.contract import (
     Call,
 )
@@ -84,6 +86,7 @@ from ipor_fusion.core.withdraw_manager import (
 __all__ = [
     "Web3Context",
     "InFlightLimit",
+    "ContextManager",
     "Multicall3",
     "Multicall3Batch",
     "BatchValue",
@@ -92,6 +95,7 @@ __all__ = [
     "AccessManager",
     "RoleAccount",
     "RoleAccountJson",
+    "CallPermission",
     "RoleStatus",
     "RewardsManager",
     "VestingData",

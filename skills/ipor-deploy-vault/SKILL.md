@@ -204,22 +204,32 @@ Notes on the walk:
 so you recognise and avoid it. Verify against `ipor-abi` before use; the
 registry is the source of truth and is regenerated on release.
 
-| Chain | Chain id | `IporFusionFactoryProxy` (use) | `IporFusionFactoryImpl` (reverts) | Verified |
-|---|---|---|---|---|
-| Ethereum | 1 | `0xcd05909C4A1F8E501e4ED554cEF4Ed5E48D9b852` | `0xf19C1E9f6616F6056AF1e322A86fDaAaAf0263f5` | implementation slot |
-| Unichain | 130 | `0xC9b4E839e86284C558791C13Bda97999fc49aF63` | `0xf5Bc40C192D51ED93ADD6557884766772FA72589` | implementation slot |
-| TAC | 239 | `0x26b5561E2E0e7d7977431E92740903Ef3cB7194b` | `0x7DDd0bBB59eFB4b7791cE5E1Cf1587F083aE4Ef5` | implementation slot |
-| Botanix | 3637 | `0x7c9857f22D0cc6523C8e88BFDCbf411AB8300fF5` | `0xddb0EFB2a7a5C02e01b5A1f85C0a1110d68EeC26` | registry only |
-| Base | 8453 | `0x1455717668fA96534f675856347A973fA907e922` | `0x610152A79BE7F2Aa3aA70520c9331c18fe8D33b7` | clone executed on a fork |
-| Plasma | 9745 | `0x70d41759FBF90fB63c88197217cB08F93a1c65CB` | `0x3A42bD6fEa94421025Ae2ed01CE6f137ac785abD` | implementation slot |
-| Arbitrum | 42161 | `0x134fCAce7a2C7Ef3dF2479B62f03ddabAEa922d5` | `0x87f94ac9aF79261F0BC73582114f805F55Cd0b25` | clone executed on a fork |
-| Avalanche | 43114 | `0xa00b6379833D77fA9C9497b32dae00dF39Ac751e` | `0x399596cFccFEbBb60f8652bece8586a6Bb4199ab` | implementation slot |
-| Ink | 57073 | `0xEC53f69Bd1D991a2F99e96DE66E81D0E42A61D8D` | `0xe7372BC46b79e0c87AfE5286c41c20687018E425` | implementation slot |
-| Katana | 747474 | `0xc29b8D591d6a3f109Ca7ba384F2e00162866D37B` | `0x4a4De6e86AD0d0546F55B595cA75f55803D940bA` | registry only |
+| Chain | Chain id | `IporFusionFactoryProxy` (use) | `IporFusionFactoryImpl` (reverts) | Vault tooling | Verified |
+|---|---|---|---|---|---|
+| Ethereum | 1 | `0xcd05909C4A1F8E501e4ED554cEF4Ed5E48D9b852` | `0x14d120C365Debd920eaDf0a7AC31e659Bc58217b` | validated | implementation slot |
+| Flare | 14 | `0xE75F3565D67645775351A9886F2b598f07d1860B` | `0x6C1ff6eBf5e92Dbc5591E7cCF455829De9C46579` | factory only | implementation slot |
+| Unichain | 130 | `0xC9b4E839e86284C558791C13Bda97999fc49aF63` | `0x73c7CA802403BB21e9608C937c556C04d5eeBAD6` | validated | implementation slot |
+| Monad | 143 | `0x62DFfe8bCaaf7960f858a4f7dDC83cc98F04cEDC` | `0x1017f0032460B3c8FBB92Bfd350F708Ff6229137` | validated | implementation slot |
+| TAC | 239 | `0x26b5561E2E0e7d7977431E92740903Ef3cB7194b` | `0x7DDd0bBB59eFB4b7791cE5E1Cf1587F083aE4Ef5` | factory only | implementation slot |
+| HyperEVM | 999 | `0x6bBc827F34b4e862d15215ABd4AC0E3886181665` | `0x010430cbdE2Bb8ACC48D7aDfbEb99812E83f1156` | validated | implementation slot |
+| Botanix | 3637 | `0x7c9857f22D0cc6523C8e88BFDCbf411AB8300fF5` | `0xddb0EFB2a7a5C02e01b5A1f85C0a1110d68EeC26` | factory only | registry only |
+| Robinhood | 4663 | `0xDF7A590b60072476E355A8EfF33e4872440bDc7C` | `0x9d897beA78F8747d8f9C45d5734089ca7225AE90` | validated | implementation slot |
+| Base | 8453 | `0x1455717668fA96534f675856347A973fA907e922` | `0x378fEb2E96082FB965E2BB922AEE484d07c14014` | validated | implementation slot |
+| Plasma | 9745 | `0x70d41759FBF90fB63c88197217cB08F93a1c65CB` | `0x346DA190c60d6101B77DA613a252c7aE25A7a120` | validated | implementation slot |
+| Arbitrum | 42161 | `0x134fCAce7a2C7Ef3dF2479B62f03ddabAEa922d5` | `0x86C8Ea8800EB6bc8C846c3e0230178520a0ED721` | validated | implementation slot |
+| Avalanche | 43114 | `0xa00b6379833D77fA9C9497b32dae00dF39Ac751e` | `0x0f358Bb3d14AB911dBfAF4d9061097e7F5Cf123F` | validated | implementation slot |
+| Ink | 57073 | `0xEC53f69Bd1D991a2F99e96DE66E81D0E42A61D8D` | `0xEF774B9767cC9FC813A2b595BE870A13D5B367C0` | validated | implementation slot |
+| Katana | 747474 | `0xc29b8D591d6a3f109Ca7ba384F2e00162866D37B` | `0x4a4De6e86AD0d0546F55B595cA75f55803D940bA` | validated | implementation slot |
 
-"Implementation slot" means the proxy's EIP-1967 implementation slot was read
-and matches the registry's `IporFusionFactoryImpl`; "registry only" means the
-pair was taken from `ipor-abi` without an on-chain read.
+A deployed factory is not the same as supported tooling. "Validated" chains are
+`SUPPORTED_CHAIN_IDS` (`ipor_fusion.chains`): `fusion vault info`/`validate`
+and `fetch_vault_data` run there. On a "factory only" chain `clone()` works,
+but the vault tooling raises `UnsupportedChainError` until the chain is
+validated. "Implementation slot" means the proxy's EIP-1967 implementation
+slot was read on chain and matches the registry's `IporFusionFactoryImpl`;
+"registry only" means the pair comes from `ipor-abi` without an on-chain read.
+The factory implementations are upgraded in place, so the implementation
+column changes with releases while the proxy stays.
 
 Fuse addresses are not in the SDK. Resolve them by registry name and chain
 in `ipor-abi` (`SupplyFuseAaveV3`, `BalanceFuseAaveV3`, ...), or with the

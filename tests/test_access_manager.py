@@ -11,10 +11,12 @@ from web3.exceptions import ContractLogicError
 # Top-level imports on purpose — they also exercise the __init__ exports.
 from ipor_fusion import (
     AccessManager,
+    CallPermission,
     ContractNotFoundError,
     NotPlasmaVaultError,
     OwnerNotFoundError,
     RoleAccount,
+    parse_access_manager_address,
     resolve_access_manager,
     role_account_sort_key,
 )
@@ -255,3 +257,47 @@ class TestResolveAccessManager:
 
         assert isinstance(manager, AccessManager)
         assert manager.address == MANAGER_ADDR
+
+
+SELECTOR = bytes.fromhex("6e553f65")  # deposit(uint256,address)
+
+
+class TestPermissionReads:
+    manager = AccessManager(parse_access_manager_address(MANAGER_ADDR))
+
+    def test_can_call_encodes_and_decodes(self):
+        call = self.manager.can_call(ALICE, VAULT_ADDR, SELECTOR)
+
+        selector = Web3.keccak(text="canCall(address,address,bytes4)")[:4]
+        assert call.calldata == selector + encode(
+            ["address", "address", "bytes4"], [ALICE, VAULT_ADDR, SELECTOR]
+        )
+        assert call.decode(encode(["bool", "uint32"], [True, 0])) == CallPermission(
+            immediate=True, delay=Period(0)
+        )
+
+    @pytest.mark.parametrize(
+        ("immediate", "delay", "allowed"),
+        [(True, 0, True), (False, 3600, True), (False, 0, False)],
+    )
+    def test_allowed_covers_scheduled_calls(self, immediate, delay, allowed):
+        permission = self.manager.can_call(ALICE, VAULT_ADDR, SELECTOR).decode(
+            encode(["bool", "uint32"], [immediate, delay])
+        )
+
+        assert permission.delay == delay
+        assert permission.allowed is allowed
+
+    def test_is_target_closed(self):
+        call = self.manager.is_target_closed(VAULT_ADDR)
+
+        assert call.calldata[:4] == Web3.keccak(text="isTargetClosed(address)")[:4]
+        assert call.decode(encode(["bool"], [True])) is True
+
+    def test_get_account_lock_time(self):
+        call = self.manager.get_account_lock_time(ALICE)
+
+        assert call.calldata == Web3.keccak(text="getAccountLockTime(address)")[
+            :4
+        ] + encode(["address"], [ALICE])
+        assert call.decode(encode(["uint256"], [1_700_000_000])) == 1_700_000_000

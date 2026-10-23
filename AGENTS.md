@@ -269,7 +269,7 @@ the lifecycle matrix follows that.
   TypedDict's `__optional_keys__` is right at run time.
   None of them imports `cli/` (`tests/test_sdk_layering.py`)
 - `config/roles.py` — `Roles` IntEnum
-- `core/` — `context` (`Web3Context`), `contract` (`Call`, `ContractWrapper`),
+- `core/` — `context` (`Web3Context`), `context_manager` (`ContextManager`), `contract` (`Call`, `ContractWrapper`),
   `multicall` (`Multicall3`), `logs` (`get_logs_adaptive`: every event scan pages
   `eth_getLogs` within the provider's caps from the contract's creation block, within a
   time and request budget, and raises `LogScanError` rather than return partial logs;
@@ -419,7 +419,9 @@ or examples.
   round re-resolves it. Labels only name calls in `result.calls` and failures.
   Integration tests and examples use it instead of a local node.
 - Amounts are raw on-chain integers; `types.py` `NewType`s (`Amount`, `Shares`,
-  `MarketId`, ...) name the unit, and nothing scales by decimals.
+  `MarketId`, ...) name the unit, and nothing scales by decimals except the exact
+  boundary converters `parse_amount` / `format_amount` (and the `*_shares` pair):
+  decimal text in, raw integer out, no float ever.
 - Three address roles are nominal: `PlasmaVaultAddress`, `FuseAddress` and
   `AccessManagerAddress` (NewTypes of `ChecksumAddress`). Their wrappers, getters and
   records return them, so a vault, a fuse and an access manager cannot be passed for

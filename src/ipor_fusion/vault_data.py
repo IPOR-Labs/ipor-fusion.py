@@ -572,12 +572,17 @@ def _fetch_lending_reads(
         ),
     )
     morpho_unread: list[str] = []
-    morpho_positions = _fetch_morpho_positions(
-        ctx, pool, vault_addr, markets.market_substrates, morpho_unread
+    f_morpho = pool.submit(
+        _fetch_morpho_positions,
+        ctx,
+        vault_addr,
+        markets.market_substrates,
+        morpho_unread,
     )
     aave_positions = _fetch_aave_positions(
         ctx, pool, vault_addr, markets.aave_pools, markets.market_substrates
     )
+    morpho_positions = f_morpho.result()
     lending_health = f_health.result()
     return _LendingReads(
         lending_health=lending_health,

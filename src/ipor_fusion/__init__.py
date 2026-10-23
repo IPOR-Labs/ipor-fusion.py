@@ -26,6 +26,7 @@ from ipor_fusion.chains import (
 from ipor_fusion.config.roles import Roles
 from ipor_fusion.core.access import (
     AccessManager,
+    CallPermission,
     RoleAccount,
     RoleAccountJson,
     RoleAccountsJson,
@@ -35,6 +36,7 @@ from ipor_fusion.core.access import (
     role_account_sort_key,
 )
 from ipor_fusion.core.context import InFlightLimit, Web3Context
+from ipor_fusion.core.context_manager import ContextManager
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.external_state_executor import (
@@ -333,11 +335,15 @@ from ipor_fusion.types import (
     TxHash,
     Verdict,
     Wad,
+    format_amount,
+    format_shares,
     parse_access_manager_address,
+    parse_amount,
     parse_fuse_address,
     parse_hex_address,
     parse_morpho_market_id,
     parse_plasma_vault_address,
+    parse_shares,
     parse_tx_hash,
 )
 from ipor_fusion.validation import (
@@ -444,6 +450,7 @@ __all__ = [
     "repository_url",
     "Web3Context",
     "InFlightLimit",
+    "ContextManager",
     "Call",
     "get_logs_adaptive",
     "find_creation_block",
@@ -465,6 +472,7 @@ __all__ = [
     "AccessManager",
     "RoleAccount",
     "RoleAccountJson",
+    "CallPermission",
     "RoleStatus",
     "resolve_access_manager",
     "role_account_sort_key",
@@ -617,6 +625,10 @@ __all__ = [
     "parse_plasma_vault_address",
     "parse_morpho_market_id",
     "parse_tx_hash",
+    "parse_amount",
+    "parse_shares",
+    "format_amount",
+    "format_shares",
     "Price",
     "Period",
     "MAX_UINT256",
