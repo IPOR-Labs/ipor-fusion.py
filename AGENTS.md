@@ -154,6 +154,15 @@ the lifecycle matrix follows that.
   `commit-lint.yml` fails a PR whose commit subjects or title break it. Never
   hand-bump `project.version`; the release workflow stamps it and re-locks
   `uv.lock`.
+- Preview features (`ipor_fusion.crosschain` with its subpackages, and
+  `ipor_fusion.hypercore`) keep no backward compatibility: they follow the
+  current official contracts only, and support for retired deployments (the
+  pilot executors and factories, canaries) is removed rather than kept beside
+  them. From 4.1 on, a breaking change confined to them ships as `feat`/`fix`
+  without `!` or a `BREAKING CHANGE:` footer, so it never forces a major
+  release; anything it changes outside those packages (the top level, the
+  `vault info` document, the CLI and MCP) is still breaking by the usual rules.
+  4.0 itself keeps its MIGRATION_4.md entries for them, for 3.x users.
 - This repository is public, and commit messages also ship in `CHANGELOG.md`
   inside the wheel. No issue-tracker keys (`IL-` plus a number), internal hosts,
   dashboard links or private repository names in commits, branch names, PR
@@ -207,7 +216,8 @@ the lifecycle matrix follows that.
   path. Adding or removing a
   name updates the snapshots in `tests/test_public_api.py` (every `__all__`, and
   the names each public module keeps by path); moving a name out of a public
-  module leaves a re-export there. A removal or rename is a breaking change.
+  module leaves a re-export there. A removal or rename is a breaking change,
+  except inside a preview package (see Conventions).
   A project type used in a public signature or field is exported too
   (`tests/test_public_type_reachability.py`). The package is `py.typed`, so public APIs stay fully
   annotated.

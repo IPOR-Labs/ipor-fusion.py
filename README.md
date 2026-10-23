@@ -369,7 +369,8 @@ release; adding one does not.
 - **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`) export only
   from their own subpackages, `ipor_fusion.crosschain` (with `crosschain.fuses`,
   `crosschain.ccip` and `crosschain.stargate`) and `ipor_fusion.hypercore`, never
-  from the top level, and may change in a minor release. Their exception classes
+  from the top level, and keep no backward compatibility: a minor release may
+  change or remove them (see [Preview features](#preview-features-ipor_fusioncrosschain-ipor_fusionhypercore)). Their exception classes
   stay in `ipor_fusion.errors`, and the `vault info` document's HyperCore blocks
   (`HyperCoreJson`, ...) stay with the document.
 - **Third-party types** are not re-exported: import `ChecksumAddress` and
@@ -439,7 +440,10 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 ### Preview features (`ipor_fusion.crosschain`, `ipor_fusion.hypercore`)
 
 Not production (see the note at the top) and outside the stable top level:
-import these from their subpackage, and expect changes in a minor release.
+import these from their subpackage. They track the current official contracts
+only, with no backward compatibility: from 4.1 on, a minor release may change or
+remove any of these names and drops support for retired deployments (such as
+the pilot executors and factories). Pin an exact version if you depend on them.
 
 | Name | Purpose |
 |------|---------|
