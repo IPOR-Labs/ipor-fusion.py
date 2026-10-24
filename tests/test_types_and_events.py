@@ -156,9 +156,20 @@ class TestChecksumParsers:
         assert parser(checksum) == checksum
         assert parser(bytes.fromhex(self.LOWER[2:])) == checksum
         assert parser("0X" + self.LOWER[2:]) == checksum
+        assert parser("0x" + self.LOWER[2:].upper()) == checksum
+        assert parser("0X" + checksum[2:]) == checksum
         for bad in ("0x1234", " " + self.LOWER):
             with pytest.raises(ValueError):
                 parser(bad)
+        i = next(i for i, c in enumerate(checksum) if c in "abcdefABCDEF")
+        miscased = checksum[:i] + checksum[i].swapcase() + checksum[i + 1 :]
+        with pytest.raises(ValueError, match="invalid address checksum"):
+            parser(miscased)
+        # Two characters swapped: a different address that looks right.
+        swapped = checksum[:2] + checksum[3] + checksum[2] + checksum[4:]
+        assert swapped[2:4] != checksum[2:4]
+        with pytest.raises(ValueError, match="invalid address checksum"):
+            parser(swapped)
 
 
 class TestAmountText:
