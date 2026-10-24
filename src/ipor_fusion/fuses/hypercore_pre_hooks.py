@@ -9,12 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector, to_checksum_address
+from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.fuses.base import _validate_not_zero_address
-from ipor_fusion.types import parse_hex_address
+from ipor_fusion.types import parse_checksum_address
 
 
 def _selectors(*signatures: str) -> tuple[bytes, ...]:
@@ -64,7 +64,7 @@ class HyperCorePreHookWiring:
         for name in ("capital_flow_hook", "pending_action_hook"):
             value = getattr(self, name)
             try:
-                hook = to_checksum_address(parse_hex_address(value))
+                hook = parse_checksum_address(value)
             except (ValueError, TypeError) as exc:
                 raise ValueError(f"{name} is not an address: {value!r}") from exc
             _validate_not_zero_address(hook, name)
