@@ -97,9 +97,10 @@ PERP_ASSET_INFO_PRECOMPILE = _precompile(0x80A)
 TOKEN_INFO_PRECOMPILE = _precompile(0x80C)
 ACCOUNT_MARGIN_SUMMARY_PRECOMPILE = _precompile(0x80F)
 CORE_USER_EXISTS_PRECOMPILE = _precompile(0x810)
-#: ``position2``: the position read that addresses HIP-3 read indexes above
-#: 65535; the legacy ``0x800`` cannot, so the fuses never use it.
-POSITION_PRECOMPILE = _precompile(0x813)
+#: ``position2``: same layout as ``position`` (``0x800``), which reads indexes up
+#: to 65535; ``position2`` also reads the HIP-3 ones above. The fuses read
+#: ``0x800`` for native perp assets and this one for HIP-3.
+POSITION2_PRECOMPILE = _precompile(0x813)
 
 #: The order ``HyperCoreValuationLib`` sums the enabled HIP-3 dexes in.
 HIP3_VALUATION_ORDER = (1, 6, 8, 9, 10)
@@ -293,7 +294,7 @@ class HyperCoreReader:
     ) -> Call[HyperCorePosition]:
         _validate_uint(read_index, 32, "read_index")
         return self._read(
-            POSITION_PRECOMPILE,
+            POSITION2_PRECOMPILE,
             ["address", "uint32"],
             [user, read_index],
             ["int64", "uint64", "int64", "uint32", "bool"],

@@ -37,7 +37,7 @@ from ipor_fusion.readers.hypercore import (
     L1_BLOCK_NUMBER_PRECOMPILE,
     PENDING_STATE_TYPE,
     PERP_ASSET_INFO_PRECOMPILE,
-    POSITION_PRECOMPILE,
+    POSITION2_PRECOMPILE,
     SPOT_BALANCE_PRECOMPILE,
     TOKEN_INFO_PRECOMPILE,
     HyperCoreVaultState,
@@ -98,7 +98,7 @@ class TestPrecompileCalls:
         assert self.reader.l1_block_number().data == b""
         assert self.reader.l1_block_number().to == L1_BLOCK_NUMBER_PRECOMPILE
         assert self.reader.core_user_exists(VAULT).to == CORE_USER_EXISTS_PRECOMPILE
-        assert self.reader.position(VAULT, 10_002).to == POSITION_PRECOMPILE
+        assert self.reader.position(VAULT, 10_002).to == POSITION2_PRECOMPILE
         assert self.reader.account_margin_summary(1, VAULT).data == encode(
             ["uint32", "address"], [1, VAULT]
         )
