@@ -8,8 +8,6 @@ with no backward compatibility, which is why they live here rather than in
 """
 
 from ipor_fusion.fuses.hypercore import (
-    HYPERCORE_CAPITAL_FLOW_SELECTORS,
-    HYPERCORE_PENDING_ACTION_SELECTORS,
     RESERVED_HYPERCORE_CONFIG_KEYS,
     SPOT_DEX,
     USDC_SYSTEM_ADDRESS,
@@ -20,7 +18,6 @@ from ipor_fusion.fuses.hypercore import (
     HyperCoreDepositFuse,
     HyperCoreMarginFuse,
     HyperCoreOrderFuse,
-    HyperCorePreHookWiring,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
     TimeInForce,
@@ -62,6 +59,11 @@ from ipor_fusion.fuses.hypercore_event_decoding import (
     find_hypercore_events,
     hypercore_event_name,
     hypercore_events,
+)
+from ipor_fusion.fuses.hypercore_pre_hooks import (
+    HYPERCORE_CAPITAL_FLOW_SELECTORS,
+    HYPERCORE_PENDING_ACTION_SELECTORS,
+    HyperCorePreHookWiring,
 )
 from ipor_fusion.readers.hypercore import (
     HYPERCORE_MARKET,

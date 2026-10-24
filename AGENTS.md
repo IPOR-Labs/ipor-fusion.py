@@ -281,7 +281,8 @@ checkout's default profile), the pending reader included.
   `hypercore_event_decoding.py` (the ExternalState and HyperCore event specs, classes
   and decoders; internal modules, the ExternalState names are exported from
   `ipor_fusion.fuses`, the HyperCore ones from `ipor_fusion.hypercore`), `hypercore.py`
-  (the HyperCore fuses, market 55, and their pre-hook wiring);
+  (the HyperCore fuses, market 55), `hypercore_pre_hooks.py` (the `PlasmaVault` call
+  that wires their pre-hooks);
   `base.py` re-exports the `core/fuse.py` base and validators,
   `FuseAction` and `ZERO_ADDRESS` (from `types`). A fuse is a value: equality and
   hash cover its class and every attribute it stores
