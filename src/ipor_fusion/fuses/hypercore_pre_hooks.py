@@ -66,7 +66,9 @@ class HyperCorePreHookWiring:
             try:
                 hook = parse_checksum_address(value)
             except (ValueError, TypeError) as exc:
-                raise ValueError(f"{name} is not an address: {value!r}") from exc
+                raise ValueError(
+                    f"{name} is not an address: {value!r} ({exc})"
+                ) from exc
             _validate_not_zero_address(hook, name)
             object.__setattr__(self, name, hook)
         if self.capital_flow_hook == self.pending_action_hook:

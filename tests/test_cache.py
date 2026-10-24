@@ -23,7 +23,7 @@ from ipor_fusion.types import ChainId, parse_plasma_vault_address, parse_tx_hash
 
 ETHEREUM = ChainId(1)
 BASE = ChainId(8453)
-CHECKSUM = "0xAbCdEf0123456789aBcDeF0123456789AbCdEf01"
+CHECKSUM = "0xabCDeF0123456789AbcdEf0123456789aBCDEF01"
 LOWER = CHECKSUM.lower()
 VAULT = parse_plasma_vault_address(CHECKSUM)
 

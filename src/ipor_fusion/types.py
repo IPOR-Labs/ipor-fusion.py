@@ -187,10 +187,20 @@ def parse_tx_hash(value: str | bytes) -> TxHash:
 
 
 def parse_checksum_address(value: str | bytes) -> ChecksumAddress:
-    """An address, checksummed from 20 raw bytes or ``0x``/``0X`` and 40 hex
-    digits in any case; raises ``ValueError`` on anything else, surrounding
+    """The EIP-55 checksummed form of ``value``: 20 raw bytes, or ``0x``/``0X``
+    and 40 hex digits that are all lowercase, all uppercase or correctly
+    checksummed. Raises ``ValueError`` on anything else, surrounding
     whitespace included."""
-    return to_checksum_address("0x" + _hex_digits(value, 20, "address"))
+    address = to_checksum_address("0x" + _hex_digits(value, 20, "address"))
+    if isinstance(value, str):
+        digits = value[2:]
+        # Mixed case is an EIP-55 checksum, which catches a mistyped address.
+        if digits not in (digits.lower(), digits.upper(), address[2:]):
+            raise ValueError(
+                "invalid address checksum, a character is mistyped or miscased: "
+                f"{value!r}"
+            )
+    return address
 
 
 def parse_plasma_vault_address(value: str | bytes) -> PlasmaVaultAddress:

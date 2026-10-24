@@ -761,7 +761,7 @@ label values; they do not validate byte widths or address spelling.
 | `RoleId` | a `Roles` member (accepted as is), or `RoleId(n)`; `Roles.resolve(name)` returns one |
 | `Decimals`, `Period`, `Amount`, `Shares`, ... | `Decimals(8)`, `Period(0)`, `Amount(n)`, `Shares(n)` |
 | `Wad` | `Wad(6 * 10**17)` (60%): an 18-decimal fraction, `10**18` is 100% |
-| `ChecksumAddress` | `Web3.to_checksum_address(value)` |
+| `ChecksumAddress` | `Web3.to_checksum_address(value)`, or from 4.1 `parse_checksum_address(value)`, which also rejects a wrong EIP-55 checksum |
 | `HexAddress` | any `ChecksumAddress`, or `parse_hex_address(value)` (20 bytes or `0x`/`0X`-prefixed hex in any case → lowercase `0x` form) |
 | `MorphoBlueMarketId` | `parse_morpho_market_id(value)`: 32 bytes or hex in any spelling, always `0x` + 64 lowercase digits |
 | `TxHash` | `parse_tx_hash(value)` (32 bytes or `0x`/`0X`-prefixed hex in any case) |
@@ -775,6 +775,9 @@ The address and hash parsers (`parse_hex_address`, `parse_tx_hash`,
 `parse_plasma_vault_address`, `parse_fuse_address`, `parse_access_manager_address`)
 validate strictly: a string needs exactly one `0x`/`0X` prefix and the exact number of
 hex digits, with no surrounding whitespace; anything else raises `ValueError`.
+From 4.1 on, the checksumming ones (`parse_checksum_address` and the three role
+parsers) also reject a mixed-case address whose EIP-55 checksum is wrong; an
+all-lowercase or all-uppercase address carries no checksum and still parses.
 Normalize user input first (see [Start here](#start-here)).
 `parse_morpho_market_id` still accepts hex without `0x`.
 

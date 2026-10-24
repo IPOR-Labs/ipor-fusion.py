@@ -65,6 +65,9 @@ class TestHyperCorePreHookWiring:
             for bad in ("0xzz", "0x1234", TOKEN_A[2:], 5):
                 with pytest.raises(ValueError, match=f"{field} is not an address"):
                     wiring(field, bad)
+            miscased = TOKEN_A[:2] + TOKEN_A[2].swapcase() + TOKEN_A[3:]
+            with pytest.raises(ValueError, match=f"{field} .*invalid address checksum"):
+                wiring(field, miscased)
         for spelling in (TOKEN_A, TOKEN_A.lower(), "0X" + TOKEN_A[2:]):
             with pytest.raises(ValueError, match="must differ"):
                 wiring("pending_action_hook", spelling)
