@@ -1087,8 +1087,9 @@ class TestMarketMetaMorpho:
 
 
 class TestVaultAddressArgument:
-    """Tool callers send addresses as 3.x accepted them; the server normalizes
-    before the strict SDK parser."""
+    """Tool callers may pad an address with whitespace or omit its ``0x``; the
+    server normalizes that before the strict SDK parser, which decides letter
+    case."""
 
     VAULT = "0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2"
 
@@ -1098,17 +1099,27 @@ class TestVaultAddressArgument:
             VAULT,
             VAULT.upper().replace("0X", "0x"),
             VAULT[2:],
+            VAULT[2:].upper(),
             f"  {VAULT}  ",
             Web3.to_checksum_address(VAULT),
+            Web3.to_checksum_address(VAULT)[2:],
         ],
     )
-    def test_accepts_any_spelling(self, raw: str):
+    def test_accepts_padded_bare_or_single_case_spellings(self, raw: str):
         assert _vault_arg(raw) == Web3.to_checksum_address(self.VAULT)
 
     @pytest.mark.parametrize("raw", ["", "0x1234", "not an address", "0x" + "g" * 40])
     def test_rejects_non_addresses(self, raw: str):
         with pytest.raises(ValueError):
             _vault_arg(raw)
+
+    def test_rejects_a_wrong_checksum(self):
+        checksum = Web3.to_checksum_address(self.VAULT)
+        i = next(i for i, c in enumerate(checksum) if c in "abcdefABCDEF")
+        miscased = checksum[:i] + checksum[i].swapcase() + checksum[i + 1 :]
+        for raw in (miscased, "0X" + miscased[2:], miscased[2:]):
+            with pytest.raises(ValueError, match="invalid address checksum"):
+                _vault_arg(raw)
 
 
 class TestVaultAddressResolvesSavedChain:
