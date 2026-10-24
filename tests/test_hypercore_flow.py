@@ -22,7 +22,6 @@ from pathlib import Path
 
 import pytest
 from eth_abi import decode
-from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion import ERC20, AccessManager, PlasmaVault, decode_substrate
@@ -32,6 +31,7 @@ from ipor_fusion.hypercore import (
     HyperCoreConfigKey,
     HyperCoreDepositFuse,
     HyperCoreOrderFuse,
+    HyperCorePreHookWiring,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
     TimeInForce,
@@ -168,27 +168,17 @@ PENDING_ACTION_PRE_HOOK = Web3.to_checksum_address(
 CAPITAL_FLOW_PRE_HOOK = Web3.to_checksum_address(
     "0xc8efdb4f33b7112f6d68b0d864ded0badc4c9029"
 )
-PRE_HOOKS = [
-    ("execute((address,bytes)[])", PENDING_ACTION_PRE_HOOK),
-    ("updateMarketsBalances(uint256[])", PENDING_ACTION_PRE_HOOK),
-    ("deposit(uint256,address)", CAPITAL_FLOW_PRE_HOOK),
-    (
-        "depositWithPermit(uint256,address,uint256,uint8,bytes32,bytes32)",
-        CAPITAL_FLOW_PRE_HOOK,
-    ),
-    ("mint(uint256,address)", CAPITAL_FLOW_PRE_HOOK),
-    ("withdraw(uint256,address,address)", CAPITAL_FLOW_PRE_HOOK),
-    ("redeem(uint256,address,address)", CAPITAL_FLOW_PRE_HOOK),
-    ("redeemFromRequest(uint256,address,address)", CAPITAL_FLOW_PRE_HOOK),
-]
 
 
 def _set_pre_hooks() -> bytes:
-    return vault.set_pre_hook_implementations(
-        [function_signature_to_4byte_selector(sig) for sig, _hook in PRE_HOOKS],
-        [hook for _sig, hook in PRE_HOOKS],
-        [[] for _ in PRE_HOOKS],
-    ).calldata
+    return (
+        HyperCorePreHookWiring(
+            capital_flow_hook=CAPITAL_FLOW_PRE_HOOK,
+            pending_action_hook=PENDING_ACTION_PRE_HOOK,
+        )
+        .set_pre_hook_implementations(vault)
+        .calldata
+    )
 
 
 # nonce -> how the SDK expresses that transaction.

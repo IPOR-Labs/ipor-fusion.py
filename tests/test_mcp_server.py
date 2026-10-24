@@ -1100,6 +1100,7 @@ class TestVaultAddressArgument:
             VAULT[2:],
             f"  {VAULT}  ",
             Web3.to_checksum_address(VAULT),
+            Web3.to_checksum_address(VAULT)[2:],
         ],
     )
     def test_accepts_any_spelling(self, raw: str):
@@ -1109,6 +1110,14 @@ class TestVaultAddressArgument:
     def test_rejects_non_addresses(self, raw: str):
         with pytest.raises(ValueError):
             _vault_arg(raw)
+
+    def test_rejects_a_wrong_checksum(self):
+        checksum = Web3.to_checksum_address(self.VAULT)
+        i = next(i for i, c in enumerate(checksum) if c in "abcdefABCDEF")
+        miscased = checksum[:i] + checksum[i].swapcase() + checksum[i + 1 :]
+        for raw in (miscased, miscased[2:]):
+            with pytest.raises(ValueError, match="invalid address checksum"):
+                _vault_arg(raw)
 
 
 class TestVaultAddressResolvesSavedChain:

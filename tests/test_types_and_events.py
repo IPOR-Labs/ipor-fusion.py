@@ -133,18 +133,19 @@ class TestPositionEventAddresses:
         assert event.token_id == 1
 
 
-class TestRoleParsers:
+class TestChecksumParsers:
     LOWER = "0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2"
 
     @pytest.mark.parametrize(
         "parse",
         [
+            "parse_checksum_address",
             "parse_plasma_vault_address",
             "parse_fuse_address",
             "parse_access_manager_address",
         ],
     )
-    def test_role_parsers_checksum_and_validate(self, parse):
+    def test_checksum_and_validate(self, parse):
         from web3 import Web3
 
         import ipor_fusion
@@ -152,9 +153,23 @@ class TestRoleParsers:
         parser = getattr(ipor_fusion, parse)
         checksum = Web3.to_checksum_address(self.LOWER)
         assert parser(self.LOWER) == checksum
+        assert parser(checksum) == checksum
         assert parser(bytes.fromhex(self.LOWER[2:])) == checksum
-        with pytest.raises(ValueError):
-            parser("0x1234")
+        assert parser("0X" + self.LOWER[2:]) == checksum
+        assert parser("0x" + self.LOWER[2:].upper()) == checksum
+        assert parser("0X" + checksum[2:]) == checksum
+        for bad in ("0x1234", " " + self.LOWER):
+            with pytest.raises(ValueError):
+                parser(bad)
+        i = next(i for i, c in enumerate(checksum) if c in "abcdefABCDEF")
+        miscased = checksum[:i] + checksum[i].swapcase() + checksum[i + 1 :]
+        with pytest.raises(ValueError, match="invalid address checksum"):
+            parser(miscased)
+        # Two characters swapped: a different address that looks right.
+        swapped = checksum[:2] + checksum[3] + checksum[2] + checksum[4:]
+        assert swapped[2:4] != checksum[2:4]
+        with pytest.raises(ValueError, match="invalid address checksum"):
+            parser(swapped)
 
 
 class TestAmountText:
