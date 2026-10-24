@@ -133,18 +133,19 @@ class TestPositionEventAddresses:
         assert event.token_id == 1
 
 
-class TestRoleParsers:
+class TestChecksumParsers:
     LOWER = "0x43ee0243ea8cf02f7087d8b16c8d2007cc9c7ca2"
 
     @pytest.mark.parametrize(
         "parse",
         [
+            "parse_checksum_address",
             "parse_plasma_vault_address",
             "parse_fuse_address",
             "parse_access_manager_address",
         ],
     )
-    def test_role_parsers_checksum_and_validate(self, parse):
+    def test_checksum_and_validate(self, parse):
         from web3 import Web3
 
         import ipor_fusion
@@ -152,9 +153,12 @@ class TestRoleParsers:
         parser = getattr(ipor_fusion, parse)
         checksum = Web3.to_checksum_address(self.LOWER)
         assert parser(self.LOWER) == checksum
+        assert parser(checksum) == checksum
         assert parser(bytes.fromhex(self.LOWER[2:])) == checksum
-        with pytest.raises(ValueError):
-            parser("0x1234")
+        assert parser("0X" + self.LOWER[2:]) == checksum
+        for bad in ("0x1234", " " + self.LOWER):
+            with pytest.raises(ValueError):
+                parser(bad)
 
 
 class TestAmountText:
