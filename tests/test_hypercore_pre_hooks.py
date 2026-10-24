@@ -48,6 +48,7 @@ class TestHyperCorePreHookWiring:
         assert wiring.selectors == (
             HYPERCORE_PENDING_ACTION_SELECTORS + HYPERCORE_CAPITAL_FLOW_SELECTORS
         )
+        assert HyperCorePreHookWiring.selectors is wiring.selectors
         # Literal counts pin the contracts' 2 + 6 split; len() of the tuples
         # would silently track a change.
         assert wiring.implementations == (TOKEN_B,) * 2 + (TOKEN_A,) * 6

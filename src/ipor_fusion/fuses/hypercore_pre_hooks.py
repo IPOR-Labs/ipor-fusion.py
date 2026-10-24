@@ -7,6 +7,7 @@ Status: preview, not production. The contracts behind it are under active develo
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
@@ -55,6 +56,11 @@ class HyperCorePreHookWiring:
     nested call.
     """
 
+    #: The pending-action selectors, then the capital-flow ones.
+    selectors: ClassVar[tuple[bytes, ...]] = (
+        HYPERCORE_PENDING_ACTION_SELECTORS + HYPERCORE_CAPITAL_FLOW_SELECTORS
+    )
+
     capital_flow_hook: ChecksumAddress
     pending_action_hook: ChecksumAddress
 
@@ -65,11 +71,6 @@ class HyperCorePreHookWiring:
         # hook on all eight selectors would freeze the vault's flows.
         if self.capital_flow_hook.lower() == self.pending_action_hook.lower():
             raise ValueError("capital_flow_hook and pending_action_hook must differ")
-
-    @property
-    def selectors(self) -> tuple[bytes, ...]:
-        """The pending-action selectors, then the capital-flow ones."""
-        return HYPERCORE_PENDING_ACTION_SELECTORS + HYPERCORE_CAPITAL_FLOW_SELECTORS
 
     @property
     def implementations(self) -> tuple[ChecksumAddress, ...]:
