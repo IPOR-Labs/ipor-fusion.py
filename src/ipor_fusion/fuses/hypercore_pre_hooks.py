@@ -9,12 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector, to_checksum_address
+from eth_utils import function_signature_to_4byte_selector
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.fuses.base import _validate_not_zero_address
-from ipor_fusion.types import parse_hex_address
 
 
 def _selectors(*signatures: str) -> tuple[bytes, ...]:
@@ -59,17 +58,11 @@ class HyperCorePreHookWiring:
     pending_action_hook: ChecksumAddress
 
     def __post_init__(self) -> None:
-        # Parsed first, so the zero check and the comparison see every
-        # spelling of an address in one canonical form.
-        for name in ("capital_flow_hook", "pending_action_hook"):
-            value = getattr(self, name)
-            try:
-                hook = to_checksum_address(parse_hex_address(value))
-            except (ValueError, TypeError) as exc:
-                raise ValueError(f"{name} is not an address: {value!r}") from exc
-            _validate_not_zero_address(hook, name)
-            object.__setattr__(self, name, hook)
-        if self.capital_flow_hook == self.pending_action_hook:
+        _validate_not_zero_address(self.capital_flow_hook, "capital_flow_hook")
+        _validate_not_zero_address(self.pending_action_hook, "pending_action_hook")
+        # Case-insensitive: the annotation is not enforced at run time, and one
+        # hook on all eight selectors would freeze the vault's flows.
+        if self.capital_flow_hook.lower() == self.pending_action_hook.lower():
             raise ValueError("capital_flow_hook and pending_action_hook must differ")
 
     @property
