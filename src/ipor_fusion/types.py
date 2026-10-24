@@ -175,7 +175,7 @@ def parse_hex_address(value: str | bytes) -> HexAddress:
     """An address as ``0x`` and 40 lowercase hex digits, from 20 raw bytes or
     ``0x``-prefixed hex in any case; raises ``ValueError`` on anything else,
     surrounding whitespace included. For a checksummed
-    address use ``Web3.to_checksum_address``."""
+    address use `parse_checksum_address`."""
     return HexAddress(HexStr("0x" + _hex_digits(value, 20, "address")))
 
 
@@ -186,26 +186,29 @@ def parse_tx_hash(value: str | bytes) -> TxHash:
     return TxHash(HexStr("0x" + _hex_digits(value, 32, "transaction hash")))
 
 
-def _checksum(value: str | bytes) -> ChecksumAddress:
+def parse_checksum_address(value: str | bytes) -> ChecksumAddress:
+    """An address, checksummed from 20 raw bytes or ``0x``/``0X`` and 40 hex
+    digits in any case; raises ``ValueError`` on anything else, surrounding
+    whitespace included."""
     return to_checksum_address("0x" + _hex_digits(value, 20, "address"))
 
 
 def parse_plasma_vault_address(value: str | bytes) -> PlasmaVaultAddress:
-    """A Plasma Vault's address, checksummed from 20 raw bytes or ``0x``/``0X``
-    and 40 hex digits in any case; raises ``ValueError`` on anything else,
-    surrounding whitespace included. It labels the role and checks nothing on
-    chain."""
-    return PlasmaVaultAddress(_checksum(value))
+    """`parse_checksum_address`, labeled as a Plasma Vault's address. The label
+    checks nothing on chain."""
+    return PlasmaVaultAddress(parse_checksum_address(value))
 
 
 def parse_fuse_address(value: str | bytes) -> FuseAddress:
-    """A fuse's address, checksummed; see `parse_plasma_vault_address`."""
-    return FuseAddress(_checksum(value))
+    """`parse_checksum_address`, labeled as a fuse's address. The label checks
+    nothing on chain."""
+    return FuseAddress(parse_checksum_address(value))
 
 
 def parse_access_manager_address(value: str | bytes) -> AccessManagerAddress:
-    """An access manager's address, checksummed; see `parse_plasma_vault_address`."""
-    return AccessManagerAddress(_checksum(value))
+    """`parse_checksum_address`, labeled as an access manager's address. The
+    label checks nothing on chain."""
+    return AccessManagerAddress(parse_checksum_address(value))
 
 
 # ASCII digits only: ``\d`` would also take other scripts' digits, which int() reads.
