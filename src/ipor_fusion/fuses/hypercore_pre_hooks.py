@@ -44,7 +44,8 @@ class HyperCorePreHookWiring:
     Each hook reverts ``HyperCorePreHookWrongSelector`` under the other's
     selectors. A deposit or exit selector without the capital-flow hook runs no
     HyperCore code, so the action fuses refuse to open Core exposure. Neither
-    hook reads substrates. The hook addresses are per deployment (``ipor-abi``).
+    hook takes pre-hook substrates. The hook addresses are per deployment
+    (``ipor-abi``).
 
     The capital-flow hook refreshes the market through the vault's own
     ``updateMarketsBalances``: the vault must hold
