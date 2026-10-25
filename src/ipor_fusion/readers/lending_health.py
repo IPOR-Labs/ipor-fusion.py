@@ -1,4 +1,4 @@
-"""Lending health computation for Morpho Blue, Aave V3 and Aave V4 markets.
+"""Lending health computation for Morpho Blue, Aave V3, Aave V4 and Euler V2 markets.
 
 Provides a unified view of LTV, liquidation thresholds, and health factors
 for lending positions held by Plasma Vaults.
@@ -30,6 +30,11 @@ from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.aave_v4 import AaveV4OracleReader, AaveV4SpokeReader
+from ipor_fusion.readers.euler_v2 import (
+    EULER_USD_UNIT_OF_ACCOUNT,
+    EulerV2Substrate,
+    EulerV2VaultReader,
+)
 from ipor_fusion.readers.morpho import (
     MorphoReader,
     morpho_blue_address,
@@ -61,6 +66,7 @@ _READ_ERRORS = (
 
 WAD = 10**18
 RAY = 10**27
+BPS = 10_000
 ORACLE_PRICE_SCALE = 10**36
 
 # Aave V3 Core Pool per chain — the Pool of market AAVE_V3 only. Aave V3 Prime
@@ -109,6 +115,27 @@ AAVE_V4_MARKET_IDS = frozenset(
     }
 )
 
+# Market IDs served by the Euler V2 fuses. Health is account-level per
+# sub-account, read from the controller: the one borrowable vault it owes.
+EULER_V2_MARKET_IDS = frozenset(
+    {
+        IporFusionMarkets.EULER_V2,
+    }
+)
+
+# Markets whose fuses can borrow but whose health has no reader yet. Their
+# positions are listed as unreadable rather than left out: an unknown
+# liquidation risk is not a healthy one. Dolomite counts only when a
+# substrate grants borrowing.
+UNSUPPORTED_BORROW_MARKET_IDS = frozenset(
+    {
+        IporFusionMarkets.MOONWELL,
+        IporFusionMarkets.SILO_V2,
+        IporFusionMarkets.EBISU,
+    }
+)
+_UNSUPPORTED_REASON = "no lending health reader for this market"
+
 
 @dataclass(slots=True)
 class LendingMarketHealth:
@@ -118,6 +145,7 @@ class LendingMarketHealth:
     - Morpho: the morpho market id (`0x` + 64 lowercase hex) (one row per substrate).
     - Aave V3: None — Aave health is account-level, aggregated across reserves.
     - Aave V4: the Spoke address — account-level per Spoke, across its reserves.
+    - Euler V2: the sub-account address — account-level, across its collaterals.
     """
 
     protocol: str
@@ -409,6 +437,127 @@ def _compute_aave_v4_market_health(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _EulerV2Account:
+    """An EVC sub-account of the vault and the Euler vaults it may borrow from."""
+
+    sub_account: ChecksumAddress
+    borrow_vaults: tuple[ChecksumAddress, ...]
+
+
+def _compute_euler_v2_account_health(
+    ctx: Web3Context,
+    account: _EulerV2Account,
+    ipor_market_id: MarketId,
+    market_name: str,
+) -> LendingMarketHealth | UnreadableLendingMarket | None:
+    """Compute LTV health for one Euler V2 sub-account; None when it owes nothing.
+
+    Euler values each collateral at its liquidation LTV, so the market value
+    is recovered by dividing that LTV back out.
+    """
+    sub_account = account.sub_account
+    multicall = Multicall3(ctx)
+    try:
+        debts = multicall.aggregate(
+            [EulerV2VaultReader(v).debt_of(sub_account) for v in account.borrow_vaults]
+        )
+    except _READ_ERRORS as exc:
+        return UnreadableLendingMarket(
+            protocol="euler_v2",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason=_reason("debt", exc),
+            substrate_id=sub_account,
+        )
+    # A sub-account has at most one controller: the only vault it can owe.
+    controller = next(
+        (v for v, d in zip(account.borrow_vaults, debts, strict=True) if d > 0),
+        None,
+    )
+    if controller is None:
+        return None
+
+    reader = EulerV2VaultReader(controller)
+    try:
+        batch = multicall.batch()
+        liquidity_read = batch.add(reader.account_liquidity_full(sub_account))
+        unit_read = batch.add(reader.unit_of_account())
+        batch.run()
+        liquidity = liquidity_read.value
+        liquidation_ltvs = multicall.aggregate(
+            [reader.ltv_liquidation(c) for c in liquidity.collaterals]
+        )
+    except _READ_ERRORS as exc:
+        return UnreadableLendingMarket(
+            protocol="euler_v2",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason=_reason("account liquidity", exc),
+            substrate_id=sub_account,
+        )
+
+    adjusted = sum(liquidity.risk_adjusted_collateral_values)
+    collateral = sum(
+        value * BPS // ltv
+        for value, ltv in zip(
+            liquidity.risk_adjusted_collateral_values, liquidation_ltvs, strict=True
+        )
+        if ltv > 0
+    )
+    liability = liquidity.liability_value
+    current_ltv = liability / collateral if collateral > 0 else None
+    max_ltv = adjusted / collateral if collateral > 0 else 0.0
+    health_factor = adjusted / liability if liability > 0 else None
+    ltv_usage = liability / adjusted * 100 if adjusted > 0 else None
+    # The USD unit of account prices in 18 decimals; other units are not USD.
+    in_usd = unit_read.value == EULER_USD_UNIT_OF_ACCOUNT
+
+    return LendingMarketHealth(
+        protocol="euler_v2",
+        market_id=ipor_market_id,
+        market_name=market_name,
+        current_ltv=round(current_ltv, 6) if current_ltv is not None else None,
+        max_ltv=round(max_ltv, 6),
+        health_factor=round(health_factor, 4) if health_factor is not None else None,
+        total_collateral_usd=round(collateral / WAD, 2) if in_usd else None,
+        total_debt_usd=round(liability / WAD, 2) if in_usd else None,
+        ltv_usage_percent=round(ltv_usage, 2) if ltv_usage is not None else None,
+        substrate_id=sub_account,
+    )
+
+
+def _euler_v2_borrow_accounts(
+    substrates: list[bytes], vault: PlasmaVaultAddress
+) -> list[_EulerV2Account]:
+    """The vault's sub-accounts that may borrow, from its Euler V2 substrates."""
+    borrow_vaults: dict[ChecksumAddress, list[ChecksumAddress]] = {}
+    for raw in substrates:
+        substrate = EulerV2Substrate.from_bytes(raw)
+        if substrate.can_borrow:
+            borrow_vaults.setdefault(substrate.sub_account(vault), []).append(
+                substrate.euler_vault
+            )
+    return [
+        _EulerV2Account(sub_account, tuple(vaults))
+        for sub_account, vaults in borrow_vaults.items()
+    ]
+
+
+def _dolomite_can_borrow(substrate: bytes) -> bool:
+    """DolomiteFuseLib: asset<<96 | subAccountId<<88 | canBorrow<<80."""
+    return bool(int.from_bytes(substrate, "big") >> 80 & 0x01)
+
+
+def _can_borrow(market_id: MarketId, substrates: list[bytes]) -> bool:
+    """Whether a market without a health reader may hold a borrow position."""
+    if market_id in UNSUPPORTED_BORROW_MARKET_IDS:
+        return True
+    if market_id == IporFusionMarkets.DOLOMITE:
+        return any(_dolomite_can_borrow(sub) for sub in substrates)
+    return False
+
+
 def _aave_v4_spokes(substrates: list[bytes]) -> list[ChecksumAddress]:
     """Unique Spokes named by Aave V4 reserve substrates, in grant order."""
     spokes: dict[ChecksumAddress, None] = {}
@@ -424,25 +573,32 @@ class _LendingMarkets:
     morpho: list[tuple[MarketId, str, MorphoBlueMarketId]]
     aave_v3: list[tuple[MarketId, str, ChecksumAddress]]
     aave_v4: list[tuple[MarketId, str, ChecksumAddress]]
+    euler_v2: list[tuple[MarketId, str, _EulerV2Account]]
     unreadable: list[UnreadableLendingMarket]
 
 
 def _collect_lending_markets(
+    vault: PlasmaVaultAddress,
     balance_fuse_market_ids: list[MarketId],
     market_substrates: dict[MarketId, list[bytes]],
     aave_pools: dict[MarketId, ChecksumAddress],
 ) -> _LendingMarkets:
     """Pick the positions to read: Morpho substrates, Aave V3 markets with a Pool,
-    and the Spokes of Aave V4 markets."""
-    markets = _LendingMarkets(morpho=[], aave_v3=[], aave_v4=[], unreadable=[])
+    the Spokes of Aave V4 markets and the borrowing Euler V2 sub-accounts. A
+    market that may borrow but has no reader is listed as unreadable."""
+    markets = _LendingMarkets(
+        morpho=[], aave_v3=[], aave_v4=[], euler_v2=[], unreadable=[]
+    )
 
     for mid in balance_fuse_market_ids:
         name = market_name(mid)
+        substrates = market_substrates.get(mid, [])
         if mid in MORPHO_MARKET_IDS:
-            substrates = market_substrates.get(mid, [])
-            for sub in substrates:
-                if len(sub) == 32:
-                    markets.morpho.append((mid, name, parse_morpho_market_id(sub)))
+            markets.morpho.extend(
+                (mid, name, parse_morpho_market_id(sub))
+                for sub in substrates
+                if len(sub) == 32
+            )
         elif mid in AAVE_V3_MARKET_IDS:
             if aave_pool := aave_pools.get(mid):
                 markets.aave_v3.append((mid, name, aave_pool))
@@ -456,8 +612,23 @@ def _collect_lending_markets(
                     )
                 )
         elif mid in AAVE_V4_MARKET_IDS:
-            for spoke in _aave_v4_spokes(market_substrates.get(mid, [])):
-                markets.aave_v4.append((mid, name, spoke))
+            markets.aave_v4.extend(
+                (mid, name, spoke) for spoke in _aave_v4_spokes(substrates)
+            )
+        elif mid in EULER_V2_MARKET_IDS:
+            markets.euler_v2.extend(
+                (mid, name, account)
+                for account in _euler_v2_borrow_accounts(substrates, vault)
+            )
+        elif _can_borrow(mid, substrates):
+            markets.unreadable.append(
+                UnreadableLendingMarket(
+                    protocol=name.lower(),
+                    market_id=mid,
+                    market_name=name,
+                    reason=_UNSUPPORTED_REASON,
+                )
+            )
 
     return markets
 
@@ -477,7 +648,8 @@ def fetch_vault_lending_health(
         vault: The Plasma Vault address.
         balance_fuse_market_ids: List of market IDs from balance fuses.
         market_substrates: Map of market_id -> list of raw substrate bytes.
-            Morpho market ids and Aave V4 Spokes are read from it.
+            Morpho market ids, Aave V4 Spokes and Euler V2 sub-accounts are
+            read from it.
         aave_pools: Map of Aave V3 market_id -> the Pool its balance fuse
             reads (`AaveV3FuseReader.pool`). An Aave V3 market without an
             entry is listed in ``unreadable``. Defaults to the chain's Core pool for AAVE_V3 only:
@@ -489,7 +661,7 @@ def fetch_vault_lending_health(
         aave_pools = {IporFusionMarkets.AAVE_V3: core_pool} if core_pool else {}
 
     markets = _collect_lending_markets(
-        balance_fuse_market_ids, market_substrates, aave_pools
+        vault, balance_fuse_market_ids, market_substrates, aave_pools
     )
 
     results: list[LendingMarketHealth] = []
@@ -538,8 +710,17 @@ def fetch_vault_lending_health(
                 )
             )
 
+        for ipor_mid, name, account in markets.euler_v2:
+            futures.append(
+                pool.submit(
+                    _compute_euler_v2_account_health, ctx, account, ipor_mid, name
+                )
+            )
+
         for fut in futures:
             result = fut.result()
+            if result is None:
+                continue
             if isinstance(result, UnreadableLendingMarket):
                 unreadable.append(result)
             else:

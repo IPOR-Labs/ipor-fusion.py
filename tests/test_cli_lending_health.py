@@ -4,19 +4,22 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from _multicall import sequenced
+from _multicall import multicall_aware, sequenced
 from _validation import validate
-from eth_abi import encode
+from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
-from web3.exceptions import Web3RPCError, Web3ValueError
+from web3.exceptions import ContractLogicError, Web3RPCError, Web3ValueError
 
+from ipor_fusion.fuses.euler_v2 import euler_substrate
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
+from ipor_fusion.readers.euler_v2 import EULER_USD_UNIT_OF_ACCOUNT, EulerV2Substrate
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
     AAVE_V3_POOL,
     AAVE_V4_MARKET_IDS,
+    EULER_V2_MARKET_IDS,
     MORPHO_MARKET_IDS,
     ORACLE_PRICE_SCALE,
     LendingMarketHealth,
@@ -24,7 +27,9 @@ from ipor_fusion.readers.lending_health import (
     VaultLendingHealth,
     _compute_aave_market_health,
     _compute_aave_v4_market_health,
+    _compute_euler_v2_account_health,
     _compute_morpho_market_health,
+    _EulerV2Account,
     fetch_vault_lending_health,
 )
 from ipor_fusion.readers.morpho import (
@@ -1106,3 +1111,238 @@ class TestOrphanFuseMarketsHealthCheck:
         health = validate(data)
 
         assert not [c for c in health.criticals if "ERC20_VAULT_BALANCE" in c]
+
+
+# ── Euler V2 ──────────────────────────────────────────────────────────
+
+# Live reads of vault 0x3e212F13…93bF ("TESS cbETH (Base) Loop Vault") at Base
+# block 52995835: sub-account 0x01 owes eWETH-36 against ecbETH-5, USD unit
+# of account, 97% liquidation LTV.
+EULER_VAULT = Web3.to_checksum_address("0x3e212F136244465d8E524Fb658E6Daa1fb0593bF")
+EULER_SUB_ACCOUNT = Web3.to_checksum_address(
+    "0x3e212f136244465d8e524fb658e6daa1fb0593be"
+)
+EULER_COLLATERAL = Web3.to_checksum_address(
+    "0x60c61a47804283a514bfcdf163138b7528720d0f"
+)
+EULER_BORROW = Web3.to_checksum_address("0xdc4efb20ce286b421f6361734a2a006a1f24af8d")
+EULER_DEBT = 1_686_324_901_840_101_461_983
+EULER_ADJUSTED_COLLATERAL = 4_740_289_721_451_937_074_302_855
+EULER_LIABILITY = 4_050_377_393_812_968_788_103_822
+
+_SELECTOR_DEBT_OF = function_signature_to_4byte_selector("debtOf(address)")
+_SELECTOR_LIQUIDITY_FULL = function_signature_to_4byte_selector(
+    "accountLiquidityFull(address,bool)"
+)
+_SELECTOR_LTV_LIQUIDATION = function_signature_to_4byte_selector(
+    "LTVLiquidation(address)"
+)
+_SELECTOR_UNIT_OF_ACCOUNT = function_signature_to_4byte_selector("unitOfAccount()")
+
+
+EULER_SUBSTRATES = [
+    euler_substrate(
+        euler_vault=EULER_COLLATERAL,
+        is_collateral=True,
+        can_borrow=False,
+        sub_account=1,
+    ),
+    euler_substrate(
+        euler_vault=EULER_BORROW, is_collateral=False, can_borrow=True, sub_account=1
+    ),
+]
+EULER_ACCOUNT = _EulerV2Account(EULER_SUB_ACCOUNT, (EULER_BORROW,))
+
+
+def _euler_ctx(
+    *,
+    debt: int = EULER_DEBT,
+    unit: str = EULER_USD_UNIT_OF_ACCOUNT,
+    liquidity_reverts: bool = False,
+) -> MagicMock:
+    """Answer the TESS sub-account's reads; only the borrow vault is its controller."""
+
+    def handler(to: str, data: bytes) -> bytes:
+        selector = data[:4]
+        assert to == EULER_BORROW
+        if selector == _SELECTOR_DEBT_OF:
+            (account,) = decode(["address"], data[4:])
+            assert Web3.to_checksum_address(account) == EULER_SUB_ACCOUNT
+            return encode(["uint256"], [debt])
+        if selector == _SELECTOR_LIQUIDITY_FULL:
+            if liquidity_reverts:
+                raise ContractLogicError("E_NoLiability")
+            return encode(
+                ["address[]", "uint256[]", "uint256"],
+                [[EULER_COLLATERAL], [EULER_ADJUSTED_COLLATERAL], EULER_LIABILITY],
+            )
+        if selector == _SELECTOR_UNIT_OF_ACCOUNT:
+            return encode(["address"], [unit])
+        assert selector == _SELECTOR_LTV_LIQUIDATION
+        return encode(["uint16"], [9700])
+
+    ctx = MagicMock()
+    ctx.call.side_effect = multicall_aware(handler)
+    return ctx
+
+
+class TestEulerV2Substrate:
+    def test_decodes_what_the_fuse_encoder_packs(self):
+        substrate = EulerV2Substrate.from_bytes(EULER_SUBSTRATES[1])
+
+        assert substrate == EulerV2Substrate(
+            euler_vault=EULER_BORROW,
+            is_collateral=False,
+            can_borrow=True,
+            sub_account_id=1,
+        )
+        assert substrate.sub_account(EULER_VAULT) == EULER_SUB_ACCOUNT
+
+
+class TestEulerV2Health:
+    def test_borrowing_sub_account_matches_the_live_position(self):
+        result = _compute_euler_v2_account_health(
+            _euler_ctx(), EULER_ACCOUNT, MarketId(11), "EULER_V2"
+        )
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.protocol == "euler_v2"
+        assert result.substrate_id == EULER_SUB_ACCOUNT
+        assert result.health_factor == 1.1703
+        assert result.current_ltv == 0.828824
+        assert result.max_ltv == 0.97
+        assert result.ltv_usage_percent == 85.45
+        assert result.total_collateral_usd == 4_886_896.62
+        assert result.total_debt_usd == 4_050_377.39
+
+    def test_no_debt_is_no_position(self):
+        result = _compute_euler_v2_account_health(
+            _euler_ctx(debt=0),
+            EULER_ACCOUNT,
+            MarketId(11),
+            "EULER_V2",
+        )
+
+        assert result is None
+
+    def test_values_outside_usd_are_not_reported_as_usd(self):
+        result = _compute_euler_v2_account_health(
+            _euler_ctx(unit=TOKEN_A),
+            EULER_ACCOUNT,
+            MarketId(11),
+            "EULER_V2",
+        )
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.health_factor == 1.1703
+        assert result.total_collateral_usd is None
+        assert result.total_debt_usd is None
+
+    def test_failed_debt_read_is_unreadable(self):
+        ctx = MagicMock()
+        ctx.call.side_effect = Web3RPCError("rpc down")
+
+        result = _compute_euler_v2_account_health(
+            ctx, EULER_ACCOUNT, MarketId(11), "EULER_V2"
+        )
+
+        assert isinstance(result, UnreadableLendingMarket)
+        assert result.reason == "debt read failed: Web3RPCError"
+
+    def test_failed_liquidity_read_is_unreadable(self):
+        result = _compute_euler_v2_account_health(
+            _euler_ctx(liquidity_reverts=True),
+            EULER_ACCOUNT,
+            MarketId(11),
+            "EULER_V2",
+        )
+
+        assert isinstance(result, UnreadableLendingMarket)
+        assert result.substrate_id == EULER_SUB_ACCOUNT
+        assert "account liquidity" in result.reason
+
+    def test_vault_reads_one_row_per_borrowing_sub_account(self):
+        """Only substrates that may borrow name a sub-account to read; the
+        collateral vault is never asked for liquidity."""
+        assert IporFusionMarkets.EULER_V2 in EULER_V2_MARKET_IDS
+
+        result = fetch_vault_lending_health(
+            _euler_ctx(),
+            EULER_VAULT,
+            balance_fuse_market_ids=[IporFusionMarkets.EULER_V2],
+            market_substrates={IporFusionMarkets.EULER_V2: EULER_SUBSTRATES},
+        )
+
+        assert [m.substrate_id for m in result.markets] == [EULER_SUB_ACCOUNT]
+        assert result.is_complete
+        assert result.worst_ltv_usage == 85.45
+
+    def test_supply_only_euler_market_has_no_position(self):
+        ctx = MagicMock()
+
+        result = fetch_vault_lending_health(
+            ctx,
+            EULER_VAULT,
+            balance_fuse_market_ids=[IporFusionMarkets.EULER_V2],
+            market_substrates={IporFusionMarkets.EULER_V2: EULER_SUBSTRATES[:1]},
+        )
+
+        assert not result.has_lending_positions
+        ctx.call.assert_not_called()
+
+
+# ── Borrow markets without a reader ───────────────────────────────────
+
+
+def _dolomite_substrate(asset: str, *, can_borrow: bool) -> bytes:
+    """asset << 96 | subAccountId << 88 | canBorrow << 80."""
+    return (int(asset, 16) << 96 | 1 << 88 | int(can_borrow) << 80).to_bytes(32, "big")
+
+
+class TestUnsupportedBorrowMarkets:
+    @pytest.mark.parametrize(
+        "market_id",
+        [
+            IporFusionMarkets.MOONWELL,
+            IporFusionMarkets.SILO_V2,
+            IporFusionMarkets.EBISU,
+        ],
+    )
+    def test_borrow_capable_market_is_unreadable_not_absent(self, market_id):
+        result = fetch_vault_lending_health(
+            MagicMock(),
+            VAULT_ADDR,
+            balance_fuse_market_ids=[market_id],
+            market_substrates={},
+        )
+
+        assert not result.markets
+        [unreadable] = result.unreadable
+        assert unreadable.market_id == market_id
+        assert not result.is_complete
+
+    def test_dolomite_counts_only_when_a_substrate_may_borrow(self):
+        mid = IporFusionMarkets.DOLOMITE
+
+        def health(can_borrow: bool) -> VaultLendingHealth:
+            return fetch_vault_lending_health(
+                MagicMock(),
+                VAULT_ADDR,
+                balance_fuse_market_ids=[mid],
+                market_substrates={
+                    mid: [_dolomite_substrate(TOKEN_A, can_borrow=can_borrow)]
+                },
+            )
+
+        assert not health(can_borrow=False).has_lending_positions
+        assert [u.market_id for u in health(can_borrow=True).unreadable] == [mid]
+
+    def test_supply_only_market_is_not_flagged(self):
+        result = fetch_vault_lending_health(
+            MagicMock(),
+            VAULT_ADDR,
+            balance_fuse_market_ids=[IporFusionMarkets.LIQUITY_V2],
+            market_substrates={},
+        )
+
+        assert not result.has_lending_positions
