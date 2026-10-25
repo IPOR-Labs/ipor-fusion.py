@@ -11,9 +11,10 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError, Web3RPCError, Web3ValueError
 
+from ipor_fusion.fuses.euler_v2 import euler_substrate
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
-from ipor_fusion.readers.euler_v2 import EULER_USD_UNIT_OF_ACCOUNT
+from ipor_fusion.readers.euler_v2 import EULER_USD_UNIT_OF_ACCOUNT, EulerV2Substrate
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
     AAVE_V3_POOL,
@@ -28,6 +29,7 @@ from ipor_fusion.readers.lending_health import (
     _compute_aave_v4_market_health,
     _compute_euler_v2_account_health,
     _compute_morpho_market_health,
+    _EulerV2Account,
     fetch_vault_lending_health,
 )
 from ipor_fusion.readers.morpho import (
@@ -1138,25 +1140,18 @@ _SELECTOR_LTV_LIQUIDATION = function_signature_to_4byte_selector(
 _SELECTOR_UNIT_OF_ACCOUNT = function_signature_to_4byte_selector("unitOfAccount()")
 
 
-def _euler_substrate(
-    vault: str, *, is_collateral: bool, can_borrow: bool, sub_account: int
-) -> bytes:
-    """EulerFuseLib: vault << 96 | isCollateral << 88 | canBorrow << 80 | subAccount << 72."""
-    word = (
-        int(vault, 16) << 96
-        | int(is_collateral) << 88
-        | int(can_borrow) << 80
-        | sub_account << 72
-    )
-    return word.to_bytes(32, "big")
-
-
 EULER_SUBSTRATES = [
-    _euler_substrate(
-        EULER_COLLATERAL, is_collateral=True, can_borrow=False, sub_account=1
+    euler_substrate(
+        euler_vault=EULER_COLLATERAL,
+        is_collateral=True,
+        can_borrow=False,
+        sub_account=1,
     ),
-    _euler_substrate(EULER_BORROW, is_collateral=False, can_borrow=True, sub_account=1),
+    euler_substrate(
+        euler_vault=EULER_BORROW, is_collateral=False, can_borrow=True, sub_account=1
+    ),
 ]
+EULER_ACCOUNT = _EulerV2Account(EULER_SUB_ACCOUNT, (EULER_BORROW,))
 
 
 def _euler_ctx(
@@ -1191,10 +1186,23 @@ def _euler_ctx(
     return ctx
 
 
+class TestEulerV2Substrate:
+    def test_decodes_what_the_fuse_encoder_packs(self):
+        substrate = EulerV2Substrate.from_bytes(EULER_SUBSTRATES[1])
+
+        assert substrate == EulerV2Substrate(
+            euler_vault=EULER_BORROW,
+            is_collateral=False,
+            can_borrow=True,
+            sub_account_id=1,
+        )
+        assert substrate.sub_account(EULER_VAULT) == EULER_SUB_ACCOUNT
+
+
 class TestEulerV2Health:
     def test_borrowing_sub_account_matches_the_live_position(self):
         result = _compute_euler_v2_account_health(
-            _euler_ctx(), EULER_SUB_ACCOUNT, [EULER_BORROW], MarketId(11), "EULER_V2"
+            _euler_ctx(), EULER_ACCOUNT, MarketId(11), "EULER_V2"
         )
 
         assert isinstance(result, LendingMarketHealth)
@@ -1210,8 +1218,7 @@ class TestEulerV2Health:
     def test_no_debt_is_no_position(self):
         result = _compute_euler_v2_account_health(
             _euler_ctx(debt=0),
-            EULER_SUB_ACCOUNT,
-            [EULER_BORROW],
+            EULER_ACCOUNT,
             MarketId(11),
             "EULER_V2",
         )
@@ -1221,8 +1228,7 @@ class TestEulerV2Health:
     def test_values_outside_usd_are_not_reported_as_usd(self):
         result = _compute_euler_v2_account_health(
             _euler_ctx(unit=TOKEN_A),
-            EULER_SUB_ACCOUNT,
-            [EULER_BORROW],
+            EULER_ACCOUNT,
             MarketId(11),
             "EULER_V2",
         )
@@ -1237,7 +1243,7 @@ class TestEulerV2Health:
         ctx.call.side_effect = Web3RPCError("rpc down")
 
         result = _compute_euler_v2_account_health(
-            ctx, EULER_SUB_ACCOUNT, [EULER_BORROW], MarketId(11), "EULER_V2"
+            ctx, EULER_ACCOUNT, MarketId(11), "EULER_V2"
         )
 
         assert isinstance(result, UnreadableLendingMarket)
@@ -1246,8 +1252,7 @@ class TestEulerV2Health:
     def test_failed_liquidity_read_is_unreadable(self):
         result = _compute_euler_v2_account_health(
             _euler_ctx(liquidity_reverts=True),
-            EULER_SUB_ACCOUNT,
-            [EULER_BORROW],
+            EULER_ACCOUNT,
             MarketId(11),
             "EULER_V2",
         )

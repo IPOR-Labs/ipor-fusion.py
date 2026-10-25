@@ -30,7 +30,11 @@ from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.aave_v4 import AaveV4OracleReader, AaveV4SpokeReader
-from ipor_fusion.readers.euler_v2 import EULER_USD_UNIT_OF_ACCOUNT, EulerV2VaultReader
+from ipor_fusion.readers.euler_v2 import (
+    EULER_USD_UNIT_OF_ACCOUNT,
+    EulerV2Substrate,
+    EulerV2VaultReader,
+)
 from ipor_fusion.readers.morpho import (
     MorphoReader,
     morpho_blue_address,
@@ -433,10 +437,17 @@ def _compute_aave_v4_market_health(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _EulerV2Account:
+    """An EVC sub-account of the vault and the Euler vaults it may borrow from."""
+
+    sub_account: ChecksumAddress
+    borrow_vaults: tuple[ChecksumAddress, ...]
+
+
 def _compute_euler_v2_account_health(
     ctx: Web3Context,
-    sub_account: ChecksumAddress,
-    borrow_vaults: list[ChecksumAddress],
+    account: _EulerV2Account,
     ipor_market_id: MarketId,
     market_name: str,
 ) -> LendingMarketHealth | UnreadableLendingMarket | None:
@@ -445,10 +456,11 @@ def _compute_euler_v2_account_health(
     Euler values each collateral at its liquidation LTV, so the market value
     is recovered by dividing that LTV back out.
     """
+    sub_account = account.sub_account
     multicall = Multicall3(ctx)
     try:
         debts = multicall.aggregate(
-            [EulerV2VaultReader(v).debt_of(sub_account) for v in borrow_vaults]
+            [EulerV2VaultReader(v).debt_of(sub_account) for v in account.borrow_vaults]
         )
     except _READ_ERRORS as exc:
         return UnreadableLendingMarket(
@@ -460,7 +472,8 @@ def _compute_euler_v2_account_health(
         )
     # A sub-account has at most one controller: the only vault it can owe.
     controller = next(
-        (v for v, d in zip(borrow_vaults, debts, strict=True) if d > 0), None
+        (v for v, d in zip(account.borrow_vaults, debts, strict=True) if d > 0),
+        None,
     )
     if controller is None:
         return None
@@ -516,21 +529,24 @@ def _compute_euler_v2_account_health(
 
 def _euler_v2_borrow_accounts(
     substrates: list[bytes], vault: PlasmaVaultAddress
-) -> dict[ChecksumAddress, list[ChecksumAddress]]:
-    """Sub-account -> the vaults it may borrow from, from Euler V2 substrates.
+) -> list[_EulerV2Account]:
+    """The vault's sub-accounts that may borrow, from its Euler V2 substrates."""
+    borrow_vaults: dict[ChecksumAddress, list[ChecksumAddress]] = {}
+    for raw in substrates:
+        substrate = EulerV2Substrate.from_bytes(raw)
+        if substrate.can_borrow:
+            borrow_vaults.setdefault(substrate.sub_account(vault), []).append(
+                substrate.euler_vault
+            )
+    return [
+        _EulerV2Account(sub_account, tuple(vaults))
+        for sub_account, vaults in borrow_vaults.items()
+    ]
 
-    EulerFuseLib: vault << 96 | isCollateral << 88 | canBorrow << 80 |
-    subAccount << 72; a sub-account is the Plasma Vault address XOR its id.
-    """
-    accounts: dict[ChecksumAddress, list[ChecksumAddress]] = {}
-    for sub in substrates:
-        if len(sub) != 32 or not sub[21] & 0x01:
-            continue
-        sub_account = Web3.to_checksum_address(
-            (int(vault, 16) ^ sub[22]).to_bytes(20, "big")
-        )
-        accounts.setdefault(sub_account, []).append(Web3.to_checksum_address(sub[:20]))
-    return accounts
+
+def _dolomite_can_borrow(substrate: bytes) -> bool:
+    """DolomiteFuseLib: asset<<96 | subAccountId<<88 | canBorrow<<80."""
+    return bool(int.from_bytes(substrate, "big") >> 80 & 0x01)
 
 
 def _can_borrow(market_id: MarketId, substrates: list[bytes]) -> bool:
@@ -538,10 +554,7 @@ def _can_borrow(market_id: MarketId, substrates: list[bytes]) -> bool:
     if market_id in UNSUPPORTED_BORROW_MARKET_IDS:
         return True
     if market_id == IporFusionMarkets.DOLOMITE:
-        return any(
-            decode_substrate(sub, market_id=market_id).extra.get("can_borrow") == "True"
-            for sub in substrates
-        )
+        return any(_dolomite_can_borrow(sub) for sub in substrates)
     return False
 
 
@@ -560,7 +573,7 @@ class _LendingMarkets:
     morpho: list[tuple[MarketId, str, MorphoBlueMarketId]]
     aave_v3: list[tuple[MarketId, str, ChecksumAddress]]
     aave_v4: list[tuple[MarketId, str, ChecksumAddress]]
-    euler_v2: list[tuple[MarketId, str, ChecksumAddress, list[ChecksumAddress]]]
+    euler_v2: list[tuple[MarketId, str, _EulerV2Account]]
     unreadable: list[UnreadableLendingMarket]
 
 
@@ -604,10 +617,8 @@ def _collect_lending_markets(
             )
         elif mid in EULER_V2_MARKET_IDS:
             markets.euler_v2.extend(
-                (mid, name, sub_account, borrow_vaults)
-                for sub_account, borrow_vaults in _euler_v2_borrow_accounts(
-                    substrates, vault
-                ).items()
+                (mid, name, account)
+                for account in _euler_v2_borrow_accounts(substrates, vault)
             )
         elif _can_borrow(mid, substrates):
             markets.unreadable.append(
@@ -699,15 +710,10 @@ def fetch_vault_lending_health(
                 )
             )
 
-        for ipor_mid, name, sub_account, borrow_vaults in markets.euler_v2:
+        for ipor_mid, name, account in markets.euler_v2:
             futures.append(
                 pool.submit(
-                    _compute_euler_v2_account_health,
-                    ctx,
-                    sub_account,
-                    borrow_vaults,
-                    ipor_mid,
-                    name,
+                    _compute_euler_v2_account_health, ctx, account, ipor_mid, name
                 )
             )
 
