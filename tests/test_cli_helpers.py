@@ -154,6 +154,8 @@ class TestAddressType:
 
         result = runner.invoke(cmd, [bad])
         assert result.exit_code != 0
+        assert "invalid address checksum" in result.output
+        assert good not in result.output
 
     def test_too_short(self):
         runner = CliRunner()
@@ -1167,17 +1169,6 @@ class TestPrintBalanceFusesTable:
         out = capsys.readouterr().out
         assert "Balance Fuses (1):" in out
         assert "Zero-Balance Fuses" not in out
-
-
-class TestAddressTypeChecksumException:
-    @patch("ipor_fusion.cli.options.Web3.to_checksum_address")
-    def test_checksum_exception_caught(self, mock_checksum):
-        mock_checksum.side_effect = Exception("unexpected error")
-        mixed = "0xAbCdEf1234567890aBcDeF1234567890AbCdEf12"
-        with pytest.raises(
-            click.exceptions.BadParameter, match="invalid address checksum"
-        ):
-            ADDRESS.convert(mixed, None, None)
 
 
 class TestPrintReconciliation:
