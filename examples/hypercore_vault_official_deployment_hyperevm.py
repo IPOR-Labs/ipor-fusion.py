@@ -96,6 +96,7 @@ from ipor_fusion import (
     decode_substrate,
     erc20_balance_slot,
     is_simulate_v1_supported,
+    parse_checksum_address,
     parse_fuse_address,
 )
 from ipor_fusion.hypercore import (
@@ -110,6 +111,7 @@ from ipor_fusion.hypercore import (
     HyperCorePendingReader,
     HyperCorePendingState,
     HyperCorePerpAssetInfo,
+    HyperCorePreHookWiring,
     HyperCoreReader,
     HyperCoreSendFuse,
     HyperCoreSubstrates,
@@ -138,7 +140,7 @@ log = logging.getLogger("hypercore_vault_official_deployment_hyperevm")
 HYPEREVM_CHAIN_ID = ChainId(999)
 
 # IporFusionFactoryProxy (implementation IporFusionFactoryImpl, factory version 10).
-FUSION_FACTORY = Web3.to_checksum_address("0x6bBc827F34b4e862d15215ABd4AC0E3886181665")
+FUSION_FACTORY = parse_checksum_address("0x6bBc827F34b4e862d15215ABd4AC0E3886181665")
 
 # BurnRequestFeeFuseV2: the fuse every factory clone starts with.
 FACTORY_FEE_FUSE = parse_fuse_address("0xD62f398d36aeDE3992521EA9Fc501dEB418a50b4")
@@ -154,28 +156,28 @@ ORDER_FUSE = parse_fuse_address("0x96f97c088E9610A036a2738B004DF04Ee9Cf17a2")
 # HyperCoreBalanceFuse: values the vault's Core account for market 55.
 BALANCE_FUSE = parse_fuse_address("0xbEd25202529DCD2a05f7D8944B10779b6dbc6Fa6")
 # HyperCoreCapitalFlowPreHook and HyperCorePendingActionPreHook.
-CAPITAL_FLOW_PRE_HOOK = Web3.to_checksum_address(
+CAPITAL_FLOW_PRE_HOOK = parse_checksum_address(
     "0xbA999E8b50bDC2672CcE13A1F896aaD7Dc5BE547"
 )
-PENDING_ACTION_PRE_HOOK = Web3.to_checksum_address(
+PENDING_ACTION_PRE_HOOK = parse_checksum_address(
     "0xd240690cf7C41dDD75863c4b4a9358ea62B20c85"
 )
 # HyperCorePendingReader: the stateless helper the vault delegatecalls to report
 # its pending-action record. The SDK's default for chain 999 is this address.
-PENDING_READER = Web3.to_checksum_address("0x1EFFb12434f5fb59a636C54D8CBaC93b13DF1A9E")
+PENDING_READER = parse_checksum_address("0x1EFFb12434f5fb59a636C54D8CBaC93b13DF1A9E")
 
 # IporFusionPriceFeedUSD: a constant 1 USD price (8 decimals). The global price
 # oracle middleware on HyperEVM has no USDC source, so the vault's own price
 # manager must name one. A constant peg keeps this example's NAV arithmetic
 # exact; a production vault picks its USDC feed in its oracle review (a market
 # USDC/USD feed prices a depeg, a constant does not).
-USD_PRICE_FEED = Web3.to_checksum_address("0x15794119c5D99Ed7997D1CE80DE8599e188547c5")
+USD_PRICE_FEED = parse_checksum_address("0x15794119c5D99Ed7997D1CE80DE8599e188547c5")
 
 # Native Circle USDC on HyperEVM (6 decimals). Core token 0 is USDC; its
 # ``tokenInfo(0).evmContract`` is Circle's CoreDepositWallet, whose ``token()`` is
 # this ERC-20, so the SpotToken grant names this address, not the wallet
 # (contracts/fuses/hypercore/README.md in ipor-fusion).
-HYPEREVM_USDC = Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f")
+HYPEREVM_USDC = parse_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f")
 
 # xyz is HIP-3 perp dex 1, and xyz:NVDA is its market 2: action asset
 # 100_000 + 1 * 10_000 + 2 in orders and grants, read index 10_002 for the
@@ -195,9 +197,9 @@ XYZ_NVDA_SZ_DECIMALS = 3
 # refresh balances, and DEPOSITOR is an end user. OWNER and ALPHA must never
 # share an address in production: a compromised alpha key would become
 # governance, and on a HyperCore vault governance can re-wire the pre-hooks.
-OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
-ALPHA = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
-DEPOSITOR = Web3.to_checksum_address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+OWNER = parse_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+ALPHA = parse_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+DEPOSITOR = parse_checksum_address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
 
 # Pinned HyperEVM block, after the official HyperCore contracts and the factory
 # upgrade. If your provider cannot serve state at this height, BUMP IT to a
@@ -234,22 +236,10 @@ MAX_ORDER_NOTIONAL_USD6 = 15_000_000
 SEND_CAP_WEI = 10_000_000_000  # 100 USDC
 NAV_JUMP_FLOOR_USD6 = 1_000_000  # 1 USD; the runbook sizes it per vault TVL
 
-# The six share-priced entry points and the two operator entry points of a
-# Plasma Vault: the HyperCore pre-hooks are wired per selector.
-CAPITAL_FLOW_SELECTORS = tuple(
-    function_signature_to_4byte_selector(signature)
-    for signature in (
-        "deposit(uint256,address)",
-        "depositWithPermit(uint256,address,uint256,uint8,bytes32,bytes32)",
-        "mint(uint256,address)",
-        "withdraw(uint256,address,address)",
-        "redeem(uint256,address,address)",
-        "redeemFromRequest(uint256,address,address)",
-    )
-)
-PENDING_ACTION_SELECTORS = tuple(
-    function_signature_to_4byte_selector(signature)
-    for signature in ("execute((address,bytes)[])", "updateMarketsBalances(uint256[])")
+# This deployment's two pre-hooks.
+PRE_HOOKS = HyperCorePreHookWiring(
+    capital_flow_hook=CAPITAL_FLOW_PRE_HOOK,
+    pending_action_hook=PENDING_ACTION_PRE_HOOK,
 )
 
 
@@ -338,18 +328,6 @@ def market_substrates(vault: PlasmaVaultAddress) -> list[bytes]:
             HyperCoreConfigKey.NAV_JUMP_FLOOR_USD6, NAV_JUMP_FLOOR_USD6
         ),
     ]
-
-
-def pre_hook_wiring() -> tuple[list[bytes], list[ChecksumAddress], list[list[bytes]]]:
-    """``setPreHookImplementations`` arguments: the capital-flow hook on the six
-    share-priced selectors, the pending-action hook on ``execute`` and
-    ``updateMarketsBalances``; neither hook takes substrates. A selector appears
-    once: a duplicate in one call silently keeps the last value."""
-    selectors = [*CAPITAL_FLOW_SELECTORS, *PENDING_ACTION_SELECTORS]
-    implementations = [CAPITAL_FLOW_PRE_HOOK] * len(CAPITAL_FLOW_SELECTORS) + [
-        PENDING_ACTION_PRE_HOOK
-    ] * len(PENDING_ACTION_SELECTORS)
-    return selectors, implementations, [[] for _ in selectors]
 
 
 def core_to_evm_amount(spot_total_wei: int) -> int:
@@ -675,9 +653,8 @@ def run_simulation(
 
     # 3. The pre-hooks. The deposit fuse and opening orders revert unless all
     #    six share-priced selectors carry the capital-flow hook.
-    selectors, implementations, hook_substrates = pre_hook_wiring()
     sim.add_call(
-        vault.set_pre_hook_implementations(selectors, implementations, hook_substrates),
+        PRE_HOOKS.set_pre_hook_implementations(vault),
         from_=OWNER,
         label="set pre-hooks",
         gas=CALL_GAS,
@@ -686,8 +663,10 @@ def run_simulation(
 
     # The post-deployment checklist, read back from the wired vault.
     wired_hooks = [
-        (selector, sim.observe(vault.get_pre_hook_implementation(selector)))
-        for selector in selectors
+        (selector, expected, sim.observe(vault.get_pre_hook_implementation(selector)))
+        for selector, expected in zip(
+            PRE_HOOKS.selectors, PRE_HOOKS.implementations, strict=True
+        )
     ]
     vault_refresh_role = sim.observe(
         access_manager.has_role(Roles.UPDATE_MARKETS_BALANCES_ROLE, vault_address)
@@ -719,12 +698,7 @@ def run_simulation(
     result = sim.run()
     _assert_all_success(result)
 
-    for selector, implementation in wired_hooks:
-        expected = (
-            CAPITAL_FLOW_PRE_HOOK
-            if selector in CAPITAL_FLOW_SELECTORS
-            else PENDING_ACTION_PRE_HOOK
-        )
+    for selector, expected, implementation in wired_hooks:
         _check(
             implementation.value == expected,
             f"selector 0x{selector.hex()} runs {implementation.value}, not {expected}",

@@ -118,9 +118,13 @@ def _resolve_provider(cfg: FusionConfig, chain_id: ChainId) -> str:
 
 
 def _vault_arg(raw: str) -> PlasmaVaultAddress:
-    """A vault address as a tool caller sends it: surrounding whitespace, a
-    missing ``0x`` and any letter case are accepted, as in 3.x."""
-    return parse_plasma_vault_address(Web3.to_checksum_address(raw.strip()))
+    """A vault address as a tool caller sends it: surrounding whitespace and a
+    missing ``0x`` are accepted, as in 3.x; letter case follows
+    `parse_checksum_address`, so a wrong EIP-55 checksum is refused."""
+    value = raw.strip()
+    if value[:2] not in ("0x", "0X"):
+        value = "0x" + value
+    return parse_plasma_vault_address(value)
 
 
 def _resolve_chain_id(

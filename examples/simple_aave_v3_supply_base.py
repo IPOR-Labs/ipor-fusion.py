@@ -51,6 +51,7 @@ from ipor_fusion import (
     VaultSimulator,
     Web3Context,
     is_simulate_v1_supported,
+    parse_checksum_address,
     parse_fuse_address,
 )
 from ipor_fusion.fuses import AaveV3SupplyFuse
@@ -68,13 +69,13 @@ BASE_CHAIN_ID = ChainId(8453)
 
 # IporFusionFactoryProxy on Base. Its clone(...) takes the six arguments
 # assembled in clone_args() below.
-BASE_FUSION_FACTORY = Web3.to_checksum_address(
+BASE_FUSION_FACTORY = parse_checksum_address(
     "0x1455717668fA96534f675856347A973fA907e922"
 )
 
 # Native (Circle-issued) USDC on Base, 6 decimals. Not the bridged USDbC, a
 # distinct ERC-20 with its own Aave market and price feed.
-BASE_USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+BASE_USDC = parse_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
 
 # Aave V3 market (IporFusionMarkets.AAVE_V3).
 AAVE_MARKET = IporFusionMarkets.AAVE_V3
@@ -112,21 +113,21 @@ BASE_AAVE_V3_BALANCE_FUSE = parse_fuse_address(
 #   DEPOSITOR-- an end user; only ever holds and deposits funds.
 
 # Governance/atomist. Any address; here it happens to be a random EOA.
-OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+OWNER = parse_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
 # The alpha operator. Anvil account #0, a well-known test address.
-ALPHA = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+ALPHA = parse_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
 
 # The depositor -- the end user putting funds in. Never drives execute() and
 # never holds a governance role. Anvil account #1, the natural sibling to the
 # alpha's Anvil account #0.
-DEPOSITOR = Web3.to_checksum_address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+DEPOSITOR = parse_checksum_address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
 
 # A Base address holding ample USDC, used to fund the depositor via an
 # impersonated transfer inside the simulation. This is the Morpho Blue core
 # contract (~150M USDC) -- deliberately a different protocol from Aave, so
 # funding does not perturb the market the strategy supplies into.
-BASE_USDC_WHALE = Web3.to_checksum_address("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb")
+BASE_USDC_WHALE = parse_checksum_address("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb")
 
 # Pinned Base block. Pinning makes the simulation deterministic and immune to
 # mainnet state drift. It requires an archive node that can serve state at this

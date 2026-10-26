@@ -60,6 +60,11 @@ from ipor_fusion.fuses.hypercore_event_decoding import (
     hypercore_event_name,
     hypercore_events,
 )
+from ipor_fusion.fuses.hypercore_pre_hooks import (
+    HYPERCORE_CAPITAL_FLOW_SELECTORS,
+    HYPERCORE_PENDING_ACTION_SELECTORS,
+    HyperCorePreHookWiring,
+)
 from ipor_fusion.readers.hypercore import (
     HYPERCORE_MARKET,
     HYPERCORE_PENDING_READERS,
@@ -110,10 +115,12 @@ __all__ = [
     "TransferDirection",
     "USDC_SYSTEM_ADDRESS",
     "USDC_TOKEN_INDEX",
+    "HYPERCORE_CAPITAL_FLOW_SELECTORS",
     "HYPERCORE_EVENTS",
     "HYPERCORE_EVENT_CLASSES",
     "HYPERCORE_EVENT_SPECS",
     "HYPERCORE_MARKET",
+    "HYPERCORE_PENDING_ACTION_SELECTORS",
     "HYPERCORE_PENDING_READERS",
     "HyperCoreAccountMarginSummary",
     "HyperCoreActionClass",
@@ -154,6 +161,7 @@ __all__ = [
     "HyperCorePerpLeg",
     "HyperCorePerpMarket",
     "HyperCorePosition",
+    "HyperCorePreHookWiring",
     "HyperCoreReader",
     "HyperCoreEffectKind",
     "HyperCoreSendFuse",

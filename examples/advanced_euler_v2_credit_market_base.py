@@ -62,6 +62,7 @@ from ipor_fusion import (
     VaultSimulator,
     Web3Context,
     is_simulate_v1_supported,
+    parse_checksum_address,
     parse_fuse_address,
 )
 from ipor_fusion.fuses import (
@@ -87,7 +88,7 @@ BASE_CHAIN_ID = ChainId(8453)
 EULER_MARKET = IporFusionMarkets.EULER_V2
 
 # IporFusionFactoryProxy on Base. Its clone(...) takes the six args in clone_args().
-BASE_FUSION_FACTORY = Web3.to_checksum_address(
+BASE_FUSION_FACTORY = parse_checksum_address(
     "0x1455717668fA96534f675856347A973fA907e922"
 )
 
@@ -116,20 +117,18 @@ EULER_BALANCE_FUSE = parse_fuse_address("0xF8A6AA09bB55f2319113b0DA88883F392e66A
 # so they are not in the ipor-abi registry -- they are a live cbETH/WETH pair
 # whose LTV allows the borrow below. The RPC-gated test asserts each eVault's
 # IEVault.asset() equals the expected underlying, which is their provenance check.
-EVAULT_CBETH = Web3.to_checksum_address("0x358f25F82644eaBb441d0df4AF8746614fb9ea49")
-EVAULT_WETH = Web3.to_checksum_address("0x859160DB5841E5cfB8D3f144C6b3381A85A4b410")
+EVAULT_CBETH = parse_checksum_address("0x358f25F82644eaBb441d0df4AF8746614fb9ea49")
+EVAULT_WETH = parse_checksum_address("0x859160DB5841E5cfB8D3f144C6b3381A85A4b410")
 
 # Underlying assets of those eVaults (registry names "cbETH" / "wETH").
-BASE_CBETH = Web3.to_checksum_address("0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22")
-BASE_WETH = Web3.to_checksum_address("0x4200000000000000000000000000000000000006")
+BASE_CBETH = parse_checksum_address("0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22")
+BASE_WETH = parse_checksum_address("0x4200000000000000000000000000000000000006")
 
 # A Base address holding ample cbETH, used to fund the vault's collateral via an
 # impersonated transfer inside the simulation. This is the Morpho Blue core
 # contract (registry name "Morpho") -- a large, unrelated holder, so funding does
 # not perturb the Euler markets the strategy uses.
-BASE_CBETH_WHALE = Web3.to_checksum_address(
-    "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"
-)
+BASE_CBETH_WHALE = parse_checksum_address("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb")
 
 # ── Simulation parameters (safe to adjust) ───────────────────────────────────
 #
@@ -152,10 +151,10 @@ BASE_CBETH_WHALE = Web3.to_checksum_address(
 # focuses on the credit lifecycle rather than the deposit -> shares path.)
 
 # Governance/atomist. Any address; here it happens to be a random EOA.
-OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+OWNER = parse_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
 # The alpha operator. Anvil account #0, a well-known test address.
-ALPHA = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+ALPHA = parse_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
 
 # One owner address controls 256 Euler sub-accounts; the vault's EVC account for
 # this position is `plasma_vault XOR SUB_ACCOUNT`. Using a non-zero sub-account

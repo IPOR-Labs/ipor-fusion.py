@@ -42,6 +42,7 @@ from ipor_fusion import (
     PlasmaVault,
     Roles,
     Web3Context,
+    parse_checksum_address,
     parse_fuse_address,
 )
 from ipor_fusion.fuses import AaveV3SupplyFuse
@@ -53,8 +54,8 @@ owner = Account.from_key(OWNER_PRIVATE_KEY).address  # owns, configures and oper
 ctx = Web3Context(w3, chain_id=ChainId(8453), signer=owner, private_key=OWNER_PRIVATE_KEY)
 
 # Generic addresses are ChecksumAddress; fuse addresses carry their role (FuseAddress).
-FACTORY_PROXY = Web3.to_checksum_address("0x1455717668fA96534f675856347A973fA907e922")  # IporFusionFactoryProxy, Base
-USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+FACTORY_PROXY = parse_checksum_address("0x1455717668fA96534f675856347A973fA907e922")  # IporFusionFactoryProxy, Base
+USDC = parse_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
 SUPPLY_FUSE = parse_fuse_address("0x26fD6EF391E98C78CfCA27e00c3d15be4D941625")  # SupplyFuseAaveV3, Base
 BALANCE_FUSE = parse_fuse_address("0xf53f3EaFfDf67539256365cA7299540A98b60BA9")  # BalanceFuseAaveV3, Base
 
