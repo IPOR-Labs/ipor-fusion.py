@@ -84,13 +84,14 @@ HYPEREVM_SELECTOR = 2442541497099098535
 ARBITRUM_ROUTER = Web3.to_checksum_address("0x141fa059441E0ca23ce184B6A78bafD2A517DdE8")
 HYPEREVM_ROUTER = Web3.to_checksum_address("0x13b3332b66389B1467CA6eBd6fa79775CCeF65ec")
 
-#: The source pair's route policy. Commands carry 2.7 M, the minimum the
-#: released CCIP README sets for `messageGasLimit` (a DEPOSIT's budget alone
-#: needs about 1.84 M of route gas, per the released CCIP README); token deliveries 1 M; the
-#: dispatcher deployment ticket 6 M (a big block on HyperEVM).
-MESSAGE_GAS_LIMIT = 2_700_000
+#: The source pair's route policy. Commands carry 2.4 M, which keeps a delivery
+#: (message gas + about 365 k) inside HyperEVM's 3 M small block; a DEPOSIT's
+#: budget alone needs about 1.84 M of route gas, per the released CCIP README.
+#: Token deliveries 1 M; the dispatcher deployment ticket 7 M (a big block on
+#: HyperEVM).
+MESSAGE_GAS_LIMIT = 2_400_000
 TOKEN_GAS_LIMIT = 1_000_000
-TICKET_GAS_LIMIT = 6_000_000
+TICKET_GAS_LIMIT = 7_000_000
 #: The per-message fee caps of the deployed routes, Arbitrum then HyperEVM.
 ROUTE_MAX_FEES = (10**16, 10**18)
 ARBITRUM_FUSION_FACTORY = Web3.to_checksum_address(

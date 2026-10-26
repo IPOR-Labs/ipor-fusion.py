@@ -554,7 +554,7 @@ def _fetch_lending_reads(
     vault_addr: PlasmaVaultAddress,
     markets: _MarketReads,
 ) -> _LendingReads:
-    """Lending health (Morpho, Aave V3) plus the per-position breakdowns.
+    """Lending health plus the Morpho and Aave V3 per-position breakdowns.
 
     Health runs as one pool task (it fans out on its own executor); the
     breakdowns fan out on `pool` from the calling thread, so no pool task ever

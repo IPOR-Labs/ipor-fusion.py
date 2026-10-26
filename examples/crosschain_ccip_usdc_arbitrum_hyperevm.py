@@ -59,7 +59,7 @@ One live fact this simulation does not reproduce: Chainlink's executors submit
 into HyperEVM's 3 M-gas small blocks. A delivery that does not fit one needs a
 manual execution through the permissionless ``OffRamp.execute``
 (``ipor_fusion.crosschain.manual_execution``); the one-time dispatcher
-deployment ticket, which carries 6 M of gas, always does. The relay here
+deployment ticket, which carries 7 M of gas, always does. The relay here
 delivers every message directly.
 
 The creation codes are the release build of ``CcipCrosschainExecutor`` and
@@ -326,13 +326,17 @@ USDC_ASSET_ID = AssetId(bytes(Web3.keccak(text="USDC")))
 # which is also the dispatcher address on the spoke.
 EXECUTOR_SALT = bytes(Web3.keccak(text="ipor-fusion.py crosschain CCIP example"))
 
-# The factory route policy. Commands carry 2.7 M of gas, the minimum the CCIP
-# README of the release sets for messageGasLimit; token deliveries 1 M; the
-# dispatcher deployment ticket 6 M. The fee caps are per message, in the
-# source chain's native token: 0.01 ETH on Arbitrum, 1 HYPE on HyperEVM.
-MESSAGE_GAS_LIMIT = 2_700_000
+# The factory route policy. Commands carry 2.4 M of gas: Chainlink's executors
+# submit a delivery with about the message gas + 365 k, so 2.4 M still fits
+# HyperEVM's 3 M small block and executes on its own (the CCIP README's 2.7 M
+# is a recommendation the code does not enforce, and would not fit). At 2.4 M
+# one UPDATE_VAULTS carries at most 22 vaults. Token deliveries 1 M; the
+# dispatcher deployment ticket 7 M (the deployment itself uses about 5.6 M).
+# The fee caps are per message, in the source chain's native token: 0.01 ETH
+# on Arbitrum, 1 HYPE on HyperEVM.
+MESSAGE_GAS_LIMIT = 2_400_000
 TOKEN_GAS_LIMIT = 1_000_000
-DISPATCHER_DEPLOYMENT_GAS_LIMIT = 6_000_000
+DISPATCHER_DEPLOYMENT_GAS_LIMIT = 7_000_000
 ARBITRUM_ROUTE_MAX_FEE = 10**16
 HYPEREVM_ROUTE_MAX_FEE = 10**18
 
