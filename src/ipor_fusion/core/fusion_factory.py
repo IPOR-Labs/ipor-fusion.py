@@ -38,6 +38,7 @@ from ipor_fusion.types import (
     Period,
     PlasmaVaultAddress,
     parse_access_manager_address,
+    parse_checksum_address,
     parse_plasma_vault_address,
 )
 
@@ -82,8 +83,8 @@ class FusionInstance:
     def from_dict(cls, data: Mapping[str, object]) -> FusionInstance:
         """Rebuild an instance from its JSON form (``dataclasses.asdict``),
         parsing every field: role addresses through their parsers, the rest
-        checksummed, integers and strings type-checked. Raises ``ValueError``
-        on a missing, extra or malformed field."""
+        through `parse_checksum_address`, integers and strings type-checked.
+        Raises ``ValueError`` on a missing, extra or malformed field."""
         names = {f.name for f in fields(cls)}
         missing = names - data.keys()
         extra = data.keys() - names
@@ -128,7 +129,7 @@ def _text(value: object) -> str:
 
 
 def _address(value: object) -> ChecksumAddress:
-    return Web3.to_checksum_address(_text(value))
+    return parse_checksum_address(_text(value))
 
 
 _FUSION_INSTANCE_OUTPUT_TYPES: list[str] = [
