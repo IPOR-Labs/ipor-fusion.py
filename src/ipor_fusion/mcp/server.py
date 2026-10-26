@@ -8,6 +8,7 @@ from collections.abc import Callable
 from functools import partial
 from typing import Annotated, Literal
 
+from eth_typing import ChecksumAddress
 from mcp.server.fastmcp import FastMCP
 from pydantic import AfterValidator, BeforeValidator, Field
 from web3 import Web3
@@ -76,8 +77,8 @@ from ipor_fusion.registry import (
 from ipor_fusion.types import (
     ChainId,
     PlasmaVaultAddress,
+    parse_checksum_address,
     parse_morpho_market_id,
-    parse_plasma_vault_address,
 )
 from ipor_fusion.validation import validate_vault
 from ipor_fusion.vault_data import (
@@ -117,14 +118,19 @@ def _resolve_provider(cfg: FusionConfig, chain_id: ChainId) -> str:
     )
 
 
-def _vault_arg(raw: str) -> PlasmaVaultAddress:
-    """A vault address as a tool caller sends it: surrounding whitespace and a
+def _address_arg(raw: str) -> ChecksumAddress:
+    """An address as a tool caller sends it: surrounding whitespace and a
     missing ``0x`` are accepted, as in 3.x; letter case follows
     `parse_checksum_address`, so a wrong EIP-55 checksum is refused."""
     value = raw.strip()
     if value[:2] not in ("0x", "0X"):
         value = "0x" + value
-    return parse_plasma_vault_address(value)
+    return parse_checksum_address(value)
+
+
+def _vault_arg(raw: str) -> PlasmaVaultAddress:
+    """`_address_arg`, labeled as a Plasma Vault's address."""
+    return PlasmaVaultAddress(_address_arg(raw))
 
 
 def _resolve_chain_id(
