@@ -5,6 +5,7 @@ import importlib.metadata
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
+from _addresses import miscased
 from mcp.server.fastmcp.exceptions import ToolError
 from web3 import Web3
 
@@ -770,7 +771,7 @@ _LOAN = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
 _COLLAT = "0xD2af830E8CBdFed6CC11Bab697bB25496ed6FA62"
 _ORACLE = "0x7C65985C35181D51eF7571FA40211B57659B7d80"
 _IRM = "0x870Ac11D48B15db9a138Cf899d20F13F79Ba00BC"
-_VAULT = "0xf9bDdD4A9b3a45F980E11Fdde96E16364DDBec49"
+_VAULT = Web3.to_checksum_address("0xf9bddd4a9b3a45f980e11fdde96e16364ddbec49")
 
 
 def _stub_reader_instance():
@@ -1085,6 +1086,17 @@ class TestMarketMetaMorpho:
         with pytest.raises(MorphoApiError, match="not found"):
             market_meta_morpho(vault_address=_VAULT, chain_id=1)
 
+    @patch("ipor_fusion.mcp.server.fetch_vault", return_value=_v1_info())
+    def test_accepts_padded_bare_lowercase_address(self, fetch):
+        market_meta_morpho(vault_address=f" {_VAULT[2:].lower()} ", chain_id=1)
+        fetch.assert_called_once_with(_VAULT, 1)
+
+    @patch("ipor_fusion.mcp.server.fetch_vault", return_value=_v1_info())
+    def test_rejects_a_wrong_checksum(self, fetch):
+        with pytest.raises(ValueError, match="invalid address checksum"):
+            market_meta_morpho(vault_address=miscased(_VAULT), chain_id=1)
+        fetch.assert_not_called()
+
 
 class TestVaultAddressArgument:
     """Tool callers may pad an address with whitespace or omit its ``0x``; the
@@ -1114,10 +1126,8 @@ class TestVaultAddressArgument:
             _vault_arg(raw)
 
     def test_rejects_a_wrong_checksum(self):
-        checksum = Web3.to_checksum_address(self.VAULT)
-        i = next(i for i, c in enumerate(checksum) if c in "abcdefABCDEF")
-        miscased = checksum[:i] + checksum[i].swapcase() + checksum[i + 1 :]
-        for raw in (miscased, "0X" + miscased[2:], miscased[2:]):
+        bad = miscased(self.VAULT)
+        for raw in (bad, "0X" + bad[2:], bad[2:]):
             with pytest.raises(ValueError, match="invalid address checksum"):
                 _vault_arg(raw)
 

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+from _addresses import miscased
 from _multicall import decode_aggregate3, multicall_aware
 from _validation import holding, validate
 from click.testing import CliRunner
@@ -131,9 +132,20 @@ class TestAddressType:
         checksum = Web3.to_checksum_address("0x" + "1a2b3c4d5e" * 4)
         assert ADDRESS.convert(checksum, None, None) == checksum
 
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "0X" + "ab" * 20,
+            "0X" + "AB" * 20,
+            "0X" + VALID_CHECKSUM[2:],
+        ],
+    )
+    def test_valid_with_uppercase_0x_prefix(self, raw: str):
+        assert _convert_via_cli(raw) == VALID_CHECKSUM
+
     def test_bad_checksum_mixed_case(self):
         good = str(Web3.to_checksum_address("0x" + "1a2b3c4d5e" * 4))
-        bad = good[:-1] + good[-1].swapcase()
+        bad = miscased(good)
         runner = CliRunner()
 
         @click.command()
@@ -143,6 +155,8 @@ class TestAddressType:
 
         result = runner.invoke(cmd, [bad])
         assert result.exit_code != 0
+        assert "invalid address checksum" in result.output
+        assert good not in result.output
 
     def test_too_short(self):
         runner = CliRunner()
@@ -1156,17 +1170,6 @@ class TestPrintBalanceFusesTable:
         out = capsys.readouterr().out
         assert "Balance Fuses (1):" in out
         assert "Zero-Balance Fuses" not in out
-
-
-class TestAddressTypeChecksumException:
-    @patch("ipor_fusion.cli.options.Web3.to_checksum_address")
-    def test_checksum_exception_caught(self, mock_checksum):
-        mock_checksum.side_effect = Exception("unexpected error")
-        mixed = "0xAbCdEf1234567890aBcDeF1234567890AbCdEf12"
-        with pytest.raises(
-            click.exceptions.BadParameter, match="invalid address checksum"
-        ):
-            ADDRESS.convert(mixed, None, None)
 
 
 class TestPrintReconciliation:

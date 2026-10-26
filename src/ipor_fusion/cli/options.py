@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import click
 from eth_typing import ChecksumAddress
-from web3 import Web3
 
 from ipor_fusion.chains import CHAIN_NAME_TO_ID, ensure_supported_chain
 from ipor_fusion.cli.config_store import (
@@ -13,7 +12,12 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.errors import (
     UnsupportedChainError,
 )
-from ipor_fusion.types import ChainId, PlasmaVaultAddress
+from ipor_fusion.types import (
+    ChainId,
+    PlasmaVaultAddress,
+    parse_checksum_address,
+    parse_hex_address,
+)
 
 
 # click < 8.4 does not make ParamType generic, so it cannot be subscripted.
@@ -27,26 +31,18 @@ class AddressType(click.ParamType):  # pyright: ignore[reportMissingTypeArgument
             self.fail(f"expected string, got {type(value).__name__}", param, ctx)
 
         value = value.strip()
-        if not value.startswith("0x"):
-            value = "0x" + value
+        if value[:2] in ("0x", "0X"):
+            value = value[2:]
+        value = "0x" + value
 
-        raw = value[2:]
-        if len(raw) != 40 or not all(c in "0123456789abcdefABCDEF" for c in raw):
+        try:
+            parse_hex_address(value)
+        except ValueError:
             self.fail(f"invalid Ethereum address: {value}", param, ctx)
-
-        if not raw.islower() and not raw.isupper():
-            try:
-                checksum = Web3.to_checksum_address(value)
-            except Exception:
-                self.fail(f"invalid address checksum: {value}", param, ctx)
-            if checksum != value:
-                self.fail(
-                    f"bad checksum — expected {checksum}, got {value}",
-                    param,
-                    ctx,
-                )
-
-        return Web3.to_checksum_address(value)
+        try:
+            return parse_checksum_address(value)
+        except ValueError as exc:
+            self.fail(str(exc), param, ctx)
 
 
 ADDRESS = AddressType()
