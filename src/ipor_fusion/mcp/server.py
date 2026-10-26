@@ -347,7 +347,10 @@ def vault_preflight(
         raise ValueError(f"calldata: {exc}") from exc
     if not actions:
         raise ValueError("calldata: the batch has no actions")
-    sender_address = _address_arg(sender)
+    try:
+        sender_address = _address_arg(sender)
+    except ValueError as exc:
+        raise ValueError(f"sender: {exc}") from exc
     cfg = load_config()
     checksum = _vault_arg(vault_address)
     chain_id = _resolve_chain_id(cfg, checksum, chain_id)
