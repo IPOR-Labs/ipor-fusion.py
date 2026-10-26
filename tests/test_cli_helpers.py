@@ -131,6 +131,17 @@ class TestAddressType:
         checksum = Web3.to_checksum_address("0x" + "1a2b3c4d5e" * 4)
         assert ADDRESS.convert(checksum, None, None) == checksum
 
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "0X" + "ab" * 20,
+            "0X" + "AB" * 20,
+            "0X" + VALID_CHECKSUM[2:],
+        ],
+    )
+    def test_valid_with_uppercase_0x_prefix(self, raw: str):
+        assert _convert_via_cli(raw) == VALID_CHECKSUM
+
     def test_bad_checksum_mixed_case(self):
         good = str(Web3.to_checksum_address("0x" + "1a2b3c4d5e" * 4))
         bad = good[:-1] + good[-1].swapcase()

@@ -27,8 +27,9 @@ class AddressType(click.ParamType):  # pyright: ignore[reportMissingTypeArgument
             self.fail(f"expected string, got {type(value).__name__}", param, ctx)
 
         value = value.strip()
-        if not value.startswith("0x"):
-            value = "0x" + value
+        if value[:2] in ("0x", "0X"):
+            value = value[2:]
+        value = "0x" + value
 
         raw = value[2:]
         if len(raw) != 40 or not all(c in "0123456789abcdefABCDEF" for c in raw):
