@@ -47,6 +47,7 @@ from ipor_fusion import (
     VaultSimulator,
     Web3Context,
     is_simulate_v1_supported,
+    parse_checksum_address,
     parse_fuse_address,
 )
 from ipor_fusion.fuses import (
@@ -76,7 +77,7 @@ EULER_MARKET = IporFusionMarkets.EULER_V2
 SWAPPER_MARKET = IporFusionMarkets.UNIVERSAL_TOKEN_SWAPPER_V2
 MORPHO_FLASH_MARKET = IporFusionMarkets.MORPHO_FLASH_LOAN
 
-ARBITRUM_FUSION_FACTORY = Web3.to_checksum_address(
+ARBITRUM_FUSION_FACTORY = parse_checksum_address(
     "0x134fCAce7a2C7Ef3dF2479B62f03ddabAEa922d5"
 )
 EULER_SUPPLY_FUSE = parse_fuse_address("0x920f6c81666877490A8D6dcFEFd85d151Ef04B7d")
@@ -96,34 +97,34 @@ UNIVERSAL_SWAPPER_FUSE_V2 = parse_fuse_address(
 UNIVERSAL_SWAPPER_BALANCE_FUSE_V2 = parse_fuse_address(
     "0x69199E8360b3Baa536Cda2bd71dFFb30F79fBeF7"
 )
-MORPHO_CALLBACK_HANDLER = Web3.to_checksum_address(
+MORPHO_CALLBACK_HANDLER = parse_checksum_address(
     "0x62E0A527fa7990183C4225f4565B2BfC925CD46e"
 )
-MORPHO = Web3.to_checksum_address("0x6c247b1F6182318877311737BaC0844bAa518F5e")
+MORPHO = parse_checksum_address("0x6c247b1F6182318877311737BaC0844bAa518F5e")
 
 # Euler eVaults come from Euler's official Arbitrum Cluster deployment manifest.
 # The RPC-gated test also checks each eVault's ``asset()`` at PINNED_BLOCK.
-EVAULT_USDC = Web3.to_checksum_address("0x0a1eCC5Fe8C9be3C809844fcBe615B46A869b899")
-EVAULT_WBTC = Web3.to_checksum_address("0x889E1c458B2469b70aCcdfb5B59726dC1668896C")
+EVAULT_USDC = parse_checksum_address("0x0a1eCC5Fe8C9be3C809844fcBe615B46A869b899")
+EVAULT_WBTC = parse_checksum_address("0x889E1c458B2469b70aCcdfb5B59726dC1668896C")
 
-ARBITRUM_USDC = Web3.to_checksum_address("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
-ARBITRUM_WBTC = Web3.to_checksum_address("0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f")
+ARBITRUM_USDC = parse_checksum_address("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+ARBITRUM_WBTC = parse_checksum_address("0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f")
 
 # Official Uniswap Universal Router deployment on Arbitrum. The 500-fee pool is
 # verified on-chain in the RPC-gated test and is the deepest USDC/WBTC V3 pool at
 # the pinned block.
-UNISWAP_UNIVERSAL_ROUTER = Web3.to_checksum_address(
+UNISWAP_UNIVERSAL_ROUTER = parse_checksum_address(
     "0x5E325eDA8064b456f4781070C0738d849c824258"
 )
 UNISWAP_POOL_FEE = 500
-UNISWAP_USDC_WBTC_POOL = Web3.to_checksum_address(
+UNISWAP_USDC_WBTC_POOL = parse_checksum_address(
     "0x0e4831319a50228b9e450861297ab92dee15b44f"
 )
 
 # ── Simulation parameters (safe to adjust) ───────────────────────────────────
 
-OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
-ALPHA = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+OWNER = parse_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+ALPHA = parse_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
 SUB_ACCOUNT = 0x01
 
 INITIAL_WBTC = Amount(10_000_000)  # 0.10 WBTC, the unlevered equity

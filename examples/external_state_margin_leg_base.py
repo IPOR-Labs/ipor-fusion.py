@@ -99,6 +99,7 @@ from ipor_fusion import (
     WithdrawManager,
     WithdrawRequestInfo,
     is_simulate_v1_supported,
+    parse_checksum_address,
     parse_fuse_address,
 )
 from ipor_fusion.fuses import ExternalStateOperationFuse
@@ -116,7 +117,7 @@ BASE_CHAIN_ID = ChainId(8453)
 
 # IporFusionFactoryProxy on Base. Its clone(...) takes the six arguments
 # assembled in clone_args() below.
-BASE_FUSION_FACTORY = Web3.to_checksum_address(
+BASE_FUSION_FACTORY = parse_checksum_address(
     "0x1455717668fA96534f675856347A973fA907e922"
 )
 
@@ -125,7 +126,7 @@ BASE_FUSION_FACTORY = Web3.to_checksum_address(
 # asset parked at the venue -- perp venues margin in USDC, and a venue that
 # credits by sender needs the executor itself to send it, so a second asset plus
 # a swap would only add a market this example does not need.
-BASE_USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+BASE_USDC = parse_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
 
 # External-state market (IporFusionMarkets.EXTERNAL_STATE).
 EXTERNAL_STATE_MARKET = IporFusionMarkets.EXTERNAL_STATE
@@ -172,17 +173,17 @@ BASE_EXTERNAL_STATE_BALANCE_FUSE = parse_fuse_address(
 #                 two addresses driven by one process buy nothing.
 
 # Governance/atomist. Any address; here it happens to be a random EOA.
-OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+OWNER = parse_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 
 # The alpha operator. Anvil account #0, a well-known test address.
-ALPHA = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+ALPHA = parse_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
 
 # The depositor -- the end user putting funds in. Anvil account #1.
-DEPOSITOR = Web3.to_checksum_address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+DEPOSITOR = parse_checksum_address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
 
 # The two custodians. Anvil accounts #2 and #3.
-CUSTODIAN_A = Web3.to_checksum_address("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")
-CUSTODIAN_B = Web3.to_checksum_address("0x90F79bf6EB2c4f870365E785982E1f101E93b906")
+CUSTODIAN_A = parse_checksum_address("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")
+CUSTODIAN_B = parse_checksum_address("0x90F79bf6EB2c4f870365E785982E1f101E93b906")
 
 # SIMULATION ONLY (placeholder addresses). Two distinct things, easy to conflate.
 #
@@ -204,10 +205,10 @@ CUSTODIAN_B = Web3.to_checksum_address("0x90F79bf6EB2c4f870365E785982E1f101E93b9
 # not reach. Pasting that address here would give it borrowed provenance: on Base
 # it is an unrelated account, and a reader who copied it would send funds
 # nowhere.
-VENUE_DEPOSIT_ADDRESS = Web3.to_checksum_address(
+VENUE_DEPOSIT_ADDRESS = parse_checksum_address(
     "0x000000000000000000000000000000000000BEEF"
 )
-VENUE_BALANCE_ACCOUNT = Web3.to_checksum_address(
+VENUE_BALANCE_ACCOUNT = parse_checksum_address(
     "0x000000000000000000000000000000000000CAFE"
 )
 
@@ -215,7 +216,7 @@ VENUE_BALANCE_ACCOUNT = Web3.to_checksum_address(
 # impersonated transfer inside the simulation. Morpho Blue's core contract
 # (~150M USDC) -- a protocol this example never touches, so funding cannot
 # perturb the flow under test.
-BASE_USDC_WHALE = Web3.to_checksum_address("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb")
+BASE_USDC_WHALE = parse_checksum_address("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb")
 
 # Pinned Base block, after both external-state fuses were deployed. Pinning makes
 # the simulation deterministic and immune to mainnet state drift. It requires an

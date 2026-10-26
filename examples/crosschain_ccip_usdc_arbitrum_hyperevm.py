@@ -113,6 +113,7 @@ from ipor_fusion import (
     Web3Context,
     erc20_balance_slot,
     is_simulate_v1_supported,
+    parse_checksum_address,
     parse_fuse_address,
 )
 from ipor_fusion.crosschain import (
@@ -151,10 +152,10 @@ ARBITRUM_CHAIN_ID = ChainId(42161)
 HYPEREVM_CHAIN_ID = ChainId(999)
 ARBITRUM_CCIP_SELECTOR = CcipChainSelector(4949039107694359620)
 HYPEREVM_CCIP_SELECTOR = CcipChainSelector(2442541497099098535)
-ARBITRUM_CCIP_ROUTER = Web3.to_checksum_address(
+ARBITRUM_CCIP_ROUTER = parse_checksum_address(
     "0x141fa059441E0ca23ce184B6A78bafD2A517DdE8"
 )
-HYPEREVM_CCIP_ROUTER = Web3.to_checksum_address(
+HYPEREVM_CCIP_ROUTER = parse_checksum_address(
     "0x13b3332b66389B1467CA6eBd6fa79775CCeF65ec"
 )
 
@@ -162,17 +163,17 @@ HYPEREVM_CCIP_ROUTER = Web3.to_checksum_address(
 # (developers.circle.com -> stablecoins -> USDC contract addresses). The USDC
 # CCIP lane between them is a CCTP burn-and-mint lane, so the asset arrives as
 # the same native token on the other side.
-ARBITRUM_USDC = Web3.to_checksum_address("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
-HYPEREVM_USDC = Web3.to_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f")
+ARBITRUM_USDC = parse_checksum_address("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
+HYPEREVM_USDC = parse_checksum_address("0xb88339CB7199b77E23DB6E890353E22632Ba630f")
 USDC_DECIMALS = Decimals(6)
 
 # Chainlink USDC/USD feed proxies (data.chain.link -> feeds -> arbitrum ->
 # mainnet -> usdc-usd, and hyperliquid -> hyperliquid -> usdc-usd; the standard
 # feeds, not SVR). Each vault's price manager prices USDC from its chain's feed.
-ARBITRUM_USDC_USD_FEED = Web3.to_checksum_address(
+ARBITRUM_USDC_USD_FEED = parse_checksum_address(
     "0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3"
 )
-HYPEREVM_USDC_USD_FEED = Web3.to_checksum_address(
+HYPEREVM_USDC_USD_FEED = parse_checksum_address(
     "0xA0Adc43ce7AfE3EE7d7eac3C994E178D0620223B"
 )
 
@@ -180,10 +181,10 @@ HYPEREVM_USDC_USD_FEED = Web3.to_checksum_address(
 # mainnet/mainnet-arbitrum-fusion/addresses.json and
 # mainnet/mainnet-hyperevm-fusion/addresses.json. Their clone(...) creates the
 # hub and the spoke vault.
-ARBITRUM_FUSION_FACTORY = Web3.to_checksum_address(
+ARBITRUM_FUSION_FACTORY = parse_checksum_address(
     "0x134fCAce7a2C7Ef3dF2479B62f03ddabAEa922d5"
 )
-HYPEREVM_FUSION_FACTORY = Web3.to_checksum_address(
+HYPEREVM_FUSION_FACTORY = parse_checksum_address(
     "0x6bBc827F34b4e862d15215ABd4AC0E3886181665"
 )
 
@@ -195,7 +196,7 @@ HYPEREVM_FUSION_FACTORY = Web3.to_checksum_address(
 RELEASE_COMMIT = "10f0f8e4031980b6f130d4f6460c6f8edfbcab32"
 # CcipCrosschainFactory: creates executors on the hub and dispatchers on the
 # spoke, and carries the factory-to-factory deployment ticket.
-CCIP_FACTORY = Web3.to_checksum_address("0xAd84580810A4e498F5F13Ad8506F73782FB472FA")
+CCIP_FACTORY = parse_checksum_address("0xAd84580810A4e498F5F13Ad8506F73782FB472FA")
 # CcipCrosschainSupplyFuse, CcipCrosschainCommandFuse, CrosschainClaimFuse and
 # CrosschainBalanceFuse, all bound to the CROSSCHAIN market (54).
 CCIP_SUPPLY_FUSE = parse_fuse_address("0x00a20FD711083CcE9C9c4292762aFf79f78C48eb")
@@ -207,13 +208,13 @@ CROSSCHAIN_BALANCE_FUSE = parse_fuse_address(
 # CrosschainNavValidationPreHook: closes the vault's share-price-sensitive entry
 # points while any of its executors fails its NAV check (a stale attestation,
 # a blocked chain, a stale transfer).
-CROSSCHAIN_NAV_PRE_HOOK = Web3.to_checksum_address(
+CROSSCHAIN_NAV_PRE_HOOK = parse_checksum_address(
     "0xA17c7A5Ed994aA5FE99C22B37DeCBCbfb32FaFe3"
 )
 # The libraries the executor and the dispatcher link (source path, name,
 # address), in the order Foundry's ``--libraries`` takes them.
 RELEASE_LIBRARIES: tuple[tuple[str, str, ChecksumAddress], ...] = tuple(
-    (source, name, Web3.to_checksum_address(address))
+    (source, name, parse_checksum_address(address))
     for source, name, address in (
         (
             "contracts/crosschain/ccip/lib/CcipRouteLib.sol",
@@ -277,7 +278,7 @@ DISPATCHER_CREATION_CODE_HASH = bytes.fromhex(
 # The factory's owner on both chains, read from CcipCrosschainFactory.owner()
 # (a Safe multisig). Only it configures the factory and allows executor
 # creators; the example checks the read against this constant.
-FACTORY_OWNER = Web3.to_checksum_address("0xA74376157E78053275fdae4A6849B5C16F41A0B9")
+FACTORY_OWNER = parse_checksum_address("0xA74376157E78053275fdae4A6849B5C16F41A0B9")
 
 # ``IporFusionMarkets.CROSSCHAIN``: the market the crosschain fuses are bound to.
 CROSSCHAIN_MARKET = IporFusionMarkets.CROSSCHAIN
@@ -303,17 +304,13 @@ CROSSCHAIN_MARKET = IporFusionMarkets.CROSSCHAIN
 #   RESCUE_GUARDIAN -- can veto the executor's timelocked rescue actions,
 #                  nothing else; the executor refuses it equal to the rescue
 #                  admin (VAULT_OWNER).
-VAULT_OWNER = Web3.to_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
+VAULT_OWNER = parse_checksum_address("0x533ac556E288625B267bD71B7928E0a8B46DcE82")
 # Anvil accounts #0 to #4, well-known test addresses.
-ALPHA = Web3.to_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
-DEPOSITOR = Web3.to_checksum_address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
-BALANCE_PROPOSER = Web3.to_checksum_address(
-    "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
-)
-BALANCE_APPROVER = Web3.to_checksum_address(
-    "0x90F79bf6EB2c4f870365E785982E1f101E93b906"
-)
-RESCUE_GUARDIAN = Web3.to_checksum_address("0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65")
+ALPHA = parse_checksum_address("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+DEPOSITOR = parse_checksum_address("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+BALANCE_PROPOSER = parse_checksum_address("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")
+BALANCE_APPROVER = parse_checksum_address("0x90F79bf6EB2c4f870365E785982E1f101E93b906")
+RESCUE_GUARDIAN = parse_checksum_address("0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65")
 
 # ── Adjustable simulation parameters ─────────────────────────────────────────
 # Pinned after the released contracts were deployed, at the same timestamp on
