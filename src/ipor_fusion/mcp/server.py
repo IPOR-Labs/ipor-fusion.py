@@ -759,7 +759,7 @@ def market_meta_morpho(
         vault_address: MetaMorpho V1 or Vault V2 address.
         chain_id: EVM chain ID.
     """
-    info = fetch_vault(Web3.to_checksum_address(vault_address), chain_id)
+    info = fetch_vault(_address_arg(vault_address), chain_id)
     payload = build_meta_morpho_json(info, chain_id)
     return MetaMorphoVaultResponse.model_validate(payload)
 

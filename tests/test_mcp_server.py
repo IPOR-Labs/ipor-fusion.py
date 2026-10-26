@@ -770,7 +770,7 @@ _LOAN = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
 _COLLAT = "0xD2af830E8CBdFed6CC11Bab697bB25496ed6FA62"
 _ORACLE = "0x7C65985C35181D51eF7571FA40211B57659B7d80"
 _IRM = "0x870Ac11D48B15db9a138Cf899d20F13F79Ba00BC"
-_VAULT = "0xf9bDdD4A9b3a45F980E11Fdde96E16364DDBec49"
+_VAULT = Web3.to_checksum_address("0xf9bddd4a9b3a45f980e11fdde96e16364ddbec49")
 
 
 def _stub_reader_instance():
@@ -1084,6 +1084,18 @@ class TestMarketMetaMorpho:
     def test_unknown_vault_errors(self, _fetch):
         with pytest.raises(MorphoApiError, match="not found"):
             market_meta_morpho(vault_address=_VAULT, chain_id=1)
+
+    @patch("ipor_fusion.mcp.server.fetch_vault", return_value=_v1_info())
+    def test_accepts_padded_bare_lowercase_address(self, fetch):
+        market_meta_morpho(vault_address=f" {_VAULT[2:].lower()} ", chain_id=1)
+        fetch.assert_called_once_with(_VAULT, 1)
+
+    @patch("ipor_fusion.mcp.server.fetch_vault", return_value=_v1_info())
+    def test_rejects_a_wrong_checksum(self, fetch):
+        miscased = _VAULT[:2] + _VAULT[2].swapcase() + _VAULT[3:]
+        with pytest.raises(ValueError, match="invalid address checksum"):
+            market_meta_morpho(vault_address=miscased, chain_id=1)
+        fetch.assert_not_called()
 
 
 class TestVaultAddressArgument:
