@@ -84,3 +84,12 @@ def test_bad_calldata_is_a_tool_error(preflight):
     with pytest.raises(ToolError, match="no actions"):
         _call(vault_address=VAULT, calldata=empty, sender=SENDER)
     preflight.assert_not_called()
+
+
+def test_wrong_sender_checksum_is_a_tool_error(preflight):
+    checksum = Web3.to_checksum_address("0x" + "ab" * 20)
+    miscased = checksum[:2] + checksum[2].swapcase() + checksum[3:]
+    assert miscased[2:] not in (miscased[2:].lower(), miscased[2:].upper())
+    with pytest.raises(ToolError, match="invalid address checksum"):
+        _call(vault_address=VAULT, calldata=CALLDATA, sender=miscased)
+    preflight.assert_not_called()

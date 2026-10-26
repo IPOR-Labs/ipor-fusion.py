@@ -347,6 +347,7 @@ def vault_preflight(
         raise ValueError(f"calldata: {exc}") from exc
     if not actions:
         raise ValueError("calldata: the batch has no actions")
+    sender_address = _address_arg(sender)
     cfg = load_config()
     checksum = _vault_arg(vault_address)
     chain_id = _resolve_chain_id(cfg, checksum, chain_id)
@@ -356,7 +357,7 @@ def vault_preflight(
         ctx,
         checksum,
         actions,
-        sender=Web3.to_checksum_address(sender),
+        sender=sender_address,
         simulate=simulate,
     )
     return ExecutePreflightResponse.model_validate(build_execute_preflight_json(result))
