@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import pytest
+from _addresses import miscased
 from eth_abi import encode
 from hexbytes import HexBytes
 from web3 import Web3
@@ -161,10 +162,8 @@ class TestChecksumParsers:
         for bad in ("0x1234", " " + self.LOWER):
             with pytest.raises(ValueError):
                 parser(bad)
-        i = next(i for i, c in enumerate(checksum) if c in "abcdefABCDEF")
-        miscased = checksum[:i] + checksum[i].swapcase() + checksum[i + 1 :]
         with pytest.raises(ValueError, match="invalid address checksum"):
-            parser(miscased)
+            parser(miscased(checksum))
         # Two characters swapped: a different address that looks right.
         swapped = checksum[:2] + checksum[3] + checksum[2] + checksum[4:]
         assert swapped[2:4] != checksum[2:4]

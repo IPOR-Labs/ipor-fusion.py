@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _addresses import miscased
 from mcp.server.fastmcp.exceptions import ToolError
 from web3 import Web3
 
@@ -26,6 +27,8 @@ from ipor_fusion.types import (
 
 VAULT = PlasmaVaultAddress(Web3.to_checksum_address("0x" + "11" * 20))
 SENDER = Web3.to_checksum_address("0x" + "33" * 20)
+# Hex letters, so it can carry a wrong checksum; SENDER has none.
+SENDER_HEX = "0x" + "ab" * 20
 FUSE = FuseAddress(Web3.to_checksum_address("0x" + "55" * 20))
 ACTION = AaveV3SupplyFuse(FUSE).supply(
     asset=Web3.to_checksum_address("0x" + "44" * 20), amount=Amount(10)
@@ -87,9 +90,6 @@ def test_bad_calldata_is_a_tool_error(preflight):
 
 
 def test_wrong_sender_checksum_is_a_tool_error(preflight):
-    checksum = Web3.to_checksum_address("0x" + "ab" * 20)
-    miscased = checksum[:2] + checksum[2].swapcase() + checksum[3:]
-    assert miscased[2:] not in (miscased[2:].lower(), miscased[2:].upper())
     with pytest.raises(ToolError, match="sender: invalid address checksum"):
-        _call(vault_address=VAULT, calldata=CALLDATA, sender=miscased)
+        _call(vault_address=VAULT, calldata=CALLDATA, sender=miscased(SENDER_HEX))
     preflight.assert_not_called()

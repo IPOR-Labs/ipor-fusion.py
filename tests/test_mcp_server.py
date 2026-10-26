@@ -5,6 +5,7 @@ import importlib.metadata
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
+from _addresses import miscased
 from mcp.server.fastmcp.exceptions import ToolError
 from web3 import Web3
 
@@ -1092,9 +1093,8 @@ class TestMarketMetaMorpho:
 
     @patch("ipor_fusion.mcp.server.fetch_vault", return_value=_v1_info())
     def test_rejects_a_wrong_checksum(self, fetch):
-        miscased = _VAULT[:2] + _VAULT[2].swapcase() + _VAULT[3:]
         with pytest.raises(ValueError, match="invalid address checksum"):
-            market_meta_morpho(vault_address=miscased, chain_id=1)
+            market_meta_morpho(vault_address=miscased(_VAULT), chain_id=1)
         fetch.assert_not_called()
 
 
@@ -1126,10 +1126,8 @@ class TestVaultAddressArgument:
             _vault_arg(raw)
 
     def test_rejects_a_wrong_checksum(self):
-        checksum = Web3.to_checksum_address(self.VAULT)
-        i = next(i for i, c in enumerate(checksum) if c in "abcdefABCDEF")
-        miscased = checksum[:i] + checksum[i].swapcase() + checksum[i + 1 :]
-        for raw in (miscased, "0X" + miscased[2:], miscased[2:]):
+        bad = miscased(self.VAULT)
+        for raw in (bad, "0X" + bad[2:], bad[2:]):
             with pytest.raises(ValueError, match="invalid address checksum"):
                 _vault_arg(raw)
 

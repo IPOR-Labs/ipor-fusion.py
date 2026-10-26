@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 import pytest
+from _addresses import miscased
 from web3 import Web3
 
 from ipor_fusion.core.fusion_factory import FusionInstance
@@ -42,15 +43,6 @@ def _stored() -> dict:
     }
 
 
-def _miscased(address: str) -> str:
-    # A wrong checksum needs mixed case after the flip: at least two letters.
-    checksummed = Web3.to_checksum_address(address)
-    letters = [i for i, c in enumerate(checksummed) if i > 1 and c.isalpha()]
-    assert len(letters) >= 2, f"no wrong checksum is possible for {address}"
-    i = letters[0]
-    return checksummed[:i] + checksummed[i].swapcase() + checksummed[i + 1 :]
-
-
 def test_from_dict_checksums_every_address_and_round_trips():
     stored = _stored()
     instance = FusionInstance.from_dict(stored)
@@ -67,8 +59,8 @@ def test_from_dict_checksums_every_address_and_round_trips():
         (lambda d: d.update(extra=1), "extra"),
         (lambda d: d.update(plasma_vault="0x1234"), "address"),
         (lambda d: d.update(plasma_vault=" " + d["plasma_vault"]), "address"),
-        (lambda d: d.update(plasma_vault=_miscased(d["plasma_vault"])), "checksum"),
-        (lambda d: d.update(price_manager=_miscased(d["price_manager"])), "checksum"),
+        (lambda d: d.update(plasma_vault=miscased(d["plasma_vault"])), "checksum"),
+        (lambda d: d.update(price_manager=miscased(d["price_manager"])), "checksum"),
         (lambda d: d.update(asset_decimals="8"), "integer"),
         (lambda d: d.update(index=True), "integer"),
         (lambda d: d.update(asset_symbol=None), "string"),

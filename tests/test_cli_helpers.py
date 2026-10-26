@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+from _addresses import miscased
 from _multicall import decode_aggregate3, multicall_aware
 from _validation import holding, validate
 from click.testing import CliRunner
@@ -144,7 +145,7 @@ class TestAddressType:
 
     def test_bad_checksum_mixed_case(self):
         good = str(Web3.to_checksum_address("0x" + "1a2b3c4d5e" * 4))
-        bad = good[:-1] + good[-1].swapcase()
+        bad = miscased(good)
         runner = CliRunner()
 
         @click.command()
