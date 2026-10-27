@@ -312,7 +312,21 @@ def resolve_token_decimals(ctx: Web3Context, address: HexAddress) -> Decimals | 
     return decimals
 
 
-def _block_timestamp(ctx: Web3Context, block: int) -> Timestamp:
+def _latest_head(ctx: Web3Context) -> tuple[int, Timestamp]:
+    """The latest block's number and timestamp from one read.
+
+    Reading the head number first and the block by number second can reach a
+    node behind a load balancer that has not seen that block yet.
+    """
+    head = ctx.web3.eth.get_block("latest")
+    return head["number"], head["timestamp"]
+
+
+def _block_timestamp(
+    ctx: Web3Context, block: int, known: Timestamp | None
+) -> Timestamp:
+    if known is not None:
+        return known
     return ctx.web3.eth.get_block(block)["timestamp"]
 
 
@@ -634,14 +648,18 @@ def fetch_vault_data(
     ensure_supported_chain(ctx.chain_id)
     if block is None:
         block = _pinned_default_block(ctx)
-    resolved_block = ctx.web3.eth.block_number if block is None else block
     is_latest = block is None
+    head_timestamp: Timestamp | None = None
+    if block is None:
+        resolved_block, head_timestamp = _latest_head(ctx)
+    else:
+        resolved_block = block
     ctx = ctx.at_block(resolved_block)
     plasma_vault = PlasmaVault(vault)
     with ThreadPoolExecutor() as pool:
         # Independent pipelines, each a short chain of batched reads; none of
         # them waits on a pool future, so they cannot starve the pool.
-        f_timestamp = pool.submit(_block_timestamp, ctx, resolved_block)
+        f_timestamp = pool.submit(_block_timestamp, ctx, resolved_block, head_timestamp)
         f_vault = pool.submit(_fetch_vault_reads, ctx, plasma_vault)
         f_fees = pool.submit(_fetch_fee_data, ctx, plasma_vault)
         f_withdraw = pool.submit(_fetch_withdraw_manager, ctx, plasma_vault)
