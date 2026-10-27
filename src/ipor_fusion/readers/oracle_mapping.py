@@ -236,15 +236,32 @@ def _resolve_middleware_fallback(
     node.source_type = TYPE_MIDDLEWARE_FALLBACK
     node.status = "resolved"
     if underlying_middleware is not None:
-        # Same asset, different oracle — must not be in `visited` yet; runaway
-        # manager→manager chains are bounded by max_depth instead.
-        dep = _resolve(
-            reader.delegate(underlying_middleware),
-            asset,
-            depth + 1,
-            visited,
-            max_depth,
-        )
+        # Same asset, different oracle: the asset key is not in `visited` yet,
+        # so the hop is keyed by (oracle, asset) — a manager chain that loops
+        # back ends as a cycle instead of running to max_depth.
+        hop = f"{underlying_middleware.lower()}/{asset.lower()}"
+        if hop in visited:
+            return _partial(
+                asset,
+                symbol,
+                decimals,
+                source,
+                TYPE_UNKNOWN,
+                "cycle_detected",
+                [label],
+                price,
+            )
+        visited.add(hop)
+        try:
+            dep = _resolve(
+                reader.delegate(underlying_middleware),
+                asset,
+                depth + 1,
+                visited,
+                max_depth,
+            )
+        finally:
+            visited.discard(hop)
         node.dependencies = [dep]
         # dep re-resolves the same asset, so drop its leading label from the path.
         node.path = [label, "middleware fallback", *dep.path[1:]]
