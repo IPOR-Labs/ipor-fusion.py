@@ -636,6 +636,26 @@ class TestResolve:
             "chainlink_feed_registry": None,
         }
 
+    def test_manager_delegating_to_itself_ends_as_a_cycle(self):
+        r = FakeReader()
+        weth = addr(1)
+        mw = addr(0x51)
+        zero = Web3.to_checksum_address(om.ZERO_ADDRESS)
+        r.symbols[weth] = "WETH"
+        r.decimals[weth] = 18
+        r.sources[weth] = zero
+        r.prices[weth] = Price(asset=weth, amount=2_000 * 10**18, decimals=18)
+        r.underlying_mw = mw
+        r.delegated = r  # the manager names itself as its underlying middleware
+
+        node = om.resolve_asset(r, weth, max_depth=50)
+
+        # one hop back to the same manager, not 50 down to max_depth
+        (dep,) = node.dependencies
+        assert dep.reason == "cycle_detected"
+        assert not dep.dependencies
+        assert node.status == "partially_resolved"
+
     def test_zero_underlying_middleware_treated_as_absent(self):
         r = FakeReader()
         asset = addr(1)
