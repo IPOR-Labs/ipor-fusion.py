@@ -467,6 +467,7 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "HyperCoreActionSettledArgs",
             "HyperCoreActionSettledEvent",
             "HyperCoreAsset",
+            "HyperCoreBbo",
             "HyperCoreBuilderFeeFuse",
             "HyperCoreBuilderFeeFuseEnterArgs",
             "HyperCoreBuilderFeeFuseEnterEvent",
