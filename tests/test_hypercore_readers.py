@@ -29,6 +29,7 @@ from ipor_fusion.hypercore import (
     HyperCoreSpotBalance,
     HyperCoreTokenInfo,
     convert_to_wad_int,
+    perp_px_decimals,
     read_hypercore_nav,
 )
 from ipor_fusion.readers.hypercore import (
@@ -333,6 +334,17 @@ class TestUniversalRead:
 )
 def test_convert_to_wad_int_rounds_like_ipor_math(value, decimals, expected):
     assert convert_to_wad_int(value, decimals) == expected
+
+
+@pytest.mark.parametrize(("sz_decimals", "expected"), [(0, 6), (5, 1), (6, 0)])
+def test_perp_px_decimals(sz_decimals, expected):
+    assert perp_px_decimals(sz_decimals) == expected
+
+
+@pytest.mark.parametrize("sz_decimals", [-1, 7])
+def test_perp_px_decimals_rejects_out_of_range(sz_decimals):
+    with pytest.raises(ValueError, match="sz_decimals"):
+        perp_px_decimals(sz_decimals)
 
 
 def _universal_read(data: bytes) -> bytes:

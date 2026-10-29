@@ -95,12 +95,14 @@ from ipor_fusion import (
     Web3Context,
     decode_substrate,
     erc20_balance_slot,
+    format_amount,
     is_simulate_v1_supported,
     parse_checksum_address,
     parse_fuse_address,
 )
 from ipor_fusion.hypercore import (
     HYPERCORE_PENDING_READERS,
+    ORDER_DECIMALS,
     SPOT_DEX,
     USDC_SYSTEM_ADDRESS,
     USDC_TOKEN_INDEX,
@@ -119,6 +121,7 @@ from ipor_fusion.hypercore import (
     TimeInForce,
     decode_hypercore_event,
     hip3_action_asset,
+    perp_px_decimals,
     precompile_index_of,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
@@ -224,9 +227,10 @@ BRIDGE_AMOUNT = Amount(15_000_000)  # 15 USDC EVM -> Core
 # whose default is that same 1 USDC in Core wei.
 ACTIVATION_FEE_WEI = 100_000_000
 TO_DEX_WEI = 1_000_000_000  # 10 USDC spot -> xyz dex
-ORDER_SIZE = 5_000_000  # 0.05 xyz:NVDA (a multiple of the 10**(8 - 3) lot)
-LIMIT_BUY_PX = 230 * 10**8  # pays at most 230 USD
-LIMIT_SELL_PX = 220 * 10**8  # sells at no less than 220 USD
+# 0.05 xyz:NVDA, a multiple of its 10**(ORDER_DECIMALS - 3) lot
+ORDER_SIZE = 5 * 10 ** (ORDER_DECIMALS - 2)
+LIMIT_BUY_PX = 230 * 10**ORDER_DECIMALS  # pays at most 230 USD
+LIMIT_SELL_PX = 220 * 10**ORDER_DECIMALS  # sells at no less than 220 USD
 # Core -> EVM: a spot -> spot sendAsset to the USDC system address. The amount
 # must be a multiple of 100 Core wei (representable in 6 EVM decimals); Core
 # takes its transfer fee from what stays on spot.
@@ -374,7 +378,7 @@ def core_ledger() -> tuple[CoreAnswers, ...]:
     bridged = BRIDGE_AMOUNT * CORE_WEI_PER_EVM_UNIT - ACTIVATION_FEE_WEI
     mark = 225_000
     on_dex = TO_DEX_WEI // 100  # Core wei -> USD6
-    filled = ORDER_SIZE // 10 ** (8 - XYZ_NVDA_SZ_DECIMALS)
+    filled = ORDER_SIZE // 10 ** (ORDER_DECIMALS - XYZ_NVDA_SZ_DECIMALS)
     return (
         CoreAnswers(False, 0, 0, 0, mark),  # before the bridge: no Core account
         CoreAnswers(True, bridged, 0, 0, mark),  # the bridge landed
@@ -481,7 +485,7 @@ def check_core_metadata(
         f"{XYZ_NVDA_COIN} szDecimals is {nvda_info.sz_decimals}",
     )
     _check(
-        ORDER_SIZE % 10 ** (8 - nvda_info.sz_decimals) == 0,
+        ORDER_SIZE % 10 ** (ORDER_DECIMALS - nvda_info.sz_decimals) == 0,
         "the order size is not a whole number of lots",
     )
 
@@ -512,7 +516,7 @@ def read_core_metadata_at_head(web3: Web3) -> None:
         wallet_token,
         nvda_info.coin,
         nvda_info.sz_decimals,
-        mark / 10 ** (6 - nvda_info.sz_decimals),
+        format_amount(Amount(mark), perp_px_decimals(nvda_info.sz_decimals)),
     )
 
 

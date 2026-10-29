@@ -81,6 +81,10 @@ HYPERCORE_PENDING_READERS: dict[ChainId, ChecksumAddress] = {
 WAD_DECIMALS = 18
 #: ``accountMarginSummary`` reports USD with 6 decimals.
 USD6_DECIMALS = 6
+#: The most decimals a perp price can carry: Hyperliquid's ``MAX_DECIMALS``,
+#: which is 6 for perps (8 for spot). A perp's price has
+#: ``PERP_MAX_DECIMALS - szDecimals`` decimals (:func:`perp_px_decimals`).
+PERP_MAX_DECIMALS = 6
 _INT256_MAX = (1 << 255) - 1
 
 
@@ -109,6 +113,16 @@ HIP3_VALUATION_ORDER = (1, 6, 8, 9, 10)
 def _validate_uint(value: int, bits: int, name: str) -> None:
     if not 0 <= value < (1 << bits):
         raise ValueError(f"{name} must fit in uint{bits}, got {value}")
+
+
+def perp_px_decimals(sz_decimals: Decimals) -> Decimals:
+    """Decimals of a perp's :meth:`HyperCoreReader.mark_px` and
+    :meth:`HyperCoreReader.oracle_px`, from its ``szDecimals``."""
+    if not 0 <= sz_decimals <= PERP_MAX_DECIMALS:
+        raise ValueError(
+            f"sz_decimals must be in 0..{PERP_MAX_DECIMALS}, got {sz_decimals}"
+        )
+    return Decimals(PERP_MAX_DECIMALS - sz_decimals)
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,10 +320,12 @@ class HyperCoreReader:
         return self._read(WITHDRAWABLE_PRECOMPILE, ["address"], [user], ["uint64"])
 
     def oracle_px(self, read_index: int) -> Call[int]:
+        """A perp's oracle price, with :func:`perp_px_decimals` decimals."""
         _validate_uint(read_index, 32, "read_index")
         return self._read(ORACLE_PX_PRECOMPILE, ["uint32"], [read_index], ["uint64"])
 
     def mark_px(self, read_index: int) -> Call[int]:
+        """A perp's mark price, with :func:`perp_px_decimals` decimals."""
         _validate_uint(read_index, 32, "read_index")
         return self._read(MARK_PX_PRECOMPILE, ["uint32"], [read_index], ["uint64"])
 
