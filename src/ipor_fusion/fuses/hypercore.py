@@ -17,7 +17,7 @@ native perp dex is 0. A HIP-3 builder-deployed market is addressed by its
 action asset ``100_000 + dex * 10_000 + index_in_dex`` in orders, cancels and
 the PerpMarket substrate; the read precompiles take ``dex * 10_000 +
 index_in_dex`` instead (:func:`precompile_index_of`). Amounts are Core integers:
-``limit_px`` and ``sz`` carry 8 implied decimals, ``usd6`` 6, and
+``limit_px`` and ``sz`` carry :data:`ORDER_DECIMALS` implied decimals, ``usd6`` 6, and
 ``amount_wei`` is Core wei (8 decimals for USDC).
 
 ABI (one struct argument per method)::
@@ -64,6 +64,8 @@ from ipor_fusion.types import (
 SPOT_DEX = 0xFFFFFFFF
 #: ``HyperCoreLib.NATIVE_PERP_DEX``: Hyperliquid's own perp dex.
 NATIVE_PERP_DEX = 0
+#: Decimals of ``limit_px`` and ``sz`` in :meth:`HyperCoreOrderFuse.enter`.
+ORDER_DECIMALS = 8
 #: Core token index of USDC.
 USDC_TOKEN_INDEX = HyperCoreTokenIndex(0)
 #: Core -> EVM route for token 0: a spot -> spot ``sendAsset`` to this address
@@ -297,7 +299,8 @@ class HyperCoreOrderFuse(Fuse):
         cloid: HyperCoreClientOrderId,
         reduce_only: bool = False,
     ) -> FuseAction:
-        """Place ``sz`` (8 decimals) of ``asset`` at ``limit_px`` (8 decimals).
+        """Place ``sz`` of ``asset`` at ``limit_px``, both with
+        :data:`ORDER_DECIMALS` decimals.
         The fuse enforces the market's notional cap and lot size and, for
         HIP-3 markets, that this is the vault's only PerpMarket grant."""
         _validate_uint(asset, 32, "asset")

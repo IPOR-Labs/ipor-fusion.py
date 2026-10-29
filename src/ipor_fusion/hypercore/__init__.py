@@ -8,6 +8,7 @@ with no backward compatibility, which is why they live here rather than in
 """
 
 from ipor_fusion.fuses.hypercore import (
+    ORDER_DECIMALS,
     RESERVED_HYPERCORE_CONFIG_KEYS,
     SPOT_DEX,
     USDC_SYSTEM_ADDRESS,
@@ -68,6 +69,8 @@ from ipor_fusion.fuses.hypercore_pre_hooks import (
 from ipor_fusion.readers.hypercore import (
     HYPERCORE_MARKET,
     HYPERCORE_PENDING_READERS,
+    PERP_MAX_DECIMALS,
+    USD6_DECIMALS,
     HyperCoreAccountMarginSummary,
     HyperCoreActionClass,
     HyperCoreEffectKind,
@@ -84,6 +87,7 @@ from ipor_fusion.readers.hypercore import (
     HyperCoreTokenInfo,
     HyperCoreVaultState,
     convert_to_wad_int,
+    perp_px_decimals,
     read_hypercore_nav,
     read_hypercore_vault_state,
 )
@@ -110,9 +114,12 @@ from ipor_fusion.types import (
 
 __all__ = [
     "MarginTableId",
+    "ORDER_DECIMALS",
+    "PERP_MAX_DECIMALS",
     "PayloadHash",
     "SPOT_DEX",
     "TransferDirection",
+    "USD6_DECIMALS",
     "USDC_SYSTEM_ADDRESS",
     "USDC_TOKEN_INDEX",
     "HYPERCORE_CAPITAL_FLOW_SELECTORS",
@@ -190,6 +197,7 @@ __all__ = [
     "is_hip3_asset",
     "is_native_perp_asset",
     "perp_dex_of",
+    "perp_px_decimals",
     "precompile_index_of",
     "read_hypercore_evm_exit_ceiling",
     "read_hypercore_nav",
