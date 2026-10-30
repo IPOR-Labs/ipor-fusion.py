@@ -1,4 +1,6 @@
 import json
+import re
+import shlex
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
@@ -181,6 +183,24 @@ class TestConfigSetProvider:
         assert result.exit_code == 0
         assert "Detected chain ID: 42161" in result.output
         assert "Provider for chain 42161 set" in result.output
+
+    def test_no_provider_hint_runs_as_printed(self, tmp_config):
+        failed = CliRunner().invoke(
+            cli, ["vault", "info", ADDR_1, "--chain-id", "42161"]
+        )
+        assert failed.exit_code == 2
+        hint = re.search(r"'fusion (.+)'", failed.output)
+        assert hint is not None, failed.output
+        args = [
+            "https://arb-rpc.example.com" if arg == "<url>" else arg
+            for arg in shlex.split(hint.group(1))
+        ]
+
+        result = CliRunner().invoke(cli, args)
+        assert result.exit_code == 0, result.output
+
+        cfg_data = json.loads(tmp_config[1].read_text(encoding="utf-8"))
+        assert cfg_data["providers"]["42161"] == "https://arb-rpc.example.com"
 
 
 class TestConfigSetEtherscanKey:

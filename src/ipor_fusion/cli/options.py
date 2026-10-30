@@ -138,7 +138,7 @@ def _resolve_provider(cfg: FusionConfig, chain_id: ChainId) -> str:
         return provider_url
     raise click.UsageError(
         f"No provider for chain {chain_id}. "
-        f"Use 'fusion config set-provider {chain_id} <url>'"
+        f"Use 'fusion config set-provider <url> --chain-id {chain_id}'"
     )
 
 
