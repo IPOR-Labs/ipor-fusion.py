@@ -14,6 +14,7 @@ from typing import NoReturn
 
 import pytest
 import requests
+from _rpc_cache import with_cache
 from web3 import Web3
 from web3.exceptions import Web3Exception
 
@@ -50,7 +51,9 @@ def archive_context(env_var: str, block: int, contract: str) -> Web3Context:
     """A context pinned to ``block`` on the provider in ``env_var``, once it
     has connected and served ``contract``'s code at that block (historical
     state, not just the header); later SDK errors are test failures, not
-    infrastructure."""
+    infrastructure. Its reads at finalized blocks go through `_rpc_cache`; the
+    probe always reaches the node, since a cached answer would vouch for a
+    provider that can no longer serve the block."""
     url = provider_url(env_var)
     # The failure is reported outside the except block: a chained traceback
     # would print the request URL, which embeds the API key.
@@ -64,4 +67,6 @@ def archive_context(env_var: str, block: int, contract: str) -> Web3Context:
         unavailable(env_var, f"{env_var} cannot serve state at {block}: {failure}")
     if not code:
         unavailable(env_var, f"{env_var} returned no code for {contract} at {block}")
+    # `from_url`'s middleware lives on the `Web3`, so swapping the provider keeps it.
+    ctx.web3.provider = with_cache(ctx.web3.provider)
     return ctx.at_block(block)

@@ -5,6 +5,8 @@ from typing import Any
 
 import _rpc_cache
 import pytest
+import requests
+from _live import archive_context
 from _rpc_cache import (
     CachingProvider,
     endpoint_key,
@@ -432,3 +434,76 @@ def test_cache_can_be_turned_off(monkeypatch):
 
     monkeypatch.delenv("IPOR_FUSION_TEST_RPC_CACHE")
     assert isinstance(http_provider(URL), CachingProvider)
+
+
+CONTRACT = "0x" + "11" * 20
+EXTRA_DATA = "0x" + "ab" * 66
+
+
+class _ArchiveNode(_Network):
+    """A `_Network` whose `eth_getCode` answers `code` (`ERROR` raises a
+    connection error) and whose block 16 carries `EXTRA_DATA`."""
+
+    code: Any = "0x6080"
+
+    def make_request(self, method: RPCEndpoint, params: Any) -> RPCResponse:
+        if method == "eth_getCode":
+            self.calls.append(method)
+            if self.code is ERROR:
+                raise requests.ConnectionError
+            return _reply(self.code)
+        if method == "eth_getBlockByNumber" and params[0] == "0x10":
+            self.calls.append(method)
+            return _reply({"number": "0x10", "extraData": EXTRA_DATA})
+        return super().make_request(method, params)
+
+
+@pytest.fixture
+def archive_node(monkeypatch, tmp_path) -> _ArchiveNode:
+    """An `_ArchiveNode` behind every `HTTPProvider`, at `URL` in the env var
+    `TEST_PROVIDER_URL`."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("TEST_PROVIDER_URL", URL)
+    monkeypatch.delenv("IPOR_FUSION_TEST_RPC_CACHE", raising=False)
+    monkeypatch.delenv("IPOR_FUSION_REQUIRE_LIVE", raising=False)
+    network = _ArchiveNode()
+    monkeypatch.setattr(
+        HTTPProvider,
+        "make_request",
+        lambda _self, method, params: network.make_request(method, params),
+    )
+    return network
+
+
+def test_archive_context_probes_the_node_and_caches_its_reads(archive_node, tmp_path):
+    for _ in range(2):
+        ctx = archive_context("TEST_PROVIDER_URL", 16, CONTRACT)
+        # Over 32 bytes of extraData fail web3's block formatter unless
+        # `from_url`'s ExtraDataToPOAMiddleware still runs, from the cache too.
+        block = ctx.web3.eth.get_block(16)
+        assert block["proofOfAuthorityData"] == HexBytes(EXTRA_DATA)
+        assert "in_flight_limit" in ctx.web3.middleware_onion
+        assert "validation" not in ctx.web3.middleware_onion
+
+    assert archive_node.count("eth_getCode") == 2
+    # A finality lookup per provider and one block read; the second is cached.
+    assert archive_node.count("eth_getBlockByNumber") == 3
+    assert len(_entries(tmp_path)) == 1
+
+
+@pytest.mark.parametrize("code", ["0x", ERROR])
+def test_archive_context_skips_a_provider_that_cannot_serve_the_block(
+    archive_node, code
+):
+    archive_node.code = code
+
+    with pytest.raises(pytest.skip.Exception):
+        archive_context("TEST_PROVIDER_URL", 16, CONTRACT)
+
+
+def test_archive_context_can_skip_the_cache(archive_node, monkeypatch):
+    monkeypatch.setenv("IPOR_FUSION_TEST_RPC_CACHE", "0")
+
+    ctx = archive_context("TEST_PROVIDER_URL", 16, CONTRACT)
+
+    assert type(ctx.web3.provider) is HTTPProvider
