@@ -748,7 +748,7 @@ class TestUniversalTokenSwapperSubstrates:
         with pytest.raises(ValueError, match="20-byte"):
             UniversalTokenSwapperSubstrates.token("0x1234")  # type: ignore[arg-type]
 
-    @pytest.mark.parametrize("spelling", [ZERO_ADDRESS, "0" * 40])
+    @pytest.mark.parametrize("spelling", [ZERO_ADDRESS, "0X" + "0" * 40, "0" * 40])
     def test_zero_address_rejected(self, spelling):
         # Mirrors UniversalTokenSwapperSubstrateLibZeroAddress on-chain. The
         # error names the field, so a guard wired to the wrong one would show.
@@ -1214,9 +1214,9 @@ class TestSlippageParamsAllowZero:
 class TestFuseConstructorValidation:
     """Fuse constructor must reject zero and empty addresses."""
 
-    @pytest.mark.parametrize("spelling", [ZERO_ADDR, "0" * 40])
+    @pytest.mark.parametrize("spelling", [ZERO_ADDR, "0X" + "0" * 40, "0" * 40])
     def test_zero_address_rejected(self, spelling):
-        # Prefixed and un-prefixed name the same address; both must be caught.
+        # Every prefix spelling names the same address; all must be caught.
         with pytest.raises(ValueError, match="zero address"):
             AaveV3SupplyFuse(spelling)
 
@@ -2203,7 +2203,7 @@ class TestExternalStateSubstrates:
     @pytest.mark.parametrize(
         ("encoder", "field"), _ADDRESS_ENCODERS, ids=_ADDRESS_ENCODER_IDS
     )
-    @pytest.mark.parametrize("spelling", [ZERO_ADDRESS, "0" * 40])
+    @pytest.mark.parametrize("spelling", [ZERO_ADDRESS, "0X" + "0" * 40, "0" * 40])
     def test_zero_address_rejected(self, encoder, field, spelling):
         # Mirrors ExternalStateErrors.ExternalStateZeroAddress on-chain. The
         # bare spelling matters: config files and CSV exports drop the 0x, and
