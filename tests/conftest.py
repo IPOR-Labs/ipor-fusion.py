@@ -80,6 +80,10 @@ def _connected_web3(env_var: str) -> Web3:
     """Build a Web3 client from `env_var`; skip the test if missing/unreachable
     (fail when the run requires it, see `_live`)."""
     w3 = Web3(Web3.HTTPProvider(provider_url(env_var)))
+    # web3's validation middleware reads eth_chainId before and after every
+    # eth_call to check a transaction's chainId; these clients only read and
+    # simulate, so drop it, as Web3Context.from_url does.
+    w3.middleware_onion.remove("validation")
     if not w3.is_connected():
         unavailable(env_var, f"cannot reach RPC at {env_var}")
     return w3
