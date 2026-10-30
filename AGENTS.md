@@ -70,6 +70,11 @@ public Solidity sources from GitHub). Skip only for an unavailable source; an
 exception from the
 SDK is a test failure, never a skip. Never print `.env` or a provider URL: they
 embed API keys, so skip and fail messages carry the exception type only.
+The `web3_*` fixtures cache responses to reads at finalized blocks in
+`$XDG_CACHE_HOME/ipor-fusion/tests/` (`tests/_rpc_cache.py`), so a rerun of the
+tests on them refetches only reads that can still change; clients built with
+`Web3Context.from_url` and JSON-RPC batch requests are not cached.
+`IPOR_FUSION_TEST_RPC_CACHE=0` turns it off.
 `HYPEREVM_PROVIDER_URL` is used by the Arbitrum → HyperEVM rehearsal and the
 HyperCore tests; general PR CI does not supply it.
 `test_simulate_crosschain_hyperevm.py` rehearses Arbitrum → HyperEVM on pinned blocks
