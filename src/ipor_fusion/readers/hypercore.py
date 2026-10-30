@@ -99,6 +99,7 @@ ORACLE_PX_PRECOMPILE = _precompile(0x807)
 L1_BLOCK_NUMBER_PRECOMPILE = _precompile(0x809)
 PERP_ASSET_INFO_PRECOMPILE = _precompile(0x80A)
 TOKEN_INFO_PRECOMPILE = _precompile(0x80C)
+BBO_PRECOMPILE = _precompile(0x80E)
 ACCOUNT_MARGIN_SUMMARY_PRECOMPILE = _precompile(0x80F)
 CORE_USER_EXISTS_PRECOMPILE = _precompile(0x810)
 #: ``position2``: same layout as ``position`` (``0x800``), which reads indexes up
@@ -171,6 +172,15 @@ class HyperCorePerpAssetInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class HyperCoreBbo:
+    """``bbo`` precompile result: the best bid and ask, ``None`` for an empty
+    side of the book, which the precompile answers as 0 (never a real price)."""
+
+    bid: int | None
+    ask: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class HyperCorePosition:
     """``position`` precompile result; ``szi`` and ``isolated_raw_usd`` are
     signed."""
@@ -225,14 +235,19 @@ def _position(values: tuple[int, int, int, int, bool]) -> HyperCorePosition:
     return HyperCorePosition(*values)
 
 
+def _bbo(values: tuple[int, int]) -> HyperCoreBbo:
+    bid, ask = values
+    return HyperCoreBbo(bid=bid or None, ask=ask or None)
+
+
 class HyperCoreReader:
     """The HyperCore read precompiles as :class:`Call`s.
 
-    Mirrors ``HyperCoreLib``'s reads: a precompile takes its arguments as raw
-    ABI-encoded words (no selector) and answers one ABI-encoded value. The
-    perp reads take the *read index* of a market
+    Mirrors ``HyperCoreLib``'s reads, plus :meth:`bbo`: a precompile takes its
+    arguments as raw ABI-encoded words (no selector) and answers one
+    ABI-encoded value. The perp reads take the *read index* of a market
     (:func:`ipor_fusion.hypercore.precompile_index_of`: the action asset without the HIP-3
-    offset), never the action asset itself.
+    offset); only :meth:`bbo` takes the action asset itself.
     """
 
     def _read(
@@ -328,6 +343,15 @@ class HyperCoreReader:
         """A perp's mark price, with :func:`perp_px_decimals` decimals."""
         _validate_uint(read_index, 32, "read_index")
         return self._read(MARK_PX_PRECOMPILE, ["uint32"], [read_index], ["uint64"])
+
+    def bbo(self, asset: HyperCoreAsset) -> Call[HyperCoreBbo]:
+        """The best bid and ask of ``asset``, the action asset an order takes
+        (a HIP-3 read index answers another market's book). A perp's prices
+        have :func:`perp_px_decimals` decimals."""
+        _validate_uint(asset, 32, "asset")
+        return self._read(
+            BBO_PRECOMPILE, ["uint32"], [asset], ["uint64", "uint64"], _bbo
+        )
 
     def l1_block_number(self) -> Call[int]:
         return self._read(L1_BLOCK_NUMBER_PRECOMPILE, [], [], ["uint64"])

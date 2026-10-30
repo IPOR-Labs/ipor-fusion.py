@@ -21,6 +21,7 @@ from ipor_fusion import (
 )
 from ipor_fusion.hypercore import (
     HyperCoreActionClass,
+    HyperCoreBbo,
     HyperCoreEffectKind,
     HyperCoreNav,
     HyperCorePendingReader,
@@ -152,11 +153,33 @@ class TestPrecompileCalls:
             self.reader.core_user_exists(VAULT).decode(encode(["bool"], [True])) is True
         )
 
+    def test_bbo_takes_the_action_asset(self):
+        call = self.reader.bbo(110_002)
+        # The literal, so a wrong BBO_PRECOMPILE fails.
+        assert call.to == Web3.to_checksum_address("0x" + "00" * 18 + "080e")
+        assert call.data == encode(["uint32"], [110_002])
+        bbo = call.decode(encode(["uint64", "uint64"], [213_750, 213_770]))
+        assert bbo == HyperCoreBbo(bid=213_750, ask=213_770)
+
+    def test_bbo_reads_an_empty_side_as_none(self):
+        empty_ask = self.reader.bbo(10_200).decode(
+            encode(["uint64", "uint64"], [18_700_000, 0])
+        )
+        assert empty_ask == HyperCoreBbo(bid=18_700_000, ask=None)
+        empty_bid = self.reader.bbo(10_200).decode(
+            encode(["uint64", "uint64"], [0, 18_800_000])
+        )
+        assert empty_bid == HyperCoreBbo(bid=None, ask=18_800_000)
+        empty = self.reader.bbo(10_220).decode(encode(["uint64", "uint64"], [0, 0]))
+        assert empty == HyperCoreBbo(bid=None, ask=None)
+
     def test_arguments_are_width_checked(self):
         with pytest.raises(ValueError, match="uint64"):
             self.reader.spot_balance(VAULT, 1 << 64)
         with pytest.raises(ValueError, match="uint32"):
             self.reader.perp_asset_info(1 << 32)
+        with pytest.raises(ValueError, match="uint32"):
+            self.reader.bbo(1 << 32)
 
 
 USDC = Web3.to_checksum_address("0xb88339cb7199b77e23db6e890353e22632ba630f")
