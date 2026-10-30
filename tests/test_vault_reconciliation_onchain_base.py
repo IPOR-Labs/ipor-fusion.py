@@ -12,14 +12,10 @@ Skipped unless an archive BASE RPC is configured via ``BASE_PROVIDER_URL``.
 
 from __future__ import annotations
 
-import os
-
-import pytest
-import requests
+from _live import archive_context
 from web3 import Web3
-from web3.exceptions import Web3Exception
 
-from ipor_fusion import Web3Context, validate_vault
+from ipor_fusion import validate_vault
 from ipor_fusion.vault_data import fetch_vault_data
 
 BLOCK = 52945233
@@ -27,24 +23,14 @@ NETTING_VAULT = Web3.to_checksum_address("0x7872893e528fe2c0829e405960db5b742112
 GROSS_VAULT = Web3.to_checksum_address("0x17d0f109ee895bad0b68aa104aa72bd0b003ad8e")
 
 
-def _ctx() -> Web3Context:
-    url = os.environ.get("BASE_PROVIDER_URL")
-    if not url:
-        pytest.skip("BASE_PROVIDER_URL not set")
-    return Web3Context.from_url(url)
-
-
-def _fetch(ctx: Web3Context, vault):
-    try:
-        ctx.web3.eth.get_block(BLOCK)
-    except (Web3Exception, requests.RequestException) as exc:
-        pytest.skip(f"BASE archive block unavailable: {type(exc).__name__}")
+def _fetch(vault):
+    ctx = archive_context("BASE_PROVIDER_URL", BLOCK, vault)
     data = fetch_vault_data(ctx, vault, block=BLOCK, lending=False, metadata=False)
     return data, validate_vault(ctx, vault, block=BLOCK)
 
 
 def test_a_vault_netting_the_management_fee_reconciles():
-    data, validation = _fetch(_ctx(), NETTING_VAULT)
+    data, validation = _fetch(NETTING_VAULT)
     recon = validation.reconciliation
     fee = data.unrealized_management_fee
     assert fee is not None and fee > 0
@@ -56,7 +42,7 @@ def test_a_vault_netting_the_management_fee_reconciles():
 
 
 def test_a_gross_vault_with_vested_rewards_reconciles():
-    data, validation = _fetch(_ctx(), GROSS_VAULT)
+    data, validation = _fetch(GROSS_VAULT)
     recon = validation.reconciliation
     assert data.unrealized_management_fee
     assert data.rewards_manager_balance
