@@ -40,6 +40,14 @@ from ipor_fusion.types import Amount, Period
 
 ZERO_ADDRESS = Web3.to_checksum_address("0x0000000000000000000000000000000000000000")
 
+# The block every Euler V2 Base test reads and simulates at. Fixed, so that a
+# result depends on the code alone: the setup relies on Euler and Morpho state
+# (eVault caps and LTVs, liquidity, the registry bond, the whale's balances)
+# that can change at any time, while the fuses under test are immutable. Being
+# finalized, it also lets the RPC cache serve repeat runs. A new value must pass
+# every test that uses it.
+PINNED_BLOCK = 53418376  # 2026-11-02 13:28 UTC
+
 # --- deployed BASE addresses (ipor-abi mainnet-base-fusion) ------------------
 BASE_FUSION_FACTORY = Web3.to_checksum_address(
     "0x1455717668fA96534f675856347A973fA907e922"
