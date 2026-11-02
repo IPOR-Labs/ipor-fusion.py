@@ -40,16 +40,23 @@ class _Blocked:
         return None
 
 sys.meta_path.insert(0, _Blocked())
-importlib.import_module(sys.argv[1])
+for module in sys.argv[1:]:
+    importlib.import_module(module)
 leaked = sorted(m for m in sys.modules if m.startswith("ipor_fusion.cli"))
 assert not leaked, leaked
 """
 
 
-@pytest.mark.parametrize("module", CORE_MODULES)
-def test_core_module_imports_without_the_cli_layer(module: str) -> None:
+# A fresh interpreter, since anything the test process already imported (click,
+# ipor_fusion.cli) would pass unseen. One for all modules: importing any of them
+# runs ``ipor_fusion/__init__`` first, which imports the rest, so separate
+# processes would load the same set. Both checks (the click block and the
+# ipor_fusion.cli assert) see everything the modules load together. A blocked
+# click import fails with its import chain; a leaked CLI module is listed by
+# name. An interpreter start costs seconds on a slow filesystem, once per process.
+def test_core_modules_import_without_the_cli_layer() -> None:
     result = subprocess.run(  # noqa: S603
-        [sys.executable, "-c", _PROBE, module],
+        [sys.executable, "-c", _PROBE, *CORE_MODULES],
         capture_output=True,
         text=True,
         check=False,
