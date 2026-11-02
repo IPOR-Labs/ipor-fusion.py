@@ -46,7 +46,7 @@ from web3 import HTTPProvider
 # uses, so a key sees the params exactly as they go on the wire (`HexBytes` and
 # hex strings alike); a web3 release that moves it fails this import.
 from web3._utils.encoding import Web3JsonEncoder
-from web3.providers import BaseProvider
+from web3.providers import BaseProvider, JSONBaseProvider
 from web3.types import RPCEndpoint, RPCResponse
 
 from ipor_fusion.cache import default_cache_path
@@ -167,8 +167,12 @@ def _is_local(host: str) -> bool:
     return address.is_loopback or address.is_private or address.is_link_local
 
 
-class CachingProvider(BaseProvider):
-    """`inner`, with its reads at finalized blocks served from `cache_dir`."""
+class CachingProvider(JSONBaseProvider):
+    """`inner`, with its reads at finalized blocks served from `cache_dir`.
+
+    A `JSONBaseProvider` because web3 batches (`Web3.batch_requests`) only
+    through one; what the cache does not serve, batches included, goes to
+    `inner`."""
 
     def __init__(self, inner: BaseProvider, *, cache_dir: Path) -> None:
         super().__init__()
@@ -196,9 +200,7 @@ class CachingProvider(BaseProvider):
         return response
 
     def make_batch_request(self, requests: list[tuple[RPCEndpoint, Any]]) -> Any:
-        # `BaseProvider` lacks it (`HTTPProvider` inherits it from
-        # `JSONBaseProvider`), so without it a batch on a wrapped `Web3`
-        # raises. Forwarded uncached: no SDK code sends batches.
+        # Forwarded uncached: no SDK code sends batches.
         return self._inner.make_batch_request(requests)  # pyright: ignore[reportAttributeAccessIssue]
 
     def _entry(self, method: str, params: Any) -> Path | None:

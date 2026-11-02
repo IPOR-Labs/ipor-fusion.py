@@ -19,7 +19,7 @@ from _rpc_cache import (
     with_cache,
 )
 from hexbytes import HexBytes
-from web3 import HTTPProvider
+from web3 import HTTPProvider, Web3
 from web3.providers import BaseProvider
 from web3.types import RPCEndpoint, RPCResponse
 
@@ -381,6 +381,19 @@ def test_batch_requests_pass_through_uncached(network, provider, tmp_path):
     assert provider.make_batch_request(batch) == provider.make_batch_request(batch)
     assert network.count("<batch>") == 2
     assert _files(tmp_path) == []
+
+
+def test_web3_batch_requests_reach_the_wrapped_provider(provider, network, monkeypatch):
+    def reply(requests):
+        assert len(requests) == 1
+        assert requests[0][0] == "eth_chainId"
+        return [{"jsonrpc": "2.0", "id": 1, "result": "0x1"}]
+
+    monkeypatch.setattr(network, "make_batch_request", reply)
+    w3 = Web3(provider)
+    with w3.batch_requests() as batch:
+        batch.add(w3.eth.chain_id)
+        assert batch.execute() == [1]
 
 
 def test_connection_checks_go_to_the_wrapped_provider(provider):
