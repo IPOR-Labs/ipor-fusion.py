@@ -1,7 +1,8 @@
 """The test-suite RPC cache stores only reads at finalized blocks."""
 
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import _rpc_cache
 import pytest
@@ -9,6 +10,9 @@ import requests
 from _live import archive_context
 from _rpc_cache import (
     CachingProvider,
+    cache_dir,
+    clear_cache,
+    clear_if_requested,
     endpoint_key,
     http_provider,
     pinned_block,
@@ -415,14 +419,19 @@ def test_pinned_block(method, params, block):
     assert pinned_block(method, params) == block
 
 
-def test_the_cache_lives_under_xdg_cache_home(monkeypatch, tmp_path):
+def _stored_call(monkeypatch, tmp_path) -> Path:
+    """Point the cache at `tmp_path`, store one finalized-block `eth_call` in it
+    and return the file it went to."""
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     monkeypatch.delenv("IPOR_FUSION_TEST_RPC_CACHE", raising=False)
-    network = _Network()
-
-    _request(with_cache(network), "eth_call", CALL)
-
+    _request(with_cache(_Network()), "eth_call", CALL)
     (entry,) = _entries(tmp_path)
+    return entry
+
+
+def test_the_cache_lives_under_xdg_cache_home(monkeypatch, tmp_path):
+    entry = _stored_call(monkeypatch, tmp_path)
+
     assert entry.is_relative_to(tmp_path / "ipor-fusion" / "tests" / "1")
 
 
@@ -434,6 +443,50 @@ def test_cache_can_be_turned_off(monkeypatch):
 
     monkeypatch.delenv("IPOR_FUSION_TEST_RPC_CACHE")
     assert isinstance(http_provider(URL), CachingProvider)
+
+
+def test_clear_cache_removes_every_entry(monkeypatch, tmp_path):
+    entry = _stored_call(monkeypatch, tmp_path)
+    assert entry.is_relative_to(cache_dir())
+
+    clear_cache()
+
+    assert not cache_dir().exists()
+    clear_cache()  # nothing left to remove is no error
+
+
+def test_clear_cache_raises_when_it_cannot_remove(monkeypatch, tmp_path):
+    _stored_call(monkeypatch, tmp_path)
+
+    def fail(path):
+        raise PermissionError(path)
+
+    monkeypatch.setattr(_rpc_cache.shutil, "rmtree", fail)
+
+    with pytest.raises(PermissionError):
+        clear_cache()
+
+
+def test_the_clear_option_is_registered(pytestconfig):
+    # An unregistered dest raises ValueError; either value is fine, so the test
+    # passes with or without the flag on the command line.
+    assert isinstance(pytestconfig.getoption("rpc_cache_clear"), bool)
+
+
+@pytest.mark.parametrize(
+    ("requested", "worker", "cleared"),
+    [(False, False, False), (True, False, True), (True, True, False)],
+    ids=["not-requested", "controller", "xdist-worker"],
+)
+def test_clear_if_requested(monkeypatch, tmp_path, requested, worker, cleared):
+    entry = _stored_call(monkeypatch, tmp_path)
+    config = SimpleNamespace(getoption={"rpc_cache_clear": requested}.__getitem__)
+    if worker:
+        config.workerinput = {"workerid": "gw0"}
+
+    clear_if_requested(cast("pytest.Config", config))
+
+    assert entry.exists() is not cleared
 
 
 CONTRACT = "0x" + "11" * 20

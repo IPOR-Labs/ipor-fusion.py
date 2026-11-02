@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from _live import provider_url, unavailable
 from _multicall import SequentialMulticall
-from _rpc_cache import http_provider
+from _rpc_cache import clear_if_requested, http_provider
 from dotenv import load_dotenv
 from web3 import Web3
 
@@ -16,6 +16,18 @@ from ipor_fusion import is_simulate_v1_supported
 load_dotenv()
 
 _EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--rpc-cache-clear",
+        action="store_true",
+        help="empty the on-disk RPC response cache (tests/_rpc_cache.py) first",
+    )
+
+
+def pytest_configure(config):
+    clear_if_requested(config)
 
 
 @pytest.fixture

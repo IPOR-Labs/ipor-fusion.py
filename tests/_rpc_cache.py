@@ -22,7 +22,8 @@ list would be); and the params of reads at finalized blocks are deterministic
 (a wall-clock time or a random salt adds an entry on every run). The cache
 only ever speeds tests up: a failed cache read or write, or a request it
 cannot key, falls back to the network.
-`IPOR_FUSION_TEST_RPC_CACHE=0` turns it off; deleting the directory resets it.
+`IPOR_FUSION_TEST_RPC_CACHE=0` turns it off; `pytest --rpc-cache-clear` empties
+it before the run.
 """
 
 from __future__ import annotations
@@ -32,11 +33,13 @@ import hashlib
 import ipaddress
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlsplit
 
+import pytest
 from web3 import HTTPProvider
 
 # web3's private `Web3JsonEncoder`, the one `HTTPProvider.encode_rpc_request`
@@ -82,7 +85,29 @@ def with_cache(provider: BaseProvider) -> BaseProvider:
     """`provider` behind a `CachingProvider`, unless `IPOR_FUSION_TEST_RPC_CACHE=0`."""
     if os.environ.get("IPOR_FUSION_TEST_RPC_CACHE") == "0":
         return provider
-    return CachingProvider(provider, cache_dir=default_cache_path().parent / "tests")
+    return CachingProvider(provider, cache_dir=cache_dir())
+
+
+def cache_dir() -> Path:
+    """`$XDG_CACHE_HOME/ipor-fusion/tests`, the directory `with_cache` stores in."""
+    return default_cache_path().parent / "tests"
+
+
+def clear_cache() -> None:
+    """Remove every stored response; a failure other than a missing directory
+    raises, so a run never goes on believing a stale cache was cleared."""
+    with contextlib.suppress(FileNotFoundError):
+        shutil.rmtree(cache_dir())
+
+
+def clear_if_requested(config: pytest.Config) -> None:
+    """`clear_cache` under `pytest --rpc-cache-clear`.
+
+    Under pytest-xdist only the controller clears, before its workers start; a
+    worker clearing would delete what the others already stored.
+    """
+    if config.getoption("rpc_cache_clear") and not hasattr(config, "workerinput"):
+        clear_cache()
 
 
 def _quantity(value: Any) -> int | None:
