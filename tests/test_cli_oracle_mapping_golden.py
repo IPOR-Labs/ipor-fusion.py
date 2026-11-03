@@ -154,6 +154,17 @@ def _reader() -> FakeReader:
         "loan": USDC,
     }
     r.morpho_prices[addr(0x31)] = 970_000 * 10**18
+    r.morpho_feeds[addr(0x31)] = {
+        "BASE_FEED_1": addr(0x32),
+        "BASE_FEED_2": addr(0),
+        "QUOTE_FEED_1": addr(0),
+        "QUOTE_FEED_2": addr(0),
+    }
+    r.feeds[addr(0x32)] = {
+        "round": (9, 97 * 10**16, 1_700_000_000, 1_700_000_050, 9),
+        "feed_decimals": 18,
+        "description": "COLL / LOAN",
+    }
 
     r.symbols[WAT] = "WAT"
     r.decimals[WAT] = 18

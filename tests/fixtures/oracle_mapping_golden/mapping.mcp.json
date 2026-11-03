@@ -300,7 +300,22 @@
         "morpho_oracle": "0x0000000000000000000000000000000000000031",
         "collateral_token": "0x0000000000000000000000000000000000000006",
         "loan_token": "0x0000000000000000000000000000000000000001",
-        "morpho_price": "970000000000000000000000"
+        "morpho_price": "970000000000000000000000",
+        "oracle_feeds": [
+          {
+            "address": "0x0000000000000000000000000000000000000032",
+            "description": "COLL / LOAN",
+            "round_id": "9",
+            "answer": "970000000000000000",
+            "decimals": 18,
+            "started_at": 1700000000,
+            "started_at_utc": "2023-11-14T22:13:20Z",
+            "updated_at": 1700000050,
+            "updated_at_utc": "2023-11-14T22:14:10Z",
+            "answered_in_round": "9",
+            "role": "BASE_FEED_1"
+          }
+        ]
       },
       "dependencies": [
         {

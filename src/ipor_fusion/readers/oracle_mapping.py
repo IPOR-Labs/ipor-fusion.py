@@ -9,7 +9,8 @@ collateral feeds). Unknown feeds are reported as partial, never dropped.
 A zero source is not a dead end: the oracle may be a manager variant that
 delegates such assets to an underlying global middleware — that delegation is
 followed and reported as ``middleware_fallback``. Every aggregator-compatible
-read (Chainlink-tier leaves, dual-cross-reference component feeds) carries
+read (Chainlink-tier leaves, dual-cross-reference component feeds, feeds
+behind a Morpho oracle) carries
 ``description()`` and the full ``latestRoundData()`` round in
 ``source_detail`` — raw values plus ISO-8601 UTC twins of the timestamps,
 no staleness judgment; ``description`` is null when the feed does not
@@ -83,6 +84,7 @@ from ipor_fusion.readers.oracle_mapping_nodes import (
     _apply_dependency_status,
     _collect_unresolved,
     _mapping_status,
+    _morpho_oracle_feeds,
     _partial,
     _price_block,
     _resolve_chainlink,
@@ -181,6 +183,7 @@ def _resolve_morpho(
         "collateral_token": collateral,
         "loan_token": loan,
         "morpho_price": str(price) if price is not None else None,
+        "oracle_feeds": _morpho_oracle_feeds(reader, morpho_oracle),
     }
     dep = _resolve(reader, loan, depth + 1, visited, max_depth)
     node.dependencies = [dep]

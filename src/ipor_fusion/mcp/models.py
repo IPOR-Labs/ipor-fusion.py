@@ -564,11 +564,21 @@ class Erc4626Detail(_Base):
     rate: str | None
 
 
+class MorphoOracleFeed(AggregatorFeedDetail):
+    """A feed behind a Morpho oracle; role names the getter it came from."""
+
+    role: str
+
+
 class MorphoFeedDetail(_Base):
     morpho_oracle: str
     collateral_token: str | None
     loan_token: str
     morpho_price: str | None
+    oracle_feeds: list[MorphoOracleFeed] | None = Field(
+        description="Feeds the oracle uses; null when it does not expose them, "
+        "so their freshness cannot be read."
+    )
 
 
 class MiddlewareFallbackDetail(_Base):

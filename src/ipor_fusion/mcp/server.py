@@ -468,7 +468,9 @@ def vault_oracle_mapping(
     description, a foreign getter answering; still resolved, but verify the
     address yourself if identity matters), ERC4626PriceFeed (share→asset
     rate, recurses on the underlying), CollateralTokenOnMorphoMarketPriceFeed
-    (recurses on the loan token), middleware_fallback (no per-vault source;
+    (recurses on the loan token; source_detail.oracle_feeds lists the feeds
+    behind the Morpho oracle, null when it does not expose them),
+    middleware_fallback (no per-vault source;
     priced by the oracle's underlying global middleware, followed as a
     dependency when discoverable), custom_unknown (partial). Classification is
     heuristic interface probing: it grades on-chain evidence and cannot prove
