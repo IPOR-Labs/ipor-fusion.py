@@ -20,8 +20,9 @@ at a finalized block are complete (an empty answer is not stored, so a scan's
 empty pages are refetched on every run, but a lagging backend's truncated
 list would be); and the params of reads at finalized blocks are deterministic
 (a wall-clock time or a random salt adds an entry on every run). The cache
-only ever speeds tests up: a failed cache read or write, or a request it
-cannot key, falls back to the network.
+only ever speeds tests up: a failed cache read or write, a failed lookup of
+its own (chain id, finality), or a request it cannot key, falls back to the
+network.
 `IPOR_FUSION_TEST_RPC_CACHE=0` turns it off; `pytest --rpc-cache-clear` empties
 it before the run.
 """
@@ -46,6 +47,7 @@ from web3 import HTTPProvider
 # uses, so a key sees the params exactly as they go on the wire (`HexBytes` and
 # hex strings alike); a web3 release that moves it fails this import.
 from web3._utils.encoding import Web3JsonEncoder
+from web3.exceptions import Web3Exception
 from web3.providers import BaseProvider, JSONBaseProvider
 from web3.types import RPCEndpoint, RPCResponse
 
@@ -71,9 +73,18 @@ _UNCACHED_RESULTS: tuple[Any, ...] = (None, "0x", [])
 #: below it, so nothing is cached.
 _NO_FINALITY = -1
 
-#: Failed `finalized` lookups (errors, malformed answers) before a provider
+#: Failed lookups of the finalized block, and separately of the chain id (an
+#: error or malformed answer, or one of `_LOOKUP_ERRORS`), before a provider
 #: stops caching; a transient one must not turn the cache off for the session.
-_FINALITY_ATTEMPTS = 3
+_LOOKUP_ATTEMPTS = 3
+
+#: A provider that cannot be reached, refuses the key or fails the request (a
+#: pruned state included); `requests`' exceptions are `OSError`s.
+TRANSPORT_ERRORS = (Web3Exception, OSError)
+
+#: Failures of the cache's own lookups: the transport's and an answer that
+#: does not decode (not UTF-8, not JSON).
+_LOOKUP_ERRORS = (*TRANSPORT_ERRORS, UnicodeDecodeError, json.JSONDecodeError)
 
 
 def http_provider(url: str) -> BaseProvider:
@@ -182,6 +193,7 @@ class CachingProvider(JSONBaseProvider):
         self._chain_dir: Path | None = None
         self._finalized: int | None = None
         self._finality_failures = 0
+        self._chain_id_failures = 0
 
     def is_connected(self, show_traceback: bool = False) -> bool:
         return self._inner.is_connected(show_traceback)
@@ -224,12 +236,18 @@ class CachingProvider(JSONBaseProvider):
         return chain_dir / f"{hashlib.sha256(request.encode()).hexdigest()}.json"
 
     def _chain_cache_dir(self) -> Path | None:
-        """`<cache_dir>/<chain id>/<endpoint key>`; None (retried next time) if
-        the chain id cannot be read."""
+        """`<cache_dir>/<chain id>/<endpoint key>`, or None if the chain id
+        cannot be read: retried, up to `_LOOKUP_ATTEMPTS` lookups, after which
+        the provider caches nothing."""
         if self._chain_dir is None:
-            response = self._inner.make_request(RPCEndpoint("eth_chainId"), [])
+            if self._endpoint is None:
+                return None
+            response = self._lookup("eth_chainId", [])
             chain_id = _quantity(response.get("result"))
-            if chain_id is None or self._endpoint is None:
+            if chain_id is None:
+                self._chain_id_failures += 1
+                if self._chain_id_failures >= _LOOKUP_ATTEMPTS:
+                    self._endpoint = None  # no key: nothing is cached
                 return None
             self._chain_dir = self._cache_dir / str(chain_id) / self._endpoint
         return self._chain_dir
@@ -245,12 +263,11 @@ class CachingProvider(JSONBaseProvider):
         """The finalized block, `_NO_FINALITY` for good, or None to ask again.
 
         A `null` answer is final: the chain has no finalized block, and asking
-        again would add a round trip to every read. An error or a malformed
-        answer is retried, up to `_FINALITY_ATTEMPTS` lookups.
+        again would add a round trip to every read. An error, a malformed
+        answer or one of `_LOOKUP_ERRORS` is retried, up to `_LOOKUP_ATTEMPTS`
+        lookups.
         """
-        response = self._inner.make_request(
-            RPCEndpoint("eth_getBlockByNumber"), ["finalized", False]
-        )
+        response = self._lookup("eth_getBlockByNumber", ["finalized", False])
         block = response.get("result")
         number = _quantity(block.get("number")) if isinstance(block, dict) else None
         if number is not None:
@@ -258,7 +275,19 @@ class CachingProvider(JSONBaseProvider):
         if "result" in response and block is None:
             return _NO_FINALITY
         self._finality_failures += 1
-        return _NO_FINALITY if self._finality_failures >= _FINALITY_ATTEMPTS else None
+        return _NO_FINALITY if self._finality_failures >= _LOOKUP_ATTEMPTS else None
+
+    def _lookup(self, method: str, params: Any) -> RPCResponse:
+        """`inner`'s answer to a request the cache makes for itself, or an
+        empty response on one of `_LOOKUP_ERRORS` or an answer that is not a
+        JSON object: such a failure leaves the read it was made for uncached,
+        and the read itself still goes to `inner`."""
+        try:
+            response = self._inner.make_request(RPCEndpoint(method), params)
+        except _LOOKUP_ERRORS:
+            return cast("RPCResponse", {})
+        # web3 checks no shape: a `null` or a string decodes too.
+        return response if isinstance(response, dict) else cast("RPCResponse", {})
 
 
 def _read_entry(entry: Path) -> RPCResponse | None:

@@ -13,10 +13,8 @@ import os
 from typing import NoReturn
 
 import pytest
-import requests
-from _rpc_cache import with_cache
+from _rpc_cache import TRANSPORT_ERRORS, with_cache
 from web3 import Web3
-from web3.exceptions import Web3Exception
 
 from ipor_fusion import Web3Context
 
@@ -43,10 +41,6 @@ def provider_url(env_var: str) -> str:
     return url
 
 
-# A provider that cannot be reached, refuses the key, or has pruned the state.
-_INFRA_ERRORS = (Web3Exception, requests.RequestException, OSError)
-
-
 def archive_context(env_var: str, block: int, contract: str) -> Web3Context:
     """A context pinned to ``block`` on the provider in ``env_var``, once it
     has connected and served ``contract``'s code at that block (historical
@@ -61,7 +55,7 @@ def archive_context(env_var: str, block: int, contract: str) -> Web3Context:
     try:
         ctx = Web3Context.from_url(url)
         code = ctx.web3.eth.get_code(Web3.to_checksum_address(contract), block)
-    except _INFRA_ERRORS as exc:
+    except TRANSPORT_ERRORS as exc:
         failure = type(exc).__name__
     if failure is not None:
         unavailable(env_var, f"{env_var} cannot serve state at {block}: {failure}")

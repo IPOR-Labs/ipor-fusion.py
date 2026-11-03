@@ -1,5 +1,6 @@
 """The test-suite RPC cache stores only reads at finalized blocks."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -37,9 +38,16 @@ class _Network(BaseProvider):
     response, anything else the literal result. `chain_id` is an int, `ERROR`
     or a literal result. A call whose first param is `"revert"` gets an error,
     one whose first param is a key of `RESULTS` gets that literal result.
+    Wherever a result goes, an exception is raised and a `_Raw` is returned
+    as it is, with no envelope.
     """
 
-    RESULTS = {"null": None, "empty-hex": "0x", "empty-list": []}
+    RESULTS = {
+        "null": None,
+        "empty-hex": "0x",
+        "empty-list": [],
+        "timeout": requests.Timeout("read timed out"),
+    }
 
     def __init__(
         self,
@@ -85,7 +93,31 @@ class _Network(BaseProvider):
         return self.calls.count(method)
 
 
+class _Raw:
+    """A decoded answer that is not a JSON-RPC envelope (`null`, a string)."""
+
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+
+#: Lookup failures beside error answers: the transport's, and answers that do
+#: not decode or are not a JSON object.
+LOOKUP_FAILURES = [
+    pytest.param(requests.Timeout("lookup timed out"), id="timeout"),
+    pytest.param(json.JSONDecodeError("Expecting value", "<html>", 0), id="not-json"),
+    pytest.param(
+        UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"),
+        id="not-utf-8",
+    ),
+    pytest.param(_Raw(None), id="not-an-object"),
+]
+
+
 def _reply(result: Any) -> RPCResponse:
+    if isinstance(result, Exception):
+        raise result
+    if isinstance(result, _Raw):
+        return result.value
     if result is ERROR:
         return {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "x"}}
     return {"jsonrpc": "2.0", "id": 1, "result": result}
@@ -246,8 +278,9 @@ def test_a_chain_without_a_finalized_block_caches_nothing(tmp_path):
     assert network.count("eth_getBlockByNumber") == 1
 
 
-def test_a_failed_finality_lookup_is_retried(tmp_path):
-    network = _Network(finalized=[ERROR, FINALIZED])
+@pytest.mark.parametrize("failure", [pytest.param(ERROR, id="error"), *LOOKUP_FAILURES])
+def test_a_failed_finality_lookup_is_retried(tmp_path, failure):
+    network = _Network(finalized=[failure, FINALIZED])
     provider = CachingProvider(network, cache_dir=tmp_path)
 
     for _ in range(3):
@@ -260,8 +293,13 @@ def test_a_failed_finality_lookup_is_retried(tmp_path):
 
 @pytest.mark.parametrize(
     "answer",
-    [ERROR, {}, {"number": "0xzz"}, "0x64"],
-    ids=["error", "no-number", "bad-number", "not-a-block"],
+    [
+        pytest.param(ERROR, id="error"),
+        pytest.param({}, id="no-number"),
+        pytest.param({"number": "0xzz"}, id="bad-number"),
+        pytest.param("0x64", id="not-a-block"),
+        *LOOKUP_FAILURES,
+    ],
 )
 def test_finality_lookups_stop_after_repeated_failures(tmp_path, answer):
     network = _Network(finalized=answer)
@@ -270,7 +308,7 @@ def test_finality_lookups_stop_after_repeated_failures(tmp_path, answer):
     for _ in range(5):
         _request(provider, "eth_call", CALL)
 
-    assert network.count("eth_getBlockByNumber") == _rpc_cache._FINALITY_ATTEMPTS
+    assert network.count("eth_getBlockByNumber") == _rpc_cache._LOOKUP_ATTEMPTS
     assert network.count("eth_call") == 5
 
 
@@ -284,7 +322,13 @@ def test_a_finalized_genesis_block_is_cached(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "chain_id", [ERROR, None, "0xzz"], ids=["error", "null", "bad"]
+    "chain_id",
+    [
+        pytest.param(ERROR, id="error"),
+        pytest.param(None, id="null"),
+        pytest.param("0xzz", id="bad"),
+        *LOOKUP_FAILURES,
+    ],
 )
 def test_failed_chain_id_read_skips_the_cache_and_is_retried(tmp_path, chain_id):
     network = _Network(chain_id=chain_id)
@@ -294,6 +338,25 @@ def test_failed_chain_id_read_skips_the_cache_and_is_retried(tmp_path, chain_id)
 
     assert network.count("eth_call") == 2
     assert network.count("eth_chainId") == 2
+
+
+@pytest.mark.parametrize(
+    "chain_id", [pytest.param(ERROR, id="error"), *LOOKUP_FAILURES]
+)
+def test_chain_id_lookups_stop_after_repeated_failures(tmp_path, chain_id):
+    network = _Network(chain_id=chain_id)
+    provider = CachingProvider(network, cache_dir=tmp_path)
+
+    for _ in range(5):
+        _request(provider, "eth_call", CALL)
+
+    assert network.count("eth_chainId") == _rpc_cache._LOOKUP_ATTEMPTS
+    assert network.count("eth_call") == 5
+
+
+def test_a_failing_read_still_raises(provider):
+    with pytest.raises(requests.Timeout, match="read timed out"):
+        _request(provider, "eth_call", ["timeout", hex(FINALIZED)])
 
 
 def test_finality_and_chain_id_are_read_once(network, provider):
