@@ -11,6 +11,7 @@ from web3 import Web3
 from web3.types import TxParams, TxReceipt
 
 from ipor_fusion.fusion_errors import FUSION_ERROR_SIGNATURES
+from ipor_fusion.onchain_text import sanitize_onchain_text
 from ipor_fusion.types import TxHash
 
 log = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ def _decode_revert_reason(data: bytes) -> str:
     if selector == ERROR_SELECTOR:
         try:
             (reason,) = abi_decode(["string"], payload)
-            return f'Error("{reason}")'
+            return f'Error("{sanitize_onchain_text(reason)}")'
         except Exception:
             return f"Error(<decode failed>: 0x{payload.hex()[:64]})"
 

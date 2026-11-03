@@ -18,6 +18,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.errors import EmptyCallResultError, UnsupportedVaultVersionError
+from ipor_fusion.onchain_text import sanitize_onchain_text
 from ipor_fusion.types import (
     ZERO_ADDRESS,
     AccessManagerAddress,
@@ -614,7 +615,9 @@ class PlasmaVault(ContractWrapper):
         return self._view("totalSupply()", output_types=["uint256"], decoder=Shares)
 
     def name(self) -> Call[str]:
-        return self._view("name()", output_types=["string"])
+        return self._view(
+            "name()", output_types=["string"], decoder=sanitize_onchain_text
+        )
 
     def underlying_asset_address(self) -> Call[ChecksumAddress]:
         return self._view(

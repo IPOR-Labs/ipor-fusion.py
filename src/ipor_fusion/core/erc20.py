@@ -1,6 +1,7 @@
 from eth_typing import ChecksumAddress
 
 from ipor_fusion.core.contract import Call, ContractWrapper
+from ipor_fusion.onchain_text import sanitize_onchain_text
 from ipor_fusion.types import Amount, Decimals
 
 
@@ -26,10 +27,14 @@ class ERC20(ContractWrapper):
         return self._view("decimals()", output_types=["uint256"], decoder=Decimals)
 
     def symbol(self) -> Call[str]:
-        return self._view("symbol()", output_types=["string"])
+        return self._view(
+            "symbol()", output_types=["string"], decoder=sanitize_onchain_text
+        )
 
     def name(self) -> Call[str]:
-        return self._view("name()", output_types=["string"])
+        return self._view(
+            "name()", output_types=["string"], decoder=sanitize_onchain_text
+        )
 
     def total_supply(self) -> Call[Amount]:
         return self._view("totalSupply()", output_types=["uint256"], decoder=Amount)
