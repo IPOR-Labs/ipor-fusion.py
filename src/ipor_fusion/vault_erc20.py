@@ -19,6 +19,16 @@ from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import Amount, Decimals, MarketId, PlasmaVaultAddress, Price
 
+# The cached value is written at an earlier price and the live one is rounded,
+# so the two never match exactly; a gap within this share of the live value is
+# not staleness.
+ERC20_CACHE_TOLERANCE = 0.1
+
+
+def cache_lags_value(usd_value: float, cached_usd: float) -> bool:
+    """Whether a live USD value exceeds the market's cached value beyond tolerance."""
+    return usd_value - cached_usd > ERC20_CACHE_TOLERANCE * usd_value
+
 
 @dataclass(frozen=True)
 class Erc20Holding:
@@ -216,7 +226,7 @@ def _holding(
     elif (
         read.price_usd
         and cached_usd is not None
-        and amount * read.price_usd > cached_usd
+        and cache_lags_value(amount * read.price_usd, cached_usd)
     ):
         note = (
             f"${amount * read.price_usd:,.2f} not reflected in totalAssets "

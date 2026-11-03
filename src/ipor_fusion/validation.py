@@ -43,6 +43,10 @@ from ipor_fusion.vault_data import (
     GET_TOTAL_SUPPLY_CAP,
     fetch_vault_data,
 )
+from ipor_fusion.vault_erc20 import (
+    ERC20_CACHE_TOLERANCE,
+    cache_lags_value,
+)
 from ipor_fusion.vault_erc20 import Erc20Holding as Erc20Holding
 from ipor_fusion.vault_erc20 import Erc20Holdings as Erc20Holdings
 
@@ -704,7 +708,8 @@ def _erc20_findings(state: VaultState, erc20: Erc20Holdings) -> list[Finding]:
     non_underlying = erc20.value_in_asset - underlying
     cached = erc20.market_cached_value
     if non_underlying > 0 and (
-        cached == 0 or abs(non_underlying - cached) / non_underlying > 0.1
+        cached == 0
+        or abs(non_underlying - cached) / non_underlying > ERC20_CACHE_TOLERANCE
     ):
         findings.append(
             Finding(
@@ -747,7 +752,7 @@ def _uncovered_erc20_lines(state: VaultState, erc20: Erc20Holdings) -> list[str]
         )
         if address not in covered:
             lines.append(f"{row} — not in any balance fuse substrate")
-        elif 0 < cached_usd < (token.usd_value or 0):
+        elif cached_usd > 0 and cache_lags_value(token.usd_value or 0, cached_usd):
             lines.append(
                 f"{row} — {usd.strip()} not reflected in totalAssets (stale cache)"
             )
