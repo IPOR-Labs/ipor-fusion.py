@@ -22,7 +22,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--rpc-cache-clear",
         action="store_true",
-        help="empty the on-disk RPC response cache (tests/_rpc_cache.py) first",
+        help="empty the on-disk test caches (RPC responses included) first",
     )
 
 

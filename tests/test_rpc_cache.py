@@ -12,6 +12,7 @@ from _live import archive_context
 from _rpc_cache import (
     CachingProvider,
     cache_dir,
+    cache_root,
     clear_cache,
     clear_if_requested,
     endpoint_key,
@@ -508,7 +509,17 @@ def _stored_call(monkeypatch, tmp_path) -> Path:
 def test_the_cache_lives_under_xdg_cache_home(monkeypatch, tmp_path):
     entry = _stored_call(monkeypatch, tmp_path)
 
-    assert entry.is_relative_to(tmp_path / "ipor-fusion" / "tests" / "1")
+    assert entry.is_relative_to(tmp_path / "ipor-fusion" / "tests" / "rpc" / "v1" / "1")
+
+
+def test_a_new_format_ignores_the_old_entries(monkeypatch, tmp_path):
+    _stored_call(monkeypatch, tmp_path)
+    monkeypatch.setattr(_rpc_cache, "_FORMAT_VERSION", "v2")
+    network = _Network()
+
+    _request(with_cache(network), "eth_call", CALL)
+
+    assert network.count("eth_call") == 1
 
 
 def test_cache_can_be_turned_off(monkeypatch):
@@ -524,10 +535,14 @@ def test_cache_can_be_turned_off(monkeypatch):
 def test_clear_cache_removes_every_entry(monkeypatch, tmp_path):
     entry = _stored_call(monkeypatch, tmp_path)
     assert entry.is_relative_to(cache_dir())
+    # Outside `rpc/`, so a clear of `rpc/` alone fails the test.
+    unversioned_entry = cache_root() / "1" / "abc" / "entry.json"
+    unversioned_entry.parent.mkdir(parents=True)
+    unversioned_entry.write_text("{}")
 
     clear_cache()
 
-    assert not cache_dir().exists()
+    assert not cache_root().exists()
     clear_cache()  # nothing left to remove is no error
 
 

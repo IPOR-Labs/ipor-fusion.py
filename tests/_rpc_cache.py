@@ -2,12 +2,13 @@
 
 A read at a block at or below the chain's finalized block answers the same
 forever, so `CachingProvider` stores its response under
-`$XDG_CACHE_HOME/ipor-fusion/tests/<chain id>/<host hash>/` (`~/.cache/...`
-when unset) and serves it from there on later runs. It wraps a provider rather
-than replacing one, so it also goes around the one `Web3Context.from_url`
-builds. Reads at `latest` or past finality (tests that pin the head at run
-time), error responses, empty results and batch requests always go to the
-network.
+`$XDG_CACHE_HOME/ipor-fusion/tests/rpc/<format>/<chain id>/<host hash>/`
+(`~/.cache/...` when unset) and serves it from there on later runs;
+`<format>` is `_FORMAT_VERSION`, so a change to it starts an empty directory.
+It wraps a provider rather than replacing one, so it also goes around the one
+`Web3Context.from_url` builds. Reads at `latest` or past finality (tests that
+pin the head at run time), error responses, empty results and batch requests
+always go to the network.
 
 The host hash covers only the endpoint's scheme, host and port, so an API key
 in its path or query never reaches the disk, hashed or not, and a fork on
@@ -24,7 +25,7 @@ only ever speeds tests up: a failed cache read or write, a failed lookup of
 its own (chain id, finality), or a request it cannot key, falls back to the
 network.
 `IPOR_FUSION_TEST_RPC_CACHE=0` turns it off; `pytest --rpc-cache-clear` empties
-it before the run.
+`$XDG_CACHE_HOME/ipor-fusion/tests/`, every format's entries, before the run.
 """
 
 from __future__ import annotations
@@ -86,6 +87,13 @@ TRANSPORT_ERRORS = (Web3Exception, OSError)
 #: does not decode (not UTF-8, not JSON).
 _LOOKUP_ERRORS = (*TRANSPORT_ERRORS, UnicodeDecodeError, json.JSONDecodeError)
 
+#: Format of the stored entries, a directory under `<cache_root>/rpc`. Bump it
+#: whenever an old entry would be read wrongly: the request key
+#: (`CachingProvider._entry`), the path layout (`_chain_cache_dir`,
+#: `endpoint_key`) or the stored JSON (`_read_entry`). `--rpc-cache-clear`
+#: removes every format's directory.
+_FORMAT_VERSION = "v1"
+
 
 def http_provider(url: str) -> BaseProvider:
     """An `HTTPProvider` for `url`, wrapped by `with_cache`."""
@@ -99,16 +107,22 @@ def with_cache(provider: BaseProvider) -> BaseProvider:
     return CachingProvider(provider, cache_dir=cache_dir())
 
 
-def cache_dir() -> Path:
-    """`$XDG_CACHE_HOME/ipor-fusion/tests`, the directory `with_cache` stores in."""
+def cache_root() -> Path:
+    """`$XDG_CACHE_HOME/ipor-fusion/tests`, the test suite's caches."""
     return default_cache_path().parent / "tests"
 
 
+def cache_dir() -> Path:
+    """`<cache_root>/rpc/<_FORMAT_VERSION>`, the directory `with_cache` stores in."""
+    return cache_root() / "rpc" / _FORMAT_VERSION
+
+
 def clear_cache() -> None:
-    """Remove every stored response; a failure other than a missing directory
-    raises, so a run never goes on believing a stale cache was cleared."""
+    """Remove `cache_root`, every format's stored responses included; a failure
+    other than a missing directory raises, so a run never goes on believing a
+    stale cache was cleared."""
     with contextlib.suppress(FileNotFoundError):
-        shutil.rmtree(cache_dir())
+        shutil.rmtree(cache_root())
 
 
 def clear_if_requested(config: pytest.Config) -> None:
