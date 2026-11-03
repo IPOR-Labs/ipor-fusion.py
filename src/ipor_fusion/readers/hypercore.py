@@ -31,6 +31,7 @@ from enum import IntEnum
 from typing import TypeVar
 
 from eth_abi import decode, encode
+from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -65,6 +66,7 @@ from ipor_fusion.types import (
 )
 
 T = TypeVar("T")
+_E = TypeVar("_E", bound=IntEnum)
 
 #: The HyperCore market id.
 HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
@@ -425,6 +427,17 @@ _PendingAction = tuple[
 ]  # fmt: skip
 
 
+def _pending_enum(enum: type[_E], value: int) -> _E:
+    # Raises DecodingError so an optional batch read degrades to None.
+    try:
+        return enum(value)
+    except ValueError as exc:
+        raise DecodingError(
+            f"HyperCorePendingReader.pendingState() returned {value}, "
+            f"not a known {enum.__name__}"
+        ) from exc
+
+
 def _decode_pending_state(
     values: tuple[_PendingAction, bool, bool, int, int, bool],
 ) -> HyperCorePendingState:
@@ -453,12 +466,12 @@ def _decode_pending_state(
         pending_until=Timestamp(pending_until),
         enqueued_l1_block=enqueued_l1_block,
         enqueued_evm_block=enqueued_evm_block,
-        action_class=HyperCoreActionClass(action_class),
+        action_class=_pending_enum(HyperCoreActionClass, action_class),
         action_id=HyperCoreActionId(action_id),
         payload_hash=PayloadHash(bytes(payload_hash)),
         cached_value_wad=cached_value_wad,
         action_nonce=action_nonce,
-        effect_kind=HyperCoreEffectKind(effect_kind),
+        effect_kind=_pending_enum(HyperCoreEffectKind, effect_kind),
         effect_token_index=HyperCoreTokenIndex(effect_token_index),
         effect_evm_asset=Web3.to_checksum_address(effect_evm_asset),
         timeout_at=Timestamp(timeout_at),
@@ -503,7 +516,9 @@ class HyperCorePendingReader:
 
     def pending_state(self) -> Call[HyperCorePendingState]:
         """Raises ``UnsupportedContractVersionError`` for a payload that is
-        not the released reader's 23 words (the earlier reader returns 18)."""
+        not the released reader's 23 words (the earlier reader returns 18),
+        and ``eth_abi``'s ``DecodingError`` for an action class or effect kind
+        the SDK does not know."""
         return self._vault.universal_read(self._reader, _PENDING_STATE_SELECTOR).map(
             _decode_pending_payload
         )

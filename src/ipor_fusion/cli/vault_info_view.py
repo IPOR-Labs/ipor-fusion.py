@@ -343,7 +343,9 @@ def _print_hypercore(data: VaultData) -> None:
 def _print_hypercore_pending(pending: HyperCorePendingState | None) -> None:
     if pending is None:
         click.echo(
-            "  Pending action: unknown (no HyperCorePendingReader known on this chain)"
+            "  Pending action: unknown (no HyperCorePendingReader known on this "
+            "chain, or the read reverted or returned an unknown action class "
+            "or effect kind)"
         )
         return
     last = f"{pending.action_class.name} #{pending.action_nonce}"
