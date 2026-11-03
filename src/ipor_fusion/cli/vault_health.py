@@ -12,6 +12,7 @@ from ipor_fusion.validation import (
     VaultValidation,
 )
 from ipor_fusion.vault_data import VaultData
+from ipor_fusion.vault_erc20 import ERC20_CACHE_TOLERANCE
 from ipor_fusion.vault_info import health_check_lists
 
 
@@ -146,7 +147,11 @@ def _print_erc20_cache_divergence(
             f"ERC20 direct={direct_fmt} — likely stale cache",
             fg="yellow",
         )
-    elif cached > 0 and direct > 0 and abs(cached - direct) / direct > 0.1:
+    elif (
+        cached > 0
+        and direct > 0
+        and abs(cached - direct) / direct > ERC20_CACHE_TOLERANCE
+    ):
         click.secho(
             f"  ERC20_VAULT_BALANCE cached={cached_fmt}, "
             f"ERC20 direct={direct_fmt} — significant divergence",

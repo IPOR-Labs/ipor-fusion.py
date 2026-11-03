@@ -40,7 +40,13 @@ from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import ChainId, MarketId
 from ipor_fusion.validation import GET_MARKET_SUBSTRATES, Reconciliation
 from ipor_fusion.vault_data import VaultData, _MarketReads, _VaultReads
-from ipor_fusion.vault_erc20 import _Asset, _erc20_holdings, _read_erc20_market
+from ipor_fusion.vault_erc20 import (
+    _Asset,
+    _erc20_holdings,
+    _Erc20Market,
+    _read_erc20_market,
+    _TokenRead,
+)
 
 
 def _addr(suffix: str) -> str:
@@ -57,6 +63,11 @@ ORPHAN_FUSE = _addr("f5")
 AAVE = IporFusionMarkets.AAVE_V3
 MORPHO = IporFusionMarkets.MORPHO
 ERC20_MARKET = IporFusionMarkets.ERC20_VAULT_BALANCE
+# A token whose value matches the market's cached value but for float rounding.
+ASSET_PRICE = 2594.826591677957
+ROUNDED_BALANCE = 3663278943628990
+ROUNDED_PRICE = 2269.8825
+ROUNDED_CACHE = 3204535051949216
 WAD = 10**18
 
 
@@ -275,6 +286,16 @@ class TestRouting:
         heading, *rows = message.split("\n")
         assert heading == "ERC20 holdings not covered by balance fuses:"
         assert [row.split()[0] for row in rows] == ["AAA", "BBB"]
+
+    def test_rounding_gap_to_the_cache_is_not_uncovered(self):
+        state = _erc20_state(asset_price_usd=ASSET_PRICE)
+        erc20 = Erc20Holdings(
+            tokens=(holding(TOKEN, balance=ROUNDED_BALANCE, price_usd=ROUNDED_PRICE),),
+            value_in_asset=ROUNDED_CACHE,
+            market_cached_value=ROUNDED_CACHE,
+        )
+        validation = validate(state, 100 * WAD, erc20)
+        assert "uncovered_erc20" not in [check for check, _ in _checks(validation)]
 
     def test_stale_erc20_cache_and_missing_price_feed(self):
         erc20 = Erc20Holdings(
@@ -597,6 +618,17 @@ class TestReadErc20Holdings:
         assert (erc20.value_in_asset, erc20.value_usd) == (11 * WAD, 11.0)
         assert erc20.market_cached_value == 2 * WAD
         assert erc20.unpriced_tokens == (f"{OTHER.lower()} (?)",)
+
+    def test_rounding_gap_to_the_cache_keeps_the_token_in_the_market(self):
+        erc20 = _erc20_holdings(
+            _Asset(ASSET, 18, ASSET_PRICE),  # type: ignore[arg-type]
+            _Erc20Market(  # type: ignore[arg-type]
+                ROUNDED_CACHE,
+                (_TokenRead(TOKEN, 18, ROUNDED_BALANCE, ROUNDED_PRICE),),  # type: ignore[arg-type]
+            ),
+            {},
+        )
+        assert erc20.tokens[0].note == "in ERC20_VAULT_BALANCE"
 
     def test_symbols_name_the_holdings(self):
         symbols = {a.lower(): a.lower()[-2:] for a in (ASSET, TOKEN, OTHER)}
