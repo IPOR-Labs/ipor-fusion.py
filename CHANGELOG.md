@@ -2,6 +2,132 @@
 
 <!-- version list -->
 
+## v4.1.0 (2026-11-03)
+
+### Bug Fixes
+
+- **cli**: Accept a 0X prefix in address arguments
+  ([`cc23ff7`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cc23ff7be50ca760eb6adc1a245746bc93a62553))
+
+- **cli**: Check address arguments with parse_checksum_address
+  ([`4023d07`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4023d0789ed78d1ab76ce8f44d76a98b65c366f6))
+
+- **cli**: Print a set-provider hint that runs as shown
+  ([`6dd2894`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6dd2894693038bae57b256293a4128160f35fc02))
+
+- **cli**: Read --block-number 0 as the latest block
+  ([`8dd339f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8dd339f0d8412389c6a473a57f119e79473e9ef6))
+
+- **mcp**: Name the preflight sender in its parse errors
+  ([`b1a6115`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b1a61158a1f25eb9516f0e96d1a5c794ff943c65))
+
+- **mcp**: Read block_number=0 as the latest block
+  ([`320bb93`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/320bb935726d83fd7787cab9bb82430681ee6a11))
+
+- **mcp**: Reject a wrong EIP-55 checksum in the MetaMorpho vault
+  ([`02a5159`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/02a5159d727f768a40e97aad6869ff3b0356c418))
+
+- **mcp**: Reject a wrong EIP-55 checksum in the preflight sender
+  ([`4d5af23`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/4d5af236721c2cd3e9e8a0f52ed045b06039b4fa))
+
+- **mcp**: Reject a wrong EIP-55 checksum in vault arguments
+  ([`37625ec`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/37625ecb172a3478fc7fb5e522027c71c0a98dcf))
+
+- **sdk**: Check EIP-55 in every FusionInstance address field
+  ([`951f49a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/951f49a4ccceecef4a06b8c600c12564da0c6ce5))
+
+- **sdk**: Do not follow CCIP-Read lookups from contracts
+  ([`51c8ef2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/51c8ef25e19b9e33c8ea4317a9e1df26ad87dccd))
+
+- **sdk**: Read the latest block's number and timestamp in one call
+  ([`60a4a8f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/60a4a8f545714f1013a2f30145837b2d8ad421cb))
+
+- **sdk**: Reject a 0X-prefixed zero address
+  ([`556ee32`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/556ee329d7954ac39f2b0dff607fa2aba7ba3bdd))
+
+- **sdk**: Reject a wrong EIP-55 checksum in the address parsers
+  ([`deac726`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/deac7262bb5ccfdc0932eab8d22ed02bd66d4c3b))
+
+- **sdk**: Report Euler V2 lending health and never drop a borrow market
+  ([`1de4598`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1de4598248b2a73d322d68359baaa74421244b2e))
+
+- **sdk**: Stop reporting a rounding gap as a stale ERC20 cache
+  ([`29ffb53`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/29ffb53377cd91308815a0d3ede18acfe640ee4a))
+
+- **sdk**: Stop the oracle mapping at a price oracle manager delegation cycle
+  ([`1470d93`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1470d93f85f477e24a85e6a28013f4456149d128))
+
+### Build System
+
+- Bump aiohttp, multidict and mcp in the lock
+  ([`3c266b1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3c266b195f3b6ae4b72bdf8e7ae5a2c165838cc1))
+
+### Documentation
+
+- Block 0 reads the latest block in the tools and the CLI
+  ([`308ccd2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/308ccd22cff554c3f31f1414a8e825fac8b00625))
+
+- Keep the CCIP example's command gas inside HyperEVM's small block
+  ([`5e3a093`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5e3a093b66c79c9565f89b7c91615cb95c2e1ff7))
+
+- **examples**: Build address literals with parse_checksum_address
+  ([`c449d13`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c449d13ab481ec9b13497bb435569d9651f5b38c))
+
+- **sdk**: Say the HyperCore pre-hooks take no pre-hook substrates
+  ([`b609593`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b609593ebb4b05bfd2b866e6139f02321323f6a3))
+
+- **sdk**: Wire the HyperCore example's pre-hooks with the helper
+  ([`edd2776`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/edd277677da59872f5074d8dcba2b6b5cad2daa2))
+
+### Features
+
+- **sdk**: Add parse_checksum_address
+  ([`a9a6b84`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a9a6b848e606318fc76fa82dc2c54c7d5b4a94d9))
+
+- **sdk**: Expose the HyperCore order and price scales
+  ([`b75c645`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b75c645f95c525114e181519fe75c2348b7962b7))
+
+- **sdk**: HyperCore pre-hook wiring
+  ([`6f16ae6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6f16ae6cbe2d0f3298308f4592538cb06e52eab6))
+
+- **sdk**: Read the HyperCore best bid and ask
+  ([`5fda9ee`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5fda9ee754eb8085df3f8c432ce65565c045bddf))
+
+- **sdk**: Report the feeds behind a Morpho oracle in the oracle mapping
+  ([`c692d72`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c692d72449805ee98ae786f14d41d28e6de2c24e))
+
+- **sdk**: Support TAC (239) in the vault tooling again
+  ([`0cc00c3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0cc00c3e8d30f5937296ec6dc40896a4e1c766f7))
+
+### Refactoring
+
+- **mcp**: Share _vault_arg's input normalization
+  ([`80744af`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/80744afd6d52d33ba7e8a075478083aef4048384))
+
+- **sdk**: Decode Euler V2 and Dolomite substrates into typed values
+  ([`8f4f1ad`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8f4f1ad5045772da897a3e31d8514b32c6386610))
+
+- **sdk**: Make HyperCorePreHookWiring.selectors a class constant
+  ([`ae9bf3e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ae9bf3e72f31fe795ef5683cd7287b40a1c83d14))
+
+- **sdk**: Move the HyperCore pre-hook wiring to its own module
+  ([`b150389`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b1503891468fe4f54379d8ba49ce68d6b3c7e041))
+
+- **sdk**: Name the 0x813 precompile POSITION2_PRECOMPILE
+  ([`9529f22`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/9529f22e8a1517ef096fe1b4bff56dcaa8139e5a))
+
+- **sdk**: Stop coercing HyperCorePreHookWiring's hooks
+  ([`759448d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/759448d02b3d690a5de636ee91363263e7dd0e40))
+
+### Testing
+
+- Share a miscased-address helper
+  ([`5f769ac`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5f769ac98160baa0fe2099b3255b0f91d2b4b223))
+
+- **sdk**: Probe the core modules' CLI isolation in one subprocess
+  ([`3fc160a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3fc160a5766171dc7bb471968d2740521b59d69e))
+
+
 ## v4.0.0 (2026-10-23)
 
 ### Bug Fixes

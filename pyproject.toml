@@ -1,6 +1,6 @@
 [project]
 name = "ipor-fusion"
-version = "4.0.0"
+version = "4.1.0"
 description = "The IPOR Fusion SDK for Python"
 authors = [
     { name = "Adam Mydlarz", email = "amydlarz@gmail.com" },
