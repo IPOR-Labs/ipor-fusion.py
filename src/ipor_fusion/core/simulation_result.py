@@ -13,6 +13,7 @@ from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 
 from ipor_fusion.errors import SimulationError, SimulationRunError, decode_custom_error
+from ipor_fusion.onchain_text import sanitize_onchain_text
 
 
 class QueuedCall(Protocol):
@@ -295,7 +296,7 @@ def _decode_revert(return_data: HexBytes, error: str | None) -> str | None:
         if selector == b"\x08\xc3\x79\xa0":  # Error(string)
             try:
                 (msg,) = decode(["string"], bytes(return_data[4:]))
-                return msg
+                return sanitize_onchain_text(msg)
             except (DecodingError, OverflowError, ValueError):
                 pass
         if selector == b"\x4e\x48\x7b\x71":  # Panic(uint256)

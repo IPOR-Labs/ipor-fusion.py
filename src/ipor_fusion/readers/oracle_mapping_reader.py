@@ -20,6 +20,7 @@ from ipor_fusion.core.oracle import (
     PriceOracleMiddlewareManager,
     price_oracle_middleware,
 )
+from ipor_fusion.onchain_text import sanitize_onchain_text
 from ipor_fusion.types import (
     Amount,
     Decimals,
@@ -83,7 +84,9 @@ class _Aggregator(ContractWrapper):
         return self._view("decimals()", output_types=["uint8"], decoder=Decimals)
 
     def description(self) -> Call[str]:
-        return self._view("description()", output_types=["string"])
+        return self._view(
+            "description()", output_types=["string"], decoder=sanitize_onchain_text
+        )
 
     def latest_round_data(self) -> Call[tuple[int, int, int, int, int]]:
         return self._view(
