@@ -515,10 +515,9 @@ class HyperCorePendingReader:
         self._reader = reader
 
     def pending_state(self) -> Call[HyperCorePendingState]:
-        """Raises ``UnsupportedContractVersionError`` for a payload that is
-        not the released reader's 23 words (the earlier reader returns 18),
-        and ``eth_abi``'s ``DecodingError`` for an action class or effect kind
-        the SDK does not know."""
+        """Raises ``UnsupportedContractVersionError`` unless the payload is the
+        released reader's 23 words, and ``eth_abi``'s ``DecodingError`` for an
+        action class or effect kind the SDK does not know."""
         return self._vault.universal_read(self._reader, _PENDING_STATE_SELECTOR).map(
             _decode_pending_payload
         )
