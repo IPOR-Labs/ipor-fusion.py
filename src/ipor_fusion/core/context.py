@@ -100,6 +100,10 @@ class Web3Context:
         log_source: LogSource | None = None,
         cache: ContractCache | None = None,
     ):
+        # EIP-3668: web3 would otherwise follow a contract's OffchainLookup
+        # revert from inside eth.call, sending an HTTP request to a URL chosen
+        # by whoever deployed the contract. Nothing in the SDK reads through it.
+        web3.provider.global_ccip_read_enabled = False
         self._web3 = web3
         self._chain_id = chain_id
         # Bounds of every `get_logs` scan: wall clock, and eth_getLogs requests

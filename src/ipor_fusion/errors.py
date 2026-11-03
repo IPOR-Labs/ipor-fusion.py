@@ -132,7 +132,9 @@ def get_revert_reason(web3: Web3, tx_hash: TxHash, receipt: TxReceipt) -> str | 
             call_params["gas"] = tx["gas"]
 
         block_number = receipt["blockNumber"]
-        web3.eth.call(call_params, block_identifier=block_number)
+        web3.eth.call(
+            call_params, block_identifier=block_number, ccip_read_enabled=False
+        )
         return None  # replay succeeded — can't determine reason
     except Exception as exc:
         exc_data = getattr(exc, "data", None)
