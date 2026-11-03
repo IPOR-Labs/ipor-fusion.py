@@ -59,6 +59,9 @@ class _MorphoOracle(ContractWrapper):
     def price(self) -> Call[int]:
         return self._view("price()", output_types=["uint256"], decoder=int)
 
+    def feed(self, role: str) -> Call[ChecksumAddress]:
+        return self._view(f"{role}()", output_types=["address"], decoder=_addr)
+
 
 class _DualXrefFeed(ContractWrapper):
     def asset_x(self) -> Call[ChecksumAddress]:
@@ -221,6 +224,11 @@ class OracleMappingReader:
 
     def morpho_oracle_price(self, morpho_oracle: ChecksumAddress) -> int | None:
         return self._safe(_MorphoOracle(morpho_oracle).price())
+
+    def morpho_oracle_feed(
+        self, morpho_oracle: ChecksumAddress, role: str
+    ) -> ChecksumAddress | None:
+        return self._safe(_MorphoOracle(morpho_oracle).feed(role))
 
     def feed_asset_x(self, source: ChecksumAddress) -> ChecksumAddress | None:
         return self._safe(_DualXrefFeed(source).asset_x())

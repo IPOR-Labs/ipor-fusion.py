@@ -52,6 +52,7 @@ class FakeReader:
         self.feeds: dict[str, Feed] = {}
         self.vaults: dict[str, Erc4626] = {}
         self.morpho_prices: dict[str, int] = {}
+        self.morpho_feeds: dict[str, dict[str, str]] = {}
         # oracle variant (middleware-fallback resolution); "_mw" because the
         # exact method name would be shadowed by the attribute
         self.underlying_mw: str | None = None
@@ -124,6 +125,9 @@ class FakeReader:
 
     def morpho_oracle_price(self, o: str) -> int | None:
         return self.morpho_prices.get(o)
+
+    def morpho_oracle_feed(self, o: str, role: str) -> str | None:
+        return self.morpho_feeds.get(o, {}).get(role)
 
     def feed_asset_x(self, s: str) -> str | None:
         return self._f(s).get("asset_x")

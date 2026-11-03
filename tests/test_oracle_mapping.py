@@ -270,6 +270,53 @@ class TestResolve:
         assert [d.asset for d in node.dependencies] == [loan]
         assert node.path[:2] == ["COLL", "Morpho collateral/loan oracle"]
 
+    def test_morpho_oracle_feeds_report_their_rounds_and_skip_unused_slots(self):
+        r = FakeReader()
+        coll, loan = addr(1), addr(2)
+        feed, m_oracle, base_feed = addr(0x11), addr(0x31), addr(0x41)
+        r.sources[coll] = feed
+        r.prices[coll] = Price(asset=coll, amount=10**8, decimals=8)
+        r.feeds[feed] = {"morpho_oracle": m_oracle, "collateral": coll, "loan": loan}
+        r.feeds[base_feed] = {
+            "round": (7, 10**18, 1_700_000_000, 1_700_000_100, 7),
+            "feed_decimals": 18,
+            "description": "COLL / LOAN",
+        }
+        zero = addr(0)
+        r.morpho_feeds[m_oracle] = {
+            "BASE_FEED_1": base_feed,
+            "BASE_FEED_2": zero,
+            "QUOTE_FEED_1": zero,
+            "QUOTE_FEED_2": zero,
+        }
+        chainlink_asset(r, loan, addr(0x12), symbol="LOAN")
+
+        detail = om.resolve_asset(r, coll, max_depth=6).source_detail
+
+        assert detail is not None and "oracle_feeds" in detail
+        feeds = detail["oracle_feeds"]
+        assert feeds is not None
+        assert [(f["role"], f["address"]) for f in feeds] == [
+            ("BASE_FEED_1", base_feed)
+        ]
+        assert feeds[0]["description"] == "COLL / LOAN"
+        assert feeds[0]["updated_at"] == 1_700_000_100
+
+    def test_morpho_oracle_without_the_feed_getters_reports_none(self):
+        r = FakeReader()
+        coll, loan = addr(1), addr(2)
+        feed, m_oracle = addr(0x11), addr(0x31)
+        r.sources[coll] = feed
+        r.prices[coll] = Price(asset=coll, amount=10**8, decimals=8)
+        r.feeds[feed] = {"morpho_oracle": m_oracle, "collateral": coll, "loan": loan}
+        chainlink_asset(r, loan, addr(0x12), symbol="LOAN")
+
+        node = om.resolve_asset(r, coll, max_depth=6)
+
+        assert node.status == "resolved"
+        assert node.source_detail is not None and "oracle_feeds" in node.source_detail
+        assert node.source_detail["oracle_feeds"] is None
+
     def test_dual_xref_wins_over_chainlink(self):
         r = FakeReader()
         wsteth = addr(1)
@@ -1165,6 +1212,7 @@ class TestOracleMappingReader:
         assert reader.feed_asset_x_asset_y_feed(feed) == target
         assert reader.feed_asset_y_usd_feed(feed) == target
         assert reader.feed_aggregator(feed) == target
+        assert reader.morpho_oracle_feed(addr(0x31), "BASE_FEED_1") == target
 
         ctx.call.return_value = encode(["uint256"], [1_030_000])
         assert reader.morpho_oracle_price(addr(0x31)) == 1_030_000

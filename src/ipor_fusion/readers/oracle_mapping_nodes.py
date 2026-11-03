@@ -30,6 +30,12 @@ TYPE_CHAINLINK = "ChainlinkAggregator"
 TYPE_CHAINLINK_STYLE = "chainlink_style"
 TYPE_ERC4626 = "ERC4626PriceFeed"
 TYPE_MORPHO = "CollateralTokenOnMorphoMarketPriceFeed"
+MORPHO_ORACLE_FEED_ROLES = (
+    "BASE_FEED_1",
+    "BASE_FEED_2",
+    "QUOTE_FEED_1",
+    "QUOTE_FEED_2",
+)
 TYPE_DUAL_XREF = "DualCrossReferencePriceFeed"
 TYPE_MIDDLEWARE_FALLBACK = "middleware_fallback"
 TYPE_UNKNOWN = "custom_unknown"
@@ -83,11 +89,21 @@ class Erc4626DetailJson(TypedDict):
     rate: str | None
 
 
+class MorphoOracleFeedJson(AggregatorFeedDetailJson):
+    """A feed behind a Morpho oracle; ``role`` names the getter it came from."""
+
+    role: str
+
+
 class MorphoFeedDetailJson(TypedDict):
+    """``oracle_feeds`` lists the feeds the oracle uses; null when the oracle
+    does not expose them, so their freshness cannot be read."""
+
     morpho_oracle: ChecksumAddress
     collateral_token: ChecksumAddress | None
     loan_token: ChecksumAddress
     morpho_price: str | None
+    oracle_feeds: list[MorphoOracleFeedJson] | None
 
 
 class MiddlewareFallbackDetailJson(TypedDict):
@@ -411,6 +427,31 @@ def _resolve_chainlink(
     }
     node.status = "resolved"
     return node
+
+
+def _morpho_oracle_feeds(
+    reader: OracleMappingReader, morpho_oracle: ChecksumAddress
+) -> list[MorphoOracleFeedJson] | None:
+    """The feeds behind a Morpho oracle, skipping its unused (zero) slots."""
+    feeds: list[MorphoOracleFeedJson] = []
+    for role in MORPHO_ORACLE_FEED_ROLES:
+        address = reader.morpho_oracle_feed(morpho_oracle, role)
+        if address is None:
+            return None
+        if address.lower() == ZERO_ADDRESS:
+            continue
+        feeds.append(
+            {
+                "address": address,
+                **_aggregator_detail(
+                    reader.feed_description(address),
+                    reader.feed_latest_round_data(address),
+                    reader.feed_decimals(address),
+                ),
+                "role": role,
+            }
+        )
+    return feeds
 
 
 def _resolve_dual_xref(
