@@ -612,7 +612,14 @@ class TestNestedBlocksDumpVerbatim:
     @pytest.mark.parametrize("document", _vault_info_documents())
     def test_vault_info_blocks(self, document):
         dumped = VaultInfoResponse.model_validate(document).model_dump(mode="json")
-        for key in ("links", "deployment", "share_price", "substrates"):
+        for key in (
+            "links",
+            "deployment",
+            "share_price",
+            "substrates",
+            "fuses",
+            "instant_withdrawal_fuses",
+        ):
             assert json.dumps(dumped[key]) == json.dumps(document[key]), key
         assert json.dumps(dumped.get("dependency_graph")) == json.dumps(
             document.get("dependency_graph")

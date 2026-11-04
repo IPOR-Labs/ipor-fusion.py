@@ -303,7 +303,7 @@ class WithdrawManagerDetails(_Base):
     total_pending_shares_note: str
 
 
-class FuseEntry(_Base):
+class FuseEntry(_Sparse):
     address: str
     contract: str = Field(
         description="Contract name resolved via Etherscan; '?' if unknown."
