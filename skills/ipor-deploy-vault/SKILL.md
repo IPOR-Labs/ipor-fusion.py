@@ -68,6 +68,16 @@ greppable.
    `AaveV3WithPriceOracleMiddlewareBalanceFuse`, Arbitrum only the latter, so a
    name that resolves on one chain may not exist on the next. Resolve
    `(chain, name)` in `ipor-abi`; never reuse an address across chains.
+   A registry entry is not a whitelist entry. Before adding or deploying a
+   fuse, check the chain's Fuse Whitelist (`IporFusionFuseWhitelistProxy` in
+   the same `addresses.json`): `getFusesByMarketId(market_id)` returns a
+   market's fuses, active and deprecated together, and only those whose
+   `getFuseByAddress(fuse)` reports `fuseState` 1 (active) belong in a new
+   vault. Use an active fuse when one covers the action. A redeployed or
+   forked copy of a whitelisted fuse is never whitelisted, and the IPOR app
+   shows its market as unknown; a fuse for an action no active fuse covers
+   goes through the whitelist review at
+   https://ipor.io/docs/build-on-fusion/integrating-a-new-market.md.
 6. **`.send(ctx)` signs locally and needs a private key in the `Web3Context`;
    `.call(ctx)` previews without one.** Sending through a context built with
    `signer=` alone raises `ValueError("Private key required for sending
@@ -238,6 +248,7 @@ Resolve fuse addresses by registry name and chain from `ipor-abi`
 `fusion address lookup SupplyFuseAaveV3 --chain base`, or the MCP tool
 `address_lookup` (the hosted server's `fusion_address_lookup`). The SDK class
 for a registry name swaps the parts: `SupplyFuseAaveV3` is `AaveV3SupplyFuse`.
+Then confirm the fuse is active in the chain's Fuse Whitelist (invariant 5).
 
 ## Pointers
 
