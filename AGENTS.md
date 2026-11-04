@@ -507,6 +507,16 @@ value sets are `Literal` enums. The docstring keeps only what has no
 structured home: a one-line summary, behavioral notes, cost warnings. Do not
 repeat schema content as prose; it drifts.
 
+Fee wording in CLI output, JSON notes and MCP descriptions follows the labels
+of the IPOR app's "Fees And Limits" table (a vault's page on app.ipor.io), one
+name per concept and no synonyms, so a question phrased in the app's words
+meets the same words here: Management Fee (`getManagementFeeData`), Performance
+Fee (`getPerformanceFeeData`), Onboarding Contribution (FeeManager
+`getDepositFee`), Offboarding Contribution for Scheduled Withdrawals
+(WithdrawManager `getRequestFee`), Offboarding Contribution for Instant
+Withdrawals (`getWithdrawFee`). JSON keys mirror the contracts, so a description
+names the getter beside the label.
+
 `mcp/models.py` forbids extra keys and stays the source of the published JSON
 schema. A command whose CLI `--json` and MCP tool return the same data publish one
 document: an SDK builder returns its TypedDict (`build_vault_info_json`,
