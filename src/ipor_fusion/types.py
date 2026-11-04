@@ -101,6 +101,7 @@ Check: TypeAlias = Literal[
     "uncovered_erc20",
     "erc20_cache_stale",
     "missing_price_feed",
+    "fuse_whitelist",
 ]
 
 

@@ -730,6 +730,15 @@ class TestSnapshotTokenMetadata:
         assert [t.symbol for t in data.erc20.tokens] == ["?", "TKN", "?"]
 
 
+@pytest.fixture(autouse=True)
+def _no_fuse_whitelist(monkeypatch):
+    # The whitelist check has its own tests (test_fuse_whitelist.py); here the
+    # chain publishes none, so no registry download happens.
+    monkeypatch.setattr(
+        "ipor_fusion.validation.fuse_whitelist_for_chain", lambda _: None
+    )
+
+
 class TestValidateVault:
     def test_validates_the_snapshot_it_fetches(self):
         ctx = MagicMock()

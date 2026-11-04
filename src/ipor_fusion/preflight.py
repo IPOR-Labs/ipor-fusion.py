@@ -33,6 +33,12 @@ from ipor_fusion.core.multicall import Multicall3, Multicall3Batch
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.simulation import VaultSimulator, is_simulate_v1_supported
 from ipor_fusion.errors import ExecutePreflightError
+from ipor_fusion.fuse_whitelist import (
+    FUSE_WHITELIST_READ_ERRORS,
+    check_fuses,
+    fuse_whitelist_for_chain,
+    fuse_whitelist_issues,
+)
 from ipor_fusion.types import (
     AccessManagerAddress,
     Amount,
@@ -54,6 +60,7 @@ PreflightCheck = Literal[
     "no_balance_fuse",
     "simulation_failed",
     "simulation_unavailable",
+    "fuse_whitelist",
 ]
 
 _EXECUTE_SELECTOR = function_signature_to_4byte_selector("execute((address,bytes)[])")
@@ -255,6 +262,30 @@ def _action_findings(
     return findings
 
 
+def _whitelist_findings(
+    ctx: Web3Context, actions: Sequence[PreflightAction]
+) -> list[PreflightFinding]:
+    fuses = {a.fuse: a.market_id for a in actions if a.market_id is not None}
+    try:
+        whitelist = fuse_whitelist_for_chain(ctx.chain_id)
+        if whitelist is None or not fuses:
+            return []
+        check = check_fuses(ctx, whitelist, fuses)
+    except FUSE_WHITELIST_READ_ERRORS as exc:
+        return [
+            PreflightFinding(
+                "fuse_whitelist",
+                "warning",
+                f"the Fuse Whitelist could not be read ({type(exc).__name__});"
+                " the batch's fuses were not checked against it",
+            )
+        ]
+    return [
+        PreflightFinding("fuse_whitelist", "warning", issue.message)
+        for issue in fuse_whitelist_issues(check, fuses)
+    ]
+
+
 def _schedule(
     ctx: Web3Context,
     manager: AccessManagerAddress,
@@ -320,6 +351,7 @@ def preflight_execute(
     *,
     sender: ChecksumAddress,
     simulate: bool = True,
+    fuse_whitelist: bool = True,
 ) -> ExecutePreflight:
     """Check ``actions`` as ``sender``'s `PlasmaVault.execute` on the state of one
     base block: the one ``ctx.default_block`` names (a number, hash or tag),
@@ -329,7 +361,9 @@ def preflight_execute(
     level), the ``canCall`` read, the balance-fuse storage reads and, for a
     caller with an execution delay, the schedule of this exact calldata;
     ``simulate`` adds a capability probe and one ``eth_simulateV1`` request.
-    Read-only.
+    ``fuse_whitelist`` adds a warning for each fuse of the batch that is not
+    active in the chain's Fuse Whitelist (the ``ipor-abi`` registry plus two
+    Multicall3 batches); a failure to read it is a warning too. Read-only.
     """
     if not actions:
         raise ValueError("preflight needs at least one action")
@@ -372,6 +406,7 @@ def preflight_execute(
         + _dependency_findings(
             _dependency_closure(ctx, plasma_vault, touched), balance_markets
         )
+        + (_whitelist_findings(ctx, preflight_actions) if fuse_whitelist else [])
     )
     simulation, simulated = (
         _simulate(ctx, plasma_vault, actions, sender, block) if simulate else (None, [])
