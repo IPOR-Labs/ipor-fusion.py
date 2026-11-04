@@ -443,6 +443,25 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
             "role_account_sort_key",
             "validate_vault",
             "validate_vault_state",
+            "FUSE_WHITELIST_READ_ERRORS",
+            "FUSE_WHITELIST_REGISTRY_NAME",
+            "FuseIssueKind",
+            "FuseRole",
+            "FuseState",
+            "FuseWhitelist",
+            "FuseWhitelistCheck",
+            "FuseWhitelistIssue",
+            "FuseWhitelistJson",
+            "WhitelistEntry",
+            "WhitelistEntryJson",
+            "build_fuse_whitelist_json",
+            "check_fuses",
+            "fetch_fuse_whitelist_json",
+            "fuse_whitelist_for_chain",
+            "fuse_whitelist_issues",
+            "read_fuse_entries",
+            "read_market_fuses",
+            "read_vault_fuse_whitelist",
         }
     ),
     "ipor_fusion.config": frozenset(
@@ -1133,6 +1152,28 @@ _MODULE_PATH_SNAPSHOT: dict[str, frozenset[str]] = {
             "preflight_execute",
         }
     ),
+    "ipor_fusion.fuse_whitelist": frozenset(
+        {
+            "FUSE_WHITELIST_READ_ERRORS",
+            "FUSE_WHITELIST_REGISTRY_NAME",
+            "FuseIssueKind",
+            "FuseRole",
+            "FuseState",
+            "FuseWhitelist",
+            "FuseWhitelistCheck",
+            "FuseWhitelistIssue",
+            "FuseWhitelistJson",
+            "WhitelistEntry",
+            "WhitelistEntryJson",
+            "build_fuse_whitelist_json",
+            "check_fuses",
+            "fetch_fuse_whitelist_json",
+            "fuse_whitelist_for_chain",
+            "fuse_whitelist_issues",
+            "read_fuse_entries",
+            "read_market_fuses",
+        }
+    ),
     "ipor_fusion.registry": frozenset(
         {
             "AddressListJson",
@@ -1232,6 +1273,7 @@ _MODULE_PATH_SNAPSHOT: dict[str, frozenset[str]] = {
             "VaultState",
             "VaultValidation",
             "WithdrawQueue",
+            "read_vault_fuse_whitelist",
             "validate_vault",
             "validate_vault_state",
         }

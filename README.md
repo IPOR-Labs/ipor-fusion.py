@@ -202,6 +202,9 @@ fusion market meta-morpho 0xVAULT_ADDRESS --chain ethereum
 # Find IPOR Fusion contracts in the ipor-abi registry
 fusion address lookup SupplyFuseAaveV3 --chain base
 fusion address list --chain base
+
+# Whitelisted fuses of a market: reuse one instead of deploying a copy
+fusion fuse whitelist --chain arbitrum --market-id 11
 ```
 
 ## MCP Server
@@ -260,7 +263,7 @@ Available tools:
 | `config_set_provider` | Set RPC provider URL for a chain (auto-detects chain ID) |
 | `config_set_etherscan_key` | Set Etherscan API key (enables contract name resolution) |
 | `vault_info` | Full on-chain vault state — assets, fuses, balances, fees, lending health, reconciliation |
-| `vault_validate` | Health verdict (ok / warning / critical) with the reconciliation, lending-health and ERC20 numbers behind it |
+| `vault_validate` | Health verdict (ok / warning / critical) with the reconciliation, lending-health and ERC20 numbers behind it, plus a warning for each fuse not active in the Fuse Whitelist |
 | `vault_preflight` | Check execute calldata as its sender would send it: permission, fuses, balance fuses, simulation |
 | `vault_role_accounts` | Accounts holding each AccessManager role on a vault |
 | `vault_oracle_mapping` | Price-oracle sources per asset for a vault |
@@ -272,6 +275,7 @@ Available tools:
 | `address_lookup` | IPOR Fusion contracts by name substring or address (ipor-abi registry) |
 | `address_names` | Contract names in the registry, with the chains that have them |
 | `address_list` | One chain's full `{name: address}` registry |
+| `fuse_whitelist` | The fuses the chain's Fuse Whitelist lists for a market (active first) |
 
 Configure providers and vaults via `fusion config` or the MCP config tools first.
 

@@ -90,6 +90,13 @@ def _ctx(
 
 
 @pytest.fixture(autouse=True)
+def _no_fuse_whitelist(monkeypatch):
+    # The whitelist check has its own tests (test_fuse_whitelist.py); here the
+    # chain publishes none, so no registry download happens.
+    monkeypatch.setattr(preflight_module, "fuse_whitelist_for_chain", lambda _: None)
+
+
+@pytest.fixture(autouse=True)
 def _balance_fuses(monkeypatch):
     monkeypatch.setattr(
         PlasmaVault,

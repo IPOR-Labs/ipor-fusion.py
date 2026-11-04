@@ -32,6 +32,7 @@ from ipor_fusion.core.access import build_role_accounts_json, resolve_access_man
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.explorer import get_contract_name
+from ipor_fusion.fuse_whitelist import fetch_fuse_whitelist_json
 from ipor_fusion.market_info import (
     build_meta_morpho_json,
     build_morpho_blue_market_json,
@@ -45,6 +46,7 @@ from ipor_fusion.mcp.models import (
     ChangelogEntryModel,
     ConfigShowResponse,
     ExecutePreflightResponse,
+    FuseWhitelistResponse,
     MetaMorphoVaultResponse,
     MorphoBlueMarketResponse,
     OracleMappingResponse,
@@ -76,6 +78,7 @@ from ipor_fusion.registry import (
 )
 from ipor_fusion.types import (
     ChainId,
+    MarketId,
     PlasmaVaultAddress,
     parse_checksum_address,
     parse_morpho_market_id,
@@ -795,6 +798,27 @@ def address_list(chain_id: RequiredChainArg) -> AddressListResponse:
     address_lookup is cheaper for one contract."""
     return AddressListResponse.model_validate(
         build_address_list_json(fetch_address_registry(chain_id))
+    )
+
+
+@mcp.tool()
+def fuse_whitelist(
+    chain_id: RequiredChainArg,
+    market_id: Annotated[
+        int, Field(description="Numeric market ID (IporFusionMarkets).", ge=0)
+    ],
+    block_number: BlockArg = None,
+    include_deprecated: bool = False,
+) -> FuseWhitelistResponse:
+    """The fuses the chain's Fuse Whitelist lists for a market. Call it before
+    writing or deploying a fuse: use an active one when it covers the action.
+    A redeployed or forked copy is never whitelisted and the IPOR app shows its
+    allocation as unknown; a deprecated fuse makes the app warn the Atomist."""
+    ctx, _ = _build_ctx(load_config(), chain_id, block_number)
+    return FuseWhitelistResponse.model_validate(
+        fetch_fuse_whitelist_json(
+            ctx, MarketId(market_id), include_deprecated=include_deprecated
+        )
     )
 
 
