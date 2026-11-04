@@ -306,7 +306,8 @@ class PlasmaVault(ContractWrapper):
 
     def balance_fuse_value(self, balance_fuse: FuseAddress) -> Call[Amount]:
         """``balanceOf()`` of ``balance_fuse`` evaluated in the vault's context:
-        the figure ``updateMarketsBalances`` would store for its market now."""
+        its market's value in USD, 18 decimals, which ``updateMarketsBalances``
+        converts to the vault's asset before storing it."""
         return self.universal_read_decoded(
             balance_fuse, _BALANCE_OF_SELECTOR, output_types=["uint256"], decoder=Amount
         )
