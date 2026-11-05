@@ -44,6 +44,7 @@ from ipor_fusion.readers.morpho import (
     morpho_blue_address,
     to_assets_up,
 )
+from ipor_fusion.redaction import redact_provider_urls
 from ipor_fusion.substrates import decode_substrate, market_name
 from ipor_fusion.types import (
     ChainId,
@@ -227,7 +228,12 @@ class VaultLendingHealth:
 
 def _reason(what: str, exc: Exception) -> str:
     """Why a read failed, for the unreadable entry and its finding."""
-    _logger.debug("lending %s read failed: %s: %s", what, type(exc).__name__, exc)
+    _logger.debug(
+        "lending %s read failed: %s: %s",
+        what,
+        type(exc).__name__,
+        redact_provider_urls(str(exc)),
+    )
     return f"{what} read failed: {type(exc).__name__}"
 
 
