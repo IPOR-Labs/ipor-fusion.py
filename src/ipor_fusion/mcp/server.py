@@ -4,12 +4,14 @@ Calls the ipor_fusion SDK directly — no CLI subprocess.
 Configuration is loaded from the shared CLI config (~/.config/ipor-fusion/).
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from eth_typing import ChecksumAddress
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import ContentBlock
 from pydantic import AfterValidator, BeforeValidator, Field
 from web3 import Web3
 
@@ -23,7 +25,6 @@ from ipor_fusion.cli.config_store import (
     FusionConfig,
     VaultEntry,
     load_config,
-    mask_provider_url,
     resolve_chain_id,
     save_config,
 )
@@ -69,6 +70,7 @@ from ipor_fusion.preflight import (
 )
 from ipor_fusion.readers.morpho import MorphoReader, morpho_blue_address
 from ipor_fusion.readers.oracle_mapping import build_oracle_mapping
+from ipor_fusion.redaction import mask_provider_url, redact_provider_urls
 from ipor_fusion.registry import (
     build_address_list_json,
     build_address_lookup_json,
@@ -92,7 +94,20 @@ from ipor_fusion.vault_info import build_vault_info_json, build_vault_validation
 
 # chain_id default: detect the chain from the saved vault or the single provider.
 
-mcp = FastMCP(
+
+class _RedactingFastMCP(FastMCP):
+    """Every tool failure reaches the client through `call_tool`."""
+
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any]
+    ) -> Sequence[ContentBlock] | dict[str, Any]:
+        try:
+            return await super().call_tool(name, arguments)
+        except Exception as exc:
+            raise ToolError(redact_provider_urls(str(exc))) from exc
+
+
+mcp = _RedactingFastMCP(
     "ipor-fusion",
     instructions=(
         "Inspection and configuration tools for IPOR Fusion Plasma Vaults. "

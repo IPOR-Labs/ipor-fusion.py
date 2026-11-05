@@ -8,9 +8,9 @@ from ipor_fusion.cli.config_store import (
     FusionConfig,
     VaultEntry,
     load_config,
-    mask_provider_url,
     save_config,
 )
+from ipor_fusion.redaction import mask_provider_url
 
 
 @pytest.fixture(autouse=True)
