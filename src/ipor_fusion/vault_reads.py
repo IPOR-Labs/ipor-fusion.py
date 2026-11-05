@@ -12,6 +12,7 @@ from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.errors import EmptyCallResultError, LogScanError
+from ipor_fusion.redaction import redact_provider_urls
 
 T = TypeVar("T")
 
@@ -36,7 +37,11 @@ def _scan_or_none(func: Callable[[], T]) -> T | None:
     try:
         return func()
     except _ROLE_SCAN_ERRORS as exc:
-        _logger.debug("scan unavailable: %s: %s", type(exc).__name__, exc)
+        _logger.debug(
+            "scan unavailable: %s: %s",
+            type(exc).__name__,
+            redact_provider_urls(str(exc)),
+        )
         return None
 
 

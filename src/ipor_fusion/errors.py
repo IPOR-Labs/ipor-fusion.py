@@ -12,6 +12,7 @@ from web3.types import TxParams, TxReceipt
 
 from ipor_fusion.fusion_errors import FUSION_ERROR_SIGNATURES
 from ipor_fusion.onchain_text import sanitize_onchain_text
+from ipor_fusion.redaction import redact_provider_urls
 from ipor_fusion.types import TxHash
 
 log = logging.getLogger(__name__)
@@ -148,7 +149,9 @@ def get_revert_reason(web3: Web3, tx_hash: TxHash, receipt: TxReceipt) -> str | 
             or "execution reverted" in exc_message.lower()
         ):
             return exc_message
-        log.debug("Could not decode revert reason: %s", exc)
+        log.debug(
+            "Could not decode revert reason: %s", redact_provider_urls(exc_message)
+        )
         return None
 
 
