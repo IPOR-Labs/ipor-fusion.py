@@ -132,6 +132,7 @@ UNSUPPORTED_BORROW_MARKET_IDS = frozenset(
         IporFusionMarkets.MOONWELL,
         IporFusionMarkets.SILO_V2,
         IporFusionMarkets.EBISU,
+        IporFusionMarkets.COMPOUND_V3_INSTITUTIONAL_USDC,
     }
 )
 _UNSUPPORTED_REASON = "no lending health reader for this market"

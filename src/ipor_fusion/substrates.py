@@ -527,6 +527,7 @@ _register_markets(
         37,
         44,  # SPARK_LEND — reuses AaveV3SupplyFuse (isSubstrateAsAssetGranted)
         46,  # NAPIER — isSubstrateAsAssetGranted, plain asset addresses
+        57,  # COMPOUND_V3_INSTITUTIONAL_USDC — same Compound V3 fuses as market 2
         *range(100_001, 100_021),  # ERC4626_0001 .. ERC4626_0020
     ],
     _decode_plain_address,
