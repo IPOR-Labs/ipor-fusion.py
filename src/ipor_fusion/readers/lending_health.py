@@ -1,5 +1,5 @@
-"""Lending health computation for Morpho Blue, Aave V3, Aave V4, Euler V2 and
-Compound V3 markets.
+"""Lending health computation for Morpho Blue, Lido Lend, Aave V3, Aave V4,
+Euler V2 and Compound V3 markets.
 
 Provides a unified view of LTV, liquidation thresholds, and health factors
 for lending positions held by Plasma Vaults.
@@ -39,6 +39,7 @@ from ipor_fusion.readers.euler_v2 import (
     EulerV2Substrate,
     EulerV2VaultReader,
 )
+from ipor_fusion.readers.lido_lend import LidoLendReader
 from ipor_fusion.readers.morpho import (
     MorphoReader,
     morpho_blue_address,
@@ -101,6 +102,16 @@ MORPHO_MARKET_IDS = frozenset(
     }
 )
 
+# Market IDs served by the Lido Lend fuses (Morpho Blue 1.0 fork). The core is
+# read from the market's balance fuse and health is per market word, with the
+# Morpho liquidation math. The flash loan market (59) carries no position and
+# is not listed.
+LIDO_LEND_MARKET_IDS = frozenset(
+    {
+        IporFusionMarkets.LIDO_LEND,
+    }
+)
+
 # Market IDs served by the generic Aave V3 fuses, SparkLend (an Aave V3 fork)
 # included. Each market has its own Pool.
 AAVE_V3_MARKET_IDS = frozenset(
@@ -159,6 +170,7 @@ class LendingMarketHealth:
 
     `substrate_id` identifies the underlying market within the IPOR market_id:
     - Morpho: the morpho market id (`0x` + 64 lowercase hex) (one row per substrate).
+    - Lido Lend: the market id word (one row per market word of the substrates).
     - Aave V3: None — Aave health is account-level, aggregated across reserves.
     - Aave V4: the Spoke address — account-level per Spoke, across its reserves.
     - Euler V2: the sub-account address — account-level, across its collaterals.
@@ -246,8 +258,13 @@ def _compute_morpho_market_health(
     vault_address: PlasmaVaultAddress,
     ipor_market_id: MarketId,
     market_name: str,
+    *,
+    protocol: str = "morpho",
 ) -> LendingMarketHealth | UnreadableLendingMarket:
-    """Compute LTV health for a single Morpho Blue market position."""
+    """Compute LTV health for a single Morpho Blue market position.
+
+    ``protocol`` labels the result: Lido Lend reads the same ABI from its own
+    core (a ``LidoLendReader``) and liquidates with the same math."""
     batch = Multicall3(ctx).batch()
     position_read = batch.add(reader.position(morpho_market_id, vault_address))
     market_read = batch.add(reader.market(morpho_market_id))
@@ -256,7 +273,7 @@ def _compute_morpho_market_health(
         batch.run()
     except _READ_ERRORS as exc:
         return UnreadableLendingMarket(
-            protocol="morpho",
+            protocol=protocol,
             market_id=ipor_market_id,
             market_name=market_name,
             reason=_reason("market data", exc),
@@ -271,7 +288,7 @@ def _compute_morpho_market_health(
     # No borrow = no liquidation risk
     if position.borrow_shares == 0:
         return LendingMarketHealth(
-            protocol="morpho",
+            protocol=protocol,
             market_id=ipor_market_id,
             market_name=market_name,
             current_ltv=0.0,
@@ -287,7 +304,7 @@ def _compute_morpho_market_health(
         oracle_price = _call_morpho_oracle_price(ctx, params.oracle)
     except _READ_ERRORS as exc:
         return UnreadableLendingMarket(
-            protocol="morpho",
+            protocol=protocol,
             market_id=ipor_market_id,
             market_name=market_name,
             reason=_reason("oracle price", exc),
@@ -300,7 +317,7 @@ def _compute_morpho_market_health(
 
     if position.collateral == 0 or oracle_price == 0:
         return LendingMarketHealth(
-            protocol="morpho",
+            protocol=protocol,
             market_id=ipor_market_id,
             market_name=market_name,
             current_ltv=None,
@@ -331,7 +348,7 @@ def _compute_morpho_market_health(
     ltv_usage = (current_ltv / max_ltv * 100) if max_ltv > 0 else None
 
     return LendingMarketHealth(
-        protocol="morpho",
+        protocol=protocol,
         market_id=ipor_market_id,
         market_name=market_name,
         current_ltv=round(current_ltv, 6),
@@ -639,11 +656,66 @@ def _aave_v4_spokes(substrates: list[bytes]) -> list[ChecksumAddress]:
 @dataclass(slots=True)
 class _LendingMarkets:
     morpho: list[tuple[MarketId, str, MorphoBlueMarketId]]
+    lido_lend: list[tuple[MarketId, str, ChecksumAddress, MorphoBlueMarketId]]
     aave_v3: list[tuple[MarketId, str, ChecksumAddress]]
     aave_v4: list[tuple[MarketId, str, ChecksumAddress]]
     euler_v2: list[tuple[MarketId, str, _EulerV2Account]]
     compound_v3: list[tuple[MarketId, str, ChecksumAddress]]
     unreadable: list[UnreadableLendingMarket]
+
+
+def _lido_lend_markets(
+    markets: _LendingMarkets,
+    market_id: MarketId,
+    name: str,
+    substrates: list[bytes],
+    core: ChecksumAddress | None,
+) -> None:
+    """Add one position per Lido Lend market word of the substrates, read from
+    the core the balance fuse names; without a core the market is unreadable.
+    Collateral words are tokens, not markets."""
+    if core is None:
+        markets.unreadable.append(
+            UnreadableLendingMarket(
+                protocol="lido_lend",
+                market_id=market_id,
+                market_name=name,
+                reason=(
+                    "no Lido Lend core known for this market "
+                    "(the balance fuse names none or none was passed)"
+                ),
+            )
+        )
+        return
+    markets.lido_lend.extend(
+        (market_id, name, core, parse_morpho_market_id(sub))
+        for sub in substrates
+        if decode_substrate(sub, market_id).type_label == "lido_lend_market_id"
+    )
+
+
+def _venue_or_unreadable(
+    found: list[tuple[MarketId, str, ChecksumAddress]],
+    unreadable: list[UnreadableLendingMarket],
+    protocol: str,
+    market_id: MarketId,
+    name: str,
+    venue: ChecksumAddress | None,
+    reason: str,
+) -> None:
+    """List the market with the venue its balance fuse names, or as unreadable
+    with ``reason`` when the fuse names none."""
+    if venue:
+        found.append((market_id, name, venue))
+    else:
+        unreadable.append(
+            UnreadableLendingMarket(
+                protocol=protocol,
+                market_id=market_id,
+                market_name=name,
+                reason=reason,
+            )
+        )
 
 
 def _collect_lending_markets(
@@ -652,13 +724,20 @@ def _collect_lending_markets(
     market_substrates: dict[MarketId, list[bytes]],
     aave_pools: dict[MarketId, ChecksumAddress],
     comets: dict[MarketId, ChecksumAddress],
+    lido_lend_cores: dict[MarketId, ChecksumAddress],
 ) -> _LendingMarkets:
-    """Pick the positions to read: Morpho substrates, Aave V3 markets with a Pool,
-    the Spokes of Aave V4 markets, the borrowing Euler V2 sub-accounts and Compound
-    V3 markets with a Comet. A market that may borrow but has no reader is listed
-    as unreadable."""
+    """Pick the positions to read: Morpho substrates, the market words of Lido
+    Lend markets with a core, Aave V3 markets with a Pool, the Spokes of Aave V4
+    markets, the borrowing Euler V2 sub-accounts and Compound V3 markets with a
+    Comet. A market that may borrow but has no reader is listed as unreadable."""
     markets = _LendingMarkets(
-        morpho=[], aave_v3=[], aave_v4=[], euler_v2=[], compound_v3=[], unreadable=[]
+        morpho=[],
+        lido_lend=[],
+        aave_v3=[],
+        aave_v4=[],
+        euler_v2=[],
+        compound_v3=[],
+        unreadable=[],
     )
 
     for mid in balance_fuse_market_ids:
@@ -670,18 +749,18 @@ def _collect_lending_markets(
                 for sub in substrates
                 if len(sub) == 32
             )
+        elif mid in LIDO_LEND_MARKET_IDS:
+            _lido_lend_markets(markets, mid, name, substrates, lido_lend_cores.get(mid))
         elif mid in AAVE_V3_MARKET_IDS:
-            if aave_pool := aave_pools.get(mid):
-                markets.aave_v3.append((mid, name, aave_pool))
-            else:
-                markets.unreadable.append(
-                    UnreadableLendingMarket(
-                        protocol="aave_v3",
-                        market_id=mid,
-                        market_name=name,
-                        reason="the balance fuse's Aave V3 Pool could not be read",
-                    )
-                )
+            _venue_or_unreadable(
+                markets.aave_v3,
+                markets.unreadable,
+                "aave_v3",
+                mid,
+                name,
+                aave_pools.get(mid),
+                "the balance fuse's Aave V3 Pool could not be read",
+            )
         elif mid in AAVE_V4_MARKET_IDS:
             markets.aave_v4.extend(
                 (mid, name, spoke) for spoke in _aave_v4_spokes(substrates)
@@ -692,17 +771,15 @@ def _collect_lending_markets(
                 for account in _euler_v2_borrow_accounts(substrates, vault)
             )
         elif mid in COMPOUND_V3_MARKET_IDS:
-            if comet := comets.get(mid):
-                markets.compound_v3.append((mid, name, comet))
-            else:
-                markets.unreadable.append(
-                    UnreadableLendingMarket(
-                        protocol="compound_v3",
-                        market_id=mid,
-                        market_name=name,
-                        reason="the balance fuse names no Comet",
-                    )
-                )
+            _venue_or_unreadable(
+                markets.compound_v3,
+                markets.unreadable,
+                "compound_v3",
+                mid,
+                name,
+                comets.get(mid),
+                "the balance fuse names no Comet",
+            )
         elif _can_borrow(mid, substrates):
             markets.unreadable.append(
                 UnreadableLendingMarket(
@@ -737,6 +814,19 @@ def _health_reads(
             for mid, name, morpho_mid in markets.morpho
         ]
     reads += [
+        partial(
+            _compute_morpho_market_health,
+            ctx,
+            LidoLendReader(core),
+            lido_mid,
+            vault,
+            mid,
+            name,
+            protocol="lido_lend",
+        )
+        for mid, name, core, lido_mid in markets.lido_lend
+    ]
+    reads += [
         partial(_compute_aave_market_health, ctx, AaveV3Reader(pool), vault, mid, name)
         for mid, name, pool in markets.aave_v3
     ]
@@ -763,6 +853,7 @@ def fetch_vault_lending_health(
     market_substrates: dict[MarketId, list[bytes]],
     aave_pools: dict[MarketId, ChecksumAddress] | None = None,
     comets: dict[MarketId, ChecksumAddress] | None = None,
+    lido_lend_cores: dict[MarketId, ChecksumAddress] | None = None,
 ) -> VaultLendingHealth:
     """Fetch lending health for all lending markets in a vault.
 
@@ -781,13 +872,22 @@ def fetch_vault_lending_health(
         comets: Map of Compound V3 market_id -> the Comet its balance fuse reads
             (`CompoundV3FuseReader.comet`). A Compound V3 market without an entry
             is listed in ``unreadable``.
+        lido_lend_cores: Map of Lido Lend market_id -> the core its balance fuse
+            binds (`LidoLendFuseReader.lido_lend`). A Lido Lend market without
+            an entry is listed in ``unreadable``; with one, each market word of
+            its substrates is read like a Morpho market.
     """
     if aave_pools is None:
         core_pool = AAVE_V3_POOL.get(ctx.chain_id)
         aave_pools = {IporFusionMarkets.AAVE_V3: core_pool} if core_pool else {}
 
     markets = _collect_lending_markets(
-        vault, balance_fuse_market_ids, market_substrates, aave_pools, comets or {}
+        vault,
+        balance_fuse_market_ids,
+        market_substrates,
+        aave_pools,
+        comets or {},
+        lido_lend_cores or {},
     )
 
     results: list[LendingMarketHealth] = []

@@ -96,6 +96,8 @@ def _print_lending_health(data: VaultData) -> None:  # noqa: C901
                 click.echo(f"    spoke {m.substrate_id}:")
             elif m.protocol == "euler_v2":
                 click.echo(f"    sub-account {m.substrate_id}:")
+            elif m.protocol == "lido_lend":
+                click.echo(f"    lido lend market {m.substrate_id}:")
             _print_health_lines(m, indent="    ")
     _print_unreadable_health(lh)
 
@@ -118,7 +120,8 @@ def _index_lending_health(
     Morpho rows are keyed by morpho substrate id (one row per substrate).
     Aave V3 and Compound V3 rows are keyed by IPOR market id (account-aggregated,
     one row per market); Aave V4 rows by Spoke address (account-aggregated per Spoke) and
-    Euler V2 rows by sub-account address, in the same account-level map.
+    Euler V2 rows by sub-account address, in the same account-level map. Lido Lend
+    rows are keyed by their market id word, in that map too.
     """
     morpho: dict[str, LendingMarketHealth] = {}
     aave: dict[MarketId | str, LendingMarketHealth] = {}
@@ -129,7 +132,7 @@ def _index_lending_health(
             morpho[str(m.substrate_id).lower().removeprefix("0x")] = m
         elif m.protocol in ("aave_v3", "compound_v3"):
             aave[m.market_id] = m
-        elif m.protocol in ("aave_v4", "euler_v2") and m.substrate_id:
+        elif m.protocol in ("aave_v4", "euler_v2", "lido_lend") and m.substrate_id:
             aave[m.substrate_id] = m
     return morpho, aave
 
