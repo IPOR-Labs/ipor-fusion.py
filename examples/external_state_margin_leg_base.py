@@ -684,9 +684,10 @@ def _queue_bootstrap(
     # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. The admin
     # chain is OWNER -> ATOMIST -> {ALPHA, FUSE_MANAGER, WHITELIST,
     # UPDATE_MARKETS_BALANCES}, so OWNER must self-grant ATOMIST before it can
-    # grant the rest. OWNER is its OWN admin -- nothing sits above it, ADMIN_ROLE
-    # included -- which is what makes the owner key the root of the vault and
-    # worth the 14-day delay production puts on it.
+    # grant the rest. OWNER is its own admin, and `clone` leaves ADMIN_ROLE --
+    # the one role that could re-point it -- unheld: OWNER is the root of the
+    # vault, and a lost owner key has no higher authority to recover it.
+    # (`cloneSupervised` gives ADMIN_ROLE to its caller.)
     #
     # Every grant here passes Period(0) -- no execution delay -- to keep the
     # simulation legible. Production differs per role: 14 days on OWNER, 3 days

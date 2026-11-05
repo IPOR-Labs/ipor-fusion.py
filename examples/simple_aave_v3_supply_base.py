@@ -281,9 +281,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. The admin
     # chain is OWNER -> ATOMIST -> {ALPHA, FUSE_MANAGER, WHITELIST,
     # UPDATE_MARKETS_BALANCES}, so OWNER must self-grant ATOMIST before it can
-    # grant the rest. OWNER is its OWN admin -- nothing sits above it, ADMIN_ROLE
-    # included -- so it is the root of the vault, and a lost owner key has no
-    # higher authority to recover it.
+    # grant the rest. OWNER is its own admin, and `clone` leaves ADMIN_ROLE --
+    # the one role that could re-point it -- unheld: OWNER is the root of the
+    # vault, and a lost owner key has no higher authority to recover it.
+    # (`cloneSupervised` gives ADMIN_ROLE to its caller.)
     sim.add_call(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,
