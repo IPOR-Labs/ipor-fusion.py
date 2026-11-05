@@ -88,6 +88,7 @@ from ipor_fusion.vault_positions import (
     _fetch_aave_pools,
     _fetch_aave_positions,
     _fetch_breakdown_token_prices,
+    _fetch_comets,
     _fetch_morpho_positions,
 )
 from ipor_fusion.vault_reads import (
@@ -508,16 +509,17 @@ class _MarketReads:
     # Only markets with at least one substrate.
     market_substrates: dict[MarketId, list[bytes]]
     aave_pools: dict[MarketId, ChecksumAddress]
+    comets: dict[MarketId, ChecksumAddress]
     market_balances: dict[MarketId, Amount]
     # False when the vault predates getMarketSubstrates (substrates unknown).
     substrates_available: bool = True
 
 
 def _fetch_market_reads(
-    ctx: Web3Context, plasma_vault: PlasmaVault, *, with_aave_pools: bool
+    ctx: Web3Context, plasma_vault: PlasmaVault, *, with_lending_venues: bool
 ) -> _MarketReads:
     """Balance fuses, then every market's dependency graph and substrates in
-    one batch, then (optionally) the Aave V3 Pools behind the markets."""
+    one batch, then (optionally) the Aave V3 Pools and Comets behind the markets."""
     balance_fuses = plasma_vault.read_balance_fuses(ctx)
     market_ids = [bf.market_id for bf in balance_fuses]
     venues = list(dict.fromkeys(market_ids))
@@ -545,7 +547,8 @@ def _fetch_market_reads(
         market_substrates={
             mid: subs for mid, subs in zip(market_ids, substrates, strict=True) if subs
         },
-        aave_pools=_fetch_aave_pools(ctx, balance_fuses) if with_aave_pools else {},
+        aave_pools=_fetch_aave_pools(ctx, balance_fuses) if with_lending_venues else {},
+        comets=_fetch_comets(ctx, balance_fuses) if with_lending_venues else {},
         market_balances={mid: balance.value for mid, balance in balances},
         substrates_available=None not in substrates,
     )
@@ -583,6 +586,7 @@ def _fetch_lending_reads(
             balance_fuse_market_ids=[bf.market_id for bf in markets.balance_fuses],
             market_substrates=markets.market_substrates,
             aave_pools=markets.aave_pools,
+            comets=markets.comets,
         ),
     )
     morpho_unread: list[str] = []
@@ -668,7 +672,7 @@ def fetch_vault_data(
             _safe_call, partial(plasma_vault.read_stored_markets_total, ctx)
         )
         f_markets = pool.submit(
-            _fetch_market_reads, ctx, plasma_vault, with_aave_pools=lending
+            _fetch_market_reads, ctx, plasma_vault, with_lending_venues=lending
         )
 
         markets = f_markets.result()

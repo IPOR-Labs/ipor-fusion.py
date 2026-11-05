@@ -11,7 +11,12 @@ from ipor_fusion.readers.aave_v4 import (
     AaveV4SpokeReader,
     AaveV4UserAccountData,
 )
-from ipor_fusion.readers.compound_v3 import CompoundV3Reader
+from ipor_fusion.readers.compound_v3 import (
+    CometAccountValue,
+    CometAssetInfo,
+    CompoundV3FuseReader,
+    CompoundV3Reader,
+)
 from ipor_fusion.readers.hypercore import (
     HYPEREVM_CHAIN_ID,
 )
@@ -79,6 +84,9 @@ __all__ = [
     "AaveV4OracleReader",
     "AaveV4SpokeReader",
     "AaveV4UserAccountData",
+    "CometAccountValue",
+    "CometAssetInfo",
+    "CompoundV3FuseReader",
     "CompoundV3Reader",
     "HYPEREVM_CHAIN_ID",
     "LendingMarketHealth",

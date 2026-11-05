@@ -17,7 +17,7 @@ from ipor_fusion.readers.aave_v3 import (
     AaveV3ReserveTokens,
     AaveV3UserAccountData,
 )
-from ipor_fusion.readers.compound_v3 import CompoundV3Reader
+from ipor_fusion.readers.compound_v3 import CompoundV3FuseReader, CompoundV3Reader
 from ipor_fusion.readers.morpho import (
     MORPHO_BLUE_ADDRESSES,
     MorphoMarket,
@@ -631,6 +631,12 @@ class TestCompoundV3Reader:
         result = reader.collateral_balance_of(USER_ADDR, USER_ADDR).call(ctx)
 
         assert result == Amount(9_000)
+
+    def test_fuse_names_its_comet(self):
+        reader, ctx = _make_reader(CompoundV3FuseReader)
+        ctx.call.return_value = encode(["address"], [USER_ADDR])
+
+        assert reader.comet().call(ctx) == USER_ADDR
 
 
 # ── Uniswap V3 ────────────────────────────────────────────────────────

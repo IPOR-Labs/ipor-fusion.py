@@ -258,6 +258,12 @@ class TestRouting:
         state = State(total_assets=0, lending_health=_lending(None, usage=None))
         assert validate(state).findings == ()
 
+    def test_debt_against_a_zero_limit_is_critical_without_a_usage(self):
+        state = State(total_assets=0, lending_health=_lending(0.0, usage=None))
+        validation = validate(state)
+        assert validation.verdict == "critical"
+        assert "(? usage)" in validation.criticals[0]
+
     def test_total_assets_mismatch_with_pending_withdrawals_and_drift(self):
         state = State(
             withdraw_manager_data=Queue(
@@ -661,6 +667,7 @@ class TestSnapshotTokenMetadata:
             dependency_graph={},
             market_substrates=state.market_substrates,  # type: ignore[arg-type]
             aave_pools={},
+            comets={},
             market_balances=chain.market_balances,  # type: ignore[arg-type]
         )
         vault_reads = _VaultReads(
@@ -772,6 +779,7 @@ class TestFailedValidationInputs:
             dependency_graph={},
             market_substrates={},
             aave_pools={},
+            comets={},
             market_balances={},
         )
 
