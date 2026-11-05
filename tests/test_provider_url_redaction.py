@@ -31,11 +31,13 @@ USAGE_ERROR_EXIT = 2
 
 
 class _Rpc(BaseHTTPRequestHandler):
-    """Refuses every method in ``server.forbidden`` with a 403, answers the rest."""
+    """Refuses every method in ``forbidden`` with a 403, answers the rest."""
+
+    forbidden: frozenset[str] = frozenset()
 
     def do_POST(self) -> None:
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        if body["method"] in self.server.forbidden:  # type: ignore[attr-defined]
+        if body["method"] in self.forbidden:
             self.send_error(403)
             return
         answers = {
@@ -52,13 +54,16 @@ class _Rpc(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    # The parameter name is the base class's.
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         del format, args
 
 
-def _serve(forbidden: frozenset[str]) -> Iterator[str]:
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Rpc)
-    httpd.forbidden = forbidden  # type: ignore[attr-defined]
+def _serve(refused: frozenset[str]) -> Iterator[str]:
+    class Handler(_Rpc):
+        forbidden = refused
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
