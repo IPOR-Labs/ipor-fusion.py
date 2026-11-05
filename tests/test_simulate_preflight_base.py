@@ -25,7 +25,9 @@ def _action():
 
 def test_the_alpha_passes_the_static_checks(web3_base):
     ctx = archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)
-    result = preflight_execute(ctx, VAULT, [_action()], sender=ALPHA, simulate=False)
+    result = preflight_execute(
+        ctx, VAULT, [_action()], sender=ALPHA, simulate=False, fuse_whitelist=False
+    )
 
     assert result.block_number == BLOCK
     assert result.permission.immediate
@@ -35,9 +37,21 @@ def test_the_alpha_passes_the_static_checks(web3_base):
     assert result.findings == ()
 
 
+def test_a_deprecated_fuse_is_flagged_with_its_replacement(web3_base):
+    ctx = archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)
+    result = preflight_execute(ctx, VAULT, [_action()], sender=ALPHA, simulate=False)
+
+    (finding,) = result.findings
+    assert (finding.check, finding.severity) == ("fuse_whitelist", "warning")
+    assert "is deprecated in the Fuse Whitelist (AaveV3SupplyFuse)" in finding.message
+    assert "use 0x26fD6EF391E98C78CfCA27e00c3d15be4D941625" in finding.message
+
+
 def test_a_stranger_is_refused_and_the_simulation_reverts(web3_base):
     ctx = archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)
-    result = preflight_execute(ctx, VAULT, [_action()], sender=STRANGER)
+    result = preflight_execute(
+        ctx, VAULT, [_action()], sender=STRANGER, fuse_whitelist=False
+    )
 
     checks = [f.check for f in result.findings]
     assert checks == ["execute_permission", "simulation_failed"]

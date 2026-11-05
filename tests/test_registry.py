@@ -204,6 +204,45 @@ def test_concurrent_misses_download_once(monkeypatch):
     assert len(calls) == 1
 
 
+def test_stale_if_error_serves_the_expired_entry_and_retries_after_the_ttl(
+    monkeypatch,
+):
+    now = [1000.0]
+    monkeypatch.setattr(registry_module.time, "monotonic", lambda: now[0])
+    answers: list[bytes | Exception] = [
+        json.dumps({"X": PROXY}).encode(),
+        AddressRegistryError("down"),
+        json.dumps({"X": FUSE}).encode(),
+    ]
+
+    def download(_url, _t):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(registry_module, "_download", download)
+    fetch_address_registry(BASE)
+    now[0] += 601
+    stale = fetch_address_registry(BASE, stale_if_error=True)
+    assert stale.address("X") == Web3.to_checksum_address(PROXY)
+    assert len(answers) == 1
+    assert fetch_address_registry(BASE, stale_if_error=True) is stale
+    assert len(answers) == 1
+    now[0] += 601
+    fresh = fetch_address_registry(BASE, stale_if_error=True)
+    assert fresh.address("X") == Web3.to_checksum_address(FUSE)
+
+
+def test_stale_if_error_without_a_cached_entry_raises(monkeypatch):
+    def download(_url, _t):
+        raise AddressRegistryError("down")
+
+    monkeypatch.setattr(registry_module, "_download", download)
+    with pytest.raises(AddressRegistryError):
+        fetch_address_registry(BASE, stale_if_error=True)
+
+
 def test_an_expired_entry_whose_refresh_fails_raises_and_recovers(monkeypatch):
     now = [1000.0]
     monkeypatch.setattr(registry_module.time, "monotonic", lambda: now[0])

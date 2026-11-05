@@ -1,15 +1,16 @@
 """Plasma Vault validation at one block: health findings, the totalAssets
 reconciliation, ERC20 holdings and lending health, with an overall verdict.
 
-`validate_vault` fetches the snapshot and validates it. A caller that already
-holds one (the ``fusion vault info`` command) passes it to
+`validate_vault` fetches the snapshot, checks the vault's fuses against the
+chain's Fuse Whitelist and validates both. A caller that already holds a
+snapshot (the ``fusion vault info`` command) passes it to
 `validate_vault_state`, which reads nothing.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol, TypeVar
 
 from eth_typing import ChecksumAddress
@@ -21,6 +22,13 @@ from ipor_fusion.dependency_graph import (
     erc20_balance_tracks_non_underlying,
     find_markets_missing_erc20_dependency,
     find_orphan_fuse_markets,
+)
+from ipor_fusion.fuse_whitelist import (
+    FUSE_WHITELIST_READ_ERRORS,
+    FuseWhitelistCheck,
+    check_fuses,
+    fuse_whitelist_for_chain,
+    fuse_whitelist_issues,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.lending_health import VaultLendingHealth
@@ -147,6 +155,8 @@ class VaultState(Protocol):
     def market_substrates(self) -> Mapping[MarketId, Sequence[bytes]] | None: ...
     @property
     def fuse_markets(self) -> Mapping[FuseAddress, MarketId] | None: ...
+    @property
+    def fuses(self) -> Sequence[FuseAddress]: ...
     @property
     def dependency_graph(self) -> Mapping[MarketId, Sequence[MarketId]] | None: ...
     @property
@@ -277,6 +287,7 @@ def validate_vault(
     *,
     block: int | None = None,
     metadata: bool = False,
+    fuse_whitelist: bool = True,
 ) -> VaultValidation:
     """Fetch the vault's snapshot at one block (`fetch_vault_data`: ``block``,
     else the context's numeric default block, else the latest) and validate
@@ -285,14 +296,63 @@ def validate_vault(
     The checks need no display metadata, so by default the snapshot has no
     `token_symbols` / `token_decimals` and the ERC20 holdings are named
     ``"?"``; ``metadata=True`` adds one batched, cached read that names them
-    in the holdings and findings."""
-    return validate_vault_state(
-        fetch_vault_data(ctx, vault, block=block, metadata=metadata)
+    in the holdings and findings.
+
+    ``fuse_whitelist`` (default) also reads the chain's Fuse Whitelist at the
+    same block, which needs the ``ipor-abi`` registry (one cached GitHub
+    download); a registry or RPC failure becomes an ``incomplete_read``
+    warning, never an exception."""
+    data = fetch_vault_data(ctx, vault, block=block, metadata=metadata)
+    whitelist: FuseWhitelistCheck | None = None
+    whitelist_error: str | None = None
+    if fuse_whitelist:
+        try:
+            whitelist = read_vault_fuse_whitelist(ctx.at_block(data.block_number), data)
+        except FUSE_WHITELIST_READ_ERRORS as exc:
+            whitelist_error = type(exc).__name__
+    validation = validate_vault_state(data, fuse_whitelist=whitelist)
+    if whitelist_error is None:
+        return validation
+    unread = Finding(
+        "incomplete_read",
+        "warning",
+        f"WARNING — Fuse Whitelist ({whitelist_error}) could not be read:"
+        " the vault's fuses were not checked against it",
     )
+    return replace(validation, findings=(*validation.findings, unread))
 
 
-def validate_vault_state(state: VaultState) -> VaultValidation:
-    """Validate an already-fetched snapshot; reads nothing."""
+def _vault_fuses(state: VaultState) -> dict[FuseAddress, MarketId]:
+    """Action fuses and balance fuses of the vault, each with its market. A fuse
+    of market 0 holds no allocation, so the whitelist check skips it."""
+    fuses = {f: m for f, m in (state.fuse_markets or {}).items() if m != 0}
+    fuses.update({bf.fuse: bf.market_id for bf in state.balance_fuses})
+    return fuses
+
+
+def _fuses_without_market(state: VaultState) -> list[FuseAddress]:
+    """Fuses whose ``MARKET_ID()`` could not be read: the whitelist check, which
+    works per market, cannot cover them."""
+    known = {*(state.fuse_markets or {}), *(bf.fuse for bf in state.balance_fuses)}
+    return [fuse for fuse in state.fuses if fuse not in known]
+
+
+def read_vault_fuse_whitelist(
+    ctx: Web3Context, state: VaultState
+) -> FuseWhitelistCheck | None:
+    """The Fuse Whitelist state of the snapshot's fuses, read at ``ctx``'s
+    block; ``None`` when the chain publishes no whitelist."""
+    whitelist = fuse_whitelist_for_chain(state.chain_id)
+    if whitelist is None:
+        return None
+    return check_fuses(ctx, whitelist, _vault_fuses(state))
+
+
+def validate_vault_state(
+    state: VaultState, *, fuse_whitelist: FuseWhitelistCheck | None = None
+) -> VaultValidation:
+    """Validate an already-fetched snapshot; reads nothing. ``fuse_whitelist``
+    (from `read_vault_fuse_whitelist`) adds the ``fuse_whitelist`` check."""
     reconciliation = _reconcile(state)
     findings = [
         *_unimplemented_getter_findings(state),
@@ -304,6 +364,7 @@ def validate_vault_state(state: VaultState) -> VaultValidation:
         *_failed_read_findings(state),
         *_reconciliation_findings(state, reconciliation),
         *_erc20_findings(state, state.erc20),
+        *_fuse_whitelist_findings(state, fuse_whitelist),
     ]
     return VaultValidation(
         vault=state.vault,
@@ -438,6 +499,37 @@ def _rewards_manager_findings(state: VaultState) -> list[Finding]:
             "leaves it out and its delta may be that balance",
         )
     ]
+
+
+def _fuse_whitelist_findings(
+    state: VaultState, check: FuseWhitelistCheck | None
+) -> list[Finding]:
+    if check is None:
+        return []
+    issues = fuse_whitelist_issues(
+        check, _vault_fuses(state), (bf.fuse for bf in state.balance_fuses)
+    )
+    unchecked = _fuses_without_market(state)
+    if not issues and not unchecked:
+        return [
+            Finding(
+                "fuse_whitelist", "ok", "Every fuse is active in the Fuse Whitelist"
+            )
+        ]
+    findings = [
+        Finding("fuse_whitelist", "warning", f"WARNING — {issue.message}")
+        for issue in issues
+    ]
+    if unchecked:
+        findings.append(
+            Finding(
+                "incomplete_read",
+                "warning",
+                f"WARNING — MARKET_ID() of {', '.join(unchecked)} could not be"
+                " read: not checked against the Fuse Whitelist",
+            )
+        )
+    return findings
 
 
 def _orphan_fuse_findings(state: VaultState) -> list[Finding]:

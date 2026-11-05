@@ -1244,6 +1244,7 @@ class PreflightFindingModel(_Base):
         "no_balance_fuse",
         "simulation_failed",
         "simulation_unavailable",
+        "fuse_whitelist",
     ]
     severity: Severity
     message: str
@@ -1315,6 +1316,31 @@ class AddressNamesResponse(_Base):
 
     chain_ids: list[ChainId] = Field(description="Chains whose registry was read.")
     names: list[AddressName]
+
+
+class FuseWhitelistEntry(_Base):
+    fuse: str
+    state: Literal["active", "deprecated", "removed", "not_listed"]
+    fuse_type: int = Field(description="Fuse type id in the whitelist.")
+    type_name: str = Field(description="The whitelist's name of fuse_type.")
+    role: Literal["action", "balance"] | None = Field(
+        description="From the type name; null when the name does not tell."
+    )
+    added_at: int = Field(description="Unix time the fuse was listed.")
+
+
+class FuseWhitelistResponse(_Base):
+    """The fuses the chain's Fuse Whitelist lists for one market."""
+
+    chain_id: ChainId
+    chain: str
+    whitelist: str = Field(description="IporFusionFuseWhitelistProxy address.")
+    market_id: int
+    market: str
+    fuses: list[FuseWhitelistEntry] = Field(
+        description="Active fuses first; deprecated and removed ones only when "
+        "requested."
+    )
 
 
 class AddressListResponse(_Base):

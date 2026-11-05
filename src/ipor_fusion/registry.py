@@ -118,13 +118,19 @@ def registry_url(chain_id: ChainId, ref: str = "main") -> str:
 
 
 def fetch_address_registry(
-    chain_id: ChainId, *, ref: str = "main", timeout: float = 20.0
+    chain_id: ChainId,
+    *,
+    ref: str = "main",
+    timeout: float = 20.0,
+    stale_if_error: bool = False,
 ) -> AddressRegistry:
     """The registry of ``chain_id`` at ``ref`` (a branch, tag or commit hash).
 
     Cached in the process: a commit hash for good, a branch or tag for ten
     minutes. Raises `UnsupportedChainError` for a chain without a deployment
     file and `AddressRegistryError` when the file cannot be read or parsed.
+    ``stale_if_error`` returns an expired cached registry instead of raising
+    when its refresh fails, and tries again after another ten minutes.
     """
     url = registry_url(chain_id, ref)
     key = (chain_id, ref)
@@ -137,7 +143,14 @@ def fetch_address_registry(
             _COMMIT.fullmatch(ref) or time.monotonic() - cached[0] < _MOVING_REF_TTL
         ):
             return cached[1]
-        registry = AddressRegistry(chain_id, ref, _parse(_download(url, timeout), url))
+        try:
+            registry = AddressRegistry(
+                chain_id, ref, _parse(_download(url, timeout), url)
+            )
+        except AddressRegistryError:
+            if cached is None or not stale_if_error:
+                raise
+            registry = cached[1]
         with _cache_lock:
             _cache[key] = (time.monotonic(), registry)
         return registry
