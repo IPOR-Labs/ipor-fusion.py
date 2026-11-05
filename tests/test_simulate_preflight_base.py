@@ -38,7 +38,7 @@ def test_the_alpha_passes_the_static_checks(web3_base):
 
 
 def test_a_deprecated_fuse_is_flagged_with_its_replacement(web3_base):
-    ctx = archive_context(web3_base, BLOCK)
+    ctx = archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)
     result = preflight_execute(ctx, VAULT, [_action()], sender=ALPHA, simulate=False)
 
     (finding,) = result.findings
