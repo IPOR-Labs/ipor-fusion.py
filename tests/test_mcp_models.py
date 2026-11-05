@@ -33,6 +33,7 @@ from ipor_fusion import (
     ExecutePreflightJson,
     Fee,
     FuseAddress,
+    IporFusionMarkets,
     MarketId,
     MetaMorphoV1Json,
     MetaMorphoV2Json,
@@ -72,6 +73,12 @@ from ipor_fusion.mcp.models import (
     VaultValidationResponse,
     WithdrawManagerDetails,
 )
+from ipor_fusion.readers.lending_health import (
+    LendingMarketHealth as LendingMarketHealthRow,
+)
+from ipor_fusion.readers.lending_health import (
+    VaultLendingHealth,
+)
 from ipor_fusion.readers.oracle_mapping import (
     OracleAsset,
     OracleMapping,
@@ -79,6 +86,7 @@ from ipor_fusion.readers.oracle_mapping import (
     OraclePrice,
 )
 from ipor_fusion.types import Period, RoleId
+from ipor_fusion.vault_info import _lending_health_json
 
 
 def _amount(raw: int = 0, formatted: str = "0") -> AmountJson:
@@ -1307,3 +1315,26 @@ class TestModelsImportGraph:
             }
         )
         assert offending == []
+
+
+def test_debt_without_ltv_passes_through_the_published_model() -> None:
+    row = LendingMarketHealthRow(
+        protocol="morpho",
+        market_id=IporFusionMarkets.MORPHO,
+        market_name="MORPHO",
+        current_ltv=None,
+        max_ltv=0.86,
+        health_factor=0.0,
+        total_collateral_usd=None,
+        total_debt_usd=None,
+        ltv_usage_percent=None,
+        substrate_id="0x" + "ab" * 32,
+    )
+
+    document = _lending_health_json(VaultLendingHealth(markets=[row]))
+    model = mcp_models.LendingHealth.model_validate(document)
+
+    market = model.markets[0]
+    assert market.health_factor == 0.0
+    assert market.current_ltv is None
+    assert market.is_critical

@@ -1532,6 +1532,18 @@ class TestPrintLendingHealth:
         _print_lending_health(data)
         assert "N/A" in capsys.readouterr().out
 
+    def test_debt_without_ltv_is_not_shown_as_no_debt(self, capsys):
+        m = _make_lending_market(
+            current_ltv=None, health_factor=0.0, ltv_usage_percent=None
+        )
+        m.protocol = "aave_v3"
+        m.market_id = MarketId(1)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        _print_lending_health(data)
+        out = capsys.readouterr().out
+        assert "CRITICAL" in out
+        assert "no debt" not in out
+
 
 class TestHealthCheckLendingIntegration:
     def test_lending_ok_in_health_check(self, capsys):
@@ -1555,6 +1567,22 @@ class TestHealthCheckLendingIntegration:
         captured = capsys.readouterr()
         assert "CRITICAL" in captured.out
         assert "NEAR LIQUIDATION" in captured.out
+
+    def test_debt_without_ltv_is_critical_not_ok(self, capsys):
+        m = _make_lending_market(
+            current_ltv=None, ltv_usage_percent=None, health_factor=0.0
+        )
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        _print_health_check(validate(data, 100 * 10**18))
+        captured = capsys.readouterr()
+        assert "CRITICAL" in captured.out
+        assert "NEAR LIQUIDATION" in captured.out
+
+    def test_lending_warning_without_usage_is_reported(self, capsys):
+        m = _make_lending_market(ltv_usage_percent=None, health_factor=1.08)
+        data = _make_data(lending_health=VaultLendingHealth(markets=[m]))
+        _print_health_check(validate(data, 100 * 10**18))
+        assert "approaching liquidation" in capsys.readouterr().out
 
     def test_lending_none_usage_skipped(self, capsys):
         m = _make_lending_market(ltv_usage_percent=None, health_factor=None)
