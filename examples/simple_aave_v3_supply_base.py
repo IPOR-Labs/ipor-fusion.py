@@ -242,7 +242,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     factory = FusionFactory(BASE_FUSION_FACTORY)
 
-    # 1. Preview the deterministic addresses (eth_call, no gas, no state change).
+    # 1. Predict the stack's addresses (eth_call, no gas, no state change). The
+    #    prediction holds only if no other clone lands first; see below.
     preview = factory.clone(**clone_args()).call(ctx)
     log.info(
         "predicted vault=%s access_manager=%s price_manager=%s (index=%d)",
