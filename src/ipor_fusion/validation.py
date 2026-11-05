@@ -691,8 +691,9 @@ def _lending_health_findings(state: VaultState) -> list[Finding]:
         for u in health.unreadable
     ]
     for market in health.markets:
-        # A critical row with no usage (debt against a zero limit) is still critical.
-        if market.ltv_usage_percent is None and not market.is_critical:
+        # A row with neither value gives no risk metric to judge. Debt against a zero
+        # limit has no usage but a critical health factor.
+        if market.ltv_usage_percent is None and market.health_factor is None:
             continue
         ltv = f"{market.current_ltv:.4f}" if market.current_ltv is not None else "?"
         usage = (

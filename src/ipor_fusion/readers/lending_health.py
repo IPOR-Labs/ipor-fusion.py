@@ -298,6 +298,8 @@ def _compute_morpho_market_health(
         position.borrow_shares, market.total_borrow_assets, market.total_borrow_shares
     )
 
+    # Morpho's own check sees a zero borrow limit here, so the position can be
+    # liquidated: a known risk, of which only the LTV has no value.
     if position.collateral == 0 or oracle_price == 0:
         return LendingMarketHealth(
             protocol="morpho",
@@ -305,7 +307,7 @@ def _compute_morpho_market_health(
             market_name=market_name,
             current_ltv=None,
             max_ltv=params.lltv / WAD,
-            health_factor=None,
+            health_factor=0.0,
             total_collateral_usd=None,
             total_debt_usd=None,
             ltv_usage_percent=None,
@@ -322,9 +324,9 @@ def _compute_morpho_market_health(
     max_ltv = params.lltv / WAD
 
     # health_factor = max_borrow / borrowed
-    # max_borrow = collateral * oracle_price / ORACLE_PRICE_SCALE * lltv / WAD
+    # Two floors, as in Morpho's _isHealthy.
     max_borrow = (
-        position.collateral * oracle_price * params.lltv // (ORACLE_PRICE_SCALE * WAD)
+        position.collateral * oracle_price // ORACLE_PRICE_SCALE * params.lltv // WAD
     )
     health_factor = max_borrow / borrowed if borrowed > 0 else None
 
@@ -336,7 +338,7 @@ def _compute_morpho_market_health(
         market_name=market_name,
         current_ltv=round(current_ltv, 6),
         max_ltv=round(max_ltv, 6),
-        health_factor=round(health_factor, 4) if health_factor else None,
+        health_factor=round(health_factor, 4) if health_factor is not None else None,
         total_collateral_usd=None,
         total_debt_usd=None,
         ltv_usage_percent=round(ltv_usage, 2) if ltv_usage is not None else None,
@@ -574,9 +576,17 @@ def _compute_euler_v2_account_health(
         if ltv > 0
     )
     liability = liquidity.liability_value
+    # The vault owes, yet its oracle values that at nothing: no ratio means anything.
+    if liability == 0:
+        return UnreadableLendingMarket(
+            protocol="euler_v2",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason="debt is valued at zero",
+            substrate_id=sub_account,
+        )
     current_ltv = liability / collateral if collateral > 0 else None
     max_ltv = adjusted / collateral if collateral > 0 else 0.0
-    health_factor = adjusted / liability if liability > 0 else None
     ltv_usage = liability / adjusted * 100 if adjusted > 0 else None
     # The USD unit of account prices in 18 decimals; other units are not USD.
     in_usd = unit_read.value == EULER_USD_UNIT_OF_ACCOUNT
@@ -587,7 +597,7 @@ def _compute_euler_v2_account_health(
         market_name=market_name,
         current_ltv=round(current_ltv, 6) if current_ltv is not None else None,
         max_ltv=round(max_ltv, 6),
-        health_factor=round(health_factor, 4) if health_factor is not None else None,
+        health_factor=round(adjusted / liability, 4),
         total_collateral_usd=round(collateral / WAD, 2) if in_usd else None,
         total_debt_usd=round(liability / WAD, 2) if in_usd else None,
         ltv_usage_percent=round(ltv_usage, 2) if ltv_usage is not None else None,

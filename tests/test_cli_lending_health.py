@@ -419,6 +419,115 @@ class TestComputeMorphoMarketHealth:
         assert isinstance(result, LendingMarketHealth)
         assert result.current_ltv is None
         assert result.ltv_usage_percent is None
+        assert result.health_factor == 0.0
+        assert result.is_critical
+
+    def test_zero_oracle_price_with_debt_is_critical(self):
+        reader, ctx = _make_morpho_reader()
+
+        ctx.call.side_effect = sequenced(
+            [
+                encode(["uint256", "uint128", "uint128"], [0, 100, 1000]),
+                encode(
+                    ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+                    [2000, 2000, 1000, 1000, 1700000000, 0],
+                ),
+                encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
+                ),
+                encode(["uint256"], [0]),
+            ]
+        )
+
+        result = _compute_morpho_market_health(
+            ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
+        )
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.current_ltv is None
+        assert result.health_factor == 0.0
+        assert result.is_critical
+
+    def test_dust_collateral_flooring_the_limit_to_zero_is_critical(self):
+        reader, ctx = _make_morpho_reader()
+
+        ctx.call.side_effect = sequenced(
+            [
+                encode(["uint256", "uint128", "uint128"], [0, 500 * 10**6, 1]),
+                encode(
+                    ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+                    [2000, 2000 * 10**6, 1000, 1000 * 10**6, 1700000000, 0],
+                ),
+                encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
+                ),
+                encode(["uint256"], [ORACLE_PRICE_SCALE]),
+            ]
+        )
+
+        result = _compute_morpho_market_health(
+            ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
+        )
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.current_ltv is not None
+        assert result.health_factor == 0.0
+        assert result.is_critical
+
+    def test_limit_floors_twice_as_morpho_does(self):
+        # 2 * 0.9 floors to 1, then 1 * 0.86 floors to 0; one combined floor gives 1.
+        reader, ctx = _make_morpho_reader()
+
+        ctx.call.side_effect = sequenced(
+            [
+                encode(["uint256", "uint128", "uint128"], [0, 10**6, 2]),
+                encode(
+                    ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+                    [2000, 2000 * 10**6, 1000, 1000 * 10**6, 1700000000, 0],
+                ),
+                encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 860000000000000000],
+                ),
+                encode(["uint256"], [9 * ORACLE_PRICE_SCALE // 10]),
+            ]
+        )
+
+        result = _compute_morpho_market_health(
+            ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
+        )
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.health_factor == 0.0
+
+    def test_debt_on_a_zero_lltv_market_is_critical_without_usage(self):
+        reader, ctx = _make_morpho_reader()
+
+        ctx.call.side_effect = sequenced(
+            [
+                encode(["uint256", "uint128", "uint128"], [0, 500 * 10**6, 1000]),
+                encode(
+                    ["uint128", "uint128", "uint128", "uint128", "uint128", "uint128"],
+                    [2000, 2000 * 10**6, 1000, 1000 * 10**6, 1700000000, 0],
+                ),
+                encode(
+                    ["address", "address", "address", "address", "uint256"],
+                    [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 0],
+                ),
+                encode(["uint256"], [ORACLE_PRICE_SCALE]),
+            ]
+        )
+
+        result = _compute_morpho_market_health(
+            ctx, reader, MORPHO_MARKET_ID, VAULT_ADDR, 14, "MORPHO"
+        )
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.ltv_usage_percent is None
+        assert result.health_factor == 0.0
+        assert result.is_critical
 
     def test_position_read_failure_is_unreadable(self):
         reader, ctx = _make_morpho_reader()
@@ -1162,6 +1271,8 @@ def _euler_ctx(
     debt: int = EULER_DEBT,
     unit: str = EULER_USD_UNIT_OF_ACCOUNT,
     liquidity_reverts: bool = False,
+    adjusted: int = EULER_ADJUSTED_COLLATERAL,
+    liability: int = EULER_LIABILITY,
 ) -> MagicMock:
     """Answer the TESS sub-account's reads; only the borrow vault is its controller."""
 
@@ -1177,7 +1288,7 @@ def _euler_ctx(
                 raise ContractLogicError("E_NoLiability")
             return encode(
                 ["address[]", "uint256[]", "uint256"],
-                [[EULER_COLLATERAL], [EULER_ADJUSTED_COLLATERAL], EULER_LIABILITY],
+                [[EULER_COLLATERAL], [adjusted], liability],
             )
         if selector == _SELECTOR_UNIT_OF_ACCOUNT:
             return encode(["address"], [unit])
@@ -1240,6 +1351,19 @@ class TestEulerV2Health:
         assert result.health_factor == 1.1703
         assert result.total_collateral_usd is None
         assert result.total_debt_usd is None
+
+    @pytest.mark.parametrize("adjusted", [0, EULER_ADJUSTED_COLLATERAL])
+    def test_debt_valued_at_zero_is_unreadable_not_no_debt(self, adjusted):
+        result = _compute_euler_v2_account_health(
+            _euler_ctx(adjusted=adjusted, liability=0),
+            EULER_ACCOUNT,
+            MarketId(11),
+            "EULER_V2",
+        )
+
+        assert isinstance(result, UnreadableLendingMarket)
+        assert result.substrate_id == EULER_SUB_ACCOUNT
+        assert result.reason == "debt is valued at zero"
 
     def test_failed_debt_read_is_unreadable(self):
         ctx = MagicMock()
