@@ -31,7 +31,7 @@ This example shows the whole lifecycle an alpha drives, end to end:
 A scheduled withdrawal takes three steps and two parties: the user calls
 ``requestShares``, the alpha calls ``releaseFunds`` once the money is back, and
 the user then calls ``redeemFromRequest`` to take it. Steps 9 and 10 above are
-the first two. The two-step shape exists for exactly the situation modelled
+the first two. The two-step shape exists for exactly the situation modeled
 here -- the vault's assets are not all in the vault, so the request is what
 gives the alpha notice and time to unwind the venue position.
 
