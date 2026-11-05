@@ -260,7 +260,11 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     factory = FusionFactory(ETHEREUM_FUSION_FACTORY)
 
-    # Preview the deterministic addresses (eth_call, no gas, no state change).
+    # SIMULATION ONLY: the pinned replay has no other clone between this
+    # preview and the simulated one, so the predicted stack is the created one.
+    # Live, another clone in between moves it: send the clone first, take the
+    # stack from factory.decode_clone_receipt(receipt) and build the
+    # configuration and operation calldata from those addresses.
     preview = factory.clone(**clone_args()).call(ctx)
     log.info("predicted vault=%s", preview.plasma_vault)
 
@@ -278,6 +282,9 @@ def run_simulation(web3: Web3) -> SimulationResult:
     #     (or X.calldata to a multisig / timelock).
     #   - sim.execute([action]) -> plasma_vault.execute([action]).send(ctx) by the alpha.
     #   - read = sim.observe(X), then read.value -> X.call(ctx), a plain read.
+    # SIMULATION ONLY (per-call senders): `from_` lets one process act as every
+    # actor, because in simulation they are addresses with no keys. In production
+    # they are separate signers on separate systems.
     sim = VaultSimulator(
         web3=web3, vault=vault_address, alpha=ALPHA, block=PINNED_BLOCK
     )
@@ -311,7 +318,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # UPDATE_MARKETS_BALANCES}, so OWNER must self-grant ATOMIST before it can
     # grant the rest. Each grant uses Period(0) (no execution delay) to keep the
     # simulation legible; production governance often puts a nonzero delay -- a
-    # timelock -- on the sensitive roles.
+    # timelock -- on the sensitive roles. ALPHA must stay a separate address from
+    # OWNER in production: a compromised alpha key must not equal governance.
     for role, holder in (
         (Roles.ATOMIST_ROLE, OWNER),
         (Roles.FUSE_MANAGER_ROLE, OWNER),
