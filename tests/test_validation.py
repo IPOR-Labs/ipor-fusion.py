@@ -661,6 +661,7 @@ class TestSnapshotTokenMetadata:
             dependency_graph={},
             market_substrates=state.market_substrates,  # type: ignore[arg-type]
             aave_pools={},
+            comets={},
             market_balances=chain.market_balances,  # type: ignore[arg-type]
         )
         vault_reads = _VaultReads(
@@ -763,6 +764,7 @@ class TestFailedValidationInputs:
             dependency_graph={},
             market_substrates={},
             aave_pools={},
+            comets={},
             market_balances={},
         )
 

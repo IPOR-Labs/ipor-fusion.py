@@ -116,8 +116,8 @@ def _index_lending_health(
     """Split lending health rows by protocol for fast lookup during rendering.
 
     Morpho rows are keyed by morpho substrate id (one row per substrate).
-    Aave V3 rows are keyed by IPOR market id (account-aggregated, one row per
-    market); Aave V4 rows by Spoke address (account-aggregated per Spoke) and
+    Aave V3 and Compound V3 rows are keyed by IPOR market id (account-aggregated,
+    one row per market); Aave V4 rows by Spoke address (account-aggregated per Spoke) and
     Euler V2 rows by sub-account address, in the same account-level map.
     """
     morpho: dict[str, LendingMarketHealth] = {}
@@ -127,7 +127,7 @@ def _index_lending_health(
     for m in lh.markets:
         if m.protocol == "morpho" and m.substrate_id:
             morpho[str(m.substrate_id).lower().removeprefix("0x")] = m
-        elif m.protocol == "aave_v3":
+        elif m.protocol in ("aave_v3", "compound_v3"):
             aave[m.market_id] = m
         elif m.protocol in ("aave_v4", "euler_v2") and m.substrate_id:
             aave[m.substrate_id] = m

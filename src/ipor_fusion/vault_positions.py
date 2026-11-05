@@ -20,7 +20,12 @@ from ipor_fusion.readers.aave_v3 import (
     AaveV3PositionBreakdown,
     AaveV3Reader,
 )
-from ipor_fusion.readers.lending_health import AAVE_V3_MARKET_IDS, MORPHO_MARKET_IDS
+from ipor_fusion.readers.compound_v3 import CompoundV3FuseReader
+from ipor_fusion.readers.lending_health import (
+    AAVE_V3_MARKET_IDS,
+    COMPOUND_V3_MARKET_IDS,
+    MORPHO_MARKET_IDS,
+)
 from ipor_fusion.readers.morpho import (
     MorphoPositionBreakdown,
     MorphoReader,
@@ -149,6 +154,28 @@ def _fetch_aave_pools(
     )
     return {
         mid: pool for mid, pool in zip(resolved, pools, strict=True) if pool is not None
+    }
+
+
+def _fetch_comets(
+    ctx: Web3Context, balance_fuses: list[BalanceFuse]
+) -> dict[MarketId, ChecksumAddress]:
+    """Map every Compound V3 market to the Comet its balance fuse reads. A balance
+    fuse that names no Comet reverts or answers with empty data and is left out."""
+    fuses = {
+        bf.market_id: bf.fuse
+        for bf in balance_fuses
+        if bf.market_id in COMPOUND_V3_MARKET_IDS
+    }
+    if not fuses:
+        return {}
+    comets = Multicall3(ctx).try_aggregate(
+        [CompoundV3FuseReader(fuse).comet() for fuse in fuses.values()]
+    )
+    return {
+        mid: comet
+        for mid, comet in zip(fuses, comets, strict=True)
+        if comet is not None
     }
 
 

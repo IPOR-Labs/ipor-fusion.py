@@ -1,4 +1,5 @@
-"""Lending health computation for Morpho Blue, Aave V3, Aave V4 and Euler V2 markets.
+"""Lending health computation for Morpho Blue, Aave V3, Aave V4, Euler V2 and
+Compound V3 markets.
 
 Provides a unified view of LTV, liquidation thresholds, and health factors
 for lending positions held by Plasma Vaults.
@@ -7,8 +8,10 @@ for lending positions held by Plasma Vaults.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from functools import partial
 
 import requests
 from eth_abi import decode
@@ -30,6 +33,7 @@ from ipor_fusion.errors import EmptyCallResultError
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
 from ipor_fusion.readers.aave_v4 import AaveV4OracleReader, AaveV4SpokeReader
+from ipor_fusion.readers.compound_v3 import COMET_PRICE_SCALE, CompoundV3Reader
 from ipor_fusion.readers.euler_v2 import (
     EULER_USD_UNIT_OF_ACCOUNT,
     EulerV2Substrate,
@@ -123,6 +127,18 @@ EULER_V2_MARKET_IDS = frozenset(
     }
 )
 
+# Market IDs served by the Compound V3 fuses. One Comet per market, read from its
+# balance fuse. Health is account-level; a Comet account owing nothing has no
+# liquidation risk and no row. The WETH Comet prices in ETH, not USD.
+COMPOUND_V3_MARKET_IDS = frozenset(
+    {
+        IporFusionMarkets.COMPOUND_V3_USDC,
+        IporFusionMarkets.COMPOUND_V3_USDT,
+        IporFusionMarkets.COMPOUND_V3_WETH,
+        IporFusionMarkets.COMPOUND_V3_INSTITUTIONAL_USDC,
+    }
+)
+
 # Markets whose fuses can borrow but whose health has no reader yet. Their
 # positions are listed as unreadable rather than left out: an unknown
 # liquidation risk is not a healthy one. Dolomite counts only when a
@@ -132,7 +148,6 @@ UNSUPPORTED_BORROW_MARKET_IDS = frozenset(
         IporFusionMarkets.MOONWELL,
         IporFusionMarkets.SILO_V2,
         IporFusionMarkets.EBISU,
-        IporFusionMarkets.COMPOUND_V3_INSTITUTIONAL_USDC,
     }
 )
 _UNSUPPORTED_REASON = "no lending health reader for this market"
@@ -147,6 +162,7 @@ class LendingMarketHealth:
     - Aave V3: None — Aave health is account-level, aggregated across reserves.
     - Aave V4: the Spoke address — account-level per Spoke, across its reserves.
     - Euler V2: the sub-account address — account-level, across its collaterals.
+    - Compound V3: None — account-level on the market's Comet, across its collaterals.
     """
 
     protocol: str
@@ -438,6 +454,52 @@ def _compute_aave_v4_market_health(
     )
 
 
+def _compute_compound_v3_market_health(
+    ctx: Web3Context,
+    comet: ChecksumAddress,
+    vault_address: PlasmaVaultAddress,
+    ipor_market_id: MarketId,
+    market_name: str,
+) -> LendingMarketHealth | UnreadableLendingMarket | None:
+    """Compute LTV health for the vault's account on one Comet; None when it owes
+    nothing. The health factor is the liquidation limit over the debt, so it falls
+    to 1 where `Comet.isLiquidatable` turns true."""
+    reader = CompoundV3Reader(comet)
+
+    def unreadable(reason: str) -> UnreadableLendingMarket:
+        return UnreadableLendingMarket(
+            protocol="compound_v3",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason=reason,
+        )
+
+    try:
+        if reader.borrow_balance_of(vault_address).call(ctx) == 0:
+            return None
+        account = reader.read_account_value(ctx, vault_address)
+    except _READ_ERRORS as exc:
+        return unreadable(_reason("account value", exc))
+    # Without a limit there is no ratio to report, and debt is not a healthy row.
+    if account.liquidation_limit == 0 or account.debt == 0:
+        return unreadable("debt with no collateral value to measure it against")
+
+    in_usd = ipor_market_id != IporFusionMarkets.COMPOUND_V3_WETH
+    return LendingMarketHealth(
+        protocol="compound_v3",
+        market_id=ipor_market_id,
+        market_name=market_name,
+        current_ltv=round(account.debt / account.collateral, 6),
+        max_ltv=round(account.liquidation_limit / account.collateral, 6),
+        health_factor=round(account.liquidation_limit / account.debt, 4),
+        total_collateral_usd=(
+            round(account.collateral / COMET_PRICE_SCALE, 2) if in_usd else None
+        ),
+        total_debt_usd=round(account.debt / COMET_PRICE_SCALE, 2) if in_usd else None,
+        ltv_usage_percent=round(account.debt / account.liquidation_limit * 100, 2),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class _EulerV2Account:
     """An EVC sub-account of the vault and the Euler vaults it may borrow from."""
@@ -575,6 +637,7 @@ class _LendingMarkets:
     aave_v3: list[tuple[MarketId, str, ChecksumAddress]]
     aave_v4: list[tuple[MarketId, str, ChecksumAddress]]
     euler_v2: list[tuple[MarketId, str, _EulerV2Account]]
+    compound_v3: list[tuple[MarketId, str, ChecksumAddress]]
     unreadable: list[UnreadableLendingMarket]
 
 
@@ -583,12 +646,14 @@ def _collect_lending_markets(
     balance_fuse_market_ids: list[MarketId],
     market_substrates: dict[MarketId, list[bytes]],
     aave_pools: dict[MarketId, ChecksumAddress],
+    comets: dict[MarketId, ChecksumAddress],
 ) -> _LendingMarkets:
     """Pick the positions to read: Morpho substrates, Aave V3 markets with a Pool,
-    the Spokes of Aave V4 markets and the borrowing Euler V2 sub-accounts. A
-    market that may borrow but has no reader is listed as unreadable."""
+    the Spokes of Aave V4 markets, the borrowing Euler V2 sub-accounts and Compound
+    V3 markets with a Comet. A market that may borrow but has no reader is listed
+    as unreadable."""
     markets = _LendingMarkets(
-        morpho=[], aave_v3=[], aave_v4=[], euler_v2=[], unreadable=[]
+        morpho=[], aave_v3=[], aave_v4=[], euler_v2=[], compound_v3=[], unreadable=[]
     )
 
     for mid in balance_fuse_market_ids:
@@ -621,6 +686,18 @@ def _collect_lending_markets(
                 (mid, name, account)
                 for account in _euler_v2_borrow_accounts(substrates, vault)
             )
+        elif mid in COMPOUND_V3_MARKET_IDS:
+            if comet := comets.get(mid):
+                markets.compound_v3.append((mid, name, comet))
+            else:
+                markets.unreadable.append(
+                    UnreadableLendingMarket(
+                        protocol="compound_v3",
+                        market_id=mid,
+                        market_name=name,
+                        reason="the balance fuse names no Comet",
+                    )
+                )
         elif _can_borrow(mid, substrates):
             markets.unreadable.append(
                 UnreadableLendingMarket(
@@ -634,6 +711,45 @@ def _collect_lending_markets(
     return markets
 
 
+def _health_reads(
+    ctx: Web3Context, vault: PlasmaVaultAddress, markets: _LendingMarkets
+) -> list[Callable[[], LendingMarketHealth | UnreadableLendingMarket | None]]:
+    """One read per position; Aave V3 health is account-level per Pool, so each
+    market reads its own."""
+    reads: list[Callable[[], LendingMarketHealth | UnreadableLendingMarket | None]] = []
+    if markets.morpho:
+        morpho_reader = MorphoReader(morpho_blue_address(ctx.chain_id))
+        reads += [
+            partial(
+                _compute_morpho_market_health,
+                ctx,
+                morpho_reader,
+                morpho_mid,
+                vault,
+                mid,
+                name,
+            )
+            for mid, name, morpho_mid in markets.morpho
+        ]
+    reads += [
+        partial(_compute_aave_market_health, ctx, AaveV3Reader(pool), vault, mid, name)
+        for mid, name, pool in markets.aave_v3
+    ]
+    reads += [
+        partial(_compute_aave_v4_market_health, ctx, spoke, vault, mid, name)
+        for mid, name, spoke in markets.aave_v4
+    ]
+    reads += [
+        partial(_compute_euler_v2_account_health, ctx, account, mid, name)
+        for mid, name, account in markets.euler_v2
+    ]
+    reads += [
+        partial(_compute_compound_v3_market_health, ctx, comet, vault, mid, name)
+        for mid, name, comet in markets.compound_v3
+    ]
+    return reads
+
+
 def fetch_vault_lending_health(
     ctx: Web3Context,
     vault: PlasmaVaultAddress,
@@ -641,6 +757,7 @@ def fetch_vault_lending_health(
     balance_fuse_market_ids: list[MarketId],
     market_substrates: dict[MarketId, list[bytes]],
     aave_pools: dict[MarketId, ChecksumAddress] | None = None,
+    comets: dict[MarketId, ChecksumAddress] | None = None,
 ) -> VaultLendingHealth:
     """Fetch lending health for all lending markets in a vault.
 
@@ -656,68 +773,23 @@ def fetch_vault_lending_health(
             entry is listed in ``unreadable``. Defaults to the chain's Core pool for AAVE_V3 only:
             the Pools of Aave V3 Prime and SparkLend are known only to their
             fuses.
+        comets: Map of Compound V3 market_id -> the Comet its balance fuse reads
+            (`CompoundV3FuseReader.comet`). A Compound V3 market without an entry
+            is listed in ``unreadable``.
     """
     if aave_pools is None:
         core_pool = AAVE_V3_POOL.get(ctx.chain_id)
         aave_pools = {IporFusionMarkets.AAVE_V3: core_pool} if core_pool else {}
 
     markets = _collect_lending_markets(
-        vault, balance_fuse_market_ids, market_substrates, aave_pools
+        vault, balance_fuse_market_ids, market_substrates, aave_pools, comets or {}
     )
 
     results: list[LendingMarketHealth] = []
     unreadable = list(markets.unreadable)
 
     with ThreadPoolExecutor() as pool:
-        futures = []
-
-        if markets.morpho:
-            morpho_reader = MorphoReader(morpho_blue_address(ctx.chain_id))
-            for ipor_mid, name, morpho_mid in markets.morpho:
-                futures.append(
-                    pool.submit(
-                        _compute_morpho_market_health,
-                        ctx,
-                        morpho_reader,
-                        morpho_mid,
-                        vault,
-                        ipor_mid,
-                        name,
-                    )
-                )
-
-        # Aave V3 health is account-level per Pool, so each market reads its own.
-        for ipor_mid, name, aave_pool in markets.aave_v3:
-            futures.append(
-                pool.submit(
-                    _compute_aave_market_health,
-                    ctx,
-                    AaveV3Reader(aave_pool),
-                    vault,
-                    ipor_mid,
-                    name,
-                )
-            )
-
-        for ipor_mid, name, spoke in markets.aave_v4:
-            futures.append(
-                pool.submit(
-                    _compute_aave_v4_market_health,
-                    ctx,
-                    spoke,
-                    vault,
-                    ipor_mid,
-                    name,
-                )
-            )
-
-        for ipor_mid, name, account in markets.euler_v2:
-            futures.append(
-                pool.submit(
-                    _compute_euler_v2_account_health, ctx, account, ipor_mid, name
-                )
-            )
-
+        futures = [pool.submit(read) for read in _health_reads(ctx, vault, markets)]
         for fut in futures:
             result = fut.result()
             if result is None:

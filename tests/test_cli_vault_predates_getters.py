@@ -129,7 +129,7 @@ def _market_reads(responses: dict[str, Response]):
     pv = _vault(ctx)
     fuses = [BalanceFuse(MarketId(1), FUSE), BalanceFuse(MarketId(2), FUSE)]
     with patch.object(PlasmaVault, "read_balance_fuses", return_value=fuses):
-        return _fetch_market_reads(ctx, pv, with_aave_pools=False)
+        return _fetch_market_reads(ctx, pv, with_lending_venues=False)
 
 
 class TestSelectors:

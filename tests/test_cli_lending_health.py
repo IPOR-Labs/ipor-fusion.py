@@ -11,6 +11,7 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError, Web3RPCError, Web3ValueError
 
+from ipor_fusion.cli.vault_markets_view import _index_lending_health
 from ipor_fusion.fuses.euler_v2 import euler_substrate
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
@@ -19,6 +20,7 @@ from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
     AAVE_V3_POOL,
     AAVE_V4_MARKET_IDS,
+    COMPOUND_V3_MARKET_IDS,
     EULER_V2_MARKET_IDS,
     MORPHO_MARKET_IDS,
     ORACLE_PRICE_SCALE,
@@ -27,6 +29,7 @@ from ipor_fusion.readers.lending_health import (
     VaultLendingHealth,
     _compute_aave_market_health,
     _compute_aave_v4_market_health,
+    _compute_compound_v3_market_health,
     _compute_euler_v2_account_health,
     _compute_morpho_market_health,
     _EulerV2Account,
@@ -1306,7 +1309,6 @@ class TestUnsupportedBorrowMarkets:
             IporFusionMarkets.MOONWELL,
             IporFusionMarkets.SILO_V2,
             IporFusionMarkets.EBISU,
-            IporFusionMarkets.COMPOUND_V3_INSTITUTIONAL_USDC,
         ],
     )
     def test_borrow_capable_market_is_unreadable_not_absent(self, market_id):
@@ -1347,3 +1349,189 @@ class TestUnsupportedBorrowMarkets:
         )
 
         assert not result.has_lending_positions
+
+
+# ── Compound V3 ─────────────────────────────────────────────────────────
+
+COMET = Web3.to_checksum_address("0x207158a267CBD2598BB3d611D8CBdEE2709F2F8C")
+COMET_WETH = Web3.to_checksum_address("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+COMET_WBTC = Web3.to_checksum_address("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599")
+COMET_WETH_FEED = Web3.to_checksum_address("0x" + "1" * 40)
+COMET_WBTC_FEED = Web3.to_checksum_address("0x" + "2" * 40)
+COMET_BASE_FEED = Web3.to_checksum_address("0x" + "3" * 40)
+
+
+def _comet_ctx(
+    *,
+    debt: int = 20_000 * 10**6,
+    weth: int = 10 * 10**18,
+    wbtc: int = 0,
+    reverts: bytes | None = None,
+) -> MagicMock:
+    """A USDC Comet listing WETH at $3,000 (liquidation factor 0.9) and WBTC at
+    $100,000 (0.85), with USDC at $1."""
+    prices = {
+        COMET_WETH_FEED: 3_000 * 10**8,
+        COMET_WBTC_FEED: 100_000 * 10**8,
+        COMET_BASE_FEED: 10**8,
+    }
+    listings = [
+        (COMET_WETH, COMET_WETH_FEED, 10**18, 9 * 10**17, weth),
+        (COMET_WBTC, COMET_WBTC_FEED, 10**8, 85 * 10**16, wbtc),
+    ]
+
+    def handler(to: str, data: bytes) -> bytes:
+        assert to == COMET
+        selector = data[:4]
+        if selector == reverts:
+            raise ContractLogicError("Comet read reverted")
+        if selector == function_signature_to_4byte_selector("numAssets()"):
+            return encode(["uint8"], [len(listings)])
+        if selector == function_signature_to_4byte_selector("baseScale()"):
+            return encode(["uint256"], [10**6])
+        if selector == function_signature_to_4byte_selector("baseTokenPriceFeed()"):
+            return encode(["address"], [COMET_BASE_FEED])
+        if selector == function_signature_to_4byte_selector("borrowBalanceOf(address)"):
+            return encode(["uint256"], [debt])
+        if selector == function_signature_to_4byte_selector("getPrice(address)"):
+            (feed,) = decode(["address"], data[4:])
+            return encode(["uint256"], [prices[Web3.to_checksum_address(feed)]])
+        if selector == function_signature_to_4byte_selector("getAssetInfo(uint8)"):
+            (index,) = decode(["uint8"], data[4:])
+            asset, feed, scale, factor, _ = listings[index]
+            return encode(
+                ["(uint8,address,address,uint64,uint64,uint64,uint64,uint128)"],
+                [(index, asset, feed, scale, 8 * 10**17, factor, 10**18, 10**30)],
+            )
+        assert selector == function_signature_to_4byte_selector(
+            "collateralBalanceOf(address,address)"
+        )
+        (_, asset) = decode(["address", "address"], data[4:])
+        checksum = Web3.to_checksum_address(asset)
+        return encode(["uint128"], [next(x[4] for x in listings if x[0] == checksum)])
+
+    ctx = MagicMock()
+    ctx.call.side_effect = multicall_aware(handler)
+    return ctx
+
+
+def _compound_health(
+    ctx: MagicMock,
+    market_id: MarketId = IporFusionMarkets.COMPOUND_V3_INSTITUTIONAL_USDC,
+):
+    return _compute_compound_v3_market_health(
+        ctx, COMET, VAULT_ADDR, market_id, "COMPOUND_V3_INSTITUTIONAL_USDC"
+    )
+
+
+class TestCompoundV3Health:
+    def test_markets_cover_every_comet_market(self):
+        assert COMPOUND_V3_MARKET_IDS == {
+            IporFusionMarkets.COMPOUND_V3_USDC,
+            IporFusionMarkets.COMPOUND_V3_USDT,
+            IporFusionMarkets.COMPOUND_V3_WETH,
+            IporFusionMarkets.COMPOUND_V3_INSTITUTIONAL_USDC,
+        }
+
+    def test_borrowing_account_is_measured_against_the_liquidation_limit(self):
+        result = _compound_health(_comet_ctx())
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.protocol == "compound_v3"
+        assert result.substrate_id is None
+        # $30,000 of WETH at 0.9 is a $27,000 limit against $20,000 of debt.
+        assert result.total_collateral_usd == 30_000.0
+        assert result.total_debt_usd == 20_000.0
+        assert result.current_ltv == 0.666667
+        assert result.max_ltv == 0.9
+        assert result.health_factor == 1.35
+        assert result.ltv_usage_percent == 74.07
+
+    def test_every_listed_collateral_counts_at_its_own_factor(self):
+        result = _compound_health(_comet_ctx(wbtc=10**8))
+
+        assert isinstance(result, LendingMarketHealth)
+        # Adds $100,000 of WBTC at 0.85: a $112,000 limit on $130,000.
+        assert result.total_collateral_usd == 130_000.0
+        assert result.max_ltv == 0.861538
+        assert result.health_factor == 5.6
+
+    def test_health_factor_reaches_one_at_the_liquidation_limit(self):
+        result = _compound_health(_comet_ctx(debt=27_000 * 10**6))
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.health_factor == 1.0
+        assert result.ltv_usage_percent == 100.0
+        assert result.is_critical
+
+    def test_no_debt_is_no_position(self):
+        assert _compound_health(_comet_ctx(debt=0)) is None
+
+    def test_debt_without_collateral_is_unreadable_not_healthy(self):
+        result = _compound_health(_comet_ctx(weth=0))
+
+        assert isinstance(result, UnreadableLendingMarket)
+        assert result.protocol == "compound_v3"
+        assert "no collateral" in result.reason
+
+    def test_failed_read_is_unreadable(self):
+        result = _compound_health(
+            _comet_ctx(
+                reverts=function_signature_to_4byte_selector("getPrice(address)")
+            )
+        )
+
+        assert isinstance(result, UnreadableLendingMarket)
+        assert result.market_id == MarketId(57)
+
+    def test_weth_comet_values_are_not_reported_as_usd(self):
+        result = _compound_health(_comet_ctx(), IporFusionMarkets.COMPOUND_V3_WETH)
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.total_collateral_usd is None
+        assert result.total_debt_usd is None
+        assert result.health_factor == 1.35
+
+    def test_vault_health_reads_the_market_comet(self):
+        result = fetch_vault_lending_health(
+            _comet_ctx(),
+            VAULT_ADDR,
+            balance_fuse_market_ids=[MarketId(57)],
+            market_substrates={},
+            comets={MarketId(57): COMET},
+        )
+
+        assert [m.health_factor for m in result.markets] == [1.35]
+        assert result.is_complete
+
+    def test_supply_only_vault_has_no_row_and_no_warning(self):
+        result = fetch_vault_lending_health(
+            _comet_ctx(debt=0),
+            VAULT_ADDR,
+            balance_fuse_market_ids=[MarketId(2)],
+            market_substrates={},
+            comets={MarketId(2): COMET},
+        )
+
+        assert not result.markets
+        assert result.is_complete
+
+    def test_market_whose_fuse_names_no_comet_is_unreadable(self):
+        result = fetch_vault_lending_health(
+            MagicMock(),
+            VAULT_ADDR,
+            balance_fuse_market_ids=[MarketId(13)],
+            market_substrates={},
+        )
+
+        [unreadable] = result.unreadable
+        assert unreadable.market_id == MarketId(13)
+        assert unreadable.reason == "the balance fuse names no Comet"
+
+    def test_row_is_rendered_under_its_market(self):
+        row = _compound_health(_comet_ctx())
+        assert isinstance(row, LendingMarketHealth)
+
+        _, account_level = _index_lending_health(VaultLendingHealth(markets=[row]))
+
+        assert account_level == {row.market_id: row}
