@@ -408,6 +408,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     #     (or X.calldata to a multisig / timelock).
     #   - sim.execute([action]) -> plasma_vault.execute([action]).send(ctx) by the alpha.
     #   - read = sim.observe(X), then read.value -> X.call(ctx), a plain read.
+    # SIMULATION ONLY (per-call senders): `from_` lets one process act as both
+    # actors, because in simulation they are addresses with no keys. In production
+    # they are two separate signers on separate systems, and that separation is
+    # what keeps a compromised alpha key from becoming governance.
     sim = VaultSimulator(
         web3=web3, vault=preview.plasma_vault, alpha=ALPHA, block=PINNED_BLOCK
     )
