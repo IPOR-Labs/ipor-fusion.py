@@ -529,7 +529,8 @@ def market_substrates() -> list[bytes]:
 
     That is the concrete reason the alpha key here is hot, least-privilege, and
     must never share an address with the owner/atomist: the alpha can move the
-    parked asset, and only the atomist decides which asset that is.
+    parked asset, and only FUSE_MANAGER (administered by the atomist) decides
+    which asset that is.
 
     (Margining in an asset the vault does not otherwise hold would narrow the
     blast radius to whatever is on hand in that asset -- but only while no
@@ -762,7 +763,7 @@ def _queue_bootstrap(
     # Two mechanisms, and the difference decides what a revocation actually
     # does. The operation fuse reads TARGET, ASSET and BALANCE_ACCOUNT LIVE from
     # the vault on every call, so those grants take effect and stop taking
-    # effect the instant the atomist changes them. The executor additionally
+    # effect the instant FUSE_MANAGER re-grants the set. The executor additionally
     # keeps its own CACHE -- the custodian list, the balance accounts, the
     # dust-checked assets, the guard values -- populated at deployment and
     # refreshed only by syncSubstrates() on the executor.
