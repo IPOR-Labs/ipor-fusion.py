@@ -353,6 +353,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
         alpha=ALPHA,
         block=PINNED_BLOCK,
     )
+    # The clone MUST be the first queued call. The sub-factories deploy each
+    # component with plain CREATE (`Clones.clone`), so its address follows the
+    # sub-factory's nonce, not the clone's arguments: any earlier call that makes
+    # them deploy anything shifts every address previewed above.
     sim.add_call(call=factory.clone(**clone_args()), from_=OWNER, label="clone")
 
     # OWNER is governance; ALPHA is a separate online operator. A production

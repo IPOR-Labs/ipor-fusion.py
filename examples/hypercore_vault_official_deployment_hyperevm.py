@@ -592,8 +592,10 @@ def run_simulation(
         sim.with_state_override_provider(core.answers(vault_address, core_ledger()[0]))
     plan: list[str] = []
 
-    # 1. The clone must be the first queued call: anything that bumps the
-    #    factory index first changes the previewed addresses.
+    # 1. The clone MUST be the first queued call. The sub-factories deploy each
+    #    component with plain CREATE (`Clones.clone`), so its address follows
+    #    the sub-factory's nonce, not the clone's arguments: any earlier call
+    #    that makes them deploy anything shifts every address previewed above.
     sim.add_call(
         factory.clone(**clone_args()), from_=OWNER, label="clone", gas=CLONE_GAS
     )

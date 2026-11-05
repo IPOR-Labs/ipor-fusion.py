@@ -674,11 +674,10 @@ def _queue_bootstrap(
     identical -- the executor address the discovery pass learns is only valid for
     the lifecycle batch if nothing before the enter differs.
     """
-    # The clone MUST be the first queued call. Each component is deployed with
-    # `Clones.clone` -- plain CREATE -- so its address is a function of the
-    # deploying sub-factory's NONCE, not of the arguments: any earlier call that
-    # made those factories deploy anything would shift every address previewed
-    # in run_simulation.
+    # The clone MUST be the first queued call. The sub-factories deploy each
+    # component with plain CREATE (`Clones.clone`), so its address follows the
+    # sub-factory's nonce, not the clone's arguments: any earlier call that makes
+    # them deploy anything shifts every address previewed in run_simulation.
     sim.add_call(call=factory.clone(**clone_args()), from_=OWNER, label="clone")
     plan.append("deploy the vault stack (clone)")
 

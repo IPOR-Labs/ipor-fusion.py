@@ -271,8 +271,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     plan: list[str] = []
 
-    # The clone MUST be the first queued call -- any earlier call that bumps the
-    # factory index would change the addresses we previewed above.
+    # The clone MUST be the first queued call. The sub-factories deploy each
+    # component with plain CREATE (`Clones.clone`), so its address follows the
+    # sub-factory's nonce, not the clone's arguments: any earlier call that makes
+    # them deploy anything shifts every address previewed above.
     sim.add_call(call=factory.clone(**clone_args()), from_=OWNER, label="clone")
     plan.append("deploy the vault stack (clone)")
 
