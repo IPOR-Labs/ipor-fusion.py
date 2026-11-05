@@ -161,6 +161,6 @@ real funds. (Writing an example? The full scope rules are in
   running bot lives there.
 - [IPOR deployments and ABIs](https://github.com/IPOR-Labs/ipor-abi) -- the
   source of provenance for every address used here.
-- [IPOR Fusion documentation](https://docs.ipor.io/ipor-fusion/fusion-introduction)
+- [IPOR Fusion documentation](https://ipor.io/docs/build-on-fusion)
   -- concepts referenced by the examples: access management, substrates, and the
   price oracle middleware.

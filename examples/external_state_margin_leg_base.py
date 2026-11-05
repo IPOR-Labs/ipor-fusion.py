@@ -697,7 +697,7 @@ def _queue_bootstrap(
     # simulation legible. Production differs per role: 14 days on OWNER, 3 days
     # on ATOMIST, 0 on GUARDIAN so it can cancel a queued malicious action
     # instantly. Delays can be raised at once but only lowered after the full
-    # notice period. Figures from docs.ipor.io -> build-on-fusion -> atomists ->
+    # notice period. Figures from ipor.io/docs -> build-on-fusion -> atomists ->
     # vault-configuration-step-by-step -> timelocks-and-execution-delays.
     #
     # A delayed role does not merely wait: it must schedule() an operation and

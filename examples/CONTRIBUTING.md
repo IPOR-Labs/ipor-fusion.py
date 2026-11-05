@@ -158,7 +158,7 @@ per line, no reliance on 2D layout.
   recommended governance delays, protocol parameters, an address registry. A reader cannot check
   those from the file, and they change independently of this repo. Do **not** cite for anything the
   code demonstrates on its own; that link is decoration, and it rots. Prefer a documentation path
-  (`docs.ipor.io -> build-on-fusion -> atomists -> ...`) over a bare URL, so a moved page stays
+  (`ipor.io/docs -> build-on-fusion -> atomists -> ...`) over a bare URL, so a moved page stays
   findable.
 
 ## 10. Tests and CI
