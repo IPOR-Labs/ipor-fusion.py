@@ -1306,6 +1306,7 @@ class TestUnsupportedBorrowMarkets:
             IporFusionMarkets.MOONWELL,
             IporFusionMarkets.SILO_V2,
             IporFusionMarkets.EBISU,
+            IporFusionMarkets.COMPOUND_V3_INSTITUTIONAL_USDC,
         ],
     )
     def test_borrow_capable_market_is_unreadable_not_absent(self, market_id):

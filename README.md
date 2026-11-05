@@ -471,7 +471,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Euler V2 | `EulerV2SupplyFuse`, `EulerV2CollateralFuse`, `EulerV2ControllerFuse`, `EulerV2BorrowFuse`, `EulerV2BatchFuse`, `EulerV2SwapDeployFuse`, `EulerV2SwapReconfigureFuse`, `EulerV2SwapRegistryFuse` |
 | Uniswap V3 | `UniswapV3SwapFuse`, `UniswapV3NewPositionFuse`, `UniswapV3ModifyPositionFuse`, `UniswapV3CollectFuse` |
 | Ramses V2 | `RamsesV2NewPositionFuse`, `RamsesV2ModifyPositionFuse`, `RamsesV2CollectFuse`, `RamsesClaimFuse` |
-| Compound V3 | `CompoundV3SupplyFuse` |
+| Compound V3 | `CompoundV3SupplyFuse`, `CompoundV3BorrowFuse`, `CompoundV3ClaimFuse` |
 | Gearbox V3 | `GearboxSupplyFuse`, `GearboxStakeFuse` |
 | ERC-4626 | `ERC4626SupplyFuse` |
 | Fluid Instadapp | `FluidInstadappSupplyFuse`, `FluidInstadappStakingFuse` |

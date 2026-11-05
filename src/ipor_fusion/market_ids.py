@@ -106,6 +106,10 @@ class IporFusionMarkets:
     # Substrate type: HyperCoreSubstrateLib (1 SpotToken, 2 PerpMarket,
     # 3 Destination, 4 Builder, 5 Config, 6 SendCap, 7 PerpPositionCap).
     HYPERCORE = MarketId(55)
+    # Compound V3 Institutional USDC (ciUSDCv3) on Ethereum: its own Comet, so
+    # the Compound V3 fuses are deployed again under this id; substrates: asset
+    # addresses, as for COMPOUND_V3_USDC
+    COMPOUND_V3_INSTITUTIONAL_USDC = MarketId(57)
     # POL unstaking via sPOLController. The out-of-band id is baked into the
     # deployed fuses as an immutable (424243 = 0x67933), so it must match the
     # deployments. Substrates per IporFusionMarkets.sol: the sPOLController

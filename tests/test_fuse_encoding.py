@@ -11,7 +11,11 @@ from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.fuses.aave_v3 import AaveV3BorrowFuse, AaveV3SupplyFuse
 from ipor_fusion.fuses.async_action import AsyncActionFuse, AsyncActionSubstrates
 from ipor_fusion.fuses.base import Fuse
-from ipor_fusion.fuses.compound_v3 import CompoundV3SupplyFuse
+from ipor_fusion.fuses.compound_v3 import (
+    CompoundV3BorrowFuse,
+    CompoundV3ClaimFuse,
+    CompoundV3SupplyFuse,
+)
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
 from ipor_fusion.fuses.euler_v2 import (
     EulerSwapDynamicParams,
@@ -404,6 +408,38 @@ class TestCompoundV3SupplyFuse:
     def test_withdraw(self):
         action = CompoundV3SupplyFuse(FUSE_ADDR).withdraw(asset=TOKEN_B, amount=2000)
         assert action.data[:4] == _selector("exit((address,uint256))")
+
+
+class TestCompoundV3BorrowFuse:
+    def test_borrow(self):
+        action = CompoundV3BorrowFuse(FUSE_ADDR).borrow(amount=4000)
+        assert action.data[:4] == _selector("enter((uint256))")
+        assert decode(["uint256"], action.data[4:]) == (4000,)
+
+    def test_repay(self):
+        action = CompoundV3BorrowFuse(FUSE_ADDR).repay(amount=MAX_UINT256)
+        assert action.data[:4] == _selector("exit((uint256))")
+        assert decode(["uint256"], action.data[4:]) == (MAX_UINT256,)
+
+    @pytest.mark.parametrize("bad_amount", [0, -1])
+    def test_rejects_bad_amount(self, bad_amount):
+        fuse = CompoundV3BorrowFuse(FUSE_ADDR)
+        with pytest.raises(ValueError, match="amount"):
+            fuse.borrow(amount=bad_amount)
+        with pytest.raises(ValueError, match="amount"):
+            fuse.repay(amount=bad_amount)
+
+
+class TestCompoundV3ClaimFuse:
+    def test_claim(self):
+        action = CompoundV3ClaimFuse(FUSE_ADDR).claim(comet=TOKEN_A)
+        assert action.data[:4] == _selector("claim(address)")
+        (comet,) = decode(["address"], action.data[4:])
+        assert comet.lower() == TOKEN_A_LOW
+
+    def test_rejects_zero_comet(self):
+        with pytest.raises(ValueError, match="comet"):
+            CompoundV3ClaimFuse(FUSE_ADDR).claim(comet=ZERO_ADDR)
 
 
 # ── ERC4626 ─────────────────────────────────────────────────────────────

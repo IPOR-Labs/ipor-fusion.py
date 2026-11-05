@@ -19,3 +19,14 @@ class CompoundV3Reader(ContractWrapper):
             output_types=["uint256"],
             decoder=Amount,
         )
+
+    def collateral_balance_of(
+        self, account: ChecksumAddress, asset: ChecksumAddress
+    ) -> Call[Amount]:
+        return self._view(
+            "collateralBalanceOf(address,address)",
+            account,
+            asset,
+            output_types=["uint128"],
+            decoder=Amount,
+        )

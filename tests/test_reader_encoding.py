@@ -624,6 +624,14 @@ class TestCompoundV3Reader:
 
         assert result == Amount(7_500)
 
+    def test_collateral_balance_of(self):
+        reader, ctx = _make_reader(CompoundV3Reader)
+        ctx.call.return_value = encode(["uint128"], [9_000])
+
+        result = reader.collateral_balance_of(USER_ADDR, USER_ADDR).call(ctx)
+
+        assert result == Amount(9_000)
+
 
 # ── Uniswap V3 ────────────────────────────────────────────────────────
 

@@ -22,9 +22,8 @@ from ipor_fusion.core.external_state_executor import ExternalStateExecutor
 from ipor_fusion.fuses import ExternalStateOperationFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 
-# IPOR-Labs/ipor-fusion main as of 2026-10-21 (the contracts release
-# ipor-abi publishes)
-IPOR_FUSION_REF = "10f0f8e4031980b6f130d4f6460c6f8edfbcab32"
+# IPOR-Labs/ipor-fusion main as of 2026-11-05 (Compound V3 Institutional USDC)
+IPOR_FUSION_REF = "636bb4c2b78826586a0c0c8c9083c5c285692657"
 
 _RAW_URL = "https://raw.githubusercontent.com/IPOR-Labs/ipor-fusion/{ref}/{path}"
 _LIBRARIES = "contracts/libraries"
