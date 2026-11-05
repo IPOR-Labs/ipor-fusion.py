@@ -23,6 +23,12 @@ transaction.
   controller, borrow WETH, repay, then unwind (controller before collateral) and
   withdraw the collateral, reading the outstanding debt from the eVault's
   `debtOf` to confirm the position fully closed.
+- [`advanced_compound_v3_institutional_usdc_ethereum.py`](advanced_compound_v3_institutional_usdc_ethereum.py) --
+  the same lifecycle on one Comet (market 57, Ethereum). Pairs the supply and borrow
+  fuses with the balance fuse, grants WETH as collateral and USDC as the borrow gate,
+  values the borrowed USDC through the ERC20 market and a dependency edge, then
+  supplies, borrows, repays part, lets interest accrue, repays in full and withdraws,
+  confirming NAV at each step.
 - [`advanced_euler_v2_looping_arbitrum.py`](advanced_euler_v2_looping_arbitrum.py) --
   builds a WBTC-denominated vault on Arbitrum and opens (but does not unwind) a
   leveraged Euler V2 position in one Morpho flash-loan callback: supply WBTC,

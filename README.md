@@ -345,6 +345,10 @@ ever signed or broadcast.
 - [Advanced Euler V2 credit-market vault](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/advanced_euler_v2_credit_market_base.py) —
   continue here for composing multiple functional fuses, typed Euler substrates and sub-accounts,
   and an ordered collateral → borrow → repay → unwind lifecycle.
+- [Compound V3 Institutional USDC borrow](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/advanced_compound_v3_institutional_usdc_ethereum.py) —
+  a WETH vault on market 57: collateral, borrow, repay and withdrawal with NAV at each step, the
+  USDC substrate as the borrow gate, and the ERC20 market valuing the borrowed USDC through a
+  dependency edge.
 - [External-state margin leg](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/examples/external_state_margin_leg_base.py) — a vault whose capital
   sits off-chain: typed market-50 substrates, a dual-custodian propose/confirm marking the NAV,
   the scheduled-withdrawal prep an alpha performs, and a mismatched confirmation being rejected.
@@ -362,6 +366,13 @@ export BASE_PROVIDER_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
 uv run python examples/simple_aave_v3_supply_base.py
 uv run python examples/advanced_euler_v2_credit_market_base.py
 uv run python examples/external_state_margin_leg_base.py
+```
+
+The Compound example needs an Ethereum archive RPC:
+
+```bash
+export ETHEREUM_PROVIDER_URL="https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY"
+uv run python examples/advanced_compound_v3_institutional_usdc_ethereum.py
 ```
 
 The crosschain example needs Arbitrum and HyperEVM archive RPCs and the executor and dispatcher
