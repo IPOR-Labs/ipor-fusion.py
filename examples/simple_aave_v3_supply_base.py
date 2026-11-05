@@ -286,7 +286,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # admin, and `clone` leaves ADMIN_ROLE -- the one role that could re-point
     # it -- unheld: OWNER is the root of the vault, and a lost owner key has no
     # higher authority to recover it. (`cloneSupervised` gives ADMIN_ROLE to its
-    # caller.)
+    # caller.) Role admins: ipor.io/docs -> build-on-fusion -> atomists ->
+    # vault-configuration-step-by-step -> access-management. ADMIN_ROLE on a
+    # clone: ipor-fusion, contracts/factory/lib/FusionFactoryLogicLib.sol,
+    # _resolveAdmins.
     sim.add_call(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,

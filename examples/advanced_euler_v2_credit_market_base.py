@@ -426,7 +426,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # `clone` leaves ADMIN_ROLE -- the one role that could re-point it -- unheld:
     # OWNER is the root of the vault, and a lost owner key has no higher
     # authority to recover it. (`cloneSupervised` gives ADMIN_ROLE to its
-    # caller.)
+    # caller.) Role admins: ipor.io/docs -> build-on-fusion -> atomists ->
+    # vault-configuration-step-by-step -> access-management. ADMIN_ROLE on a
+    # clone: ipor-fusion, contracts/factory/lib/FusionFactoryLogicLib.sol,
+    # _resolveAdmins.
     # ALPHA must stay a separate address from OWNER in production:
     # a compromised alpha key must not equal governance. Each grant uses Period(0)
     # (no execution delay) to keep the simulation legible; production governance
