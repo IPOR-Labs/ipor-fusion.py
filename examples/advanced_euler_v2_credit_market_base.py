@@ -434,9 +434,10 @@ def run_simulation(web3: Web3) -> SimulationResult:
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,
     )
-    # FUSE_MANAGER can install fuses, and a malicious fuse can drain the vault --
-    # it is as sensitive as ATOMIST. Colocating it on the owner is fine; delegate
-    # it only to an equally-protected key (multisig/timelock), never an online one.
+    # FUSE_MANAGER installs fuses, and a malicious fuse can drain the vault: it is
+    # as sensitive as ATOMIST. Colocating it on the owner adds no power the owner
+    # lacks; the documented preference is a dedicated time-locked account, since
+    # fuses shape the strategy. Never an online key.
     sim.add_call(
         call=access_manager.grant_role(Roles.FUSE_MANAGER_ROLE, OWNER, Period(0)),
         from_=OWNER,

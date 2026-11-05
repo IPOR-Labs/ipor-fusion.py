@@ -703,11 +703,10 @@ def _queue_bootstrap(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,
     )
-    # FUSE_MANAGER installs fuses, and a malicious fuse can drain the vault -- it
-    # is as sensitive as ATOMIST. Colocating it on the owner adds no power the
-    # owner lacks, which is why it is safe here; the documented preference is
-    # still a dedicated time-locked account, since fuses shape the strategy.
-    # Either way, never an online key.
+    # FUSE_MANAGER installs fuses, and a malicious fuse can drain the vault: it is
+    # as sensitive as ATOMIST. Colocating it on the owner adds no power the owner
+    # lacks; the documented preference is a dedicated time-locked account, since
+    # fuses shape the strategy. Never an online key.
     sim.add_call(
         call=access_manager.grant_role(Roles.FUSE_MANAGER_ROLE, OWNER, Period(0)),
         from_=OWNER,
