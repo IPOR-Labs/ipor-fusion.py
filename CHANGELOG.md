@@ -2,6 +2,62 @@
 
 <!-- version list -->
 
+## v4.2.0 (2026-11-05)
+
+### Bug Fixes
+
+- **sdk**: Harden the Fuse Whitelist check against unreadable and non-fuse entries
+  ([`dbd2e55`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dbd2e5538368b2fdf0caa5e491cdea80f05c2bef))
+
+- **sdk**: Keep a Comet position critical when its limit or an unused feed fails
+  ([`cb6661c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/cb6661c066540aa699ec3e9f02928a63f0c34c09))
+
+- **sdk**: Keep provider URLs and config values out of error text
+  ([`276ab7b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/276ab7b95c3ea4a11b50b37c7b61d8fc11f015e9))
+
+- **sdk**: Report Morpho and Euler debt that has no usable health as a risk
+  ([`88a3c55`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/88a3c55373ce857b7f79895332ff51fde25a89da))
+
+- **sdk**: Sanitize text read from contracts
+  ([`7d692af`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7d692af40030eba067657058efe1e58284099482))
+
+- **sdk**: Tell agents to reuse whitelisted fuses instead of deploying copies
+  ([`614ab00`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/614ab003a24bf0b21c11dbd0f5000f8eaaadf1c4))
+
+### Documentation
+
+- **sdk**: Add a Compound V3 Institutional USDC borrow example
+  ([`5616c46`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5616c46592ef374134e40645dc1f12cb6038ce61))
+
+- **sdk**: Label the Compound example's simulation-only constructs
+  ([`5fca364`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5fca3643c2c77dec82354e768b031a1ef7a9762c))
+
+- **sdk**: Name the fuse whitelist command in the guide
+  ([`b17b62f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b17b62f157aa94eecbab214d10b1274887a72fe9))
+
+### Features
+
+- **sdk**: Check vault and batch fuses against the on-chain Fuse Whitelist
+  ([`d289d6d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d289d6db49d300be269967f3c58fbd501de53974))
+
+- **sdk**: Report Compound V3 lending health
+  ([`5baa9c2`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5baa9c243b9a8f8c9986f08bce701acda5ef98ad))
+
+- **sdk**: Support Compound V3 Institutional USDC market fuses
+  ([`b01c5db`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b01c5db8904e88ce734698f3037327e72234f676))
+
+### Testing
+
+- **sdk**: Drop type ignores from the redaction tests' RPC server
+  ([`ffa57c1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ffa57c1c7ea9f1341e7f8bde8a19f84f9c056d88))
+
+- **sdk**: Keep the live preflight checks independent of the Fuse Whitelist
+  ([`e9bc161`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e9bc1618228234b8b0c6e993b003eaca58cdc6ba))
+
+- **sdk**: Pass the live context arguments in the Fuse Whitelist preflight test
+  ([`b974e08`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b974e0864aaa9cf16786a74a4b39c268d4b7214a))
+
+
 ## v4.1.0 (2026-11-03)
 
 ### Bug Fixes
