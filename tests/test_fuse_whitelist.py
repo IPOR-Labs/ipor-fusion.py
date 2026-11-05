@@ -6,16 +6,23 @@ from unittest.mock import MagicMock, patch
 import pytest
 from _multicall import multicall_aware
 from eth_abi import decode, encode
+from eth_abi.exceptions import DecodingError
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 import ipor_fusion.preflight as preflight_module
 from ipor_fusion.core.plasma_vault import BalanceFuse
-from ipor_fusion.errors import AddressNotInRegistryError, AddressRegistryError
+from ipor_fusion.errors import (
+    AddressNotInRegistryError,
+    AddressRegistryError,
+    EmptyCallResultError,
+)
 from ipor_fusion.fuse_whitelist import (
     FuseState,
     FuseWhitelist,
+    FuseWhitelistCheck,
     WhitelistEntry,
+    _entry,
     build_fuse_whitelist_json,
     check_fuses,
     fetch_fuse_whitelist_json,
@@ -42,6 +49,7 @@ SUPPLY = _addr("03")  # active EulerV2SupplyFuse
 BORROW = _addr("04")  # active EulerV2BorrowFuse
 COPY = _addr("05")  # a redeployed copy, not listed
 CUSTOM_FUSE = _addr("06")  # not listed, in a market with nothing listed
+ZERO_ADDRESS = Web3.to_checksum_address("0x" + "00" * 20)
 
 # fuse -> (state, type, timestamp); market -> listed fuses
 LISTED = {
@@ -94,6 +102,26 @@ class TestRead:
             NEW_BALANCE, FuseState.ACTIVE, 36, "EulerV2BalanceFuse", 200
         )
 
+    @pytest.mark.parametrize(
+        ("raw_state", "state", "status"),
+        [
+            (0, FuseState.DEFAULT, "state default"),
+            (9, FuseState.UNKNOWN, "state unknown"),
+        ],
+    )
+    def test_a_listed_fuse_in_another_state_is_not_read_as_not_listed(
+        self, raw_state, state, status
+    ):
+        fuses = {COPY: EULER}
+        raw = (raw_state, 36, COPY, 100)
+        entry = _entry(COPY, raw, TYPES)
+        check = FuseWhitelistCheck(WHITELIST.address, {COPY: entry}, {})
+
+        assert entry.state is state
+        assert entry.type_name == "EulerV2BalanceFuse"
+        (issue,) = fuse_whitelist_issues(check, fuses)
+        assert status in issue.message
+
     def test_market_fuses_are_read_only_where_a_fuse_is_not_active(self):
         check = check_fuses(_ctx(), WHITELIST, {SUPPLY: EULER, COPY: CUSTOM})
 
@@ -121,6 +149,23 @@ class TestIssues:
         assert {e.fuse for e in issue.replacements} == {SUPPLY, BORROW}
         assert "shows the allocation in this market as unknown" in issue.message
 
+    def test_a_fuse_of_another_role_is_never_the_replacement(self):
+        claim = WhitelistEntry(BORROW, FuseState.ACTIVE, 38, "MorphoClaimFuse", 0)
+        hook = WhitelistEntry(
+            SUPPLY, FuseState.ACTIVE, 41, "ExternalStatePausePreHook", 0
+        )
+        fuses = {COPY: EULER}
+        check = FuseWhitelistCheck(
+            WHITELIST.address,
+            {COPY: _entry(COPY, (0, 0, ZERO_ADDRESS, 0), {})},
+            {EULER: (claim, hook)},
+        )
+
+        (issue,) = fuse_whitelist_issues(check, fuses, [COPY])
+
+        assert issue.replacements == ()
+        assert "no active whitelisted balance fuse" in issue.message
+
     def test_a_market_without_listed_fuses_points_at_the_review(self):
         fuses = {CUSTOM_FUSE: CUSTOM}
         (issue,) = fuse_whitelist_issues(check_fuses(_ctx(), WHITELIST, fuses), fuses)
@@ -144,6 +189,9 @@ class TestIssues:
         ("EulerV2SupplyFuse", "action"),
         ("BalanceFusesReader", None),
         ("PlasmaVaultBalanceAssetsValidationFuse", None),
+        ("ExchangeRateValidatorPreHook", None),
+        ("ExternalStatePausePreHook", None),
+        ("CrosschainNavValidationPreHook", None),
         ("", None),
     ],
 )
@@ -199,6 +247,7 @@ class TestValidateVault:
         state = MagicMock()
         state.chain_id = ChainId(42161)
         state.block_number = 7
+        state.fuses = [COPY]
         state.fuse_markets = {COPY: EULER}
         state.balance_fuses = [BalanceFuse(EULER, OLD_BALANCE)]
         return state
@@ -214,11 +263,74 @@ class TestValidateVault:
             ("fuse_whitelist", "warning"),
             ("fuse_whitelist", "warning"),
         ]
+        state.fuses = [SUPPLY]
         state.fuse_markets = {SUPPLY: EULER}
         state.balance_fuses = [BalanceFuse(EULER, NEW_BALANCE)]
         clean = check_fuses(_ctx(), WHITELIST, {SUPPLY: EULER, NEW_BALANCE: EULER})
         (ok,) = _fuse_whitelist_findings(state, clean)
         assert ok.severity == "ok"
+
+    def test_a_fuse_without_a_readable_market_blocks_the_ok_line(self):
+        from ipor_fusion.validation import _fuse_whitelist_findings
+
+        state = self._state()
+        state.fuses = [SUPPLY, COPY]
+        state.fuse_markets = {SUPPLY: EULER}
+        state.balance_fuses = [BalanceFuse(EULER, NEW_BALANCE)]
+        check = check_fuses(_ctx(), WHITELIST, {SUPPLY: EULER, NEW_BALANCE: EULER})
+
+        (finding,) = _fuse_whitelist_findings(state, check)
+
+        assert (finding.check, finding.severity) == ("incomplete_read", "warning")
+        assert str(COPY) in finding.message
+
+    def test_a_vault_with_no_readable_market_gets_no_ok_line(self):
+        from ipor_fusion.validation import _fuse_whitelist_findings
+
+        state = self._state()
+        state.fuses = [COPY]
+        state.fuse_markets = None
+        state.balance_fuses = []
+        check = check_fuses(_ctx(), WHITELIST, {})
+
+        (finding,) = _fuse_whitelist_findings(state, check)
+
+        assert finding.check == "incomplete_read"
+
+    def test_a_fuse_of_market_zero_is_not_checked_or_reported(self):
+        from ipor_fusion.validation import _fuse_whitelist_findings, _vault_fuses
+
+        state = self._state()
+        state.fuses = [COPY]
+        state.fuse_markets = {COPY: MarketId(0)}
+        state.balance_fuses = []
+
+        assert _vault_fuses(state) == {}
+        (ok,) = _fuse_whitelist_findings(state, check_fuses(_ctx(), WHITELIST, {}))
+        assert ok.severity == "ok"
+
+    @pytest.mark.parametrize(
+        "error", [EmptyCallResultError("no code"), DecodingError("bad")]
+    )
+    def test_a_block_before_the_whitelist_is_an_incomplete_read(self, error):
+        from ipor_fusion.validation import validate_vault
+
+        state = self._state()
+        with (
+            patch("ipor_fusion.validation.fetch_vault_data", return_value=state),
+            patch(
+                "ipor_fusion.validation.validate_vault_state",
+                side_effect=lambda s, fuse_whitelist: _empty_validation(),
+            ),
+            patch(
+                "ipor_fusion.validation.read_vault_fuse_whitelist",
+                side_effect=error,
+            ),
+        ):
+            validation = validate_vault(_ctx(), state.vault)
+
+        (finding,) = validation.findings
+        assert finding.check == "incomplete_read"
 
     def test_an_unreadable_registry_is_an_incomplete_read(self):
         from ipor_fusion.validation import validate_vault
@@ -279,6 +391,12 @@ class TestPreflight:
         (finding,) = findings
         assert (finding.check, finding.severity) == ("fuse_whitelist", "warning")
         assert str(COPY) in finding.message
+
+    def test_market_zero_needs_no_registry_download(self):
+        actions = [MagicMock(fuse=COPY, market_id=MarketId(0))]
+        with patch.object(preflight_module, "fuse_whitelist_for_chain") as download:
+            assert preflight_module._whitelist_findings(_ctx(), actions) == []
+        download.assert_not_called()
 
     def test_an_unreadable_whitelist_is_a_warning_not_an_error(self):
         actions = [MagicMock(fuse=COPY, market_id=EULER)]

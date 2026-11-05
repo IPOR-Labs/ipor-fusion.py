@@ -265,10 +265,16 @@ def _action_findings(
 def _whitelist_findings(
     ctx: Web3Context, actions: Sequence[PreflightAction]
 ) -> list[PreflightFinding]:
-    fuses = {a.fuse: a.market_id for a in actions if a.market_id is not None}
+    fuses = {
+        a.fuse: a.market_id
+        for a in actions
+        if a.market_id is not None and a.market_id != _NO_MARKET
+    }
+    if not fuses:
+        return []
     try:
         whitelist = fuse_whitelist_for_chain(ctx.chain_id)
-        if whitelist is None or not fuses:
+        if whitelist is None:
             return []
         check = check_fuses(ctx, whitelist, fuses)
     except FUSE_WHITELIST_READ_ERRORS as exc:

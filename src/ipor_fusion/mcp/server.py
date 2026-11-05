@@ -32,7 +32,7 @@ from ipor_fusion.core.access import build_role_accounts_json, resolve_access_man
 from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.explorer import get_contract_name
-from ipor_fusion.fuse_whitelist import fetch_fuse_whitelist_json
+from ipor_fusion.fuse_whitelist import MAX_MARKET_ID, fetch_fuse_whitelist_json
 from ipor_fusion.market_info import (
     build_meta_morpho_json,
     build_morpho_blue_market_json,
@@ -805,7 +805,12 @@ def address_list(chain_id: RequiredChainArg) -> AddressListResponse:
 def fuse_whitelist(
     chain_id: RequiredChainArg,
     market_id: Annotated[
-        int, Field(description="Numeric market ID (IporFusionMarkets).", ge=0)
+        int,
+        Field(
+            description="Numeric market ID (IporFusionMarkets).",
+            ge=0,
+            le=MAX_MARKET_ID,
+        ),
     ],
     block_number: BlockArg = None,
     include_deprecated: bool = False,

@@ -20,9 +20,10 @@ from enum import IntEnum
 from typing import Literal, TypedDict
 
 import requests
+from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
+from web3.exceptions import ContractLogicError, Web3RPCError
 
 from ipor_fusion.chains import CHAIN_NAMES
 from ipor_fusion.core.context import Web3Context
@@ -31,34 +32,48 @@ from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.errors import (
     AddressNotInRegistryError,
     AddressRegistryError,
+    EmptyCallResultError,
     UnsupportedChainError,
 )
+from ipor_fusion.onchain_text import sanitize_onchain_text
 from ipor_fusion.registry import fetch_address_registry
 from ipor_fusion.substrates import format_market_label
 from ipor_fusion.types import ChainId, FuseAddress, MarketId
 
 FUSE_WHITELIST_REGISTRY_NAME = "IporFusionFuseWhitelistProxy"
 
+# The check is optional, so a slow registry download must not use up a caller's
+# time budget.
+_REGISTRY_TIMEOUT_S = 5.0
+
+MAX_MARKET_ID = 2**256 - 1
+
 # What reading the whitelist can raise: the registry download, a chain without a
-# registry file, and the whitelist's own RPC reads. Callers that treat the check
-# as optional catch exactly these.
+# registry file, the whitelist's own RPC reads, and a block before the whitelist
+# was deployed. Callers that treat the check as optional catch exactly these.
 FUSE_WHITELIST_READ_ERRORS: tuple[type[Exception], ...] = (
     AddressRegistryError,
     UnsupportedChainError,
     ContractLogicError,
+    EmptyCallResultError,
+    DecodingError,
     Web3RPCError,
-    TimeExhausted,
     requests.RequestException,
 )
+
+_NOT_ACTION_OR_BALANCE = ("Reader", "PreHook", "Validation", "Validator")
 
 FuseRole = Literal["action", "balance"]
 FuseIssueKind = Literal["not_whitelisted", "deprecated"]
 
 
 class FuseState(IntEnum):
-    """`FuseWhitelist.getFuseStates()`: 0 means the fuse is not listed."""
+    """`FuseWhitelist.getFuseStates()`. The negative values are not on-chain
+    states: a fuse without an entry, and a state this SDK does not know."""
 
-    NOT_LISTED = 0
+    UNKNOWN = -2
+    NOT_LISTED = -1
+    DEFAULT = 0
     ACTIVE = 1
     DEPRECATED = 2
     REMOVED = 3
@@ -83,10 +98,11 @@ class WhitelistEntry:
     def role(self) -> FuseRole | None:
         """Balance or action fuse by the type name, ``None`` when the name does
         not tell. The whitelist has no role field and its names are not uniform
-        (``UniswapV3Balance``, ``BalanceFuseUniversalTokenSwapperV2``, and
-        ``BalanceFusesReader``, which is not a fuse)."""
+        (``UniswapV3Balance``, ``BalanceFuseUniversalTokenSwapperV2``), and it
+        also lists readers and pre-hooks (``BalanceFusesReader``,
+        ``ExchangeRateValidatorPreHook``), which are not fuses."""
         name = self.type_name
-        if not name or name.endswith("Reader") or "Validation" in name:
+        if not name or any(marker in name for marker in _NOT_ACTION_OR_BALANCE):
             return None
         return "balance" if "Balance" in name else "action"
 
@@ -121,7 +137,10 @@ class FuseWhitelist(ContractWrapper):
         return self._view(
             "getFuseTypes()",
             output_types=["uint16[]", "string[]"],
-            decoder=lambda pair: dict(zip(pair[0], pair[1], strict=True)),
+            decoder=lambda pair: {
+                fuse_type: sanitize_onchain_text(name)
+                for fuse_type, name in zip(pair[0], pair[1], strict=True)
+            },
         )
 
 
@@ -129,11 +148,20 @@ def fuse_whitelist_for_chain(chain_id: ChainId) -> FuseWhitelist | None:
     """The chain's whitelist from the ``ipor-abi`` registry, ``None`` when the
     chain publishes none. Raises `AddressRegistryError` when the registry
     cannot be read and `UnsupportedChainError` for a chain without one."""
-    registry = fetch_address_registry(chain_id)
+    registry = fetch_address_registry(
+        chain_id, timeout=_REGISTRY_TIMEOUT_S, stale_if_error=True
+    )
     try:
         return FuseWhitelist(registry.address(FUSE_WHITELIST_REGISTRY_NAME))
     except AddressNotInRegistryError:
         return None
+
+
+def _fuse_state(state: int) -> FuseState:
+    try:
+        return FuseState(state)
+    except ValueError:
+        return FuseState.UNKNOWN
 
 
 def _entry(
@@ -141,12 +169,8 @@ def _entry(
     raw: tuple[int, int, ChecksumAddress, int],
     types: Mapping[int, str],
 ) -> WhitelistEntry:
-    state, fuse_type, _, added_at = raw
-    known = (
-        FuseState(state)
-        if state in FuseState._value2member_map_
-        else FuseState.NOT_LISTED
-    )
+    state, fuse_type, listed_address, added_at = raw
+    known = _fuse_state(state) if int(listed_address, 16) else FuseState.NOT_LISTED
     return WhitelistEntry(
         fuse=fuse,
         state=known,
@@ -237,8 +261,17 @@ def _replacements(
         same_type = [e for e in active if e.fuse_type == entry.fuse_type]
         if same_type:
             return tuple(same_type)
-    same_role = [e for e in active if e.role == role]
-    return tuple(same_role or active)
+    return tuple(e for e in active if e.role == role)
+
+
+def _status(entry: WhitelistEntry) -> str:
+    if entry.state is FuseState.DEPRECATED:
+        return f"is deprecated in the Fuse Whitelist ({entry.type_name})"
+    if entry.state is FuseState.NOT_LISTED:
+        return "is not in the Fuse Whitelist"
+    if entry.state is FuseState.REMOVED:
+        return "was removed from the Fuse Whitelist"
+    return f"is not active in the Fuse Whitelist (state {entry.state.name.lower()})"
 
 
 def _issue_message(
@@ -250,20 +283,13 @@ def _issue_message(
     replacements: tuple[WhitelistEntry, ...],
 ) -> str:
     what = f"{role} fuse {fuse} of market {format_market_label(market_id)}"
-    status = (
-        f"is deprecated in the Fuse Whitelist ({entry.type_name})"
-        if issue_kind == "deprecated"
-        else "is not in the Fuse Whitelist"
-        if entry.state is FuseState.NOT_LISTED
-        else "was removed from the Fuse Whitelist"
-    )
     use = (
         "use " + ", ".join(f"{e.fuse} ({e.type_name})" for e in replacements)
         if replacements
-        else "no active whitelisted fuse covers this market; a new fuse needs the"
-        " IPOR whitelist review"
+        else f"no active whitelisted {role} fuse covers this market; a new fuse"
+        " needs the IPOR whitelist review"
     )
-    return f"{what} {status}: {_CONSEQUENCE[issue_kind]}; {use}"
+    return f"{what} {_status(entry)}: {_CONSEQUENCE[issue_kind]}; {use}"
 
 
 def fuse_whitelist_issues(

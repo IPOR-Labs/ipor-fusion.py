@@ -14,9 +14,10 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.errors import (
     AddressNotInRegistryError,
     AddressRegistryError,
+    EmptyCallResultError,
     UnsupportedChainError,
 )
-from ipor_fusion.fuse_whitelist import fetch_fuse_whitelist_json
+from ipor_fusion.fuse_whitelist import MAX_MARKET_ID, fetch_fuse_whitelist_json
 from ipor_fusion.types import ChainId, MarketId
 
 
@@ -36,7 +37,7 @@ def fuse() -> None:
 @click.option(
     "--market-id",
     "market_id",
-    type=click.IntRange(min=0),
+    type=click.IntRange(min=0, max=MAX_MARKET_ID),
     required=True,
     help="Numeric market ID (IporFusionMarkets), e.g. 11 for EULER_V2.",
 )
@@ -80,6 +81,7 @@ def whitelist(
     except (
         AddressNotInRegistryError,
         AddressRegistryError,
+        EmptyCallResultError,
         UnsupportedChainError,
     ) as exc:
         raise click.UsageError(str(exc)) from exc

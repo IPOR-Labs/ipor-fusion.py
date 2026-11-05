@@ -156,6 +156,8 @@ class VaultState(Protocol):
     @property
     def fuse_markets(self) -> Mapping[FuseAddress, MarketId] | None: ...
     @property
+    def fuses(self) -> Sequence[FuseAddress]: ...
+    @property
     def dependency_graph(self) -> Mapping[MarketId, Sequence[MarketId]] | None: ...
     @property
     def withdraw_manager_data(self) -> WithdrawQueue | None: ...
@@ -321,10 +323,18 @@ def validate_vault(
 
 
 def _vault_fuses(state: VaultState) -> dict[FuseAddress, MarketId]:
-    """Action fuses and balance fuses of the vault, each with its market."""
-    fuses = dict(state.fuse_markets or {})
+    """Action fuses and balance fuses of the vault, each with its market. A fuse
+    of market 0 holds no allocation, so the whitelist check skips it."""
+    fuses = {f: m for f, m in (state.fuse_markets or {}).items() if m != 0}
     fuses.update({bf.fuse: bf.market_id for bf in state.balance_fuses})
     return fuses
+
+
+def _fuses_without_market(state: VaultState) -> list[FuseAddress]:
+    """Fuses whose ``MARKET_ID()`` could not be read: the whitelist check, which
+    works per market, cannot cover them."""
+    known = {*(state.fuse_markets or {}), *(bf.fuse for bf in state.balance_fuses)}
+    return [fuse for fuse in state.fuses if fuse not in known]
 
 
 def read_vault_fuse_whitelist(
@@ -499,16 +509,27 @@ def _fuse_whitelist_findings(
     issues = fuse_whitelist_issues(
         check, _vault_fuses(state), (bf.fuse for bf in state.balance_fuses)
     )
-    if not issues:
+    unchecked = _fuses_without_market(state)
+    if not issues and not unchecked:
         return [
             Finding(
                 "fuse_whitelist", "ok", "Every fuse is active in the Fuse Whitelist"
             )
         ]
-    return [
+    findings = [
         Finding("fuse_whitelist", "warning", f"WARNING — {issue.message}")
         for issue in issues
     ]
+    if unchecked:
+        findings.append(
+            Finding(
+                "incomplete_read",
+                "warning",
+                f"WARNING — MARKET_ID() of {', '.join(unchecked)} could not be"
+                " read: not checked against the Fuse Whitelist",
+            )
+        )
+    return findings
 
 
 def _orphan_fuse_findings(state: VaultState) -> list[Finding]:

@@ -251,7 +251,8 @@ checkout's default profile), the pending reader included.
   Multicall3 batches, `check_fuses` + `fuse_whitelist_issues` (the warnings
   `validate_vault` and `preflight_execute` add, each naming the active
   replacement) and the `fusion fuse whitelist` document; `getFusesByMarketId`
-  returns deprecated fuses too, so state is always read alongside;
+  returns deprecated fuses too, so state is always read alongside; it reads the
+  registry with a 5 s timeout and `stale_if_error`, since the check is optional;
   `morpho_api.py` the Morpho public GraphQL API client (`fetch_market`, `fetch_vault`,
   `PUBLIC_ALLOCATOR_ADDRESSES`; it narrows the GraphQL body from `object`);
   `market_info.py` — `build_morpho_blue_market_json`, `build_meta_morpho_json`, the
