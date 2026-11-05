@@ -1430,6 +1430,9 @@ def _assert_unwind(reads: _Reads) -> None:
         released.can_withdraw,
         "release_funds did not make the request withdrawable",
     )
+    # Equal only because a fresh clone has no request fee. With one,
+    # requestShares records the shares minus the fee, while release_funds above
+    # still releases all of requested_shares, so the two differ by the fee.
     _check(
         reads.shares_released.value == released.shares,
         f"released {reads.shares_released.value} shares, requested {released.shares}",
