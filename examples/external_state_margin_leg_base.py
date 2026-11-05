@@ -1011,11 +1011,14 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # assertions below check exactly that against the emitted log rather than
     # trusting the arithmetic.
     #
-    # Production has two reads, and they are equally safe. Both return the same
-    # BalanceProposal; both reject anything that did not come from this executor
-    # or whose hash is not the hash of its own fields; and confirmBalance
-    # re-derives that hash from the pending slot regardless. So neither route can
-    # make B attest to a proposal A did not actually put on-chain:
+    # Production has two reads, equally safe for different reasons. Both return
+    # the same BalanceProposal. pending_proposals reads the executor's pending
+    # slot and computes the hash from those fields, so it has nothing to reject:
+    # what it returns is what is on-chain. find_balance_proposed parses a receipt,
+    # so it must reject: it skips a log another contract emitted and raises on one
+    # whose hash is not the hash of its own fields. confirmBalance re-derives the
+    # hash from the pending slot either way, so neither route can make B attest
+    # to a proposal A did not actually put on-chain:
     #   pending_proposals(account)     -- reads the slot, so B needs nothing from
     #                                     A but the account address.
     #   find_balance_proposed(logs, account) -- reads the same proposal out of the
