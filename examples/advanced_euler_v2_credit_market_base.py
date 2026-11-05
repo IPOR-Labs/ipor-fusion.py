@@ -143,9 +143,10 @@ BASE_CBETH_WHALE = parse_checksum_address("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37E
 #            multisig. (A fresh clone forces OWNER to self-grant ATOMIST, so owner
 #            and atomist coincide during bootstrap; in production the atomist may
 #            be delegated to a separate address.)
-#   ALPHA -- the online operator; drives execute() and refreshes market balances
-#            (update_markets_balances), and nothing else -- least-privilege, it
-#            cannot reconfigure the vault. Collapsing it into OWNER means a
+#   ALPHA -- the online operator; drives execute(), refreshes market balances
+#            (update_markets_balances) and releases withdrawal requests
+#            (WithdrawManager.releaseFunds) -- least-privilege, it cannot
+#            reconfigure the vault. Collapsing it into OWNER means a
 #            compromised alpha key becomes full governance control.
 # (There is no depositor role here: this example funds collateral directly and
 # focuses on the credit lifecycle rather than the deposit -> shares path.)

@@ -162,8 +162,9 @@ BASE_EXTERNAL_STATE_BALANCE_FUSE = parse_fuse_address(
 #                 every substrate grant below. A cold key or multisig. (A fresh
 #                 clone forces OWNER to self-grant ATOMIST, so owner and atomist
 #                 coincide during bootstrap.)
-#   ALPHA      -- the online operator; drives execute() and refreshes market
-#                 balances, and nothing else. Collapsing it into OWNER means a
+#   ALPHA      -- the online operator; drives execute(), refreshes market
+#                 balances and releases withdrawal requests
+#                 (WithdrawManager.releaseFunds). Collapsing it into OWNER means a
 #                 compromised alpha key becomes full governance control -- and
 #                 the TARGET grant below makes that especially costly here.
 #   DEPOSITOR  -- an end user; only ever holds, deposits and requests funds.

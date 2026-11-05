@@ -293,9 +293,11 @@ CROSSCHAIN_MARKET = IporFusionMarkets.CROSSCHAIN
 #   VAULT_OWNER -- owner/atomist of both vaults, the executor's creator and its
 #                  rescue admin; can reconfigure everything. A cold key or a
 #                  multisig.
-#   ALPHA       -- the online operator; drives execute() and refreshes market
-#                  balances, nothing else. Collapsing it into VAULT_OWNER means
-#                  a compromised alpha key becomes full governance control.
+#   ALPHA       -- the online operator; drives execute(), refreshes market
+#                  balances and releases withdrawal requests
+#                  (WithdrawManager.releaseFunds). Collapsing it into VAULT_OWNER
+#                  means a compromised alpha key becomes full governance
+#                  control.
 #   DEPOSITOR   -- an end user; only ever holds and deposits funds.
 #   BALANCE_PROPOSER / BALANCE_APPROVER -- the two attestation keys; the
 #                  executor refuses to be created with one address for both,

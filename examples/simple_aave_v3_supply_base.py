@@ -105,11 +105,11 @@ BASE_AAVE_V3_BALANCE_FUSE = parse_fuse_address(
 #               or multisig. (A fresh clone forces OWNER to self-grant ATOMIST,
 #               so owner and atomist coincide during bootstrap; in production the
 #               atomist may be delegated to a separate address.)
-#   ALPHA    -- the online operator; drives execute() and refreshes market
-#               balances (update_markets_balances), and nothing else --
-#               least-privilege, it cannot reconfigure the vault. Collapsing it
-#               into OWNER means a compromised alpha key becomes full governance
-#               control.
+#   ALPHA    -- the online operator; drives execute(), refreshes market
+#               balances (update_markets_balances) and releases withdrawal
+#               requests (WithdrawManager.releaseFunds) -- least-privilege, it
+#               cannot reconfigure the vault. Collapsing it into OWNER means a
+#               compromised alpha key becomes full governance control.
 #   DEPOSITOR-- an end user; only ever holds and deposits funds.
 
 # Governance/atomist. Any address; here it happens to be a random EOA.
