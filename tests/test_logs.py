@@ -1,5 +1,6 @@
 """Adaptive eth_getLogs paging (`core.logs`) against a fake provider."""
 
+import socket
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -366,14 +367,37 @@ class TestNoPartialResults:
         with pytest.raises(KeyError):
             get_logs_adaptive(_web3(eth), ADDRESS, TOPICS, chunk_hint=100)
 
-    def test_error_names_no_provider_url(self):
-        provider_url = "https://rpc.example/v2/SECRETKEY"
-        eth = _FakeEth(
-            reject=lambda _l, _h: Web3RPCError(f"bad for url: {provider_url}")
-        )
+    @pytest.mark.parametrize(
+        "quoted",
+        ["https://rpc.example/v2/SECRETKEY", "/v2/SECRETKEY?apikey=SECRETKEY"],
+    )
+    def test_error_names_no_provider_url(self, quoted):
+        eth = _FakeEth(reject=lambda _l, _h: Web3RPCError(f"bad for url: {quoted}"))
 
         with pytest.raises(LogScanError) as info:
             get_logs_adaptive(_web3(eth), ADDRESS, TOPICS, 999, 1_000)
+
+        assert "SECRETKEY" not in str(info.value)
+
+    def test_refused_connection_names_no_request_target(self, monkeypatch):
+        monkeypatch.setattr(logs_mod, "_TRANSIENT_RETRIES", 0)
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+
+        def reject(_low: int, _high: int) -> Exception | None:
+            try:
+                requests.post(
+                    f"http://127.0.0.1:{port}/v2/SECRETKEY?apikey=SECRETKEY", timeout=1
+                )
+            except requests.ConnectionError as exc:
+                return exc
+            return None
+
+        with pytest.raises(LogScanError) as info:
+            get_logs_adaptive(
+                _web3(_FakeEth(reject=reject)), ADDRESS, TOPICS, 999, 1_000
+            )
 
         assert "SECRETKEY" not in str(info.value)
 

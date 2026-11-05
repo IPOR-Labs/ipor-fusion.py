@@ -28,6 +28,7 @@ from web3.exceptions import Web3Exception
 from web3.types import BlockIdentifier, FilterParams, LogReceipt
 
 from ipor_fusion.errors import LogScanError
+from ipor_fusion.redaction import redact_provider_urls
 from ipor_fusion.types import ChainId
 
 # The log shapes the SDK's event readers accept: a receipt log from web3.py
@@ -70,7 +71,6 @@ _TRANSIENT_TEXT = re.compile(
     r"rate.?limit|too many requests|compute units|temporar|try again later", re.I
 )
 _TRANSIENT_STATUS = frozenset({429, 502, 503})
-_URL = re.compile(r"\w+://\S+")
 
 
 class LogSource(Protocol):
@@ -370,13 +370,13 @@ def _status_code(exc: BaseException) -> int | None:
 
 
 def _describe(exc: BaseException) -> str:
-    """Error text with the response body, provider URLs (they embed API keys)
-    removed, truncated."""
+    """Error text with the response body, provider URLs reduced to their host,
+    truncated."""
     text = f"{type(exc).__name__}: {exc}"
     body = getattr(getattr(exc, "response", None), "text", None)
     if isinstance(body, str) and body:
         text = f"{text} {body}"
-    return _URL.sub("<provider>", text)[:400]
+    return redact_provider_urls(text)[:400]
 
 
 def _is_transient(exc: BaseException) -> bool:

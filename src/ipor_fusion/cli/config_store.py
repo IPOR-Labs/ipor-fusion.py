@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import click
 from eth_typing import ChecksumAddress
@@ -54,18 +53,14 @@ class FusionConfig(BaseModel):
         return data
 
 
-def mask_provider_url(url: str) -> str:
-    """Render a provider URL as scheme and host only.
-
-    RPC provider URLs carry API keys in the path, the query string or the
-    userinfo, so nothing but the scheme and the host (with port) may be
-    displayed. An unparsable value is rendered as ``***``.
-    """
-    parts = urlsplit(url)
-    host = parts.netloc.rpartition("@")[2]
-    if not parts.scheme or not host:
-        return "***"
-    return f"{parts.scheme}://{host}"
+def _describe_invalid_fields(exc: ValidationError) -> str:
+    """Which fields failed and why, never their values: the file holds API keys."""
+    return "\n".join(
+        f"  {'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+        for error in exc.errors(
+            include_input=False, include_url=False, include_context=False
+        )
+    )
 
 
 def load_config() -> FusionConfig:
@@ -75,7 +70,7 @@ def load_config() -> FusionConfig:
         return FusionConfig.model_validate_json(CONFIG_FILE.read_text(encoding="utf-8"))
     except ValidationError as exc:
         raise click.ClickException(
-            f"Config {CONFIG_FILE} is invalid:\n{exc}\n"
+            f"Config {CONFIG_FILE} is invalid:\n{_describe_invalid_fields(exc)}\n"
             "Fix the file manually or delete it to start fresh."
         ) from exc
     except json.JSONDecodeError as exc:

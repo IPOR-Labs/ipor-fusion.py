@@ -4,6 +4,7 @@ import os
 import sys
 
 import click
+import requests
 
 from ipor_fusion.cli.address_cmd import address
 from ipor_fusion.cli.changelog_cmd import changelog
@@ -12,9 +13,21 @@ from ipor_fusion.cli.fuse_cmd import fuse
 from ipor_fusion.cli.market_cmd import market
 from ipor_fusion.cli.preflight_cmd import preflight
 from ipor_fusion.cli.vault_cmd import vault
+from ipor_fusion.redaction import redact_provider_urls
 
 
-@click.group()
+class _RedactingGroup(click.Group):
+    """Click prints a `ClickException` itself, before `main` could see it."""
+
+    def invoke(self, ctx: click.Context) -> object:
+        try:
+            return super().invoke(ctx)
+        except click.ClickException as exc:
+            exc.message = redact_provider_urls(exc.message)
+            raise
+
+
+@click.group(cls=_RedactingGroup)
 @click.version_option(package_name="ipor_fusion")
 @click.option("--verbose", "-v", is_flag=True, help="Print RPC call details.")
 @click.option("--quiet", "-q", is_flag=True, help="Suppress non-essential output.")
@@ -49,16 +62,17 @@ def main() -> None:
         sys.exit(130)
     except click.UsageError:
         raise
-    except ConnectionError as exc:
-        click.secho(f"Connection failed: {exc}. Check your provider URL.", fg="red")
+    except (ConnectionError, requests.ConnectionError) as exc:
+        msg = redact_provider_urls(str(exc))
+        click.secho(f"Connection failed: {msg}. Check your provider URL.", fg="red")
         sys.exit(1)
     except ValueError as exc:
-        msg = str(exc)
+        msg = redact_provider_urls(str(exc))
         if "address" in msg.lower():
             click.secho(f"Invalid address: {msg}", fg="red")
         else:
             click.secho(f"Error: {msg}", fg="red")
         sys.exit(1)
     except Exception as exc:
-        click.secho(f"Error: {exc}", fg="red")
+        click.secho(f"Error: {redact_provider_urls(str(exc))}", fg="red")
         sys.exit(1)

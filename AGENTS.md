@@ -202,6 +202,10 @@ checkout's default profile), the pending reader included.
 
 ## Layout (`src/ipor_fusion/`)
 
+- `redaction.py` — `redact_provider_urls`, the one redactor for text carrying
+  exception messages (the CLI group and `main`, every MCP tool through
+  `_RedactingFastMCP.call_tool`, `LogScanError` through `core/logs.py`), and
+  `mask_provider_url`; a new entry point goes through it
 - `chains.py` chain registry; `market_ids.py` `IporFusionMarkets`; `types.py`; `errors.py`
   defines every SDK exception class (`tests/test_error_hierarchy.py` pins it)
 - `fusion_errors.py` — `FUSION_ERROR_SIGNATURES`, every custom error of the
