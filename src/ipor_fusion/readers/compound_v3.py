@@ -120,8 +120,10 @@ class CompoundV3Reader(ContractWrapper):
         self, ctx: Web3Context, account: ChecksumAddress
     ) -> CometAccountValue:
         """Value ``account``'s collateral and debt as the Comet does, over every
-        collateral it lists rather than the vault's substrates: a revoked
-        substrate does not take collateral out of the account (three batches)."""
+        collateral it lists rather than the vault's substrates: a revoked substrate
+        does not take collateral out of the account. Only the feeds of held assets
+        are read, as `isLiquidatable` does, so a broken feed of an asset the account
+        does not hold cannot hide its position (four batches)."""
         multicall = Multicall3(ctx)
         batch = multicall.batch()
         count = batch.add(self.num_assets())
@@ -133,19 +135,24 @@ class CompoundV3Reader(ContractWrapper):
         infos = multicall.aggregate(
             [self.get_asset_info(i) for i in range(count.value)]
         )
+        balances = multicall.aggregate(
+            [self.collateral_balance_of(account, info.asset) for info in infos]
+        )
+        held = [
+            (info, balance)
+            for info, balance in zip(infos, balances, strict=True)
+            if balance > 0
+        ]
 
         batch = multicall.batch()
         base_price = batch.add(self.get_price(base_feed.value))
-        balances = [
-            batch.add(self.collateral_balance_of(account, info.asset)) for info in infos
-        ]
-        prices = [batch.add(self.get_price(info.price_feed)) for info in infos]
+        prices = [batch.add(self.get_price(info.price_feed)) for info, _ in held]
         batch.run()
 
         collateral = 0
         liquidation_limit = 0
-        for info, balance, price in zip(infos, balances, prices, strict=True):
-            value = balance.value * price.value // info.scale
+        for (info, balance), price in zip(held, prices, strict=True):
+            value = balance * price.value // info.scale
             collateral += value
             liquidation_limit += (
                 value * info.liquidate_collateral_factor // COMET_FACTOR_SCALE

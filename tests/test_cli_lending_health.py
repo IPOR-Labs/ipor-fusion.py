@@ -1366,7 +1366,8 @@ def _comet_ctx(
     debt: int = 20_000 * 10**6,
     weth: int = 10 * 10**18,
     wbtc: int = 0,
-    reverts: bytes | None = None,
+    broken_feed: str | None = None,
+    base_scale: int = 10**6,
 ) -> MagicMock:
     """A USDC Comet listing WETH at $3,000 (liquidation factor 0.9) and WBTC at
     $100,000 (0.85), with USDC at $1."""
@@ -1383,19 +1384,20 @@ def _comet_ctx(
     def handler(to: str, data: bytes) -> bytes:
         assert to == COMET
         selector = data[:4]
-        if selector == reverts:
-            raise ContractLogicError("Comet read reverted")
         if selector == function_signature_to_4byte_selector("numAssets()"):
             return encode(["uint8"], [len(listings)])
         if selector == function_signature_to_4byte_selector("baseScale()"):
-            return encode(["uint256"], [10**6])
+            return encode(["uint256"], [base_scale])
         if selector == function_signature_to_4byte_selector("baseTokenPriceFeed()"):
             return encode(["address"], [COMET_BASE_FEED])
         if selector == function_signature_to_4byte_selector("borrowBalanceOf(address)"):
             return encode(["uint256"], [debt])
         if selector == function_signature_to_4byte_selector("getPrice(address)"):
-            (feed,) = decode(["address"], data[4:])
-            return encode(["uint256"], [prices[Web3.to_checksum_address(feed)]])
+            (raw_feed,) = decode(["address"], data[4:])
+            feed = Web3.to_checksum_address(raw_feed)
+            if feed == broken_feed:
+                raise ContractLogicError("BadPrice")
+            return encode(["uint256"], [prices[feed]])
         if selector == function_signature_to_4byte_selector("getAssetInfo(uint8)"):
             (index,) = decode(["uint8"], data[4:])
             asset, feed, scale, factor, _ = listings[index]
@@ -1467,22 +1469,33 @@ class TestCompoundV3Health:
     def test_no_debt_is_no_position(self):
         assert _compound_health(_comet_ctx(debt=0)) is None
 
-    def test_debt_without_collateral_is_unreadable_not_healthy(self):
+    def test_debt_without_collateral_is_critical_not_unknown(self):
         result = _compound_health(_comet_ctx(weth=0))
 
-        assert isinstance(result, UnreadableLendingMarket)
-        assert result.protocol == "compound_v3"
-        assert "no collateral" in result.reason
+        assert isinstance(result, LendingMarketHealth)
+        assert result.health_factor == 0.0
+        assert result.current_ltv is None
+        assert result.max_ltv == 0.0
+        assert result.ltv_usage_percent is None
+        assert result.is_critical
 
-    def test_failed_read_is_unreadable(self):
-        result = _compound_health(
-            _comet_ctx(
-                reverts=function_signature_to_4byte_selector("getPrice(address)")
-            )
-        )
+    def test_dust_debt_that_prices_to_nothing_is_no_position(self):
+        assert _compound_health(_comet_ctx(debt=1, base_scale=10**18)) is None
+
+    def test_broken_feed_of_a_held_asset_is_unreadable(self):
+        result = _compound_health(_comet_ctx(broken_feed=COMET_WETH_FEED))
 
         assert isinstance(result, UnreadableLendingMarket)
         assert result.market_id == MarketId(57)
+
+    def test_broken_feed_of_an_unheld_asset_does_not_hide_a_critical_position(self):
+        result = _compound_health(
+            _comet_ctx(debt=30_000 * 10**6, broken_feed=COMET_WBTC_FEED)
+        )
+
+        assert isinstance(result, LendingMarketHealth)
+        assert result.health_factor == 0.9
+        assert result.is_critical
 
     def test_weth_comet_values_are_not_reported_as_usd(self):
         result = _compound_health(_comet_ctx(), IporFusionMarkets.COMPOUND_V3_WETH)

@@ -464,39 +464,44 @@ def _compute_compound_v3_market_health(
     """Compute LTV health for the vault's account on one Comet; None when it owes
     nothing. The health factor is the liquidation limit over the debt, so it falls
     to 1 where `Comet.isLiquidatable` turns true."""
-    reader = CompoundV3Reader(comet)
-
-    def unreadable(reason: str) -> UnreadableLendingMarket:
-        return UnreadableLendingMarket(
-            protocol="compound_v3",
-            market_id=ipor_market_id,
-            market_name=market_name,
-            reason=reason,
-        )
-
     try:
+        reader = CompoundV3Reader(comet)
         if reader.borrow_balance_of(vault_address).call(ctx) == 0:
             return None
         account = reader.read_account_value(ctx, vault_address)
     except _READ_ERRORS as exc:
-        return unreadable(_reason("account value", exc))
-    # Without a limit there is no ratio to report, and debt is not a healthy row.
-    if account.liquidation_limit == 0 or account.debt == 0:
-        return unreadable("debt with no collateral value to measure it against")
+        return UnreadableLendingMarket(
+            protocol="compound_v3",
+            market_id=ipor_market_id,
+            market_name=market_name,
+            reason=_reason("account value", exc),
+        )
+    # Dust that prices to nothing: the Comet rounds it the same way and cannot
+    # liquidate it.
+    if account.debt == 0:
+        return None
 
+    has_collateral = account.collateral > 0
+    has_limit = account.liquidation_limit > 0
+    current_ltv = account.debt / account.collateral if has_collateral else None
+    max_ltv = account.liquidation_limit / account.collateral if has_collateral else 0.0
+    # With no limit the health factor is 0, a known liquidation risk; only the usage
+    # has no value.
+    ltv_usage = account.debt / account.liquidation_limit * 100 if has_limit else None
     in_usd = ipor_market_id != IporFusionMarkets.COMPOUND_V3_WETH
+
     return LendingMarketHealth(
         protocol="compound_v3",
         market_id=ipor_market_id,
         market_name=market_name,
-        current_ltv=round(account.debt / account.collateral, 6),
-        max_ltv=round(account.liquidation_limit / account.collateral, 6),
+        current_ltv=round(current_ltv, 6) if current_ltv is not None else None,
+        max_ltv=round(max_ltv, 6),
         health_factor=round(account.liquidation_limit / account.debt, 4),
         total_collateral_usd=(
             round(account.collateral / COMET_PRICE_SCALE, 2) if in_usd else None
         ),
         total_debt_usd=round(account.debt / COMET_PRICE_SCALE, 2) if in_usd else None,
-        ltv_usage_percent=round(account.debt / account.liquidation_limit * 100, 2),
+        ltv_usage_percent=round(ltv_usage, 2) if ltv_usage is not None else None,
     )
 
 
