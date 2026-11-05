@@ -8,11 +8,13 @@
 Maintained by <a href="https://ipor.io">IPOR Labs AG</a>.
 
 > **Preview, not production:** the crosschain market (54: Stargate and CCIP executors,
-> dispatchers, lanes, fuses) and the HyperCore market (55: fuses, readers, events) are
-> under active development. The SDK follows their official deployment (the 2026-10-21
-> contracts release, listed in ipor-abi) and nothing earlier, and their interfaces may
-> change or be removed between minor versions, with no backward compatibility. Route
-> no production capital through them. Everything
+> dispatchers, lanes, fuses), the HyperCore market (55: fuses, readers, events) and the
+> Lido Lend markets (58: Lido Lend, 59: its flash loan market, Hoodi testnet only) are
+> under active development. The SDK follows their official deployment (for crosschain
+> the 2026-10-21 contracts release, listed in ipor-abi, and nothing earlier; for Lido Lend
+> the Hoodi testnet deployment), and their interfaces may change or be removed between
+> minor versions, with no backward compatibility. Route no production capital through
+> them. Everything
 > else in the package is production. `server_info` and `fusion changelog` list the same
 > status (`PREVIEW_FEATURES`).
 
@@ -321,7 +323,7 @@ Reverts on the deploy-and-configure path, keyed by selector so a failed transact
 
 Configuration order on a fresh vault: `add_fuses` → `grant_market_substrates` → `add_balance_fuse` → `execute`; all three configuration steps are mandatory.
 
-A flash-loan fuse also needs `update_callback_handler(handler, sender, selector)` before its first `execute`: Morpho Blue calls back `onMorphoFlashLoan(uint256,bytes)`, the Euler EVC `onEulerFlashLoan(bytes)`, and an unregistered callback reverts `HandlerNotFound()`.
+A flash-loan fuse also needs `update_callback_handler(handler, sender, selector)` before its first `execute`: Morpho Blue calls back `onMorphoFlashLoan(uint256,bytes)`, the Euler EVC `onEulerFlashLoan(bytes)`, and an unregistered callback reverts `HandlerNotFound()`. On Lido Lend (preview) the same selector comes from the Lido Lend core, so register `CallbackHandlerMorpho` with the core address as `sender`.
 
 The full clone → configure → deposit → execute sequence is exercised in [`tests/test_simulate_vault_from_scratch_base.py`](https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/tests/test_simulate_vault_from_scratch_base.py).
 
@@ -421,9 +423,9 @@ release; adding one does not.
   and tools, not as Python modules.
 - **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`) export only
   from their own subpackages, `ipor_fusion.crosschain` (with `crosschain.fuses`,
-  `crosschain.ccip` and `crosschain.stargate`) and `ipor_fusion.hypercore`, never
+  `crosschain.ccip` and `crosschain.stargate`), `ipor_fusion.hypercore` and `ipor_fusion.lido_lend`, never
   from the top level, and keep no backward compatibility: a minor release may
-  change or remove them (see [Preview features](#preview-features-ipor_fusioncrosschain-ipor_fusionhypercore)). Their exception classes
+  change or remove them (see [Preview features](#preview-features-ipor_fusioncrosschain-ipor_fusionhypercore-ipor_fusionlido_lend)). Their exception classes
   stay in `ipor_fusion.errors`, and the `vault info` document's HyperCore blocks
   (`HyperCoreJson`, ...) stay with the document.
 - **Third-party types** are not re-exported: import `ChecksumAddress` and
@@ -490,7 +492,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
 
-### Preview features (`ipor_fusion.crosschain`, `ipor_fusion.hypercore`)
+### Preview features (`ipor_fusion.crosschain`, `ipor_fusion.hypercore`, `ipor_fusion.lido_lend`)
 
 Not production (see the note at the top) and outside the stable top level:
 import these from their subpackage. They track the current official contracts
@@ -509,6 +511,8 @@ the pilot executors and factories). Pin an exact version if you depend on them.
 | `ccip_token_lane` | Whether a CCIP message lane exists from a chain and whether a token's pool serves it, read on Chainlink's Router, OnRamp, TokenAdminRegistry and pool |
 | `decode_hypercore_event`, `hypercore_events` | The HyperCore fuse events and the pending library's `HyperCoreActionEnqueued` / `HyperCoreActionSettled`, decoded by topic with their raw log identity under the same input contract as `decode_external_state_event`; a malformed listed log raises `HyperCoreEventDecodeError` |
 | Crosschain fuses (market 54): `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse`; transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` | `ipor_fusion.crosschain` |
+| Lido Lend fuses (markets 58 and 59): `LidoLendSupplyFuse`, `LidoLendCollateralFuse`, `LidoLendBorrowFuse`, `LidoLendFlashLoanFuse`, `LidoLendSettleFuse`; `LidoLendSubstrates`, `is_collateral_word`, `min_collateral_per_supply_asset_wad` | `ipor_fusion.lido_lend` |
+| Lido Lend readers: `LidoLendReader`, `LidoLendMarketController`, `LidoLendFuseReader`, `lido_lend_core_address`, `LIDO_LEND_CORE_ADDRESSES` (the Hoodi core) | `ipor_fusion.lido_lend` |
 | HyperCore fuses (market 55): `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` | `ipor_fusion.hypercore`, with `HyperCoreReader`, `read_hypercore_vault_state`, the event decoders and `HyperCorePreHookWiring` (the capital-flow and pending-action pre-hooks on their selectors, `HYPERCORE_CAPITAL_FLOW_SELECTORS` / `HYPERCORE_PENDING_ACTION_SELECTORS`) |
 
 The crosschain API supports only the contracts of the 2026-10-21 release; earlier
@@ -518,6 +522,36 @@ take the market ID explicitly (54, or a keccak-derived one from
 reads the market's executor grants; `open_lane` takes an executor address and uses the
 market ID to find the vault's matching fuses unless they are passed.
 
+### Lido Lend (`ipor_fusion.lido_lend`, preview)
+
+Lido Lend is a Morpho Blue 1.0 fork behind a per-market controller: market 58 is the
+lending market and market 59 its flash loan market. The Fusion family targets the Hoodi
+testnet deployment only. Names may change or be removed in a minor release, with no
+backward compatibility.
+
+The five fuse encoders are `LidoLendSupplyFuse`, `LidoLendCollateralFuse`,
+`LidoLendBorrowFuse`, `LidoLendFlashLoanFuse` and `LidoLendSettleFuse`. The supply,
+collateral, borrow and flash loan fuses share the Morpho selectors; the settle fuse is
+new. `LidoLendSubstrates` builds the collateral and market substrate words, and
+`min_collateral_per_supply_asset_wad` computes the settle rate guard. The reader side is
+`LidoLendReader` (market and position reads), `LidoLendMarketController` (the per-market
+controller) and `LidoLendFuseReader`, which takes the core address from the vault's Lido
+balance fuse.
+
+Rules:
+
+- Borrowing takes two steps: activate the collateral, then borrow. It is one step only
+  if the controller grants the vault instant activation, which may never happen.
+- The market has no instant withdraw.
+- The settle guard is in collateral units per 1e18 raw loan-token units of burned supply.
+  Compute it from the vault's own price-middleware prices, not from the Lido oracle.
+  `0` disables it and is the only way to do so; pass it explicitly. `tolerance_bps` is
+  required and has no default: the core seizes collateral rounded down while the guard
+  compares against burned supply rounded up, so a minimum at exact parity can revert on
+  rounding alone. A non-zero tolerance (for example 50 bps) absorbs that rounding.
+- Judge a settle by its return values and balance deltas, not by its events: a settle
+  without progress returns zeros and emits no event.
+
 ### Readers (`ipor_fusion.readers`)
 
 Read-only aggregators over positions and health, no fuses involved:
@@ -526,7 +560,7 @@ Read-only aggregators over positions and health, no fuses involved:
 |--------|---------|
 | `MorphoReader`, `AaveV3Reader`, `CompoundV3Reader` | Market params, rates and vault positions per lending protocol |
 | `UniswapV3Reader`, `RamsesV2Reader` | LP position details |
-| `fetch_vault_lending_health` | Health factor per lending market a vault is in (Morpho, Aave V3/V4, Euler V2, Compound V3; any other market that can borrow is listed as unreadable) |
+| `fetch_vault_lending_health` | Health factor per lending market a vault is in (Morpho, Aave V3/V4, Euler V2, Compound V3, Lido Lend (preview); any other market that can borrow is listed as unreadable) |
 | `build_oracle_mapping` | How the vault prices every configured asset |
 
 ### Supported networks

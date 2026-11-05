@@ -120,15 +120,16 @@ checkout's default profile), the pending reader included.
   `commit-lint.yml` fails a PR whose commit subjects or title break it. Never
   hand-bump `project.version`; the release workflow stamps it and re-locks
   `uv.lock`.
-- Preview features (`ipor_fusion.crosschain` with its subpackages, and
-  `ipor_fusion.hypercore`) keep no backward compatibility: they follow the
-  current official contracts only, and support for retired deployments (the
-  pilot executors and factories, canaries) is removed rather than kept beside
-  them. From 4.1 on, a breaking change confined to them ships as `feat`/`fix`
-  without `!` or a `BREAKING CHANGE:` footer, so it never forces a major
-  release; anything it changes outside those packages (the top level, the
-  `vault info` document, the CLI and MCP) is still breaking by the usual rules.
-  4.0 itself keeps its MIGRATION_4.md entries for them, for 3.x users.
+- Preview features (`ipor_fusion.crosschain` with its subpackages,
+  `ipor_fusion.hypercore` and `ipor_fusion.lido_lend`) keep no backward
+  compatibility: they follow the current official contracts only, and support
+  for retired deployments (the pilot executors and factories, canaries) is
+  removed rather than kept beside them. From 4.1 on, a breaking change confined
+  to them ships as `feat`/`fix` without `!` or a `BREAKING CHANGE:` footer, so
+  it never forces a major release; anything it changes outside those packages
+  (the top level, the `vault info` document, the CLI and MCP) is still breaking
+  by the usual rules. 4.0 itself keeps its MIGRATION_4.md entries for them, for
+  3.x users.
 - This repository is public, and commit messages also ship in `CHANGELOG.md`
   inside the wheel. No issue-tracker keys (`IL-` plus a number), internal hosts,
   dashboard links or private repository names in commits, branch names, PR
@@ -171,8 +172,9 @@ checkout's default profile), the pending reader included.
   their own subpackages, never from the top level: crosschain from `crosschain`
   (`crosschain.fuses`, `crosschain.ccip`, `crosschain.stargate`), HyperCore from
   `hypercore` (which re-exports from `fuses/` and `readers/` modules; those
-  subpackages do not list them). Their exceptions stay in `errors` and the top
-  level. `ipor_fusion.guide` keeps its own namespace. The
+  subpackages do not list them), Lido Lend from `lido_lend` (the same, over
+  `fuses/lido_lend.py` and `readers/lido_lend.py`). Their exceptions stay in
+  `errors` and the top level. `ipor_fusion.guide` keeps its own namespace. The
   public modules (`about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`,
   `field_docs`, `fuse_whitelist`, `market_ids`, `market_info`, `morpho_api`, `preflight`, `registry`, `substrates`, `types`,
   `validation`, `vault_data`, `vault_info`) stay importable for the names they
@@ -289,7 +291,8 @@ checkout's default profile), the pending reader included.
   and decoders; internal modules, the ExternalState names are exported from
   `ipor_fusion.fuses`, the HyperCore ones from `ipor_fusion.hypercore`), `hypercore.py`
   (the HyperCore fuses, market 55), `hypercore_pre_hooks.py` (the `PlasmaVault` call
-  that wires their pre-hooks);
+  that wires their pre-hooks); `lido_lend.py` (the Lido Lend fuses, markets 58 and 59,
+  with `LidoLendSubstrates` and the settle rate-guard helper; preview);
   `base.py` re-exports the `core/fuse.py` base and validators,
   `FuseAction` and `ZERO_ADDRESS` (from `types`). A fuse is a value: equality and
   hash cover its class and every attribute it stores
@@ -341,9 +344,12 @@ checkout's default profile), the pending reader included.
   and oracle_mapping_reader), position_manager, aave_v3, aave_v4, compound_v3, morpho,
   ramses_v2, uniswap_v3, unpriceable (middleware-priced tokens of granted substrates
   the oracle cannot price), hypercore and hypercore_outcome (HyperCore reads and
-  transfer outcomes)
+  transfer outcomes), and `lido_lend` (the Lido Lend core reads and the controller
+  wrapper; preview)
 - `hypercore/` — the preview HyperCore names re-exported from `fuses/hypercore*.py`
   and `readers/hypercore*.py`; no code of its own
+- `lido_lend/` — the preview Lido Lend names re-exported from `fuses/lido_lend.py` and
+  `readers/lido_lend.py`; no code of its own
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`,
   `vault_cmd.py` command orchestration over `vault_data` / `vault_info`; `options.py`
   the shared `--chain-id` / address param types and chain/provider resolution;
