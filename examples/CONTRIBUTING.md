@@ -91,8 +91,8 @@ keep in sync. Keep its section order:
 4. Inlined helpers.
 5. Pure builders -- functions that construct calldata / fuse actions with no chain access, so they
    can be unit-tested offline.
-6. The simulation function -- builds, funds, executes and observes the flow in one batch, prints an
-   ordered transaction plan, then asserts the outcome.
+6. The simulation function -- builds, funds, executes and observes the flow in one batch (or more,
+   where the example says why), prints an ordered transaction plan, then asserts the outcome.
 7. `main()` plus an `if __name__ == "__main__":` guard.
 
 ## 5. Real, provenance-verified addresses
