@@ -24,6 +24,7 @@ CHAIN_NAMES: dict[ChainId, str] = {
     ChainId(3637): "botanix",
     ChainId(57073): "ink",
     ChainId(14): "flare",
+    ChainId(560048): "hoodi",
 }
 
 CHAIN_NAME_TO_ID: dict[str, ChainId] = {name: cid for cid, name in CHAIN_NAMES.items()}
