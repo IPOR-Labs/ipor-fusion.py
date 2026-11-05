@@ -599,11 +599,16 @@ def run_simulation(
     sim.add_call(
         factory.clone(**clone_args()), from_=OWNER, label="clone", gas=CLONE_GAS
     )
-    # The admin chain is OWNER -> ATOMIST -> the rest, so OWNER grants itself
-    # ATOMIST first. FUSE_MANAGER installs fuses and PRE_HOOKS_MANAGER re-wires
-    # the hooks the HyperCore fuses rely on: both are governance-grade keys
-    # (the contracts' runbook puts PRE_HOOKS_MANAGER behind a timelock).
-    # Period(0) keeps the simulation legible; production uses delays.
+    # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. OWNER
+    # administers ATOMIST, and ATOMIST the operational roles, so OWNER must
+    # self-grant ATOMIST before it can grant the ones this example needs:
+    # FUSE_MANAGER, PRICE_ORACLE_MIDDLEWARE_MANAGER, ALPHA, WHITELIST and
+    # UPDATE_MARKETS_BALANCES. PRE_HOOKS_MANAGER sits under OWNER directly.
+    #
+    # FUSE_MANAGER installs fuses and PRE_HOOKS_MANAGER re-wires the hooks the
+    # HyperCore fuses rely on: both are governance-grade keys (the contracts'
+    # runbook puts PRE_HOOKS_MANAGER behind a timelock). Period(0) keeps the
+    # simulation legible; production uses delays.
     for role, account in (
         (Roles.ATOMIST_ROLE, OWNER),
         (Roles.FUSE_MANAGER_ROLE, OWNER),
