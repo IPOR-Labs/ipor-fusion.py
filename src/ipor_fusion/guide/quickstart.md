@@ -153,4 +153,5 @@ Resolve fuse addresses by registry name and chain from `ipor-abi`
 `fusion address lookup SupplyFuseAaveV3 --chain base`, or the MCP tool
 `address_lookup` (the hosted server's `fusion_address_lookup`). The SDK class
 for a registry name swaps the parts: `SupplyFuseAaveV3` is `AaveV3SupplyFuse`.
-Then confirm the fuse is active in the chain's Fuse Whitelist (invariant 5).
+Then confirm the fuse is active in the chain's Fuse Whitelist with
+`fusion fuse whitelist` or the MCP tool `fuse_whitelist` (invariant 5).
