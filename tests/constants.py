@@ -121,6 +121,9 @@ ARBITRUM_V4_UNISWAP_V3_NEW_POSITION_FUSE = Web3.to_checksum_address(
 )
 
 # Base fuse addresses (chain 8453)
+# The pilot-era AaveV3SupplyFuse, not ipor-abi's current one: the live Base
+# vaults these tests drive have this one registered, and a vault reverts on
+# an unregistered fuse.
 BASE_AAVE_V3_SUPPLY_FUSE = Web3.to_checksum_address(
     "0x44dcb8a4c40fa9941d99f409b2948fe91b6c15d5"
 )
