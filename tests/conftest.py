@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 from _live import provider_url, unavailable
 from _multicall import SequentialMulticall
+from _rpc_cache import clear_if_requested, http_provider
 from dotenv import load_dotenv
 from web3 import Web3
 
@@ -15,6 +16,18 @@ from ipor_fusion import is_simulate_v1_supported
 load_dotenv()
 
 _EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--rpc-cache-clear",
+        action="store_true",
+        help="empty the on-disk test caches (RPC responses included) first",
+    )
+
+
+def pytest_configure(config):
+    clear_if_requested(config)
 
 
 @pytest.fixture
@@ -79,7 +92,11 @@ def pytest_collection_modifyitems(config, items):
 def _connected_web3(env_var: str) -> Web3:
     """Build a Web3 client from `env_var`; skip the test if missing/unreachable
     (fail when the run requires it, see `_live`)."""
-    w3 = Web3(Web3.HTTPProvider(provider_url(env_var)))
+    w3 = Web3(http_provider(provider_url(env_var)))
+    # web3's validation middleware reads eth_chainId before and after every
+    # eth_call to check a transaction's chainId; these clients only read and
+    # simulate, so drop it, as Web3Context.from_url does.
+    w3.middleware_onion.remove("validation")
     if not w3.is_connected():
         unavailable(env_var, f"cannot reach RPC at {env_var}")
     return w3
