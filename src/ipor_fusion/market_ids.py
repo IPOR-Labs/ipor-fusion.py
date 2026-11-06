@@ -110,6 +110,24 @@ class IporFusionMarkets:
     # the Compound V3 fuses are deployed again under this id; substrates: asset
     # addresses, as for COMPOUND_V3_USDC
     COMPOUND_V3_INSTITUTIONAL_USDC = MarketId(57)
+    # Lido Lend market: supply, collateral, borrow, settle and balance fuses on
+    # Lido's Morpho-fork lending markets. Substrate type: bytes32 word of one
+    # of two kinds, parsed and encoded only by LidoLendSubstrateLib:
+    # - market word: Id of a Lido Lend market,
+    #   keccak256(abi.encode(MarketParams)), as in Morpho market 14
+    # - collateral word: byte 0x01 in bits 255..248, zeros in bits 247..160,
+    #   collateral token address in bits 159..0; approves the token as
+    #   collateral in every granted market whose collateralToken matches
+    # Dependence graph: add an edge LIDO_LEND (58) -> ERC20_VAULT_BALANCE (7);
+    # borrow, collateral withdrawal and settle return tokens to the vault.
+    # Instant withdraw is not supported.
+    LIDO_LEND = MarketId(58)
+    # Lido Lend flash loan market; balance fuse: ZeroBalanceFuse (the loan is
+    # repaid within the same execute). Substrate type: substrate-as-asset
+    # (ERC20 token addresses granted as the flash-loan asset on the Lido Lend
+    # Morpho core). Dependence graph: add an edge LIDO_LEND_FLASH_LOAN (59) ->
+    # ERC20_VAULT_BALANCE (7).
+    LIDO_LEND_FLASH_LOAN = MarketId(59)
     # POL unstaking via sPOLController. The out-of-band id is baked into the
     # deployed fuses as an immutable (424243 = 0x67933), so it must match the
     # deployments. Substrates per IporFusionMarkets.sol: the sPOLController

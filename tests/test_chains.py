@@ -3,6 +3,7 @@
 import pytest
 
 from ipor_fusion.chains import (
+    CHAIN_NAME_TO_ID,
     CHAIN_NAMES,
     GET_LOGS_RANGE_HINTS,
     SUPPORTED_CHAIN_IDS,
@@ -65,7 +66,7 @@ def test_supported_chains():
     }
 
 
-@pytest.mark.parametrize("chain_id", [3637, 14])
+@pytest.mark.parametrize("chain_id", [3637, 14, 560048])
 def test_chains_without_validated_vaults_stay_gated(chain_id):
     with pytest.raises(UnsupportedChainError):
         ensure_supported_chain(chain_id)
@@ -94,3 +95,9 @@ def test_every_factory_chain_in_the_guide_has_its_name():
     )
     assert rows
     assert {int(cid): name.lower() for name, cid in rows}.items() <= CHAIN_NAMES.items()
+
+
+def test_hoodi_is_named_but_not_supported():
+    assert CHAIN_NAMES[560048] == "hoodi"
+    assert CHAIN_NAME_TO_ID["hoodi"] == 560048
+    assert 560048 not in SUPPORTED_CHAIN_IDS

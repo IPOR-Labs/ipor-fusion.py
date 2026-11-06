@@ -60,6 +60,16 @@ from ipor_fusion.fuses.hypercore import (
     precompile_index_of,
     system_address,
 )
+from ipor_fusion.fuses.lido_lend import (
+    LidoLendBorrowFuse,
+    LidoLendCollateralFuse,
+    LidoLendFlashLoanFuse,
+    LidoLendSettleFuse,
+    LidoLendSubstrates,
+    LidoLendSupplyFuse,
+    is_collateral_word,
+    min_collateral_per_supply_asset_wad,
+)
 from ipor_fusion.fuses.merkl import MerklClaimWrapperFuse
 from ipor_fusion.fuses.morpho import (
     MorphoBorrowFuse,
@@ -85,8 +95,9 @@ from ipor_fusion.fuses.universal import (
     UniversalTokenSwapperFuse,
     UniversalTokenSwapperSubstrates,
 )
+from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
-from ipor_fusion.types import MAX_UINT256, ZERO_ADDRESS
+from ipor_fusion.types import MAX_UINT256, ZERO_ADDRESS, MorphoBlueMarketId
 
 # Deterministic test addresses
 FUSE_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
@@ -2437,3 +2448,437 @@ class TestHyperCoreFuses:
             HyperCoreSubstrates.perp_market(1, 1 << 88)
         with pytest.raises(ValueError, match="destination"):
             HyperCoreSubstrates.destination(ZERO_ADDRESS)
+
+
+# ── Lido Lend ───────────────────────────────────────────────────────────
+#
+# Selectors and struct layouts below are the ones in the compiled artifacts of
+# the Lido Lend fuses (sol-abi.py show), not derived from the SDK's own
+# signature strings.
+
+LIDO_MARKET = MorphoBlueMarketId(
+    "0x6a1c794db6232d046223fa809c14c59be90eedeb58ba10b9ee00d36e5b8f2f35"
+)
+LIDO_MARKET_BYTES = bytes.fromhex(LIDO_MARKET.removeprefix("0x"))
+# 0x01, 11 zero bytes, then an address: the shape of a collateral word
+COLLATERAL_SHAPED_ID = MorphoBlueMarketId("0x01" + "00" * 11 + "ab" * 20)
+
+PAIR = ["bytes32", "uint256"]
+TRIPLE = ["bytes32", "uint256", "uint256"]
+
+
+class TestLidoLendSupplyFuse:
+    def test_supply(self):
+        # enter((bytes32 lidoLendMarketId, uint256 amount)) = 0x11802451
+        action = LidoLendSupplyFuse(FUSE_ADDR).supply(
+            market_id=LIDO_MARKET, amount=10_000
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == bytes.fromhex("11802451")
+        assert decode(PAIR, action.data[4:]) == (LIDO_MARKET_BYTES, 10_000)
+
+    def test_withdraw(self):
+        # exit((bytes32 lidoLendMarketId, uint256 amount)) = 0xbf1c77ee
+        action = LidoLendSupplyFuse(FUSE_ADDR).withdraw(
+            market_id=LIDO_MARKET, amount=7_000
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == bytes.fromhex("bf1c77ee")
+        assert decode(PAIR, action.data[4:]) == (LIDO_MARKET_BYTES, 7_000)
+
+    def test_withdraw_all_is_max_uint256(self):
+        action = LidoLendSupplyFuse(FUSE_ADDR).withdraw_all(market_id=LIDO_MARKET)
+        assert action.data[:4] == bytes.fromhex("bf1c77ee")
+        assert decode(PAIR, action.data[4:]) == (LIDO_MARKET_BYTES, MAX_UINT256)
+
+    def test_rejects_zero_amount_and_collateral_shaped_id(self):
+        fuse = LidoLendSupplyFuse(FUSE_ADDR)
+        with pytest.raises(ValueError, match="amount must be greater than zero"):
+            fuse.supply(market_id=LIDO_MARKET, amount=0)
+        with pytest.raises(ValueError, match="amount must be greater than zero"):
+            fuse.withdraw(market_id=LIDO_MARKET, amount=0)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.supply(market_id=COLLATERAL_SHAPED_ID, amount=1)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.withdraw_all(market_id=COLLATERAL_SHAPED_ID)
+        with pytest.raises(ValueError, match="32 bytes"):
+            fuse.supply(market_id=MorphoBlueMarketId("0x1234"), amount=1)
+
+
+class TestLidoLendCollateralFuse:
+    def test_supply_collateral(self):
+        # enter((bytes32 marketId, uint256 amount)) = 0x11802451
+        action = LidoLendCollateralFuse(FUSE_ADDR).supply_collateral(
+            market_id=LIDO_MARKET, amount=500
+        )
+        assert action.data[:4] == bytes.fromhex("11802451")
+        assert decode(PAIR, action.data[4:]) == (LIDO_MARKET_BYTES, 500)
+
+    def test_withdraw_collateral(self):
+        # exit((bytes32 marketId, uint256 amount)) = 0xbf1c77ee
+        action = LidoLendCollateralFuse(FUSE_ADDR).withdraw_collateral(
+            market_id=LIDO_MARKET, amount=300
+        )
+        assert action.data[:4] == bytes.fromhex("bf1c77ee")
+        assert decode(PAIR, action.data[4:]) == (LIDO_MARKET_BYTES, 300)
+
+    def test_withdraw_all_collateral_is_max_uint256(self):
+        action = LidoLendCollateralFuse(FUSE_ADDR).withdraw_all_collateral(
+            market_id=LIDO_MARKET
+        )
+        assert action.data[:4] == bytes.fromhex("bf1c77ee")
+        assert decode(PAIR, action.data[4:]) == (LIDO_MARKET_BYTES, MAX_UINT256)
+
+    def test_rejects_zero_amount_and_collateral_shaped_id(self):
+        fuse = LidoLendCollateralFuse(FUSE_ADDR)
+        with pytest.raises(ValueError, match="amount must be greater than zero"):
+            fuse.supply_collateral(market_id=LIDO_MARKET, amount=0)
+        with pytest.raises(ValueError, match="amount must be greater than zero"):
+            fuse.withdraw_collateral(market_id=LIDO_MARKET, amount=0)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.supply_collateral(market_id=COLLATERAL_SHAPED_ID, amount=1)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.withdraw_all_collateral(market_id=COLLATERAL_SHAPED_ID)
+
+
+class TestLidoLendBorrowFuse:
+    # enter((bytes32 marketId, uint256 assets, uint256 shares)) = 0x6f761f69
+    # exit((bytes32 marketId, uint256 assets, uint256 shares)) = 0xf25b9658
+    def test_borrow_by_assets(self):
+        action = LidoLendBorrowFuse(FUSE_ADDR).borrow(
+            market_id=LIDO_MARKET, amount=2_000
+        )
+        assert action.data[:4] == bytes.fromhex("6f761f69")
+        assert decode(TRIPLE, action.data[4:]) == (LIDO_MARKET_BYTES, 2_000, 0)
+
+    def test_borrow_by_shares(self):
+        action = LidoLendBorrowFuse(FUSE_ADDR).borrow_shares(
+            market_id=LIDO_MARKET, shares=3_000
+        )
+        assert action.data[:4] == bytes.fromhex("6f761f69")
+        assert decode(TRIPLE, action.data[4:]) == (LIDO_MARKET_BYTES, 0, 3_000)
+
+    def test_repay_by_assets(self):
+        action = LidoLendBorrowFuse(FUSE_ADDR).repay(
+            market_id=LIDO_MARKET, amount=1_500
+        )
+        assert action.data[:4] == bytes.fromhex("f25b9658")
+        assert decode(TRIPLE, action.data[4:]) == (LIDO_MARKET_BYTES, 1_500, 0)
+
+    def test_repay_by_shares(self):
+        action = LidoLendBorrowFuse(FUSE_ADDR).repay_shares(
+            market_id=LIDO_MARKET, shares=900
+        )
+        assert action.data[:4] == bytes.fromhex("f25b9658")
+        assert decode(TRIPLE, action.data[4:]) == (LIDO_MARKET_BYTES, 0, 900)
+
+    def test_repay_all_is_max_assets_and_zero_shares(self):
+        action = LidoLendBorrowFuse(FUSE_ADDR).repay_all(market_id=LIDO_MARKET)
+        assert action.data[:4] == bytes.fromhex("f25b9658")
+        assert decode(TRIPLE, action.data[4:]) == (
+            LIDO_MARKET_BYTES,
+            MAX_UINT256,
+            0,
+        )
+
+    def test_rejects_zero_and_collateral_shaped_id(self):
+        fuse = LidoLendBorrowFuse(FUSE_ADDR)
+        with pytest.raises(ValueError, match="amount must be greater than zero"):
+            fuse.borrow(market_id=LIDO_MARKET, amount=0)
+        with pytest.raises(ValueError, match="amount must be greater than zero"):
+            fuse.repay(market_id=LIDO_MARKET, amount=0)
+        with pytest.raises(ValueError, match="shares must be greater than zero"):
+            fuse.borrow_shares(market_id=LIDO_MARKET, shares=0)
+        with pytest.raises(ValueError, match="shares must be greater than zero"):
+            fuse.repay_shares(market_id=LIDO_MARKET, shares=0)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.borrow(market_id=COLLATERAL_SHAPED_ID, amount=1)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.borrow_shares(market_id=COLLATERAL_SHAPED_ID, shares=1)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.repay_shares(market_id=COLLATERAL_SHAPED_ID, shares=1)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.repay_all(market_id=COLLATERAL_SHAPED_ID)
+
+
+class TestLidoLendFlashLoanFuse:
+    # enter((address token, uint256 amount, bytes callbackFuseActionsData)) = 0xedc3c229
+    def test_flash_loan_encodes_nested_actions(self):
+        inner1 = FuseAction(fuse=FUSE_ADDR, data=b"\x01\x02")
+        inner2 = FuseAction(fuse=FUSE_ADDR_2, data=b"\x03\x04")
+        action = LidoLendFlashLoanFuse(FUSE_ADDR).flash_loan(
+            asset=TOKEN_A, amount=50_000, actions=[inner1, inner2]
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == bytes.fromhex("edc3c229")
+        ((asset, amount, inner_bytes),) = decode(
+            ["(address,uint256,bytes)"], action.data[4:]
+        )
+        assert asset.lower() == TOKEN_A_LOW
+        assert amount == 50_000
+        (decoded_actions,) = decode(["(address,bytes)[]"], inner_bytes)
+        assert [(a.lower(), d) for a, d in decoded_actions] == [
+            (FUSE_ADDR_LOW, b"\x01\x02"),
+            (FUSE_ADDR_2_LOW, b"\x03\x04"),
+        ]
+
+    def test_flash_loan_empty_actions(self):
+        action = LidoLendFlashLoanFuse(FUSE_ADDR).flash_loan(
+            asset=TOKEN_A, amount=100, actions=[]
+        )
+        ((_, _, inner_bytes),) = decode(["(address,uint256,bytes)"], action.data[4:])
+        assert decode(["(address,bytes)[]"], inner_bytes) == ((),)
+
+    def test_rejects_zero_amount_and_zero_asset(self):
+        fuse = LidoLendFlashLoanFuse(FUSE_ADDR)
+        with pytest.raises(ValueError, match="amount must be greater than zero"):
+            fuse.flash_loan(asset=TOKEN_A, amount=0, actions=[])
+        with pytest.raises(ValueError, match="asset"):
+            fuse.flash_loan(asset=ZERO_ADDRESS, amount=1, actions=[])
+
+
+class TestLidoLendSettleFuse:
+    # enter((bytes32 marketId, address borrower, uint256 supplySharesBudget,
+    #        uint256 maxIterations, uint256 minCollateralPerSupplyAssetWad))
+    # = 0xa58c350e
+    SETTLE = ["bytes32", "address", "uint256", "uint256", "uint256"]
+
+    def test_queue_root(self):
+        action = LidoLendSettleFuse(FUSE_ADDR).settle_queue_root(
+            market_id=LIDO_MARKET,
+            supply_shares_budget=1_000,
+            max_iterations=5,
+            min_collateral_per_supply_asset_wad=815,
+        )
+        assert action.fuse == FUSE_ADDR
+        assert action.data[:4] == bytes.fromhex("a58c350e")
+        market, borrower, budget, iterations, minimum = decode(
+            self.SETTLE, action.data[4:]
+        )
+        assert market == LIDO_MARKET_BYTES
+        assert int(borrower, 16) == 0
+        assert (budget, iterations, minimum) == (1_000, 5, 815)
+
+    def test_personal_mode_sends_one_iteration(self):
+        action = LidoLendSettleFuse(FUSE_ADDR).settle_borrower(
+            market_id=LIDO_MARKET,
+            borrower=TOKEN_B,
+            supply_shares_budget=2_000,
+            min_collateral_per_supply_asset_wad=0,
+        )
+        assert action.data[:4] == bytes.fromhex("a58c350e")
+        market, borrower, budget, iterations, minimum = decode(
+            self.SETTLE, action.data[4:]
+        )
+        assert market == LIDO_MARKET_BYTES
+        assert borrower.lower() == TOKEN_B_LOW
+        assert (budget, iterations) == (2_000, 1)
+        assert minimum == 0  # an explicit 0 disables the guard
+
+    def test_explicit_zero_guard_encodes_zero_on_queue_root(self):
+        action = LidoLendSettleFuse(FUSE_ADDR).settle_queue_root(
+            market_id=LIDO_MARKET,
+            supply_shares_budget=1,
+            max_iterations=1,
+            min_collateral_per_supply_asset_wad=0,
+        )
+        assert decode(TestLidoLendSettleFuse.SETTLE, action.data[4:])[4] == 0
+
+    def test_rejections(self):
+        fuse = LidoLendSettleFuse(FUSE_ADDR)
+        base = {
+            "market_id": LIDO_MARKET,
+            "supply_shares_budget": 1,
+            "min_collateral_per_supply_asset_wad": 1,
+        }
+        with pytest.raises(ValueError, match="supply_shares_budget must be greater"):
+            fuse.settle_queue_root(
+                **{**base, "supply_shares_budget": 0}, max_iterations=1
+            )
+        with pytest.raises(ValueError, match="max_iterations must be greater"):
+            fuse.settle_queue_root(**base, max_iterations=0)
+        with pytest.raises(ValueError, match="must not be negative"):
+            fuse.settle_queue_root(
+                **{**base, "min_collateral_per_supply_asset_wad": -1},
+                max_iterations=1,
+            )
+        with pytest.raises(ValueError, match="supply_shares_budget must be greater"):
+            fuse.settle_borrower(
+                **{**base, "supply_shares_budget": 0}, borrower=TOKEN_B
+            )
+        with pytest.raises(ValueError, match="borrower"):
+            fuse.settle_borrower(**base, borrower=ZERO_ADDRESS)
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.settle_borrower(
+                **{**base, "market_id": COLLATERAL_SHAPED_ID}, borrower=TOKEN_B
+            )
+        with pytest.raises(ValueError, match="collateral word"):
+            fuse.settle_queue_root(
+                **{**base, "market_id": COLLATERAL_SHAPED_ID}, max_iterations=1
+            )
+
+
+class TestLidoLendSubstrates:
+    def test_collateral_word_layout(self):
+        word = LidoLendSubstrates.collateral(TOKEN_A)
+        assert word == b"\x01" + b"\x00" * 11 + bytes.fromhex("aa" * 20)
+        assert is_collateral_word(word)
+        info = decode_substrate(word, IporFusionMarkets.LIDO_LEND)
+        assert info.type_label == "COLLATERAL"
+        assert info.address is not None
+        assert info.address.lower() == TOKEN_A_LOW
+
+    def test_market_word_round_trip(self):
+        word = LidoLendSubstrates.market(LIDO_MARKET)
+        assert word == LIDO_MARKET_BYTES
+        assert not is_collateral_word(word)
+        info = decode_substrate(word, IporFusionMarkets.LIDO_LEND)
+        assert info.type_label == "lido_lend_market_id"
+        assert info.raw_hex == LIDO_MARKET
+
+    def test_market_with_nonzero_middle_is_a_market_word(self):
+        word = bytes([1]) + b"\x00" * 10 + b"\x01" + bytes.fromhex("ab" * 20)
+        assert not is_collateral_word(word)
+        info = decode_substrate(word, IporFusionMarkets.LIDO_LEND)
+        assert info.type_label == "lido_lend_market_id"
+        assert LidoLendSubstrates.market(MorphoBlueMarketId("0x" + word.hex())) == word
+
+    def test_rejections(self):
+        with pytest.raises(ValueError, match="collateral word"):
+            LidoLendSubstrates.market(COLLATERAL_SHAPED_ID)
+        with pytest.raises(ValueError, match="token"):
+            LidoLendSubstrates.collateral(ZERO_ADDRESS)
+        assert not is_collateral_word(b"\x01" * 5)
+
+
+class TestMinCollateralPerSupplyAssetWad:
+    def test_parity_with_equal_decimals(self):
+        assert (
+            min_collateral_per_supply_asset_wad(
+                loan_price=3_000,
+                collateral_price=3_000,
+                loan_decimals=18,
+                collateral_decimals=18,
+                tolerance_bps=0,
+            )
+            == 10**18
+        )
+
+    def test_tolerance_is_required(self):
+        with pytest.raises(TypeError, match="tolerance_bps"):
+            min_collateral_per_supply_asset_wad(  # type: ignore[call-arg]
+                loan_price=1,
+                collateral_price=1,
+                loan_decimals=18,
+                collateral_decimals=18,
+            )
+
+    def test_parity_settle_with_rounding_needs_tolerance(self):
+        # Contracts example: wstETH priced 1.22x the loan token, 18 decimals.
+        # The core seizes rounded down and the fuse's guard divides by the burned
+        # supply rounded up, so the realised rate falls below the parity minimum.
+        debt = 10**18
+        oracle_price = 122 * 10**34
+        seized = debt * 10**36 // oracle_price
+        burned_up = debt + 1
+        realised = seized * 10**18 // burned_up
+        kwargs = {
+            "loan_price": 100,
+            "collateral_price": 122,
+            "loan_decimals": 18,
+            "collateral_decimals": 18,
+        }
+        parity = min_collateral_per_supply_asset_wad(**kwargs, tolerance_bps=0)
+        assert parity == 819_672_131_147_540_983
+        assert realised == 819_672_131_147_540_982
+        assert parity > realised  # the guard would revert at tolerance 0
+        assert min_collateral_per_supply_asset_wad(**kwargs, tolerance_bps=50) <= (
+            realised
+        )
+
+    def test_readme_example_weth_loan_wsteth_collateral(self):
+        # wstETH priced 1.22x WETH: about 0.8197e18, with 50 bps about 0.8156e18
+        kwargs = {
+            "loan_price": 2_000 * 10**8,
+            "collateral_price": 2_440 * 10**8,
+            "loan_decimals": 18,
+            "collateral_decimals": 18,
+            "tolerance_bps": 0,
+        }
+        assert min_collateral_per_supply_asset_wad(**kwargs) == 819_672_131_147_540_983
+        assert (
+            min_collateral_per_supply_asset_wad(**{**kwargs, "tolerance_bps": 50})
+            == 815_573_770_491_803_278
+        )
+
+    def test_different_decimals(self):
+        # loan 18 decimals, collateral 6 decimals, equal prices
+        assert (
+            min_collateral_per_supply_asset_wad(
+                loan_price=1,
+                collateral_price=1,
+                loan_decimals=18,
+                collateral_decimals=6,
+                tolerance_bps=0,
+            )
+            == 10**6
+        )
+        # loan 6 decimals, collateral 18 decimals
+        assert (
+            min_collateral_per_supply_asset_wad(
+                loan_price=1,
+                collateral_price=1,
+                loan_decimals=6,
+                collateral_decimals=18,
+                tolerance_bps=0,
+            )
+            == 10**30
+        )
+
+    def test_tolerance_bounds(self):
+        kwargs = {
+            "loan_price": 1,
+            "collateral_price": 1,
+            "loan_decimals": 18,
+            "collateral_decimals": 18,
+        }
+        assert min_collateral_per_supply_asset_wad(**kwargs, tolerance_bps=0) == 10**18
+        assert (
+            min_collateral_per_supply_asset_wad(**kwargs, tolerance_bps=9_999) == 10**14
+        )
+        with pytest.raises(ValueError, match="tolerance_bps"):
+            min_collateral_per_supply_asset_wad(**kwargs, tolerance_bps=10_000)
+        with pytest.raises(ValueError, match="tolerance_bps"):
+            min_collateral_per_supply_asset_wad(**kwargs, tolerance_bps=-1)
+
+    def test_rejects_bad_prices_and_decimals(self):
+        ok = {"loan_price": 1, "collateral_price": 1, "tolerance_bps": 0}
+        with pytest.raises(ValueError, match="prices"):
+            min_collateral_per_supply_asset_wad(
+                **{**ok, "loan_price": 0}, loan_decimals=18, collateral_decimals=18
+            )
+        with pytest.raises(ValueError, match="prices"):
+            min_collateral_per_supply_asset_wad(
+                **{**ok, "collateral_price": 0},
+                loan_decimals=18,
+                collateral_decimals=18,
+            )
+        with pytest.raises(ValueError, match="decimals"):
+            min_collateral_per_supply_asset_wad(
+                **ok, loan_decimals=-1, collateral_decimals=18
+            )
+        with pytest.raises(ValueError, match="decimals"):
+            min_collateral_per_supply_asset_wad(
+                **ok, loan_decimals=18, collateral_decimals=-1
+            )
+
+    def test_rejects_a_result_that_rounds_to_zero(self):
+        # the fuse treats 0 as "guard off"; the helper must not produce it
+        with pytest.raises(ValueError, match="rounds down to zero"):
+            min_collateral_per_supply_asset_wad(
+                loan_price=1,
+                collateral_price=100_000,
+                loan_decimals=18,
+                collateral_decimals=6,
+                tolerance_bps=9_999,
+            )
