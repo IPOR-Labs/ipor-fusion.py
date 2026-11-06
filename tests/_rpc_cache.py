@@ -183,10 +183,12 @@ def endpoint_key(endpoint_uri: Any) -> str | None:
 
 
 def _is_local(host: str) -> bool:
+    host = host.rstrip(".")  # `anvil.` is `anvil`, fully qualified
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
-        # Checked after the address: an IPv6 literal has no dot either.
+        # A name, not an IP literal (an IPv6 one has no dot either): one
+        # without a dot is a single label.
         return "." not in host or host.endswith(".localhost")
     return not address.is_global
 
