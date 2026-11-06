@@ -306,20 +306,23 @@ def run_simulation(web3: Web3) -> SimulationResult:
         slot=erc20_balance_slot(web3, ETHEREUM_USDC, block=PINNED_BLOCK),
     )
 
-    # The clone MUST be the first queued call -- any earlier call that bumps the
-    # factory index would change the addresses previewed above.
+    # The clone MUST be the first queued call. The sub-factories deploy each
+    # component with plain CREATE (`Clones.clone`), so its address follows the
+    # sub-factory's nonce, not the clone's arguments: any earlier call that makes
+    # them deploy anything shifts every address previewed above.
     sim.add_call(
         call=factory.clone(**clone_args()), from_=OWNER, label="clone", gas=CLONE_GAS
     )
     plan.append("deploy the vault stack (clone)")
 
-    # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. The admin
-    # chain is OWNER -> ATOMIST -> {ALPHA, FUSE_MANAGER, WHITELIST,
-    # UPDATE_MARKETS_BALANCES}, so OWNER must self-grant ATOMIST before it can
-    # grant the rest. Each grant uses Period(0) (no execution delay) to keep the
-    # simulation legible; production governance often puts a nonzero delay -- a
-    # timelock -- on the sensitive roles. ALPHA must stay a separate address from
-    # OWNER in production: a compromised alpha key must not equal governance.
+    # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. OWNER
+    # administers ATOMIST, and ATOMIST the operational roles, so OWNER must
+    # self-grant ATOMIST before it can grant the ones this example needs:
+    # FUSE_MANAGER, ALPHA and WHITELIST. Each grant uses Period(0) (no execution
+    # delay) to keep the simulation legible; production governance often puts a
+    # nonzero delay -- a timelock -- on the sensitive roles. ALPHA must stay a
+    # separate address from OWNER in production: a compromised alpha key must not
+    # equal governance.
     for role, holder in (
         (Roles.ATOMIST_ROLE, OWNER),
         (Roles.FUSE_MANAGER_ROLE, OWNER),

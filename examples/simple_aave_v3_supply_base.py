@@ -105,11 +105,11 @@ BASE_AAVE_V3_BALANCE_FUSE = parse_fuse_address(
 #               or multisig. (A fresh clone forces OWNER to self-grant ATOMIST,
 #               so owner and atomist coincide during bootstrap; in production the
 #               atomist may be delegated to a separate address.)
-#   ALPHA    -- the online operator; drives execute() and refreshes market
-#               balances (update_markets_balances), and nothing else --
-#               least-privilege, it cannot reconfigure the vault. Collapsing it
-#               into OWNER means a compromised alpha key becomes full governance
-#               control.
+#   ALPHA    -- the online operator; drives execute(), refreshes market
+#               balances (update_markets_balances) and releases withdrawal
+#               requests (WithdrawManager.releaseFunds) -- least-privilege, it
+#               cannot reconfigure the vault. Collapsing it into OWNER means a
+#               compromised alpha key becomes full governance control.
 #   DEPOSITOR-- an end user; only ever holds and deposits funds.
 
 # Governance/atomist. Any address; here it happens to be a random EOA.
@@ -242,7 +242,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     factory = FusionFactory(BASE_FUSION_FACTORY)
 
-    # 1. Preview the deterministic addresses (eth_call, no gas, no state change).
+    # 1. Predict the stack's addresses (eth_call, no gas, no state change). The
+    #    prediction holds only if no other clone lands first; see below.
     preview = factory.clone(**clone_args()).call(ctx)
     log.info(
         "predicted vault=%s access_manager=%s price_manager=%s (index=%d)",
@@ -266,29 +267,41 @@ def run_simulation(web3: Web3) -> SimulationResult:
     #     (or X.calldata to a multisig / timelock).
     #   - sim.execute([action]) -> plasma_vault.execute([action]).send(ctx) by the alpha.
     #   - read = sim.observe(X), then read.value -> X.call(ctx), a plain read.
+    # SIMULATION ONLY (per-call senders): `from_` lets one process act as all three
+    # actors, because in simulation they are addresses with no keys. In production
+    # they are three separate signers on separate systems, and that separation is
+    # what keeps a compromised alpha key from becoming governance.
     sim = VaultSimulator(
         web3=web3, vault=preview.plasma_vault, alpha=ALPHA, block=PINNED_BLOCK
     )
     plan: list[str] = []
 
-    # The clone MUST be the first queued call -- any earlier call that bumps the
-    # factory index would change the addresses we previewed above.
+    # The clone MUST be the first queued call. The sub-factories deploy each
+    # component with plain CREATE (`Clones.clone`), so its address follows the
+    # sub-factory's nonce, not the clone's arguments: any earlier call that makes
+    # them deploy anything shifts every address previewed above.
     sim.add_call(call=factory.clone(**clone_args()), from_=OWNER, label="clone")
     plan.append("deploy the vault stack (clone)")
 
-    # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. The admin
-    # chain is OWNER -> ATOMIST -> {ALPHA, FUSE_MANAGER, WHITELIST,
-    # UPDATE_MARKETS_BALANCES}, so OWNER must self-grant ATOMIST before it can
-    # grant the rest. OWNER is its OWN admin -- nothing sits above it, ADMIN_ROLE
-    # included -- so it is the root of the vault, and a lost owner key has no
-    # higher authority to recover it.
+    # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. OWNER
+    # administers ATOMIST, and ATOMIST the operational roles, so OWNER must
+    # self-grant ATOMIST before it can grant the ones this example needs: ALPHA,
+    # FUSE_MANAGER, WHITELIST and UPDATE_MARKETS_BALANCES. OWNER is its own
+    # admin, and `clone` leaves ADMIN_ROLE -- the one role that could re-point
+    # it -- unheld: OWNER is the root of the vault, and a lost owner key has no
+    # higher authority to recover it. (`cloneSupervised` gives ADMIN_ROLE to its
+    # caller.) Role admins: ipor.io/docs -> build-on-fusion -> atomists ->
+    # vault-configuration-step-by-step -> access-management. ADMIN_ROLE on a
+    # clone: ipor-fusion, contracts/factory/lib/FusionFactoryLogicLib.sol,
+    # _resolveAdmins.
     sim.add_call(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,
     )
-    # FUSE_MANAGER can install fuses, and a malicious fuse can drain the vault --
-    # it is as sensitive as ATOMIST. Colocating it on the owner is fine; delegate
-    # it only to an equally-protected key (multisig/timelock), never an online one.
+    # FUSE_MANAGER installs fuses, and a malicious fuse can drain the vault: it is
+    # as sensitive as ATOMIST. Colocating it on the owner adds no power the owner
+    # lacks; the documented preference is a dedicated time-locked account, since
+    # fuses shape the strategy. Never an online key.
     sim.add_call(
         call=access_manager.grant_role(Roles.FUSE_MANAGER_ROLE, OWNER, Period(0)),
         from_=OWNER,

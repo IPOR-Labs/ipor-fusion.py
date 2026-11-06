@@ -6,11 +6,11 @@ Clone addresses depend on the factory's CREATE nonces, so we preview `clone(...)
 via eth_call to learn them, then queue the real `clone(...)` as the FIRST call in
 the atomic simulation batch. A live deployment must use receipt events instead.
 
-Governance bootstrap: a fresh clone grants the `owner` param only OWNER_ROLE. The
-role-admin chain is ADMIN → OWNER → ATOMIST → {ALPHA, FUSE_MANAGER, WHITELIST,
-UPDATE_MARKETS_BALANCES}, so OWNER must grant itself ATOMIST *before* it can grant
-FUSE_MANAGER. A fresh clone is also WHITELIST-gated (not public), so the depositor needs
-WHITELIST.
+Governance bootstrap: a fresh clone grants the `owner` param only OWNER_ROLE. OWNER
+administers ATOMIST, and ATOMIST the operational roles, so OWNER must grant itself
+ATOMIST *before* it can grant the ones this test needs: ALPHA, FUSE_MANAGER, WHITELIST
+and UPDATE_MARKETS_BALANCES. A fresh clone is also WHITELIST-gated (not public), so the
+depositor needs WHITELIST.
 
 `total_assets_in_market` is a *cached* value refreshed by the post-execute hook;
 advancing block.timestamp alone won't move it. After the +1y block we call

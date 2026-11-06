@@ -18,10 +18,10 @@ from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 
+from ipor_fusion import CUSTOM_ERRORS
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
-from ipor_fusion.fuses import ExternalStateSubstrates
 from ipor_fusion.types import MAX_UINT256, Amount
 
 Loader = Callable[[str], ModuleType]
@@ -373,18 +373,15 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
             (guard,) = by_type[type_tag]
             assert int.from_bytes(guard[1:], "big") == expected
 
-    def test_mandatory_guard_encoders_reject_zero(self) -> None:
-        # The executor reads a zero STALENESS_MAX or BIG_CHANGE_BPS as "unset"
-        # and refuses to build its substrate cache, which happens inside the
-        # first enter -- so a zero would fail far from its cause. Assert the
-        # encoder is what stops it (checking the example's own constants would
-        # be tautological: market_substrates() could not have built them).
-        for encoder in (
-            ExternalStateSubstrates.staleness_max,
-            ExternalStateSubstrates.big_change_bps,
-        ):
-            with pytest.raises(ValueError, match="must not be zero"):
-                encoder(0)
+    def test_venue_pnl_is_positive_and_inside_big_change_bps(self) -> None:
+        # A zero PnL makes the confirm re-attest what the enter booked, and the
+        # simulated run would not show the balance fuse moving NAV.
+        assert self.mod.VENUE_PNL > 0
+        assert self.mod.ATTESTED_AMOUNT == self.mod.MARGIN_AMOUNT + self.mod.VENUE_PNL
+        # The example's claim: the 2% move stays inside BIG_CHANGE_BPS.
+        assert self.mod.VENUE_PNL * 10_000 < (
+            self.mod.BIG_CHANGE_BPS * self.mod.MARGIN_AMOUNT
+        )
 
     def test_actor_addresses_are_pairwise_distinct(self) -> None:
         # Collapsing ALPHA into OWNER -- the anti-pattern this example spends
@@ -536,14 +533,14 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
         with pytest.raises(AssertionError, match="no simulated call labeled"):
             self.mod._logs_of(result, "confirm")
 
-    def test_proposal_hash_mismatch_selector_is_the_real_one(self) -> None:
-        # The example hand-writes this error signature and only the RPC-gated run
-        # consumes it, so a typo would surface as "reverted for the wrong reason"
-        # against a live provider and nowhere else. Derive it here independently.
-        assert self.mod.PROPOSAL_HASH_MISMATCH_SELECTOR == (
-            function_signature_to_4byte_selector(
-                "ExternalStateExecutorProposalHashMismatch(bytes32,bytes32)"
-            )
+    def test_proposal_hash_mismatch_selector_is_a_contracts_error(self) -> None:
+        # Looked up in the error registry generated from the contracts' source,
+        # so a selector of no contract error, or of another one, fails offline
+        # instead of as "reverted for the wrong reason" in the RPC-gated run.
+        # That the deployed executor raises it is shown only by that run.
+        assert CUSTOM_ERRORS.get(self.mod.PROPOSAL_HASH_MISMATCH_SELECTOR) == (
+            "ExternalStateExecutorProposalHashMismatch",
+            ("bytes32", "bytes32"),
         )
         # bytes32, so a shorter literal would encode as a different proposal.
         assert len(self.mod.WRONG_PROPOSAL_HASH) == 32

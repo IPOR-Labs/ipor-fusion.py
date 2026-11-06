@@ -20,8 +20,9 @@ This example shows the whole lifecycle an alpha drives, end to end:
   6. a user deposits USDC;
   7. the alpha enters the market: USDC moves vault -> executor -> venue, and the
      executor books it against a balance account;
-  8. custodian A proposes the off-venue value, custodian B confirms it, and the
-     alpha refreshes the vault's cached NAV;
+  8. the position earns PnL at the venue; custodian A proposes its value,
+     custodian B confirms it, and the alpha refreshes the vault's cached NAV,
+     which moves by that PnL;
   9. the user files a scheduled-withdrawal request;
  10. the alpha exits the market -- the venue returns the cash, the executor hands
      it back to the vault -- and releases funds for that request;
@@ -30,7 +31,7 @@ This example shows the whole lifecycle an alpha drives, end to end:
 A scheduled withdrawal takes three steps and two parties: the user calls
 ``requestShares``, the alpha calls ``releaseFunds`` once the money is back, and
 the user then calls ``redeemFromRequest`` to take it. Steps 9 and 10 above are
-the first two. The two-step shape exists for exactly the situation modelled
+the first two. The two-step shape exists for exactly the situation modeled
 here -- the vault's assets are not all in the vault, so the request is what
 gives the alpha notice and time to unwind the venue position.
 
@@ -161,8 +162,9 @@ BASE_EXTERNAL_STATE_BALANCE_FUSE = parse_fuse_address(
 #                 every substrate grant below. A cold key or multisig. (A fresh
 #                 clone forces OWNER to self-grant ATOMIST, so owner and atomist
 #                 coincide during bootstrap.)
-#   ALPHA      -- the online operator; drives execute() and refreshes market
-#                 balances, and nothing else. Collapsing it into OWNER means a
+#   ALPHA      -- the online operator; drives execute(), refreshes market
+#                 balances and releases withdrawal requests
+#                 (WithdrawManager.releaseFunds). Collapsing it into OWNER means a
 #                 compromised alpha key becomes full governance control -- and
 #                 the TARGET grant below makes that especially costly here.
 #   DEPOSITOR  -- an end user; only ever holds, deposits and requests funds.
@@ -193,7 +195,7 @@ CUSTODIAN_B = parse_checksum_address("0x90F79bf6EB2c4f870365E785982E1f101E93b906
 #
 # VENUE_BALANCE_ACCOUNT is a label. No money is ever sent to it. It is the key of
 # a mapping on the executor, granted as the BALANCE_ACCOUNT substrate, and the
-# address the custodians name when they attest "this bucket holds 900 USDC".
+# address the custodians name when they attest "this bucket holds 918 USDC".
 # On a venue that credits deposits by sender, the natural label is the EXECUTOR's
 # own address, since that is the identity the venue assigns -- which needs
 # createExecutor() and syncSubstrates() before the first enter, so this example
@@ -228,6 +230,13 @@ PINNED_BLOCK = 51169852  # Base, ~2026-09-11
 DEPOSIT_AMOUNT = Amount(1_000_000_000)  # 1,000 USDC (6 decimals)
 # What the alpha parks at the venue. The rest stays idle in the vault.
 MARGIN_AMOUNT = Amount(900_000_000)  # 900 USDC
+# What the position earns at the venue before the custodians attest it; they
+# attest the margin plus this. The attestation has to differ from what the enter
+# booked: an attestation of MARGIN_AMOUNT alone would leave NAV where it already
+# is, and prove nothing about the balance fuse carrying a new value into it. 2%
+# of the margin stays inside BIG_CHANGE_BPS.
+VENUE_PNL = Amount(18_000_000)  # 18 USDC
+ATTESTED_AMOUNT = Amount(MARGIN_AMOUNT + VENUE_PNL)  # 918 USDC
 # What the depositor asks to withdraw on the scheduled path.
 WITHDRAW_REQUEST_AMOUNT = Amount(500_000_000)  # 500 USDC
 # NAV must be conserved across the round trip up to oracle-conversion dust.
@@ -520,7 +529,8 @@ def market_substrates() -> list[bytes]:
 
     That is the concrete reason the alpha key here is hot, least-privilege, and
     must never share an address with the owner/atomist: the alpha can move the
-    parked asset, and only the atomist decides which asset that is.
+    parked asset, and only FUSE_MANAGER (administered by the atomist) decides
+    which asset that is.
 
     (Margining in an asset the vault does not otherwise hold would narrow the
     blast radius to whatever is on hand in that asset -- but only while no
@@ -590,13 +600,16 @@ def build_exit_action(amount: Amount) -> FuseAction:
     the executor before it can hand them over, and it is the venue -- not the
     vault -- that sends them (see the staging step in ``run_simulation``).
 
-    Exiting the exact amount that was entered works only because the whole run
-    reads one block's state: ``next_block`` moves ``block.timestamp`` but not the
-    price feed's stored answer, so enter and exit convert through an identical
-    USDC price and the tracked balance matches to the unit. Against a real chain
-    the two conversions straddle a price update, the exit's value can round above
-    what the enter booked, and ``removeBalance`` reverts -- so production exits
-    the tracked balance it reads back, or leaves a small buffer.
+    The executor tracks the balance in underlying units, and the exit converts
+    ``amount`` of ``asset`` into them through the price oracle, whose prices
+    carry 18 decimals, so for USDC the conversion floors twice and is exact
+    only when ``amount * price`` is a multiple of 10**6. The attested amount
+    here is whole USDC, so exiting it empties the tracked balance to the unit;
+    a fractional one can leave a unit behind. With an asset other than the
+    underlying the two prices move independently, the converted value can round
+    above what the executor tracks, and ``removeBalance`` reverts. Either way,
+    an exit meant to empty the balance is sized from the tracked balance read
+    back at the exit's block, or leaves a small buffer.
     """
     return ExternalStateOperationFuse(BASE_EXTERNAL_STATE_OPERATION_FUSE).exit(
         asset=BASE_USDC,
@@ -634,6 +647,7 @@ class _Reads(NamedTuple):
     executor_nonce: SimulationObservation[int]
     tracked_after_confirm: SimulationObservation[Amount]
     last_updated_after_confirm: SimulationObservation[Timestamp]
+    market_value_before_refresh: SimulationObservation[Amount]
     market_value_after_confirm: SimulationObservation[Amount]
     total_assets_after_confirm: SimulationObservation[Amount]
     request_after_filing: SimulationObservation[WithdrawRequestInfo]
@@ -662,26 +676,30 @@ def _queue_bootstrap(
     identical -- the executor address the discovery pass learns is only valid for
     the lifecycle batch if nothing before the enter differs.
     """
-    # The clone MUST be the first queued call. Each component is deployed with
-    # `Clones.clone` -- plain CREATE -- so its address is a function of the
-    # deploying sub-factory's NONCE, not of the arguments: any earlier call that
-    # made those factories deploy anything would shift every address previewed
-    # in run_simulation.
+    # The clone MUST be the first queued call. The sub-factories deploy each
+    # component with plain CREATE (`Clones.clone`), so its address follows the
+    # sub-factory's nonce, not the clone's arguments: any earlier call that makes
+    # them deploy anything shifts every address previewed in run_simulation.
     sim.add_call(call=factory.clone(**clone_args()), from_=OWNER, label="clone")
     plan.append("deploy the vault stack (clone)")
 
-    # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. The admin
-    # chain is OWNER -> ATOMIST -> {ALPHA, FUSE_MANAGER, WHITELIST,
-    # UPDATE_MARKETS_BALANCES}, so OWNER must self-grant ATOMIST before it can
-    # grant the rest. OWNER is its OWN admin -- nothing sits above it, ADMIN_ROLE
-    # included -- which is what makes the owner key the root of the vault and
-    # worth the 14-day delay production puts on it.
+    # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. OWNER
+    # administers ATOMIST, and ATOMIST the operational roles, so OWNER must
+    # self-grant ATOMIST before it can grant the ones this example needs: ALPHA,
+    # FUSE_MANAGER, WHITELIST and UPDATE_MARKETS_BALANCES. OWNER is its own
+    # admin, and `clone` leaves ADMIN_ROLE -- the one role that could re-point
+    # it -- unheld: OWNER is the root of the vault, and a lost owner key has no
+    # higher authority to recover it. (`cloneSupervised` gives ADMIN_ROLE to its
+    # caller.) Role admins: ipor.io/docs -> build-on-fusion -> atomists ->
+    # vault-configuration-step-by-step -> access-management. ADMIN_ROLE on a
+    # clone: ipor-fusion, contracts/factory/lib/FusionFactoryLogicLib.sol,
+    # _resolveAdmins.
     #
     # Every grant here passes Period(0) -- no execution delay -- to keep the
     # simulation legible. Production differs per role: 14 days on OWNER, 3 days
     # on ATOMIST, 0 on GUARDIAN so it can cancel a queued malicious action
     # instantly. Delays can be raised at once but only lowered after the full
-    # notice period. Figures from docs.ipor.io -> build-on-fusion -> atomists ->
+    # notice period. Figures from ipor.io/docs -> build-on-fusion -> atomists ->
     # vault-configuration-step-by-step -> timelocks-and-execution-delays.
     #
     # A delayed role does not merely wait: it must schedule() an operation and
@@ -691,11 +709,10 @@ def _queue_bootstrap(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,
     )
-    # FUSE_MANAGER installs fuses, and a malicious fuse can drain the vault -- it
-    # is as sensitive as ATOMIST. Colocating it on the owner adds no power the
-    # owner lacks, which is why it is safe here; the documented preference is
-    # still a dedicated time-locked account, since fuses shape the strategy.
-    # Either way, never an online key.
+    # FUSE_MANAGER installs fuses, and a malicious fuse can drain the vault: it is
+    # as sensitive as ATOMIST. Colocating it on the owner adds no power the owner
+    # lacks; the documented preference is a dedicated time-locked account, since
+    # fuses shape the strategy. Never an online key.
     sim.add_call(
         call=access_manager.grant_role(Roles.FUSE_MANAGER_ROLE, OWNER, Period(0)),
         from_=OWNER,
@@ -746,7 +763,7 @@ def _queue_bootstrap(
     # Two mechanisms, and the difference decides what a revocation actually
     # does. The operation fuse reads TARGET, ASSET and BALANCE_ACCOUNT LIVE from
     # the vault on every call, so those grants take effect and stop taking
-    # effect the instant the atomist changes them. The executor additionally
+    # effect the instant FUSE_MANAGER re-grants the set. The executor additionally
     # keeps its own CACHE -- the custodian list, the balance accounts, the
     # dust-checked assets, the guard values -- populated at deployment and
     # refreshed only by syncSubstrates() on the executor.
@@ -881,7 +898,9 @@ def run_simulation(web3: Web3) -> SimulationResult:
 
     factory = FusionFactory(BASE_FUSION_FACTORY)
 
-    # 1. Preview the deterministic addresses (eth_call, no gas, no state change).
+    # 1. Predict the stack's addresses (eth_call, no gas, no state change). The
+    #    prediction holds only if no other clone lands first; see
+    #    _queue_bootstrap.
     preview = factory.clone(**clone_args()).call(ctx)
     log.info(
         "predicted vault=%s access_manager=%s withdraw_manager=%s (index=%d)",
@@ -953,7 +972,21 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # can be compared.
     tracked_after_enter = sim.observe(executor.balances(VENUE_BALANCE_ACCOUNT))
 
+    # ── The position earns PnL at the venue ──────────────────────────────────
+    # SIMULATION ONLY (venue PnL): the position earned VENUE_PNL while it sat at
+    # the venue. Nothing on Base trades it, so the whale pays the venue address
+    # directly. In production no transaction does this: the custodians read the
+    # grown position off the venue, and their attestation is how NAV learns it.
+    sim.next_block().with_block_time_shift(PROPOSE_OFFSET)
+    sim.add_call(
+        call=usdc.transfer(VENUE_DEPOSIT_ADDRESS, VENUE_PNL), from_=BASE_USDC_WHALE
+    )
+    plan.append("the venue position earns 18 USDC")
+
     # ── Custodian A proposes the off-venue value ─────────────────────────────
+    # The propose runs in the block opened above, at PROPOSE_OFFSET, which
+    # proposed_at below is computed from.
+    #
     # Two calls, from two addresses, is the production shape: custodian A's
     # service proposes, custodian B's service confirms, and neither can do the
     # other's half. That is the entire security property of this market.
@@ -962,13 +995,12 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # driven from this one process. In a real deployment they live in separate
     # systems -- if one process can send both, a single compromise moves the
     # vault's NAV and the two-party design has bought nothing.
-    sim.next_block().with_block_time_shift(PROPOSE_OFFSET)
     sim.add_call(
-        call=executor.propose_balance(VENUE_BALANCE_ACCOUNT, MARGIN_AMOUNT),
+        call=executor.propose_balance(VENUE_BALANCE_ACCOUNT, ATTESTED_AMOUNT),
         from_=CUSTODIAN_A,
         label="propose",
     )
-    plan.append("custodian A proposes the off-venue value (900 USDC)")
+    plan.append("custodian A proposes the off-venue value (918 USDC)")
 
     # ── Custodian B confirms it ──────────────────────────────────────────────
     # The confirm quotes the proposal's hash, which binds the executor, the
@@ -979,11 +1011,14 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # assertions below check exactly that against the emitted log rather than
     # trusting the arithmetic.
     #
-    # Production has two reads, and they are equally safe. Both return the same
-    # BalanceProposal; both reject anything that did not come from this executor
-    # or whose hash is not the hash of its own fields; and confirmBalance
-    # re-derives that hash from the pending slot regardless. So neither route can
-    # make B attest to a proposal A did not actually put on-chain:
+    # Production has two reads, equally safe for different reasons. Both return
+    # the same BalanceProposal. pending_proposals reads the executor's pending
+    # slot and computes the hash from those fields, so it has nothing to reject:
+    # what it returns is what is on-chain. find_balance_proposed parses a receipt,
+    # so it must reject: it skips a log another contract emitted and raises on one
+    # whose hash is not the hash of its own fields. confirmBalance re-derives the
+    # hash from the pending slot either way, so neither route can make B attest
+    # to a proposal A did not actually put on-chain:
     #   pending_proposals(account)     -- reads the slot, so B needs nothing from
     #                                     A but the account address.
     #   find_balance_proposed(logs, account) -- reads the same proposal out of the
@@ -1004,7 +1039,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
         executor=executor_address,
         chain_id=BASE_CHAIN_ID,
         balance_account=VENUE_BALANCE_ACCOUNT,
-        value=MARGIN_AMOUNT,
+        value=ATTESTED_AMOUNT,
         proposer=CUSTODIAN_A,
         proposed_at=proposed_at,
         nonce=1,  # a fresh executor's first proposal; asserted against the log
@@ -1022,7 +1057,11 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # execute() refreshes the markets it touched in a post-execute hook -- which
     # is why the market value was already right after the enter -- but the confirm
     # is a direct call to the executor, so nothing tells the vault anything
-    # changed. This is the call that makes it look.
+    # changed. This is the call that makes it look; the read before it shows the
+    # cache still holding the enter's figure.
+    market_value_before_refresh = sim.observe(
+        plasma_vault.total_assets_in_market(EXTERNAL_STATE_MARKET),
+    )
     sim.add_call(
         call=plasma_vault.update_markets_balances([EXTERNAL_STATE_MARKET]), from_=ALPHA
     )
@@ -1054,21 +1093,23 @@ def run_simulation(web3: Web3) -> SimulationResult:
         call=withdraw_manager.request_shares(requested_shares), from_=DEPOSITOR
     )
     request_after_filing = sim.observe(withdraw_manager.request_info(DEPOSITOR))
-    plan.append("user requests a scheduled withdrawal worth 500 USDC")
+    plan.append("user requests a scheduled withdrawal of the shares worth 500 USDC")
 
     # ── The alpha brings the margin back and releases it ─────────────────────
     # SIMULATION ONLY: this transfer impersonates the venue. The exit pulls USDC
     # from the executor to the vault, so the funds must be back on the executor
     # first -- and it is the venue that sends them. In production the alpha
     # requests a withdrawal at the venue and waits for it to land; nothing the
-    # vault signs can make it happen.
+    # vault signs can make it happen. The whole attested position comes back,
+    # margin and PnL.
     sim.next_block().with_block_time_shift(RELEASE_OFFSET)
     sim.add_call(
-        call=usdc.transfer(executor_address, MARGIN_AMOUNT), from_=VENUE_DEPOSIT_ADDRESS
+        call=usdc.transfer(executor_address, ATTESTED_AMOUNT),
+        from_=VENUE_DEPOSIT_ADDRESS,
     )
-    plan.append("the venue returns the margin to the executor")
+    plan.append("the venue returns the margin and PnL to the executor")
 
-    sim.execute([build_exit_action(MARGIN_AMOUNT)])
+    sim.execute([build_exit_action(ATTESTED_AMOUNT)])
     vault_usdc_after_exit = sim.observe(usdc.balance_of(preview.plasma_vault))
     venue_usdc_after_exit = sim.observe(usdc.balance_of(VENUE_DEPOSIT_ADDRESS))
     tracked_after_exit = sim.observe(executor.balances(VENUE_BALANCE_ACCOUNT))
@@ -1132,6 +1173,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
         executor_nonce=executor_nonce,
         tracked_after_confirm=tracked_after_confirm,
         last_updated_after_confirm=last_updated_after_confirm,
+        market_value_before_refresh=market_value_before_refresh,
         market_value_after_confirm=market_value_after_confirm,
         total_assets_after_confirm=total_assets_after_confirm,
         request_after_filing=request_after_filing,
@@ -1256,7 +1298,7 @@ def _assert_attestation(
     proposed_at: int,
     confirmed_at: int,
 ) -> None:
-    """The custodians' figure is what the contract recorded, and NAV held."""
+    """The custodians' figure is what the contract recorded, and NAV took it."""
     # The SDK's own reader, over the propose call's logs. It accepts only logs
     # this executor emitted, and only a payload whose proposal_hash is the hash
     # of its own other fields, so what comes back is a self-consistent proposal
@@ -1275,8 +1317,8 @@ def _assert_attestation(
         logged.nonce == 1, f"first proposal carried nonce {logged.nonce}, expected 1"
     )
     _check(
-        logged.value == MARGIN_AMOUNT,
-        f"custodian A proposed {logged.value}, expected {MARGIN_AMOUNT}",
+        logged.value == ATTESTED_AMOUNT,
+        f"custodian A proposed {logged.value}, expected {ATTESTED_AMOUNT}",
     )
     _check(
         logged.proposer == CUSTODIAN_A,
@@ -1302,36 +1344,43 @@ def _assert_attestation(
         f"the account's last update reads "
         f"{reads.last_updated_after_confirm.value}, expected {confirmed_at}",
     )
-    # The custodians attested exactly what was parked, so the confirmed value
-    # does not move NAV. (It also stays inside BIG_CHANGE_BPS, but this vault
-    # would not act on a breach -- see the guard-constant note above -- so that
-    # is not asserted here.)
+    # The custodians attested the margin plus the venue's PnL. The executor takes
+    # the new figure at once, the vault only after the refresh, and then NAV
+    # moves by the PnL, up to oracle dust. (The move stays inside BIG_CHANGE_BPS, but this
+    # vault would not act on a breach -- see the guard-constant note above -- so
+    # that is not asserted here.)
     _check(
-        reads.tracked_after_confirm.value == MARGIN_AMOUNT,
+        reads.tracked_after_confirm.value == ATTESTED_AMOUNT,
         f"confirmed balance is {reads.tracked_after_confirm.value}",
     )
     _check(
-        reads.market_value_after_confirm.value == MARGIN_AMOUNT,
+        reads.market_value_before_refresh.value == MARGIN_AMOUNT,
+        f"market 50 took the attestation before the refresh: "
+        f"{reads.market_value_before_refresh.value}",
+    )
+    _check(
+        reads.market_value_after_confirm.value == ATTESTED_AMOUNT,
         f"market 50 values the attested position at "
         f"{reads.market_value_after_confirm.value}",
     )
+    nav_move = (
+        reads.total_assets_after_confirm.value
+        - reads.bootstrap.total_assets_after_deposit.value
+    )
     _check(
-        abs(
-            reads.total_assets_after_confirm.value
-            - reads.bootstrap.total_assets_after_deposit.value
-        )
-        <= NAV_DUST_TOLERANCE,
-        f"the attestation moved NAV: {reads.bootstrap.total_assets_after_deposit.value} -> "
-        f"{reads.total_assets_after_confirm.value}",
+        abs(nav_move - VENUE_PNL) <= NAV_DUST_TOLERANCE,
+        f"the attestation moved NAV by {nav_move}, expected {VENUE_PNL}",
     )
 
 
 def _assert_unwind(reads: _Reads) -> None:
-    """The margin came home, the market emptied, and the request is releasable."""
+    """Margin and PnL came home, the market emptied, the request is releasable."""
     _check(
-        reads.vault_usdc_after_exit.value == DEPOSIT_AMOUNT,
+        reads.vault_usdc_after_exit.value == DEPOSIT_AMOUNT + VENUE_PNL,
         f"vault holds {reads.vault_usdc_after_exit.value} USDC after the exit",
     )
+    # The venue paid back what it received, the PnL included, so it ends where
+    # it started.
     _check(
         reads.venue_usdc_after_exit.value
         == reads.bootstrap.venue_usdc_before_enter.value,
@@ -1346,14 +1395,22 @@ def _assert_unwind(reads: _Reads) -> None:
         reads.market_value_after_exit.value == 0,
         f"market 50 still values {reads.market_value_after_exit.value}",
     )
+    # The exit only converts market-50 value back into idle USDC, so NAV keeps
+    # the PnL the attestation added and nothing else.
     _check(
         abs(
-            reads.total_assets_after_exit.value
-            - reads.bootstrap.total_assets_after_deposit.value
+            reads.total_assets_after_exit.value - reads.total_assets_after_confirm.value
         )
         <= NAV_DUST_TOLERANCE,
-        f"the round trip moved NAV: {reads.bootstrap.total_assets_after_deposit.value} -> "
+        f"the exit moved NAV: {reads.total_assets_after_confirm.value} -> "
         f"{reads.total_assets_after_exit.value}",
+    )
+    # Each step above allows NAV_DUST_TOLERANCE; the end state gets its own.
+    expected_nav = reads.bootstrap.total_assets_after_deposit.value + VENUE_PNL
+    _check(
+        abs(reads.total_assets_after_exit.value - expected_nav) <= NAV_DUST_TOLERANCE,
+        f"NAV ended at {reads.total_assets_after_exit.value}, "
+        f"expected deposit plus PnL {expected_nav}",
     )
     # The request survives the round trip: it is filed before the margin comes
     # home and still carries the same shares after, only now withdrawable. The
@@ -1373,6 +1430,9 @@ def _assert_unwind(reads: _Reads) -> None:
         released.can_withdraw,
         "release_funds did not make the request withdrawable",
     )
+    # Equal only because a fresh clone has no request fee. With one,
+    # requestShares records the shares minus the fee, while release_funds above
+    # still releases all of requested_shares, so the two differ by the fee.
     _check(
         reads.shares_released.value == released.shares,
         f"released {reads.shares_released.value} shares, requested {released.shares}",

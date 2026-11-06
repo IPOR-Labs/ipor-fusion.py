@@ -40,7 +40,8 @@ transaction.
   its operation and balance fuses, grants the typed substrates that market needs
   (asset, one permitted call, a balance account, two custodians, four guards),
   parks USDC at an off-chain venue through the per-vault executor, has two
-  custodians propose and confirm the off-venue value so the NAV reflects it,
+  custodians propose and confirm the off-venue value, venue PnL included, so the
+  NAV moves by that PnL,
   brings the margin home and releases it for a user's scheduled withdrawal, then
   demonstrates the executor rejecting a confirmation that does not match its
   proposal.
@@ -160,6 +161,6 @@ real funds. (Writing an example? The full scope rules are in
   running bot lives there.
 - [IPOR deployments and ABIs](https://github.com/IPOR-Labs/ipor-abi) -- the
   source of provenance for every address used here.
-- [IPOR Fusion documentation](https://docs.ipor.io/ipor-fusion/fusion-introduction)
+- [IPOR Fusion documentation](https://ipor.io/docs/build-on-fusion)
   -- concepts referenced by the examples: access management, substrates, and the
   price oracle middleware.

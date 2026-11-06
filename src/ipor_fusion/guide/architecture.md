@@ -33,9 +33,10 @@ reports a change.
 ## Governance
 
 Every vault has its own access manager. The clone assigns `OWNER_ROLE` to the
-`owner` argument and nothing else. The role-admin chain is
-`OWNER → ATOMIST → {ALPHA, FUSE_MANAGER, WHITELIST, UPDATE_MARKETS_BALANCES}`,
-so the owner grants itself `ATOMIST_ROLE` first and the operating roles after.
+`owner` argument and nothing else. `OWNER_ROLE` administers `ATOMIST_ROLE`,
+and `ATOMIST_ROLE` the operating roles (`ALPHA_ROLE`, `FUSE_MANAGER_ROLE`,
+`WHITELIST_ROLE`, `UPDATE_MARKETS_BALANCES_ROLE` and others), so the owner
+grants itself `ATOMIST_ROLE` first and the operating roles after.
 `ALPHA_ROLE` is the only role that can call `execute`; it is meant for the
 strategy bot. `FUSE_MANAGER_ROLE` configures markets. A fresh vault is
 private: `deposit` and `mint` require `WHITELIST_ROLE` until an Atomist calls
