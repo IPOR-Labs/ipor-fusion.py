@@ -373,6 +373,16 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
             (guard,) = by_type[type_tag]
             assert int.from_bytes(guard[1:], "big") == expected
 
+    def test_venue_pnl_is_positive_and_inside_big_change_bps(self) -> None:
+        # A zero PnL makes the confirm re-attest what the enter booked, and the
+        # simulated run would not show the balance fuse moving NAV.
+        assert self.mod.VENUE_PNL > 0
+        assert self.mod.ATTESTED_AMOUNT == self.mod.MARGIN_AMOUNT + self.mod.VENUE_PNL
+        # The example's claim: the 2% move stays inside BIG_CHANGE_BPS.
+        assert self.mod.VENUE_PNL * 10_000 < (
+            self.mod.BIG_CHANGE_BPS * self.mod.MARGIN_AMOUNT
+        )
+
     def test_actor_addresses_are_pairwise_distinct(self) -> None:
         # Collapsing ALPHA into OWNER -- the anti-pattern this example spends
         # paragraphs warning against -- would otherwise pass every other check,
