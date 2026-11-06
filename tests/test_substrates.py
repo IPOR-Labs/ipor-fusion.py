@@ -547,3 +547,102 @@ def test_hypercore_words_the_library_rejects_are_errors(word, label):
     assert info.address is None
     assert info.raw_hex == word
     assert info.extra == {"error": "invalid HyperCore substrate"}
+
+
+# Derive (market 60): words built from the DeriveSubstrateLib bit layout.
+DERIVE_USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+DERIVE_KEY = "0x" + "ab" * 20
+DERIVE_MAX_SCOPE = 2**248 - 1
+
+
+def _derive_word(type_byte: int, data: int) -> str:
+    return "0x" + f"{(type_byte << 248) | data:064x}"
+
+
+DERIVE_LIMITS_WORD = _derive_word(
+    7,
+    (1800 << 208)
+    | (600 << 176)
+    | (604800 << 144)
+    | (100_000_000 << 80)
+    | (10_000_000 << 16),
+)
+
+
+def test_derive_typed_substrates():
+    market = IporFusionMarkets.DERIVE
+    assert market == 60
+    assert market_name(market) == "DERIVE"
+
+    asset = decode_substrate(_derive_word(1, int(DERIVE_USDC, 16)), market_id=market)
+    assert asset == SubstrateInfo(address=DERIVE_USDC, type_label="ASSET")
+
+    manager = decode_substrate(_derive_word(2, 5), market_id=market)
+    assert manager.type_label == "MANAGER" and not manager.is_error
+    assert manager.extra == {"manager_id": "5"}
+
+    sub = decode_substrate(_derive_word(3, 2**64 - 1), market_id=market)
+    assert sub.type_label == "SUBACCOUNT"
+    assert sub.extra == {"subaccount_id": str(2**64 - 1)}
+
+    for type_byte, label in ((4, "SESSION_KEY"), (6, "KEEPER")):
+        info = decode_substrate(
+            _derive_word(type_byte, int(DERIVE_KEY, 16)), market_id=market
+        )
+        assert info == SubstrateInfo(address=DERIVE_KEY, type_label=label)
+
+    scope = decode_substrate(_derive_word(5, 5), market_id=market)
+    assert scope.type_label == "SCOPE" and scope.extra == {"scope_id": "5"}
+    widest = decode_substrate(_derive_word(5, DERIVE_MAX_SCOPE), market_id=market)
+    assert widest.extra == {"scope_id": str(DERIVE_MAX_SCOPE)} and not widest.is_error
+
+    limits = decode_substrate(DERIVE_LIMITS_WORD, market_id=market)
+    assert limits.type_label == "LIMITS" and not limits.is_error
+    assert limits.extra == {
+        "max_report_age_sec": "1800",
+        "max_deadline_sec": "600",
+        "max_session_key_ttl_sec": "604800",
+        "max_new_subaccount_deposit_usd_e6": "100000000",
+        "max_withdraw_fee_usd_e6": "10000000",
+        "nav_jump_bps": "0",
+    }
+    # field order: the first sits right under bit 240, navJumpBps in the lowest bits
+    edge = decode_substrate(_derive_word(7, ((2**32 - 1) << 208) | 7), market_id=market)
+    assert edge.extra == {
+        "max_report_age_sec": str(2**32 - 1),
+        "max_deadline_sec": "0",
+        "max_session_key_ttl_sec": "0",
+        "max_new_subaccount_deposit_usd_e6": "0",
+        "max_withdraw_fee_usd_e6": "0",
+        "nav_jump_bps": "7",
+    }
+
+
+@pytest.mark.parametrize(
+    ("word", "label"),
+    [
+        (_derive_word(0, 0), "type=0"),
+        (_derive_word(8, 0), "type=8"),
+        (_derive_word(1, (1 << 160) | int(DERIVE_USDC, 16)), "ASSET"),
+        (_derive_word(2, (1 << 32) | 1), "MANAGER"),
+        (_derive_word(3, (1 << 64) | 1), "SUBACCOUNT"),
+        (_derive_word(4, (1 << 160) | int(DERIVE_KEY, 16)), "SESSION_KEY"),
+        (_derive_word(6, (1 << 160) | int(DERIVE_KEY, 16)), "KEEPER"),
+        (_derive_word(7, (1 << 240) | (1800 << 208)), "LIMITS"),
+        # bit 247 (top of the reserved span, hex digit 2) set on every non-SCOPE type
+        (_derive_word(1, (1 << 247) | int(DERIVE_USDC, 16)), "ASSET"),
+        (_derive_word(2, (1 << 247) | 1), "MANAGER"),
+        (_derive_word(3, (1 << 247) | 1), "SUBACCOUNT"),
+        (_derive_word(4, (1 << 247) | int(DERIVE_KEY, 16)), "SESSION_KEY"),
+        (_derive_word(6, (1 << 247) | int(DERIVE_KEY, 16)), "KEEPER"),
+        (_derive_word(7, (1 << 247) | (1800 << 208)), "LIMITS"),
+    ],
+)
+def test_derive_words_the_library_rejects_are_errors(word, label):
+    assert len(word) == 66, word
+    info = decode_substrate(word, market_id=IporFusionMarkets.DERIVE)
+    assert info.is_error
+    assert info.type_label == label
+    assert info.address is None
+    assert info.raw_hex == word
+    assert info.extra == {"error": "invalid Derive substrate"}

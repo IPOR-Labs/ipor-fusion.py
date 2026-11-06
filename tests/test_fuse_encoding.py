@@ -16,6 +16,7 @@ from ipor_fusion.fuses.compound_v3 import (
     CompoundV3ClaimFuse,
     CompoundV3SupplyFuse,
 )
+from ipor_fusion.fuses.derive import DeriveLimits, DeriveSubstrates
 from ipor_fusion.fuses.erc4626 import ERC4626SupplyFuse
 from ipor_fusion.fuses.euler_v2 import (
     EulerSwapDynamicParams,
@@ -2437,3 +2438,157 @@ class TestHyperCoreFuses:
             HyperCoreSubstrates.perp_market(1, 1 << 88)
         with pytest.raises(ValueError, match="destination"):
             HyperCoreSubstrates.destination(ZERO_ADDRESS)
+
+
+# ── Derive substrates (market 60) ───────────────────────────────────────
+
+_DERIVE_ADDR = Web3.to_checksum_address("0xcee5c4272e246a424aede992c987966736e0f63b")
+_DERIVE_ADDR_HEX = "cee5c4272e246a424aede992c987966736e0f63b"
+_DERIVE_LIMITS = DeriveLimits(
+    max_report_age_sec=1800,
+    max_deadline_sec=600,
+    max_session_key_ttl_sec=604_800,
+    max_new_subaccount_deposit_usd_e6=100 * 10**6,
+    max_withdraw_fee_usd_e6=10 * 10**6,
+    nav_jump_bps=0,
+)
+
+
+def test_derive_substrates_match_the_library_layout():
+    # DeriveSubstrateLib.encode*: type byte in bits 255..248, data in the low bits
+    assert DeriveSubstrates.asset(_DERIVE_ADDR).hex() == (
+        "01" + "00" * 11 + _DERIVE_ADDR_HEX
+    )
+    assert DeriveSubstrates.manager(7).hex() == "02" + "00" * 30 + "07"
+    assert DeriveSubstrates.manager((1 << 32) - 1).hex() == (
+        "02" + "00" * 27 + "ffffffff"
+    )
+    assert DeriveSubstrates.subaccount(0x1234).hex() == "03" + "00" * 29 + "1234"
+    assert DeriveSubstrates.subaccount((1 << 64) - 1).hex() == (
+        "03" + "00" * 23 + "ff" * 8
+    )
+    assert DeriveSubstrates.session_key(_DERIVE_ADDR).hex() == (
+        "04" + "00" * 11 + _DERIVE_ADDR_HEX
+    )
+    assert DeriveSubstrates.scope(5).hex() == "05" + "00" * 30 + "05"
+    assert DeriveSubstrates.scope((1 << 248) - 1).hex() == "05" + "ff" * 31
+    assert DeriveSubstrates.keeper(_DERIVE_ADDR).hex() == (
+        "06" + "00" * 11 + _DERIVE_ADDR_HEX
+    )
+    expected = (
+        (7 << 248)
+        | (1800 << 208)
+        | (600 << 176)
+        | (604_800 << 144)
+        | (100 * 10**6 << 80)
+        | (10 * 10**6 << 16)
+        | 0
+    )
+    assert DeriveSubstrates.limits(_DERIVE_LIMITS) == expected.to_bytes(32, "big")
+    assert DeriveSubstrates.limits(_DERIVE_LIMITS)[0] == 0x07
+    # bits 247..240 of LIMITS stay zero even with every field at its maximum
+    full = DeriveSubstrates.limits(
+        DeriveLimits(
+            (1 << 32) - 1,
+            (1 << 32) - 1,
+            (1 << 32) - 1,
+            (1 << 64) - 1,
+            (1 << 64) - 1,
+            (1 << 16) - 1,
+        )
+    )
+    assert full.hex() == "07" + "00" + "ff" * 30
+
+
+def test_derive_substrates_round_trip_through_decode_substrate():
+    asset = decode_substrate(DeriveSubstrates.asset(_DERIVE_ADDR), market_id=60)
+    assert asset.type_label == "ASSET"
+    assert asset.address is not None and asset.address.lower() == _DERIVE_ADDR.lower()
+    manager = decode_substrate(DeriveSubstrates.manager(4_000_000_000), market_id=60)
+    assert (manager.type_label, manager.extra["manager_id"]) == (
+        "MANAGER",
+        "4000000000",
+    )
+    sub = decode_substrate(DeriveSubstrates.subaccount(2**63 + 5), market_id=60)
+    assert (sub.type_label, sub.extra["subaccount_id"]) == (
+        "SUBACCOUNT",
+        str(2**63 + 5),
+    )
+    key = decode_substrate(DeriveSubstrates.session_key(_DERIVE_ADDR), market_id=60)
+    assert key.type_label == "SESSION_KEY"
+    assert key.address is not None and key.address.lower() == _DERIVE_ADDR.lower()
+    scope_id = (1 << 247) + 12345
+    scope = decode_substrate(DeriveSubstrates.scope(scope_id), market_id=60)
+    assert (scope.type_label, scope.extra["scope_id"]) == ("SCOPE", str(scope_id))
+    keeper = decode_substrate(DeriveSubstrates.keeper(_DERIVE_ADDR), market_id=60)
+    assert keeper.type_label == "KEEPER"
+    assert keeper.address is not None and keeper.address.lower() == _DERIVE_ADDR.lower()
+    limits = decode_substrate(DeriveSubstrates.limits(_DERIVE_LIMITS), market_id=60)
+    assert limits.type_label == "LIMITS" and not limits.is_error
+    assert limits.extra == {
+        "max_report_age_sec": "1800",
+        "max_deadline_sec": "600",
+        "max_session_key_ttl_sec": "604800",
+        "max_new_subaccount_deposit_usd_e6": "100000000",
+        "max_withdraw_fee_usd_e6": "10000000",
+        "nav_jump_bps": "0",
+    }
+    for word in (
+        DeriveSubstrates.asset(_DERIVE_ADDR),
+        DeriveSubstrates.manager(1),
+        DeriveSubstrates.scope(1),
+        DeriveSubstrates.limits(_DERIVE_LIMITS),
+    ):
+        assert not decode_substrate(word, market_id=60).is_error
+
+
+@pytest.mark.parametrize(
+    ("call", "match"),
+    [
+        (lambda: DeriveSubstrates.manager(1 << 32), "manager_id"),
+        (lambda: DeriveSubstrates.manager(-1), "manager_id"),
+        (lambda: DeriveSubstrates.subaccount(1 << 64), "subaccount_id"),
+        (lambda: DeriveSubstrates.scope(1 << 248), "scope_id"),
+        (lambda: DeriveSubstrates.scope(-1), "scope_id"),
+        (
+            lambda: DeriveSubstrates.limits(DeriveLimits(1 << 32, 0, 0, 0, 0, 0)),
+            "max_report_age_sec",
+        ),
+        (
+            lambda: DeriveSubstrates.limits(DeriveLimits(0, 1 << 32, 0, 0, 0, 0)),
+            "max_deadline_sec",
+        ),
+        (
+            lambda: DeriveSubstrates.limits(DeriveLimits(0, 0, 1 << 32, 0, 0, 0)),
+            "max_session_key_ttl_sec",
+        ),
+        (
+            lambda: DeriveSubstrates.limits(DeriveLimits(0, 0, 0, 1 << 64, 0, 0)),
+            "max_new_subaccount_deposit_usd_e6",
+        ),
+        (
+            lambda: DeriveSubstrates.limits(DeriveLimits(0, 0, 0, 0, 1 << 64, 0)),
+            "max_withdraw_fee_usd_e6",
+        ),
+        (
+            lambda: DeriveSubstrates.limits(DeriveLimits(0, 0, 0, 0, 0, 1 << 16)),
+            "nav_jump_bps",
+        ),
+    ],
+)
+def test_derive_substrates_reject_out_of_range_values(call, match):
+    with pytest.raises(ValueError, match=match):
+        call()
+
+
+@pytest.mark.parametrize(
+    ("call", "match"),
+    [
+        (DeriveSubstrates.asset, "label"),
+        (DeriveSubstrates.session_key, "key"),
+        (DeriveSubstrates.keeper, "keeper"),
+    ],
+)
+def test_derive_substrates_reject_the_zero_address(call, match):
+    with pytest.raises(ValueError, match=match):
+        call(ZERO_ADDR)

@@ -481,6 +481,89 @@ def _hypercore_invalid(hex_str: str, label: str) -> SubstrateInfo:
     )
 
 
+_DERIVE_TYPES = {
+    1: "ASSET",
+    2: "MANAGER",
+    3: "SUBACCOUNT",
+    4: "SESSION_KEY",
+    5: "SCOPE",
+    6: "KEEPER",
+    7: "LIMITS",
+}
+# Hex spans (of the 64 digits) DeriveSubstrateLib._data requires to be zero
+# after the type byte: everything above the used data bits. SCOPE uses all 248.
+_DERIVE_RESERVED_SPANS = {
+    1: (2, 24),
+    2: (2, 56),
+    3: (2, 48),
+    4: (2, 24),
+    5: (2, 2),
+    6: (2, 24),
+    7: (2, 4),
+}
+
+
+def _decode_derive(hex_str: str) -> SubstrateInfo:
+    """Decode Derive typed substrates (market 60).
+
+    Source: DeriveSubstrateLib.sol -- ``bytes32(uint256(type) << 248 | data)``,
+    a one-byte type tag then a 31-byte payload whose unused bits MUST be zero:
+    - ASSET (1): protocol asset label, address in bits 159..0.
+    - MANAGER (2): ``uint32 managerId`` in bits 31..0.
+    - SUBACCOUNT (3): ``uint64 subaccountId`` in bits 63..0.
+    - SESSION_KEY (4): address in bits 159..0.
+    - SCOPE (5): ``uint256 scopeId`` in bits 247..0.
+    - KEEPER (6): address in bits 159..0.
+    - LIMITS (7): bits 247..240 zero, then ``maxReportAgeSec`` u32,
+      ``maxDeadlineSec`` u32, ``maxSessionKeyTtlSec`` u32,
+      ``maxNewSubaccountDepositUsdE6`` u64, ``maxWithdrawFeeUsdE6`` u64 and
+      ``navJumpBps`` u16 (0 = band disabled), high to low.
+    Words the library's decoders revert on come back raw with ``is_error``
+    (a tag outside 1..7, any unused bit set): the fuses would reject them, so
+    no field of theirs may look granted.
+    """
+    type_byte = int(hex_str[0:2], 16)
+    label = _DERIVE_TYPES.get(type_byte)
+    if label is None:
+        return _derive_invalid(hex_str, f"type={type_byte}")
+    start, end = _DERIVE_RESERVED_SPANS[type_byte]
+    if hex_str[start:end].strip("0"):
+        return _derive_invalid(hex_str, label)
+    if type_byte in (1, 4, 6):
+        return SubstrateInfo(address=_address(hex_str[24:]), type_label=label)
+    if type_byte == 2:
+        extra = {"manager_id": str(int(hex_str[56:], 16))}
+    elif type_byte == 3:
+        extra = {"subaccount_id": str(int(hex_str[48:], 16))}
+    elif type_byte == 5:
+        extra = {"scope_id": str(int(hex_str[2:], 16))}
+    else:
+        extra = _decode_derive_limits(hex_str)
+    return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label=label, extra=extra)
+
+
+def _decode_derive_limits(hex_str: str) -> dict[str, str]:
+    fields = (
+        ("max_report_age_sec", 4, 12),
+        ("max_deadline_sec", 12, 20),
+        ("max_session_key_ttl_sec", 20, 28),
+        ("max_new_subaccount_deposit_usd_e6", 28, 44),
+        ("max_withdraw_fee_usd_e6", 44, 60),
+        ("nav_jump_bps", 60, 64),
+    )
+    return {name: str(int(hex_str[a:b], 16)) for name, a, b in fields}
+
+
+def _derive_invalid(hex_str: str, label: str) -> SubstrateInfo:
+    """A word DeriveSubstrateLib would revert on: raw, flagged, no fields."""
+    return SubstrateInfo(
+        raw_hex=f"0x{hex_str}",
+        type_label=label,
+        is_error=True,
+        extra={"error": "invalid Derive substrate"},
+    )
+
+
 # Market ID → decoder function.  Markets not listed here get raw hex output.
 _SUBSTRATE_DECODERS: dict[MarketId, Callable[[str], SubstrateInfo]] = {}
 
@@ -640,6 +723,9 @@ _register_markets([54], _decode_crosschain)
 # HyperCore (55): typed substrates per HyperCoreSubstrateLib.sol at the
 # release the official deployment was built from.
 _register_markets([55], _decode_hypercore)
+# Derive (60): typed substrates per DeriveSubstrateLib.sol (strict: any unused
+# bit set makes the word invalid).
+_register_markets([60], _decode_derive)
 
 
 # Markets left without a decoder on purpose, each with the reason; they decode

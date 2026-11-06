@@ -120,9 +120,10 @@ checkout's default profile), the pending reader included.
   `commit-lint.yml` fails a PR whose commit subjects or title break it. Never
   hand-bump `project.version`; the release workflow stamps it and re-locks
   `uv.lock`.
-- Preview features (`ipor_fusion.crosschain` with its subpackages, and
-  `ipor_fusion.hypercore`) keep no backward compatibility: they follow the
-  current official contracts only, and support for retired deployments (the
+- Preview features (`ipor_fusion.crosschain` with its subpackages,
+  `ipor_fusion.hypercore` and `ipor_fusion.derive`) keep no backward compatibility: crosschain and
+  hypercore follow the current official contracts only, `derive` tracks the contracts feature branch
+  until it has an official deployment, and support for retired deployments (the
   pilot executors and factories, canaries) is removed rather than kept beside
   them. From 4.1 on, a breaking change confined to them ships as `feat`/`fix`
   without `!` or a `BREAKING CHANGE:` footer, so it never forces a major
@@ -171,7 +172,8 @@ checkout's default profile), the pending reader included.
   their own subpackages, never from the top level: crosschain from `crosschain`
   (`crosschain.fuses`, `crosschain.ccip`, `crosschain.stargate`), HyperCore from
   `hypercore` (which re-exports from `fuses/` and `readers/` modules; those
-  subpackages do not list them). Their exceptions stay in `errors` and the top
+  subpackages do not list them), Derive from `derive` (over `fuses/derive.py` and the
+  `derive/report.py` helper). Their exceptions stay in `errors` and the top
   level. `ipor_fusion.guide` keeps its own namespace. The
   public modules (`about`, `cache`, `chains`, `dependency_graph`, `errors`, `explorer`,
   `field_docs`, `fuse_whitelist`, `market_ids`, `market_info`, `morpho_api`, `preflight`, `registry`, `substrates`, `types`,
@@ -195,7 +197,7 @@ checkout's default profile), the pending reader included.
 |---|---|
 | ruff version | `uv.lock` dev group and `rev` in `.pre-commit-config.yaml` |
 | Python 3.12 runtime, 3.11 floor | `.python-version` + CI `python-version` default; `requires-python`, ruff `target-version`, pyright `pythonVersion` |
-| `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors An id sourced from a contracts feature branch ahead of the pinned ref goes in the test's `_AHEAD_OF_UPSTREAM` allowlist and is removed when the ref catches up |
+| `IporFusionMarkets`, `Roles` | `market_ids.py`, `config/roles.py` mirror `IporFusionMarkets.sol`, `Roles.sol` in `ipor-fusion/contracts/libraries/`; drift-gated by `tests/test_solidity_mirrors.py` — bump its pinned ref in the same change that syncs the mirrors An id sourced from a contracts feature branch ahead of the pinned ref goes in the test's `_AHEAD_OF_UPSTREAM` allowlist and is removed when the ref catches up (today: `DERIVE` = 60, the Derive feature branch) |
 | substrate decoders | `substrates.py` registry mirrors each market's `contracts/fuses/<protocol>/*SubstrateLib.sol` or `*FuseLib.sol` |
 | `vault_info` / `fusion market` JSON shapes | the builders and their TypedDicts (`VaultInfoJson`, `MorphoBlueMarketJson`, `MetaMorphoV1Json` / `MetaMorphoV2Json`) in `vault_info.py` / `market_info.py`, models in `mcp/models.py` (`extra="forbid"`, the published schema), the `VaultInfoJson`-typed `_full_vault_info_dict` fixture in `test_mcp_models.py` |
 | CLI command set | every CLI command has a matching tool in `mcp/server.py` with the same arguments (`changelog` maps to `server_info`; `--json` and display filters are CLI-only); `tests/test_cli_mcp_parity.py` enforces it, and the RPC-backed commands resolve chain and provider through `cli/config_store.resolve_chain_id` (`fusion address` reads no RPC: an omitted chain means every registry chain) |
@@ -212,7 +214,17 @@ checkout's default profile), the pending reader included.
   ipor-fusion contracts and their imports, registered by `errors.py` so reverts
   decode by name; generated, never edited by hand: `uv run python
   scripts/fusion_error_signatures.py ../ipor-fusion --source <commit>` (needs the
-  checkout's `npm ci`)
+  checkout's `npm ci`). The file holds two tuples: `_PUBLIC_SIGNATURES`, the public
+  set, and `_AHEAD_OF_UPSTREAM_SIGNATURES` for errors of a contracts feature branch not
+  in a public commit yet (today: the Derive errors). `FUSION_ERROR_SIGNATURES` is the
+  union of both tuples. Augment the ahead tuple without
+  touching the public one: `uv run python scripts/fusion_error_signatures.py --ahead
+  <file-or-dir.sol> [--ahead ...] --ahead-label "<public-safe text>"`; the public tuple
+  and its source sentence are kept, the ahead tuple is replaced in full each run.
+  Hand-off rule: after the public sync, a full regeneration (`--source <commit>`) drops
+  the ahead sentence and empties `_AHEAD_OF_UPSTREAM_SIGNATURES`. The same change must
+  edit `tests/test_fusion_errors.py::test_the_public_and_ahead_sets_are_sorted_disjoint_and_leak_free`,
+  which asserts the ahead set is non-empty and Derive-only, or that test fails
 - `about.py` — package version, repository URL, CHANGELOG parsing (`fusion changelog`,
   `server_info`); `field_docs.py` — `DOCS`, the JSON field descriptions shared by CLI
   output and MCP models
@@ -293,7 +305,9 @@ checkout's default profile), the pending reader included.
   and decoders; internal modules, the ExternalState names are exported from
   `ipor_fusion.fuses`, the HyperCore ones from `ipor_fusion.hypercore`), `hypercore.py`
   (the HyperCore fuses, market 55), `hypercore_pre_hooks.py` (the `PlasmaVault` call
-  that wires their pre-hooks);
+  that wires their pre-hooks); `derive.py` (preview: the Derive substrate encoders,
+  `DeriveSubstrates` and `DeriveLimits`, market 60; the fuse call encoders are a
+  follow-up);
   `base.py` re-exports the `core/fuse.py` base and validators,
   `FuseAction` and `ZERO_ADDRESS` (from `types`). A fuse is a value: equality and
   hash cover its class and every attribute it stores
@@ -345,9 +359,14 @@ checkout's default profile), the pending reader included.
   and oracle_mapping_reader), position_manager, aave_v3, aave_v4, compound_v3, morpho,
   ramses_v2, uniswap_v3, unpriceable (middleware-priced tokens of granted substrates
   the oracle cannot price), hypercore and hypercore_outcome (HyperCore reads and
-  transfer outcomes)
+  transfer outcomes); `unpriceable` also prices the Derive `CASH_ASSET()` and the
+  tokens of granted ASSET labels through the Ethereum WithdrawalOutbox
 - `hypercore/` — the preview HyperCore names re-exported from `fuses/hypercore*.py`
   and `readers/hypercore*.py`; no code of its own
+- `derive/` — the preview Derive package: `report.py` (the EIP-712 NAV report helper,
+  the deadline rule and the `DeriveAccount` wrapper; it does not check valuation
+  coherence, which is the keeper's job) and `__init__.py`, which re-exports it with
+  `fuses/derive.py`; the account reader is a follow-up
 - `cli/` — `main.py` root group; `changelog_cmd.py`, `config_cmd.py`, `market_cmd.py`,
   `vault_cmd.py` command orchestration over `vault_data` / `vault_info`; `options.py`
   the shared `--chain-id` / address param types and chain/provider resolution;

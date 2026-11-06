@@ -37,6 +37,11 @@ PREVIEW_FEATURES: tuple[PreviewFeature, ...] = (
         "hypercore",
         "HyperCore (Hyperliquid) vaults, market 55: fuses, readers and events",
     ),
+    PreviewFeature(
+        "derive",
+        "Derive (options and perps venue) market 60: substrates and the "
+        "EIP-712 NAV report helper",
+    ),
 )
 PREVIEW_STATEMENT = (
     "Preview, not production: the contracts are under active development, the "

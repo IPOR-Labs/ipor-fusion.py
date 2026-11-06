@@ -6,11 +6,16 @@ from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
+from ipor_fusion.core.multicall import Multicall3Batch
 from ipor_fusion.core.plasma_vault import BalanceFuse
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers import unpriceable
 from ipor_fusion.readers.unpriceable import (
+    _DERIVE_WITHDRAWAL_OUTBOX,
     MiddlewarePricedToken,
+    _derive_tokens,
+    _DeriveAssetResolution,
+    _resolve_asset_call,
     fetch_unpriceable_priced_tokens,
 )
 from ipor_fusion.validation import _unpriceable_token_findings
@@ -50,6 +55,7 @@ class _FakeMulticall:
     """Answers each Call by (to, calldata); an unknown call reverts."""
 
     answers: dict[tuple[str, bytes], object] = {}
+    asked: list[tuple[str, bytes]] = []
 
     def __init__(self, ctx):
         pass
@@ -61,6 +67,7 @@ class _FakeMulticall:
         return self
 
     def try_add(self, call):
+        self.asked.append((call.to, bytes(call.data)))
         return SimpleNamespace(value=self.answers.get((call.to, bytes(call.data))))
 
     def run(self):
@@ -80,10 +87,14 @@ def _oracle_answers(sources: dict[str, str], priced: set[str]):
 @pytest.fixture
 def chain(monkeypatch):
     _FakeMulticall.answers = {}
+    _FakeMulticall.asked = []
     monkeypatch.setattr(unpriceable, "Multicall3", _FakeMulticall)
     ctx = MagicMock()
+    ctx.chain_id = 1
     ctx.web3.eth.get_code.return_value = b"\x60\x80"
-    return SimpleNamespace(ctx=ctx, answers=_FakeMulticall.answers)
+    return SimpleNamespace(
+        ctx=ctx, answers=_FakeMulticall.answers, asked=_FakeMulticall.asked
+    )
 
 
 def _fetch(chain, substrates, balance_fuses=(), morpho_positions=None):
@@ -369,3 +380,199 @@ class TestFindings:
     def test_none_when_not_run(self):
         data = SimpleNamespace(unpriceable_priced_tokens=None)
         assert _unpriceable_token_findings(data) == []  # type: ignore[arg-type]
+
+
+DERIVE = IporFusionMarkets.DERIVE
+DERIVE_FUSE = _addr(0x20)
+USDC = _addr(0x21)
+LABEL = _addr(0x22)
+LABEL_2 = _addr(0x23)
+TOKEN_2 = _addr(0x24)
+OUTBOX = _DERIVE_WITHDRAWAL_OUTBOX[1]
+CASH_VIA = "cash asset of the Derive balance fuse (report equity)"
+
+
+def _derive_word(type_byte: int, address: str) -> bytes:
+    return (type_byte << 248 | int(address, 16)).to_bytes(32, "big")
+
+
+def _resolve_key(label: str) -> tuple[str, bytes]:
+    return OUTBOX, _sel("resolveAsset(address)") + encode(["address"], [label])
+
+
+class TestDerive:
+    FUSES = (BalanceFuse(market_id=DERIVE, fuse=DERIVE_FUSE),)
+
+    def _grant(self, chain, *labels, usdc=USDC):
+        chain.answers[(DERIVE_FUSE, _sel("CASH_ASSET()"))] = usdc
+        for label, token, native in labels:
+            chain.answers[_resolve_key(label)] = _DeriveAssetResolution(token, native)
+
+    def _check(self, chain, words, fuses=FUSES):
+        return _check(chain, {DERIVE: words}, fuses)
+
+    def test_outbox_is_the_ethereum_proxy_from_the_contract_provenance(self):
+        assert OUTBOX == "0x7c743D79C9C595cE332314503d84cBBb4E85FA63"
+
+    def test_cash_asset_and_label_token_are_flagged_when_the_oracle_reverts(
+        self, chain
+    ):
+        self._grant(chain, (LABEL, UNPRICED, False))
+        chain.answers.update(
+            _oracle_answers({USDC: FEED, UNPRICED: ZERO}, priced=set())
+        )
+        check = self._check(chain, [_derive_word(1, LABEL)])
+        assert check.unread == []
+        assert check.tokens == [
+            MiddlewarePricedToken(
+                DERIVE,
+                UNPRICED,
+                f"token of granted Derive asset label {LABEL}",
+                zero_balance_reverts=False,
+            ),
+            MiddlewarePricedToken(
+                DERIVE, USDC, CASH_VIA, zero_balance_reverts=False, price_source=FEED
+            ),
+        ]
+        assert all(t.position_open is None for t in check.tokens)
+
+    def test_priced_tokens_are_not_flagged(self, chain):
+        self._grant(chain, (LABEL, PRICED, False))
+        chain.answers.update(
+            _oracle_answers({USDC: ZERO, PRICED: ZERO}, priced={USDC, PRICED})
+        )
+        check = self._check(chain, [_derive_word(1, LABEL)])
+        assert check.tokens == [] and check.unread == []
+        assert _resolve_key(LABEL) in chain.asked
+        assert (DERIVE_FUSE, _sel("CASH_ASSET()")) in chain.asked
+        price = _sel("getAssetPrice(address)")
+        assert (ORACLE, price + encode(["address"], [PRICED])) in chain.asked
+        assert (ORACLE, price + encode(["address"], [USDC])) in chain.asked
+
+    def test_native_label_has_no_token_to_price(self, chain):
+        self._grant(chain, (LABEL, UNPRICED, True))
+        chain.answers.update(_oracle_answers({USDC: ZERO}, priced={USDC}))
+        check = self._check(chain, [_derive_word(1, LABEL)])
+        assert check.tokens == [] and check.unread == []
+        assert _resolve_key(LABEL) in chain.asked
+        oracle_reads = [key for key in chain.asked if key[0] == ORACLE]
+        assert all(encode(["address"], [UNPRICED]) not in d for _, d in oracle_reads)
+
+    def test_unknown_label_is_unread(self, chain):
+        chain.answers[(DERIVE_FUSE, _sel("CASH_ASSET()"))] = USDC
+        chain.answers.update(_oracle_answers({USDC: ZERO}, priced={USDC}))
+        check = self._check(chain, [_derive_word(1, LABEL)])
+        assert check.tokens == []
+        assert _resolve_key(LABEL) in chain.asked
+        assert check.unread == [f"resolveAsset() of granted Derive asset label {LABEL}"]
+
+    def test_other_chain_leaves_labels_unread_but_still_reads_cash_asset(self, chain):
+        chain.ctx.chain_id = 42161
+        self._grant(chain, (LABEL, UNPRICED, False))
+        chain.answers.update(_oracle_answers({USDC: FEED}, priced=set()))
+        check = self._check(chain, [_derive_word(1, LABEL), _derive_word(1, LABEL_2)])
+        assert [t.token for t in check.tokens] == [USDC]
+        assert len(check.unread) == 2
+        assert all("chain 42161" in line for line in check.unread)
+
+    def test_without_the_balance_fuse_only_labels_are_checked(self, chain):
+        self._grant(chain, (LABEL, UNPRICED, False))
+        chain.answers.update(_oracle_answers({UNPRICED: ZERO}, priced=set()))
+        check = self._check(chain, [_derive_word(1, LABEL)], fuses=())
+        assert [t.token for t in check.tokens] == [UNPRICED]
+
+    def test_reverting_cash_asset_is_unread(self, chain):
+        check = self._check(chain, [])
+        assert check.tokens == []
+        assert check.unread == [
+            f"CASH_ASSET() of the Derive balance fuse {DERIVE_FUSE}"
+        ]
+
+    def test_other_substrate_types_cause_no_reads(self, chain, monkeypatch):
+        words = [
+            _derive_word(4, LABEL),
+            _derive_word(6, LABEL_2),
+            (3 << 248 | 7).to_bytes(32, "big"),
+        ]
+        self._grant(chain)
+        chain.answers.update(_oracle_answers({USDC: ZERO}, priced={USDC}))
+        reads: list[tuple[str, bytes]] = []
+        original = _FakeMulticall.try_add
+
+        def spy(self, call):
+            reads.append((call.to, bytes(call.data)))
+            return original(self, call)
+
+        monkeypatch.setattr(_FakeMulticall, "try_add", spy)
+        check = self._check(chain, words)
+        assert check.unread == []
+        assert not any(to == OUTBOX for to, _ in reads)
+
+    def test_nothing_granted_makes_no_call(self, chain, monkeypatch):
+        batch_made = []
+        monkeypatch.setattr(
+            _FakeMulticall, "batch", lambda self: batch_made.append(1) or self
+        )
+        check = self._check(chain, [], fuses=())
+        assert check.tokens == [] and check.unread == []
+        assert batch_made == []
+
+    def test_malformed_asset_word_is_unread_and_never_resolved(self, chain):
+        dirty = (1 << 248 | 1 << 200 | int(LABEL, 16)).to_bytes(32, "big")
+        self._grant(chain, (LABEL, UNPRICED, False))
+        chain.answers.update(_oracle_answers({USDC: ZERO}, priced={USDC}))
+        check = self._check(chain, [dirty])
+        assert check.tokens == []
+        assert check.unread == [
+            f"malformed Derive ASSET word 0x{dirty.hex()} "
+            "(DeriveSubstrateLib rejects it)"
+        ]
+        assert _resolve_key(LABEL) not in chain.asked
+
+    def test_resolve_asset_call_decodes_the_raw_return(self):
+        vault, label, token = _addr(0x31), _addr(0x32), _addr(0x33)
+        raw = encode(
+            ["(address,uint64,address,uint8)", "address", "bool"],
+            [(vault, 10**6, token, 6), label, True],
+        )
+        call = _resolve_asset_call(OUTBOX, LABEL)
+        assert call.data == _sel("resolveAsset(address)") + encode(["address"], [LABEL])
+        assert call.decode(raw) == _DeriveAssetResolution(token, True)
+        assert call.decode(raw).token not in (vault, label)
+
+    def test_truncated_return_lands_in_unread(self, chain, monkeypatch):
+        good = encode(
+            ["(address,uint64,address,uint8)", "address", "bool"],
+            [(_addr(0x31), 1, TOKEN_2, 6), LABEL, False],
+        )
+
+        class RawMulticall:
+            def __init__(self, ctx):
+                self._ctx = ctx
+
+            def batch(self):
+                return Multicall3Batch(self)  # type: ignore[arg-type]
+
+            def _fetch(self, calls):
+                return [
+                    (True, encode(["address"], [USDC]))
+                    if call.to == DERIVE_FUSE
+                    else (
+                        True,
+                        good
+                        if call.data.endswith(bytes.fromhex(LABEL[2:]))
+                        else good[:70],
+                    )
+                    for call in calls
+                ]
+
+        monkeypatch.setattr(unpriceable, "Multicall3", RawMulticall)
+        unread: list[str] = []
+        tokens = _derive_tokens(
+            chain.ctx,
+            list(self.FUSES),
+            {DERIVE: [_derive_word(1, LABEL), _derive_word(1, LABEL_2)]},
+            unread,
+        )
+        assert [t.token for t in tokens] == [USDC, TOKEN_2]
+        assert unread == [f"resolveAsset() of granted Derive asset label {LABEL_2}"]

@@ -8,13 +8,15 @@
 Maintained by <a href="https://ipor.io">IPOR Labs AG</a>.
 
 > **Preview, not production:** the crosschain market (54: Stargate and CCIP executors,
-> dispatchers, lanes, fuses) and the HyperCore market (55: fuses, readers, events) are
-> under active development. The SDK follows their official deployment (the 2026-10-21
-> contracts release, listed in ipor-abi) and nothing earlier, and their interfaces may
-> change or be removed between minor versions, with no backward compatibility. Route
-> no production capital through them. Everything
-> else in the package is production. `server_info` and `fusion changelog` list the same
-> status (`PREVIEW_FEATURES`).
+> dispatchers, lanes, fuses), the HyperCore market (55: fuses, readers, events) and the
+> Derive market (60: substrates and the NAV report helper) are under active development.
+> The SDK follows their official deployment (the 2026-10-21 contracts release, listed in
+> ipor-abi, for crosschain and HyperCore) and nothing earlier. Derive is ahead of the
+> public contracts: its contracts sit on a feature branch with no public commit yet, so
+> the SDK tracks that branch. Their interfaces may change or be removed between minor
+> versions, with no backward compatibility. Route no production capital through them.
+> Everything else in the package is production. `server_info` and `fusion changelog` list
+> the same status (`PREVIEW_FEATURES`).
 
 [Documentation](https://docs.ipor.io/build-on-fusion) · [SDK docs](https://docs.ipor.io/build-on-fusion/alpha/sdk) · [llms.txt for AI agents](https://ipor.io/llms.txt) · [Hosted MCP server](https://mcp.ipor.io/mcp) · [Example bot](https://github.com/IPOR-Labs/ipor-fusion-alpha-example) · [Contracts](https://github.com/IPOR-Labs/ipor-fusion)
 
@@ -421,9 +423,9 @@ release; adding one does not.
   and tools, not as Python modules.
 - **Preview features** (`PREVIEW_FEATURES` in `ipor_fusion.about`) export only
   from their own subpackages, `ipor_fusion.crosschain` (with `crosschain.fuses`,
-  `crosschain.ccip` and `crosschain.stargate`) and `ipor_fusion.hypercore`, never
-  from the top level, and keep no backward compatibility: a minor release may
-  change or remove them (see [Preview features](#preview-features-ipor_fusioncrosschain-ipor_fusionhypercore)). Their exception classes
+  `crosschain.ccip` and `crosschain.stargate`), `ipor_fusion.hypercore` and
+  `ipor_fusion.derive`, never from the top level, and keep no backward compatibility:
+  a minor release may change or remove them (see [Preview features](#preview-features-ipor_fusioncrosschain-ipor_fusionhypercore-ipor_fusionderive)). Their exception classes
   stay in `ipor_fusion.errors`, and the `vault info` document's HyperCore blocks
   (`HyperCoreJson`, ...) stay with the document.
 - **Third-party types** are not re-exported: import `ChecksumAddress` and
@@ -490,7 +492,7 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
 
-### Preview features (`ipor_fusion.crosschain`, `ipor_fusion.hypercore`)
+### Preview features (`ipor_fusion.crosschain`, `ipor_fusion.hypercore`, `ipor_fusion.derive`)
 
 Not production (see the note at the top) and outside the stable top level:
 import these from their subpackage. They track the current official contracts
@@ -510,6 +512,7 @@ the pilot executors and factories). Pin an exact version if you depend on them.
 | `decode_hypercore_event`, `hypercore_events` | The HyperCore fuse events and the pending library's `HyperCoreActionEnqueued` / `HyperCoreActionSettled`, decoded by topic with their raw log identity under the same input contract as `decode_external_state_event`; a malformed listed log raises `HyperCoreEventDecodeError` |
 | Crosschain fuses (market 54): `StargateCrosschainSupplyFuse`, `StargateCrosschainCommandFuse`, `CcipCrosschainSupplyFuse`, `CcipCrosschainCommandFuse`, `CrosschainClaimFuse`; transport-agnostic bases `CrosschainSupplyFuse` / `CrosschainCommandFuse` with `StargateSendParams` / `CcipSendParams`, plus `Command`, `CrosschainSubstrateLib`, `OptionsBuilder` | `ipor_fusion.crosschain` |
 | HyperCore fuses (market 55): `HyperCoreDepositFuse`, `HyperCoreMarginFuse`, `HyperCoreSendFuse`, `HyperCoreOrderFuse`, `HyperCoreCancelFuse`, `HyperCoreBuilderFeeFuse`, `HyperCoreSubstrates` | `ipor_fusion.hypercore`, with `HyperCoreReader`, `read_hypercore_vault_state`, the event decoders and `HyperCorePreHookWiring` (the capital-flow and pending-action pre-hooks on their selectors, `HYPERCORE_CAPITAL_FLOW_SELECTORS` / `HYPERCORE_PENDING_ACTION_SELECTORS`) |
+| Derive substrates (market 60): `DeriveSubstrates`, `DeriveLimits`, `DERIVE_MAX_SUBACCOUNTS`; NAV report helper: `DeriveNavReport`, `derive_report_from_subaccount_values`, `mtm_usd_e18_from_subaccount_values`, `derive_report_deadline`, `derive_report_typed_data`, `derive_report_digest`, `sign_derive_report`, `encode_submit_nav_report`, `DeriveAccount` (the last accepted deadline and the unsigned `submit_nav_report`) | `ipor_fusion.derive` |
 
 The crosschain API supports only the contracts of the 2026-10-21 release; earlier
 deployments are unreadable (`MIGRATION_4.md`). `open_lane` and `discover_deployment`
@@ -517,6 +520,83 @@ take the market ID explicitly (54, or a keccak-derived one from
 `crosschain_market_id(name)` for a vault built with its own): `discover_deployment`
 reads the market's executor grants; `open_lane` takes an executor address and uses the
 market ID to find the vault's matching fuses unless they are passed.
+
+### Derive (`ipor_fusion.derive`, preview)
+
+Derive is a market (60, Ethereum only) in which a PlasmaVault holds capital in Derive
+subaccounts. Its value comes from keeper-signed NAV reports, not from a price, and the
+market has no instant withdraw: `DERIVE` must never be added to a vault's instant
+withdrawal configuration. Names may change or be removed in a minor release, with no
+backward compatibility.
+
+What the package holds today:
+
+- **Substrates.** `DeriveSubstrates` encodes the typed bytes32 words of the market
+  (asset labels, managers, subaccounts, session keys, scopes, keepers and the single
+  limits word, `DeriveLimits`). `ipor_fusion.decode_substrate` inverts them for market 60.
+  At most `DERIVE_MAX_SUBACCOUNTS` (32) subaccounts may be granted.
+- **NAV report helper** (`ipor_fusion.derive`, the keeper service's tool). It builds the
+  report from per-subaccount values with exact arithmetic
+  (`mtm_usd_e18_from_subaccount_values` floors each subaccount at zero), computes the
+  EIP-712 digest the account verifies, signs it (`sign_derive_report`), and encodes
+  `submitNavReport` calldata (`encode_submit_nav_report`).
+- **Deadline rule.** `derive_report_deadline(now, window_sec, last_accepted_deadline)`
+  returns `max(now + window_sec, last_accepted_deadline + 1)`, so deadlines strictly
+  increase across accepted reports. `DeriveAccount.last_accepted_deadline()` reads the
+  last accepted deadline (0 before the first report).
+
+```python
+from decimal import Decimal
+
+from ipor_fusion.derive import (
+    DeriveLimits,
+    DeriveSubstrates,
+    derive_report_deadline,
+    mtm_usd_e18_from_subaccount_values,
+)
+
+limits = DeriveSubstrates.limits(
+    DeriveLimits(
+        max_report_age_sec=3600,
+        max_deadline_sec=900,
+        max_session_key_ttl_sec=86400,
+        max_new_subaccount_deposit_usd_e6=1_000_000_000_000,
+        max_withdraw_fee_usd_e6=50_000_000,
+        nav_jump_bps=500,
+    )
+)
+manager = DeriveSubstrates.manager(1)
+subaccount = DeriveSubstrates.subaccount(7)
+
+# Subaccount 8 is underwater and contributes zero to the sum.
+mtm = mtm_usd_e18_from_subaccount_values({7: Decimal("1500.25"), 8: Decimal("-40")})
+
+deadline = derive_report_deadline(
+    now=1_700_000_000, window_sec=300, last_accepted_deadline=1_700_000_250
+)
+```
+
+Limitations, which the SDK does not and cannot close on its own:
+
+- **Revoked grants and pending tokens.** The unpriceable check (`fetch_unpriceable_priced_tokens`)
+  reads `CASH_ASSET()` of the market's balance fuse and the token of every ASSET label
+  the vault currently grants, through the Ethereum WithdrawalOutbox (`resolveAsset`). The
+  in-flight ledger entries are priced by the balance fuse (`DeriveBalanceFuse._inFlightUsd`)
+  whatever the grants are: a pending deposit, and a withdrawal the engine has consumed, stay
+  valued after their ASSET label is revoked, and that token is outside this check until the
+  account reader ships. The outbox queue is different: the amount queued in the WithdrawalOutbox
+  for a revoked label is not valued at all, because the fuse scans only granted labels.
+- **Valuation coherence is the keeper's responsibility.** The helper signs the values it
+  is given. It does not check that `subaccount_value` agrees with the report's
+  `stateRoot` and `lastOpTimestamp`, and it does not choose a window within the account's
+  `maxDeadlineSec` (`derive_report_deadline` only enforces monotonicity). The contract
+  checks the root, the subaccount set, the deadline and the NAV band; it does not check
+  the valuation behind them.
+
+Not in the SDK yet (follow-up): the fuse call encoders, the Derive capital-flow pre-hook
+helper and the account readers. The keeper service that computes subaccount values from
+the Derive API, submits reports after `BatchSubmitted` and raises alerts is outside this
+package and is the next piece the keeper side needs.
 
 ### Readers (`ipor_fusion.readers`)
 

@@ -280,8 +280,8 @@ class TestShippedChangelog:
         assert '"CHANGELOG.md" = "ipor_fusion/CHANGELOG.md"' in pyproject
 
 
-def test_preview_features_name_crosschain_and_hypercore():
+def test_preview_features_name_crosschain_hypercore_and_derive():
     from ipor_fusion.about import PREVIEW_FEATURES, PREVIEW_STATEMENT
 
-    assert [f.name for f in PREVIEW_FEATURES] == ["crosschain", "hypercore"]
+    assert [f.name for f in PREVIEW_FEATURES] == ["crosschain", "hypercore", "derive"]
     assert "not production" in PREVIEW_STATEMENT

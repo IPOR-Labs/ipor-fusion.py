@@ -33,6 +33,7 @@ _PUBLIC_PACKAGES = (
     "ipor_fusion.crosschain.ccip",
     "ipor_fusion.crosschain.fuses",
     "ipor_fusion.crosschain.stargate",
+    "ipor_fusion.derive",
     "ipor_fusion.fuses",
     "ipor_fusion.hypercore",
     "ipor_fusion.readers",

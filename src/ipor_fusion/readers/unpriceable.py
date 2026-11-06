@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
+from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.types import ChecksumAddress
@@ -39,6 +40,15 @@ _GET_SILOS_SELECTOR = function_signature_to_4byte_selector("getSilos()")
 _PUSH4_GET_PRICE_ORACLE = b"\x63" + function_signature_to_4byte_selector(
     "getPriceOracle()"
 )
+
+_CASH_ASSET_SELECTOR = function_signature_to_4byte_selector("CASH_ASSET()")
+_RESOLVE_ASSET_SELECTOR = function_signature_to_4byte_selector("resolveAsset(address)")
+# Derive's L1 WithdrawalOutbox proxy per chain (IWithdrawalOutbox provenance,
+# verified on Etherscan). Derive settles on Ethereum only; a label cannot be
+# resolved anywhere else.
+_DERIVE_WITHDRAWAL_OUTBOX: dict[int, ChecksumAddress] = {
+    1: Web3.to_checksum_address("0x7c743D79C9C595cE332314503d84cBBb4E85FA63"),
+}
 
 _ERC4626_MARKET_IDS = frozenset(
     range(IporFusionMarkets.ERC4626_0001, IporFusionMarkets.ERC4626_0020 + 1)
@@ -174,9 +184,11 @@ def _morpho_tokens(
 @dataclass(frozen=True)
 class UnpriceableCheck:
     """`fetch_unpriceable_priced_tokens`: the flagged ``tokens``, and in
-    ``unread`` the granted substrates whose priced token could not be found
-    (a reverting ``asset()`` or ``getSilos()``): the check is complete only
-    when it is empty."""
+    ``unread`` the granted substrates whose priced token could not be found:
+    a reverting ``asset()`` or ``getSilos()``; for Derive, a reverting or
+    unmakeable ``CASH_ASSET()`` or ``resolveAsset()``, an ASSET label on a
+    chain with no known WithdrawalOutbox, and a malformed ASSET word. The check
+    is complete only when it is empty."""
 
     tokens: list[MiddlewarePricedToken]
     unread: list[str] = field(default_factory=list)
@@ -276,6 +288,129 @@ def _aave_v3_middleware_tokens(
     return tokens
 
 
+@dataclass(frozen=True)
+class _DeriveAssetResolution:
+    """What ``WithdrawalOutbox.resolveAsset(label)`` says about a label."""
+
+    token: ChecksumAddress
+    native: bool
+
+
+def _decode_resolve_asset(
+    values: tuple[tuple[str, int, str, int], str, bool],
+) -> _DeriveAssetResolution:
+    (_vault, _price, token, _decimals), _label, native = values
+    return _DeriveAssetResolution(Web3.to_checksum_address(token), bool(native))
+
+
+def _resolve_asset_call(
+    outbox: ChecksumAddress, label: ChecksumAddress
+) -> Call[_DeriveAssetResolution]:
+    """``resolveAsset(label) returns (AssetConfig{address vault, uint64
+    staticPriceX6, address token, uint8 decimals}, address label, bool
+    native)``; the token is the third field of the config tuple."""
+    return Call(
+        to=outbox,
+        data=_RESOLVE_ASSET_SELECTOR + encode(["address"], [label]),
+        output_types=["(address,uint64,address,uint8)", "address", "bool"],
+        decoder=_decode_resolve_asset,
+    )
+
+
+def _derive_asset_labels(subs: list[bytes], unread: list[str]) -> list[ChecksumAddress]:
+    """Granted Derive ASSET labels, in grant order, without duplicates. A
+    malformed ASSET word goes to ``unread``: DeriveSubstrateLib reverts on it,
+    so the fuse's ``balanceOf`` reverts whatever the labels resolve to."""
+    labels: dict[ChecksumAddress, None] = {}
+    for sub in subs:
+        info = decode_substrate(sub, IporFusionMarkets.DERIVE)
+        if info.type_label != "ASSET":
+            continue
+        if info.is_error:
+            unread.append(
+                f"malformed Derive ASSET word {info.raw_hex} "
+                "(DeriveSubstrateLib rejects it)"
+            )
+        elif info.address:
+            labels[Web3.to_checksum_address(info.address)] = None
+    return list(labels)
+
+
+def _derive_tokens(
+    ctx: Web3Context,
+    balance_fuses: list[BalanceFuse],
+    market_substrates: dict[MarketId, list[bytes]],
+    unread: list[str],
+) -> list[MiddlewarePricedToken]:
+    """The Derive balance fuse prices ``CASH_ASSET()`` whenever the report
+    equity is non-zero, and the token of every queued withdrawal of a granted
+    ASSET label; both only for non-zero amounts, so no position is needed to
+    revert on a missing price. The token comes from the Ethereum
+    WithdrawalOutbox (``resolveAsset``). A label the outbox flags ``native``
+    is skipped, although the balance fuse prices ``resolveAsset(label)
+    .cfg.token`` whatever ``native`` is: the skip assumes the native marker
+    is never granted, because the deposit and withdraw fuses reject it.
+    A read that reverts, returns undecodable data, or cannot be made (another
+    chain) lands in ``unread``."""
+    fuses = [
+        Web3.to_checksum_address(bf.fuse)
+        for bf in balance_fuses
+        if bf.market_id == IporFusionMarkets.DERIVE
+    ]
+    labels = _derive_asset_labels(
+        market_substrates.get(IporFusionMarkets.DERIVE, []), unread
+    )
+    outbox = _DERIVE_WITHDRAWAL_OUTBOX.get(int(ctx.chain_id))
+    if outbox is None:
+        unread += [
+            f"resolveAsset() of granted Derive asset label {label}: no known "
+            f"WithdrawalOutbox on chain {int(ctx.chain_id)}"
+            for label in labels
+        ]
+        labels = []
+    if not fuses and not labels:
+        return []
+
+    batch = Multicall3(ctx).batch()
+    cash = [
+        (fuse, batch.try_add(_address_call(fuse, _CASH_ASSET_SELECTOR)))
+        for fuse in fuses
+    ]
+    resolved = (
+        [(label, batch.try_add(_resolve_asset_call(outbox, label))) for label in labels]
+        if outbox is not None
+        else []
+    )
+    batch.run()
+
+    tokens = []
+    for fuse, cash_asset in cash:
+        if cash_asset.value is None:
+            unread.append(f"CASH_ASSET() of the Derive balance fuse {fuse}")
+        elif cash_asset.value != _ZERO:
+            tokens.append(
+                MiddlewarePricedToken(
+                    IporFusionMarkets.DERIVE,
+                    cash_asset.value,
+                    "cash asset of the Derive balance fuse (report equity)",
+                    zero_balance_reverts=False,
+                )
+            )
+    for label, resolution in resolved:
+        if resolution.value is None:
+            unread.append(f"resolveAsset() of granted Derive asset label {label}")
+        elif not resolution.value.native and resolution.value.token != _ZERO:
+            tokens.append(
+                MiddlewarePricedToken(
+                    IporFusionMarkets.DERIVE,
+                    resolution.value.token,
+                    f"token of granted Derive asset label {label}",
+                    zero_balance_reverts=False,
+                )
+            )
+    return tokens
+
+
 def _unpriceable(
     ctx: Web3Context, oracle: PriceOracleMiddleware, tokens: Iterable[ChecksumAddress]
 ) -> dict[ChecksumAddress, ChecksumAddress | None]:
@@ -325,6 +460,7 @@ def fetch_unpriceable_priced_tokens(
         *_morpho_tokens(morpho_positions),
         *_vault_asset_tokens(ctx, market_substrates, unread),
         *_aave_v3_middleware_tokens(ctx, balance_fuses, market_substrates),
+        *_derive_tokens(ctx, balance_fuses, market_substrates, unread),
     ]
     if not priced:
         return UnpriceableCheck(tokens=[], unread=unread)

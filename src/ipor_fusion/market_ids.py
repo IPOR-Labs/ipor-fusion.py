@@ -110,6 +110,26 @@ class IporFusionMarkets:
     # the Compound V3 fuses are deployed again under this id; substrates: asset
     # addresses, as for COMPOUND_V3_USDC
     COMPOUND_V3_INSTITUTIONAL_USDC = MarketId(57)
+    # Derive market (id 60, Ethereum only): a PlasmaVault holding capital in
+    # Derive subaccounts, valued from keeper-attested NAV reports. Substrate
+    # type: DeriveSubstrateLib (type byte in bits 255..248, every unused bit
+    # zero): 0x01 ASSET (protocol asset label, address in bits 159..0),
+    # 0x02 MANAGER (uint32 managerId in bits 31..0; PRIME SM = 1, PM2 = 5),
+    # 0x03 SUBACCOUNT (uint64 subaccountId in bits 63..0; the subaccounts valued
+    # by the NAV report, max 32), 0x04 SESSION_KEY (address in bits 159..0),
+    # 0x05 SCOPE (uint256 scopeId in bits 247..0), 0x06 KEEPER (address in bits
+    # 159..0; NAV report signers, at least two distinct), 0x07 LIMITS (exactly
+    # one word, data bits 239..0, bits 247..240 zero: maxReportAgeSec uint32
+    # (239..208), maxDeadlineSec uint32 (207..176), maxSessionKeyTtlSec uint32
+    # (175..144), maxNewSubaccountDepositUsdE6 uint64 (143..80),
+    # maxWithdrawFeeUsdE6 uint64 (79..16), navJumpBps uint16 (15..0, 0 = band
+    # disabled)).
+    # dependence graph: balance of ERC20_VAULT_BALANCE (withdrawals pay tokens
+    # into the vault, so its ERC20 balance is re-evaluated with this market).
+    # Instant withdraw is NOT supported: DERIVE must never be added to the
+    # instant withdrawal configuration of a PlasmaVault.
+    # Bootstrap: createAccount, syncConfig, a zero-set NAV report, then deposits.
+    DERIVE = MarketId(60)
     # POL unstaking via sPOLController. The out-of-band id is baked into the
     # deployed fuses as an immutable (424243 = 0x67933), so it must match the
     # deployments. Substrates per IporFusionMarkets.sol: the sPOLController

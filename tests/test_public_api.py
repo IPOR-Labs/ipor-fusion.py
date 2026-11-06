@@ -27,6 +27,7 @@ _PREVIEW = frozenset(
         "ipor_fusion.crosschain.ccip",
         "ipor_fusion.crosschain.fuses",
         "ipor_fusion.crosschain.stargate",
+        "ipor_fusion.derive",
         "ipor_fusion.hypercore",
     }
 )
@@ -472,6 +473,25 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
     "ipor_fusion.config": frozenset(
         {
             "Roles",
+        }
+    ),
+    "ipor_fusion.derive": frozenset(
+        {
+            "DERIVE_MAX_SUBACCOUNTS",
+            "DERIVE_REPORT_DOMAIN_NAME",
+            "DERIVE_REPORT_DOMAIN_VERSION",
+            "DERIVE_REPORT_TYPE",
+            "DeriveAccount",
+            "DeriveLimits",
+            "DeriveNavReport",
+            "DeriveSubstrates",
+            "derive_report_deadline",
+            "derive_report_digest",
+            "derive_report_from_subaccount_values",
+            "derive_report_typed_data",
+            "encode_submit_nav_report",
+            "mtm_usd_e18_from_subaccount_values",
+            "sign_derive_report",
         }
     ),
     "ipor_fusion.hypercore": frozenset(
@@ -1459,7 +1479,9 @@ def test_subpackage_all_lists_every_exported_name_it_defines(package: str) -> No
         defined |= _defined_in(_module(info.name))
     # HyperCore modules live under fuses/ and readers/ but export through
     # the preview subpackage.
-    preview = set(_module("ipor_fusion.hypercore").__all__)
+    preview = set(_module("ipor_fusion.hypercore").__all__) | set(
+        _module("ipor_fusion.derive").__all__
+    )
     missing = sorted(defined - set(root.__all__) - preview)
     assert not missing, f"{package}.__all__ lacks {missing}"
 
@@ -1500,6 +1522,8 @@ def test_no_stable_package_exports_a_name_a_preview_module_defines() -> None:
     root = Path(ipor_fusion.__file__).parent
     modules = [
         *root.joinpath("crosschain").rglob("*.py"),
+        *root.joinpath("derive").glob("*.py"),
+        *root.joinpath("fuses").glob("derive*.py"),
         *root.joinpath("fuses").glob("hypercore*.py"),
         *root.joinpath("readers").glob("hypercore*.py"),
     ]

@@ -234,3 +234,27 @@ class TestFindMarketsMissingErc20Dependency:
             {self.euler: [self.erc20]},
         )
         assert result == [self.morpho_lim]
+
+
+class TestDeriveDependencyEdges:
+    """DERIVE (60) must depend on ERC20_VAULT_BALANCE (7); the general rule
+    covers it without special cases."""
+
+    erc20 = IporFusionMarkets.ERC20_VAULT_BALANCE
+    derive = IporFusionMarkets.DERIVE
+
+    def test_ids(self):
+        assert (self.derive, self.erc20) == (60, 7)
+
+    def test_missing_edge_is_reported(self):
+        assert find_markets_missing_erc20_dependency({self.derive}, {}) == [60]
+
+    def test_edge_to_erc20_satisfies_the_rule(self):
+        graph = {self.derive: [self.erc20]}
+        assert not find_markets_missing_erc20_dependency({self.derive}, graph)
+
+    def test_derive_is_not_exempt_from_the_balance_fuse_rule(self):
+        assert self.derive not in NO_BALANCE_FUSE_MARKETS
+        fuse_markets = {"0xDeriveFuse": self.derive}
+        assert find_orphan_fuse_markets(fuse_markets, set()) == {60: ["0xDeriveFuse"]}
+        assert not find_orphan_fuse_markets(fuse_markets, {self.derive})

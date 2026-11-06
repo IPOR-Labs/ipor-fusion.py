@@ -149,6 +149,9 @@ UNSUPPORTED_BORROW_MARKET_IDS = frozenset(
         IporFusionMarkets.MOONWELL,
         IporFusionMarkets.SILO_V2,
         IporFusionMarkets.EBISU,
+        # A session key may open leveraged positions on Derive; the NAV report
+        # floors each subaccount at zero and there is no health reader.
+        IporFusionMarkets.DERIVE,
     }
 )
 _UNSUPPORTED_REASON = "no lending health reader for this market"
