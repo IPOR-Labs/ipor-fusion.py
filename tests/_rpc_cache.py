@@ -201,6 +201,11 @@ class CachingProvider(JSONBaseProvider):
 
     def __init__(self, inner: BaseProvider, *, cache_dir: Path) -> None:
         super().__init__()
+        # web3 reads the EIP-3668 guard off `w3.provider`, this wrapper, so it
+        # takes the one `Web3Context` set on `inner` (`archive_context` wraps
+        # after that). A copy, taken once: IF ANYTHING EVER WRITES THE FLAG
+        # AFTER WRAPPING, MAKE THIS A PROPERTY DELEGATING TO `inner`.
+        self.global_ccip_read_enabled = inner.global_ccip_read_enabled
         self._inner = inner
         self._cache_dir = cache_dir
         self._endpoint = endpoint_key(getattr(inner, "endpoint_uri", None))

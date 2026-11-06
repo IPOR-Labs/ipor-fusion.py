@@ -532,6 +532,16 @@ def test_cache_can_be_turned_off(monkeypatch):
     assert isinstance(http_provider(URL), CachingProvider)
 
 
+@pytest.mark.parametrize("enabled", [False, True])
+def test_wrapping_keeps_the_ccip_read_guard(tmp_path, enabled):
+    network = _Network()
+    network.global_ccip_read_enabled = enabled
+
+    provider = CachingProvider(network, cache_dir=tmp_path)
+
+    assert provider.global_ccip_read_enabled is enabled
+
+
 def test_clear_cache_removes_every_entry(monkeypatch, tmp_path):
     entry = _stored_call(monkeypatch, tmp_path)
     assert entry.is_relative_to(cache_dir())
@@ -628,6 +638,7 @@ def test_archive_context_probes_the_node_and_caches_its_reads(archive_node, tmp_
         assert block["proofOfAuthorityData"] == HexBytes(EXTRA_DATA)
         assert "in_flight_limit" in ctx.web3.middleware_onion
         assert "validation" not in ctx.web3.middleware_onion
+        assert ctx.web3.provider.global_ccip_read_enabled is False
 
     assert archive_node.count("eth_getCode") == 2
     # A finality lookup per provider and one block read; the second is cached.
