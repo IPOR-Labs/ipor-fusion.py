@@ -211,6 +211,8 @@ def test_keys_of_one_host_share_entries_and_never_reach_the_disk(tmp_path):
         "http://10.0.0.5:8545",
         "http://192.168.1.2",
         "http://169.254.0.1",
+        "http://100.64.0.1:8545",
+        "http://anvil:8545",
         "ws://rpc.example",
         "https://rpc.example:notaport",
         None,
@@ -224,6 +226,13 @@ def test_local_or_unknown_endpoints_are_never_cached(tmp_path, endpoint_uri):
 
     assert network.calls == ["eth_call", "eth_call"]  # no chain-id or finality lookup
     assert _files(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "endpoint_uri", ["http://8.8.8.8:8545", "https://[2001:4860::8888]"]
+)
+def test_global_address_endpoints_get_a_cache_key(endpoint_uri):
+    assert endpoint_key(endpoint_uri) is not None
 
 
 def test_the_endpoint_key_ignores_the_default_port():

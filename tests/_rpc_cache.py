@@ -12,9 +12,12 @@ always go to the network.
 
 The host hash covers only the endpoint's scheme, host and port, so an API key
 in its path or query never reaches the disk, hashed or not, and a fork on
-another host never shares the node's entries. An endpoint on a loopback or
-private address (Anvil, Hardhat, a local proxy) is never cached: a fork
-restarted at the same URL serves different state.
+another host never shares the node's entries. An endpoint on an address that
+is not global (loopback, private, link-local, shared `100.64.0.0/10`) or on a
+single-label host (`localhost`, a compose service such as `anvil`), where
+Anvil, Hardhat or a local proxy run, is never cached: a fork restarted at the
+same URL serves different state. A DNS name that resolves to such an address
+is not detected.
 
 Assumptions: a public endpoint keeps serving the same chain's state; its logs
 at a finalized block are complete (an empty answer is not stored, so a scan's
@@ -166,8 +169,8 @@ def pinned_block(method: str, params: Any) -> int | None:
 
 def endpoint_key(endpoint_uri: Any) -> str | None:
     """The cache directory name of an endpoint: a hash of its scheme, host and
-    port; None for an endpoint that must not be cached (no URL, loopback or
-    private host)."""
+    port; None for an endpoint that must not be cached (no URL, a local host
+    as the module docstring defines it)."""
     if endpoint_uri is None:
         return None
     url = urlsplit(str(endpoint_uri))
@@ -183,13 +186,12 @@ def endpoint_key(endpoint_uri: Any) -> str | None:
 
 
 def _is_local(host: str) -> bool:
-    if host == "localhost" or host.endswith(".localhost"):
-        return True
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
-        return False
-    return address.is_loopback or address.is_private or address.is_link_local
+        # Checked after the address: an IPv6 literal has no dot either.
+        return "." not in host or host.endswith(".localhost")
+    return not address.is_global
 
 
 class CachingProvider(JSONBaseProvider):
