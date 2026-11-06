@@ -522,10 +522,11 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
         with pytest.raises(AssertionError, match="no simulated call labeled"):
             self.mod._logs_of(result, "confirm")
 
-    def test_proposal_hash_mismatch_selector_is_the_real_one(self) -> None:
-        # The example hand-writes this error signature and only the RPC-gated run
-        # consumes it, so a typo would surface as "reverted for the wrong reason"
-        # against a live provider and nowhere else. Derive it here independently.
+    def test_proposal_hash_mismatch_selector_is_pinned(self) -> None:
+        # Pins the example's selector to this signature, so an edit to its
+        # signature string fails offline instead of as "reverted for the wrong
+        # reason" in the RPC-gated run. That the deployed executor raises this
+        # error is shown only by that run.
         assert self.mod.PROPOSAL_HASH_MISMATCH_SELECTOR == (
             function_signature_to_4byte_selector(
                 "ExternalStateExecutorProposalHashMismatch(bytes32,bytes32)"
