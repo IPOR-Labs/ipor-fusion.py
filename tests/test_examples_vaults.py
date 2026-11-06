@@ -18,6 +18,7 @@ from eth_utils import function_signature_to_4byte_selector
 from hexbytes import HexBytes
 from web3 import Web3
 
+from ipor_fusion import CUSTOM_ERRORS
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
@@ -522,15 +523,14 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
         with pytest.raises(AssertionError, match="no simulated call labeled"):
             self.mod._logs_of(result, "confirm")
 
-    def test_proposal_hash_mismatch_selector_is_pinned(self) -> None:
-        # Pins the example's selector to this signature, so an edit to its
-        # signature string fails offline instead of as "reverted for the wrong
-        # reason" in the RPC-gated run. That the deployed executor raises this
-        # error is shown only by that run.
-        assert self.mod.PROPOSAL_HASH_MISMATCH_SELECTOR == (
-            function_signature_to_4byte_selector(
-                "ExternalStateExecutorProposalHashMismatch(bytes32,bytes32)"
-            )
+    def test_proposal_hash_mismatch_selector_is_a_contracts_error(self) -> None:
+        # Looked up in the error registry generated from the contracts' source,
+        # so a selector of no contract error, or of another one, fails offline
+        # instead of as "reverted for the wrong reason" in the RPC-gated run.
+        # That the deployed executor raises it is shown only by that run.
+        assert CUSTOM_ERRORS.get(self.mod.PROPOSAL_HASH_MISMATCH_SELECTOR) == (
+            "ExternalStateExecutorProposalHashMismatch",
+            ("bytes32", "bytes32"),
         )
         # bytes32, so a shorter literal would encode as a different proposal.
         assert len(self.mod.WRONG_PROPOSAL_HASH) == 32
