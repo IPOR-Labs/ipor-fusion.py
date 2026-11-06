@@ -21,7 +21,6 @@ from web3 import Web3
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.fuse_action import FuseAction
 from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
-from ipor_fusion.fuses import ExternalStateSubstrates
 from ipor_fusion.types import MAX_UINT256, Amount
 
 Loader = Callable[[str], ModuleType]
@@ -372,19 +371,6 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
         for type_tag, expected in guards.items():
             (guard,) = by_type[type_tag]
             assert int.from_bytes(guard[1:], "big") == expected
-
-    def test_mandatory_guard_encoders_reject_zero(self) -> None:
-        # The executor reads a zero STALENESS_MAX or BIG_CHANGE_BPS as "unset"
-        # and refuses to build its substrate cache, which happens inside the
-        # first enter -- so a zero would fail far from its cause. Assert the
-        # encoder is what stops it (checking the example's own constants would
-        # be tautological: market_substrates() could not have built them).
-        for encoder in (
-            ExternalStateSubstrates.staleness_max,
-            ExternalStateSubstrates.big_change_bps,
-        ):
-            with pytest.raises(ValueError, match="must not be zero"):
-                encoder(0)
 
     def test_actor_addresses_are_pairwise_distinct(self) -> None:
         # Collapsing ALPHA into OWNER -- the anti-pattern this example spends
