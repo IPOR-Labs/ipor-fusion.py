@@ -224,6 +224,50 @@ class TestDocument:
         ):
             fetch_fuse_whitelist_json(_ctx(), EULER)
 
+    @staticmethod
+    def _no_data(block: object, code: bytes) -> MagicMock:
+        ctx = _ctx()
+        ctx.default_block = block
+        ctx.call.side_effect = lambda to, data, *block: b""
+        ctx.web3.eth.get_code.return_value = code
+        return ctx
+
+    def test_a_block_before_the_whitelist_was_deployed_names_it(self):
+        ctx = self._no_data(100_000_000, b"")
+        with (
+            patch(
+                "ipor_fusion.fuse_whitelist.fuse_whitelist_for_chain",
+                autospec=True,
+                return_value=WHITELIST,
+            ),
+            pytest.raises(EmptyCallResultError) as raised,
+        ):
+            fetch_fuse_whitelist_json(ctx, EULER)
+
+        assert str(raised.value) == (
+            f"arbitrum's IporFusionFuseWhitelistProxy ({WHITELIST.address}) was"
+            " not deployed yet at block 100000000: ask for a later block, or"
+            " omit it for the latest."
+        )
+        ctx.web3.eth.get_code.assert_called_once_with(WHITELIST.address, 100_000_000)
+
+    @pytest.mark.parametrize(
+        ("block", "code"), [("latest", b""), (100_000_000, b"\x60\x80")]
+    )
+    def test_no_data_from_a_deployed_or_latest_whitelist_stays_generic(
+        self, block, code
+    ):
+        ctx = self._no_data(block, code)
+        with (
+            patch(
+                "ipor_fusion.fuse_whitelist.fuse_whitelist_for_chain",
+                autospec=True,
+                return_value=WHITELIST,
+            ),
+            pytest.raises(EmptyCallResultError, match="returned no data"),
+        ):
+            fetch_fuse_whitelist_json(ctx, EULER)
+
 
 def test_the_whitelist_comes_from_the_registry_by_name():
     registry = AddressRegistry(

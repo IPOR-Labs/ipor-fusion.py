@@ -384,14 +384,27 @@ def fetch_fuse_whitelist_json(
 ) -> FuseWhitelistJson:
     """Read the whitelist of ``market_id`` on ``ctx``'s chain and block and build
     its document. Raises `AddressNotInRegistryError` when the chain publishes no
-    whitelist, plus what `fuse_whitelist_for_chain` raises."""
+    whitelist, `EmptyCallResultError` (naming the whitelist and the block) when
+    ``ctx`` is pinned to a block before the whitelist was deployed, plus what
+    `fuse_whitelist_for_chain` raises."""
     whitelist = fuse_whitelist_for_chain(ctx.chain_id)
     if whitelist is None:
         raise AddressNotInRegistryError(
             f"{CHAIN_NAMES.get(ctx.chain_id, ctx.chain_id)} publishes no"
             f" {FUSE_WHITELIST_REGISTRY_NAME} in the ipor-abi registry"
         )
-    entries = read_market_fuses(ctx, whitelist, [market_id])[market_id]
+    try:
+        entries = read_market_fuses(ctx, whitelist, [market_id])[market_id]
+    except EmptyCallResultError as exc:
+        block = ctx.default_block
+        if block == "latest" or ctx.web3.eth.get_code(whitelist.address, block):
+            raise
+        raise EmptyCallResultError(
+            f"{CHAIN_NAMES.get(ctx.chain_id, ctx.chain_id)}'s"
+            f" {FUSE_WHITELIST_REGISTRY_NAME} ({whitelist.address}) was not"
+            f" deployed yet at block {block}: ask for a later block, or omit"
+            " it for the latest."
+        ) from exc
     return build_fuse_whitelist_json(
         ctx.chain_id,
         whitelist,
