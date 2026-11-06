@@ -22,10 +22,12 @@ is not detected.
 Assumptions: a public endpoint keeps serving the same chain's state; its logs
 at a finalized block are complete (an empty answer is not stored, so a scan's
 empty pages are refetched on every run, but a lagging backend's truncated
-list would be); and the params of reads at finalized blocks are deterministic
-(a wall-clock time or a random salt adds an entry on every run). The cache
-only ever speeds tests up: a failed cache read or write, a failed lookup of
-its own (chain id, finality), or a request it cannot key, falls back to the
+list would be); the params of reads at finalized blocks are deterministic
+(a wall-clock time or a random salt adds an entry on every run); and only the
+tests write the cache directory: an entry is served as it is, never checked
+against the chain, so whoever can write there decides what the tests see. The
+cache only ever speeds tests up: a failed cache read or write, a failed lookup
+of its own (chain id, finality), or a request it cannot key, falls back to the
 network.
 `IPOR_FUSION_TEST_RPC_CACHE=0` turns it off; `pytest --rpc-cache-clear` empties
 `$XDG_CACHE_HOME/ipor-fusion/tests/`, every format's entries, before the run.
