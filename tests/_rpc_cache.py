@@ -45,12 +45,7 @@ from typing import Any, cast
 from urllib.parse import urlsplit
 
 import pytest
-from web3 import HTTPProvider
-
-# web3's private `Web3JsonEncoder`, the one `HTTPProvider.encode_rpc_request`
-# uses, so a key sees the params exactly as they go on the wire (`HexBytes` and
-# hex strings alike); a web3 release that moves it fails this import.
-from web3._utils.encoding import Web3JsonEncoder
+from web3 import HTTPProvider, Web3
 from web3.exceptions import Web3Exception
 from web3.providers import BaseProvider, JSONBaseProvider
 from web3.types import RPCEndpoint, RPCResponse
@@ -246,11 +241,13 @@ class CachingProvider(JSONBaseProvider):
         if chain_dir is None:
             return None
         try:
+            # `Web3.to_json` applies the encoder `HTTPProvider.encode_rpc_request`
+            # uses, so a key sees the params as they go on the wire (`HexBytes`
+            # and hex strings alike); the round trip adds the `sort_keys` it
+            # does not take.
+            wire_params = json.loads(Web3.to_json({"params": params}))["params"]
             request = json.dumps(
-                [method, params],
-                cls=Web3JsonEncoder,
-                sort_keys=True,
-                separators=(",", ":"),
+                [method, wire_params], sort_keys=True, separators=(",", ":")
             )
         except (TypeError, ValueError):
             return None

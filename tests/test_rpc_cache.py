@@ -254,7 +254,7 @@ def test_the_endpoint_key_ignores_the_default_port():
         ("eth_call", ["empty-hex", hex(FINALIZED)]),
         ("eth_call", ["empty-list", hex(FINALIZED)]),
         ("eth_getLogs", [{"fromBlock": "0x0", "toBlock": "latest"}]),
-        ("eth_call", [{1: "a", "b": 2}, hex(FINALIZED)]),
+        ("eth_call", [{"to": "0xabc", "data": object()}, hex(FINALIZED)]),
     ],
     ids=[
         "past-finality",
