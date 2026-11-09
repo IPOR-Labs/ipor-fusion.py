@@ -7,6 +7,7 @@ fetched `VaultData` (with its validation) as one `VaultInfoJson`."""
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
+from enum import IntEnum
 from typing import NotRequired, TypeAlias, TypedDict
 
 from eth_typing import ChecksumAddress, HexAddress
@@ -1298,7 +1299,22 @@ def _wad_to_usd(wad: int) -> float:
     return wad / 10**18
 
 
-def _hypercore_pending_json(pending: HyperCorePendingState) -> HyperCorePendingJson:
+def _is_declared_member(member: IntEnum) -> bool:
+    # `member in type(member)` answers differently on 3.11, 3.12 and 3.13 for
+    # a pseudo-member.
+    return member.name in type(member).__members__
+
+
+def _hypercore_pending_json(
+    pending: HyperCorePendingState | None,
+) -> HyperCorePendingJson | None:
+    # The document's enum fields are closed Literals: an UNKNOWN_<n> value
+    # leaves the whole block null, as the `pending` field doc says.
+    if pending is None or not (
+        _is_declared_member(pending.action_class)
+        and _is_declared_member(pending.effect_kind)
+    ):
+        return None
     return {
         "pending": pending.pending,
         "settled": pending.settled,
@@ -1370,7 +1386,7 @@ def _build_hypercore_json(data: VaultData) -> HyperCoreJson | None:
             }
             for pm in state.perp_markets
         ],
-        "pending": _hypercore_pending_json(state.pending) if state.pending else None,
+        "pending": _hypercore_pending_json(state.pending),
         "core_user_exists_note": _HYPERCORE_DOCS["core_user_exists"],
         "perp_dex_bitmap_note": _HYPERCORE_DOCS["perp_dex_bitmap"],
         "nav_wad_note": _HYPERCORE_DOCS["nav_wad"],

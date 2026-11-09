@@ -4,6 +4,9 @@ from dataclasses import replace
 from unittest.mock import MagicMock
 
 import pytest
+from _multicall import multicall_aware
+from eth_abi import encode
+from test_hypercore_readers import READER, _pending_state_raw
 from web3 import Web3
 
 from ipor_fusion import UnsupportedChainError, Web3Context
@@ -12,6 +15,10 @@ from ipor_fusion.hypercore import (
     HyperCoreTransferStatus,
     compare_hypercore_transfer,
     read_hypercore_transfer_snapshot,
+)
+from ipor_fusion.readers.hypercore import (
+    CORE_USER_EXISTS_PRECOMPILE,
+    SPOT_BALANCE_PRECOMPILE,
 )
 from ipor_fusion.types import Amount, ChainId
 
@@ -125,6 +132,25 @@ def test_snapshots_must_track_one_action_and_one_vault() -> None:
         )
     with pytest.raises(ValueError, match="later block"):
         compare_hypercore_transfer(_snapshot(), _snapshot(), "core_to_evm")
+
+
+def test_snapshot_keeps_the_flags_of_an_unknown_action_class() -> None:
+    def handler(to: str, data: bytes) -> bytes:
+        if to == CORE_USER_EXISTS_PRECOMPILE:
+            return encode(["bool"], [True])
+        if to == SPOT_BALANCE_PRECOMPILE:
+            return encode(["uint64"] * 3, [1_400_986_500, 0, 0])
+        if to == USDC:
+            return encode(["uint256"], [0])
+        assert to == VAULT
+        return _pending_state_raw(pending=True, settled=False, action_class=9)
+
+    ctx = MagicMock(chain_id=999, default_block=100)
+    ctx.at_block.return_value = ctx
+    ctx.call.side_effect = multicall_aware(handler)
+    snapshot = read_hypercore_transfer_snapshot(ctx, VAULT, USDC, pending_reader=READER)
+    assert (snapshot.pending, snapshot.settled) == (True, False)
+    assert snapshot.action_nonce == 32
 
 
 def test_snapshot_on_a_chain_without_a_pending_reader_is_unsupported() -> None:

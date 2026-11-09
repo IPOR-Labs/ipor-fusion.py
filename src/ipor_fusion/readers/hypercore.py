@@ -28,7 +28,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import TypeVar
+from typing import Self, TypeVar
 
 from eth_abi import decode, encode
 from eth_abi.exceptions import DecodingError
@@ -66,7 +66,6 @@ from ipor_fusion.types import (
 )
 
 T = TypeVar("T")
-_E = TypeVar("_E", bound=IntEnum)
 
 #: The HyperCore market id.
 HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
@@ -359,17 +358,43 @@ class HyperCoreReader:
         return self._read(L1_BLOCK_NUMBER_PRECOMPILE, [], [], ["uint64"])
 
 
-class HyperCoreActionClass(IntEnum):
-    """``HyperCorePendingLib.ActionClass``."""
+class _OpenIntEnum(IntEnum):
+    """An ``IntEnum`` that decodes an undeclared int to an ``UNKNOWN_<n>``
+    pseudo-member, so a value a later contracts release adds keeps the rest of
+    the decoded struct. Each decode builds a new pseudo-member: compare them
+    with ``==``, since ``is`` holds only for declared members."""
+
+    @classmethod
+    def _missing_(cls, value: object) -> Self | None:
+        if not isinstance(value, int):
+            return None
+        member = int.__new__(cls, value)
+        member._name_ = f"UNKNOWN_{value}"
+        member._value_ = value
+        return member
+
+
+class HyperCoreActionClass(_OpenIntEnum):
+    """``HyperCorePendingLib.ActionClass``.
+
+    An undeclared value decodes to an ``UNKNOWN_<n>`` pseudo-member: it equals
+    ``n`` and is not in ``list(HyperCoreActionClass)``. A ``match`` over the
+    members is therefore not exhaustive, although type checkers accept it as
+    such.
+    """
 
     NONE = 0
     TRANSFER = 1
     ORDER = 2
 
 
-class HyperCoreEffectKind(IntEnum):
+class HyperCoreEffectKind(_OpenIntEnum):
     """``HyperCorePendingLib.EFFECT_*``: the balance a transfer waits for
-    before it counts as settled."""
+    before it counts as settled.
+
+    An undeclared value decodes to an ``UNKNOWN_<n>`` pseudo-member, as in
+    :class:`HyperCoreActionClass`.
+    """
 
     NONE = 0
     CORE_SPOT = 1
@@ -427,17 +452,6 @@ _PendingAction = tuple[
 ]  # fmt: skip
 
 
-def _pending_enum(enum: type[_E], value: int) -> _E:
-    # Raises DecodingError so an optional batch read degrades to None.
-    try:
-        return enum(value)
-    except ValueError as exc:
-        raise DecodingError(
-            f"HyperCorePendingReader.pendingState() returned {value}, "
-            f"not a known {enum.__name__}"
-        ) from exc
-
-
 def _decode_pending_state(
     values: tuple[_PendingAction, bool, bool, int, int, bool],
 ) -> HyperCorePendingState:
@@ -466,12 +480,12 @@ def _decode_pending_state(
         pending_until=Timestamp(pending_until),
         enqueued_l1_block=enqueued_l1_block,
         enqueued_evm_block=enqueued_evm_block,
-        action_class=_pending_enum(HyperCoreActionClass, action_class),
+        action_class=HyperCoreActionClass(action_class),
         action_id=HyperCoreActionId(action_id),
         payload_hash=PayloadHash(bytes(payload_hash)),
         cached_value_wad=cached_value_wad,
         action_nonce=action_nonce,
-        effect_kind=_pending_enum(HyperCoreEffectKind, effect_kind),
+        effect_kind=HyperCoreEffectKind(effect_kind),
         effect_token_index=HyperCoreTokenIndex(effect_token_index),
         effect_evm_asset=Web3.to_checksum_address(effect_evm_asset),
         timeout_at=Timestamp(timeout_at),
@@ -524,8 +538,8 @@ class HyperCorePendingReader:
 
     def pending_state(self) -> Call[HyperCorePendingState]:
         """Raises ``UnsupportedContractVersionError`` unless the payload is the
-        released reader's 23 words, and ``eth_abi``'s ``DecodingError`` for an
-        action class or effect kind the SDK does not know."""
+        released reader's 23 words. An action class or effect kind the SDK
+        does not know decodes to an ``UNKNOWN_<n>`` pseudo-member."""
         return self._pending_state_payload().map(_decode_pending_payload)
 
     def _optional_pending_state(self) -> Call[HyperCorePendingState | None]:
