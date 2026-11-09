@@ -246,8 +246,14 @@ def test_local_or_unknown_endpoints_are_never_cached(tmp_path, endpoint_uri):
         "https://[2001:4860::8888]",
     ],
 )
-def test_global_address_endpoints_get_a_cache_key(endpoint_uri):
-    assert endpoint_key(endpoint_uri) is not None
+def test_global_address_endpoints_are_cached(tmp_path, endpoint_uri):
+    network = _Network(endpoint_uri=endpoint_uri)
+    provider = CachingProvider(network, cache_dir=tmp_path)
+
+    _twice(provider, "eth_call", CALL)
+
+    assert network.count("eth_call") == 1
+    assert len(_entries(tmp_path)) == 1
 
 
 def test_a_host_inet_aton_refuses_is_classified_as_a_name():
