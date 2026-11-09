@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from _multicall import multicall_aware
 from eth_abi import decode, encode
+from eth_abi.exceptions import DecodingError
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -244,6 +245,10 @@ def _pending_state_raw(*, pending: bool, settled: bool, **over) -> bytes:
     return encode(["(bytes)"], [(inner,)])
 
 
+# The pilot reader's answer: 18 words where the released reader returns 23.
+PILOT_PENDING_STATE_RAW = encode(["(bytes)"], [(b"\x00" * 18 * 32,)])
+
+
 class TestUniversalRead:
     def test_pending_state_reads_through_the_vault(self):
         ctx = _ctx()
@@ -288,8 +293,23 @@ class TestUniversalRead:
 
     def test_the_earlier_eighteen_word_payload_is_refused_by_name(self):
         ctx = _ctx()
-        ctx.call.return_value = encode(["(bytes)"], [(b"\x00" * 18 * 32,)])
+        ctx.call.return_value = PILOT_PENDING_STATE_RAW
         with pytest.raises(UnsupportedContractVersionError, match="576 bytes"):
+            HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
+
+    @pytest.mark.parametrize(
+        ("field", "enum"),
+        [
+            ("action_class", "HyperCoreActionClass"),
+            ("effect_kind", "HyperCoreEffectKind"),
+        ],
+    )
+    def test_an_unknown_enum_value_is_a_decoding_error(self, field, enum):
+        ctx = _ctx()
+        ctx.call.return_value = _pending_state_raw(
+            pending=True, settled=False, **{field: 99}
+        )
+        with pytest.raises(DecodingError, match=f"99, not a known {enum}"):
             HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
 
     def test_a_pending_margin_transfer_without_an_effect_stays_pending(self):
@@ -370,11 +390,15 @@ def test_perp_px_decimals_rejects_out_of_range(sz_decimals):
         perp_px_decimals(sz_decimals)
 
 
-def _universal_read(data: bytes) -> bytes:
+def _universal_read(
+    data: bytes, *, pending_payload: bytes | None = None, **pending_action: object
+) -> bytes:
     """`PlasmaVault.read` double: the pending reader or the balance fuse."""
     target, inner = decode(["address", "bytes"], data[4:])
     if Web3.to_checksum_address(target) == READER:
-        return _pending_state_raw(pending=False, settled=True)
+        if pending_payload is not None:
+            return pending_payload
+        return _pending_state_raw(pending=False, settled=True, **pending_action)
     assert Web3.to_checksum_address(target) == BALANCE_FUSE
     assert bytes(inner) == _selector("balanceOf()")
     return encode(["(bytes)"], [(encode(["uint256"], [8_245_000_000_000_000]),)])
@@ -386,8 +410,12 @@ def _vault_state_handler(
     substrates: list[bytes] | None = None,
     xyz_value: int = XYZ_ACCOUNT_VALUE,
     price: tuple[int, int] | BaseException = USDC_PRICE,
+    pending_action: dict[str, object] | None = None,
+    pending_payload: bytes | None = None,
 ):
-    """eth_call double for the vault, the oracle and the precompiles."""
+    """eth_call double for the vault, the oracle and the precompiles;
+    ``pending_action`` overrides fields of the reader's pending action, and
+    ``pending_payload`` replaces the reader's whole answer."""
     words = SUBSTRATES if substrates is None else substrates
     vault_views = {
         _selector("getMarketSubstrates(uint256)"): lambda _d: encode(
@@ -396,7 +424,9 @@ def _vault_state_handler(
         _selector("getPriceOracleMiddleware()"): lambda _d: encode(
             ["address"], [ORACLE]
         ),
-        _selector("read(address,bytes)"): _universal_read,
+        _selector("read(address,bytes)"): lambda d: _universal_read(
+            d, pending_payload=pending_payload, **(pending_action or {})
+        ),
     }
 
     def margin(data: bytes) -> bytes:
@@ -535,3 +565,24 @@ class TestVaultState:
         ctx.call.side_effect = multicall_aware(_vault_state_handler(xyz_value=0))
         state = read_hypercore_vault_state(ctx, VAULT, BALANCE_FUSE, MARKET)
         assert state.pending is None and state.nav_matches_balance_fuse is True
+
+    @pytest.mark.parametrize(
+        "undecodable",
+        [
+            pytest.param({"pending_action": {"effect_kind": 99}}, id="unknown_enum"),
+            pytest.param({"pending_payload": PILOT_PENDING_STATE_RAW}, id="18_words"),
+        ],
+    )
+    def test_an_undecodable_pending_state_leaves_only_it_none(self, undecodable):
+        ctx = _ctx()
+        ctx.chain_id = 999
+        ctx.call.side_effect = multicall_aware(
+            _vault_state_handler(xyz_value=0, **undecodable)
+        )
+        state = read_hypercore_vault_state(
+            ctx, VAULT, BALANCE_FUSE, MARKET, pending_reader=READER
+        )
+        assert state.pending is None
+        assert state.balance_fuse_value_wad == 8_245_000_000_000_000
+        assert state.nav_matches_balance_fuse is True
+        assert len(state.perp_markets) == 1

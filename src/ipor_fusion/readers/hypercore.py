@@ -31,6 +31,7 @@ from enum import IntEnum
 from typing import TypeVar
 
 from eth_abi import decode, encode
+from eth_abi.exceptions import DecodingError
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -65,6 +66,7 @@ from ipor_fusion.types import (
 )
 
 T = TypeVar("T")
+_E = TypeVar("_E", bound=IntEnum)
 
 #: The HyperCore market id.
 HYPERCORE_MARKET = IporFusionMarkets.HYPERCORE
@@ -425,6 +427,17 @@ _PendingAction = tuple[
 ]  # fmt: skip
 
 
+def _pending_enum(enum: type[_E], value: int) -> _E:
+    # Raises DecodingError so an optional batch read degrades to None.
+    try:
+        return enum(value)
+    except ValueError as exc:
+        raise DecodingError(
+            f"HyperCorePendingReader.pendingState() returned {value}, "
+            f"not a known {enum.__name__}"
+        ) from exc
+
+
 def _decode_pending_state(
     values: tuple[_PendingAction, bool, bool, int, int, bool],
 ) -> HyperCorePendingState:
@@ -453,12 +466,12 @@ def _decode_pending_state(
         pending_until=Timestamp(pending_until),
         enqueued_l1_block=enqueued_l1_block,
         enqueued_evm_block=enqueued_evm_block,
-        action_class=HyperCoreActionClass(action_class),
+        action_class=_pending_enum(HyperCoreActionClass, action_class),
         action_id=HyperCoreActionId(action_id),
         payload_hash=PayloadHash(bytes(payload_hash)),
         cached_value_wad=cached_value_wad,
         action_nonce=action_nonce,
-        effect_kind=HyperCoreEffectKind(effect_kind),
+        effect_kind=_pending_enum(HyperCoreEffectKind, effect_kind),
         effect_token_index=HyperCoreTokenIndex(effect_token_index),
         effect_evm_asset=Web3.to_checksum_address(effect_evm_asset),
         timeout_at=Timestamp(timeout_at),
@@ -486,6 +499,14 @@ def _decode_pending_payload(data: bytes) -> HyperCorePendingState:
     return _decode_pending_state(values)
 
 
+def _decode_optional_pending_payload(data: bytes) -> HyperCorePendingState | None:
+    # A payload the SDK cannot decode leaves only the pending state unknown.
+    try:
+        return _decode_pending_payload(data)
+    except (UnsupportedContractVersionError, DecodingError):
+        return None
+
+
 class HyperCorePendingReader:
     """``HyperCorePendingReader`` through the vault's ``UniversalReader``.
 
@@ -502,11 +523,16 @@ class HyperCorePendingReader:
         self._reader = reader
 
     def pending_state(self) -> Call[HyperCorePendingState]:
-        """Raises ``UnsupportedContractVersionError`` for a payload that is
-        not the released reader's 23 words (the earlier reader returns 18)."""
-        return self._vault.universal_read(self._reader, _PENDING_STATE_SELECTOR).map(
-            _decode_pending_payload
-        )
+        """Raises ``UnsupportedContractVersionError`` unless the payload is the
+        released reader's 23 words, and ``eth_abi``'s ``DecodingError`` for an
+        action class or effect kind the SDK does not know."""
+        return self._pending_state_payload().map(_decode_pending_payload)
+
+    def _optional_pending_state(self) -> Call[HyperCorePendingState | None]:
+        return self._pending_state_payload().map(_decode_optional_pending_payload)
+
+    def _pending_state_payload(self) -> Call[bytes]:
+        return self._vault.universal_read(self._reader, _PENDING_STATE_SELECTOR)
 
     def is_action_pending(self) -> Call[bool]:
         return self._vault.universal_read_decoded(
@@ -798,7 +824,8 @@ def read_hypercore_vault_state(
 ) -> HyperCoreVaultState:
     """:func:`read_hypercore_nav` plus the balance fuse's ``balanceOf()`` in
     the vault's context, the pending state (when a reader is known for the
-    chain or given) and the granted perp markets with their coin names, all
+    chain or given, and its answer decodes; ``None`` otherwise, without
+    affecting the rest) and the granted perp markets with their coin names, all
     at ``ctx.default_block``."""
     nav = read_hypercore_nav(ctx, vault, market_id)
     pv = PlasmaVault(vault)
@@ -808,7 +835,9 @@ def read_hypercore_vault_state(
     batch = Multicall3(ctx).batch()
     fuse_value = batch.try_add(pv.balance_fuse_value(balance_fuse))
     pending = (
-        batch.try_add(HyperCorePendingReader(vault, pending_reader).pending_state())
+        batch.try_add(
+            HyperCorePendingReader(vault, pending_reader)._optional_pending_state()
+        )
         if pending_reader is not None
         else None
     )

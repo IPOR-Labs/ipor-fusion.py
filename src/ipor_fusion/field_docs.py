@@ -136,7 +136,9 @@ DOCS: dict[str, dict[str, str]] = {
             "HyperCorePendingReader.pendingState(): whether a HyperCore action "
             "blocks execute and updateMarketsBalances, the settled predicate, and "
             "the raw last action (class, id, nonce, window). Null when no reader "
-            "is known for the chain."
+            "is known for the chain, or the read reverts or returns a payload "
+            "the SDK cannot decode: another length than the released reader's, "
+            "or an action class or effect kind the SDK does not know."
         ),
     },
     "withdraw_manager_details": {
