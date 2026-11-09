@@ -22,6 +22,7 @@ from _euler_v2 import (
     BASE_FUSION_FACTORY,
     EULER_SWAP_DEPLOY_FUSE,
     OWNER,
+    PINNED_BLOCK,
     SUB_ACCOUNT,
     clone_args,
     evc_is_operator_authorized,
@@ -41,9 +42,7 @@ log = logging.getLogger(__name__)
 
 
 def test_simulate_euler_v2_swap_deploy_base(web3_base):
-    # Pin the latest block for the run so every read/sim call sees one consistent
-    # state (whale balances, factory + eVault state).
-    block = web3_base.eth.block_number
+    block = PINNED_BLOCK
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER).at_block(
         block
     )

@@ -15,6 +15,7 @@ from _euler_v2 import (
     BASE_FUSION_FACTORY,
     EULER_SWAP_RECONFIGURE_FUSE,
     OWNER,
+    PINNED_BLOCK,
     SUB_ACCOUNT,
     clone_args,
     dynamic_params,
@@ -44,8 +45,7 @@ _NEW_EQUILIBRIUM_RESERVE = 6 * 10**18
 
 
 def test_simulate_euler_v2_swap_reconfigure_base(web3_base):
-    # Pin the latest block for the run so every read/sim call sees one consistent state.
-    block = web3_base.eth.block_number
+    block = PINNED_BLOCK
     ctx = Web3Context(web3=web3_base, chain_id=ChainId(8453), signer=OWNER).at_block(
         block
     )

@@ -95,6 +95,10 @@ jobs:
         run: uv build
         id: build
 
+      # The tests serve RPC responses cached under ~/.cache/ipor-fusion/tests/
+      # (tests/_rpc_cache.py) without checking them: if that directory is ever
+      # restored from a cache, restore only entries saved by runs on main, never
+      # by a pull request. `enable-cache` above is uv's package cache, not this.
       - name: Tests
         if: inputs.test-enabled
         run: |
