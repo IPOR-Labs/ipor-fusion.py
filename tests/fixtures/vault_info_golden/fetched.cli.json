@@ -53,7 +53,7 @@
     "ipor_dao_fee_recipient_note": "Address receiving the IPOR DAO's share of the performance and management fees.",
     "deposit_fee_percent": null,
     "deposit_fee_wad": null,
-    "deposit_fee_percent_note": "Onboarding Contribution: charged when a deposit is made into the vault, in shares rather than assets. null when not known - most often because this vault's FeeManager predates the deposit fee.",
+    "deposit_fee_percent_note": "Onboarding Contribution: charged when a deposit is made into the vault, in shares rather than assets. null when not known - most often because this vault's FeeManager predates `getDepositFee`.",
     "request_fee_percent": 0.1,
     "request_fee_wad": 1000000000000000,
     "request_fee_percent_note": "Offboarding Contribution for Scheduled Withdrawals: charged at request time. Applies only to the Scheduled Withdrawal path, never to an Instant Withdrawal \u2013 a user pays one path, never both.",

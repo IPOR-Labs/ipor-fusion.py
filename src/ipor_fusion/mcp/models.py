@@ -158,7 +158,8 @@ class HighWaterMark(_Base):
 
 
 class FeesSection(_Base):
-    """Every fee the vault can charge, entry and exit sides included.
+    """Every fee the vault can charge, the Onboarding and Offboarding
+    Contributions included.
 
     Every key is always present. On a fee value, `null` means "not known" —
     the vault has no withdraw manager, or its FeeManager predates the getter;
@@ -275,10 +276,10 @@ class PendingRequestEntry(_Base):
 class WithdrawManagerDetails(_Base):
     """Scheduled-withdrawal state: the release window and what is queued in it.
 
-    The exit fees a user pays are NOT here; they live in the top-level `fees`
-    object alongside the entry-side fee, so one object answers what the vault
-    costs. `fees_note` is that cross-reference, and is the one `*_note` field
-    with no sibling of its own.
+    The two Offboarding Contributions are NOT here; they live in the top-level
+    `fees` object alongside the Onboarding Contribution, so one object answers
+    what the vault costs. `fees_note` is that cross-reference, and is the one
+    `*_note` field with no sibling of its own.
     """
 
     withdraw_window_seconds: int = Field(
