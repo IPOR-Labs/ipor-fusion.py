@@ -41,6 +41,7 @@ import ipaddress
 import json
 import os
 import shutil
+import socket
 import tempfile
 from pathlib import Path
 from typing import Any, cast
@@ -182,13 +183,25 @@ def endpoint_key(endpoint_uri: Any) -> str | None:
     return hashlib.sha256(origin.encode()).hexdigest()[:16]
 
 
+def _ip_literal(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """`host` as an address, or None if it is a name. The resolver also takes
+    shorthand IPv4 (`127.1`, `0x7f.1`, `0177.0.0.1`), and `inet_aton` parses
+    those forms."""
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    try:
+        return ipaddress.IPv4Address(socket.inet_aton(host))
+    except (OSError, ValueError):  # ValueError: an embedded NUL
+        return None
+
+
 def _is_local(host: str) -> bool:
     host = host.rstrip(".")  # `anvil.` is `anvil`, fully qualified
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        # A name, not an IP literal (an IPv6 one has no dot either): one
-        # without a dot is a single label.
+    address = _ip_literal(host)
+    if address is None:
+        # A name: one without a dot is a single label.
         return "." not in host or host.endswith(".localhost")
     return not address.is_global
 

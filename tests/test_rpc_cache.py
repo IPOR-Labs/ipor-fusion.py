@@ -216,6 +216,12 @@ def test_keys_of_one_host_share_entries_and_never_reach_the_disk(tmp_path):
         "http://anvil.:8545",
         "http://localhost.:8545",
         "http://anvil.localhost.:8545",
+        "http://127.1:8545",
+        "http://0x7f.1:8545",
+        "http://0177.0.0.1:8545",
+        "http://10.1:8545",
+        "http://2130706433:8545",
+        "http://127.1.:8545",
         "ws://rpc.example",
         "https://rpc.example:notaport",
         None,
@@ -232,10 +238,21 @@ def test_local_or_unknown_endpoints_are_never_cached(tmp_path, endpoint_uri):
 
 
 @pytest.mark.parametrize(
-    "endpoint_uri", ["http://8.8.8.8:8545", "https://[2001:4860::8888]"]
+    "endpoint_uri",
+    [
+        "http://8.8.8.8:8545",
+        "http://8.8.2056:8545",
+        "http://134744072:8545",
+        "https://[2001:4860::8888]",
+    ],
 )
 def test_global_address_endpoints_get_a_cache_key(endpoint_uri):
     assert endpoint_key(endpoint_uri) is not None
+
+
+def test_a_host_inet_aton_refuses_is_classified_as_a_name():
+    # `inet_aton` raises ValueError, not OSError, on an embedded NUL.
+    assert endpoint_key("http://127.0.0.1\x00x:8545") is not None
 
 
 def test_the_endpoint_key_ignores_the_default_port():
