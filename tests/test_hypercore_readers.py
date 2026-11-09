@@ -245,6 +245,10 @@ def _pending_state_raw(*, pending: bool, settled: bool, **over) -> bytes:
     return encode(["(bytes)"], [(inner,)])
 
 
+# The pilot reader's answer: 18 words where the released reader returns 23.
+PILOT_PENDING_STATE_RAW = encode(["(bytes)"], [(b"\x00" * 18 * 32,)])
+
+
 class TestUniversalRead:
     def test_pending_state_reads_through_the_vault(self):
         ctx = _ctx()
@@ -289,7 +293,7 @@ class TestUniversalRead:
 
     def test_the_earlier_eighteen_word_payload_is_refused_by_name(self):
         ctx = _ctx()
-        ctx.call.return_value = encode(["(bytes)"], [(b"\x00" * 18 * 32,)])
+        ctx.call.return_value = PILOT_PENDING_STATE_RAW
         with pytest.raises(UnsupportedContractVersionError, match="576 bytes"):
             HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
 
@@ -386,10 +390,14 @@ def test_perp_px_decimals_rejects_out_of_range(sz_decimals):
         perp_px_decimals(sz_decimals)
 
 
-def _universal_read(data: bytes, **pending_action: object) -> bytes:
+def _universal_read(
+    data: bytes, *, pending_payload: bytes | None = None, **pending_action: object
+) -> bytes:
     """`PlasmaVault.read` double: the pending reader or the balance fuse."""
     target, inner = decode(["address", "bytes"], data[4:])
     if Web3.to_checksum_address(target) == READER:
+        if pending_payload is not None:
+            return pending_payload
         return _pending_state_raw(pending=False, settled=True, **pending_action)
     assert Web3.to_checksum_address(target) == BALANCE_FUSE
     assert bytes(inner) == _selector("balanceOf()")
@@ -403,9 +411,11 @@ def _vault_state_handler(
     xyz_value: int = XYZ_ACCOUNT_VALUE,
     price: tuple[int, int] | BaseException = USDC_PRICE,
     pending_action: dict[str, object] | None = None,
+    pending_payload: bytes | None = None,
 ):
     """eth_call double for the vault, the oracle and the precompiles;
-    ``pending_action`` overrides fields of the reader's pending action."""
+    ``pending_action`` overrides fields of the reader's pending action, and
+    ``pending_payload`` replaces the reader's whole answer."""
     words = SUBSTRATES if substrates is None else substrates
     vault_views = {
         _selector("getMarketSubstrates(uint256)"): lambda _d: encode(
@@ -415,7 +425,7 @@ def _vault_state_handler(
             ["address"], [ORACLE]
         ),
         _selector("read(address,bytes)"): lambda d: _universal_read(
-            d, **(pending_action or {})
+            d, pending_payload=pending_payload, **(pending_action or {})
         ),
     }
 
@@ -556,11 +566,18 @@ class TestVaultState:
         state = read_hypercore_vault_state(ctx, VAULT, BALANCE_FUSE, MARKET)
         assert state.pending is None and state.nav_matches_balance_fuse is True
 
-    def test_an_unknown_pending_enum_leaves_only_the_pending_state_none(self):
+    @pytest.mark.parametrize(
+        "undecodable",
+        [
+            pytest.param({"pending_action": {"effect_kind": 99}}, id="unknown_enum"),
+            pytest.param({"pending_payload": PILOT_PENDING_STATE_RAW}, id="18_words"),
+        ],
+    )
+    def test_an_undecodable_pending_state_leaves_only_it_none(self, undecodable):
         ctx = _ctx()
         ctx.chain_id = 999
         ctx.call.side_effect = multicall_aware(
-            _vault_state_handler(xyz_value=0, pending_action={"effect_kind": 99})
+            _vault_state_handler(xyz_value=0, **undecodable)
         )
         state = read_hypercore_vault_state(
             ctx, VAULT, BALANCE_FUSE, MARKET, pending_reader=READER
