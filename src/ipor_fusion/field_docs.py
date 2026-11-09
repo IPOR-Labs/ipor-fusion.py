@@ -29,7 +29,7 @@ DOCS: dict[str, dict[str, str]] = {
         "deposit_fee_percent": (
             "Onboarding Contribution: charged when a deposit is made into the "
             "vault, in shares rather than assets. null when not known - most "
-            "often because this vault's FeeManager predates the deposit fee."
+            "often because this vault's FeeManager predates `getDepositFee`."
         ),
         "request_fee_percent": (
             "Offboarding Contribution for Scheduled Withdrawals: charged at "
