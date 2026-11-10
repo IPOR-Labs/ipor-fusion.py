@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
+import pytest
 from test_mcp_hypercore import FUSE, PENDING, _state
 from web3 import Web3
 
@@ -11,6 +13,7 @@ from ipor_fusion.cli.vault_info_view import (
     _print_hypercore,
 )
 from ipor_fusion.core.plasma_vault import BalanceFuse
+from ipor_fusion.hypercore import HyperCoreActionClass
 from ipor_fusion.types import MarketId
 from ipor_fusion.vault_data import _fetch_hypercore_state
 
@@ -41,6 +44,25 @@ def test_text_block_without_a_reader_says_so(capsys):
     assert "Pending action: unknown" in capsys.readouterr().out
     _print_hypercore(MagicMock(hypercore=None))
     assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize(
+    ("pending", "line"),
+    [
+        (True, "Pending action: UNKNOWN_9 #32 (id 13) until"),
+        (False, "Pending action: none (last UNKNOWN_9 #32 settled)"),
+    ],
+    ids=["pending", "settled"],
+)
+def test_text_block_names_an_unknown_action_class(capsys, pending, line):
+    state = replace(
+        PENDING,
+        action_class=HyperCoreActionClass(9),
+        pending=pending,
+        settled=not pending,
+    )
+    _print_hypercore(MagicMock(hypercore=_state(pending=state)))
+    assert line in capsys.readouterr().out
 
 
 def _markets(*fuses: BalanceFuse) -> MagicMock:

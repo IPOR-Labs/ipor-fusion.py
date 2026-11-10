@@ -345,7 +345,7 @@ def _print_hypercore_pending(pending: HyperCorePendingState | None) -> None:
         click.echo(
             "  Pending action: unknown (no HyperCorePendingReader known on this "
             "chain, or the read reverted or returned a payload of another "
-            "length or with an unknown action class or effect kind)"
+            "length or one that does not decode as the released struct)"
         )
         return
     last = f"{pending.action_class.name} #{pending.action_nonce}"

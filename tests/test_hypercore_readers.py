@@ -5,12 +5,13 @@ state of 2026-10-02 (block 47452386)."""
 
 from __future__ import annotations
 
+import copy
+import pickle
 from unittest.mock import MagicMock
 
 import pytest
 from _multicall import multicall_aware
 from eth_abi import decode, encode
-from eth_abi.exceptions import DecodingError
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -304,13 +305,16 @@ class TestUniversalRead:
             ("effect_kind", "HyperCoreEffectKind"),
         ],
     )
-    def test_an_unknown_enum_value_is_a_decoding_error(self, field, enum):
+    def test_an_unknown_enum_value_keeps_the_flags(self, field, enum):
         ctx = _ctx()
         ctx.call.return_value = _pending_state_raw(
             pending=True, settled=False, **{field: 99}
         )
-        with pytest.raises(DecodingError, match=f"99, not a known {enum}"):
-            HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
+        state = HyperCorePendingReader(VAULT, READER).pending_state().call(ctx)
+        value = getattr(state, field)
+        assert type(value).__name__ == enum
+        assert (value.name, value) == ("UNKNOWN_99", 99)
+        assert (state.pending, state.settled, state.action_nonce) == (True, False, 32)
 
     def test_a_pending_margin_transfer_without_an_effect_stays_pending(self):
         ctx = _ctx()
@@ -566,18 +570,11 @@ class TestVaultState:
         state = read_hypercore_vault_state(ctx, VAULT, BALANCE_FUSE, MARKET)
         assert state.pending is None and state.nav_matches_balance_fuse is True
 
-    @pytest.mark.parametrize(
-        "undecodable",
-        [
-            pytest.param({"pending_action": {"effect_kind": 99}}, id="unknown_enum"),
-            pytest.param({"pending_payload": PILOT_PENDING_STATE_RAW}, id="18_words"),
-        ],
-    )
-    def test_an_undecodable_pending_state_leaves_only_it_none(self, undecodable):
+    def test_an_undecodable_pending_state_leaves_only_it_none(self):
         ctx = _ctx()
         ctx.chain_id = 999
         ctx.call.side_effect = multicall_aware(
-            _vault_state_handler(xyz_value=0, **undecodable)
+            _vault_state_handler(xyz_value=0, pending_payload=PILOT_PENDING_STATE_RAW)
         )
         state = read_hypercore_vault_state(
             ctx, VAULT, BALANCE_FUSE, MARKET, pending_reader=READER
@@ -586,3 +583,42 @@ class TestVaultState:
         assert state.balance_fuse_value_wad == 8_245_000_000_000_000
         assert state.nav_matches_balance_fuse is True
         assert len(state.perp_markets) == 1
+
+    @pytest.mark.parametrize("field", ["action_class", "effect_kind"])
+    def test_an_unknown_enum_value_keeps_the_pending_state(self, field):
+        ctx = _ctx()
+        ctx.chain_id = 999
+        ctx.call.side_effect = multicall_aware(
+            _vault_state_handler(xyz_value=0, pending_action={field: 99})
+        )
+        state = read_hypercore_vault_state(
+            ctx, VAULT, BALANCE_FUSE, MARKET, pending_reader=READER
+        )
+        assert state.pending is not None
+        assert getattr(state.pending, field).name == "UNKNOWN_99"
+        assert (state.pending.pending, state.pending.settled) == (False, True)
+
+
+class TestOpenEnums:
+    @pytest.mark.parametrize("enum", [HyperCoreActionClass, HyperCoreEffectKind])
+    def test_an_undeclared_int_is_a_pseudo_member(self, enum):
+        unknown = enum(7)
+        assert isinstance(unknown, enum)
+        assert (unknown.name, unknown) == ("UNKNOWN_7", 7)
+        assert unknown not in list(enum)
+        assert len(enum) == 3
+
+    def test_declared_values_stay_singletons(self):
+        assert HyperCoreActionClass(1) is HyperCoreActionClass.TRANSFER
+        assert HyperCoreEffectKind(2) is HyperCoreEffectKind.EVM_BALANCE
+
+    def test_a_non_int_raises(self):
+        with pytest.raises(ValueError, match="not a valid"):
+            HyperCoreActionClass("TRANSFER")
+
+    def test_a_pseudo_member_survives_pickle_and_deepcopy(self):
+        unknown = HyperCoreEffectKind(7)
+        pickled = pickle.loads(pickle.dumps(unknown))  # noqa: S301 -- our own bytes
+        for copied in (pickled, copy.deepcopy(unknown)):
+            assert type(copied) is HyperCoreEffectKind
+            assert (copied.name, copied) == ("UNKNOWN_7", 7)

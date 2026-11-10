@@ -3,8 +3,10 @@ against the MCP model, field by field."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import MagicMock
 
+import pytest
 from web3 import Web3
 
 from ipor_fusion.mcp.models import HyperCoreSection, VaultInfoResponse
@@ -103,3 +105,18 @@ def test_unknown_pending_reader_and_absent_market_are_null():
     HyperCoreSection.model_validate(payload)
     assert _build_hypercore_json(MagicMock(hypercore=None)) is None
     assert "hypercore" in VaultInfoResponse.model_fields
+
+
+@pytest.mark.parametrize(
+    "unknown",
+    [
+        {"action_class": HyperCoreActionClass(9)},
+        {"effect_kind": HyperCoreEffectKind(9)},
+    ],
+    ids=["action_class", "effect_kind"],
+)
+def test_an_unknown_pending_enum_leaves_the_pending_block_null(unknown):
+    pending = replace(PENDING, pending=True, settled=False, **unknown)
+    payload = _build_hypercore_json(MagicMock(hypercore=_state(pending=pending)))
+    assert payload is not None and payload["pending"] is None
+    HyperCoreSection.model_validate(payload)
