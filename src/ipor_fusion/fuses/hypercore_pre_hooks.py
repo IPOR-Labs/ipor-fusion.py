@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
+from eth_utils import function_signature_to_4byte_selector, keccak
 
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.plasma_vault import PlasmaVault
@@ -36,6 +36,22 @@ HYPERCORE_CAPITAL_FLOW_SELECTORS: tuple[bytes, ...] = _selectors(
     "redeem(uint256,address,address)",
     "redeemFromRequest(uint256,address,address)",
 )
+
+#: What ``HyperCoreCapitalFlowPreHook.HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID()``
+#: returns: the marker the action fuses identify the capital-flow hook by.
+HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID: bytes = keccak(
+    text="ipor.fusion.hypercore.CapitalFlowPreHook"
+)
+_CAPITAL_FLOW_MARKER_SELECTOR = function_signature_to_4byte_selector(
+    "HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID()"
+)
+
+
+def capital_flow_pre_hook_id(hook: ChecksumAddress) -> Call[bytes]:
+    """``HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID()`` on ``hook``: equal to
+    :data:`HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID` on a capital-flow hook; the
+    pending-action hook reverts."""
+    return Call(to=hook, data=_CAPITAL_FLOW_MARKER_SELECTOR, output_types=("bytes32",))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
