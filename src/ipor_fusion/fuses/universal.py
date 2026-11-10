@@ -1,3 +1,4 @@
+import warnings
 from enum import Enum, auto
 
 from eth_typing import ChecksumAddress
@@ -69,9 +70,25 @@ class UniversalTokenSwapperFuse(Fuse):
     def __init__(
         self,
         address: FuseAddress,
-        abi: UniversalTokenSwapperAbi = UniversalTokenSwapperAbi.LEGACY,
+        abi: UniversalTokenSwapperAbi | None = None,
     ):
+        """``abi`` must match the deployed fuse at ``address`` (see
+        `UniversalTokenSwapperAbi`). Omitting it is deprecated: it warns and
+        selects ``LEGACY``, which the HyperEVM fuses and the Arbitrum fuses of
+        the 2026-10-21 contracts release reject."""
         super().__init__(address)
+        if abi is None:
+            warnings.warn(
+                "UniversalTokenSwapperFuse without abi= selects "
+                "UniversalTokenSwapperAbi.LEGACY; pass the member matching the "
+                "deployed fuse (LEGACY, MIN_AMOUNT_OUT or TOKENS_TO_RETURN). A "
+                "future major release requires abi=.",
+                # Shown by default, unlike DeprecationWarning: most callers
+                # are scripts and keepers with no test run to surface it.
+                FutureWarning,
+                stacklevel=2,
+            )
+            abi = UniversalTokenSwapperAbi.LEGACY
         self._abi = abi
 
     def swap(

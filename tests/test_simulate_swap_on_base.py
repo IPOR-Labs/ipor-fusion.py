@@ -25,7 +25,7 @@ from ipor_fusion import (
     VaultSimulator,
     Web3Context,
 )
-from ipor_fusion.fuses import UniversalTokenSwapperFuse
+from ipor_fusion.fuses import UniversalTokenSwapperAbi, UniversalTokenSwapperFuse
 from ipor_fusion.types import Amount, ChainId
 
 logging.basicConfig(level=logging.INFO)
@@ -101,7 +101,9 @@ def test_simulate_swap_cbbtc_to_usdc(web3_base):
     deposit_amount = 1_00000000  # 1 cbBTC, exactly as in the original test
     swap_amount = deposit_amount // 2
 
-    universal = UniversalTokenSwapperFuse(BASE_UNIVERSAL_SWAP_FUSE)
+    universal = UniversalTokenSwapperFuse(
+        BASE_UNIVERSAL_SWAP_FUSE, abi=UniversalTokenSwapperAbi.LEGACY
+    )
     swap_action = _build_universal_swap(
         ctx, universal, CBBTC, BASE_USDC, swap_amount, 500
     )
@@ -170,7 +172,9 @@ def test_simulate_swap_weth_to_pepe(web3_base):
     pepe_token = ERC20(pepe)
     weth_balance = weth.balance_of(vault_address).call(ctx)
 
-    universal = UniversalTokenSwapperFuse(BASE_UNIVERSAL_SWAP_FUSE)
+    universal = UniversalTokenSwapperFuse(
+        BASE_UNIVERSAL_SWAP_FUSE, abi=UniversalTokenSwapperAbi.LEGACY
+    )
     swap_action = _build_universal_swap(
         ctx, universal, BASE_WETH, pepe, weth_balance, 10000
     )
