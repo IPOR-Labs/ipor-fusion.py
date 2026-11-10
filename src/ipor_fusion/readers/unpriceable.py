@@ -171,6 +171,58 @@ def _morpho_tokens(
     ]
 
 
+def _approved_collateral_tokens(
+    market_id: MarketId, subs: list[bytes]
+) -> frozenset[ChecksumAddress]:
+    """Collateral tokens granted as ``COLLATERAL`` words of a Lido Lend
+    market's substrates (market-id words are not tokens)."""
+    return frozenset(
+        Web3.to_checksum_address(info.address)
+        for info in (decode_substrate(sub, market_id) for sub in subs)
+        if info.type_label == "COLLATERAL" and info.address
+    )
+
+
+def _lido_lend_tokens(
+    lido_lend_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None,
+    market_substrates: dict[MarketId, list[bytes]],
+) -> list[MiddlewarePricedToken]:
+    """Loan token of every granted Lido Lend market and its collateral token
+    when that token is an approved collateral word.
+
+    LidoLendBalanceFuse prices the loan token for supply minus debt and
+    prices only approved collateral; a collateral token that was never
+    approved (a donation) is not priced, so it is not flagged.
+    """
+    tokens = []
+    for market_id, breakdowns in (lido_lend_positions or {}).items():
+        approved = _approved_collateral_tokens(
+            market_id, market_substrates.get(market_id, [])
+        )
+        for pb in breakdowns:
+            if pb.loan_token != _ZERO:
+                tokens.append(
+                    MiddlewarePricedToken(
+                        market_id,
+                        pb.loan_token,
+                        f"loan token of Lido Lend market {pb.market_id}",
+                        zero_balance_reverts=False,
+                        position_open=_loan_leg_open(pb),
+                    )
+                )
+            if pb.collateral_token != _ZERO and pb.collateral_token in approved:
+                tokens.append(
+                    MiddlewarePricedToken(
+                        market_id,
+                        pb.collateral_token,
+                        f"collateral token of Lido Lend market {pb.market_id}",
+                        zero_balance_reverts=False,
+                        position_open=pb.collateral > 0,
+                    )
+                )
+    return tokens
+
+
 @dataclass(frozen=True)
 class UnpriceableCheck:
     """`fetch_unpriceable_priced_tokens`: the flagged ``tokens``, and in
@@ -314,15 +366,18 @@ def fetch_unpriceable_priced_tokens(
     balance_fuses: list[BalanceFuse],
     market_substrates: dict[MarketId, list[bytes]],
     morpho_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None,
+    lido_lend_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None = None,
 ) -> UnpriceableCheck:
     """Every middleware-priced token of a granted substrate the middleware
     cannot price, in market order, and the substrates whose token could not
     be found. ``morpho_positions`` must hold every Morpho substrate: a
-    position left out is a token left unchecked."""
+    position left out is a token left unchecked. ``lido_lend_positions`` holds
+    the same for every Lido Lend market word."""
     unread: list[str] = []
     priced = [
         *_plain_tokens(market_substrates, Web3.to_checksum_address(underlying)),
         *_morpho_tokens(morpho_positions),
+        *_lido_lend_tokens(lido_lend_positions, market_substrates),
         *_vault_asset_tokens(ctx, market_substrates, unread),
         *_aave_v3_middleware_tokens(ctx, balance_fuses, market_substrates),
     ]

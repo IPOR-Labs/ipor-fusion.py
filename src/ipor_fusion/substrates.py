@@ -120,6 +120,17 @@ def _decode_morpho(hex_str: str) -> SubstrateInfo:
     return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="morpho_market_id")
 
 
+def _decode_lido_lend(hex_str: str) -> SubstrateInfo:
+    """LidoLendSubstrateLib.sol: a word is either a collateral word (type byte
+    0x01, zeros in bits 247..160, token address in bits 159..0) or a Lido Lend
+    market ``Id`` (raw ``keccak256(abi.encode(MarketParams))``). The library
+    splits every word into these two classes: ``0x01`` over a non-zero middle
+    is a market word, not an error."""
+    if hex_str[:2] == "01" and hex_str[2:24] == "0" * 22:
+        return SubstrateInfo(address=_address(hex_str[24:]), type_label="COLLATERAL")
+    return SubstrateInfo(raw_hex=f"0x{hex_str}", type_label="lido_lend_market_id")
+
+
 def _decode_uniswap_v4(hex_str: str) -> SubstrateInfo:
     """Uniswap V4 two-level whitelist (UniswapV4SubstrateLib.sol): a PoolId
     (raw bytes32, keccak256(abi.encode(PoolKey)) — carries the hook, fee tier
@@ -542,6 +553,9 @@ _register_markets(
         200_001,
         IporFusionMarkets.MERKL,
         IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
+        # LIDO_LEND_FLASH_LOAN — LidoLendFlashLoanFuse.enter gates the loan
+        # token via isSubstrateAsAssetGranted
+        IporFusionMarkets.LIDO_LEND_FLASH_LOAN,
     ],
     _decode_strict_plain_address,
 )
@@ -550,6 +564,8 @@ _register_markets(
 # every live market-19 substrate is the zero-padded address form (registry
 # census 2026-09-03: 111 of 111 rows on Ethereum, Base and Arbitrum)
 _register_markets([14, 22, 41], _decode_morpho)
+# Lido Lend (58): market ids and collateral words (LidoLendSubstrateLib.sol)
+_register_markets([IporFusionMarkets.LIDO_LEND], _decode_lido_lend)
 # Ebisu
 _register_markets(
     [39],

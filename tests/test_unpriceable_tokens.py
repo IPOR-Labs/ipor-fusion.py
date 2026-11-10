@@ -86,11 +86,17 @@ def chain(monkeypatch):
     return SimpleNamespace(ctx=ctx, answers=_FakeMulticall.answers)
 
 
-def _fetch(chain, substrates, balance_fuses=(), morpho_positions=None):
-    return _check(chain, substrates, balance_fuses, morpho_positions).tokens
+def _fetch(
+    chain, substrates, balance_fuses=(), morpho_positions=None, lido_positions=None
+):
+    return _check(
+        chain, substrates, balance_fuses, morpho_positions, lido_positions
+    ).tokens
 
 
-def _check(chain, substrates, balance_fuses=(), morpho_positions=None):
+def _check(
+    chain, substrates, balance_fuses=(), morpho_positions=None, lido_positions=None
+):
     return fetch_unpriceable_priced_tokens(
         chain.ctx,
         price_oracle=ORACLE,
@@ -98,7 +104,27 @@ def _check(chain, substrates, balance_fuses=(), morpho_positions=None):
         balance_fuses=list(balance_fuses),
         market_substrates=substrates,
         morpho_positions=morpho_positions,
+        lido_lend_positions=lido_positions,
     )
+
+
+def _lido_position(loan, collateral_token, collateral, supply, borrow):
+    return SimpleNamespace(
+        market_id="ab" * 32,
+        loan_token=loan,
+        collateral_token=collateral_token,
+        collateral=collateral,
+        supply_assets=supply,
+        borrow_assets=borrow,
+    )
+
+
+def _lido_collateral_word(token: str) -> bytes:
+    return bytes.fromhex("01" + "00" * 11) + bytes.fromhex(token[2:])
+
+
+def _lido_market_word() -> bytes:
+    return bytes.fromhex("ab" * 32)
 
 
 class TestFetch:
@@ -249,6 +275,75 @@ class TestFetch:
         )
         assert flagged.position_open is position_open
         assert not flagged.morpho_collateral
+
+    @pytest.mark.parametrize(
+        ("supply", "borrow", "position_open"),
+        [(0, 5, True), (7, 5, True), (5, 5, None), (0, 0, False)],
+    )
+    def test_lido_lend_loan_leg_follows_the_net_amount(
+        self, chain, supply, borrow, position_open
+    ):
+        chain.answers.update(_oracle_answers({UNPRICED: ZERO}, priced=set()))
+        (flagged,) = _fetch(
+            chain,
+            {},
+            lido_positions={
+                IporFusionMarkets.LIDO_LEND: [
+                    _lido_position(UNPRICED, ZERO, 0, supply, borrow)
+                ]
+            },
+        )
+        assert flagged.market_id == IporFusionMarkets.LIDO_LEND
+        assert flagged.via == f"loan token of Lido Lend market {'ab' * 32}"
+        assert flagged.position_open is position_open
+        assert not flagged.zero_balance_reverts
+        assert not flagged.morpho_collateral
+
+    @pytest.mark.parametrize(("collateral", "open_"), [(0, False), (3, True)])
+    def test_lido_lend_approved_collateral_is_flagged(self, chain, collateral, open_):
+        chain.answers.update(
+            _oracle_answers({PRICED: ZERO, UNPRICED: ZERO}, priced={PRICED})
+        )
+        market = IporFusionMarkets.LIDO_LEND
+        (flagged,) = _fetch(
+            chain,
+            {market: [_lido_collateral_word(UNPRICED), _lido_market_word()]},
+            lido_positions={
+                market: [_lido_position(PRICED, UNPRICED, collateral, 0, 0)]
+            },
+        )
+        assert flagged.token == UNPRICED
+        assert flagged.via == f"collateral token of Lido Lend market {'ab' * 32}"
+        assert flagged.position_open is open_
+        assert flagged.morpho_collateral is False
+        assert not flagged.zero_balance_reverts
+
+    def test_lido_lend_unapproved_collateral_is_not_flagged(self, chain):
+        chain.answers.update(
+            _oracle_answers({PRICED: ZERO, UNPRICED: ZERO}, priced={PRICED})
+        )
+        market = IporFusionMarkets.LIDO_LEND
+        for substrates in (
+            {},
+            {market: [_lido_market_word()]},
+            {market: [_lido_collateral_word(PRICED)]},
+        ):
+            assert not _fetch(
+                chain,
+                substrates,
+                lido_positions={market: [_lido_position(PRICED, UNPRICED, 5, 0, 0)]},
+            )
+
+    def test_lido_lend_zero_loan_token_is_skipped(self, chain):
+        market = IporFusionMarkets.LIDO_LEND
+        assert (
+            _fetch(
+                chain,
+                {market: [_lido_collateral_word(ZERO)]},
+                lido_positions={market: [_lido_position(ZERO, ZERO, 0, 0, 0)]},
+            )
+            == []
+        )
 
     @pytest.mark.parametrize(
         ("code", "flagged"),

@@ -224,6 +224,50 @@ def test_morpho_market_is_raw():
     assert info.raw_hex == raw
 
 
+WSTETH_HOODI = "0x7e99ee3c66636de415d2d7c880938f2f40f94de4"
+LIDO_MARKET_ID = "0x6a1c794db6232d046223fa809c14c59be90eedeb58ba10b9ee00d36e5b8f2f35"
+
+
+def test_lido_lend_collateral_word_decodes_to_the_token():
+    raw = "0x01" + "00" * 11 + WSTETH_HOODI[2:]
+    assert decode_substrate(raw, market_id=58) == SubstrateInfo(
+        address=WSTETH_HOODI, type_label="COLLATERAL"
+    )
+
+
+def test_lido_lend_market_word_is_raw():
+    info = decode_substrate(LIDO_MARKET_ID, market_id=58)
+    assert info == SubstrateInfo(
+        raw_hex=LIDO_MARKET_ID, type_label="lido_lend_market_id"
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        # type byte 0x01 over a non-zero middle: a market word, never an error
+        "0x01" + "00" * 10 + "01" + WSTETH_HOODI[2:],
+        "0x01" + "ff" * 31,
+        # zero padding without the type byte: also a market word
+        "0x" + "00" * 12 + WSTETH_HOODI[2:],
+        # another type byte over a clean middle
+        "0x02" + "00" * 11 + WSTETH_HOODI[2:],
+    ],
+)
+def test_lido_lend_non_collateral_words_are_market_words(raw):
+    info = decode_substrate(raw, market_id=58)
+    assert info == SubstrateInfo(raw_hex=raw, type_label="lido_lend_market_id")
+    assert not info.is_error
+
+
+def test_lido_lend_collateral_word_matches_the_solidity_encoding():
+    # LidoLendSubstrateLib.encodeCollateral: (0x01 << 248) | uint160(token)
+    word = (0x01 << 248) | int(WSTETH_HOODI, 16)
+    info = decode_substrate(word.to_bytes(32, "big"), market_id=58)
+    assert info.type_label == "COLLATERAL"
+    assert info.address == WSTETH_HOODI
+
+
 def test_morpho_flash_loan_substrate_is_a_token_address():
     # MorphoFlashLoanFuse gates the loan token via isSubstrateAsAssetGranted;
     # the substrate is the plain address form, never a Morpho market id
@@ -318,6 +362,7 @@ def test_agua_typed_substrates(type_byte, label):
         IporFusionMarkets.MERKL,
         IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
         IporFusionMarkets.META_MORPHO_0001,
+        IporFusionMarkets.LIDO_LEND_FLASH_LOAN,
     ],
 )
 def test_substrate_as_asset_markets_decode_plain_addresses(market_id):
@@ -353,6 +398,7 @@ def test_strict_typed_markets_flag_noncanonical_words(market_id, raw):
         IporFusionMarkets.MERKL,
         IporFusionMarkets.ASSETS_BALANCE_VALIDATION,
         IporFusionMarkets.META_MORPHO_0001,
+        IporFusionMarkets.LIDO_LEND_FLASH_LOAN,
     ],
 )
 def test_strict_plain_markets_flag_dirty_padding(market_id):

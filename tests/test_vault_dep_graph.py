@@ -234,3 +234,34 @@ class TestFindMarketsMissingErc20Dependency:
             {self.euler: [self.erc20]},
         )
         assert result == [self.morpho_lim]
+
+
+class TestLidoLendDependencyEdges:
+    """LIDO_LEND (58) and LIDO_LEND_FLASH_LOAN (59) must depend on
+    ERC20_VAULT_BALANCE (7); the general rule covers them without special
+    cases."""
+
+    erc20 = IporFusionMarkets.ERC20_VAULT_BALANCE
+    lido = IporFusionMarkets.LIDO_LEND
+    flash = IporFusionMarkets.LIDO_LEND_FLASH_LOAN
+
+    def test_ids(self):
+        assert (self.lido, self.flash) == (58, 59)
+
+    def test_missing_edges_are_reported(self):
+        result = find_markets_missing_erc20_dependency({self.lido, self.flash}, {})
+        assert sorted(result) == [58, 59]
+
+    def test_edges_to_erc20_satisfy_the_rule(self):
+        graph = {self.lido: [self.erc20], self.flash: [self.erc20]}
+        assert not find_markets_missing_erc20_dependency({self.lido, self.flash}, graph)
+
+    def test_flash_loan_market_is_not_exempt_from_the_balance_fuse_rule(self):
+        assert self.flash not in NO_BALANCE_FUSE_MARKETS
+        assert self.lido not in NO_BALANCE_FUSE_MARKETS
+        fuse_markets = {"0xLidoSupply": self.lido, "0xLidoFlash": self.flash}
+        assert find_orphan_fuse_markets(fuse_markets, set()) == {
+            58: ["0xLidoSupply"],
+            59: ["0xLidoFlash"],
+        }
+        assert not find_orphan_fuse_markets(fuse_markets, {self.lido, self.flash})

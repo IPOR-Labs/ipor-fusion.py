@@ -231,7 +231,11 @@ class TestServerInfo:
 
     def test_lists_the_preview_features(self):
         result = server_info()
-        assert [f.name for f in result.preview_features] == ["crosschain", "hypercore"]
+        assert [f.name for f in result.preview_features] == [
+            "crosschain",
+            "hypercore",
+            "lido_lend",
+        ]
         assert {f.status for f in result.preview_features} == {"preview"}
         assert all(f.scope for f in result.preview_features)
 
