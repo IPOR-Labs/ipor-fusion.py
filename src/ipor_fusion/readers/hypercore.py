@@ -42,12 +42,21 @@ from ipor_fusion.core.contract import Call
 from ipor_fusion.core.multicall import Multicall3
 from ipor_fusion.core.oracle import PriceOracleMiddleware
 from ipor_fusion.core.plasma_vault import PlasmaVault
-from ipor_fusion.errors import HyperCoreValuationError, UnsupportedContractVersionError
+from ipor_fusion.errors import (
+    HyperCorePreHookWiringError,
+    HyperCoreValuationError,
+    UnsupportedContractVersionError,
+)
 from ipor_fusion.fuses.hypercore import (
     NATIVE_PERP_DEX,
     SUPPORTED_HIP3_DEXES,
     perp_dex_of,
     precompile_index_of,
+)
+from ipor_fusion.fuses.hypercore_pre_hooks import (
+    HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID,
+    HyperCorePreHookWiring,
+    capital_flow_pre_hook_id,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.substrates import decode_substrate
@@ -865,3 +874,53 @@ def read_hypercore_vault_state(
         pending=pending.value if pending is not None else None,
         perp_markets=perp_markets,
     )
+
+
+def read_hypercore_pre_hook_check(
+    ctx: Web3Context, wiring: HyperCorePreHookWiring
+) -> None:
+    """Raise `HyperCorePreHookWiringError` unless ``wiring``'s capital-flow
+    hook answers the capital-flow marker, and its pending-action hook has code
+    and does not answer the marker.
+
+    Run it before ``wiring.set_pre_hook_implementations``: a swapped pair or a
+    pending-action hook without code installs without error, then every
+    deposit, exit, ``execute`` and ``updateMarketsBalances`` reverts until the
+    hooks are re-wired. The check also catches a ``capital_flow_hook`` that is
+    not a capital-flow hook. It cannot prove ``pending_action_hook`` is a
+    pending-action hook: any contract without the marker passes as one."""
+    capital_flow_answer, pending_action_answer = Multicall3(ctx).try_aggregate(
+        [
+            capital_flow_pre_hook_id(wiring.capital_flow_hook),
+            capital_flow_pre_hook_id(wiring.pending_action_hook),
+        ]
+    )
+    problem = _pre_hook_marker_problem(capital_flow_answer, pending_action_answer)
+    if problem is None and not ctx.web3.eth.get_code(
+        wiring.pending_action_hook, block_identifier=ctx.default_block
+    ):
+        problem = "pending_action_hook has no code"
+    if problem is not None:
+        raise HyperCorePreHookWiringError(
+            f"{problem} (capital_flow_hook={wiring.capital_flow_hook}, "
+            f"pending_action_hook={wiring.pending_action_hook})"
+        )
+
+
+def _pre_hook_marker_problem(
+    capital_flow_answer: bytes | None, pending_action_answer: bytes | None
+) -> str | None:
+    """What the two marker answers say is wrong with the pair; ``None`` when
+    only the capital-flow hook carries the marker."""
+    capital_flow = capital_flow_answer == HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID
+    pending_action = pending_action_answer == HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID
+    if capital_flow and pending_action:
+        return "both hooks carry the capital-flow marker"
+    if pending_action:
+        # A reverting capital-flow slot is what the pending-action hook does.
+        if capital_flow_answer is None:
+            return "the hooks are swapped"
+        return "pending_action_hook carries the capital-flow marker"
+    if not capital_flow:
+        return "capital_flow_hook does not carry the capital-flow marker"
+    return None

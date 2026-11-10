@@ -20,9 +20,10 @@ in order:
      fuse, and grant the market-55 substrates (spot token, perp market, the two
      destinations, the send cap and the config keys);
   3. install ``HyperCoreCapitalFlowPreHook`` on the six share-priced selectors and
-     ``HyperCorePendingActionPreHook`` on ``execute`` and ``updateMarketsBalances``,
-     then read every selector, role, fuse and substrate back (the contracts'
-     post-deployment checklist);
+     ``HyperCorePendingActionPreHook`` on ``execute`` and ``updateMarketsBalances``
+     (``read_hypercore_pre_hook_check`` checks on chain beforehand that the pair
+     is not swapped), then read every selector, role, fuse and substrate back
+     (the contracts' post-deployment checklist);
   4. build the Core leg from the granted substrates: bridge USDC EVM -> Core, send
      it spot -> the xyz perp dex, buy xyz:NVDA with an IOC limit order, close it
      reduce-only, send the margin back to spot, and bridge Core -> EVM; print each
@@ -123,6 +124,7 @@ from ipor_fusion.hypercore import (
     hip3_action_asset,
     perp_px_decimals,
     precompile_index_of,
+    read_hypercore_pre_hook_check,
 )
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.types import (
@@ -560,6 +562,8 @@ def run_simulation(
         HYPERCORE_PENDING_READERS[HYPEREVM_CHAIN_ID] == PENDING_READER,
         "the SDK's default HyperCorePendingReader is not the published one",
     )
+    # A swapped pair installs without error and then freezes every flow.
+    read_hypercore_pre_hook_check(ctx, PRE_HOOKS)
 
     # SIMULATION ONLY: the pinned replay has no other clone between this
     # preview and the simulated one, so the predicted stack is the created one.
