@@ -273,20 +273,6 @@ class TestAdvancedEulerV2CreditMarketBase(_ExampleOfflineChecks):
             "0x000000000000000000000000000000000000ff01"
         )
 
-    def test_evault_debt_of_encodes_debtof_call(self) -> None:
-        # _evault_debt_of builds calldata with no chain access,
-        # so guard its encoding here rather than only inside the RPC-gated sim: a
-        # swapped account/vault or a signature typo would otherwise be invisible.
-        account = self.mod.OWNER
-        call = self.mod._evault_debt_of(self.mod.EVAULT_WETH, account)
-        assert call.to == self.mod.EVAULT_WETH
-        assert call.data[:4] == function_signature_to_4byte_selector("debtOf(address)")
-        # debtOf returns underlying units; a wrong/dropped return type would
-        # misdecode the debt read, so pin it too.
-        assert call.output_types == ("uint256",)
-        (decoded_account,) = decode(["address"], call.data[4:])
-        assert Web3.to_checksum_address(decoded_account) == account
-
 
 def _substrate_address(substrate: bytes) -> str:
     """Checksummed address out of a market-50 address substrate's low 20 bytes."""

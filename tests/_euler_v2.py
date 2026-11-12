@@ -247,14 +247,6 @@ def registry_pool_by_euler_account(account: ChecksumAddress) -> Call[ChecksumAdd
     return Call(to=EULERSWAP_REGISTRY, data=data, output_types=["address"])
 
 
-def evault_debt_of(euler_vault: ChecksumAddress, account: ChecksumAddress) -> Call[int]:
-    """Read an Euler eVault's outstanding debt for an account (underlying units)."""
-    data = function_signature_to_4byte_selector("debtOf(address)") + encode(
-        ["address"], [account]
-    )
-    return Call(to=euler_vault, data=data, output_types=["uint256"])
-
-
 @dataclass(frozen=True)
 class EulerDeployPlan:
     """Everything a test needs to drive (and reconfigure) a freshly-deployed pool."""
