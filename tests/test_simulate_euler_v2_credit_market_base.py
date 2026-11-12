@@ -29,13 +29,12 @@ from _euler_v2 import (
     PINNED_BLOCK,
     SUB_ACCOUNT,
     clone_args,
-    evault_debt_of,
     queue_setup,
 )
 from _simulate import assert_all_success
 from constants import ANVIL_WALLET
 
-from ipor_fusion import VaultSimulator, Web3Context
+from ipor_fusion import EulerV2VaultReader, VaultSimulator, Web3Context
 from ipor_fusion.core.fusion_factory import FusionFactory
 from ipor_fusion.fuses import (
     EulerV2BorrowFuse,
@@ -72,6 +71,7 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
     collateral_fuse = EulerV2CollateralFuse(EULER_COLLATERAL_FUSE)
     controller_fuse = EulerV2ControllerFuse(EULER_CONTROLLER_FUSE)
     borrow_fuse = EulerV2BorrowFuse(EULER_BORROW_FUSE)
+    weth_evault = EulerV2VaultReader(EVAULT_WETH)
 
     # Supply cbETH collateral only (plan.supply_actions[0]); WETH is borrowed below.
     sim.execute([plan.supply_actions[0]])
@@ -98,7 +98,7 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
             )
         ]
     )
-    debt_after_borrow = sim.observe(evault_debt_of(EVAULT_WETH, plan.euler_account))
+    debt_after_borrow = sim.observe(weth_evault.debt_of(plan.euler_account))
 
     # Repay the full debt.
     sim.execute(
@@ -110,7 +110,7 @@ def test_simulate_euler_v2_credit_market_base(web3_base):
             )
         ]
     )
-    debt_after_repay = sim.observe(evault_debt_of(EVAULT_WETH, plan.euler_account))
+    debt_after_repay = sim.observe(weth_evault.debt_of(plan.euler_account))
 
     # Tear down the credit position (controller first, then collateral).
     sim.execute(
