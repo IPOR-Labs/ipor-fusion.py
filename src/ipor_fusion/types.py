@@ -71,6 +71,12 @@ AccessManagerAddress = NewType("AccessManagerAddress", ChecksumAddress)
 TxHash = NewType("TxHash", HexStr)
 # ExternalStateExecutor's bytes32 balance proposal hash.
 ProposalHash = NewType("ProposalHash", bytes)
+# A loan-to-value ratio in basis points (10_000 = 100%).
+LtvBps = NewType("LtvBps", int)
+# A value in an Euler V2 vault's unit of account, in that unit's decimals.
+EulerUnitOfAccountValue = NewType("EulerUnitOfAccountValue", int)
+# The byte XORed into the Plasma Vault address to name an Euler EVC sub-account.
+EulerSubAccountId = NewType("EulerSubAccountId", int)
 
 MAX_UINT256 = (1 << 256) - 1
 ZERO_ADDRESS = to_checksum_address("0x" + "00" * 20)

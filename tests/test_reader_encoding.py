@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from _multicall import multicall_aware, sequenced
-from eth_abi import encode
+from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError
@@ -18,6 +18,11 @@ from ipor_fusion.readers.aave_v3 import (
     AaveV3UserAccountData,
 )
 from ipor_fusion.readers.compound_v3 import CompoundV3FuseReader, CompoundV3Reader
+from ipor_fusion.readers.euler_v2 import (
+    EULER_USD_UNIT_OF_ACCOUNT,
+    EulerV2AccountLiquidity,
+    EulerV2VaultReader,
+)
 from ipor_fusion.readers.morpho import (
     MORPHO_BLUE_ADDRESSES,
     MorphoMarket,
@@ -356,6 +361,71 @@ class TestAaveV3FuseReaderPool:
             self.PROVIDER,
             function_signature_to_4byte_selector("getPool()"),
         )
+
+
+class TestEulerV2VaultReader:
+    def _args(self, call, signature: str, types: list[str]) -> tuple:
+        assert call.to == CONTRACT_ADDR
+        assert call.data[:4] == function_signature_to_4byte_selector(signature)
+        return decode(types, call.data[4:])
+
+    def test_debt_of_encodes_account_and_decodes_amount(self):
+        reader, ctx = _make_reader(EulerV2VaultReader)
+        call = reader.debt_of(USER_ADDR)
+        (account,) = self._args(call, "debtOf(address)", ["address"])
+        assert Web3.to_checksum_address(account) == USER_ADDR
+        ctx.call.return_value = encode(["uint256"], [1_234_567])
+
+        assert call.call(ctx) == 1_234_567
+
+    def test_account_liquidity_full_asks_for_liquidation_values(self):
+        reader, ctx = _make_reader(EulerV2VaultReader)
+        call = reader.account_liquidity_full(USER_ADDR)
+        account, liquidation = self._args(
+            call, "accountLiquidityFull(address,bool)", ["address", "bool"]
+        )
+        assert Web3.to_checksum_address(account) == USER_ADDR
+        assert liquidation is True
+        ctx.call.return_value = encode(
+            ["address[]", "uint256[]", "uint256"],
+            [[TOKEN_A.lower(), TOKEN_B.lower()], [700, 300], 800],
+        )
+
+        result = call.call(ctx)
+
+        assert isinstance(result, EulerV2AccountLiquidity)
+        assert result.collaterals == [TOKEN_A, TOKEN_B]
+        assert result.risk_adjusted_collateral_values == [700, 300]
+        assert result.liability_value == 800
+
+    def test_account_liquidity_full_decodes_an_account_without_collateral(self):
+        reader, ctx = _make_reader(EulerV2VaultReader)
+        ctx.call.return_value = encode(
+            ["address[]", "uint256[]", "uint256"], [[], [], 0]
+        )
+
+        result = reader.account_liquidity_full(USER_ADDR).call(ctx)
+
+        assert result.collaterals == []
+        assert result.risk_adjusted_collateral_values == []
+        assert result.liability_value == 0
+
+    def test_ltv_liquidation_encodes_collateral_and_decodes_bps(self):
+        reader, ctx = _make_reader(EulerV2VaultReader)
+        call = reader.ltv_liquidation(TOKEN_A)
+        (collateral,) = self._args(call, "LTVLiquidation(address)", ["address"])
+        assert Web3.to_checksum_address(collateral) == TOKEN_A
+        ctx.call.return_value = encode(["uint16"], [9_700])
+
+        assert call.call(ctx) == 9_700
+
+    def test_unit_of_account_decodes_a_checksummed_address(self):
+        reader, ctx = _make_reader(EulerV2VaultReader)
+        call = reader.unit_of_account()
+        assert self._args(call, "unitOfAccount()", []) == ()
+        ctx.call.return_value = encode(["address"], [EULER_USD_UNIT_OF_ACCOUNT.lower()])
+
+        assert call.call(ctx) == EULER_USD_UNIT_OF_ACCOUNT
 
 
 class TestMorphoReaderPositionBreakdown:
