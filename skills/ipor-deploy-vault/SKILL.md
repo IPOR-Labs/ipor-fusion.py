@@ -115,6 +115,12 @@ The hosted read-only server at `https://mcp.ipor.io/mcp` and the bundled
 `fusion-mcp` server inspect vaults; neither deploys, configures, deposits or
 executes. Those go through the SDK below.
 
+Operator tooling for a HyperCore vault (market 55, preview) calls the
+Hyperliquid API through Hyperliquid's `hyperliquid-python-sdk`, which conflicts
+with `ipor-fusion` on `eth-utils`. The README section "HyperCore with `hyperliquid-python-sdk`"
+(https://github.com/IPOR-Labs/ipor-fusion.py/blob/main/README.md#hypercore-with-hyperliquid-python-sdk)
+gives the uv override that installs both and the workaround for pip.
+
 ## The walk: clone, roles, market, access posture, deposit, execute
 
 Base, USDC into Aave V3. Executed end to end on a Base fork with this SDK: all

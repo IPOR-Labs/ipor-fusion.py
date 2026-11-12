@@ -5,6 +5,10 @@ preview feature (`ipor_fusion.PREVIEW_FEATURES`) that follows only the
 official deployment: its names may change or be removed in a minor release,
 with no backward compatibility, which is why they live here rather than in
 `ipor_fusion`.
+
+The Hyperliquid API (Info, websocket) is out of scope: use Hyperliquid's
+`hyperliquid-python-sdk`. To install it beside this package, see the README
+section "HyperCore with `hyperliquid-python-sdk`".
 """
 
 from ipor_fusion.fuses.hypercore import (
