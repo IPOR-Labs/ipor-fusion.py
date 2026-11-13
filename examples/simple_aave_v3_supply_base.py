@@ -12,7 +12,8 @@ the test suite, how to:
   6. grant only the USDC substrate (no unrelated permissions);
   7. verify oracle coverage for USDC;
   8. deposit USDC and run an alpha-driven Aave V3 supply;
-  9. confirm the vault NAV is preserved across the supply.
+  9. confirm the vault NAV is preserved across the supply;
+ 10. confirm the vault's Aave valuation against the aToken balance.
 
 Everything runs inside a single ``eth_simulateV1`` batch against a pinned Base
 block -- nothing is signed or broadcast. To put a flow on-chain, hand the
@@ -41,6 +42,8 @@ from web3 import Web3
 
 from ipor_fusion import (
     ERC20,
+    AaveV3FuseReader,
+    AaveV3Reader,
     AccessManager,
     FuseAction,
     FusionFactory,
@@ -260,6 +263,12 @@ def run_simulation(web3: Web3) -> SimulationResult:
     price_manager = PriceOracleMiddlewareManager(preview.price_manager)
     usdc = ERC20(BASE_USDC)
 
+    # The aToken that holds the supplied USDC, read from the supply fuse's Aave
+    # deployment, so it follows the fuse. Both exist before the clone, so plain
+    # reads at the pinned block are sound.
+    aave_pool = AaveV3FuseReader(BASE_AAVE_V3_SUPPLY_FUSE).read_pool(ctx)
+    a_usdc = ERC20(AaveV3Reader(aave_pool).reserve_tokens(BASE_USDC).call(ctx).a_token)
+
     # The whole flow runs as ONE eth_simulateV1 batch; nothing here is signed or
     # broadcast (see the module docstring). Each simulator primitive stands in for
     # a production action, read as "simulation -> production":
@@ -378,6 +387,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     total_assets_after_supply = sim.observe(plasma_vault.total_assets())
     aave_value_t0 = sim.observe(plasma_vault.total_assets_in_market(AAVE_MARKET))
     vault_usdc_after_supply_obs = sim.observe(usdc.balance_of(preview.plasma_vault))
+    # What Aave itself holds for the vault, independent of the balance fuse.
+    a_usdc_t0 = sim.observe(a_usdc.balance_of(preview.plasma_vault))
 
     # SIMULATION ONLY (time advancement): next_block shifts block.timestamp so a
     # year of Aave interest accrues inside one batch. There is no production
@@ -389,7 +400,9 @@ def run_simulation(web3: Web3) -> SimulationResult:
     sim.add_call(call=plasma_vault.update_markets_balances([AAVE_MARKET]), from_=ALPHA)
     aave_value_t1 = sim.observe(plasma_vault.total_assets_in_market(AAVE_MARKET))
     total_assets_t1 = sim.observe(plasma_vault.total_assets())
+    a_usdc_t1 = sim.observe(a_usdc.balance_of(preview.plasma_vault))
     plan.append("advance one year and re-value the Aave position")
+    plan.append("check the Aave valuation against the aToken balance")
 
     log.info("transaction plan:")
     for i, step in enumerate(plan, start=1):
@@ -437,12 +450,6 @@ def run_simulation(web3: Web3) -> SimulationResult:
         vault_usdc_after_supply == DEPOSIT_AMOUNT - supply_amount_int,
         f"unexpected idle USDC after supply: {vault_usdc_after_supply}",
     )
-    # The position shows up in the Aave market valuation right after the supply
-    # (>= 99% of supplied; Aave's scaled-balance math rounds down by dust).
-    _check(
-        aave_value_t0.value >= supply_amount_int * 99 // 100,
-        "Aave position undervalued right after supply",
-    )
     # After a year the position has appreciated, and NAV reflects the growth.
     _check(
         aave_value_t1.value > aave_value_t0.value,
@@ -452,6 +459,23 @@ def run_simulation(web3: Web3) -> SimulationResult:
         total_assets_t1.value > total_after_supply,
         "NAV did not reflect the accrued interest",
     )
+    # The supplied USDC landed in the aToken (Aave's scaled-balance math rounds it
+    # down by dust).
+    _check(
+        a_usdc_t0.value >= supply_amount_int - NAV_DUST_TOLERANCE,
+        f"aToken balance below the supplied amount: {a_usdc_t0.value}",
+    )
+    # The balance fuse values what Aave holds. One that values another pool or
+    # asset than the supply fuse uses would still pass every NAV check above, but
+    # not this one (the tolerance covers the oracle round trip).
+    for label, valued, held in (
+        ("t0", aave_value_t0.value, a_usdc_t0.value),
+        ("t1", aave_value_t1.value, a_usdc_t1.value),
+    ):
+        _check(
+            abs(valued - held) <= NAV_DUST_TOLERANCE,
+            f"Aave valuation {valued} != aToken balance {held} at {label}",
+        )
 
     log.info(
         "OK -- USDC price=%s (dec=%s), NAV t0=%s -> t1=%s, gas_used=%s",
