@@ -234,11 +234,12 @@ class TestAdvancedEulerV2CreditMarketBase(_ExampleOfflineChecks):
             assert decoded_tuple[1:] == tail
 
     def test_euler_account_is_vault_xor_sub_account(self) -> None:
-        vault = Web3.to_checksum_address("0x000000000000000000000000000000000000ff00")
-        # XOR the low byte with SUB_ACCOUNT (0x01) -> ...ff01.
-        assert self.mod._euler_account(vault) == Web3.to_checksum_address(
-            "0x000000000000000000000000000000000000ff01"
-        )
+        clear = Web3.to_checksum_address("0x000000000000000000000000000000000000ff00")
+        flipped = Web3.to_checksum_address("0x000000000000000000000000000000000000ff01")
+        # XOR with SUB_ACCOUNT (0x01) flips the low bit both ways; OR, AND-NOT,
+        # + 1 and - 1 each fail one of the two directions.
+        assert self.mod._euler_account(clear) == flipped
+        assert self.mod._euler_account(flipped) == clear
 
 
 def _substrate_address(substrate: bytes) -> str:
