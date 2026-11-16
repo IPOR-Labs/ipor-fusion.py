@@ -31,7 +31,8 @@ def test_euler_looping_substrates_are_narrow(load_example):
         UniversalTokenSwapperSubstrates.token(mod.ARBITRUM_WBTC),
         UniversalTokenSwapperSubstrates.target(mod.ARBITRUM_USDC),
         UniversalTokenSwapperSubstrates.target(mod.UNISWAP_UNIVERSAL_ROUTER),
-        UniversalTokenSwapperSubstrates.slippage(mod.MAX_SWAP_SLIPPAGE_WAD),
+        # A literal: the module's own constant would match any value.
+        UniversalTokenSwapperSubstrates.slippage(2 * 10**16),
     }
 
 
