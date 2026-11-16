@@ -450,14 +450,20 @@ def run_simulation(web3: Web3) -> SimulationResult:
         vault_usdc_after_supply == DEPOSIT_AMOUNT - supply_amount_int,
         f"unexpected idle USDC after supply: {vault_usdc_after_supply}",
     )
-    # After a year the position has appreciated, and NAV reflects the growth.
+    # A year of interest grows the position by at least 1%. The pinned block
+    # yields about 3.1%; the margin allows a re-pin to a block with a lower rate.
+    # A bare increase would also pass for a time shift of seconds.
+    aave_growth = aave_value_t1.value - aave_value_t0.value
     _check(
-        aave_value_t1.value > aave_value_t0.value,
-        "Aave position did not accrue interest over the year",
+        aave_value_t1.value * 100 >= aave_value_t0.value * 101,
+        f"Aave position grew by less than 1% over the year: {aave_value_t0.value}"
+        f" -> {aave_value_t1.value}",
     )
+    # NAV grows by what the Aave position earned, within dust.
+    nav_growth = total_assets_t1.value - total_after_supply
     _check(
-        total_assets_t1.value > total_after_supply,
-        "NAV did not reflect the accrued interest",
+        abs(nav_growth - aave_growth) <= NAV_DUST_TOLERANCE,
+        f"NAV grew by {nav_growth}, the Aave position by {aave_growth}",
     )
     # The supplied USDC landed in the aToken (Aave's scaled-balance math rounds it
     # down by dust).
