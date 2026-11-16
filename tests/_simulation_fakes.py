@@ -1,4 +1,4 @@
-"""Fake ``SimulationResult`` builders for the examples' fail-loud helper tests."""
+"""Fake ``SimulationResult`` builders: a finished run without a chain."""
 
 from __future__ import annotations
 
