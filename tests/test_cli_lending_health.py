@@ -1317,6 +1317,21 @@ class TestEulerV2Substrate:
         with pytest.raises(ValueError, match="32 bytes"):
             EulerV2Substrate.from_bytes(bytes(length))
 
+    @pytest.mark.parametrize("sub_account_id", [0, 255])
+    def test_accepts_and_decodes_a_sub_account_id_at_either_end_of_a_byte(
+        self, sub_account_id
+    ):
+        substrate = EulerV2Substrate(
+            euler_vault=EULER_BORROW,
+            is_collateral=False,
+            can_borrow=True,
+            sub_account_id=sub_account_id,
+        )
+        assert substrate.sub_account_id == sub_account_id
+        # Built by hand: the fuse encoder would round-trip a layout bug it shares.
+        word = int(EULER_BORROW, 16) << 96 | 1 << 80 | sub_account_id << 72
+        assert EulerV2Substrate.from_bytes(word.to_bytes(32, "big")) == substrate
+
     @pytest.mark.parametrize("sub_account_id", [-1, 256])
     def test_rejects_a_sub_account_id_wider_than_a_byte(self, sub_account_id):
         with pytest.raises(ValueError, match="single byte"):
