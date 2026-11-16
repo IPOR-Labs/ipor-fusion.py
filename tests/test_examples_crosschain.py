@@ -13,8 +13,9 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from _simulation_fakes import simulated_call, simulation_result
 from eth_abi.abi import decode
-from test_examples_vaults import Loader, _simulated_call, _simulation_result
+from test_examples_vaults import Loader
 from test_simulate_crosschain_hyperevm import (
     ARBITRUM_FUSION_FACTORY,
     ARBITRUM_ROUTER,
@@ -83,11 +84,11 @@ class TestCrosschainCcipUsdcArbitrumHyperevm:
 
     def test_assert_relay_success_raises_on_failure(self) -> None:
         results = {
-            self.mod.ARBITRUM_CHAIN_ID: _simulation_result(
-                [_simulated_call("configure_creation_codes", success=True)]
+            self.mod.ARBITRUM_CHAIN_ID: simulation_result(
+                [simulated_call("configure_creation_codes", success=True)]
             ),
-            self.mod.HYPEREVM_CHAIN_ID: _simulation_result(
-                [_simulated_call("ccip_receive:deadbeef", success=False)]
+            self.mod.HYPEREVM_CHAIN_ID: simulation_result(
+                [simulated_call("ccip_receive:deadbeef", success=False)]
             ),
         }
         with pytest.raises(AssertionError, match="simulation calls failed"):

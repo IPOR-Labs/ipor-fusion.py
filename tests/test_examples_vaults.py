@@ -13,50 +13,17 @@ from collections.abc import Callable
 from types import ModuleType
 
 import pytest
+from _simulation_fakes import simulated_call, simulation_result
 from eth_abi.abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
-from hexbytes import HexBytes
 from web3 import Web3
 
 from ipor_fusion import CUSTOM_ERRORS
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.fuse_action import FuseAction
-from ipor_fusion.core.simulation import SimulatedCallResult, SimulationResult
 from ipor_fusion.types import MAX_UINT256, Amount
 
 Loader = Callable[[str], ModuleType]
-
-
-def _simulated_call(
-    label: str,
-    *,
-    success: bool,
-    return_data: bytes = b"",
-    logs: list[dict] | None = None,
-) -> SimulatedCallResult:
-    """One entry in a fake `SimulationResult`, for exercising the fail-loud helpers."""
-    return SimulatedCallResult(
-        label=label,
-        success=success,
-        return_data=HexBytes(return_data),
-        gas_used=0,
-        error=None if success else "execution reverted",
-        logs=logs if logs is not None else [],
-    )
-
-
-def _simulation_result(calls: list[SimulatedCallResult]) -> SimulationResult:
-    """A finished `SimulationResult` over `calls`, with `failed_calls` derived."""
-    failed = [c for c in calls if not c.success]
-    return SimulationResult(
-        success=not failed,
-        all_success=not failed,
-        revert_reason="execution reverted" if failed else None,
-        gas_used=0,
-        execute_logs=[],
-        calls=calls,
-        failed_calls=failed,
-    )
 
 
 class _ExampleOfflineChecks:
@@ -103,7 +70,7 @@ class _ExampleOfflineChecks:
             self.mod._connected_web3()
 
     def test_assert_all_success_raises_on_failure(self) -> None:
-        result = _simulation_result([_simulated_call("clone", success=False)])
+        result = simulation_result([simulated_call("clone", success=False)])
         with pytest.raises(AssertionError, match="simulation calls failed"):
             self.mod._assert_all_success(result)
 
@@ -509,10 +476,10 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
         # it is asked for exists -- so a typo'd label would surface there as an
         # empty scan rather than as this assertion.
         wanted = [{"address": self.VAULT, "topics": [self.DEPLOYED_TOPIC]}]
-        result = _simulation_result(
+        result = simulation_result(
             [
-                _simulated_call("clone", success=True),
-                _simulated_call("propose", success=True, logs=wanted),
+                simulated_call("clone", success=True),
+                simulated_call("propose", success=True, logs=wanted),
             ]
         )
         assert self.mod._logs_of(result, "propose") == wanted
@@ -536,10 +503,10 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
         # so this doubles as a check that the helper returns it unchanged for
         # run_simulation's "reverted for the wrong reason" comparison.
         revert_data = self.mod.PROPOSAL_HASH_MISMATCH_SELECTOR
-        result = _simulation_result(
+        result = simulation_result(
             [
-                _simulated_call("clone", success=True),
-                _simulated_call("demo_confirm", success=False, return_data=revert_data),
+                simulated_call("clone", success=True),
+                simulated_call("demo_confirm", success=False, return_data=revert_data),
             ]
         )
         payload = self.mod._assert_only_expected_failure(result, "demo_confirm")
@@ -550,10 +517,10 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
         # confirm goes through, meaning the hash guard did not fire. Without this
         # case, widening the count check to `> 1` passes every other test here
         # and turns this path into an IndexError instead of a clear assertion.
-        result = _simulation_result(
+        result = simulation_result(
             [
-                _simulated_call("clone", success=True),
-                _simulated_call("demo_confirm", success=True),
+                simulated_call("clone", success=True),
+                simulated_call("demo_confirm", success=True),
             ]
         )
         with pytest.raises(AssertionError, match="expected exactly one failed call"):
@@ -562,10 +529,10 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
     def test_assert_only_expected_failure_rejects_a_broken_happy_path(self) -> None:
         # A second failure means the lifecycle broke, and the run must not report
         # success just because the demo reverted as designed.
-        result = _simulation_result(
+        result = simulation_result(
             [
-                _simulated_call("clone", success=False),
-                _simulated_call("demo_confirm", success=False),
+                simulated_call("clone", success=False),
+                simulated_call("demo_confirm", success=False),
             ]
         )
         with pytest.raises(AssertionError, match="expected exactly one failed call"):
@@ -576,6 +543,6 @@ class TestExternalStateMarginLegBase(_ExampleOfflineChecks):
     ) -> None:
         # One failure, but not the demo's: the lifecycle broke and the demo never
         # got to run. Without this branch a lone unexpected revert could pass.
-        result = _simulation_result([_simulated_call("clone", success=False)])
+        result = simulation_result([simulated_call("clone", success=False)])
         with pytest.raises(AssertionError, match="expected exactly one failed call"):
             self.mod._assert_only_expected_failure(result, "demo_confirm")
