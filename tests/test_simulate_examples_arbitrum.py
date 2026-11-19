@@ -72,12 +72,21 @@ def test_timelocked_governance_arbitrum_simulation(web3_arb, load_example):
     ctx = Web3Context(web3=web3_arb, chain_id=mod.ARBITRUM_CHAIN_ID).at_block(
         mod.PINNED_BLOCK
     )
-    # A cap equal to the live one would pass the final check without a change.
-    assert PlasmaVault(mod.VAULT).get_total_supply_cap().call(ctx) != mod.NEW_CAP
+    # A cap equal to the live one would pass the final checks without a change.
+    live_cap = PlasmaVault(mod.VAULT).get_total_supply_cap().call(ctx)
+    assert live_cap not in (mod.NEW_CAP, mod.CANCELLED_CAP)
 
     # run_simulation raises unless the plan is `schedule`, only the early call
-    # fails (AccessManagerNotReady) and the cap ends at NEW_CAP.
+    # (AccessManagerNotReady) and the cancelled one (AccessManagerNotScheduled)
+    # fail, and the cap ends at NEW_CAP.
     result = mod.run_simulation(web3_arb)
 
     outcomes = {c.label: c.success for c in result.calls if c.label is not None}
-    assert outcomes == {"schedule": True, "early_execute": False, "execute": True}
+    assert outcomes == {
+        "schedule": True,
+        "early_execute": False,
+        "execute": True,
+        "schedule_cancelled": True,
+        "cancel": True,
+        "cancelled_execute": False,
+    }
