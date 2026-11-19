@@ -37,6 +37,7 @@ SKILL = SKILL_DIR / "SKILL.md"
 PLUGIN = REPO_ROOT / ".claude-plugin" / "plugin.json"
 MARKETPLACE = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 MCP_CONFIG = REPO_ROOT / ".mcp.json"
+README = REPO_ROOT / "README.md"
 
 # Everything in this file is published as-is to whoever installs the package or
 # the plugin, so every link must point at a public surface.
@@ -63,6 +64,24 @@ _FACTORY_ROW = re.compile(
     r"(validated|factory only) \| (implementation slot|registry only) \|$",
     re.MULTILINE,
 )
+_README_ANCHOR = re.compile(
+    r"https://github\.com/IPOR-Labs/ipor-fusion\.py/blob/main/README\.md#([^\s)`>\"']+)"
+)
+_FENCED_BLOCK = re.compile(r"^```.*?^```", re.DOTALL | re.MULTILINE)
+_HEADING = re.compile(r"^#{1,6} +(.+?) *$", re.MULTILINE)
+
+
+def _github_slugs(markdown: str) -> set[str]:
+    # GitHub's anchor rule: lowercase, keep only letters, digits, _, - and
+    # spaces, spaces to hyphens, and a -1, -2, ... suffix on repeats.
+    seen: dict[str, int] = {}
+    slugs: set[str] = set()
+    for heading in _HEADING.findall(_FENCED_BLOCK.sub("", markdown)):
+        slug = re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        slugs.add(f"{slug}-{count}" if count else slug)
+    return slugs
 
 
 def _public_texts() -> dict[str, str]:
@@ -144,6 +163,29 @@ class TestPublicSurface:
                 repo = repo.split("/")[0]
                 assert owner == "IPOR-Labs", f"{source}: {match.group(0)}"
                 assert repo in PUBLIC_REPOS, f"{source}: {match.group(0)}"
+
+    def test_readme_anchors_name_a_readme_heading(self):
+        slugs = _github_slugs(README.read_text(encoding="utf-8"))
+        links = [
+            # A bare link may end a sentence; slugs never end in punctuation.
+            (source, anchor.rstrip(".,;:!?]"))
+            for source, text in _public_texts().items()
+            for anchor in _README_ANCHOR.findall(text)
+        ]
+        assert links, "the guide links at least one README section"
+        for source, anchor in links:
+            assert anchor in slugs, f"{source}: README.md#{anchor}"
+
+    def test_github_slugs_follow_the_anchor_rule(self):
+        markdown = (
+            "# Install\n"
+            "```bash\n"
+            "# not a heading\n"
+            "```\n"
+            "## `fusion` CLI: info\n"
+            "# Install\n"
+        )
+        assert _github_slugs(markdown) == {"install", "fusion-cli-info", "install-1"}
 
 
 class TestSkill:

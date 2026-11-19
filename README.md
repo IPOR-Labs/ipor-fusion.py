@@ -518,6 +518,43 @@ take the market ID explicitly (54, or a keccak-derived one from
 reads the market's executor grants; `open_lane` takes an executor address and uses the
 market ID to find the vault's matching fuses unless they are passed.
 
+#### HyperCore with `hyperliquid-python-sdk`
+
+This SDK has no Hyperliquid API client. For Info queries, the websocket and
+`evmUserModify`, use Hyperliquid's official `hyperliquid-python-sdk`. The two
+packages conflict on `eth-utils`. `hyperliquid-python-sdk` 0.24.0 requires
+`eth-utils<6`. `ipor-fusion` requires `eth-utils>=6,<7`. uv resolves the pair
+with an override:
+
+```toml
+[project]
+dependencies = [
+    "ipor-fusion>=4.2,<5",
+    "hyperliquid-python-sdk==0.24.0",
+]
+
+[tool.uv]
+override-dependencies = ["eth-utils>=6,<7"]
+```
+
+- The override is safe for `eth-utils`: `hyperliquid-python-sdk` 0.24.0 calls
+  only its `keccak` and `to_hex`. Pin the Hyperliquid SDK exactly and recheck
+  this when you upgrade it.
+- Never override `eth-account`. The Hyperliquid SDK signs every action with it.
+  Both packages accept `eth-account` 0.13, which the resolver picks.
+- Keep a floor on `ipor-fusion`. Without one, uv settles the conflict silently
+  by picking `ipor-fusion` 3.1.0, the last release before `eth-utils` 6. That
+  release has no `ipor_fusion.hypercore`.
+- `uv pip install` takes the same override from a file:
+  `--overrides overrides.txt`, with the line `eth-utils>=6,<7` in it.
+
+pip has no overrides. With pip, install `ipor-fusion` first, then
+`hyperliquid-python-sdk==0.24.0` with `--no-deps`, then its other dependencies
+(`websocket-client`, `requests`, `msgpack`) by hand. `pip check` then reports
+the `eth-utils` conflict. Ignore it: the Hyperliquid SDK uses only `keccak` and
+`to_hex`, which `eth-utils` 6 keeps. The alternative is to call the Hyperliquid
+HTTP API directly.
+
 ### Readers (`ipor_fusion.readers`)
 
 Read-only aggregators over positions and health, no fuses involved:
