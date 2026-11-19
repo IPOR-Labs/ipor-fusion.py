@@ -42,6 +42,7 @@ from ipor_fusion.fuses import (
     AaveV3BorrowFuse,
     AaveV3SupplyFuse,
     MorphoFlashLoanFuse,
+    UniversalTokenSwapperAbi,
     UniversalTokenSwapperFuse,
 )
 from ipor_fusion.types import Amount, ChainId
@@ -137,7 +138,9 @@ def test_simulate_supply_borrow_in_flash_loan(web3_base):
     aave_supply = AaveV3SupplyFuse(BASE_AAVE_V3_SUPPLY_FUSE)
     aave_borrow = AaveV3BorrowFuse(BASE_AAVE_V3_BORROW_FUSE)
     morpho_flash = MorphoFlashLoanFuse(BASE_MORPHO_FLASH_LOAN_FUSE)
-    universal = UniversalTokenSwapperFuse(BASE_UNIVERSAL_SWAP_FUSE)
+    universal = UniversalTokenSwapperFuse(
+        BASE_UNIVERSAL_SWAP_FUSE, abi=UniversalTokenSwapperAbi.LEGACY
+    )
 
     supply_action = aave_supply.supply(
         asset=BASE_WSTETH, amount=wsteth_collateral_amount, e_mode=1

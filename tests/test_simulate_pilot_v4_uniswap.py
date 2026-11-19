@@ -45,6 +45,7 @@ from ipor_fusion.fuses import (
     UniswapV3ModifyPositionFuse,
     UniswapV3NewPositionFuse,
     UniswapV3SwapFuse,
+    UniversalTokenSwapperAbi,
     UniversalTokenSwapperFuse,
 )
 from ipor_fusion.types import Amount, ChainId
@@ -91,7 +92,9 @@ def _build_universal_swap(ctx, token_in, token_out, amount_in, min_out, path):
         ["bytes", "bytes[]"],
         [encode_packed(["bytes1"], [bytes.fromhex("00")]), inputs],
     )
-    universal = UniversalTokenSwapperFuse(ARBITRUM_UNIVERSAL_SWAP_FUSE)
+    universal = UniversalTokenSwapperFuse(
+        ARBITRUM_UNIVERSAL_SWAP_FUSE, abi=UniversalTokenSwapperAbi.LEGACY
+    )
     return universal.swap(
         token_in=token_in,
         token_out=token_out,

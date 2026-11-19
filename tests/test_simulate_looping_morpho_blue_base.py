@@ -37,6 +37,7 @@ from ipor_fusion.fuses import (
     MorphoBorrowFuse,
     MorphoCollateralFuse,
     MorphoFlashLoanFuse,
+    UniversalTokenSwapperAbi,
     UniversalTokenSwapperFuse,
 )
 from ipor_fusion.types import Amount, ChainId
@@ -140,7 +141,9 @@ def test_simulate_looping_morpho_blue(web3_base):
     morpho_collateral = MorphoCollateralFuse(BASE_MORPHO_COLLATERAL_FUSE)
     morpho_borrow = MorphoBorrowFuse(BASE_MORPHO_BORROW_FUSE)
     morpho_flash = MorphoFlashLoanFuse(BASE_MORPHO_FLASH_LOAN_FUSE)
-    universal = UniversalTokenSwapperFuse(BASE_UNIVERSAL_SWAP_FUSE)
+    universal = UniversalTokenSwapperFuse(
+        BASE_UNIVERSAL_SWAP_FUSE, abi=UniversalTokenSwapperAbi.LEGACY
+    )
 
     supply_collateral = morpho_collateral.supply_collateral(
         market_id=MORPHO_BLUE_MARKET_ID, amount=wsteth_collateral_amount
