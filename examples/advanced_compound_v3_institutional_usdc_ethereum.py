@@ -318,11 +318,13 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # Role bootstrap order: a fresh clone grants OWNER only OWNER_ROLE. OWNER
     # administers ATOMIST, and ATOMIST the operational roles, so OWNER must
     # self-grant ATOMIST before it can grant the ones this example needs:
-    # FUSE_MANAGER, ALPHA and WHITELIST. Each grant uses Period(0) (no execution
-    # delay) to keep the simulation legible; production governance often puts a
-    # nonzero delay -- a timelock -- on the sensitive roles. ALPHA must stay a
-    # separate address from OWNER in production: a compromised alpha key must not
-    # equal governance.
+    # FUSE_MANAGER, ALPHA and WHITELIST. ALPHA must stay a separate address from
+    # OWNER in production: a compromised alpha key must not equal governance.
+    #
+    # Each grant uses Period(0), no execution delay. Production vaults put
+    # delays on their governance roles, which the simulation skips to stay
+    # legible. A delayed holder must schedule each restricted call, wait out the
+    # delay and execute it: see timelocked_governance_arbitrum.py.
     for role, holder in (
         (Roles.ATOMIST_ROLE, OWNER),
         (Roles.FUSE_MANAGER_ROLE, OWNER),

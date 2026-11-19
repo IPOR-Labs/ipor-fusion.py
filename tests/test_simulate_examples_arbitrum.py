@@ -1,10 +1,12 @@
-"""RPC-gated proof for the Arbitrum Euler V2 looping example."""
+"""RPC-gated proofs for the Arbitrum examples."""
 
 from __future__ import annotations
 
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
+
+from ipor_fusion import PlasmaVault, Web3Context
 
 
 def _view_address(web3, contract: str, signature: str, block: int) -> str:
@@ -63,3 +65,28 @@ def test_advanced_euler_v2_looping_arbitrum_simulation(web3_arb, load_example):
 
     result = mod.run_simulation(web3_arb)
     assert result.gas_used > 0
+
+
+def test_timelocked_governance_arbitrum_simulation(web3_arb, load_example):
+    mod = load_example("timelocked_governance_arbitrum.py")
+    ctx = Web3Context(web3=web3_arb, chain_id=mod.ARBITRUM_CHAIN_ID).at_block(
+        mod.PINNED_BLOCK
+    )
+    # A cap equal to the live one would pass the final checks without a change.
+    live_cap = PlasmaVault(mod.VAULT).get_total_supply_cap().call(ctx)
+    assert live_cap not in (mod.NEW_CAP, mod.CANCELLED_CAP)
+
+    # run_simulation raises unless the plan is `schedule`, only the early call
+    # (AccessManagerNotReady) and the cancelled one (AccessManagerNotScheduled)
+    # fail, and the cap ends at NEW_CAP.
+    result = mod.run_simulation(web3_arb)
+
+    outcomes = {c.label: c.success for c in result.calls if c.label is not None}
+    assert outcomes == {
+        "schedule": True,
+        "early_execute": False,
+        "execute": True,
+        "schedule_cancelled": True,
+        "cancel": True,
+        "cancelled_execute": False,
+    }

@@ -806,6 +806,10 @@ def _hub_roles(hub: VaultSimulator, access_manager: AccessManager) -> None:
         # A fresh clone is WHITELIST-gated (private), so the depositor needs it.
         (Roles.WHITELIST_ROLE, DEPOSITOR),
     )
+    # Each grant uses Period(0), no execution delay. Production vaults put
+    # delays on their governance roles, which the simulation skips to stay
+    # legible. A delayed holder must schedule each restricted call, wait out the
+    # delay and execute it: see timelocked_governance_arbitrum.py.
     for role, account in grants:
         hub.add_call(
             access_manager.grant_role(role, account, Period(0)),
@@ -852,7 +856,8 @@ def _set_up_vaults(
     )
 
     # The spoke vault: its atomist sets the price feed and whitelists the
-    # dispatcher -- the only depositor the spoke vault has.
+    # dispatcher -- the only depositor the spoke vault has. Period(0) for the
+    # same reason as on the hub (`_hub_roles`).
     spoke_access = AccessManager(spoke_instance.access_manager)
     for role, account in (
         (Roles.ATOMIST_ROLE, VAULT_OWNER),

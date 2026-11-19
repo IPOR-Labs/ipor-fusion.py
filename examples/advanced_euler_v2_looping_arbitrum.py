@@ -361,6 +361,11 @@ def run_simulation(web3: Web3) -> SimulationResult:
 
     # OWNER is governance; ALPHA is a separate online operator. A production
     # owner should be a cold multisig, never the alpha key.
+    #
+    # Each grant uses Period(0), no execution delay. Production vaults put
+    # delays on their governance roles, which the simulation skips to stay
+    # legible. A delayed holder must schedule each restricted call, wait out the
+    # delay and execute it: see timelocked_governance_arbitrum.py.
     sim.add_call(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,
