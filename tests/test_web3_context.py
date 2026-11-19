@@ -10,12 +10,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from eth_abi import encode
 from hexbytes import HexBytes
+from requests.exceptions import Timeout
 from web3 import Web3
 from web3.exceptions import ContractLogicError, Web3RPCError
 from web3.providers.rpc import HTTPProvider
 
 from ipor_fusion import InFlightLimit
-from ipor_fusion.core.context import _RETRY_EXCEPT_GET_LOGS, Web3Context
+from ipor_fusion.core.context import _NOT_RETRIED, _RETRY_POLICY, Web3Context
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
 from ipor_fusion.errors import LogSourceUnavailable, TransactionError
@@ -94,7 +95,7 @@ class TestFromUrl:
         mock_web3_cls.HTTPProvider.assert_called_once_with(
             "http://localhost:8545",
             request_kwargs={"timeout": Web3Context.DEFAULT_RPC_TIMEOUT_S},
-            exception_retry_configuration=_RETRY_EXCEPT_GET_LOGS,
+            exception_retry_configuration=_RETRY_POLICY,
         )
         mock_web3_cls.assert_called_once_with(mock_provider)
         assert ctx.chain_id == ChainId(42161)
@@ -121,8 +122,34 @@ class TestFromUrl:
         mock_web3_cls.HTTPProvider.assert_called_once_with(
             "http://localhost:8545",
             request_kwargs={"timeout": 10.0},
-            exception_retry_configuration=_RETRY_EXCEPT_GET_LOGS,
+            exception_retry_configuration=_RETRY_POLICY,
         )
+
+    def test_retries_skip_get_logs_and_raw_transactions(self):
+        assert _NOT_RETRIED == {"eth_getLogs", "eth_sendRawTransaction"}
+        assert _NOT_RETRIED.isdisjoint(_RETRY_POLICY.method_allowlist)
+        assert "eth_call" in _RETRY_POLICY.method_allowlist
+
+    @pytest.mark.parametrize(
+        ("method", "posts"),
+        [("eth_sendRawTransaction", 1), ("eth_call", _RETRY_POLICY.retries)],
+    )
+    def test_timed_out_posts_follow_the_retry_policy(self, method, posts):
+        provider = HTTPProvider(
+            "http://localhost:8545", exception_retry_configuration=_RETRY_POLICY
+        )
+        with (
+            patch.object(
+                provider._request_session_manager,
+                "make_post_request",
+                side_effect=Timeout,
+            ) as post,
+            patch("web3.providers.rpc.rpc.time.sleep"),
+            pytest.raises(Timeout),
+        ):
+            provider.make_request(method, ["0x"])
+
+        assert post.call_count == posts
 
     def test_reads_do_not_refetch_the_chain_id(self):
         """web3's validation middleware re-fetches eth_chainId around every

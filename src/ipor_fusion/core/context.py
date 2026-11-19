@@ -41,12 +41,18 @@ from ipor_fusion.core.logs import (
 from ipor_fusion.errors import LogSourceUnavailable, TransactionError, get_revert_reason
 from ipor_fusion.types import ChainId, parse_tx_hash
 
-# web3 retries every allowlisted method on any HTTP error, a 400 included;
-# a too-wide eth_getLogs answered with HTTP 400/413 or a query timeout would be
-# sent five times before the adaptive scan could shrink it.
-_RETRY_EXCEPT_GET_LOGS = ExceptionRetryConfiguration(
+# web3 retries every allowlisted method on any HTTP error, a 400 included.
+#
+# eth_getLogs: a too-wide query answered with HTTP 400/413 or a query timeout
+# would be sent five times before the adaptive scan could shrink it.
+#
+# eth_sendRawTransaction: a post whose answer timed out may already be in the
+# mempool. Its repeat fails with "already known" or "nonce too low", which
+# would make send raise for a transaction that lands.
+_NOT_RETRIED = frozenset({"eth_getLogs", "eth_sendRawTransaction"})
+_RETRY_POLICY = ExceptionRetryConfiguration(
     errors=(RequestsConnectionError, HTTPError, Timeout),
-    method_allowlist=[m for m in REQUEST_RETRY_ALLOWLIST if m != "eth_getLogs"],
+    method_allowlist=[m for m in REQUEST_RETRY_ALLOWLIST if m not in _NOT_RETRIED],
 )
 
 _logger = logging.getLogger(__name__)
@@ -184,7 +190,7 @@ class Web3Context:
             Web3.HTTPProvider(
                 url,
                 request_kwargs={"timeout": request_timeout_s},
-                exception_retry_configuration=_RETRY_EXCEPT_GET_LOGS,
+                exception_retry_configuration=_RETRY_POLICY,
             )
         )
         # web3's validation middleware fetches eth_chainId (uncached) on the
@@ -292,6 +298,17 @@ class Web3Context:
         return receipt
 
     def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
+        """Sign the `build_transaction` dict, post it, and wait for the
+        receipt; a reverted transaction raises `TransactionError`.
+
+        A context from `from_url` posts the transaction once. A transport
+        error from that post (a timeout, a dropped connection, an HTTP error)
+        leaves the outcome unknown: the transaction may still land, so check
+        the signer's nonce or the receipt before sending again. A context on a
+        caller-built ``HTTPProvider`` uses that provider's retry policy; web3's
+        default repeats the post, and the repeat fails with "already known" or
+        "nonce too low" for a transaction that lands.
+        """
         if not self._private_key or not self._signer:
             raise ValueError("Private key required for sending transactions")
         transaction = self.build_transaction(to, data)
