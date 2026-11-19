@@ -294,6 +294,11 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # vault-configuration-step-by-step -> access-management. ADMIN_ROLE on a
     # clone: ipor-fusion, contracts/factory/lib/FusionFactoryLogicLib.sol,
     # _resolveAdmins.
+    #
+    # Each grant uses Period(0), no execution delay. Production vaults put
+    # delays on their governance roles, which the simulation skips to stay
+    # legible. A delayed holder must schedule each restricted call, wait out the
+    # delay and execute it: see timelocked_governance_arbitrum.py.
     sim.add_call(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,
@@ -307,10 +312,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
         from_=OWNER,
     )
     # ALPHA must stay a separate address from OWNER in production (see the actor
-    # notes above): a compromised alpha key must not equal governance. Each grant
-    # uses Period(0) (no execution delay) to keep the simulation legible;
-    # production governance often puts a nonzero delay -- a timelock -- on the
-    # sensitive roles.
+    # notes above): a compromised alpha key must not equal governance.
     sim.add_call(
         call=access_manager.grant_role(Roles.ALPHA_ROLE, ALPHA, Period(0)),
         from_=OWNER,
