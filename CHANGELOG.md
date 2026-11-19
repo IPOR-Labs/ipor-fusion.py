@@ -2,6 +2,163 @@
 
 <!-- version list -->
 
+## v4.3.0 (2026-11-19)
+
+### Bug Fixes
+
+- **mcp**: Omit a fuse's market keys when it serves none
+  ([`5ab28fb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5ab28fbb44fc83e5f8bfdbce7340d5d90d87305e))
+
+- **sdk**: Describe the HyperCore pending payload without its history
+  ([`b7edba9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b7edba9a2a5f7cdb32df4c05910a44f5824293af))
+
+- **sdk**: Keep the HyperCore pending flags on an unknown enum
+  ([`04536b5`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/04536b536eb4f5e34ee69bbd37f35720dc6fe332))
+
+- **sdk**: Leave the HyperCore pending state null on a wrong length
+  ([`bb79bea`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bb79beaa9805fff4410aca15b6826971c62ca0ad))
+
+- **sdk**: Leave the HyperCore pending state null on an unknown enum
+  ([`061dd80`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/061dd80a4ccb63d986d5de4ca3af7108ef76e2d8))
+
+- **sdk**: Name the Fuse Whitelist when a block predates its deployment
+  ([`d519a42`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d519a42d101f74400f6756004a310dc164c69d89))
+
+- **sdk**: Remove provider URLs from debug logs
+  ([`c14a78e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c14a78efef387d015bfac98d5c413528afc68aca))
+
+### Continuous Integration
+
+- Note who may write the test RPC cache
+  ([`b2ef8cf`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/b2ef8cf9463f61b7d6fd8b3e48d6b417f4bc7933))
+
+### Documentation
+
+- Drop fee synonyms from the vault info descriptions
+  ([`5844952`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5844952dcca383ea2104b25e0755f6afd314766f))
+
+- Name the app's fee terms in AGENTS.md
+  ([`5cea0e6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5cea0e6c1ee4e960a374c70044165fcd9689c0fa))
+
+- **sdk**: Allow examples more than one simulation batch
+  ([`925fdab`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/925fdabbd752cff95870619d6de9b71417965f2a))
+
+- **sdk**: Call the clone preview a prediction, not deterministic
+  ([`3860c4d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/3860c4dd88ba42fc07f767ea5318c4a25a89c695))
+
+- **sdk**: Cite the IPOR docs under ipor.io/docs in the examples
+  ([`bf08b55`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/bf08b559a4ac5bc9dd6f23126f4bace1421d76d4))
+
+- **sdk**: Cite the sources of the OWNER admin claim
+  ([`660b434`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/660b4345caf9f672943d9a20f2df015c639dcb55))
+
+- **sdk**: Correct the OWNER admin claim in the examples
+  ([`5d5f4b6`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5d5f4b69cf0e3308224159ea76da9a9fc92866a2))
+
+- **sdk**: Explain clone ordering by the factory nonce
+  ([`dbb6d1b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dbb6d1b0b3c1af7e0bf6e63196c76a7ac037f7fd))
+
+- **sdk**: Label the simulation-only senders in Aave and Euler
+  ([`6718856`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/67188562ff02de7f8d0c26539f6acf98c007b2ee))
+
+- **sdk**: Make the margin-leg attestation move NAV
+  ([`35e0a0e`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/35e0a0e13d6b609ebf4a346f7958133dac944749))
+
+- **sdk**: Note the request fee behind the margin-leg release check
+  ([`92f3eac`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/92f3eac97cff9b2ce73c8e6d4c1a15005030d6ea))
+
+- **sdk**: Say ALPHA also releases withdrawal requests
+  ([`a1f4395`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a1f43959b7c09236f50ff3e69a0823022e4c4f63))
+
+- **sdk**: Say FUSE_MANAGER changes the margin-leg substrates
+  ([`dd1b85c`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/dd1b85c6f3c444617b15b081e4b77b7a2e24194d))
+
+- **sdk**: Say pending_proposals verifies nothing
+  ([`d952407`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d952407e7f58ba87b1a1190657ddf6471d42273d))
+
+- **sdk**: Say what balance_fuse_value returns
+  ([`ef8f933`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/ef8f933b7fe471def34eb6872656dba3065a4a8a))
+
+- **sdk**: State the role-admin chain as a contract fact
+  ([`d133c0b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d133c0b0ece93d23a7fcf83b00898aa06a8d58c8))
+
+- **sdk**: State the role-admin chain as a contract fact in the guide
+  ([`1a7fb1a`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1a7fb1a6acf418b5289b092216512e6e0f97445f))
+
+- **sdk**: Use US spelling in the margin-leg example
+  ([`8396d55`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/8396d5537a181f01b193eca0fc353d99491a57e8))
+
+- **sdk**: Word the FUSE_MANAGER note once across examples
+  ([`d348d91`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d348d918ae22a545116aa5a1dcb36dbff837744c))
+
+### Features
+
+- **sdk**: Support Polygon in the vault tooling
+  ([`f6c39e3`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/f6c39e39346749006efb0b52d6d9e09dbb6360d0))
+
+### Testing
+
+- Say why the Base Aave supply fuse is the pilot one
+  ([`c57aab9`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c57aab9cbba71dea6f6c048f93aa04a51e7812fe))
+
+- **sdk**: Add pytest --rpc-cache-clear to empty the RPC cache
+  ([`e1f0adb`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e1f0adbb242a5a0cc9c6ddd21ffb78a7271488e1))
+
+- **sdk**: Cache finalized-block RPC responses on disk
+  ([`7e81c70`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/7e81c70dd0e6c43575eeece5a28c56eb1a9a0923))
+
+- **sdk**: Check that global-address endpoints are cached
+  ([`1f62803`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1f62803415d18613ffd4c151ea27a83e25a55b50))
+
+- **sdk**: Check the margin-leg selector against the contracts' errors
+  ([`a527253`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/a527253df03a64410d67d7eb33123f9571e5c928))
+
+- **sdk**: Drop the example test that repeats an encoder test
+  ([`d421b04`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/d421b04d158b9b1b9566765a8f1d8e4c775af192))
+
+- **sdk**: Drop web3 validation middleware in RPC test fixtures
+  ([`11ac523`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/11ac5234ed9eb63790073383ac4d4961415c64ca))
+
+- **sdk**: Keep the CCIP-Read guard behind the test RPC cache
+  ([`fc1805b`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/fc1805b8b2d1383221606bf5d03d8a5edb354160))
+
+- **sdk**: Keep the test RPC cache under rpc/v1/
+  ([`1b12ab1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/1b12ab13755856a2697b9ee9829940aebf45ee03))
+
+- **sdk**: Key the RPC cache through web3's public JSON encoder
+  ([`5404265`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5404265208b9b758d23cd885a02ef2857db2325e))
+
+- **sdk**: Let failed RPC cache lookups leave the read uncached
+  ([`0bd0468`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/0bd0468b9e137e0c20d956ea1f2fe5fff87265df))
+
+- **sdk**: Let web3 batch requests through the RPC cache
+  ([`435655d`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/435655d565cbcc927a1f544a2f4c93d95b49b469))
+
+- **sdk**: Name the selector test for what it proves
+  ([`2558b9f`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2558b9f70d49c79c299070304950180aea429727))
+
+- **sdk**: Never cache a local host written as shorthand IPv4
+  ([`5c03807`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/5c038074ef3de896cd0837c6456faaf3679c1218))
+
+- **sdk**: Never cache a local host written with a trailing dot
+  ([`2b21ee1`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/2b21ee1a102da274e01672a6ede7cfc79c081690))
+
+- **sdk**: Never cache shared-address or single-label RPC hosts
+  ([`e3db7e4`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/e3db7e487f3fd481bbabe1d685ada0ab8cbfae5d))
+
+- **sdk**: Pin the Euler V2 Base simulation tests to a fixed block
+  ([`c985816`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/c98581684a1bbc306e8f961b08ed6225c91b7831))
+
+- **sdk**: Pin the margin-leg PnL constants offline
+  ([`77f66ee`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/77f66ee45f54e2f6cf8ea1247b8305e711b3a99f))
+
+- **sdk**: Route archive_context reads through the RPC cache
+  ([`903d8fd`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/903d8fd38c4b862006716e6c5bed99ea9878ad89))
+
+- **sdk**: State the role-admin chain as a contract fact
+  ([`6fe6651`](https://github.com/IPOR-Labs/ipor-fusion.py/commit/6fe66512136ad3d7f27bbda041ecf3963998a65d))
+
+
 ## v4.2.0 (2026-11-05)
 
 ### Bug Fixes
