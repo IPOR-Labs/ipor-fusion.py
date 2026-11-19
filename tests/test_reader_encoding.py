@@ -458,9 +458,9 @@ class TestMorphoBlueAddress:
 
     def test_unknown_chain_raises_with_known_chains_listed(self):
         with pytest.raises(UnsupportedChainError) as exc_info:
-            morpho_blue_address(137)
+            morpho_blue_address(250)
         message = str(exc_info.value)
-        assert "chain 137 (polygon)" in message
+        assert "chain 250 (fantom)" in message
         assert "1 (ethereum)" in message
         assert "42161 (arbitrum)" in message
 

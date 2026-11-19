@@ -941,7 +941,7 @@ class TestMarketMorphoBlue:
     @patch("ipor_fusion.mcp.server.Web3Context")
     @patch(
         "ipor_fusion.mcp.server.load_config",
-        return_value=_config_with_provider_for(137),
+        return_value=_config_with_provider_for(250),
     )
     def test_chain_without_morpho_deployment_rejected(
         self, _load, mock_ctx_cls, mock_reader_cls
@@ -949,8 +949,8 @@ class TestMarketMorphoBlue:
         """A provider alone is not enough — Morpho Blue must be deployed there."""
         mock_ctx_cls.from_url.return_value = MagicMock()
 
-        with pytest.raises(UnsupportedChainError, match=r"chain 137 \(polygon\)"):
-            market_morpho_blue(market_id=_MARKET_ID, chain_id=137)
+        with pytest.raises(UnsupportedChainError, match=r"chain 250 \(fantom\)"):
+            market_morpho_blue(market_id=_MARKET_ID, chain_id=250)
 
         mock_reader_cls.assert_not_called()
 
