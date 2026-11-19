@@ -1048,7 +1048,11 @@ class TestSimpleResponseContracts:
         assert [(f.name, f.scope) for f in info.preview_features] == [
             (f.name, f.scope) for f in PREVIEW_FEATURES
         ]
-        assert [f.name for f in info.preview_features] == ["crosschain", "hypercore"]
+        assert [f.name for f in info.preview_features] == [
+            "crosschain",
+            "hypercore",
+            "lido_lend",
+        ]
         assert {f.status for f in info.preview_features} == {"preview"}
 
 

@@ -28,6 +28,7 @@ _PREVIEW = frozenset(
         "ipor_fusion.crosschain.fuses",
         "ipor_fusion.crosschain.stargate",
         "ipor_fusion.hypercore",
+        "ipor_fusion.lido_lend",
     }
 )
 _NOT_REEXPORTED = frozenset({"ipor_fusion.guide"}) | _PREVIEW
@@ -472,6 +473,31 @@ _ALL_SNAPSHOT: dict[str, frozenset[str]] = {
     "ipor_fusion.config": frozenset(
         {
             "Roles",
+        }
+    ),
+    "ipor_fusion.lido_lend": frozenset(
+        {
+            "LIDO_LEND_CORE_ADDRESSES",
+            "LidoLendBorrowFuse",
+            "LidoLendBorrowerPosition",
+            "LidoLendCollateralActivationConfig",
+            "LidoLendCollateralFuse",
+            "LidoLendFlashLoanFuse",
+            "LidoLendFuseReader",
+            "LidoLendMarketController",
+            "LidoLendNextSettlement",
+            "LidoLendPositionState",
+            "LidoLendReader",
+            "LidoLendSettleFuse",
+            "LidoLendSettlementConfig",
+            "LidoLendSettlementLtv",
+            "LidoLendSettlementQuote",
+            "LidoLendSettlementSlice",
+            "LidoLendSubstrates",
+            "LidoLendSupplyFuse",
+            "is_collateral_word",
+            "lido_lend_core_address",
+            "min_collateral_per_supply_asset_wad",
         }
     ),
     "ipor_fusion.hypercore": frozenset(
@@ -1459,7 +1485,9 @@ def test_subpackage_all_lists_every_exported_name_it_defines(package: str) -> No
         defined |= _defined_in(_module(info.name))
     # HyperCore modules live under fuses/ and readers/ but export through
     # the preview subpackage.
-    preview = set(_module("ipor_fusion.hypercore").__all__)
+    preview = set(_module("ipor_fusion.hypercore").__all__) | set(
+        _module("ipor_fusion.lido_lend").__all__
+    )
     missing = sorted(defined - set(root.__all__) - preview)
     assert not missing, f"{package}.__all__ lacks {missing}"
 
@@ -1502,6 +1530,8 @@ def test_no_stable_package_exports_a_name_a_preview_module_defines() -> None:
         *root.joinpath("crosschain").rglob("*.py"),
         *root.joinpath("fuses").glob("hypercore*.py"),
         *root.joinpath("readers").glob("hypercore*.py"),
+        *root.joinpath("fuses").glob("lido_lend*.py"),
+        *root.joinpath("readers").glob("lido_lend*.py"),
     ]
     defined: set[str] = set()
     for path in modules:

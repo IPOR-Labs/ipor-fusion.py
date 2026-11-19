@@ -24,13 +24,16 @@ from ipor_fusion.readers.compound_v3 import CompoundV3FuseReader
 from ipor_fusion.readers.lending_health import (
     AAVE_V3_MARKET_IDS,
     COMPOUND_V3_MARKET_IDS,
+    LIDO_LEND_MARKET_IDS,
     MORPHO_MARKET_IDS,
 )
+from ipor_fusion.readers.lido_lend import LidoLendFuseReader, LidoLendReader
 from ipor_fusion.readers.morpho import (
     MorphoPositionBreakdown,
     MorphoReader,
     morpho_blue_address,
 )
+from ipor_fusion.substrates import decode_substrate
 from ipor_fusion.types import (
     MarketId,
     MorphoBlueMarketId,
@@ -94,6 +97,74 @@ def _fetch_morpho_positions(
             if bd is None
         ]
         breakdowns = [bd for bd in per_market if bd is not None]
+        if breakdowns:
+            result[mid] = breakdowns
+    return result or None
+
+
+def _fetch_lido_lend_cores(
+    ctx: Web3Context, balance_fuses: list[BalanceFuse]
+) -> dict[MarketId, ChecksumAddress]:
+    """Map every Lido Lend market to the core its balance fuse binds. A balance
+    fuse that names no core reverts or answers with empty data and is left out."""
+    fuses = {
+        bf.market_id: bf.fuse
+        for bf in balance_fuses
+        if bf.market_id in LIDO_LEND_MARKET_IDS
+    }
+    if not fuses:
+        return {}
+    cores = Multicall3(ctx).try_aggregate(
+        [LidoLendFuseReader(fuse).lido_lend() for fuse in fuses.values()]
+    )
+    return {
+        mid: core for mid, core in zip(fuses, cores, strict=True) if core is not None
+    }
+
+
+def _fetch_lido_lend_positions(
+    ctx: Web3Context,
+    vault_addr: ChecksumAddress,
+    market_substrates: dict[MarketId, list[bytes]],
+    lido_lend_cores: dict[MarketId, ChecksumAddress],
+    unread: list[str],
+) -> dict[MarketId, list[MorphoPositionBreakdown]] | None:
+    """Fetch the position breakdown of every Lido Lend market word of every
+    Lido Lend market; a word whose read fails, or whose market has no known
+    core, is left out and named in ``unread`` (its tokens would otherwise go
+    unchecked).
+
+    Collateral words are tokens, not markets. Each core reads its words in one
+    batch; a batch failure that ``_safe_call`` suppresses leaves them all
+    unread. A market without a core is not read at all.
+    """
+    result: dict[MarketId, list[MorphoPositionBreakdown]] = {}
+    for mid in sorted(LIDO_LEND_MARKET_IDS & market_substrates.keys()):
+        words = [
+            parse_morpho_market_id(sub)
+            for sub in market_substrates[mid]
+            if decode_substrate(sub, mid).type_label == "lido_lend_market_id"
+        ]
+        if not words:
+            continue
+        core = lido_lend_cores.get(mid)
+        if core is None:
+            unread += [f"Lido Lend position in market {word}" for word in words]
+            continue
+        reads = _safe_call(
+            partial(
+                LidoLendReader(core).read_position_breakdowns,
+                ctx,
+                words,
+                vault_addr,
+            )
+        ) or [None] * len(words)
+        unread += [
+            f"Lido Lend position in market {word}"
+            for word, bd in zip(words, reads, strict=True)
+            if bd is None
+        ]
+        breakdowns = [bd for bd in reads if bd is not None]
         if breakdowns:
             result[mid] = breakdowns
     return result or None

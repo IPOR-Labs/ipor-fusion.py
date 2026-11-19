@@ -89,6 +89,8 @@ from ipor_fusion.vault_positions import (
     _fetch_aave_positions,
     _fetch_breakdown_token_prices,
     _fetch_comets,
+    _fetch_lido_lend_cores,
+    _fetch_lido_lend_positions,
     _fetch_morpho_positions,
 )
 from ipor_fusion.vault_reads import (
@@ -513,13 +515,16 @@ class _MarketReads:
     market_balances: dict[MarketId, Amount]
     # False when the vault predates getMarketSubstrates (substrates unknown).
     substrates_available: bool = True
+    # Lido Lend market -> the core its balance fuse binds.
+    lido_lend_cores: dict[MarketId, ChecksumAddress] = field(default_factory=dict)
 
 
 def _fetch_market_reads(
     ctx: Web3Context, plasma_vault: PlasmaVault, *, with_lending_venues: bool
 ) -> _MarketReads:
     """Balance fuses, then every market's dependency graph and substrates in
-    one batch, then (optionally) the Aave V3 Pools and Comets behind the markets."""
+    one batch, then (optionally) the Aave V3 Pools, Comets and Lido Lend cores behind
+    the markets."""
     balance_fuses = plasma_vault.read_balance_fuses(ctx)
     market_ids = [bf.market_id for bf in balance_fuses]
     venues = list(dict.fromkeys(market_ids))
@@ -551,6 +556,9 @@ def _fetch_market_reads(
         comets=_fetch_comets(ctx, balance_fuses) if with_lending_venues else {},
         market_balances={mid: balance.value for mid, balance in balances},
         substrates_available=None not in substrates,
+        lido_lend_cores=(
+            _fetch_lido_lend_cores(ctx, balance_fuses) if with_lending_venues else {}
+        ),
     )
 
 
@@ -563,6 +571,9 @@ class _LendingReads:
     # Morpho substrates whose position could not be read: their tokens are
     # missing from the unpriceable-token check.
     morpho_unread: list[str] = field(default_factory=list)
+    # The same for Lido Lend: positions by market, and the words left unread.
+    lido_lend_positions: dict[MarketId, list[MorphoPositionBreakdown]] | None = None
+    lido_lend_unread: list[str] = field(default_factory=list)
 
 
 def _fetch_lending_reads(
@@ -571,7 +582,8 @@ def _fetch_lending_reads(
     vault_addr: PlasmaVaultAddress,
     markets: _MarketReads,
 ) -> _LendingReads:
-    """Lending health plus the Morpho and Aave V3 per-position breakdowns.
+    """Lending health plus the Morpho, Lido Lend and Aave V3 per-position
+    breakdowns.
 
     Health runs as one pool task (it fans out on its own executor); the
     breakdowns fan out on `pool` from the calling thread, so no pool task ever
@@ -587,6 +599,7 @@ def _fetch_lending_reads(
             market_substrates=markets.market_substrates,
             aave_pools=markets.aave_pools,
             comets=markets.comets,
+            lido_lend_cores=markets.lido_lend_cores,
         ),
     )
     morpho_unread: list[str] = []
@@ -597,10 +610,20 @@ def _fetch_lending_reads(
         markets.market_substrates,
         morpho_unread,
     )
+    lido_lend_unread: list[str] = []
+    f_lido_lend = pool.submit(
+        _fetch_lido_lend_positions,
+        ctx,
+        vault_addr,
+        markets.market_substrates,
+        markets.lido_lend_cores,
+        lido_lend_unread,
+    )
     aave_positions = _fetch_aave_positions(
         ctx, pool, vault_addr, markets.aave_pools, markets.market_substrates
     )
     morpho_positions = f_morpho.result()
+    lido_lend_positions = f_lido_lend.result()
     lending_health = f_health.result()
     return _LendingReads(
         lending_health=lending_health,
@@ -608,6 +631,8 @@ def _fetch_lending_reads(
         morpho_positions=morpho_positions,
         aave_positions=aave_positions,
         morpho_unread=morpho_unread,
+        lido_lend_positions=lido_lend_positions,
+        lido_lend_unread=lido_lend_unread,
     )
 
 
@@ -834,10 +859,15 @@ def _derived_reads(
                 balance_fuses=markets.balance_fuses,
                 market_substrates=markets.market_substrates,
                 morpho_positions=lending.morpho_positions,
+                lido_lend_positions=lending.lido_lend_positions,
             )
         )
         unpriceable = check.tokens if check is not None else None
-        unread = [*lending.morpho_unread, *(check.unread if check else [])]
+        unread = [
+            *lending.morpho_unread,
+            *lending.lido_lend_unread,
+            *(check.unread if check else []),
+        ]
         if check is None:
             failed.append(_UNPRICEABLE_PRICED_TOKENS)
         failed += [f"{_UNPRICEABLE_PRICED_TOKENS}: {item}" for item in unread]

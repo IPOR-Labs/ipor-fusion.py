@@ -1,6 +1,7 @@
 # pyright: reportOperatorIssue=false, reportOptionalOperand=false
 """Unit tests for lending health computation — mock on-chain calls."""
 
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,7 +12,12 @@ from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import ContractLogicError, Web3RPCError, Web3ValueError
 
-from ipor_fusion.cli.vault_markets_view import _index_lending_health
+from ipor_fusion import vault_data
+from ipor_fusion.cli.vault_markets_view import (
+    _index_lending_health,
+    _print_lending_health,
+)
+from ipor_fusion.core.plasma_vault import BalanceFuse, PlasmaVault
 from ipor_fusion.fuses.euler_v2 import euler_substrate
 from ipor_fusion.market_ids import IporFusionMarkets
 from ipor_fusion.readers.aave_v3 import AaveV3Reader
@@ -22,11 +28,14 @@ from ipor_fusion.readers.lending_health import (
     AAVE_V4_MARKET_IDS,
     COMPOUND_V3_MARKET_IDS,
     EULER_V2_MARKET_IDS,
+    LIDO_LEND_MARKET_IDS,
     MORPHO_MARKET_IDS,
     ORACLE_PRICE_SCALE,
+    WAD,
     LendingMarketHealth,
     UnreadableLendingMarket,
     VaultLendingHealth,
+    _collect_lending_markets,
     _compute_aave_market_health,
     _compute_aave_v4_market_health,
     _compute_compound_v3_market_health,
@@ -35,13 +44,19 @@ from ipor_fusion.readers.lending_health import (
     _EulerV2Account,
     fetch_vault_lending_health,
 )
+from ipor_fusion.readers.lido_lend import LidoLendReader
 from ipor_fusion.readers.morpho import (
     MorphoReader,
     morpho_blue_address,
     to_assets_down,
     to_assets_up,
 )
+from ipor_fusion.readers.unpriceable import UnpriceableCheck
 from ipor_fusion.types import ChainId, MarketId, MorphoBlueMarketId
+from ipor_fusion.vault_positions import (
+    _fetch_lido_lend_cores,
+    _fetch_lido_lend_positions,
+)
 
 VAULT_ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 ORACLE_ADDR = Web3.to_checksum_address("0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd")
@@ -1672,3 +1687,528 @@ class TestCompoundV3Health:
         _, account_level = _index_lending_health(VaultLendingHealth(markets=[row]))
 
         assert account_level == {row.market_id: row}
+
+
+# ── Lido Lend ───────────────────────────────────────────────────────────
+
+LIDO_CORE = Web3.to_checksum_address("0x78d3262E82A35d290507bCF9B4834735DdA6b854")
+LIDO_FUSE = Web3.to_checksum_address("0x" + "f5" * 20)
+LIDO_MID = MarketId(58)
+LIDO_WORD = "0x" + "ab" * 32
+LIDO_WORD_B = "0x" + "cd" * 32
+LIDO_WORD_BYTES = bytes.fromhex("ab" * 32)
+LIDO_WORD_B_BYTES = bytes.fromhex("cd" * 32)
+# type byte 0x01, zeros, token address: a collateral word, not a market.
+LIDO_COLLATERAL_WORD = (1 << 248 | int(TOKEN_A, 16)).to_bytes(32, "big")
+_MORPHO_MARKET = ["uint128"] * 6
+_PARAMS = ["address", "address", "address", "address", "uint256"]
+
+
+def _sel(signature: str) -> bytes:
+    return function_signature_to_4byte_selector(signature)
+
+
+def _lido_core_ctx(
+    *,
+    borrow_shares: int = 500 * 10**6,
+    collateral: int = 1000,
+    price: int | Exception = ORACLE_PRICE_SCALE,
+    broken: Exception | None = None,
+    broken_words: tuple[bytes, ...] = (),
+) -> MagicMock:
+    """A Lido Lend core answering the Morpho reads (50% LTV by default); the
+    controller lookups are never made by the health read."""
+
+    def handler(to: str, data: bytes) -> bytes:
+        selector = data[:4]
+        if selector == _sel("price()"):
+            assert to == ORACLE_ADDR
+            if isinstance(price, Exception):
+                raise price
+            return encode(["uint256"], [price])
+        assert to == LIDO_CORE
+        if broken is not None:
+            raise broken
+        if data[4:36] in broken_words:
+            raise ContractLogicError("execution reverted")
+        if selector == _sel("position(bytes32,address)"):
+            return encode(
+                ["uint256", "uint128", "uint128"], [0, borrow_shares, collateral]
+            )
+        if selector == _sel("market(bytes32)"):
+            return encode(
+                _MORPHO_MARKET, [2000, 2000 * 10**6, 1000, 1000 * 10**6, 1700000000, 0]
+            )
+        assert selector == _sel("idToMarketParams(bytes32)")
+        return encode(_PARAMS, [TOKEN_A, TOKEN_B, ORACLE_ADDR, IRM_ADDR, 86 * 10**16])
+
+    ctx = MagicMock()
+    ctx.chain_id = ChainId(560048)
+    ctx.call.side_effect = multicall_aware(handler)
+    return ctx
+
+
+def _lido_health(ctx: MagicMock, **overrides):
+    return _compute_morpho_market_health(
+        ctx,
+        LidoLendReader(LIDO_CORE),
+        MorphoBlueMarketId(LIDO_WORD),
+        VAULT_ADDR,
+        LIDO_MID,
+        "LIDO_LEND",
+        protocol="lido_lend",
+        **overrides,
+    )
+
+
+class TestLidoLendCollection:
+    def test_market_ids_cover_the_lending_market_only(self):
+        assert LIDO_LEND_MARKET_IDS == {IporFusionMarkets.LIDO_LEND}
+        assert IporFusionMarkets.LIDO_LEND_FLASH_LOAN not in LIDO_LEND_MARKET_IDS
+
+    def test_one_row_per_market_word_and_collateral_words_are_skipped(self):
+        markets = _collect_lending_markets(
+            VAULT_ADDR,
+            [LIDO_MID],
+            {LIDO_MID: [LIDO_WORD_BYTES, LIDO_COLLATERAL_WORD, LIDO_WORD_B_BYTES]},
+            {},
+            {},
+            {LIDO_MID: LIDO_CORE},
+        )
+
+        assert markets.lido_lend == [
+            (LIDO_MID, "LIDO_LEND", LIDO_CORE, MorphoBlueMarketId(LIDO_WORD)),
+            (LIDO_MID, "LIDO_LEND", LIDO_CORE, MorphoBlueMarketId(LIDO_WORD_B)),
+        ]
+        assert markets.unreadable == []
+
+    def test_without_a_core_the_market_is_unreadable(self):
+        markets = _collect_lending_markets(
+            VAULT_ADDR, [LIDO_MID], {LIDO_MID: [LIDO_WORD_BYTES]}, {}, {}, {}
+        )
+
+        assert markets.lido_lend == []
+        [unreadable] = markets.unreadable
+        assert unreadable == UnreadableLendingMarket(
+            protocol="lido_lend",
+            market_id=LIDO_MID,
+            market_name="LIDO_LEND",
+            reason="no Lido Lend core known for this market (the balance fuse names none or none was passed)",
+        )
+
+    def test_unreadable_market_without_core_through_fetch(self):
+        result = fetch_vault_lending_health(
+            MagicMock(),
+            VAULT_ADDR,
+            balance_fuse_market_ids=[LIDO_MID],
+            market_substrates={LIDO_MID: [LIDO_WORD_BYTES]},
+        )
+        assert [u.protocol for u in result.unreadable] == ["lido_lend"]
+        assert not result.is_complete
+
+
+class TestLidoLendHealth:
+    def test_health_uses_the_morpho_math_on_the_core(self):
+        result = fetch_vault_lending_health(
+            _lido_core_ctx(),
+            VAULT_ADDR,
+            balance_fuse_market_ids=[LIDO_MID],
+            market_substrates={LIDO_MID: [LIDO_WORD_BYTES, LIDO_COLLATERAL_WORD]},
+            lido_lend_cores={LIDO_MID: LIDO_CORE},
+        )
+
+        [row] = result.markets
+        assert row.protocol == "lido_lend"
+        assert row.market_id == LIDO_MID
+        assert row.substrate_id == LIDO_WORD
+        # 500 borrowed against 1000 collateral at 1:1, lltv 0.86.
+        assert row.current_ltv == 0.5
+        assert row.max_ltv == 0.86
+        assert row.health_factor == 1.72
+        assert row.ltv_usage_percent == 58.14
+        assert result.is_complete
+
+    def test_every_word_is_read_from_the_core(self):
+        ctx = _lido_core_ctx()
+        result = fetch_vault_lending_health(
+            ctx,
+            VAULT_ADDR,
+            balance_fuse_market_ids=[LIDO_MID],
+            market_substrates={LIDO_MID: [LIDO_WORD_BYTES, LIDO_WORD_B_BYTES]},
+            lido_lend_cores={LIDO_MID: LIDO_CORE},
+        )
+        assert {m.substrate_id for m in result.markets} == {LIDO_WORD, LIDO_WORD_B}
+
+    def test_no_debt_is_labelled(self):
+        result = _lido_health(_lido_core_ctx(borrow_shares=0))
+        assert isinstance(result, LendingMarketHealth)
+        assert result.protocol == "lido_lend"
+        assert result.current_ltv == 0.0
+        assert result.substrate_id == LIDO_WORD
+
+    def test_debt_without_collateral_is_labelled(self):
+        result = _lido_health(_lido_core_ctx(collateral=0))
+        assert isinstance(result, LendingMarketHealth)
+        assert result.protocol == "lido_lend"
+        assert result.current_ltv is None
+        assert result.health_factor is None
+
+    def test_market_data_failure_is_unreadable_and_labelled(self):
+        result = _lido_health(_lido_core_ctx(broken=ContractLogicError("revert")))
+        assert isinstance(result, UnreadableLendingMarket)
+        assert result.protocol == "lido_lend"
+        assert result.substrate_id == LIDO_WORD
+        assert result.reason.startswith("market data read failed")
+
+    def test_oracle_failure_is_unreadable_and_labelled(self):
+        result = _lido_health(_lido_core_ctx(price=ContractLogicError("revert")))
+        assert isinstance(result, UnreadableLendingMarket)
+        assert result.protocol == "lido_lend"
+        assert result.substrate_id == LIDO_WORD
+        assert result.reason.startswith("oracle price read failed")
+
+    def test_morpho_label_is_the_default(self):
+        result = _compute_morpho_market_health(
+            _lido_core_ctx(borrow_shares=0),
+            LidoLendReader(LIDO_CORE),
+            MorphoBlueMarketId(LIDO_WORD),
+            VAULT_ADDR,
+            LIDO_MID,
+            "LIDO_LEND",
+        )
+        assert result.protocol == "morpho"
+
+
+def _lido_vault_ctx(*, fuse_reverts: bool = False) -> MagicMock:
+    """A vault with a Lido Lend market whose balance fuse binds the core."""
+
+    def handler(to: str, data: bytes) -> bytes:
+        selector = data[:4]
+        if selector == _sel("LIDO_LEND()"):
+            assert to == LIDO_FUSE
+            if fuse_reverts:
+                raise ContractLogicError("execution reverted")
+            return encode(["address"], [LIDO_CORE])
+        if selector == _sel("getDependencyBalanceGraph(uint256)"):
+            return encode(["uint256[]"], [[]])
+        if selector == _sel("totalAssetsInMarket(uint256)"):
+            return encode(["uint256"], [0])
+        assert selector == _sel("getMarketSubstrates(uint256)")
+        return encode(["bytes32[]"], [[LIDO_WORD_BYTES]])
+
+    ctx = MagicMock()
+    ctx.chain_id = ChainId(560048)
+    ctx.call.side_effect = multicall_aware(handler)
+    return ctx
+
+
+class TestLidoLendDiscovery:
+    @staticmethod
+    def _reads(ctx: MagicMock, *, lending: bool = True):
+        fuses = [BalanceFuse(LIDO_MID, LIDO_FUSE)]
+        with patch.object(PlasmaVault, "read_balance_fuses", return_value=fuses):
+            return vault_data._fetch_market_reads(
+                ctx, PlasmaVault(VAULT_ADDR), with_lending_venues=lending
+            )
+
+    def test_the_core_comes_from_the_balance_fuse(self):
+        markets = self._reads(_lido_vault_ctx())
+        assert markets.lido_lend_cores == {LIDO_MID: LIDO_CORE}
+
+    def test_a_fuse_that_names_no_core_is_left_out(self):
+        markets = self._reads(_lido_vault_ctx(fuse_reverts=True))
+        assert markets.lido_lend_cores == {}
+
+    def test_nothing_is_read_without_lending(self):
+        ctx = _lido_vault_ctx()
+        markets = self._reads(ctx, lending=False)
+        assert markets.lido_lend_cores == {}
+        assert not any(
+            c.args[1][:4] == _sel("LIDO_LEND()") for c in ctx.call.call_args_list
+        )
+
+    def test_no_lido_fuse_means_no_read(self):
+        ctx = MagicMock()
+        assert _fetch_lido_lend_cores(ctx, [BalanceFuse(MarketId(14), LIDO_FUSE)]) == {}
+        ctx.call.assert_not_called()
+
+
+class TestLidoLendPositions:
+    def test_positions_per_market_word(self):
+        unread: list[str] = []
+        positions = _fetch_lido_lend_positions(
+            _lido_core_ctx(),
+            VAULT_ADDR,
+            {LIDO_MID: [LIDO_WORD_BYTES, LIDO_COLLATERAL_WORD, LIDO_WORD_B_BYTES]},
+            {LIDO_MID: LIDO_CORE},
+            unread,
+        )
+
+        assert positions is not None
+        assert [pb.market_id for pb in positions[LIDO_MID]] == [LIDO_WORD, LIDO_WORD_B]
+        assert positions[LIDO_MID][0].collateral == 1000
+        assert unread == []
+
+    def test_an_unread_word_is_named(self):
+        unread: list[str] = []
+        positions = _fetch_lido_lend_positions(
+            _lido_core_ctx(broken_words=(LIDO_WORD_B_BYTES,)),
+            VAULT_ADDR,
+            {LIDO_MID: [LIDO_WORD_BYTES, LIDO_WORD_B_BYTES]},
+            {LIDO_MID: LIDO_CORE},
+            unread,
+        )
+
+        assert positions is not None
+        assert [pb.market_id for pb in positions[LIDO_MID]] == [LIDO_WORD]
+        assert unread == [f"Lido Lend position in market {LIDO_WORD_B}"]
+
+    def test_a_suppressed_batch_failure_leaves_every_word_unread(self):
+        unread: list[str] = []
+        positions = _fetch_lido_lend_positions(
+            _lido_core_ctx(broken=Web3RPCError("rate limited")),
+            VAULT_ADDR,
+            {LIDO_MID: [LIDO_WORD_BYTES, LIDO_WORD_B_BYTES]},
+            {LIDO_MID: LIDO_CORE},
+            unread,
+        )
+
+        assert positions is None
+        assert unread == [
+            f"Lido Lend position in market {LIDO_WORD}",
+            f"Lido Lend position in market {LIDO_WORD_B}",
+        ]
+
+    def test_market_words_without_a_core_are_named_unread(self):
+        ctx = MagicMock()
+        unread: list[str] = []
+        assert (
+            _fetch_lido_lend_positions(
+                ctx,
+                VAULT_ADDR,
+                {LIDO_MID: [LIDO_WORD_BYTES, LIDO_COLLATERAL_WORD, LIDO_WORD_B_BYTES]},
+                {},
+                unread,
+            )
+            is None
+        )
+        assert unread == [
+            f"Lido Lend position in market {LIDO_WORD}",
+            f"Lido Lend position in market {LIDO_WORD_B}",
+        ]
+        ctx.call.assert_not_called()
+
+    def test_markets_without_words_or_core_are_skipped(self):
+        ctx = MagicMock()
+        unread: list[str] = []
+        assert (
+            _fetch_lido_lend_positions(
+                ctx,
+                VAULT_ADDR,
+                {LIDO_MID: [LIDO_COLLATERAL_WORD]},
+                {LIDO_MID: LIDO_CORE},
+                unread,
+            )
+            is None
+        )
+        assert _fetch_lido_lend_positions(ctx, VAULT_ADDR, {}, {}, unread) is None
+        ctx.call.assert_not_called()
+
+
+def _markets_with_lido(**overrides) -> vault_data._MarketReads:
+    overrides.setdefault("lido_lend_cores", {LIDO_MID: LIDO_CORE})
+    return vault_data._MarketReads(
+        balance_fuses=[BalanceFuse(LIDO_MID, LIDO_FUSE)],
+        dependency_graph={},
+        market_substrates={LIDO_MID: [LIDO_WORD_BYTES]},
+        aave_pools={},
+        comets={},
+        market_balances={},
+        **overrides,
+    )
+
+
+class TestLidoLendVaultDataWiring:
+    def test_lending_reads_pass_the_cores_and_collect_the_positions(self):
+        with (
+            patch.object(
+                vault_data,
+                "fetch_vault_lending_health",
+                return_value=VaultLendingHealth(markets=[]),
+            ) as health,
+            ThreadPoolExecutor() as pool,
+        ):
+            reads = vault_data._fetch_lending_reads(
+                _lido_core_ctx(),
+                pool,
+                VAULT_ADDR,
+                _markets_with_lido(),
+            )
+
+        assert health.call_args.kwargs["lido_lend_cores"] == {LIDO_MID: LIDO_CORE}
+        assert reads.lido_lend_positions is not None
+        assert reads.lido_lend_positions[LIDO_MID][0].market_id == LIDO_WORD
+        assert reads.lido_lend_unread == []
+
+    def test_unread_words_are_kept(self):
+        with (
+            patch.object(
+                vault_data,
+                "fetch_vault_lending_health",
+                return_value=VaultLendingHealth(markets=[]),
+            ),
+            ThreadPoolExecutor() as pool,
+        ):
+            reads = vault_data._fetch_lending_reads(
+                _lido_core_ctx(broken_words=(LIDO_WORD_BYTES,)),
+                pool,
+                VAULT_ADDR,
+                _markets_with_lido(),
+            )
+
+        assert reads.lido_lend_positions is None
+        assert reads.lido_lend_unread == [f"Lido Lend position in market {LIDO_WORD}"]
+
+    @staticmethod
+    def _derive(lending):
+        reads = vault_data._VaultReads(
+            share_decimals=18,
+            total_assets=100 * WAD,
+            total_supply=100 * WAD,
+            supply_cap=100 * WAD,
+            asset=TOKEN_B,
+            access_manager=Web3.to_checksum_address("0x" + "ac" * 20),
+            price_oracle=ORACLE_ADDR,
+            fuses=[],
+            instant_fuses=[],
+            vault_name="Vault",
+            rewards_manager=None,
+            asset_decimals=18,
+            underlying_balance_on_vault=0,
+            asset_symbol="USDC",
+            asset_price_usd=1.0,
+            fuse_markets=None,
+            unimplemented_getters=[],
+            rewards_manager_balance=0,
+        )
+        check = UnpriceableCheck(tokens=[], unread=[])
+        with (
+            patch.object(vault_data, "_read_erc20_market", return_value=None),
+            patch.object(
+                vault_data, "fetch_unpriceable_priced_tokens", return_value=check
+            ) as unpriceable,
+            patch.object(vault_data, "_fetch_breakdown_token_prices", return_value={}),
+            ThreadPoolExecutor() as pool,
+        ):
+            derived = vault_data._derived_reads(
+                MagicMock(),
+                pool,
+                VAULT_ADDR,
+                reads,
+                MagicMock(),
+                _markets_with_lido(),
+                lending,
+                metadata=False,
+            )
+        return derived, unpriceable
+
+    def test_a_market_without_a_core_reaches_failed_reads(self):
+        with (
+            patch.object(
+                vault_data,
+                "fetch_vault_lending_health",
+                return_value=VaultLendingHealth(markets=[]),
+            ),
+            ThreadPoolExecutor() as pool,
+        ):
+            lending = vault_data._fetch_lending_reads(
+                _lido_core_ctx(),
+                pool,
+                VAULT_ADDR,
+                _markets_with_lido(lido_lend_cores={}),
+            )
+
+        assert lending.lido_lend_positions is None
+        assert lending.lido_lend_unread == [f"Lido Lend position in market {LIDO_WORD}"]
+        derived, _ = self._derive(lending)
+        assert derived.failed == [
+            f"unpriceable_priced_tokens: Lido Lend position in market {LIDO_WORD}"
+        ]
+
+    def test_positions_reach_the_price_check_and_unread_words_fail_the_read(self):
+        positions = {LIDO_MID: []}
+        lending = vault_data._LendingReads(
+            lending_health=VaultLendingHealth(markets=[]),
+            lido_lend_positions=positions,
+            lido_lend_unread=[f"Lido Lend position in market {LIDO_WORD_B}"],
+        )
+        derived, unpriceable = self._derive(lending)
+
+        assert unpriceable.call_args.kwargs["lido_lend_positions"] is positions
+        assert derived.failed == [
+            f"unpriceable_priced_tokens: Lido Lend position in market {LIDO_WORD_B}"
+        ]
+
+
+def _lido_row(**overrides) -> LendingMarketHealth:
+    values = {
+        "protocol": "lido_lend",
+        "market_id": LIDO_MID,
+        "market_name": "LIDO_LEND",
+        "current_ltv": 0.5,
+        "max_ltv": 0.86,
+        "health_factor": 1.72,
+        "total_collateral_usd": None,
+        "total_debt_usd": None,
+        "ltv_usage_percent": 58.14,
+        "substrate_id": LIDO_WORD,
+    }
+    values.update(overrides)
+    return LendingMarketHealth(**values)
+
+
+def _text_data(lh: VaultLendingHealth) -> MagicMock:
+    data = MagicMock()
+    data.lending_health = lh
+    data.morpho_positions = None
+    data.aave_positions = None
+    return data
+
+
+class TestLidoLendRendering:
+    def test_row_is_indexed_under_its_market_word(self):
+        row = _lido_row()
+        morpho, account_level = _index_lending_health(VaultLendingHealth(markets=[row]))
+        assert morpho == {}
+        assert account_level == {LIDO_WORD: row}
+
+    def test_row_without_a_word_is_not_indexed(self):
+        row = _lido_row(substrate_id=None)
+        assert _index_lending_health(VaultLendingHealth(markets=[row]))[1] == {}
+
+    def test_text_output_shows_the_lido_row(self, capsys):
+        _print_lending_health(_text_data(VaultLendingHealth(markets=[_lido_row()])))
+
+        out = capsys.readouterr().out
+        assert f"lido lend market {LIDO_WORD}:" in out
+        assert "LIDO_LEND (58):" in out
+        assert "Health Factor:" in out
+        assert "1.7200" in out
+
+    def test_text_output_shows_an_unreadable_market(self, capsys):
+        unreadable = UnreadableLendingMarket(
+            protocol="lido_lend",
+            market_id=LIDO_MID,
+            market_name="LIDO_LEND",
+            reason="no Lido Lend core known for this market (the balance fuse names none or none was passed)",
+        )
+        _print_lending_health(
+            _text_data(VaultLendingHealth(markets=[], unreadable=[unreadable]))
+        )
+
+        out = capsys.readouterr().out
+        assert "lido_lend health unknown" in out
+        assert (
+            "no Lido Lend core known for this market (the balance fuse names none or none was passed)"
+            in out
+        )

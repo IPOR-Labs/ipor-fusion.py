@@ -11,6 +11,9 @@ from ipor_fusion import (
     ERC4626SupplyFuse,
     Fuse,
     FuseAction,
+    MorphoBorrowFuse,
+    MorphoCollateralFuse,
+    MorphoFlashLoanFuse,
     MorphoSupplyFuse,
     PlasmaVault,
     RewardsManager,
@@ -20,10 +23,18 @@ from ipor_fusion import (
     fuse_classes_for,
 )
 from ipor_fusion.fuses.fluid_instadapp import FluidInstadappStakingFuse
+from ipor_fusion.fuses.lido_lend import (
+    LidoLendBorrowFuse,
+    LidoLendCollateralFuse,
+    LidoLendFlashLoanFuse,
+    LidoLendSettleFuse,
+    LidoLendSupplyFuse,
+)
 from ipor_fusion.types import (
     Amount,
     FuseAddress,
     PlasmaVaultAddress,
+    Shares,
     parse_morpho_market_id,
 )
 
@@ -101,3 +112,64 @@ def test_an_undeclared_signature_trips_the_suite_check():
 
     with pytest.raises(AssertionError, match="missing from its SIGNATURES"):
         Undeclared(FuseAddress(ASSET)).go()
+
+
+LIDO_FUSE = FuseAddress(Web3.to_checksum_address("0x" + "55" * 20))
+
+
+def test_lido_lend_shared_selectors_name_every_candidate():
+    supply = LidoLendSupplyFuse(LIDO_FUSE).supply(market_id=MARKET, amount=Amount(1))
+    assert {
+        LidoLendSupplyFuse,
+        LidoLendCollateralFuse,
+        MorphoSupplyFuse,
+        MorphoCollateralFuse,
+    } <= set(fuse_classes_for(supply))
+    borrow = LidoLendBorrowFuse(LIDO_FUSE).borrow(market_id=MARKET, amount=Amount(1))
+    candidates = fuse_classes_for(borrow)
+    assert {LidoLendBorrowFuse, MorphoBorrowFuse} <= set(candidates)
+    assert LidoLendSettleFuse not in candidates
+    flash = LidoLendFlashLoanFuse(LIDO_FUSE).flash_loan(
+        asset=ASSET, amount=Amount(1), actions=[]
+    )
+    assert {LidoLendFlashLoanFuse, MorphoFlashLoanFuse} <= set(fuse_classes_for(flash))
+
+
+def test_lido_lend_settle_selector_is_unambiguous():
+    settle = LidoLendSettleFuse(LIDO_FUSE).settle_borrower(
+        market_id=MARKET,
+        borrower=ASSET,
+        supply_shares_budget=Shares(9),
+        min_collateral_per_supply_asset_wad=0,
+    )
+    assert fuse_classes_for(settle) == [LidoLendSettleFuse]
+
+
+def test_lido_lend_actions_decode_their_arguments():
+    market = bytes.fromhex("ab" * 32)
+    decoded = decode_fuse_action(
+        LidoLendBorrowFuse(LIDO_FUSE).borrow_shares(market_id=MARKET, shares=Shares(4)),
+        LidoLendBorrowFuse,
+    )
+    assert decoded.signature == "enter((bytes32,uint256,uint256))"
+    assert decoded.args == ((market, 0, 4),)
+    assert decoded.label == "LidoLendBorrowFuse.enter"
+
+    settle = decode_fuse_action(
+        LidoLendSettleFuse(LIDO_FUSE).settle_queue_root(
+            market_id=MARKET,
+            supply_shares_budget=Shares(7),
+            max_iterations=3,
+            min_collateral_per_supply_asset_wad=815,
+        ),
+        LidoLendSettleFuse,
+    )
+    assert settle.signature == "enter((bytes32,address,uint256,uint256,uint256))"
+    assert settle.args == ((market, "0x" + "00" * 20, 7, 3, 815),)
+
+    supply = decode_fuse_action(
+        LidoLendSupplyFuse(LIDO_FUSE).withdraw(market_id=MARKET, amount=Amount(2)),
+        LidoLendSupplyFuse,
+    )
+    assert supply.function == "exit"
+    assert supply.args == ((market, 2),)
