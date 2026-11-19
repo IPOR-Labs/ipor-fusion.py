@@ -15,7 +15,11 @@ a 3-day delay:
   4. send the cap change an hour later: it reverts with ``AccessManagerNotReady``;
   5. wait out the delay;
   6. send the cap change again: the vault consumes the schedule and the cap
-     changes.
+     changes;
+  7. schedule a second cap change;
+  8. the GUARDIAN cancels it before the delay has passed;
+  9. wait out the delay and send the cancelled change: it reverts with
+     ``AccessManagerNotScheduled``, and the cap stays where step 6 set it.
 
 Role layout: one multisig holds OWNER (14-day delay) and ATOMIST (3-day delay)
 on this vault, and a separate guardian account holds GUARDIAN (no delay).
@@ -23,23 +27,29 @@ Sharing one key between OWNER and ATOMIST is this vault's setup and is not
 recommended: the IPOR docs require OWNER keys separate from the operational
 roles' (ipor.io/docs -> build-on-fusion -> atomists ->
 vault-configuration-step-by-step -> access-management, "Strict Key
-Separation"). Do not copy it. The example acts only as the ATOMIST.
+Separation"). Do not copy it. The example acts as the ATOMIST and, in step 8,
+as the GUARDIAN.
 
 The recommended delays per role and the 7-day expiry of a scheduled operation
 are IPOR policy: ipor.io/docs -> build-on-fusion -> atomists ->
 vault-configuration-step-by-step -> timelocks-and-execution-delays. The example
-reads the vault's delays from the chain rather than hardcoding them.
+reads the vault's delays from the chain rather than hardcoding them. A guardian
+cancels operations scheduled by OWNER, ATOMIST or FUSE_MANAGER, but not
+``grantRole``, ``revokeRole`` or ``setGrantDelay`` (access-management, and the
+developer reference of timelocks-and-execution-delays, "Cancelling an
+Operation").
 
-Part 1 (steps 1-2) reads the live chain at a pinned block. Part 2 (steps 3-6)
-runs as one ``eth_simulateV1`` batch. Step 4 is *meant* to revert, so the
-returned ``SimulationResult`` carries a failed call, and its ``all_success`` is
-``False`` on a completely successful run. Do not copy ``if result.all_success:``
-from here; this example checks that exactly the expected calls failed, each for
-the expected reason.
+Part 1 (steps 1-2) reads the live chain at a pinned block. Part 2 (steps 3-9)
+runs as one ``eth_simulateV1`` batch. Steps 4 and 9 are *meant* to revert, so
+the returned ``SimulationResult`` carries failed calls, and its ``all_success``
+is ``False`` on a completely successful run. Do not copy
+``if result.all_success:`` from here; this example checks that exactly the
+expected calls failed, each for the expected reason.
 
 Nothing is signed or broadcast. In production the ATOMIST multisig signs the
-``.calldata`` of each step, and a later ``read_call_plan`` (not a simulation)
-tells it when the delay has passed.
+``.calldata`` of each of its steps, the GUARDIAN signs the cancel of step 8,
+and a later ``read_call_plan`` (not a simulation) tells the ATOMIST when the
+delay has passed.
 
 Run it (the shell snippets assume a POSIX shell -- bash or zsh):
 
@@ -141,8 +151,20 @@ PINNED_BLOCK = 525_340_000  # Arbitrum, 2026-11-18
 # vault's cap at PINNED_BLOCK shows the change landing.
 NEW_CAP = Shares(200_000_000_000_000)
 
+# The cap of the second change, which the GUARDIAN cancels. It differs from
+# NEW_CAP and from the vault's cap at PINNED_BLOCK, so a cancelled change that
+# still lands shows in the cap.
+CANCELLED_CAP = Shares(300_000_000_000_000)
+
 # How long after the schedule the premature execution of step 4 is sent.
 EARLY_BY_SECONDS = Period.HOUR
+
+# The calls the run expects to revert, by label, with the custom error each
+# must revert with: step 4 (too early) and step 9 (cancelled).
+EXPECTED_FAILURES: Mapping[str, str] = {
+    "early_execute": "AccessManagerNotReady",
+    "cancelled_execute": "AccessManagerNotScheduled",
+}
 
 
 # ── Inlined helpers (kept local so this file is self-contained) ──────────────
@@ -160,10 +182,10 @@ def _assert_only_expected_failures(
     """Assert the batch failed on exactly the labeled demos, each with the
     custom error ``expected`` names for its label.
 
-    The premature execution is *meant* to revert, so the batch cannot be
-    checked with ``result.all_success``. Everything else still must succeed:
-    a failure anywhere else means the happy path broke and the run is not a
-    success, whatever the demos did.
+    The premature and the cancelled executions are *meant* to revert, so the
+    batch cannot be checked with ``result.all_success``. Everything else still
+    must succeed: a failure anywhere else means the happy path broke and the
+    run is not a success, whatever the demos did.
     """
     failed = {c.label: c.revert_reason or "" for c in result.failed_calls}
     if set(failed) != set(expected) or len(result.failed_calls) != len(expected):
@@ -214,6 +236,16 @@ def schedule_calldata() -> bytes:
     return manager.schedule(VAULT, cap_call(NEW_CAP).data).calldata
 
 
+def cancel_call() -> Call[None]:
+    """The GUARDIAN's cancel of the ATOMIST's scheduled ``CANCELLED_CAP`` change.
+
+    ``cancel`` names the operation by its scheduler, target and calldata, the
+    inputs of ``operation_id``.
+    """
+    manager = AccessManager(ACCESS_MANAGER)
+    return manager.cancel(ATOMIST, VAULT, cap_call(CANCELLED_CAP).data)
+
+
 def operation_id(data: bytes) -> ScheduleId:
     """The id under which the manager records the ATOMIST's schedule of ``data``
     on the vault, computed offline as the manager computes it."""
@@ -258,7 +290,8 @@ def _log_delays(ctx: Web3Context, manager: AccessManager) -> Period:
 
 def run_simulation(web3: Web3) -> SimulationResult:
     """Plan the ATOMIST's cap change on the live chain, then schedule, wait out
-    and execute it in one eth_simulateV1 batch."""
+    and execute it in one eth_simulateV1 batch, in which the GUARDIAN also
+    cancels a second change."""
     ctx = Web3Context(web3=web3, chain_id=ARBITRUM_CHAIN_ID).at_block(PINNED_BLOCK)
     vault = PlasmaVault(VAULT)
     manager = AccessManager(ACCESS_MANAGER)
@@ -325,7 +358,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     steps.append("ATOMIST schedules the cap change")
 
     # SIMULATION ONLY (time advancement): next_block shifts block.timestamp;
-    # production waits. The same holds for the second next_block below.
+    # production waits. The same holds for the later next_block calls below.
     sim.next_block(time_shift_seconds=EARLY_BY_SECONDS)
 
     # 4. Execute too early: the vault reverts with AccessManagerNotReady. In
@@ -350,12 +383,40 @@ def run_simulation(web3: Web3) -> SimulationResult:
     schedule_after = sim.observe(manager.get_schedule(plan.operation))
     steps.append("ATOMIST sends the cap change after the delay")
 
+    # 7. Schedule a second change, the one the GUARDIAN cancels. Its operation
+    #    id differs from the first one's, since the calldata differs.
+    cancelled = cap_call(CANCELLED_CAP)
+    cancelled_id = operation_id(cancelled.data)
+    _check(cancelled_id != plan.operation, "both changes share one operation id")
+    sim.add_call(
+        call=manager.schedule(VAULT, cancelled.data),
+        from_=ATOMIST,
+        label="schedule_cancelled",
+    )
+    second_scheduled_in = sim.current_time
+    second_executable_at = sim.observe(manager.get_schedule(cancelled_id))
+    steps.append("ATOMIST schedules a second cap change")
+
+    # 8. Cancel. The GUARDIAN has no delay, so it cancels at once, while the
+    #    ATOMIST's delay still runs.
+    sim.add_call(call=cancel_call(), from_=GUARDIAN, label="cancel")
+    cancelled_after = sim.observe(manager.get_schedule(cancelled_id))
+    steps.append("GUARDIAN cancels the second change")
+
+    # 9. Wait out the delay and send the cancelled change. Without the cancel
+    #    it would be executable here, as in step 6; with it, the manager has no
+    #    schedule left and reverts with AccessManagerNotScheduled.
+    sim.next_block(time_shift_seconds=delay)
+    sim.add_call(call=cancelled, from_=ATOMIST, label="cancelled_execute")
+    cap_final = sim.observe(vault.get_total_supply_cap())
+    steps.append("ATOMIST sends the cancelled change after the delay (reverts)")
+
     log.info("transaction plan:")
     for i, step in enumerate(steps, start=1):
         log.info("  %d. %s", i, step)
 
     result = sim.run()
-    _assert_only_expected_failures(result, {"early_execute": "AccessManagerNotReady"})
+    _assert_only_expected_failures(result, EXPECTED_FAILURES)
 
     # ── Simulation done. Everything above only *described* the batch; sim.run()
     # is the single eth_simulateV1 call that executed it. From here we read the
@@ -367,8 +428,24 @@ def run_simulation(web3: Web3) -> SimulationResult:
     )
     _check(cap_after.value == NEW_CAP, f"the cap is {cap_after.value}, not NEW_CAP")
     _check(schedule_after.value == 0, "the executed operation is still scheduled")
+    _check(
+        second_executable_at.value == second_scheduled_in + delay,
+        f"the second change is executable at {second_executable_at.value}, "
+        f"not {second_scheduled_in} + {delay}",
+    )
+    _check(cancelled_after.value == 0, "the cancelled operation is still scheduled")
+    _check(
+        cap_final.value == NEW_CAP,
+        f"the cap is {cap_final.value} after the cancelled change, not NEW_CAP",
+    )
 
-    log.info("OK -- cap set to %s after a %ss delay", cap_after.value, delay)
+    log.info(
+        "OK -- cap set to %s after a %ss delay; the GUARDIAN cancelled the "
+        "change to %s",
+        cap_after.value,
+        delay,
+        CANCELLED_CAP,
+    )
     return result
 
 
