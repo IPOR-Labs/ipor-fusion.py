@@ -7,15 +7,12 @@ from __future__ import annotations
 import re
 
 import pytest
+from _simulation_fakes import simulated_call, simulation_result
 from eth_abi import encode as abi_encode
 from eth_utils import keccak
 from hexbytes import HexBytes
 
-from ipor_fusion.core.simulation_result import (
-    SimulatedCallResult,
-    SimulationResult,
-    _decode_revert,
-)
+from ipor_fusion.core.simulation_result import _decode_revert
 from ipor_fusion.crosschain import CROSSCHAIN_ERROR_SIGNATURES
 from ipor_fusion.errors import (
     CUSTOM_ERRORS,
@@ -119,51 +116,38 @@ def test_unregistered_selector_stays_a_bare_selector():
     )
 
 
-def _result(*calls: SimulatedCallResult) -> SimulationResult:
-    failed = [c for c in calls if not c.success]
-    return SimulationResult(
-        success=not failed,
-        all_success=not failed,
-        revert_reason=None,
-        gas_used=0,
-        execute_logs=[],
-        calls=list(calls),
-        failed_calls=failed,
-    )
-
-
-def _call(label: str, *, success: bool, data: bytes = b"") -> SimulatedCallResult:
-    return SimulatedCallResult(
-        label=label,
-        success=success,
-        return_data=HexBytes(data),
-        gas_used=0,
-        error=None if success else "execution reverted",
-        logs=[],
-    )
-
-
 def test_call_revert_reason_is_its_own_not_the_chains_first():
-    stale = _call("nav", success=False, data=_revert("ObservationStale(uint256)", 999))
-    interval = _call(
+    stale = simulated_call(
+        "nav", success=False, return_data=_revert("ObservationStale(uint256)", 999)
+    )
+    interval = simulated_call(
         "approve",
         success=False,
-        data=_revert("MinUpdateIntervalNotMet(uint64,uint256,uint256)", 1, 2, 3600),
+        return_data=_revert(
+            "MinUpdateIntervalNotMet(uint64,uint256,uint256)", 1, 2, 3600
+        ),
     )
     assert stale.revert_reason == "ObservationStale(999)"
     assert interval.revert_reason == "MinUpdateIntervalNotMet(1, 2, 3600)"
-    assert _call("ok", success=True).revert_reason is None
+    assert simulated_call("ok", success=True).revert_reason is None
     # A successful call's return data is not a revert payload.
-    assert _call("returned", success=True, data=b"\x00" * 32).revert_reason is None
-    assert _call("bare", success=False).revert_reason == "execution reverted"
+    returned = simulated_call("returned", success=True, return_data=b"\x00" * 32)
+    assert returned.revert_reason is None
+    assert simulated_call("bare", success=False).revert_reason == "execution reverted"
 
 
 class TestRaiseForFailure:
     def test_names_the_first_failed_call_with_its_reason(self):
-        result = _result(
-            _call("ok", success=True),
-            _call("nav", success=False, data=_revert("NavSettledStale(uint256)", 8453)),
-            _call("later", success=False),
+        result = simulation_result(
+            [
+                simulated_call("ok", success=True),
+                simulated_call(
+                    "nav",
+                    success=False,
+                    return_data=_revert("NavSettledStale(uint256)", 8453),
+                ),
+                simulated_call("later", success=False),
+            ]
         )
         with pytest.raises(SimulationError, match="'nav'.*NavSettledStale\\(8453\\)"):
             result.raise_for_failure()
@@ -173,9 +157,11 @@ class TestRaiseForFailure:
         assert info.value.revert_reason == "NavSettledStale(8453)"
 
     def test_without_revert_data_reports_the_client_error(self):
-        result = _result(_call(None, success=False))  # type: ignore[arg-type]
+        result = simulation_result([simulated_call(None, success=False)])  # type: ignore[arg-type]
         with pytest.raises(SimulationError, match="<unlabelled>.*execution reverted"):
             result.raise_for_failure()
 
     def test_no_op_when_every_call_succeeded(self):
-        _result(_call("a", success=True), _call("b", success=True)).raise_for_failure()
+        simulation_result(
+            [simulated_call("a", success=True), simulated_call("b", success=True)]
+        ).raise_for_failure()

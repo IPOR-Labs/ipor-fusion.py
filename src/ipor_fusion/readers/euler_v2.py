@@ -1,20 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NewType
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
 from ipor_fusion.core.contract import Call, ContractWrapper
-from ipor_fusion.types import Amount
-
-# A value in an Euler vault's unit of account, in that unit's decimals.
-UnitOfAccountValue = NewType("UnitOfAccountValue", int)
-# An Euler LTV in basis points (10_000 = 100%).
-LtvBps = NewType("LtvBps", int)
-# The byte XORed into the Plasma Vault address to name an EVC sub-account.
-EulerSubAccountId = NewType("EulerSubAccountId", int)
+from ipor_fusion.types import (
+    Amount,
+    EulerSubAccountId,
+    EulerUnitOfAccountValue,
+    LtvBps,
+)
 
 # Euler's ISO 4217 code for USD (840) used as a unit-of-account address.
 EULER_USD_UNIT_OF_ACCOUNT = Web3.to_checksum_address(
@@ -31,10 +28,21 @@ class EulerV2Substrate:
     can_borrow: bool
     sub_account_id: EulerSubAccountId
 
+    def __post_init__(self) -> None:
+        if not 0 <= self.sub_account_id <= 0xFF:
+            raise ValueError(
+                "sub_account_id must be a single byte (0-255), "
+                f"got {self.sub_account_id}"
+            )
+
     @classmethod
     def from_bytes(cls, substrate: bytes) -> EulerV2Substrate:
         """Inverse of `EulerFuseLib.substrateToBytes32`:
-        `eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72`."""
+        `eulerVault<<96 | isCollateral<<88 | canBorrow<<80 | subAccounts<<72`.
+
+        Raises ``ValueError`` unless ``substrate`` is 32 bytes."""
+        if len(substrate) != 32:
+            raise ValueError(f"an Euler V2 substrate is 32 bytes, got {len(substrate)}")
         word = int.from_bytes(substrate, "big")
         return cls(
             euler_vault=Web3.to_checksum_address(f"0x{word >> 96:040x}"),
@@ -59,8 +67,8 @@ class EulerV2AccountLiquidity:
     """
 
     collaterals: list[ChecksumAddress]
-    risk_adjusted_collateral_values: list[UnitOfAccountValue]
-    liability_value: UnitOfAccountValue
+    risk_adjusted_collateral_values: list[EulerUnitOfAccountValue]
+    liability_value: EulerUnitOfAccountValue
 
 
 def _account_liquidity_decoder(
@@ -69,8 +77,8 @@ def _account_liquidity_decoder(
     collaterals, values, liability = value
     return EulerV2AccountLiquidity(
         collaterals=[Web3.to_checksum_address(c) for c in collaterals],
-        risk_adjusted_collateral_values=[UnitOfAccountValue(v) for v in values],
-        liability_value=UnitOfAccountValue(liability),
+        risk_adjusted_collateral_values=[EulerUnitOfAccountValue(v) for v in values],
+        liability_value=EulerUnitOfAccountValue(liability),
     )
 
 

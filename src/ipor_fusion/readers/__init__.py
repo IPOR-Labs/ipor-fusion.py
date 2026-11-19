@@ -17,6 +17,12 @@ from ipor_fusion.readers.compound_v3 import (
     CompoundV3FuseReader,
     CompoundV3Reader,
 )
+from ipor_fusion.readers.euler_v2 import (
+    EULER_USD_UNIT_OF_ACCOUNT,
+    EulerV2AccountLiquidity,
+    EulerV2Substrate,
+    EulerV2VaultReader,
+)
 from ipor_fusion.readers.hypercore import (
     HYPEREVM_CHAIN_ID,
 )
@@ -88,6 +94,10 @@ __all__ = [
     "CometAssetInfo",
     "CompoundV3FuseReader",
     "CompoundV3Reader",
+    "EULER_USD_UNIT_OF_ACCOUNT",
+    "EulerV2AccountLiquidity",
+    "EulerV2Substrate",
+    "EulerV2VaultReader",
     "HYPEREVM_CHAIN_ID",
     "LendingMarketHealth",
     "VaultLendingHealth",

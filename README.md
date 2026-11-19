@@ -524,7 +524,7 @@ Read-only aggregators over positions and health, no fuses involved:
 
 | Reader | Purpose |
 |--------|---------|
-| `MorphoReader`, `AaveV3Reader`, `CompoundV3Reader` | Market params, rates and vault positions per lending protocol |
+| `MorphoReader`, `AaveV3Reader`, `CompoundV3Reader`, `EulerV2VaultReader` | Market params, rates and vault positions per lending protocol |
 | `UniswapV3Reader`, `RamsesV2Reader` | LP position details |
 | `fetch_vault_lending_health` | Health factor per lending market a vault is in (Morpho, Aave V3/V4, Euler V2, Compound V3; any other market that can borrow is listed as unreadable) |
 | `build_oracle_mapping` | How the vault prices every configured asset |
