@@ -36,6 +36,7 @@ REGISTRY_CHAIN_IDS: frozenset[ChainId] = frozenset(
         1,
         14,
         130,
+        137,
         143,
         239,
         999,

@@ -29,8 +29,8 @@ def test_unsupported_unknown_chain_plain_id():
 def test_message_lists_supported_chains():
     with pytest.raises(
         UnsupportedChainError,
-        match=r"ethereum \(1\), unichain \(130\), monad \(143\), tac \(239\), "
-        r"hyperevm \(999\), "
+        match=r"ethereum \(1\), unichain \(130\), polygon \(137\), monad \(143\), "
+        r"tac \(239\), hyperevm \(999\), "
         r"robinhood \(4663\), base \(8453\), plasma \(9745\), arbitrum \(42161\), "
         r"avalanche \(43114\), ink \(57073\), katana \(747474\)$",
     ):
@@ -62,6 +62,7 @@ def test_supported_chains():
         "ink",
         "robinhood",
         "tac",
+        "polygon",
     }
 
 

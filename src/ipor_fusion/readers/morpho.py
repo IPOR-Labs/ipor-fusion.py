@@ -34,6 +34,7 @@ MORPHO_BLUE_ADDRESSES: dict[ChainId, ChecksumAddress] = {
     ChainId(8453): _addr("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"),  # Base
     ChainId(42161): _addr("0x6c247b1F6182318877311737BaC0844bAa518F5e"),  # Arbitrum One
     ChainId(130): _addr("0x8f5ae9CddB9f68de460C77730b018Ae7E04a140A"),  # Unichain
+    ChainId(137): _addr("0x1bF0c2541F820E775182832f06c0B7Fc27A25f67"),  # Polygon
     ChainId(143): _addr("0xD5D960E8C380B724a48AC59E2DfF1b2CB4a1eAee"),  # Monad
     ChainId(999): _addr("0x68e37dE8d93d3496ae143F2E900490f6280C57cD"),  # HyperEVM
     ChainId(4663): _addr("0x9D53d5E3bd5E8d4Cbfa6DB1ca238AEA02E651010"),  # Robinhood

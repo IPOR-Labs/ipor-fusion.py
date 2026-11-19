@@ -256,7 +256,8 @@ class VaultSimulator:
       - State does not survive across separate `run()` calls (each is fresh)
       - Read values cannot be threaded into later call calldata in the same batch
       - Up to 256 blocks per batch (eth_simulateV1 limit)
-      - Requires geth/reth-based provider (Polygon Bor / zkSync etc. unsupported)
+      - Requires a provider that serves eth_simulateV1 (geth/reth-based, Polygon
+        Bor included; zkSync etc. unsupported)
     """
 
     def __init__(
