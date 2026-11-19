@@ -611,8 +611,12 @@ def run_simulation(
     #
     # FUSE_MANAGER installs fuses and PRE_HOOKS_MANAGER re-wires the hooks the
     # HyperCore fuses rely on: both are governance-grade keys (the contracts'
-    # runbook puts PRE_HOOKS_MANAGER behind a timelock). Period(0) keeps the
-    # simulation legible; production uses delays.
+    # runbook puts PRE_HOOKS_MANAGER behind a timelock).
+    #
+    # Each grant uses Period(0), no execution delay. Production vaults put
+    # delays on their governance roles, which the simulation skips to stay
+    # legible. A delayed holder must schedule each restricted call, wait out the
+    # delay and execute it: see timelocked_governance_arbitrum.py.
     for role, account in (
         (Roles.ATOMIST_ROLE, OWNER),
         (Roles.FUSE_MANAGER_ROLE, OWNER),
