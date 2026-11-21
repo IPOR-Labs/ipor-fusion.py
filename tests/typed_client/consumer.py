@@ -54,6 +54,8 @@ from ipor_fusion import (
     SimulatedCallResult,
     SimulationObservation,
     TransactionError,
+    TransactionOutcomeUnknown,
+    TxHash,
     VaultInfoJson,
     VaultSimulator,
     Wad,
@@ -119,6 +121,10 @@ def access(ctx: Web3Context, am: AccessManager, account: ChecksumAddress) -> Non
     am.grant_role(Roles.ALPHA_ROLE, account, Period(0))
     am.revoke_role(Roles.ALPHA_ROLE, account)
     am.read_accounts_with_role(ctx, Roles.resolve("ATOMIST"))
+    try:
+        am.revoke_role(Roles.ALPHA_ROLE, account).send(ctx)
+    except TransactionOutcomeUnknown as exc:
+        assert_type(exc.tx_hash, TxHash)
 
 
 def market_limits(vault: PlasmaVault) -> None:

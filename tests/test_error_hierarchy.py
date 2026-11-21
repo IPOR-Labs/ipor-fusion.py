@@ -4,10 +4,12 @@ is (``ValueError`` for bad input)."""
 
 import importlib
 import inspect
+import pickle
 import pkgutil
 
 import pytest
 from eth_abi.exceptions import DecodingError
+from web3.exceptions import TimeExhausted
 
 import ipor_fusion
 from ipor_fusion import (
@@ -29,10 +31,13 @@ from ipor_fusion import (
     SimulationError,
     SimulationRunError,
     TransactionError,
+    TransactionOutcomeUnknown,
+    TransactionTimeout,
     UnsupportedChainError,
     UnsupportedContractVersionError,
     UnsupportedVaultVersionError,
     VerifierResultUnavailable,
+    parse_tx_hash,
 )
 
 
@@ -120,12 +125,33 @@ def test_builtin_bases_are_kept(error, builtin):
         SimulationError,
         SimulationRunError,
         TransactionError,
+        TransactionOutcomeUnknown,
+        TransactionTimeout,
         VerifierResultUnavailable,
         OwnerNotFoundError,
     ],
 )
 def test_chain_and_remote_failures_are_not_bad_input(error):
     assert not issubclass(error, ValueError)
+
+
+def test_transaction_timeout_is_web3s_time_exhausted():
+    tx_hash = parse_tx_hash("0x" + "ab" * 32)
+    error = TransactionTimeout("timed out", tx_hash)
+    assert isinstance(error, TimeExhausted)
+    assert isinstance(error, TransactionOutcomeUnknown)
+    assert not isinstance(error, TransactionError)
+    assert error.tx_hash == tx_hash
+    assert str(error) == f"timed out, tx_hash={tx_hash}"
+
+
+@pytest.mark.parametrize("error", [TransactionOutcomeUnknown, TransactionTimeout])
+def test_an_unknown_outcome_survives_pickling(error):
+    tx_hash = parse_tx_hash("0x" + "cd" * 32)
+    restored = pickle.loads(pickle.dumps(error("lost", tx_hash)))  # noqa: S301 -- our own bytes
+    assert type(restored) is error
+    assert restored.tx_hash == tx_hash
+    assert str(restored) == f"lost, tx_hash={tx_hash}"
 
 
 def test_empty_call_result_is_no_longer_an_abi_decoding_error():

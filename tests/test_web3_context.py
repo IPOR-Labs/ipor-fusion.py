@@ -1,26 +1,62 @@
 # pyright: reportAttributeAccessIssue=false
 """Unit tests for Web3Context — mock Web3 calls, no network required."""
 
+import json
+import socket
 import threading
 import time
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
+import requests
 from eth_abi import encode
+from eth_account import Account
 from hexbytes import HexBytes
-from requests.exceptions import Timeout
+from requests.exceptions import (
+    ChunkedEncodingError,
+    ConnectTimeout,
+    HTTPError,
+    ReadTimeout,
+    Timeout,
+)
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from urllib3.exceptions import (
+    MaxRetryError,
+    NewConnectionError,
+    ProtocolError,
+    SSLError,
+)
 from web3 import Web3
-from web3.exceptions import ContractLogicError, Web3RPCError
+from web3.eth import Eth
+from web3.exceptions import (
+    BadResponseFormat,
+    ContractLogicError,
+    TimeExhausted,
+    Web3RPCError,
+)
 from web3.providers.rpc import HTTPProvider
+from web3.providers.rpc.utils import ExceptionRetryConfiguration
 
 from ipor_fusion import InFlightLimit
-from ipor_fusion.core.context import _NOT_RETRIED, _RETRY_POLICY, Web3Context
+from ipor_fusion.core.context import (
+    _NOT_RETRIED,
+    _RETRY_POLICY,
+    Web3Context,
+    _no_connection_made,
+)
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
-from ipor_fusion.errors import LogSourceUnavailable, TransactionError
-from ipor_fusion.types import ChainId
+from ipor_fusion.errors import (
+    LogSourceUnavailable,
+    TransactionError,
+    TransactionOutcomeUnknown,
+    TransactionTimeout,
+)
+from ipor_fusion.types import ChainId, parse_tx_hash
 
 ADDR = Web3.to_checksum_address("0x1111111111111111111111111111111111111111")
 TO_ADDR = Web3.to_checksum_address("0x2222222222222222222222222222222222222222")
@@ -246,6 +282,25 @@ class TestCallErrorShapes:
 # ── send ────────────────────────────────────────────────────────────────
 
 
+SIGNED_HASH = HexBytes(b"\xee" * 32)
+
+
+def _sending_ctx(signer=ADDR) -> Web3Context:
+    ctx = _make_ctx(signer=signer, private_key=PRIVATE_KEY)
+    web3 = ctx.web3
+    web3.eth.get_transaction_count.return_value = 0
+    web3.eth.gas_price = 10_000_000_000
+    web3.eth.get_block.return_value = {"baseFeePerGas": 8_000_000_000}
+    web3.eth.estimate_gas.return_value = 21000
+    signed = MagicMock()
+    signed.raw_transaction = b"\xf8"
+    signed.hash = SIGNED_HASH
+    web3.eth.account.sign_transaction.return_value = signed
+    web3.eth.send_raw_transaction.return_value = SIGNED_HASH
+    web3.eth.wait_for_transaction_receipt.return_value = {"status": 1}
+    return ctx
+
+
 class TestSend:
     def test_send_raises_without_private_key(self):
         ctx = _make_ctx()
@@ -259,26 +314,10 @@ class TestSend:
             ctx.send(TO_ADDR, b"\x01\x02")
 
     def test_send_success(self):
-        ctx = _make_ctx(signer=ADDR, private_key=PRIVATE_KEY)
-        web3 = ctx.web3
-
-        # Mock chain of calls in send
-        web3.eth.get_transaction_count.return_value = 5
-        web3.eth.gas_price = 20_000_000_000
-        web3.eth.get_block.return_value = {"baseFeePerGas": 15_000_000_000}
-        web3.eth.estimate_gas.return_value = 21000
-
-        signed = MagicMock()
-        signed.raw_transaction = b"\xf8"
-        web3.eth.account.sign_transaction.return_value = signed
-
-        tx_hash = HexBytes(b"\xaa" * 32)
-        web3.eth.send_raw_transaction.return_value = tx_hash
-        web3.eth.wait_for_transaction_receipt.return_value = {"status": 1}
-
+        ctx = _sending_ctx()
         receipt = ctx.send(TO_ADDR, b"\x01\x02")
         assert receipt["status"] == 1
-        web3.eth.send_raw_transaction.assert_called_once_with(b"\xf8")
+        ctx.web3.eth.send_raw_transaction.assert_called_once_with(b"\xf8")
 
 
 # ── maxFeePerGas construction ────────────────────────────────────────────
@@ -355,7 +394,7 @@ class TestHandleReceipt:
     def test_successful_receipt_returned(self):
         ctx = _make_ctx(signer=ADDR)
         receipt = {"status": 1, "blockNumber": 100}
-        result = ctx._handle_receipt(HexBytes(b"\xaa" * 32), receipt)
+        result = ctx._handle_receipt(parse_tx_hash(b"\xaa" * 32), receipt)
         assert result is receipt
 
     @patch("ipor_fusion.core.context.get_revert_reason")
@@ -363,22 +402,22 @@ class TestHandleReceipt:
         ctx = _make_ctx(signer=ADDR)
         mock_get_reason.return_value = 'Error("Insufficient balance")'
 
-        tx_hash = HexBytes(b"\xbb" * 32)
+        tx_hash = parse_tx_hash(b"\xbb" * 32)
         receipt = {"status": 0, "blockNumber": 100}
 
         with pytest.raises(TransactionError) as exc_info:
             ctx._handle_receipt(tx_hash, receipt)
 
-        assert exc_info.value.tx_hash == tx_hash.to_0x_hex()
+        assert exc_info.value.tx_hash == tx_hash
         assert exc_info.value.revert_reason == 'Error("Insufficient balance")'
-        mock_get_reason.assert_called_once_with(ctx.web3, tx_hash.to_0x_hex(), receipt)
+        mock_get_reason.assert_called_once_with(ctx.web3, tx_hash, receipt)
 
     @patch("ipor_fusion.core.context.get_revert_reason")
     def test_failed_receipt_with_no_revert_reason(self, mock_get_reason):
         ctx = _make_ctx(signer=ADDR)
         mock_get_reason.return_value = None
 
-        tx_hash = HexBytes(b"\xcc" * 32)
+        tx_hash = parse_tx_hash(b"\xcc" * 32)
         receipt = {"status": 0, "blockNumber": 100}
 
         with pytest.raises(TransactionError):
@@ -392,28 +431,222 @@ class TestSendFailedReceipt:
     @patch("ipor_fusion.core.context.get_revert_reason")
     def test_send_raises_on_failed_transaction(self, mock_get_reason):
         mock_get_reason.return_value = "execution reverted"
-
-        ctx = _make_ctx(signer=ADDR, private_key=PRIVATE_KEY)
-        web3 = ctx.web3
-
-        web3.eth.get_transaction_count.return_value = 0
-        web3.eth.gas_price = 10_000_000_000
-        web3.eth.get_block.return_value = {"baseFeePerGas": 8_000_000_000}
-        web3.eth.estimate_gas.return_value = 21000
-
-        signed = MagicMock()
-        signed.raw_transaction = b"\xf8"
-        web3.eth.account.sign_transaction.return_value = signed
-
-        tx_hash = HexBytes(b"\xdd" * 32)
-        web3.eth.send_raw_transaction.return_value = tx_hash
-        web3.eth.wait_for_transaction_receipt.return_value = {
+        ctx = _sending_ctx()
+        ctx.web3.eth.wait_for_transaction_receipt.return_value = {
             "status": 0,
             "blockNumber": 42,
         }
 
-        with pytest.raises(TransactionError):
+        with pytest.raises(TransactionError) as exc_info:
             ctx.send(TO_ADDR, b"\x01")
+        assert exc_info.value.tx_hash == SIGNED_HASH.to_0x_hex()
+
+
+# ── send: transport failures ────────────────────────────────────────────
+
+
+def _refused() -> RequestsConnectionError:
+    reason = NewConnectionError(None, "Connection refused")
+    return RequestsConnectionError(MaxRetryError(None, "/", reason))
+
+
+def _reset() -> RequestsConnectionError:
+    return RequestsConnectionError(ProtocolError("Connection aborted."))
+
+
+_MAYBE_SENT = [
+    ReadTimeout,
+    _reset,
+    lambda: HTTPError("502 Bad Gateway"),
+    ChunkedEncodingError,
+    lambda: json.JSONDecodeError("Expecting value", "", 0),
+    lambda: BadResponseFormat("no result"),
+    lambda: OSError("IPC socket closed"),
+]
+
+
+@patch("ipor_fusion.core.context.time.sleep")
+class TestSendTransport:
+    def test_waits_for_the_signed_hash(self, _sleep):
+        ctx = _sending_ctx()
+        ctx.send(TO_ADDR, b"\x01")
+        ctx.web3.eth.wait_for_transaction_receipt.assert_called_once_with(
+            SIGNED_HASH.to_0x_hex()
+        )
+
+    @pytest.mark.parametrize("never_left", [ConnectTimeout, _refused])
+    def test_repeats_a_post_that_never_left(self, sleep, never_left):
+        ctx = _sending_ctx()
+        post = ctx.web3.eth.send_raw_transaction
+        post.side_effect = [never_left(), never_left(), SIGNED_HASH]
+        assert ctx.send(TO_ADDR, b"\x01") == {"status": 1}
+        assert post.call_count == 3
+        assert [c.args[0] for c in sleep.call_args_list] == [0.25, 0.5]
+
+    @pytest.mark.parametrize("never_left", [ConnectTimeout, _refused])
+    def test_raises_the_transport_error_once_attempts_run_out(self, sleep, never_left):
+        ctx = _sending_ctx()
+        post = ctx.web3.eth.send_raw_transaction
+        error = never_left()
+        post.side_effect = error
+        with pytest.raises(type(error)) as exc_info:
+            ctx.send(TO_ADDR, b"\x01")
+        assert exc_info.value is error
+        assert post.call_count == 3
+        assert [c.args[0] for c in sleep.call_args_list] == [0.25, 0.5]
+
+    def test_a_provider_that_repeats_the_post_proves_nothing(self, sleep):
+        ctx = _sending_ctx()
+        ctx.web3.provider.exception_retry_configuration = ExceptionRetryConfiguration(
+            errors=(RequestsConnectionError,)
+        )
+        post = ctx.web3.eth.send_raw_transaction
+        post.side_effect = _refused()
+        with pytest.raises(TransactionOutcomeUnknown):
+            ctx.send(TO_ADDR, b"\x01")
+        assert post.call_count == 1
+        sleep.assert_not_called()
+
+    def test_a_retried_post_that_may_have_left_has_an_unknown_outcome(self, sleep):
+        ctx = _sending_ctx()
+        post = ctx.web3.eth.send_raw_transaction
+        post.side_effect = [_refused(), ReadTimeout()]
+        with pytest.raises(TransactionOutcomeUnknown):
+            ctx.send(TO_ADDR, b"\x01")
+        assert post.call_count == 2
+        assert [c.args[0] for c in sleep.call_args_list] == [0.25]
+
+    @pytest.mark.parametrize("maybe_sent", _MAYBE_SENT)
+    def test_a_post_that_may_have_left_has_an_unknown_outcome(self, sleep, maybe_sent):
+        ctx = _sending_ctx()
+        post = ctx.web3.eth.send_raw_transaction
+        error = maybe_sent()
+        post.side_effect = error
+        with pytest.raises(TransactionOutcomeUnknown) as exc_info:
+            ctx.send(TO_ADDR, b"\x01")
+        assert exc_info.value.tx_hash == SIGNED_HASH.to_0x_hex()
+        assert exc_info.value.__cause__ is error
+        assert post.call_count == 1
+        sleep.assert_not_called()
+
+    def test_a_rejected_post_propagates_unchanged(self, _sleep):
+        ctx = _sending_ctx()
+        post = ctx.web3.eth.send_raw_transaction
+        error = Web3RPCError("nonce too low")
+        post.side_effect = error
+        with pytest.raises(Web3RPCError) as exc_info:
+            ctx.send(TO_ADDR, b"\x01")
+        assert exc_info.value is error
+        assert post.call_count == 1
+
+    def test_a_receipt_wait_timeout_is_a_transaction_timeout(self, _sleep):
+        ctx = _sending_ctx()
+        ctx.web3.eth.wait_for_transaction_receipt.side_effect = TimeExhausted("120 s")
+        with pytest.raises(TimeExhausted) as exc_info:
+            ctx.send(TO_ADDR, b"\x01")
+        assert isinstance(exc_info.value, TransactionTimeout)
+        assert exc_info.value.tx_hash == SIGNED_HASH.to_0x_hex()
+
+    @pytest.mark.parametrize(
+        "failure",
+        [*_MAYBE_SENT, _refused, lambda: Web3RPCError("internal error")],
+    )
+    def test_a_failed_receipt_poll_has_an_unknown_outcome(self, _sleep, failure):
+        ctx = _sending_ctx()
+        error = failure()
+        ctx.web3.eth.wait_for_transaction_receipt.side_effect = error
+        with pytest.raises(TransactionOutcomeUnknown) as exc_info:
+            ctx.send(TO_ADDR, b"\x01")
+        assert not isinstance(exc_info.value, TransactionTimeout)
+        assert exc_info.value.tx_hash == SIGNED_HASH.to_0x_hex()
+        assert exc_info.value.__cause__ is error
+
+    def test_waits_for_the_hash_of_the_posted_bytes(self, _sleep):
+        signer = Account.from_key(PRIVATE_KEY)
+        ctx = _sending_ctx(signer=signer.address)
+        ctx.web3.eth.account = Account
+        ctx.send(TO_ADDR, b"\x01")
+        raw = ctx.web3.eth.send_raw_transaction.call_args.args[0]
+        ctx.web3.eth.wait_for_transaction_receipt.assert_called_once_with(
+            Web3.keccak(raw).to_0x_hex()
+        )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        RequestsConnectionError(),
+        _reset(),
+        RequestsConnectionError(MaxRetryError(None, "/", SSLError("handshake"))),
+        ReadTimeout(),
+        ChunkedEncodingError(),
+    ],
+)
+def test_a_connection_may_have_been_made(error):
+    assert not _no_connection_made(error)
+
+
+@contextmanager
+def _refusing_port() -> Generator[int]:
+    """A local port that refuses connections: bound, never listening, so no
+    other process can take it while the test runs."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        yield probe.getsockname()[1]
+
+
+def test_a_refused_connection_is_no_connection_made():
+    """Pins the requests/urllib3 mapping `_no_connection_made` relies on."""
+    session = requests.Session()
+    session.trust_env = False  # a proxy from the environment would answer instead
+    with _refusing_port() as port, pytest.raises(RequestsConnectionError) as exc_info:
+        session.post(f"http://127.0.0.1:{port}", timeout=5)
+    assert _no_connection_made(exc_info.value)
+
+
+@pytest.fixture
+def _no_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.mark.usefixtures("_no_proxy")
+@patch("web3.providers.rpc.rpc.time.sleep")
+@patch("ipor_fusion.core.context.time.sleep")
+@patch.object(Eth, "chain_id", new_callable=PropertyMock, return_value=1)
+class TestRefusedPostThroughHttpProvider:
+    """The real provider stack: web3 must hand the refusal through unwrapped."""
+
+    def _posts(self, ctx: Web3Context) -> MagicMock:
+        manager = ctx.web3.provider._request_session_manager
+        return patch.object(
+            manager, "make_post_request", wraps=manager.make_post_request
+        ).start()
+
+    def test_from_url_repeats_the_post_then_raises_the_refusal(self, *_patches):
+        with _refusing_port() as port:
+            ctx = Web3Context.from_url(f"http://127.0.0.1:{port}")
+            posts = self._posts(ctx)
+            try:
+                with pytest.raises(RequestsConnectionError):
+                    ctx._post_raw_transaction(b"\xf8", parse_tx_hash(SIGNED_HASH))
+            finally:
+                patch.stopall()
+        assert posts.call_count == 3
+
+    def test_a_retrying_provider_has_an_unknown_outcome(self, *_patches):
+        with _refusing_port() as port:
+            web3 = Web3(Web3.HTTPProvider(f"http://127.0.0.1:{port}"))
+            ctx = Web3Context(web3, ChainId(1))
+            posts = self._posts(ctx)
+            try:
+                with pytest.raises(TransactionOutcomeUnknown):
+                    ctx._post_raw_transaction(b"\xf8", parse_tx_hash(SIGNED_HASH))
+            finally:
+                patch.stopall()
+        # web3's default retries the builtin ConnectionError, which requests'
+        # is not, so the refusal itself is posted once; the SDK adds no repeat.
+        assert posts.call_count == 1
 
 
 class TestGetStorageAt:
