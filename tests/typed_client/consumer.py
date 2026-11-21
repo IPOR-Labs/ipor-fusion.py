@@ -14,7 +14,7 @@ from typing import assert_type
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.types import TxReceipt
+from web3.types import Nonce, TxReceipt
 
 from ipor_fusion import (
     ERC20,
@@ -125,6 +125,7 @@ def access(ctx: Web3Context, am: AccessManager, account: ChecksumAddress) -> Non
         am.revoke_role(Roles.ALPHA_ROLE, account).send(ctx)
     except TransactionOutcomeUnknown as exc:
         assert_type(exc.tx_hash, TxHash)
+        assert_type(exc.nonce, Nonce)
 
 
 def market_limits(vault: PlasmaVault) -> None:

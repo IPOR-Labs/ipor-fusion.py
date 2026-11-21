@@ -365,8 +365,8 @@ class Web3Context:
         receipt wait that times out raises `TransactionTimeout`, and any other
         failure of the post or the receipt wait `TransactionOutcomeUnknown`:
         the transaction may still land, so look up their ``tx_hash`` or the
-        signer's nonce before sending again. ``nonce`` is passed to
-        `build_transaction`.
+        signer's nonce before sending again, and resend with the exception's
+        ``nonce``. The ``nonce`` argument is passed to `build_transaction`.
 
         On a provider that posts once, as a `from_url` context's does, a post
         that never reached a node (a connect timeout, a refused connection) is
@@ -382,16 +382,19 @@ class Web3Context:
             transaction, self._private_key
         )
         tx_hash = parse_tx_hash(signed_tx.hash)
-        self._post_raw_transaction(signed_tx.raw_transaction, tx_hash)
+        sent_nonce = transaction["nonce"]
+        self._post_raw_transaction(signed_tx.raw_transaction, tx_hash, sent_nonce)
         try:
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
         except TimeExhausted as exc:
-            raise TransactionTimeout(_OUTCOME_UNKNOWN, tx_hash) from exc
+            raise TransactionTimeout(_OUTCOME_UNKNOWN, tx_hash, sent_nonce) from exc
         except Exception as exc:
-            raise TransactionOutcomeUnknown(_OUTCOME_UNKNOWN, tx_hash) from exc
+            raise TransactionOutcomeUnknown(
+                _OUTCOME_UNKNOWN, tx_hash, sent_nonce
+            ) from exc
         return self._handle_receipt(tx_hash, receipt)
 
-    def _post_raw_transaction(self, raw: bytes, tx_hash: TxHash) -> None:
+    def _post_raw_transaction(self, raw: bytes, tx_hash: TxHash, nonce: Nonce) -> None:
         posts_once = not _provider_retries_post(self.web3.provider)
         for attempt in range(_SEND_CONNECT_ATTEMPTS):
             try:
@@ -401,7 +404,9 @@ class Web3Context:
                 raise
             except Exception as exc:
                 if not (posts_once and _no_connection_made(exc)):
-                    raise TransactionOutcomeUnknown(_OUTCOME_UNKNOWN, tx_hash) from exc
+                    raise TransactionOutcomeUnknown(
+                        _OUTCOME_UNKNOWN, tx_hash, nonce
+                    ) from exc
                 if attempt == _SEND_CONNECT_ATTEMPTS - 1:
                     raise
                 time.sleep(_SEND_CONNECT_BACKOFF_S * 2**attempt)

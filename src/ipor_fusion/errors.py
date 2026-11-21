@@ -9,7 +9,7 @@ from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 from web3.exceptions import TimeExhausted
-from web3.types import TxParams, TxReceipt
+from web3.types import Nonce, TxParams, TxReceipt
 
 from ipor_fusion.fusion_errors import FUSION_ERROR_SIGNATURES
 from ipor_fusion.onchain_text import sanitize_onchain_text
@@ -382,19 +382,23 @@ class TransactionOutcomeUnknown(IporFusionError):
 
     Raised by `Web3Context.send` when the post or the receipt wait fails
     after the transaction may have left. Look up ``tx_hash`` (or the signer's
-    nonce) before sending again. Kept apart from `TransactionError`, so a
-    handler that resends after a revert does not resend a transaction that
-    may land.
+    nonce) before sending again; a resend with ``nonce`` lets at most one of
+    the lost transaction and the resend land. Kept apart from
+    `TransactionError`, so a handler that resends after a revert does not
+    resend a transaction that may land.
     """
 
-    def __init__(self, message: str, tx_hash: TxHash):
+    def __init__(self, message: str, tx_hash: TxHash, nonce: Nonce):
         self.message = message
         self.tx_hash = tx_hash
-        super().__init__(f"{message}, tx_hash={tx_hash}")
+        self.nonce = nonce
+        super().__init__(f"{message}, tx_hash={tx_hash}, nonce={nonce}")
 
-    def __reduce__(self) -> tuple[type[TransactionOutcomeUnknown], tuple[str, TxHash]]:
+    def __reduce__(
+        self,
+    ) -> tuple[type[TransactionOutcomeUnknown], tuple[str, TxHash, Nonce]]:
         # args holds only the formatted text, which __init__ cannot take back.
-        return type(self), (self.message, self.tx_hash)
+        return type(self), (self.message, self.tx_hash, self.nonce)
 
 
 class TransactionTimeout(TransactionOutcomeUnknown, TimeExhausted):

@@ -40,6 +40,7 @@ from web3.exceptions import (
 )
 from web3.providers.rpc import HTTPProvider
 from web3.providers.rpc.utils import ExceptionRetryConfiguration
+from web3.types import Nonce
 
 from ipor_fusion import InFlightLimit
 from ipor_fusion.core.context import (
@@ -540,9 +541,18 @@ class TestSendTransport:
         with pytest.raises(TransactionOutcomeUnknown) as exc_info:
             ctx.send(TO_ADDR, b"\x01")
         assert exc_info.value.tx_hash == SIGNED_HASH.to_0x_hex()
+        assert exc_info.value.nonce == 0
         assert exc_info.value.__cause__ is error
         assert post.call_count == 1
         sleep.assert_not_called()
+
+    def test_an_unknown_outcome_carries_the_given_nonce(self, _sleep):
+        ctx = _sending_ctx()
+        ctx.web3.eth.send_raw_transaction.side_effect = ReadTimeout()
+        with pytest.raises(TransactionOutcomeUnknown) as exc_info:
+            ctx.send(TO_ADDR, b"\x01", nonce=41)
+        assert exc_info.value.nonce == 41
+        ctx.web3.eth.get_transaction_count.assert_not_called()
 
     def test_a_rejected_post_propagates_unchanged(self, _sleep):
         ctx = _sending_ctx()
@@ -561,6 +571,7 @@ class TestSendTransport:
             ctx.send(TO_ADDR, b"\x01")
         assert isinstance(exc_info.value, TransactionTimeout)
         assert exc_info.value.tx_hash == SIGNED_HASH.to_0x_hex()
+        assert exc_info.value.nonce == 0
 
     @pytest.mark.parametrize(
         "failure",
@@ -574,6 +585,7 @@ class TestSendTransport:
             ctx.send(TO_ADDR, b"\x01")
         assert not isinstance(exc_info.value, TransactionTimeout)
         assert exc_info.value.tx_hash == SIGNED_HASH.to_0x_hex()
+        assert exc_info.value.nonce == 0
         assert exc_info.value.__cause__ is error
 
     def test_waits_for_the_hash_of_the_posted_bytes(self, _sleep):
@@ -644,7 +656,9 @@ class TestRefusedPostThroughHttpProvider:
             posts = self._posts(ctx)
             try:
                 with pytest.raises(RequestsConnectionError):
-                    ctx._post_raw_transaction(b"\xf8", parse_tx_hash(SIGNED_HASH))
+                    ctx._post_raw_transaction(
+                        b"\xf8", parse_tx_hash(SIGNED_HASH), Nonce(0)
+                    )
             finally:
                 patch.stopall()
         assert posts.call_count == 3
@@ -656,7 +670,9 @@ class TestRefusedPostThroughHttpProvider:
             posts = self._posts(ctx)
             try:
                 with pytest.raises(TransactionOutcomeUnknown):
-                    ctx._post_raw_transaction(b"\xf8", parse_tx_hash(SIGNED_HASH))
+                    ctx._post_raw_transaction(
+                        b"\xf8", parse_tx_hash(SIGNED_HASH), Nonce(0)
+                    )
             finally:
                 patch.stopall()
         # web3's default retries the builtin ConnectionError, which requests'
