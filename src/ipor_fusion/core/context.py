@@ -474,10 +474,15 @@ class Web3Context:
         from_address: ChecksumAddress,
         block: BlockIdentifier = "latest",
     ) -> int:
-        estimated = self.web3.eth.estimate_gas(
-            {"to": to, "from": from_address, "data": data},
-            block_identifier=block,
-        )
+        try:
+            estimated = self.web3.eth.estimate_gas(
+                {"to": to, "from": from_address, "data": data},
+                block_identifier=block,
+            )
+        except Web3RPCError as exc:
+            if _is_unrecognized_revert(exc):
+                raise ContractLogicError("execution reverted", data=None) from exc
+            raise
         # State can shift between estimate and execution, so pad the limit; it is
         # only a ceiling, and unused gas is not charged.
         return int(self._gas_multiplier * estimated)

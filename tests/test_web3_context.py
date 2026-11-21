@@ -233,17 +233,17 @@ class TestFromUrl:
         assert got["proofOfAuthorityData"] == HexBytes(extra)
 
 
-# ── call: RPC error shapes ──────────────────────────────────────────────
+# ── RPC error shapes ────────────────────────────────────────────────────
 
 
-def _context_answering_eth_call_with(error: dict) -> Web3Context:
+def _context_answering_with(error: dict, private_key: str | None = None) -> Web3Context:
     def make_request(_provider, method, _params):
         if method == "eth_chainId":
             return {"jsonrpc": "2.0", "id": 1, "result": "0x3e7"}
         return {"jsonrpc": "2.0", "id": 1, "error": error}
 
     with patch.object(HTTPProvider, "make_request", make_request):
-        return Web3Context.from_url("http://localhost:8545")
+        return Web3Context.from_url("http://localhost:8545", private_key=private_key)
 
 
 REVM_REVERT = {
@@ -254,7 +254,7 @@ REVM_REVERT = {
 
 class TestCallErrorShapes:
     def test_revm_style_revert_raises_contract_logic_error(self):
-        ctx = _context_answering_eth_call_with(REVM_REVERT)
+        ctx = _context_answering_with(REVM_REVERT)
 
         with pytest.raises(ContractLogicError) as info:
             ctx.call(TO_ADDR, b"\x31\x1d\x5c\x62")
@@ -262,21 +262,29 @@ class TestCallErrorShapes:
         assert isinstance(info.value.__cause__, Web3RPCError)
 
     def test_oracle_probe_treats_revm_style_revert_as_current_middleware(self):
-        ctx = _context_answering_eth_call_with(REVM_REVERT)
+        ctx = _context_answering_with(REVM_REVERT)
 
         oracle = price_oracle_middleware(ctx, TO_ADDR)
 
         assert type(oracle) is PriceOracleMiddleware
 
     def test_other_internal_errors_are_not_treated_as_reverts(self):
-        ctx = _context_answering_eth_call_with(
-            {"code": -32603, "message": "header not found"}
-        )
+        ctx = _context_answering_with({"code": -32603, "message": "header not found"})
 
         with pytest.raises(Web3RPCError) as info:
             ctx.call(TO_ADDR, b"\x31\x1d\x5c\x62")
 
         assert not isinstance(info.value, ContractLogicError)
+
+
+class TestEstimateGasErrorShapes:
+    def test_revm_style_revert_raises_contract_logic_error(self):
+        ctx = _context_answering_with(REVM_REVERT, private_key=PRIVATE_KEY)
+
+        with pytest.raises(ContractLogicError) as info:
+            ctx.estimate_gas(TO_ADDR, b"\x31\x1d\x5c\x62")
+
+        assert isinstance(info.value.__cause__, Web3RPCError)
 
 
 # ── send ────────────────────────────────────────────────────────────────
