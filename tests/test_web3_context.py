@@ -327,6 +327,13 @@ class TestSend:
         assert receipt["status"] == 1
         ctx.web3.eth.send_raw_transaction.assert_called_once_with(b"\xf8")
 
+    def test_send_signs_the_given_nonce(self):
+        ctx = _sending_ctx()
+        ctx.send(TO_ADDR, b"\x01\x02", nonce=41)
+        signed_tx = ctx.web3.eth.account.sign_transaction.call_args.args[0]
+        assert signed_tx["nonce"] == 41
+        ctx.web3.eth.get_transaction_count.assert_not_called()
+
 
 # ── maxFeePerGas construction ────────────────────────────────────────────
 
@@ -740,6 +747,26 @@ class TestPreview:
         )
         ctx.web3.eth.get_block.assert_called_once_with("latest")
 
+    def test_build_transaction_takes_a_given_nonce_without_reading_it(self):
+        ctx = _make_ctx(signer=ADDR)
+        web3 = ctx.web3
+        web3.eth.gas_price = 20 * GWEI
+        web3.eth.get_block.return_value = {"baseFeePerGas": 15 * GWEI}
+        web3.eth.estimate_gas.return_value = 21000
+
+        tx = ctx.build_transaction(TO_ADDR, b"\x01\x02", block=123, nonce=0)
+
+        assert tx["nonce"] == 0
+        web3.eth.get_transaction_count.assert_not_called()
+        web3.eth.get_block.assert_called_once_with(123)
+
+    def test_build_transaction_rejects_a_negative_nonce_before_any_read(self):
+        ctx = _make_ctx(signer=ADDR)
+        with pytest.raises(ValueError, match="nonce must be non-negative"):
+            ctx.build_transaction(TO_ADDR, b"\x01\x02", nonce=-1)
+        ctx.web3.eth.get_transaction_count.assert_not_called()
+        ctx.web3.eth.estimate_gas.assert_not_called()
+
     def test_build_transaction_requires_signer(self):
         ctx = _make_ctx()  # no signer
         with pytest.raises(ValueError, match="Signer required"):
@@ -808,14 +835,25 @@ class TestCallPreviewDelegation:
         call = Call(to=TO_ADDR, data=b"\x03")
 
         assert call.build_transaction(ctx) is sentinel
-        ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03", block="latest")
+        ctx.build_transaction.assert_called_once_with(
+            TO_ADDR, b"\x03", block="latest", nonce=None
+        )
 
-    def test_build_transaction_forwards_the_pinned_block(self):
+    def test_build_transaction_forwards_the_pinned_block_and_nonce(self):
         ctx = MagicMock(spec=Web3Context)
         call = Call(to=TO_ADDR, data=b"\x03")
 
-        call.build_transaction(ctx, block=77)
-        ctx.build_transaction.assert_called_once_with(TO_ADDR, b"\x03", block=77)
+        call.build_transaction(ctx, block=77, nonce=5)
+        ctx.build_transaction.assert_called_once_with(
+            TO_ADDR, b"\x03", block=77, nonce=5
+        )
+
+    def test_send_forwards_the_nonce(self):
+        ctx = MagicMock(spec=Web3Context)
+        call = Call(to=TO_ADDR, data=b"\x03")
+
+        call.send(ctx, nonce=5)
+        ctx.send.assert_called_once_with(TO_ADDR, b"\x03", nonce=5)
 
 
 # ── get_logs through a LogSource ─────────────────────────────────────────

@@ -254,6 +254,7 @@ def offline_wrappers_and_executors(
     supply.build_transaction(ctx)
     supply.estimate_gas(ctx, block="pending")
     vault.convert_to_public_vault().send(ctx)
+    vault.convert_to_public_vault().send(ctx, nonce=3)
     decimals: list[Decimals] = Multicall3(ctx).aggregate([ERC20(token).decimals()])
     legacy = LegacyPriceOracleMiddleware(token, Decimals(8))
     price: Price = legacy.get_asset_price(account).call(ctx)

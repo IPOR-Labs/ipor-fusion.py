@@ -25,6 +25,7 @@ from web3.types import (
     LogReceipt,
     MakeBatchRequestFn,
     MakeRequestFn,
+    Nonce,
     RPCEndpoint,
     RPCResponse,
     TxParams,
@@ -291,6 +292,7 @@ class Web3Context:
         data: bytes,
         *,
         block: BlockIdentifier = "latest",
+        nonce: int | None = None,
     ) -> TxParams:
         """Build the transaction dict for ``data`` against ``to`` without signing
         or broadcasting — the same dict `send` would submit, ready to hand to an
@@ -311,9 +313,20 @@ class Web3Context:
         built for signing must reflect the chain head. The ``eth_gasPrice``
         read that caps the priority fee has no block parameter and stays
         current.
+
+        ``nonce`` overrides the signer's transaction count read at ``block``.
+        A resend with the nonce of a transaction whose outcome is unknown is
+        safe: at most one transaction with that nonce lands. While the first
+        one is still pending, a node accepts the resend only at higher fees,
+        and this method reads the fees afresh. Which of the two landed shows
+        in the signer's nonce or in both hashes, never in the resend's hash
+        alone.
         """
         signer = self._require_signer("build a transaction")
-        nonce = self.web3.eth.get_transaction_count(signer, block_identifier=block)
+        if nonce is None:
+            nonce = self.web3.eth.get_transaction_count(signer, block_identifier=block)
+        elif nonce < 0:
+            raise ValueError(f"nonce must be non-negative, got {nonce}")
         gas_price = self.web3.eth.gas_price
         max_priority_fee_per_gas = self._get_max_priority_fee(gas_price)
         base_fee = self.get_block(block).get("baseFeePerGas")
@@ -329,7 +342,7 @@ class Web3Context:
             "maxPriorityFeePerGas": max_priority_fee_per_gas,
             "to": to,
             "from": signer,
-            "nonce": nonce,
+            "nonce": Nonce(nonce),
             "data": data_hex,
         }
 
@@ -342,7 +355,9 @@ class Web3Context:
             )
         return receipt
 
-    def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
+    def send(
+        self, to: ChecksumAddress, data: bytes, *, nonce: int | None = None
+    ) -> TxReceipt:
         """Sign the `build_transaction` dict, post it, and wait for the
         receipt; a reverted transaction raises `TransactionError`.
 
@@ -350,7 +365,8 @@ class Web3Context:
         receipt wait that times out raises `TransactionTimeout`, and any other
         failure of the post or the receipt wait `TransactionOutcomeUnknown`:
         the transaction may still land, so look up their ``tx_hash`` or the
-        signer's nonce before sending again.
+        signer's nonce before sending again. ``nonce`` is passed to
+        `build_transaction`.
 
         On a provider that posts once, as a `from_url` context's does, a post
         that never reached a node (a connect timeout, a refused connection) is
@@ -361,7 +377,7 @@ class Web3Context:
         """
         if not self._private_key or not self._signer:
             raise ValueError("Private key required for sending transactions")
-        transaction = self.build_transaction(to, data)
+        transaction = self.build_transaction(to, data, nonce=nonce)
         signed_tx = self.web3.eth.account.sign_transaction(
             transaction, self._private_key
         )
