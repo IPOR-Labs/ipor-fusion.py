@@ -254,6 +254,8 @@ REVM_REVERT = {
     "message": "Failed to call: InvalidTransaction(Revert(RevertError { output: None }))",
 }
 
+HEADER_NOT_FOUND = {"code": -32603, "message": "header not found"}
+
 
 class TestCallErrorShapes:
     def test_revm_style_revert_raises_contract_logic_error(self):
@@ -272,7 +274,7 @@ class TestCallErrorShapes:
         assert type(oracle) is PriceOracleMiddleware
 
     def test_other_internal_errors_are_not_treated_as_reverts(self):
-        ctx = _context_answering_with({"code": -32603, "message": "header not found"})
+        ctx = _context_answering_with(HEADER_NOT_FOUND)
 
         with pytest.raises(Web3RPCError) as info:
             ctx.call(TO_ADDR, b"\x31\x1d\x5c\x62")
@@ -288,6 +290,14 @@ class TestEstimateGasErrorShapes:
             ctx.estimate_gas(TO_ADDR, b"\x31\x1d\x5c\x62")
 
         assert isinstance(info.value.__cause__, Web3RPCError)
+
+    def test_other_internal_errors_are_not_treated_as_reverts(self):
+        ctx = _context_answering_with(HEADER_NOT_FOUND, private_key=PRIVATE_KEY)
+
+        with pytest.raises(Web3RPCError) as info:
+            ctx.estimate_gas(TO_ADDR, b"\x31\x1d\x5c\x62")
+
+        assert not isinstance(info.value, ContractLogicError)
 
 
 # ── send ────────────────────────────────────────────────────────────────
@@ -336,6 +346,17 @@ class TestSend:
         signed_tx = ctx.web3.eth.account.sign_transaction.call_args.args[0]
         assert signed_tx["nonce"] == 41
         ctx.web3.eth.get_transaction_count.assert_not_called()
+
+    def test_a_revert_at_gas_estimation_sends_nothing(self):
+        ctx = _sending_ctx()
+        error = Web3RPCError(
+            REVM_REVERT["message"], rpc_response={"error": REVM_REVERT}
+        )
+        ctx.web3.eth.estimate_gas.side_effect = error
+        with pytest.raises(ContractLogicError) as exc_info:
+            ctx.send(TO_ADDR, b"\x01\x02")
+        assert exc_info.value.__cause__ is error
+        ctx.web3.eth.send_raw_transaction.assert_not_called()
 
 
 # ── maxFeePerGas construction ────────────────────────────────────────────
