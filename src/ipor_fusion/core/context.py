@@ -361,19 +361,21 @@ class Web3Context:
         """Sign the `build_transaction` dict, post it, and wait for the
         receipt; a reverted transaction raises `TransactionError`.
 
-        A node that rejects the transaction raises web3's ``Web3RPCError``. A
-        receipt wait that times out raises `TransactionTimeout`, and any other
-        failure of the post or the receipt wait `TransactionOutcomeUnknown`:
-        the transaction may still land, so look up their ``tx_hash`` or the
-        signer's nonce before sending again, and resend with the exception's
-        ``nonce``. The ``nonce`` argument is passed to `build_transaction`.
+        A node that rejects the transaction raises web3's ``Web3RPCError`` on a
+        provider that posts once (see the next paragraph). A receipt wait that
+        times out raises `TransactionTimeout`, and any other failure of the
+        post or the receipt wait `TransactionOutcomeUnknown`: the transaction
+        may still land, so look up their ``tx_hash`` or the signer's nonce
+        before sending again, and resend with the exception's ``nonce``. The
+        ``nonce`` argument is passed to `build_transaction`.
 
         On a provider that posts once, as a `from_url` context's does, a post
         that never reached a node (a connect timeout, a refused connection) is
         repeated a few times, then its transport error is raised. A provider
         that repeats the post itself, as web3's default ``HTTPProvider`` does,
         reports only its last attempt's error, so every failed post there is
-        `TransactionOutcomeUnknown`.
+        `TransactionOutcomeUnknown`, a node's answer included: it may be to a
+        repeat of a post that reached the node.
         """
         if not self._private_key or not self._signer:
             raise ValueError("Private key required for sending transactions")
@@ -400,8 +402,14 @@ class Web3Context:
             try:
                 self.web3.eth.send_raw_transaction(raw)
                 return
-            except Web3RPCError:
-                raise
+            except Web3RPCError as exc:
+                if posts_once:
+                    raise
+                # The answer may be to a repeat of a post that reached a node:
+                # "already known", "nonce too low".
+                raise TransactionOutcomeUnknown(
+                    _OUTCOME_UNKNOWN, tx_hash, nonce
+                ) from exc
             except Exception as exc:
                 if not (posts_once and _no_connection_made(exc)):
                     raise TransactionOutcomeUnknown(

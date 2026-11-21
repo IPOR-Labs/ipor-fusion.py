@@ -523,12 +523,40 @@ class TestSendTransport:
         assert post.call_count == 1
         sleep.assert_not_called()
 
+    def test_a_provider_that_repeats_the_post_cannot_prove_a_rejection(self, sleep):
+        ctx = _sending_ctx()
+        ctx.web3.provider.exception_retry_configuration = ExceptionRetryConfiguration(
+            errors=(RequestsConnectionError,)
+        )
+        post = ctx.web3.eth.send_raw_transaction
+        error = Web3RPCError("already known")
+        post.side_effect = error
+        with pytest.raises(TransactionOutcomeUnknown) as exc_info:
+            ctx.send(TO_ADDR, b"\x01", nonce=41)
+        assert exc_info.value.tx_hash == SIGNED_HASH.to_0x_hex()
+        assert exc_info.value.nonce == 41
+        assert exc_info.value.__cause__ is error
+        assert post.call_count == 1
+        sleep.assert_not_called()
+
     def test_a_retried_post_that_may_have_left_has_an_unknown_outcome(self, sleep):
         ctx = _sending_ctx()
         post = ctx.web3.eth.send_raw_transaction
         post.side_effect = [_refused(), ReadTimeout()]
         with pytest.raises(TransactionOutcomeUnknown):
             ctx.send(TO_ADDR, b"\x01")
+        assert post.call_count == 2
+        assert [c.args[0] for c in sleep.call_args_list] == [0.25]
+
+    def test_a_rejection_after_a_repeated_post_propagates_unchanged(self, sleep):
+        ctx = _sending_ctx()
+        ctx.web3.provider.exception_retry_configuration = _RETRY_POLICY
+        post = ctx.web3.eth.send_raw_transaction
+        error = Web3RPCError("nonce too low")
+        post.side_effect = [_refused(), error]
+        with pytest.raises(Web3RPCError) as exc_info:
+            ctx.send(TO_ADDR, b"\x01")
+        assert exc_info.value is error
         assert post.call_count == 2
         assert [c.args[0] for c in sleep.call_args_list] == [0.25]
 
@@ -556,6 +584,7 @@ class TestSendTransport:
 
     def test_a_rejected_post_propagates_unchanged(self, _sleep):
         ctx = _sending_ctx()
+        ctx.web3.provider.exception_retry_configuration = _RETRY_POLICY
         post = ctx.web3.eth.send_raw_transaction
         error = Web3RPCError("nonce too low")
         post.side_effect = error
