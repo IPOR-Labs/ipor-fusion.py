@@ -26,6 +26,7 @@ from requests.exceptions import (
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from urllib3.exceptions import (
     MaxRetryError,
+    NameResolutionError,
     NewConnectionError,
     ProtocolError,
     SSLError,
@@ -48,6 +49,7 @@ from ipor_fusion.core.context import (
     _RETRY_POLICY,
     Web3Context,
     _no_connection_made,
+    _provider_retries_post,
 )
 from ipor_fusion.core.contract import Call
 from ipor_fusion.core.oracle import PriceOracleMiddleware, price_oracle_middleware
@@ -461,14 +463,26 @@ class TestSendFailedReceipt:
 # ── send: transport failures ────────────────────────────────────────────
 
 
-def _refused() -> RequestsConnectionError:
-    reason = NewConnectionError(None, "Connection refused")
+def _connection_error(reason: Exception) -> RequestsConnectionError:
+    """How requests reports a urllib3 failure that exhausted its retries."""
     return RequestsConnectionError(MaxRetryError(None, "/", reason))
+
+
+def _refused() -> RequestsConnectionError:
+    return _connection_error(NewConnectionError(None, "Connection refused"))
+
+
+def _dns_failure() -> RequestsConnectionError:
+    return _connection_error(
+        NameResolutionError("node.invalid", None, socket.gaierror(-2, "Name unknown"))
+    )
 
 
 def _reset() -> RequestsConnectionError:
     return RequestsConnectionError(ProtocolError("Connection aborted."))
 
+
+_NEVER_LEFT = [ConnectTimeout, _refused, _dns_failure]
 
 _MAYBE_SENT = [
     ReadTimeout,
@@ -490,7 +504,7 @@ class TestSendTransport:
             SIGNED_HASH.to_0x_hex()
         )
 
-    @pytest.mark.parametrize("never_left", [ConnectTimeout, _refused])
+    @pytest.mark.parametrize("never_left", _NEVER_LEFT)
     def test_repeats_a_post_that_never_left(self, sleep, never_left):
         ctx = _sending_ctx()
         post = ctx.web3.eth.send_raw_transaction
@@ -499,7 +513,7 @@ class TestSendTransport:
         assert post.call_count == 3
         assert [c.args[0] for c in sleep.call_args_list] == [0.25, 0.5]
 
-    @pytest.mark.parametrize("never_left", [ConnectTimeout, _refused])
+    @pytest.mark.parametrize("never_left", _NEVER_LEFT)
     def test_raises_the_transport_error_once_attempts_run_out(self, sleep, never_left):
         ctx = _sending_ctx()
         post = ctx.web3.eth.send_raw_transaction
@@ -633,13 +647,56 @@ class TestSendTransport:
     [
         RequestsConnectionError(),
         _reset(),
-        RequestsConnectionError(MaxRetryError(None, "/", SSLError("handshake"))),
+        _connection_error(SSLError("handshake")),
         ReadTimeout(),
         ChunkedEncodingError(),
     ],
 )
 def test_a_connection_may_have_been_made(error):
     assert not _no_connection_made(error)
+
+
+@pytest.mark.parametrize("never_left", _NEVER_LEFT)
+def test_no_connection_was_made(never_left):
+    assert _no_connection_made(never_left())
+
+
+def _retrying(*allowlist: str) -> ExceptionRetryConfiguration:
+    return ExceptionRetryConfiguration(
+        errors=(RequestsConnectionError,), method_allowlist=list(allowlist)
+    )
+
+
+_URL = "http://127.0.0.1:1"
+
+
+@pytest.mark.parametrize(
+    ("provider", "retries"),
+    [
+        (object(), False),
+        (HTTPProvider(_URL, exception_retry_configuration=None), False),
+        (HTTPProvider(_URL, exception_retry_configuration=_RETRY_POLICY), False),
+        (HTTPProvider(_URL), True),
+        (
+            HTTPProvider(
+                _URL,
+                exception_retry_configuration=_retrying("eth_sendRawTransaction"),
+            ),
+            True,
+        ),
+        (HTTPProvider(_URL, exception_retry_configuration=_retrying("eth")), True),
+    ],
+    ids=[
+        "no-retry-attribute",
+        "retries-off",
+        "from-url-policy",
+        "web3-default",
+        "the-method",
+        "eth-root",
+    ],
+)
+def test_whether_a_provider_repeats_the_post(provider, retries):
+    assert _provider_retries_post(provider) is retries
 
 
 @contextmanager
@@ -673,37 +730,27 @@ def _no_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
 class TestRefusedPostThroughHttpProvider:
     """The real provider stack: web3 must hand the refusal through unwrapped."""
 
-    def _posts(self, ctx: Web3Context) -> MagicMock:
+    @contextmanager
+    def _posts(self, ctx: Web3Context) -> Generator[MagicMock]:
         manager = ctx.web3.provider._request_session_manager
-        return patch.object(
+        with patch.object(
             manager, "make_post_request", wraps=manager.make_post_request
-        ).start()
+        ) as posts:
+            yield posts
 
     def test_from_url_repeats_the_post_then_raises_the_refusal(self, *_patches):
         with _refusing_port() as port:
             ctx = Web3Context.from_url(f"http://127.0.0.1:{port}")
-            posts = self._posts(ctx)
-            try:
-                with pytest.raises(RequestsConnectionError):
-                    ctx._post_raw_transaction(
-                        b"\xf8", parse_tx_hash(SIGNED_HASH), Nonce(0)
-                    )
-            finally:
-                patch.stopall()
+            with self._posts(ctx) as posts, pytest.raises(RequestsConnectionError):
+                ctx._post_raw_transaction(b"\xf8", parse_tx_hash(SIGNED_HASH), Nonce(0))
         assert posts.call_count == 3
 
     def test_a_retrying_provider_has_an_unknown_outcome(self, *_patches):
         with _refusing_port() as port:
             web3 = Web3(Web3.HTTPProvider(f"http://127.0.0.1:{port}"))
             ctx = Web3Context(web3, ChainId(1))
-            posts = self._posts(ctx)
-            try:
-                with pytest.raises(TransactionOutcomeUnknown):
-                    ctx._post_raw_transaction(
-                        b"\xf8", parse_tx_hash(SIGNED_HASH), Nonce(0)
-                    )
-            finally:
-                patch.stopall()
+            with self._posts(ctx) as posts, pytest.raises(TransactionOutcomeUnknown):
+                ctx._post_raw_transaction(b"\xf8", parse_tx_hash(SIGNED_HASH), Nonce(0))
         # web3's default retries the builtin ConnectionError, which requests'
         # is not, so the refusal itself is posted once; the SDK adds no repeat.
         assert posts.call_count == 1
