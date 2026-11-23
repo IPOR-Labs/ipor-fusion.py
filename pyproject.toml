@@ -62,6 +62,7 @@ dev = [
     "pytest-cov>=7.0,<8",
     "ruff>=0.14,<1",
     "pyright==1.1.411",
+    "hypothesis==6.170.15",
 ]
 
 [tool.ruff]

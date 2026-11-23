@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -9,11 +10,22 @@ from _live import provider_url, unavailable
 from _multicall import SequentialMulticall
 from _rpc_cache import clear_if_requested, http_provider
 from dotenv import load_dotenv
+from hypothesis import settings
 from web3 import Web3
 
 from ipor_fusion import is_simulate_v1_supported
 
 load_dotenv()
+
+# Property tests are reproducible by default: the same examples on every run
+# for a given Hypothesis version, and no example database on disk.
+# HYPOTHESIS_PROFILE=explore searches randomly with a larger budget (a test
+# with its own max_examples keeps it).
+settings.register_profile("default", derandomize=True, database=None, deadline=None)
+settings.register_profile(
+    "explore", derandomize=False, database=None, max_examples=5000, deadline=None
+)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
 
 _EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 

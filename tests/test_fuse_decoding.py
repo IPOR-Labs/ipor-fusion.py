@@ -1,6 +1,8 @@
 """Decoding execute calldata and fuse actions back into calls."""
 
 import pytest
+from eth_abi import encode
+from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion import (
@@ -15,6 +17,7 @@ from ipor_fusion import (
     PlasmaVault,
     RewardsManager,
     StakeFuse,
+    UniswapV3SwapFuse,
     decode_execute_calldata,
     decode_fuse_action,
     fuse_classes_for,
@@ -49,6 +52,30 @@ def test_other_calldata_is_rejected():
         decode_execute_calldata(VAULT.total_assets().calldata)
     with pytest.raises(ValueError, match="does not decode"):
         decode_execute_calldata(VAULT.execute([]).calldata[:4] + b"\x01")
+
+
+HUGE_LENGTH = (0x7FFFFFFFFFFFFFE1).to_bytes(32, "big")
+
+
+def test_an_overflowing_length_is_a_value_error():
+    # A bytes length past the index range made eth_abi raise OverflowError,
+    # which escaped the documented ValueError.
+    calldata = VAULT.execute([FuseAction(AAVE.address, b"")]).calldata
+    corrupted = calldata[: 4 + 5 * 32] + HUGE_LENGTH + calldata[4 + 6 * 32 :]
+    with pytest.raises(ValueError, match="does not decode"):
+        decode_execute_calldata(corrupted)
+
+    signature = "enter((uint256,uint256,bytes))"
+    args = encode(["(uint256,uint256,bytes)"], [(1, 1, b"")])
+    action = FuseAction(
+        AAVE.address,
+        function_signature_to_4byte_selector(signature)
+        + args[: 4 * 32]
+        + HUGE_LENGTH
+        + args[5 * 32 :],
+    )
+    with pytest.raises(ValueError, match="arguments do not decode"):
+        decode_fuse_action(action, UniswapV3SwapFuse)
 
 
 def test_an_action_decodes_as_its_class():

@@ -57,7 +57,9 @@ def decode_execute_calldata(data: bytes) -> list[FuseAction]:
         )
     try:
         (actions,) = decode(["(address,bytes)[]"], bytes(data[4:]))
-    except DecodingError as exc:
+    # eth_abi raises OverflowError, not DecodingError, for a length or offset
+    # past the index range.
+    except (DecodingError, OverflowError) as exc:
         raise ValueError(f"{signature} calldata does not decode: {exc}") from exc
     return [
         FuseAction(fuse=FuseAddress(Web3.to_checksum_address(fuse)), data=bytes(call))
@@ -102,7 +104,7 @@ def decode_fuse_action(action: FuseAction, fuse_class: type[Fuse]) -> DecodedFus
         )
     try:
         args = decode(_parse_param_types(signature), bytes(action.data[4:]))
-    except DecodingError as exc:
+    except (DecodingError, OverflowError) as exc:
         raise ValueError(f"{signature} arguments do not decode: {exc}") from exc
     return DecodedFuseAction(
         fuse=action.fuse, fuse_class=fuse_class, signature=signature, args=tuple(args)
