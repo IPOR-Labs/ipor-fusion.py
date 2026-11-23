@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
@@ -49,19 +49,10 @@ from ipor_fusion.types import (
     Severity,
     Verdict,
 )
+from ipor_fusion.types import PreflightCheck as PreflightCheck
 
 # Market 0 is no market: the vault skips it when it updates balances.
 _NO_MARKET = MarketId(0)
-
-PreflightCheck = Literal[
-    "execute_permission",
-    "fuse_not_registered",
-    "fuse_market_unreadable",
-    "no_balance_fuse",
-    "simulation_failed",
-    "simulation_unavailable",
-    "fuse_whitelist",
-]
 
 _EXECUTE_SELECTOR = function_signature_to_4byte_selector("execute((address,bytes)[])")
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")

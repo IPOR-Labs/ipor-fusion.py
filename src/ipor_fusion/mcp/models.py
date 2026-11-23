@@ -52,6 +52,7 @@ from ipor_fusion.types import (
     MappingStatus,
     MarketId,
     NodeStatus,
+    PreflightCheck,
     RoleId,
     Severity,
     Verdict,
@@ -1238,15 +1239,7 @@ class PreflightActionModel(_Base):
 
 
 class PreflightFindingModel(_Base):
-    check: Literal[
-        "execute_permission",
-        "fuse_not_registered",
-        "fuse_market_unreadable",
-        "no_balance_fuse",
-        "simulation_failed",
-        "simulation_unavailable",
-        "fuse_whitelist",
-    ]
+    check: PreflightCheck
     severity: Severity
     message: str
 
