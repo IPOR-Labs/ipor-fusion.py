@@ -317,10 +317,9 @@ class Web3Context:
         ``nonce`` overrides the signer's transaction count read at ``block``.
         A resend with the nonce of a transaction whose outcome is unknown is
         safe: at most one transaction with that nonce lands. While the first
-        one is still pending, a node accepts the resend only at higher fees,
-        and this method reads the fees afresh. Which of the two landed shows
-        in the signer's nonce or in both hashes, never in the resend's hash
-        alone.
+        one is still pending, a node typically accepts the resend only at
+        higher fees, which this method does not add. The signer's nonce
+        shows that one of the two landed; both hashes show which.
         """
         signer = self._require_signer("build a transaction")
         if nonce is None:
@@ -365,8 +364,8 @@ class Web3Context:
         provider that posts once (see the next paragraph). A receipt wait that
         times out raises `TransactionTimeout`, and any other failure of the
         post or the receipt wait `TransactionOutcomeUnknown`: the transaction
-        may still land, so look up their ``tx_hash`` or the signer's nonce
-        before sending again, and resend with the exception's ``nonce``. The
+        may still land, so look up the exception's ``tx_hash`` or the signer's
+        nonce before sending again, and resend with its ``nonce``. The
         ``nonce`` argument is passed to `build_transaction`.
 
         On a provider that posts once, as a `from_url` context's does, a post

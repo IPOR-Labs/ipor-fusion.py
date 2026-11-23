@@ -48,7 +48,8 @@ from ipor_fusion.fuses import AaveV3SupplyFuse
 # A Base RPC, or an anvil fork of Base: anvil --fork-url <BASE_RPC_URL> --chain-id 8453
 OWNER_PRIVATE_KEY = os.environ["OWNER_PRIVATE_KEY"]  # .send(ctx) signs locally; .call(ctx) previews need no key
 owner = Account.from_key(OWNER_PRIVATE_KEY).address  # owns, configures and operates the vault
-# from_url reads the chain id from the node; Web3Context.send says what to do after a timeout.
+# from_url reads the chain id from the node and repeats a post only if it never
+# reached one; Web3Context.send says what to do after a timeout.
 ctx = Web3Context.from_url("http://localhost:8545", private_key=OWNER_PRIVATE_KEY)
 
 # Generic addresses are ChecksumAddress; fuse addresses carry their role (FuseAddress).
