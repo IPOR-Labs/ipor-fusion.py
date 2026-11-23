@@ -72,7 +72,7 @@ def test_batch_calldata_round_trips(actions, signature):
 @st.composite
 def corrupted_batches(draw):
     """A valid batch with one ABI word overwritten, a truncation or junk
-    appended, so the decoder gets past the selector and the first offset."""
+    appended, so most cases reach the decoder past the outer structure."""
     signature = draw(st.sampled_from(BATCH_SIGNATURES))
     actions = draw(st.lists(fuse_actions, min_size=1, max_size=4))
     calldata = bytearray(FuseAction.encode_execute_payload(actions, signature))
