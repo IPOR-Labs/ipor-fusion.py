@@ -14,7 +14,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from web3 import Web3
 
-import ipor_fusion  # noqa: F401  (loads every fuse class)
 from ipor_fusion import (
     FuseAction,
     decode_execute_calldata,
