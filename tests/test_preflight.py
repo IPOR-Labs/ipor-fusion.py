@@ -114,9 +114,12 @@ def test_a_clean_batch_passes_the_static_checks():
         _ctx(), VAULT, [_supply()], sender=SENDER, simulate=False
     )
 
-    assert result.verdict == "ok"
+    assert result.verdict == "warning"
     assert result.block_number == BLOCK
-    assert result.findings == ()
+    (skipped,) = result.findings
+    assert (skipped.check, skipped.severity) == ("simulation_skipped", "warning")
+    assert skipped.message == "the batch was not simulated: only the static checks ran"
+    assert result.simulation is None
     (action,) = result.actions
     assert (action.registered, action.market_id) == (True, 1)
     assert "AaveV3SupplyFuse" in action.candidates
@@ -139,7 +142,10 @@ def test_the_sender_must_be_allowed_now(delay, scheduled, message):
         sender=SENDER,
         simulate=False,
     )
-    assert [f.check for f in result.findings] == ["execute_permission"]
+    assert [f.check for f in result.findings] == [
+        "execute_permission",
+        "simulation_skipped",
+    ]
     assert message in result.findings[0].message
     with pytest.raises(ExecutePreflightError, match=message):
         result.raise_for_failure()
@@ -153,7 +159,7 @@ def test_a_ready_scheduled_operation_may_be_executed_directly():
         sender=SENDER,
         simulate=False,
     )
-    assert result.findings == ()
+    assert [f.check for f in result.findings] == ["simulation_skipped"]
     assert result.scheduled_at == NOW
     assert build_execute_preflight_json(result)["execute_scheduled_at"] == NOW
 
@@ -162,7 +168,7 @@ def test_market_zero_needs_no_balance_fuse():
     result = preflight_execute(
         _ctx(markets={FUSE: 0}), VAULT, [_supply()], sender=SENDER, simulate=False
     )
-    assert result.findings == ()
+    assert [f.check for f in result.findings] == ["simulation_skipped"]
 
 
 def test_dependency_markets_need_balance_fuses_once_each():
@@ -170,18 +176,19 @@ def test_dependency_markets_need_balance_fuses_once_each():
     result = preflight_execute(
         _ctx(graph=graph), VAULT, [_supply()], sender=SENDER, simulate=False
     )
-    assert [f.message for f in result.findings] == [
+    assert [f.message for f in result.findings if f.check != "simulation_skipped"] == [
         "market 2, a balance dependency of market 1, has no balance fuse;"
         " execute reverts AddressEmptyCode after the actions",
         "market 3, a balance dependency of market 1, has no balance fuse;"
         " execute reverts AddressEmptyCode after the actions",
     ]
+    assert result.findings[-1].check == "simulation_skipped"
 
 
 def test_market_zero_is_never_followed_in_the_dependency_graph():
     ctx = _ctx(graph={1: [0], 0: [2]})
     result = preflight_execute(ctx, VAULT, [_supply()], sender=SENDER, simulate=False)
-    assert result.findings == ()
+    assert [f.check for f in result.findings] == ["simulation_skipped"]
     graph_reads = [
         data
         for call in ctx.call.call_args_list
@@ -201,14 +208,22 @@ def test_an_unregistered_fuse_without_market_or_balance_fuse_is_critical():
     assert [f.check for f in result.findings] == [
         "fuse_not_registered",
         "no_balance_fuse",
+        "simulation_skipped",
     ]
-    assert all("action 1" in f.message for f in result.findings)
+    assert all(
+        "action 1" in f.message
+        for f in result.findings
+        if f.check != "simulation_skipped"
+    )
     assert result.verdict == "critical"
 
     unreadable = preflight_execute(
         _ctx(markets={}), VAULT, [_supply()], sender=SENDER, simulate=False
     )
-    assert [f.check for f in unreadable.findings] == ["fuse_market_unreadable"]
+    assert [f.check for f in unreadable.findings] == [
+        "fuse_market_unreadable",
+        "simulation_skipped",
+    ]
 
 
 class _FakeObservation:

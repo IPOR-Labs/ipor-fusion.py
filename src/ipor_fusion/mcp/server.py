@@ -351,7 +351,8 @@ def vault_preflight(
     simulate: Annotated[
         bool,
         Field(
-            description="Run the batch through eth_simulateV1; false: static checks."
+            description="Run the batch through eth_simulateV1; false: static "
+            "checks only, with a simulation_skipped warning."
         ),
     ] = True,
 ) -> ExecutePreflightResponse:

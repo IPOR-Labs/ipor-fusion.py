@@ -113,6 +113,7 @@ PreflightCheck: TypeAlias = Literal[
     "no_balance_fuse",
     "simulation_failed",
     "simulation_unavailable",
+    "simulation_skipped",
     "fuse_whitelist",
 ]
 

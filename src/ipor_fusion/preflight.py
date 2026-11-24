@@ -302,6 +302,13 @@ def _schedule(
     return int(scheduled), int(now)
 
 
+_SIMULATION_SKIPPED = PreflightFinding(
+    "simulation_skipped",
+    "warning",
+    "the batch was not simulated: only the static checks ran",
+)
+
+
 def _simulate(
     ctx: Web3Context,
     vault: PlasmaVault,
@@ -357,7 +364,8 @@ def preflight_execute(
     The static checks take a few Multicall3 batches (one per dependency-graph
     level), the ``canCall`` read, the balance-fuse storage reads and, for a
     caller with an execution delay, the schedule of this exact calldata;
-    ``simulate`` adds a capability probe and one ``eth_simulateV1`` request.
+    ``simulate`` adds a capability probe and one ``eth_simulateV1`` request;
+    without it, a ``simulation_skipped`` warning says the batch was not simulated.
     ``fuse_whitelist`` adds a warning for each fuse of the batch that is not
     active in the chain's Fuse Whitelist (the ``ipor-abi`` registry plus two
     Multicall3 batches); a failure to read it is a warning too. Read-only.
@@ -406,7 +414,9 @@ def preflight_execute(
         + (_whitelist_findings(ctx, preflight_actions) if fuse_whitelist else [])
     )
     simulation, simulated = (
-        _simulate(ctx, plasma_vault, actions, sender, block) if simulate else (None, [])
+        _simulate(ctx, plasma_vault, actions, sender, block)
+        if simulate
+        else (None, [_SIMULATION_SKIPPED])
     )
     return ExecutePreflight(
         vault=vault,

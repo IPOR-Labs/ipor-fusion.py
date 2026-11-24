@@ -61,7 +61,8 @@ def _read_calldata(calldata: str) -> str:
 @click.option(
     "--simulate/--no-simulate",
     default=True,
-    help="Run the batch through eth_simulateV1 (default) or only the static checks.",
+    help="Run the batch through eth_simulateV1 (default) or only the static "
+    "checks, which adds a simulation_skipped warning.",
 )
 @click.option(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."

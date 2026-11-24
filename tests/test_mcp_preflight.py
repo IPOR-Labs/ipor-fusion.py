@@ -1,6 +1,7 @@
 """The vault_preflight MCP tool over a faked preflight."""
 
 import asyncio
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +15,7 @@ from ipor_fusion import (
     ExecutePreflight,
     PlasmaVault,
     PreflightAction,
+    PreflightFinding,
 )
 from ipor_fusion.mcp import server
 from ipor_fusion.types import (
@@ -78,6 +80,19 @@ def test_returns_the_document(preflight):
     assert result["simulation"] is None
     assert preflight.call_args.args[2] == [ACTION]
     assert preflight.call_args.kwargs == {"sender": SENDER, "simulate": True}
+
+
+def test_a_skipped_simulation_is_a_warning_in_the_document(preflight):
+    skipped = PreflightFinding("simulation_skipped", "warning", "skipped")
+    preflight.return_value = replace(preflight.return_value, findings=(skipped,))
+    result = _call(
+        vault_address=VAULT, calldata=CALLDATA, sender=SENDER, simulate=False
+    )
+    assert result["verdict"] == "warning"
+    assert result["findings"] == [
+        {"check": "simulation_skipped", "severity": "warning", "message": "skipped"}
+    ]
+    assert preflight.call_args.kwargs["simulate"] is False
 
 
 def test_bad_calldata_is_a_tool_error(preflight):
