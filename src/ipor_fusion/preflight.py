@@ -61,6 +61,11 @@ _PRECOMPILE_FAILED_SELECTOR = function_signature_to_4byte_selector(
     "HyperCorePrecompileFailed(address)"
 )
 _RANK: dict[Severity, int] = {"ok": 0, "warning": 1, "critical": 2}
+_BPS = 10_000
+# ERC4626 conversions and Aave's aToken mint round against the depositor, by
+# about one raw unit each. An action makes a few such conversions (the deposit,
+# the share mint, the balance fuse's valuation), so 10 bounds a sound one.
+_DUST_PER_ACTION = 10
 
 
 @dataclass(frozen=True)
@@ -313,12 +318,58 @@ _SIMULATION_SKIPPED = PreflightFinding(
 )
 
 
+def _validate_drop_bps(max_total_assets_drop_bps: int) -> None:
+    if isinstance(max_total_assets_drop_bps, bool) or not isinstance(
+        max_total_assets_drop_bps, int
+    ):
+        raise TypeError(
+            "max_total_assets_drop_bps must be an int,"
+            f" not {type(max_total_assets_drop_bps).__name__}"
+        )
+    if not 0 <= max_total_assets_drop_bps <= _BPS:
+        raise ValueError(
+            f"max_total_assets_drop_bps must be an integer from 0 to {_BPS},"
+            f" got {max_total_assets_drop_bps!r}"
+        )
+
+
+def _total_assets_findings(
+    simulation: PreflightSimulation, max_drop_bps: int, action_count: int
+) -> list[PreflightFinding]:
+    before, after = simulation.total_assets_before, simulation.total_assets_after
+    if before is None or after is None:
+        return [
+            PreflightFinding(
+                "total_assets_unreadable",
+                "warning",
+                "totalAssets could not be read around the batch:"
+                " the drop was not checked",
+            )
+        ]
+    drop, dust = before - after, _DUST_PER_ACTION * action_count
+    if drop <= dust or drop * _BPS <= before * max_drop_bps:
+        return []
+    return [
+        PreflightFinding(
+            "total_assets_dropped",
+            "warning",
+            f"the batch lowers totalAssets from {before} to {after} (by {drop}"
+            f" raw units of the asset), over the tolerance of {max_drop_bps} bps"
+            f" and the rounding allowance of {dust} raw units"
+            "; the after read includes the balance refresh of the touched"
+            " markets, so a loss accrued before the batch shows up here too,"
+            " and gains accrued before it offset a loss the batch causes",
+        )
+    ]
+
+
 def _simulate(
     ctx: Web3Context,
     vault: PlasmaVault,
     actions: Sequence[FuseAction],
     sender: ChecksumAddress,
     block: int,
+    max_drop_bps: int,
 ) -> tuple[PreflightSimulation | None, list[PreflightFinding]]:
     if not is_simulate_v1_supported(ctx.web3):
         return None, [
@@ -342,7 +393,9 @@ def _simulate(
         total_assets_after=after.value if after.result.success else None,
     )
     if result.success:
-        return simulation, []
+        return simulation, _total_assets_findings(
+            simulation, max_drop_bps, len(actions)
+        )
     return simulation, [_revert_finding(result)]
 
 
@@ -375,6 +428,7 @@ def preflight_execute(
     sender: ChecksumAddress,
     simulate: bool = True,
     fuse_whitelist: bool = True,
+    max_total_assets_drop_bps: int = 0,
 ) -> ExecutePreflight:
     """Check ``actions`` as ``sender``'s `PlasmaVault.execute` on the state of one
     base block: the one ``ctx.default_block`` names (a number, hash or tag),
@@ -388,12 +442,23 @@ def preflight_execute(
     A revert of a HyperCore precompile (``HyperCorePrecompileFailed``), which
     ``eth_simulateV1`` cannot run, is a ``simulation_inconclusive`` warning
     rather than a critical ``simulation_failed``.
+    A run that succeeds is checked for a lower ``totalAssets``: a
+    ``total_assets_dropped`` warning when it falls by more than
+    ``max_total_assets_drop_bps`` basis points (0 to 10000; 10000 flags no drop)
+    and by more than 10 raw units per top-level action, the rounding of a sound
+    deposit (the actions a flash loan nests count as one).
+    A ``total_assets_unreadable`` warning says either read failed. The after
+    read includes the balance refresh of the touched markets, so a loss
+    accrued before the batch counts as a drop too, and gains accrued before
+    it offset a loss the batch causes: a loss smaller than those gains raises
+    no warning.
     ``fuse_whitelist`` adds a warning for each fuse of the batch that is not
     active in the chain's Fuse Whitelist (the ``ipor-abi`` registry plus two
     Multicall3 batches); a failure to read it is a warning too. Read-only.
     """
     if not actions:
         raise ValueError("preflight needs at least one action")
+    _validate_drop_bps(max_total_assets_drop_bps)
     ctx, block = _pinned(ctx)
     plasma_vault = PlasmaVault(vault)
     batch = Multicall3(ctx).batch()
@@ -436,7 +501,7 @@ def preflight_execute(
         + (_whitelist_findings(ctx, preflight_actions) if fuse_whitelist else [])
     )
     simulation, simulated = (
-        _simulate(ctx, plasma_vault, actions, sender, block)
+        _simulate(ctx, plasma_vault, actions, sender, block, max_total_assets_drop_bps)
         if simulate
         else (None, [_SIMULATION_SKIPPED])
     )

@@ -295,6 +295,130 @@ def test_the_simulation_reports_total_assets_and_a_revert(monkeypatch):
     assert document["simulation"]["revert_reason"] == "UnsupportedFuse()"
 
 
+def _run_with_total_assets(monkeypatch, before, after, actions=1, **kwargs):
+    monkeypatch.setattr(preflight_module, "is_simulate_v1_supported", lambda w3: True)
+    monkeypatch.setattr(preflight_module, "VaultSimulator", _FakeSimulator)
+    monkeypatch.setattr(_FakeSimulator, "values", [before, after])
+    batch = [_supply()] * actions
+
+    def execute(self, queued):
+        assert queued == batch
+
+    monkeypatch.setattr(_FakeSimulator, "execute", execute)
+    return preflight_execute(_ctx(), VAULT, batch, sender=SENDER, **kwargs)
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "bps", "actions"),
+    [
+        (1000, 1001, 0, 1),  # a rise
+        (1000, 1000, 0, 1),  # no change
+        (100_000, 99_000, 100, 1),  # exactly at the tolerance
+        (1000, 990, 0, 1),  # exactly at the rounding allowance of one action
+        (100_000, 99_985, 1, 2),  # over 1 bps, within the allowance of two
+        (1000, 1, 10_000, 1),  # the top tolerance flags no drop
+        (0, 0, 0, 1),
+    ],
+)
+def test_total_assets_within_the_tolerance_add_no_finding(
+    monkeypatch, before, after, bps, actions
+):
+    result = _run_with_total_assets(
+        monkeypatch,
+        Amount(before),
+        Amount(after),
+        actions=actions,
+        max_total_assets_drop_bps=bps,
+    )
+    assert result.findings == ()
+    assert result.verdict == "ok"
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "kwargs"),
+    [
+        (1000, 989, {}),  # the default: one raw unit over the rounding allowance
+        (100_000, 98_999, {"max_total_assets_drop_bps": 100}),
+    ],
+)
+def test_a_total_assets_drop_over_the_tolerance_is_a_warning(
+    monkeypatch, before, after, kwargs
+):
+    bps = kwargs.get("max_total_assets_drop_bps", 0)
+    result = _run_with_total_assets(
+        monkeypatch, Amount(before), Amount(after), **kwargs
+    )
+    ((check, severity, message),) = [
+        (f.check, f.severity, f.message) for f in result.findings
+    ]
+    assert (check, severity) == ("total_assets_dropped", "warning")
+    assert f"from {before} to {after} (by {before - after} raw units" in message
+    assert f"tolerance of {bps} bps" in message
+    assert "a loss accrued before the batch" in message
+    assert "gains accrued before it offset a loss" in message
+    assert result.verdict == "warning"
+
+
+@pytest.mark.parametrize(("after", "warns"), [(980, False), (979, True)])
+def test_the_rounding_allowance_grows_with_the_batch(monkeypatch, after, warns):
+    result = _run_with_total_assets(monkeypatch, Amount(1000), Amount(after), actions=2)
+    assert [f.check for f in result.findings] == (
+        ["total_assets_dropped"] if warns else []
+    )
+    if warns:
+        assert "rounding allowance of 20 raw units" in result.findings[0].message
+
+
+@pytest.mark.parametrize(
+    ("before", "after"), [(None, Amount(10)), (Amount(10), None), (None, None)]
+)
+def test_an_unreadable_total_assets_is_a_warning(monkeypatch, before, after):
+    result = _run_with_total_assets(monkeypatch, before, after)
+    ((check, severity, message),) = [
+        (f.check, f.severity, f.message) for f in result.findings
+    ]
+    assert (check, severity) == ("total_assets_unreadable", "warning")
+    assert "the drop was not checked" in message
+
+
+@pytest.mark.parametrize("values", [[Amount(1000), Amount(1)], [None, None]])
+@pytest.mark.parametrize(
+    ("hypercore", "check"),
+    [(False, "simulation_failed"), (True, "simulation_inconclusive")],
+)
+def test_a_reverted_run_is_not_judged_by_its_total_assets(
+    monkeypatch, values, hypercore, check
+):
+    monkeypatch.setattr(_FakeSimulator, "values", values)
+    execute = (
+        _reverted("HyperCorePrecompileFailed(address)", CORE_USER_EXISTS_PRECOMPILE)
+        if hypercore
+        else _reverted("UnsupportedFuse()")
+    )
+    result = _failed_run(monkeypatch, execute)
+    assert [f.check for f in result.findings] == [check]
+
+
+@pytest.mark.parametrize(
+    ("bps", "error"),
+    [
+        (-1, ValueError),
+        (10_001, ValueError),
+        (True, TypeError),
+        (1.5, TypeError),
+        ("5", TypeError),
+    ],
+)
+def test_an_invalid_drop_tolerance_raises_before_any_read(bps, error):
+    ctx = _ctx()
+    with pytest.raises(error, match="max_total_assets_drop_bps"):
+        preflight_execute(
+            ctx, VAULT, [_supply()], sender=SENDER, max_total_assets_drop_bps=bps
+        )
+    ctx.call.assert_not_called()
+    ctx.web3.eth.get_block.assert_not_called()
+
+
 def _reverted(
     signature: str, *args: object, label: str | None = None
 ) -> SimulatedCallResult:
