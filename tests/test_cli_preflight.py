@@ -76,7 +76,11 @@ def test_json_is_the_sdk_document(preflight):
     assert document["simulation"]["total_assets_after"] == 6
     _, actions = preflight.call_args.args[1:3]
     assert actions == [ACTION]
-    assert preflight.call_args.kwargs == {"sender": SENDER, "simulate": True}
+    assert preflight.call_args.kwargs == {
+        "sender": SENDER,
+        "simulate": True,
+        "max_total_assets_drop_bps": 0,
+    }
 
 
 def test_the_table_and_a_critical_exit(preflight, tmp_path):
@@ -105,4 +109,32 @@ def test_bad_calldata_is_a_usage_error(preflight, calldata, message):
     result = _run("--calldata", calldata, "--sender", SENDER)
     assert result.exit_code == 2
     assert message in result.output
+    preflight.assert_not_called()
+
+
+@pytest.mark.parametrize("bps", [0, 50, 10_000])
+def test_a_drop_tolerance_reaches_the_sdk_and_a_drop_is_a_warning(preflight, bps):
+    dropped = PreflightFinding("total_assets_dropped", "warning", "dropped by 7")
+    preflight.return_value = _result([dropped])
+    result = _run(
+        "--calldata",
+        CALLDATA,
+        "--sender",
+        SENDER,
+        "--max-total-assets-drop-bps",
+        str(bps),
+    )
+    assert result.exit_code == 0, result.output
+    assert "total_assets_dropped" in result.output
+    assert "dropped by 7" in result.output
+    assert preflight.call_args.kwargs["max_total_assets_drop_bps"] == bps
+
+
+@pytest.mark.parametrize("bps", ["-1", "10001"])
+def test_a_drop_tolerance_out_of_range_is_a_usage_error(preflight, bps):
+    result = _run(
+        "--calldata", CALLDATA, "--sender", SENDER, "--max-total-assets-drop-bps", bps
+    )
+    assert result.exit_code == 2
+    assert "--max-total-assets-drop-bps" in result.output
     preflight.assert_not_called()

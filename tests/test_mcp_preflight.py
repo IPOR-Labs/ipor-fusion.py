@@ -79,7 +79,11 @@ def test_returns_the_document(preflight):
     assert result["execute_scheduled_at"] == 1000
     assert result["simulation"] is None
     assert preflight.call_args.args[2] == [ACTION]
-    assert preflight.call_args.kwargs == {"sender": SENDER, "simulate": True}
+    assert preflight.call_args.kwargs == {
+        "sender": SENDER,
+        "simulate": True,
+        "max_total_assets_drop_bps": 0,
+    }
 
 
 def test_a_skipped_simulation_is_a_warning_in_the_document(preflight):
@@ -107,4 +111,37 @@ def test_bad_calldata_is_a_tool_error(preflight):
 def test_wrong_sender_checksum_is_a_tool_error(preflight):
     with pytest.raises(ToolError, match="sender: invalid address checksum"):
         _call(vault_address=VAULT, calldata=CALLDATA, sender=miscased(SENDER_HEX))
+    preflight.assert_not_called()
+
+
+@pytest.mark.parametrize("bps", [0, 50, 10_000])
+def test_a_drop_tolerance_reaches_the_sdk_and_a_drop_is_a_warning(preflight, bps):
+    dropped = PreflightFinding("total_assets_dropped", "warning", "dropped by 7")
+    preflight.return_value = replace(preflight.return_value, findings=(dropped,))
+    result = _call(
+        vault_address=VAULT,
+        calldata=CALLDATA,
+        sender=SENDER,
+        max_total_assets_drop_bps=bps,
+    )
+    assert result["verdict"] == "warning"
+    assert result["findings"] == [
+        {
+            "check": "total_assets_dropped",
+            "severity": "warning",
+            "message": "dropped by 7",
+        }
+    ]
+    assert preflight.call_args.kwargs["max_total_assets_drop_bps"] == bps
+
+
+@pytest.mark.parametrize("bps", [-1, 10_001])
+def test_a_drop_tolerance_out_of_range_is_a_tool_error(preflight, bps):
+    with pytest.raises(ToolError, match="max_total_assets_drop_bps"):
+        _call(
+            vault_address=VAULT,
+            calldata=CALLDATA,
+            sender=SENDER,
+            max_total_assets_drop_bps=bps,
+        )
     preflight.assert_not_called()
