@@ -114,6 +114,7 @@ PreflightCheck: TypeAlias = Literal[
     "simulation_failed",
     "simulation_unavailable",
     "simulation_skipped",
+    "simulation_inconclusive",
     "fuse_whitelist",
 ]
 

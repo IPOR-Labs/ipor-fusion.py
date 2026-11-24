@@ -32,6 +32,7 @@ from ipor_fusion.core.fuse_decoding import decode_execute_calldata, fuse_classes
 from ipor_fusion.core.multicall import Multicall3, Multicall3Batch
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.simulation import VaultSimulator, is_simulate_v1_supported
+from ipor_fusion.core.simulation_result import SimulationResult
 from ipor_fusion.errors import ExecutePreflightError
 from ipor_fusion.fuse_whitelist import (
     FUSE_WHITELIST_READ_ERRORS,
@@ -56,6 +57,9 @@ _NO_MARKET = MarketId(0)
 
 _EXECUTE_SELECTOR = function_signature_to_4byte_selector("execute((address,bytes)[])")
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
+_PRECOMPILE_FAILED_SELECTOR = function_signature_to_4byte_selector(
+    "HyperCorePrecompileFailed(address)"
+)
 _RANK: dict[Severity, int] = {"ok": 0, "warning": 1, "critical": 2}
 
 
@@ -339,13 +343,28 @@ def _simulate(
     )
     if result.success:
         return simulation, []
-    return simulation, [
-        PreflightFinding(
-            "simulation_failed",
-            "critical",
-            f"the batch reverts: {result.revert_reason or 'no reason returned'}",
+    return simulation, [_revert_finding(result)]
+
+
+def _revert_finding(result: SimulationResult) -> PreflightFinding:
+    # The execute is the run's only unlabeled call. eth_simulateV1 cannot run the
+    # HyperCore precompiles, so a run that reverts in one is inconclusive.
+    execute = next((call for call in result.failed_calls if call.label is None), None)
+    if (
+        execute is not None
+        and bytes(execute.return_data[:4]) == _PRECOMPILE_FAILED_SELECTOR
+    ):
+        return PreflightFinding(
+            "simulation_inconclusive",
+            "warning",
+            "the simulation is inconclusive: the batch reverted in a HyperCore"
+            f" precompile, which eth_simulateV1 cannot run ({execute.revert_reason})",
         )
-    ]
+    return PreflightFinding(
+        "simulation_failed",
+        "critical",
+        f"the batch reverts: {result.revert_reason or 'no reason returned'}",
+    )
 
 
 def preflight_execute(
@@ -366,6 +385,9 @@ def preflight_execute(
     caller with an execution delay, the schedule of this exact calldata;
     ``simulate`` adds a capability probe and one ``eth_simulateV1`` request;
     without it, a ``simulation_skipped`` warning says the batch was not simulated.
+    A revert of a HyperCore precompile (``HyperCorePrecompileFailed``), which
+    ``eth_simulateV1`` cannot run, is a ``simulation_inconclusive`` warning
+    rather than a critical ``simulation_failed``.
     ``fuse_whitelist`` adds a warning for each fuse of the batch that is not
     active in the chain's Fuse Whitelist (the ``ipor-abi`` registry plus two
     Multicall3 batches); a failure to read it is a warning too. Read-only.

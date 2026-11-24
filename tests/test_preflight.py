@@ -7,6 +7,7 @@ import pytest
 from _multicall import decode_aggregate3, is_aggregate3, multicall_aware
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
+from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
@@ -17,10 +18,12 @@ from ipor_fusion import (
     BalanceFuse,
     ExecutePreflightError,
     PlasmaVault,
+    SimulatedCallResult,
     build_execute_preflight_json,
     parse_execute_actions,
     preflight_execute,
 )
+from ipor_fusion.readers.hypercore import CORE_USER_EXISTS_PRECOMPILE
 from ipor_fusion.types import Amount, FuseAddress, MarketId, PlasmaVaultAddress
 
 VAULT = PlasmaVaultAddress(Web3.to_checksum_address("0x" + "11" * 20))
@@ -290,6 +293,85 @@ def test_the_simulation_reports_total_assets_and_a_revert(monkeypatch):
     assert document["verdict"] == "critical"
     assert document["simulation"] is not None
     assert document["simulation"]["revert_reason"] == "UnsupportedFuse()"
+
+
+def _reverted(
+    signature: str, *args: object, label: str | None = None
+) -> SimulatedCallResult:
+    types = signature[signature.index("(") + 1 : -1].split(",") if args else []
+    return SimulatedCallResult(
+        label=label,
+        success=False,
+        return_data=HexBytes(_sel(signature) + encode(types, list(args))),
+        gas_used=1,
+        error=None,
+        logs=[],
+    )
+
+
+def _failed_run(
+    monkeypatch,
+    execute: SimulatedCallResult,
+    after: SimulatedCallResult | None = None,
+):
+    """A run whose execute reverts, as `SimulationResult` reports it: the
+    execute's revert reason, and every failed call in queue order."""
+    monkeypatch.setattr(preflight_module, "is_simulate_v1_supported", lambda w3: True)
+    monkeypatch.setattr(preflight_module, "VaultSimulator", _FakeSimulator)
+    monkeypatch.setattr(
+        _FakeSimulator,
+        "outcome",
+        MagicMock(
+            success=False,
+            revert_reason=execute.revert_reason,
+            gas_used=1,
+            failed_calls=[execute] if after is None else [execute, after],
+        ),
+    )
+    return preflight_execute(_ctx(), VAULT, [_supply()], sender=SENDER)
+
+
+def test_a_hypercore_precompile_revert_is_an_inconclusive_warning(monkeypatch):
+    result = _failed_run(
+        monkeypatch,
+        _reverted("HyperCorePrecompileFailed(address)", CORE_USER_EXISTS_PRECOMPILE),
+    )
+    assert [(f.check, f.severity) for f in result.findings] == [
+        ("simulation_inconclusive", "warning")
+    ]
+    assert (
+        f"HyperCorePrecompileFailed({CORE_USER_EXISTS_PRECOMPILE})"
+        in result.findings[0].message
+    )
+    assert result.verdict == "warning"
+    assert result.simulation is not None
+    assert not result.simulation.success
+
+
+def test_a_precompile_revert_outside_the_execute_leaves_its_revert_critical(
+    monkeypatch,
+):
+    result = _failed_run(
+        monkeypatch,
+        _reverted("UnsupportedFuse()"),
+        after=_reverted(
+            "HyperCorePrecompileFailed(address)",
+            CORE_USER_EXISTS_PRECOMPILE,
+            label="totalAssets after",
+        ),
+    )
+    assert [(f.check, f.severity) for f in result.findings] == [
+        ("simulation_failed", "critical")
+    ]
+    assert "UnsupportedFuse()" in result.findings[0].message
+
+
+def test_another_custom_error_stays_a_critical_failure(monkeypatch):
+    result = _failed_run(monkeypatch, _reverted("HyperCorePriceOverflow(uint64)", 7))
+    assert [(f.check, f.severity) for f in result.findings] == [
+        ("simulation_failed", "critical")
+    ]
+    assert "HyperCorePriceOverflow(7)" in result.findings[0].message
 
 
 def test_no_simulate_v1_is_a_warning_not_a_failure(monkeypatch):
