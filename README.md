@@ -521,8 +521,10 @@ market ID to find the vault's matching fuses unless they are passed.
 #### HyperCore with `hyperliquid-python-sdk`
 
 This SDK has no Hyperliquid API client. For Info queries, the websocket and
-`evmUserModify`, use Hyperliquid's official `hyperliquid-python-sdk`. The two
-packages conflict on `eth-utils`. `hyperliquid-python-sdk` 0.24.0 requires
+`evmUserModify`, use Hyperliquid's official `hyperliquid-python-sdk`. Its
+`Exchange.use_big_blocks(enable)` sends `evmUserModify`, which routes the
+account's HyperEVM transactions to big or small blocks. The two packages
+conflict on `eth-utils`. `hyperliquid-python-sdk` 0.24.0 requires
 `eth-utils<6`. `ipor-fusion` requires `eth-utils>=6,<7`. uv resolves the pair
 with an override:
 
