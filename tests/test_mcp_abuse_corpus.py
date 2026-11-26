@@ -40,9 +40,22 @@ from ipor_fusion.mcp import server as mcp_server
 
 VAULT = Web3.to_checksum_address("0x" + "11" * 20)
 
-CATEGORIES = ("ssrf", "traversal", "ssti", "attr_access", "enumeration")
+# No log-forging category: this stdio server writes no per-request log
+# lines, so there is no line to forge.
+CATEGORIES = (
+    "ssrf",
+    "traversal",
+    "ssti",
+    "attr_access",
+    "cmd_injection",
+    "query_injection",
+    "oversize",
+    "enumeration",
+)
 
 # One payload list per category, the spellings probes actually use.
+# Percent-encoded traversal arrives literal inside a JSON string: it must
+# stay undecoded, another spelling of inert.
 PAYLOADS: dict[str, tuple[str, ...]] = {
     "ssrf": (
         "http://169.254.169.254/latest/meta-data/",
@@ -56,9 +69,31 @@ PAYLOADS: dict[str, tuple[str, ...]] = {
         "file:///proc/self/environ",
         "docs.md\x00.txt",
         "docs.md;.txt",
+        "..%2f..%2f..%2fetc%2fpasswd",
+        "%2e%2e/%2e%2e/etc/passwd",
     ),
     "ssti": ("{{7*7}}", "${7*7}", "<%=7*7%>"),
-    "attr_access": ("address.__class__", "__class__", "__import__", "__globals__"),
+    "attr_access": (
+        "address.__class__",
+        "__class__",
+        "__import__",
+        "__globals__",
+        "__proto__",
+        "constructor",
+    ),
+    "cmd_injection": (
+        "; id",
+        "$(curl http://127.0.0.1/)",
+        "`cat /etc/passwd`",
+        "| wget http://127.0.0.1/x",
+    ),
+    "query_injection": (
+        "' OR 1=1--",
+        "1; DROP TABLE vaults;--",
+        "' UNION SELECT NULL--",
+        '{"$where": "sleep(100)"}',
+    ),
+    "oversize": ("A" * 100_000, "../" * 30_000),
 }
 
 # Enumeration probes names, not argument values: its cases are derived from
@@ -129,6 +164,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("since"),
         "ssti": refused("since"),
         "attr_access": refused("since"),
+        "cmd_injection": refused("since"),
+        "query_injection": refused("since"),
+        "oversize": refused("since"),
         "enumeration": DERIVED,
     },
     "vault_info": {
@@ -136,6 +174,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("vault_address"),
         "ssti": refused("vault_address"),
         "attr_access": refused("vault_address"),
+        "cmd_injection": refused("vault_address"),
+        "query_injection": refused("vault_address"),
+        "oversize": refused("vault_address"),
         "enumeration": DERIVED,
     },
     "vault_validate": {
@@ -143,6 +184,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("vault_address"),
         "ssti": refused("vault_address"),
         "attr_access": refused("vault_address"),
+        "cmd_injection": refused("vault_address"),
+        "query_injection": refused("vault_address"),
+        "oversize": refused("vault_address"),
         "enumeration": DERIVED,
     },
     # calldata is parsed first, then sender, then the vault address — each
@@ -152,6 +196,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("calldata"),
         "ssti": refused("calldata"),
         "attr_access": refused("sender"),
+        "cmd_injection": refused("calldata"),
+        "query_injection": refused("calldata"),
+        "oversize": refused("calldata"),
         "enumeration": DERIVED,
     },
     "vault_role_accounts": {
@@ -159,6 +206,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("vault_address"),
         "ssti": refused("vault_address"),
         "attr_access": refused("vault_address"),
+        "cmd_injection": refused("vault_address"),
+        "query_injection": refused("vault_address"),
+        "oversize": refused("vault_address"),
         "enumeration": DERIVED,
     },
     "vault_oracle_mapping": {
@@ -166,6 +216,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("vault_address"),
         "ssti": refused("vault_address"),
         "attr_access": refused("vault_address"),
+        "cmd_injection": refused("vault_address"),
+        "query_injection": refused("vault_address"),
+        "oversize": refused("vault_address"),
         "enumeration": DERIVED,
     },
     "vault_list": {
@@ -173,6 +226,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": NO_ARGS,
         "ssti": NO_ARGS,
         "attr_access": NO_ARGS,
+        "cmd_injection": NO_ARGS,
+        "query_injection": NO_ARGS,
+        "oversize": NO_ARGS,
         "enumeration": DERIVED,
     },
     "vault_add": {
@@ -180,6 +236,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("address"),
         "ssti": refused("address"),
         "attr_access": refused("address"),
+        "cmd_injection": refused("address"),
+        "query_injection": refused("address"),
+        "oversize": refused("address"),
         "enumeration": DERIVED,
     },
     # Removing an address that parses to no saved vault answers "Vault not
@@ -189,6 +248,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": inert("address"),
         "ssti": inert("address"),
         "attr_access": inert("address"),
+        "cmd_injection": inert("address"),
+        "query_injection": inert("address"),
+        "oversize": inert("address"),
         "enumeration": DERIVED,
     },
     "config_show": {
@@ -196,6 +258,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": NO_ARGS,
         "ssti": NO_ARGS,
         "attr_access": NO_ARGS,
+        "cmd_injection": NO_ARGS,
+        "query_injection": NO_ARGS,
+        "oversize": NO_ARGS,
         "enumeration": DERIVED,
     },
     # With chain_id given, the URL is written to the local config and nothing
@@ -206,6 +271,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": inert("url", "save_config", stores=("save_config",)),
         "ssti": inert("url", "save_config", stores=("save_config",)),
         "attr_access": inert("url", "save_config", stores=("save_config",)),
+        "cmd_injection": inert("url", "save_config", stores=("save_config",)),
+        "query_injection": inert("url", "save_config", stores=("save_config",)),
+        "oversize": inert("url", "save_config", stores=("save_config",)),
         "enumeration": DERIVED,
     },
     "config_set_etherscan_key": {
@@ -213,6 +281,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": inert("api_key", "save_config", stores=("save_config",)),
         "ssti": inert("api_key", "save_config", stores=("save_config",)),
         "attr_access": inert("api_key", "save_config", stores=("save_config",)),
+        "cmd_injection": inert("api_key", "save_config", stores=("save_config",)),
+        "query_injection": inert("api_key", "save_config", stores=("save_config",)),
+        "oversize": inert("api_key", "save_config", stores=("save_config",)),
         "enumeration": DERIVED,
     },
     "market_morpho_blue": {
@@ -220,6 +291,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("market_id"),
         "ssti": refused("market_id"),
         "attr_access": refused("market_id"),
+        "cmd_injection": refused("market_id"),
+        "query_injection": refused("market_id"),
+        "oversize": refused("market_id"),
         "enumeration": DERIVED,
     },
     "market_meta_morpho": {
@@ -227,6 +301,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("vault_address"),
         "ssti": refused("vault_address"),
         "attr_access": refused("vault_address"),
+        "cmd_injection": refused("vault_address"),
+        "query_injection": refused("vault_address"),
+        "oversize": refused("vault_address"),
         "enumeration": DERIVED,
     },
     # The lookup accepts any string on purpose (substring search): the safe
@@ -236,6 +313,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": inert("query", "fetch_address_registries"),
         "ssti": inert("query", "fetch_address_registries"),
         "attr_access": inert("query", "fetch_address_registries"),
+        "cmd_injection": inert("query", "fetch_address_registries"),
+        "query_injection": inert("query", "fetch_address_registries"),
+        "oversize": inert("query", "fetch_address_registries"),
         "enumeration": DERIVED,
     },
     # Integer-only tools: the only way to deliver a payload is a wrong-typed
@@ -245,6 +325,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("chain_id"),
         "ssti": refused("chain_id"),
         "attr_access": refused("chain_id"),
+        "cmd_injection": refused("chain_id"),
+        "query_injection": refused("chain_id"),
+        "oversize": refused("chain_id"),
         "enumeration": DERIVED,
     },
     "address_list": {
@@ -252,6 +335,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("chain_id"),
         "ssti": refused("chain_id"),
         "attr_access": refused("chain_id"),
+        "cmd_injection": refused("chain_id"),
+        "query_injection": refused("chain_id"),
+        "oversize": refused("chain_id"),
         "enumeration": DERIVED,
     },
     "fuse_whitelist": {
@@ -259,6 +345,9 @@ ABUSE: dict[str, dict[str, Inject | str]] = {
         "traversal": refused("chain_id"),
         "ssti": refused("market_id"),
         "attr_access": refused("chain_id"),
+        "cmd_injection": refused("market_id"),
+        "query_injection": refused("chain_id"),
+        "oversize": refused("market_id"),
         "enumeration": DERIVED,
     },
 }
@@ -477,7 +566,13 @@ class TestEnumeration:
 
 _PROMPT_PAYLOADS = [
     pytest.param(payload, category, id=f"{category}-{payload[:24]!r}")
-    for category in ("ssti", "traversal", "attr_access")
+    for category in (
+        "ssti",
+        "traversal",
+        "attr_access",
+        "cmd_injection",
+        "query_injection",
+    )
     for payload in PAYLOADS[category]
 ]
 
