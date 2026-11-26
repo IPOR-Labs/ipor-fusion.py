@@ -72,16 +72,19 @@ _HEADING = re.compile(r"^#{1,6} +(.+?) *$", re.MULTILINE)
 
 
 def _github_slugs(markdown: str) -> set[str]:
-    # GitHub's anchor rule: lowercase, keep only letters, digits, _, - and
-    # spaces, spaces to hyphens, and a -1, -2, ... suffix on repeats.
-    seen: dict[str, int] = {}
-    slugs: set[str] = set()
+    # GitHub's anchor rule (github-slugger): lowercase, keep only letters,
+    # digits, _, - and spaces, spaces to hyphens. A taken slug gets the next
+    # free -1, -2, ... suffix, checked against generated slugs too.
+    # Keys: every slug taken so far; value: the last suffix it got as a base.
+    occurrences: dict[str, int] = {}
     for heading in _HEADING.findall(_FENCED_BLOCK.sub("", markdown)):
-        slug = re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
-        count = seen.get(slug, 0)
-        seen[slug] = count + 1
-        slugs.add(f"{slug}-{count}" if count else slug)
-    return slugs
+        base = re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
+        slug = base
+        while slug in occurrences:
+            occurrences[base] += 1
+            slug = f"{base}-{occurrences[base]}"
+        occurrences[slug] = 0
+    return set(occurrences)
 
 
 def _public_texts() -> dict[str, str]:
@@ -186,6 +189,10 @@ class TestPublicSurface:
             "# Install\n"
         )
         assert _github_slugs(markdown) == {"install", "fusion-cli-info", "install-1"}
+
+    def test_github_slugs_skip_a_suffix_a_heading_already_holds(self):
+        markdown = "# A\n# A\n# A-1\n# A\n"
+        assert _github_slugs(markdown) == {"a", "a-1", "a-1-1", "a-2"}
 
 
 class TestSkill:
