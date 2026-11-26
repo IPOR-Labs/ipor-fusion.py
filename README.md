@@ -550,9 +550,10 @@ override-dependencies = ["eth-utils>=6,<7"]
 
 pip has no overrides. With pip, install `ipor-fusion` first, then
 `hyperliquid-python-sdk==0.24.0` with `--no-deps`, then its other dependencies
-(`websocket-client`, `requests`, `msgpack`) by hand. `pip check` then reports
-the `eth-utils` conflict. Ignore it: the Hyperliquid SDK uses only `keccak` and
-`to_hex`, which `eth-utils` 6 keeps. The alternative is to call the Hyperliquid
+(`websocket-client`, `requests`, `msgpack`) by hand. That last install ends with
+an `ERROR: pip's dependency resolver ...` message about the `eth-utils`
+conflict, yet it succeeds. `pip check` reports the same conflict. Ignore both:
+the Hyperliquid SDK uses only `keccak` and `to_hex`, which `eth-utils` 6 keeps. The alternative is to call the Hyperliquid
 HTTP API directly.
 
 ### Readers (`ipor_fusion.readers`)
