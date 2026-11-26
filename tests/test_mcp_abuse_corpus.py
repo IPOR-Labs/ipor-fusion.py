@@ -93,7 +93,9 @@ PAYLOADS: dict[str, tuple[str, ...]] = {
         "' UNION SELECT NULL--",
         '{"$where": "sleep(100)"}',
     ),
-    "oversize": ("A" * 100_000, "../" * 30_000),
+    # Non-hex on purpose: a hex-looking giant can be valid calldata, which
+    # would test parsing, not size handling.
+    "oversize": ("Z" * 100_000, "../" * 30_000),
 }
 
 # Enumeration probes names, not argument values: its cases are derived from
