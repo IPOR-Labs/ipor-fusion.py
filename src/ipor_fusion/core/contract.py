@@ -136,17 +136,22 @@ class Call(Generic[T_co]):
             return self.decoder(single)
         return cast(T_co, single)
 
-    def send(self, ctx: Web3Context) -> TxReceipt:
-        """Submit as a transaction via ``ctx``'s signer."""
-        return ctx.send(self.to, self.data)
+    def send(self, ctx: Web3Context, *, nonce: int | None = None) -> TxReceipt:
+        """Submit as a transaction via ``ctx``'s signer; ``nonce`` as in
+        `Web3Context.build_transaction`."""
+        return ctx.send(self.to, self.data, nonce=nonce)
 
     def build_transaction(
-        self, ctx: Web3Context, *, block: BlockIdentifier = "latest"
+        self,
+        ctx: Web3Context,
+        *,
+        block: BlockIdentifier = "latest",
+        nonce: int | None = None,
     ) -> TxParams:
         """Build the transaction dict for this Call without signing or sending —
         mirrors `.send(ctx)`, delegating to `Web3Context.build_transaction`.
         Returns the dict a signer would submit; needs a signer address, no key."""
-        return ctx.build_transaction(self.to, self.data, block=block)
+        return ctx.build_transaction(self.to, self.data, block=block, nonce=nonce)
 
     def estimate_gas(
         self, ctx: Web3Context, *, block: BlockIdentifier = "latest"

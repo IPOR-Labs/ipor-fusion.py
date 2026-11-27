@@ -3,25 +3,29 @@ from __future__ import annotations
 import copy
 import logging
 import threading
+import time
 
 from eth_account import Account
 from eth_typing import ChecksumAddress, HexStr
 from eth_utils import encode_hex
 from hexbytes import HexBytes
 from requests import ConnectionError as RequestsConnectionError
-from requests import HTTPError, Timeout
+from requests import ConnectTimeout, HTTPError, Timeout
+from urllib3.exceptions import MaxRetryError, NewConnectionError
 from web3 import Web3
-from web3.exceptions import ContractLogicError, Web3RPCError
+from web3.exceptions import ContractLogicError, TimeExhausted, Web3RPCError
 from web3.middleware import ExtraDataToPOAMiddleware, Web3Middleware
 from web3.providers.rpc.utils import (
     REQUEST_RETRY_ALLOWLIST,
     ExceptionRetryConfiguration,
+    check_if_retry_on_failure,
 )
 from web3.types import (
     BlockIdentifier,
     LogReceipt,
     MakeBatchRequestFn,
     MakeRequestFn,
+    Nonce,
     RPCEndpoint,
     RPCResponse,
     TxParams,
@@ -38,16 +42,65 @@ from ipor_fusion.core.logs import (
     block_number,
     get_logs_adaptive,
 )
-from ipor_fusion.errors import LogSourceUnavailable, TransactionError, get_revert_reason
-from ipor_fusion.types import ChainId, parse_tx_hash
-
-# web3 retries every allowlisted method on any HTTP error, a 400 included;
-# a too-wide eth_getLogs answered with HTTP 400/413 or a query timeout would be
-# sent five times before the adaptive scan could shrink it.
-_RETRY_EXCEPT_GET_LOGS = ExceptionRetryConfiguration(
-    errors=(RequestsConnectionError, HTTPError, Timeout),
-    method_allowlist=[m for m in REQUEST_RETRY_ALLOWLIST if m != "eth_getLogs"],
+from ipor_fusion.errors import (
+    LogSourceUnavailable,
+    TransactionError,
+    TransactionOutcomeUnknown,
+    TransactionTimeout,
+    get_revert_reason,
 )
+from ipor_fusion.types import ChainId, TxHash, parse_tx_hash
+
+# web3 retries every allowlisted method on any HTTP error, a 400 included.
+#
+# eth_getLogs: a too-wide query answered with HTTP 400/413 or a query timeout
+# would be sent five times before the adaptive scan could shrink it.
+#
+# eth_sendRawTransaction: a post whose answer timed out may already be in the
+# mempool. Its repeat fails with "already known" or "nonce too low", which
+# would make send raise for a transaction that lands.
+_NOT_RETRIED = frozenset({"eth_getLogs", "eth_sendRawTransaction"})
+_RETRY_POLICY = ExceptionRetryConfiguration(
+    errors=(RequestsConnectionError, HTTPError, Timeout),
+    method_allowlist=[m for m in REQUEST_RETRY_ALLOWLIST if m not in _NOT_RETRIED],
+)
+
+_SEND_CONNECT_ATTEMPTS = 3
+_SEND_CONNECT_BACKOFF_S = 0.25
+_OUTCOME_UNKNOWN = "Transaction outcome unknown; look up tx_hash before sending again"
+
+
+def _provider_retries_post(provider: object) -> bool:
+    """Whether the provider repeats ``eth_sendRawTransaction`` itself.
+
+    web3 then raises the error of its last attempt only, which says nothing
+    about the attempts before it.
+    """
+    config = getattr(provider, "exception_retry_configuration", None)
+    return isinstance(config, ExceptionRetryConfiguration) and (
+        check_if_retry_on_failure(
+            RPCEndpoint("eth_sendRawTransaction"), config.method_allowlist
+        )
+    )
+
+
+def _no_connection_made(exc: Exception) -> bool:
+    """Whether a failed request provably sent nothing: no connection was made.
+
+    requests raises ``ConnectTimeout`` for a connect timeout, but a
+    ``ConnectionError`` around urllib3's ``NewConnectionError`` for a refused
+    connection or a failed DNS lookup. A reset may come after the node read
+    the body, so it does not count.
+    """
+    if isinstance(exc, ConnectTimeout):
+        return True
+    if not isinstance(exc, RequestsConnectionError) or not exc.args:
+        return False
+    cause = exc.args[0]
+    return isinstance(cause, MaxRetryError) and isinstance(
+        cause.reason, NewConnectionError
+    )
+
 
 _logger = logging.getLogger(__name__)
 
@@ -184,7 +237,7 @@ class Web3Context:
             Web3.HTTPProvider(
                 url,
                 request_kwargs={"timeout": request_timeout_s},
-                exception_retry_configuration=_RETRY_EXCEPT_GET_LOGS,
+                exception_retry_configuration=_RETRY_POLICY,
             )
         )
         # web3's validation middleware fetches eth_chainId (uncached) on the
@@ -239,6 +292,7 @@ class Web3Context:
         data: bytes,
         *,
         block: BlockIdentifier = "latest",
+        nonce: int | None = None,
     ) -> TxParams:
         """Build the transaction dict for ``data`` against ``to`` without signing
         or broadcasting — the same dict `send` would submit, ready to hand to an
@@ -259,9 +313,19 @@ class Web3Context:
         built for signing must reflect the chain head. The ``eth_gasPrice``
         read that caps the priority fee has no block parameter and stays
         current.
+
+        ``nonce`` overrides the signer's transaction count read at ``block``.
+        A resend with the nonce of a transaction whose outcome is unknown is
+        safe: at most one transaction with that nonce lands. While the first
+        one is still pending, a node typically accepts the resend only at
+        higher fees, which this method does not add. The signer's nonce
+        shows that one of the two landed; both hashes show which.
         """
         signer = self._require_signer("build a transaction")
-        nonce = self.web3.eth.get_transaction_count(signer, block_identifier=block)
+        if nonce is None:
+            nonce = self.web3.eth.get_transaction_count(signer, block_identifier=block)
+        elif nonce < 0:
+            raise ValueError(f"nonce must be non-negative, got {nonce}")
         gas_price = self.web3.eth.gas_price
         max_priority_fee_per_gas = self._get_max_priority_fee(gas_price)
         base_fee = self.get_block(block).get("baseFeePerGas")
@@ -277,30 +341,82 @@ class Web3Context:
             "maxPriorityFeePerGas": max_priority_fee_per_gas,
             "to": to,
             "from": signer,
-            "nonce": nonce,
+            "nonce": Nonce(nonce),
             "data": data_hex,
         }
 
-    def _handle_receipt(self, tx_hash: bytes, receipt: TxReceipt) -> TxReceipt:
+    def _handle_receipt(self, tx_hash: TxHash, receipt: TxReceipt) -> TxReceipt:
         if receipt["status"] != 1:
-            parsed = parse_tx_hash(tx_hash)
             raise TransactionError(
                 "Transaction failed",
-                tx_hash=parsed,
-                revert_reason=get_revert_reason(self.web3, parsed, receipt),
+                tx_hash=tx_hash,
+                revert_reason=get_revert_reason(self.web3, tx_hash, receipt),
             )
         return receipt
 
-    def send(self, to: ChecksumAddress, data: bytes) -> TxReceipt:
+    def send(
+        self, to: ChecksumAddress, data: bytes, *, nonce: int | None = None
+    ) -> TxReceipt:
+        """Sign the `build_transaction` dict, post it, and wait for the
+        receipt; a reverted transaction raises `TransactionError`.
+
+        A node that rejects the transaction raises web3's ``Web3RPCError`` on a
+        provider that posts once (see the next paragraph). A receipt wait that
+        times out raises `TransactionTimeout`, and any other failure of the
+        post or the receipt wait `TransactionOutcomeUnknown`: the transaction
+        may still land, so look up the exception's ``tx_hash`` or the signer's
+        nonce before sending again, and resend with its ``nonce``. The
+        ``nonce`` argument is passed to `build_transaction`.
+
+        On a provider that posts once, as a `from_url` context's does, a post
+        that never reached a node (a connect timeout, a refused connection) is
+        repeated a few times, then its transport error is raised. A provider
+        that repeats the post itself, as web3's default ``HTTPProvider`` does,
+        reports only its last attempt's error, so every failed post there is
+        `TransactionOutcomeUnknown`, a node's answer included: it may be to a
+        repeat of a post that reached the node.
+        """
         if not self._private_key or not self._signer:
             raise ValueError("Private key required for sending transactions")
-        transaction = self.build_transaction(to, data)
+        transaction = self.build_transaction(to, data, nonce=nonce)
         signed_tx = self.web3.eth.account.sign_transaction(
             transaction, self._private_key
         )
-        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+        tx_hash = parse_tx_hash(signed_tx.hash)
+        sent_nonce = transaction["nonce"]
+        self._post_raw_transaction(signed_tx.raw_transaction, tx_hash, sent_nonce)
+        try:
+            receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+        except TimeExhausted as exc:
+            raise TransactionTimeout(_OUTCOME_UNKNOWN, tx_hash, sent_nonce) from exc
+        except Exception as exc:
+            raise TransactionOutcomeUnknown(
+                _OUTCOME_UNKNOWN, tx_hash, sent_nonce
+            ) from exc
         return self._handle_receipt(tx_hash, receipt)
+
+    def _post_raw_transaction(self, raw: bytes, tx_hash: TxHash, nonce: Nonce) -> None:
+        posts_once = not _provider_retries_post(self.web3.provider)
+        for attempt in range(_SEND_CONNECT_ATTEMPTS):
+            try:
+                self.web3.eth.send_raw_transaction(raw)
+                return
+            except Web3RPCError as exc:
+                if posts_once:
+                    raise
+                # The answer may be to a repeat of a post that reached a node:
+                # "already known", "nonce too low".
+                raise TransactionOutcomeUnknown(
+                    _OUTCOME_UNKNOWN, tx_hash, nonce
+                ) from exc
+            except Exception as exc:
+                if not (posts_once and _no_connection_made(exc)):
+                    raise TransactionOutcomeUnknown(
+                        _OUTCOME_UNKNOWN, tx_hash, nonce
+                    ) from exc
+                if attempt == _SEND_CONNECT_ATTEMPTS - 1:
+                    raise
+                time.sleep(_SEND_CONNECT_BACKOFF_S * 2**attempt)
 
     def estimate_gas(
         self,
@@ -386,10 +502,15 @@ class Web3Context:
         from_address: ChecksumAddress,
         block: BlockIdentifier = "latest",
     ) -> int:
-        estimated = self.web3.eth.estimate_gas(
-            {"to": to, "from": from_address, "data": data},
-            block_identifier=block,
-        )
+        try:
+            estimated = self.web3.eth.estimate_gas(
+                {"to": to, "from": from_address, "data": data},
+                block_identifier=block,
+            )
+        except Web3RPCError as exc:
+            if _is_unrecognized_revert(exc):
+                raise ContractLogicError("execution reverted", data=None) from exc
+            raise
         # State can shift between estimate and execution, so pad the limit; it is
         # only a ceiling, and unused gas is not charged.
         return int(self._gas_multiplier * estimated)

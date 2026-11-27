@@ -94,6 +94,7 @@ greppable.
 | `0x4bf4de4e` | `HandlerNotFound()` | A protocol called back into the vault during `execute()` (a flash loan) and no handler is registered for its address and selector | `update_callback_handler(handler, sender, selector)` before the first `execute` that triggers the callback |
 | `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`, `update_callback_handler`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | `AccessManager.grant_role(role, account, Period(0))` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
 | `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send(ctx)` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
+| `TransactionOutcomeUnknown`, `TransactionTimeout` | SDK, after the transaction was posted | The post or the receipt wait failed; the transaction may still land. On a provider that repeats the post, a node's rejection arrives as `TransactionOutcomeUnknown`, with the rejection as `exc.__cause__` | Look up `exc.tx_hash` with `ctx.web3.eth.get_transaction_receipt` (or compare the signer's nonce) before sending again; a resend with `nonce=exc.nonce` lets at most one of them land, and while the first is pending a node typically accepts it only at higher fees |
 
 ## Quickstart
 
@@ -132,13 +133,11 @@ four addresses for another chain or market; keep the order.
 import os
 
 from eth_account import Account
-from web3 import Web3
 
 from ipor_fusion import (
     ERC20,
     AccessManager,
     Amount,
-    ChainId,
     FusionFactory,
     IporFusionMarkets,
     Period,
@@ -151,10 +150,11 @@ from ipor_fusion import (
 from ipor_fusion.fuses import AaveV3SupplyFuse
 
 # A Base RPC, or an anvil fork of Base: anvil --fork-url <BASE_RPC_URL> --chain-id 8453
-w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
 OWNER_PRIVATE_KEY = os.environ["OWNER_PRIVATE_KEY"]  # .send(ctx) signs locally; .call(ctx) previews need no key
 owner = Account.from_key(OWNER_PRIVATE_KEY).address  # owns, configures and operates the vault
-ctx = Web3Context(w3, chain_id=ChainId(8453), signer=owner, private_key=OWNER_PRIVATE_KEY)
+# from_url reads the chain id from the node and repeats a post only if it never
+# reached one; Web3Context.send says what to do after a timeout.
+ctx = Web3Context.from_url("http://localhost:8545", private_key=OWNER_PRIVATE_KEY)
 
 # Generic addresses are ChecksumAddress; fuse addresses carry their role (FuseAddress).
 FACTORY_PROXY = parse_checksum_address("0x1455717668fA96534f675856347A973fA907e922")  # IporFusionFactoryProxy, Base

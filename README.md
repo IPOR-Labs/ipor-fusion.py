@@ -153,6 +153,12 @@ if result.all_success:
     print(after.value - before.value)
 ```
 
+A `.send(ctx)` whose post or receipt wait fails after the transaction may have
+reached a node raises `TransactionOutcomeUnknown` (`TransactionTimeout` when the
+wait timed out), never a `requests` exception. Its `tx_hash` is the transaction
+to look up before sending again, and its `nonce` the one to resend with;
+`TransactionError` means it landed and reverted.
+
 Read a batch back from calldata, e.g. to review a multisig transaction:
 
 ```python
@@ -316,6 +322,7 @@ Reverts on the deploy-and-configure path, keyed by selector so a failed transact
 | `0x4bf4de4e` | `HandlerNotFound()` | A protocol called back into the vault during `execute()` (a flash loan) and no handler is registered for its address and selector | `update_callback_handler(handler, sender, selector)` before the first `execute` that triggers the callback |
 | `0x068ca9d8` | `AccessManagedUnauthorized(address)` | The caller lacks the role the function requires: `FUSE_MANAGER` for `add_fuses`, `grant_market_substrates`, `add_balance_fuse`, `update_callback_handler`; `ALPHA` for `execute`; `WHITELIST` for `deposit` and `mint` on a private vault | Check first with `AccessManager.can_call(caller, target, selector).call(ctx)` (a closed target or a missing role answers `immediate=False, delay=0`; a role with an execution delay answers its `delay`). `AccessManager.grant_role(role, account, Period(0))` from the role's admin (`OWNER` grants `ATOMIST`, `ATOMIST` grants the rest); for a reverting `deposit`, whitelist the depositor or convert the vault to public |
 | `ValueError: Private key required for sending transactions` | SDK, before any transaction | `.send(ctx)` on a `Web3Context` without a key | `Web3Context(w3, chain_id, signer=..., private_key=...)` or `Web3Context.from_url(url, private_key=...)` |
+| `TransactionOutcomeUnknown`, `TransactionTimeout` | SDK, after the transaction was posted | The post or the receipt wait failed; the transaction may still land. On a provider that repeats the post, a node's rejection arrives as `TransactionOutcomeUnknown`, with the rejection as `exc.__cause__` | Look up `exc.tx_hash` with `ctx.web3.eth.get_transaction_receipt` (or compare the signer's nonce) before sending again; a resend with `nonce=exc.nonce` lets at most one of them land, and while the first is pending a node typically accepts it only at higher fees |
 
 `clone()` grants the owner only `Roles.OWNER_ROLE` (1). OWNER grants `Roles.ATOMIST_ROLE` (100), which administers `Roles.FUSE_MANAGER_ROLE` (300, configuration), `Roles.ALPHA_ROLE` (200, `execute`) and `Roles.WHITELIST_ROLE` (800, `deposit` on a private vault).
 

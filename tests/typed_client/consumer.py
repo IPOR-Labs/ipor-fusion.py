@@ -14,7 +14,7 @@ from typing import assert_type
 
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from web3.types import TxReceipt
+from web3.types import Nonce, TxReceipt
 
 from ipor_fusion import (
     ERC20,
@@ -54,6 +54,8 @@ from ipor_fusion import (
     SimulatedCallResult,
     SimulationObservation,
     TransactionError,
+    TransactionOutcomeUnknown,
+    TxHash,
     VaultInfoJson,
     VaultSimulator,
     Wad,
@@ -119,6 +121,11 @@ def access(ctx: Web3Context, am: AccessManager, account: ChecksumAddress) -> Non
     am.grant_role(Roles.ALPHA_ROLE, account, Period(0))
     am.revoke_role(Roles.ALPHA_ROLE, account)
     am.read_accounts_with_role(ctx, Roles.resolve("ATOMIST"))
+    try:
+        am.revoke_role(Roles.ALPHA_ROLE, account).send(ctx)
+    except TransactionOutcomeUnknown as exc:
+        assert_type(exc.tx_hash, TxHash)
+        assert_type(exc.nonce, Nonce)
 
 
 def market_limits(vault: PlasmaVault) -> None:
@@ -248,6 +255,7 @@ def offline_wrappers_and_executors(
     supply.build_transaction(ctx)
     supply.estimate_gas(ctx, block="pending")
     vault.convert_to_public_vault().send(ctx)
+    vault.convert_to_public_vault().send(ctx, nonce=3)
     decimals: list[Decimals] = Multicall3(ctx).aggregate([ERC20(token).decimals()])
     legacy = LegacyPriceOracleMiddleware(token, Decimals(8))
     price: Price = legacy.get_asset_price(account).call(ctx)

@@ -13,7 +13,7 @@ from web3.exceptions import Web3RPCError
 
 from ipor_fusion.chains import GET_LOGS_RANGE_HINTS
 from ipor_fusion.core import logs as logs_mod
-from ipor_fusion.core.context import _RETRY_EXCEPT_GET_LOGS, Web3Context
+from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.logs import (
     DEFAULT_LOG_SCAN_MAX_REQUESTS,
     find_creation_block,
@@ -480,11 +480,7 @@ class TestWeb3Context:
 
         assert scan.call_args.kwargs["chunk_hint"] is None
 
-    def test_http_retries_skip_get_logs(self):
-        assert "eth_getLogs" not in _RETRY_EXCEPT_GET_LOGS.method_allowlist
-        assert "eth_call" in _RETRY_EXCEPT_GET_LOGS.method_allowlist
-
-    def test_from_url_installs_the_retry_policy(self):
+    def test_from_url_passes_the_log_scan_timeout(self):
         with (
             patch.object(Web3, "HTTPProvider") as provider,
             patch("ipor_fusion.core.context.Web3") as web3_cls,
@@ -493,7 +489,4 @@ class TestWeb3Context:
             web3_cls.return_value.eth.chain_id = 1
             ctx = Web3Context.from_url("https://rpc.example", log_scan_timeout_s=5)
 
-        assert provider.call_args.kwargs["exception_retry_configuration"] is (
-            _RETRY_EXCEPT_GET_LOGS
-        )
         assert ctx.log_scan_timeout_s == 5

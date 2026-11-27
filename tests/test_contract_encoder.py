@@ -153,7 +153,7 @@ def test_the_context_executes_and_the_defaults_differ_by_purpose():
     write.estimate_gas(ctx)
     write.send(ctx)
     ctx.build_transaction.assert_called_once_with(
-        SAMPLE_ADDRESS, write.data, block="latest"
+        SAMPLE_ADDRESS, write.data, block="latest", nonce=None
     )
     ctx.estimate_gas.assert_called_once_with(SAMPLE_ADDRESS, write.data, block="latest")
-    ctx.send.assert_called_once_with(SAMPLE_ADDRESS, write.data)
+    ctx.send.assert_called_once_with(SAMPLE_ADDRESS, write.data, nonce=None)
