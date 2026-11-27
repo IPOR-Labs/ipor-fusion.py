@@ -351,9 +351,22 @@ def vault_preflight(
     simulate: Annotated[
         bool,
         Field(
-            description="Run the batch through eth_simulateV1; false: static checks."
+            description="Run the batch through eth_simulateV1; false: static "
+            "checks only, with a simulation_skipped warning."
         ),
     ] = True,
+    max_total_assets_drop_bps: Annotated[
+        int,
+        Field(
+            ge=0,
+            le=10_000,
+            description="Warn (total_assets_dropped) when the batch lowers "
+            "totalAssets by more than this many basis points; 0 flags any drop "
+            "past rounding dust, 10000 flags none. The after read includes what "
+            "accrued before the batch: a loss counts as a drop, and gains can "
+            "hide one.",
+        ),
+    ] = 0,
 ) -> ExecutePreflightResponse:
     """Check an execute batch before it is signed: the sender's permission (or a
     ready scheduled operation), each fuse's registration, the balance fuses of
@@ -380,6 +393,7 @@ def vault_preflight(
         actions,
         sender=sender_address,
         simulate=simulate,
+        max_total_assets_drop_bps=max_total_assets_drop_bps,
     )
     return ExecutePreflightResponse.model_validate(build_execute_preflight_json(result))
 

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 from eth_typing import ChecksumAddress
 from eth_utils import function_signature_to_4byte_selector
@@ -32,6 +32,7 @@ from ipor_fusion.core.fuse_decoding import decode_execute_calldata, fuse_classes
 from ipor_fusion.core.multicall import Multicall3, Multicall3Batch
 from ipor_fusion.core.plasma_vault import PlasmaVault
 from ipor_fusion.core.simulation import VaultSimulator, is_simulate_v1_supported
+from ipor_fusion.core.simulation_result import SimulationResult
 from ipor_fusion.errors import ExecutePreflightError
 from ipor_fusion.fuse_whitelist import (
     FUSE_WHITELIST_READ_ERRORS,
@@ -49,23 +50,22 @@ from ipor_fusion.types import (
     Severity,
     Verdict,
 )
+from ipor_fusion.types import PreflightCheck as PreflightCheck
 
 # Market 0 is no market: the vault skips it when it updates balances.
 _NO_MARKET = MarketId(0)
 
-PreflightCheck = Literal[
-    "execute_permission",
-    "fuse_not_registered",
-    "fuse_market_unreadable",
-    "no_balance_fuse",
-    "simulation_failed",
-    "simulation_unavailable",
-    "fuse_whitelist",
-]
-
 _EXECUTE_SELECTOR = function_signature_to_4byte_selector("execute((address,bytes)[])")
 _MARKET_ID_SELECTOR = function_signature_to_4byte_selector("MARKET_ID()")
+_PRECOMPILE_FAILED_SELECTOR = function_signature_to_4byte_selector(
+    "HyperCorePrecompileFailed(address)"
+)
 _RANK: dict[Severity, int] = {"ok": 0, "warning": 1, "critical": 2}
+_BPS = 10_000
+# ERC4626 conversions and Aave's aToken mint round against the depositor, by
+# about one raw unit each. An action makes a few such conversions (the deposit,
+# the share mint, the balance fuse's valuation), so 10 bounds a sound one.
+_DUST_PER_ACTION = 10
 
 
 @dataclass(frozen=True)
@@ -311,12 +311,65 @@ def _schedule(
     return int(scheduled), int(now)
 
 
+_SIMULATION_SKIPPED = PreflightFinding(
+    "simulation_skipped",
+    "warning",
+    "the batch was not simulated: only the static checks ran",
+)
+
+
+def _validate_drop_bps(max_total_assets_drop_bps: int) -> None:
+    if isinstance(max_total_assets_drop_bps, bool) or not isinstance(
+        max_total_assets_drop_bps, int
+    ):
+        raise TypeError(
+            "max_total_assets_drop_bps must be an int,"
+            f" not {type(max_total_assets_drop_bps).__name__}"
+        )
+    if not 0 <= max_total_assets_drop_bps <= _BPS:
+        raise ValueError(
+            f"max_total_assets_drop_bps must be an integer from 0 to {_BPS},"
+            f" got {max_total_assets_drop_bps!r}"
+        )
+
+
+def _total_assets_findings(
+    simulation: PreflightSimulation, max_drop_bps: int, action_count: int
+) -> list[PreflightFinding]:
+    before, after = simulation.total_assets_before, simulation.total_assets_after
+    if before is None or after is None:
+        return [
+            PreflightFinding(
+                "total_assets_unreadable",
+                "warning",
+                "totalAssets could not be read around the batch:"
+                " the drop was not checked",
+            )
+        ]
+    drop, dust = before - after, _DUST_PER_ACTION * action_count
+    if drop <= dust or drop * _BPS <= before * max_drop_bps:
+        return []
+    return [
+        PreflightFinding(
+            "total_assets_dropped",
+            "warning",
+            f"the batch lowers totalAssets from {before} to {after} (by {drop}"
+            f" raw units of the asset), over the tolerance of {max_drop_bps} bps"
+            f" and the rounding allowance of {dust} raw units"
+            "; the after read includes the balance refresh of the touched"
+            " markets, so a loss accrued before the batch shows up here too,"
+            " and gains accrued before it offset a loss the batch causes",
+        )
+    ]
+
+
 def _simulate(
     ctx: Web3Context,
     vault: PlasmaVault,
     actions: Sequence[FuseAction],
     sender: ChecksumAddress,
     block: int,
+    max_drop_bps: int,
 ) -> tuple[PreflightSimulation | None, list[PreflightFinding]]:
     if not is_simulate_v1_supported(ctx.web3):
         return None, [
@@ -340,14 +393,31 @@ def _simulate(
         total_assets_after=after.value if after.result.success else None,
     )
     if result.success:
-        return simulation, []
-    return simulation, [
-        PreflightFinding(
-            "simulation_failed",
-            "critical",
-            f"the batch reverts: {result.revert_reason or 'no reason returned'}",
+        return simulation, _total_assets_findings(
+            simulation, max_drop_bps, len(actions)
         )
-    ]
+    return simulation, [_revert_finding(result)]
+
+
+def _revert_finding(result: SimulationResult) -> PreflightFinding:
+    # The execute is the run's only unlabeled call. eth_simulateV1 cannot run the
+    # HyperCore precompiles, so a run that reverts in one is inconclusive.
+    execute = next((call for call in result.failed_calls if call.label is None), None)
+    if (
+        execute is not None
+        and bytes(execute.return_data[:4]) == _PRECOMPILE_FAILED_SELECTOR
+    ):
+        return PreflightFinding(
+            "simulation_inconclusive",
+            "warning",
+            "the simulation is inconclusive: the batch reverted in a HyperCore"
+            f" precompile, which eth_simulateV1 cannot run ({execute.revert_reason})",
+        )
+    return PreflightFinding(
+        "simulation_failed",
+        "critical",
+        f"the batch reverts: {result.revert_reason or 'no reason returned'}",
+    )
 
 
 def preflight_execute(
@@ -358,6 +428,7 @@ def preflight_execute(
     sender: ChecksumAddress,
     simulate: bool = True,
     fuse_whitelist: bool = True,
+    max_total_assets_drop_bps: int = 0,
 ) -> ExecutePreflight:
     """Check ``actions`` as ``sender``'s `PlasmaVault.execute` on the state of one
     base block: the one ``ctx.default_block`` names (a number, hash or tag),
@@ -366,13 +437,28 @@ def preflight_execute(
     The static checks take a few Multicall3 batches (one per dependency-graph
     level), the ``canCall`` read, the balance-fuse storage reads and, for a
     caller with an execution delay, the schedule of this exact calldata;
-    ``simulate`` adds a capability probe and one ``eth_simulateV1`` request.
+    ``simulate`` adds a capability probe and one ``eth_simulateV1`` request;
+    without it, a ``simulation_skipped`` warning says the batch was not simulated.
+    A revert of a HyperCore precompile (``HyperCorePrecompileFailed``), which
+    ``eth_simulateV1`` cannot run, is a ``simulation_inconclusive`` warning
+    rather than a critical ``simulation_failed``.
+    A run that succeeds is checked for a lower ``totalAssets``: a
+    ``total_assets_dropped`` warning when it falls by more than
+    ``max_total_assets_drop_bps`` basis points (0 to 10000; 10000 flags no drop)
+    and by more than 10 raw units per top-level action, the rounding of a sound
+    deposit (the actions a flash loan nests count as one).
+    A ``total_assets_unreadable`` warning says either read failed. The after
+    read includes the balance refresh of the touched markets, so a loss
+    accrued before the batch counts as a drop too, and gains accrued before
+    it offset a loss the batch causes: a loss smaller than those gains raises
+    no warning.
     ``fuse_whitelist`` adds a warning for each fuse of the batch that is not
     active in the chain's Fuse Whitelist (the ``ipor-abi`` registry plus two
     Multicall3 batches); a failure to read it is a warning too. Read-only.
     """
     if not actions:
         raise ValueError("preflight needs at least one action")
+    _validate_drop_bps(max_total_assets_drop_bps)
     ctx, block = _pinned(ctx)
     plasma_vault = PlasmaVault(vault)
     batch = Multicall3(ctx).batch()
@@ -415,7 +501,9 @@ def preflight_execute(
         + (_whitelist_findings(ctx, preflight_actions) if fuse_whitelist else [])
     )
     simulation, simulated = (
-        _simulate(ctx, plasma_vault, actions, sender, block) if simulate else (None, [])
+        _simulate(ctx, plasma_vault, actions, sender, block, max_total_assets_drop_bps)
+        if simulate
+        else (None, [_SIMULATION_SKIPPED])
     )
     return ExecutePreflight(
         vault=vault,

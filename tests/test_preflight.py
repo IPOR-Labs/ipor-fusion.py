@@ -7,6 +7,7 @@ import pytest
 from _multicall import decode_aggregate3, is_aggregate3, multicall_aware
 from eth_abi import decode, encode
 from eth_utils import function_signature_to_4byte_selector
+from hexbytes import HexBytes
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
@@ -17,10 +18,12 @@ from ipor_fusion import (
     BalanceFuse,
     ExecutePreflightError,
     PlasmaVault,
+    SimulatedCallResult,
     build_execute_preflight_json,
     parse_execute_actions,
     preflight_execute,
 )
+from ipor_fusion.readers.hypercore import CORE_USER_EXISTS_PRECOMPILE
 from ipor_fusion.types import Amount, FuseAddress, MarketId, PlasmaVaultAddress
 
 VAULT = PlasmaVaultAddress(Web3.to_checksum_address("0x" + "11" * 20))
@@ -114,9 +117,12 @@ def test_a_clean_batch_passes_the_static_checks():
         _ctx(), VAULT, [_supply()], sender=SENDER, simulate=False
     )
 
-    assert result.verdict == "ok"
+    assert result.verdict == "warning"
     assert result.block_number == BLOCK
-    assert result.findings == ()
+    (skipped,) = result.findings
+    assert (skipped.check, skipped.severity) == ("simulation_skipped", "warning")
+    assert skipped.message == "the batch was not simulated: only the static checks ran"
+    assert result.simulation is None
     (action,) = result.actions
     assert (action.registered, action.market_id) == (True, 1)
     assert "AaveV3SupplyFuse" in action.candidates
@@ -139,7 +145,10 @@ def test_the_sender_must_be_allowed_now(delay, scheduled, message):
         sender=SENDER,
         simulate=False,
     )
-    assert [f.check for f in result.findings] == ["execute_permission"]
+    assert [f.check for f in result.findings] == [
+        "execute_permission",
+        "simulation_skipped",
+    ]
     assert message in result.findings[0].message
     with pytest.raises(ExecutePreflightError, match=message):
         result.raise_for_failure()
@@ -153,7 +162,7 @@ def test_a_ready_scheduled_operation_may_be_executed_directly():
         sender=SENDER,
         simulate=False,
     )
-    assert result.findings == ()
+    assert [f.check for f in result.findings] == ["simulation_skipped"]
     assert result.scheduled_at == NOW
     assert build_execute_preflight_json(result)["execute_scheduled_at"] == NOW
 
@@ -162,7 +171,7 @@ def test_market_zero_needs_no_balance_fuse():
     result = preflight_execute(
         _ctx(markets={FUSE: 0}), VAULT, [_supply()], sender=SENDER, simulate=False
     )
-    assert result.findings == ()
+    assert [f.check for f in result.findings] == ["simulation_skipped"]
 
 
 def test_dependency_markets_need_balance_fuses_once_each():
@@ -170,18 +179,19 @@ def test_dependency_markets_need_balance_fuses_once_each():
     result = preflight_execute(
         _ctx(graph=graph), VAULT, [_supply()], sender=SENDER, simulate=False
     )
-    assert [f.message for f in result.findings] == [
+    assert [f.message for f in result.findings if f.check != "simulation_skipped"] == [
         "market 2, a balance dependency of market 1, has no balance fuse;"
         " execute reverts AddressEmptyCode after the actions",
         "market 3, a balance dependency of market 1, has no balance fuse;"
         " execute reverts AddressEmptyCode after the actions",
     ]
+    assert result.findings[-1].check == "simulation_skipped"
 
 
 def test_market_zero_is_never_followed_in_the_dependency_graph():
     ctx = _ctx(graph={1: [0], 0: [2]})
     result = preflight_execute(ctx, VAULT, [_supply()], sender=SENDER, simulate=False)
-    assert result.findings == ()
+    assert [f.check for f in result.findings] == ["simulation_skipped"]
     graph_reads = [
         data
         for call in ctx.call.call_args_list
@@ -201,14 +211,22 @@ def test_an_unregistered_fuse_without_market_or_balance_fuse_is_critical():
     assert [f.check for f in result.findings] == [
         "fuse_not_registered",
         "no_balance_fuse",
+        "simulation_skipped",
     ]
-    assert all("action 1" in f.message for f in result.findings)
+    assert all(
+        "action 1" in f.message
+        for f in result.findings
+        if f.check != "simulation_skipped"
+    )
     assert result.verdict == "critical"
 
     unreadable = preflight_execute(
         _ctx(markets={}), VAULT, [_supply()], sender=SENDER, simulate=False
     )
-    assert [f.check for f in unreadable.findings] == ["fuse_market_unreadable"]
+    assert [f.check for f in unreadable.findings] == [
+        "fuse_market_unreadable",
+        "simulation_skipped",
+    ]
 
 
 class _FakeObservation:
@@ -275,6 +293,209 @@ def test_the_simulation_reports_total_assets_and_a_revert(monkeypatch):
     assert document["verdict"] == "critical"
     assert document["simulation"] is not None
     assert document["simulation"]["revert_reason"] == "UnsupportedFuse()"
+
+
+def _run_with_total_assets(monkeypatch, before, after, actions=1, **kwargs):
+    monkeypatch.setattr(preflight_module, "is_simulate_v1_supported", lambda w3: True)
+    monkeypatch.setattr(preflight_module, "VaultSimulator", _FakeSimulator)
+    monkeypatch.setattr(_FakeSimulator, "values", [before, after])
+    batch = [_supply()] * actions
+
+    def execute(self, queued):
+        assert queued == batch
+
+    monkeypatch.setattr(_FakeSimulator, "execute", execute)
+    return preflight_execute(_ctx(), VAULT, batch, sender=SENDER, **kwargs)
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "bps", "actions"),
+    [
+        (1000, 1001, 0, 1),  # a rise
+        (1000, 1000, 0, 1),  # no change
+        (100_000, 99_000, 100, 1),  # exactly at the tolerance
+        (1000, 990, 0, 1),  # exactly at the rounding allowance of one action
+        (100_000, 99_985, 1, 2),  # over 1 bps, within the allowance of two
+        (1000, 1, 10_000, 1),  # the top tolerance flags no drop
+        (0, 0, 0, 1),
+    ],
+)
+def test_total_assets_within_the_tolerance_add_no_finding(
+    monkeypatch, before, after, bps, actions
+):
+    result = _run_with_total_assets(
+        monkeypatch,
+        Amount(before),
+        Amount(after),
+        actions=actions,
+        max_total_assets_drop_bps=bps,
+    )
+    assert result.findings == ()
+    assert result.verdict == "ok"
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "kwargs"),
+    [
+        (1000, 989, {}),  # the default: one raw unit over the rounding allowance
+        (100_000, 98_999, {"max_total_assets_drop_bps": 100}),
+    ],
+)
+def test_a_total_assets_drop_over_the_tolerance_is_a_warning(
+    monkeypatch, before, after, kwargs
+):
+    bps = kwargs.get("max_total_assets_drop_bps", 0)
+    result = _run_with_total_assets(
+        monkeypatch, Amount(before), Amount(after), **kwargs
+    )
+    ((check, severity, message),) = [
+        (f.check, f.severity, f.message) for f in result.findings
+    ]
+    assert (check, severity) == ("total_assets_dropped", "warning")
+    assert f"from {before} to {after} (by {before - after} raw units" in message
+    assert f"tolerance of {bps} bps" in message
+    assert "a loss accrued before the batch" in message
+    assert "gains accrued before it offset a loss" in message
+    assert result.verdict == "warning"
+
+
+@pytest.mark.parametrize(("after", "warns"), [(980, False), (979, True)])
+def test_the_rounding_allowance_grows_with_the_batch(monkeypatch, after, warns):
+    result = _run_with_total_assets(monkeypatch, Amount(1000), Amount(after), actions=2)
+    assert [f.check for f in result.findings] == (
+        ["total_assets_dropped"] if warns else []
+    )
+    if warns:
+        assert "rounding allowance of 20 raw units" in result.findings[0].message
+
+
+@pytest.mark.parametrize(
+    ("before", "after"), [(None, Amount(10)), (Amount(10), None), (None, None)]
+)
+def test_an_unreadable_total_assets_is_a_warning(monkeypatch, before, after):
+    result = _run_with_total_assets(monkeypatch, before, after)
+    ((check, severity, message),) = [
+        (f.check, f.severity, f.message) for f in result.findings
+    ]
+    assert (check, severity) == ("total_assets_unreadable", "warning")
+    assert "the drop was not checked" in message
+
+
+@pytest.mark.parametrize("values", [[Amount(1000), Amount(1)], [None, None]])
+@pytest.mark.parametrize(
+    ("hypercore", "check"),
+    [(False, "simulation_failed"), (True, "simulation_inconclusive")],
+)
+def test_a_reverted_run_is_not_judged_by_its_total_assets(
+    monkeypatch, values, hypercore, check
+):
+    monkeypatch.setattr(_FakeSimulator, "values", values)
+    execute = (
+        _reverted("HyperCorePrecompileFailed(address)", CORE_USER_EXISTS_PRECOMPILE)
+        if hypercore
+        else _reverted("UnsupportedFuse()")
+    )
+    result = _failed_run(monkeypatch, execute)
+    assert [f.check for f in result.findings] == [check]
+
+
+@pytest.mark.parametrize(
+    ("bps", "error"),
+    [
+        (-1, ValueError),
+        (10_001, ValueError),
+        (True, TypeError),
+        (1.5, TypeError),
+        ("5", TypeError),
+    ],
+)
+def test_an_invalid_drop_tolerance_raises_before_any_read(bps, error):
+    ctx = _ctx()
+    with pytest.raises(error, match="max_total_assets_drop_bps"):
+        preflight_execute(
+            ctx, VAULT, [_supply()], sender=SENDER, max_total_assets_drop_bps=bps
+        )
+    ctx.call.assert_not_called()
+    ctx.web3.eth.get_block.assert_not_called()
+
+
+def _reverted(
+    signature: str, *args: object, label: str | None = None
+) -> SimulatedCallResult:
+    types = signature[signature.index("(") + 1 : -1].split(",") if args else []
+    return SimulatedCallResult(
+        label=label,
+        success=False,
+        return_data=HexBytes(_sel(signature) + encode(types, list(args))),
+        gas_used=1,
+        error=None,
+        logs=[],
+    )
+
+
+def _failed_run(
+    monkeypatch,
+    execute: SimulatedCallResult,
+    after: SimulatedCallResult | None = None,
+):
+    """A run whose execute reverts, as `SimulationResult` reports it: the
+    execute's revert reason, and every failed call in queue order."""
+    monkeypatch.setattr(preflight_module, "is_simulate_v1_supported", lambda w3: True)
+    monkeypatch.setattr(preflight_module, "VaultSimulator", _FakeSimulator)
+    monkeypatch.setattr(
+        _FakeSimulator,
+        "outcome",
+        MagicMock(
+            success=False,
+            revert_reason=execute.revert_reason,
+            gas_used=1,
+            failed_calls=[execute] if after is None else [execute, after],
+        ),
+    )
+    return preflight_execute(_ctx(), VAULT, [_supply()], sender=SENDER)
+
+
+def test_a_hypercore_precompile_revert_is_an_inconclusive_warning(monkeypatch):
+    result = _failed_run(
+        monkeypatch,
+        _reverted("HyperCorePrecompileFailed(address)", CORE_USER_EXISTS_PRECOMPILE),
+    )
+    assert [(f.check, f.severity) for f in result.findings] == [
+        ("simulation_inconclusive", "warning")
+    ]
+    assert (
+        f"HyperCorePrecompileFailed({CORE_USER_EXISTS_PRECOMPILE})"
+        in result.findings[0].message
+    )
+    assert result.verdict == "warning"
+    assert result.simulation is not None
+    assert not result.simulation.success
+
+
+def test_a_precompile_revert_outside_the_execute_leaves_its_revert_critical(
+    monkeypatch,
+):
+    result = _failed_run(
+        monkeypatch,
+        _reverted("UnsupportedFuse()"),
+        after=_reverted(
+            "HyperCorePrecompileFailed(address)",
+            CORE_USER_EXISTS_PRECOMPILE,
+            label="totalAssets after",
+        ),
+    )
+    assert [(f.check, f.severity) for f in result.findings] == [
+        ("simulation_failed", "critical")
+    ]
+    assert "UnsupportedFuse()" in result.findings[0].message
+
+
+def test_another_custom_error_stays_a_critical_failure(monkeypatch):
+    result = _failed_run(monkeypatch, _reverted("HyperCorePriceOverflow(uint64)", 7))
+    assert [(f.check, f.severity) for f in result.findings] == [
+        ("simulation_failed", "critical")
+    ]
+    assert "HyperCorePriceOverflow(7)" in result.findings[0].message
 
 
 def test_no_simulate_v1_is_a_warning_not_a_failure(monkeypatch):

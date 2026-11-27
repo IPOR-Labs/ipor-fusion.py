@@ -61,7 +61,18 @@ def _read_calldata(calldata: str) -> str:
 @click.option(
     "--simulate/--no-simulate",
     default=True,
-    help="Run the batch through eth_simulateV1 (default) or only the static checks.",
+    help="Run the batch through eth_simulateV1 (default) or only the static "
+    "checks, which adds a simulation_skipped warning.",
+)
+@click.option(
+    "--max-total-assets-drop-bps",
+    type=click.IntRange(0, 10_000),
+    default=0,
+    show_default=True,
+    help="Warn when the batch lowers totalAssets by more than this many basis "
+    "points (0 flags any drop past rounding dust, 10000 flags none). The after "
+    "read includes what accrued before the batch: a loss counts as a drop, and "
+    "gains can hide one.",
 )
 @click.option(
     "--json", "json_output", is_flag=True, default=False, help="Output as JSON."
@@ -73,6 +84,7 @@ def preflight(
     chain_id: ChainId | None,
     block_number: int | None,
     simulate: bool,
+    max_total_assets_drop_bps: int,
     json_output: bool,
 ) -> None:
     """Check an execute batch as SENDER would send it: role, fuse registration,
@@ -86,7 +98,12 @@ def preflight(
         raise click.BadParameter("the batch has no actions", param_hint="--calldata")
     _, ctx = _build_ctx(load_config(), vault_address, chain_id, block_number)
     result = preflight_execute(
-        ctx, vault_address, actions, sender=sender, simulate=simulate
+        ctx,
+        vault_address,
+        actions,
+        sender=sender,
+        simulate=simulate,
+        max_total_assets_drop_bps=max_total_assets_drop_bps,
     )
     if json_output:
         click.echo(json.dumps(build_execute_preflight_json(result), indent=2))

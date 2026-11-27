@@ -34,15 +34,16 @@ def test_the_alpha_passes_the_static_checks(web3_base):
     (action,) = result.actions
     assert action.registered
     assert action.market_id == 1
-    assert result.findings == ()
+    assert [f.check for f in result.findings] == ["simulation_skipped"]
 
 
 def test_a_deprecated_fuse_is_flagged_with_its_replacement(web3_base):
     ctx = archive_context("BASE_PROVIDER_URL", BLOCK, VAULT)
     result = preflight_execute(ctx, VAULT, [_action()], sender=ALPHA, simulate=False)
 
-    (finding,) = result.findings
+    finding, skipped = result.findings
     assert (finding.check, finding.severity) == ("fuse_whitelist", "warning")
+    assert skipped.check == "simulation_skipped"
     assert "is deprecated in the Fuse Whitelist (AaveV3SupplyFuse)" in finding.message
     assert "use 0x26fD6EF391E98C78CfCA27e00c3d15be4D941625" in finding.message
 

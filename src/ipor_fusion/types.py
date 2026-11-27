@@ -104,6 +104,22 @@ Check: TypeAlias = Literal[
     "fuse_whitelist",
 ]
 
+# Execute-preflight vocabulary of `ipor_fusion.preflight`, here so the MCP models
+# share it without importing the preflight stack.
+PreflightCheck: TypeAlias = Literal[
+    "execute_permission",
+    "fuse_not_registered",
+    "fuse_market_unreadable",
+    "no_balance_fuse",
+    "simulation_failed",
+    "simulation_unavailable",
+    "simulation_skipped",
+    "simulation_inconclusive",
+    "total_assets_dropped",
+    "total_assets_unreadable",
+    "fuse_whitelist",
+]
+
 
 @dataclass(slots=True)
 class Price:

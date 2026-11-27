@@ -1244,6 +1244,7 @@ _MODULE_PATH_SNAPSHOT: dict[str, frozenset[str]] = {
             "Period",
             "PlasmaVaultAddress",
             "PositionSetHash",
+            "PreflightCheck",
             "Price",
             "ProposalHash",
             "ProposalId",
