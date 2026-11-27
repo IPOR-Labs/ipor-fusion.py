@@ -1,5 +1,8 @@
 """Unit tests for fuse encoding — pure functions, no Docker or blockchain needed."""
 
+import linecache
+import warnings
+
 import pytest
 from eth_abi import decode
 from eth_abi.packed import encode_packed
@@ -798,7 +801,9 @@ class TestUniversalTokenSwapperFuse:
     def test_swap(self):
         targets = [TOKEN_A, TOKEN_B]
         data = [b"\xaa\xbb", b"\xcc\xdd"]
-        action = UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+        action = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.LEGACY
+        ).swap(
             token_in=TOKEN_A,
             token_out=TOKEN_B,
             amount_in=5000,
@@ -819,9 +824,9 @@ class TestUniversalTokenSwapperFuse:
         assert decoded_tuple[3][1][0] == b"\xaa\xbb"
 
     def test_swap_empty_targets(self):
-        action = UniversalTokenSwapperFuse(FUSE_ADDR).swap(
-            token_in=TOKEN_A, token_out=TOKEN_B, amount_in=100, targets=[], data=[]
-        )
+        action = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.LEGACY
+        ).swap(token_in=TOKEN_A, token_out=TOKEN_B, amount_in=100, targets=[], data=[])
         (decoded_tuple,) = decode(
             ["(address,address,uint256,(address[],bytes[]))"], action.data[4:]
         )
@@ -954,7 +959,9 @@ class TestUniversalTokenSwapperFuse:
 
     def test_legacy_abi_rejects_min_amount_out(self):
         with pytest.raises(ValueError, match="min_amount_out"):
-            UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.LEGACY
+            ).swap(
                 token_in=TOKEN_A,
                 token_out=TOKEN_B,
                 amount_in=100,
@@ -976,13 +983,32 @@ class TestUniversalTokenSwapperFuse:
             )
 
     def test_eq_distinguishes_abi(self):
-        legacy = UniversalTokenSwapperFuse(FUSE_ADDR)
+        legacy = UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.LEGACY
+        )
         modern = UniversalTokenSwapperFuse(
             FUSE_ADDR, abi=UniversalTokenSwapperAbi.MIN_AMOUNT_OUT
         )
         assert legacy != modern
         assert hash(legacy) != hash(modern)
-        assert legacy == UniversalTokenSwapperFuse(FUSE_ADDR)
+
+    def test_omitted_abi_warns_and_selects_legacy(self):
+        with pytest.warns(FutureWarning, match="without abi=") as record:
+            implicit = UniversalTokenSwapperFuse(FUSE_ADDR)
+        (ours,) = [w for w in record if "without abi=" in str(w.message)]
+        # stacklevel points the warning at the caller's line, not at the SDK.
+        assert ours.filename == __file__
+        caller = linecache.getline(ours.filename, ours.lineno)
+        assert "implicit = UniversalTokenSwapperFuse(FUSE_ADDR)" in caller
+        assert implicit == UniversalTokenSwapperFuse(
+            FUSE_ADDR, abi=UniversalTokenSwapperAbi.LEGACY
+        )
+
+    @pytest.mark.parametrize("abi", list(UniversalTokenSwapperAbi))
+    def test_explicit_abi_warns_nothing(self, abi):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            UniversalTokenSwapperFuse(FUSE_ADDR, abi=abi)
 
 
 class TestFuseEquality:
@@ -1175,7 +1201,9 @@ class TestAddressValidation:
 
     def test_universal_swap_rejects_zero_token_in(self):
         with pytest.raises(ValueError, match="token_in"):
-            UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.LEGACY
+            ).swap(
                 token_in=ZERO_ADDR,
                 token_out=TOKEN_B,
                 amount_in=100,
@@ -1334,7 +1362,9 @@ class TestUniversalSwapEdgeCases:
 
     def test_mismatched_targets_data_lengths(self):
         with pytest.raises(ValueError, match="same length"):
-            UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.LEGACY
+            ).swap(
                 token_in=TOKEN_A,
                 token_out=TOKEN_B,
                 amount_in=100,
@@ -1344,7 +1374,9 @@ class TestUniversalSwapEdgeCases:
 
     def test_mismatched_data_longer_than_targets(self):
         with pytest.raises(ValueError, match="same length"):
-            UniversalTokenSwapperFuse(FUSE_ADDR).swap(
+            UniversalTokenSwapperFuse(
+                FUSE_ADDR, abi=UniversalTokenSwapperAbi.LEGACY
+            ).swap(
                 token_in=TOKEN_A,
                 token_out=TOKEN_B,
                 amount_in=100,
