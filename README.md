@@ -490,6 +490,16 @@ Fuse.method()  -->  FuseAction  -->  PlasmaVault.execute([actions])  -->  Call  
 | Universal | `UniversalTokenSwapperFuse` |
 | Off-vault capital | `AsyncActionFuse` (market 40), `ExternalStateOperationFuse` (market 50) |
 
+`UniversalTokenSwapperFuse(address, abi=...)` must name the ABI revision that the deployed fuse at `address` accepts. A wrong revision encodes a selector the contract lacks, and the swap reverts. Each revision matches these deployed fuses:
+
+| `UniversalTokenSwapperAbi` | Deployed fuses (markets 12 and 1202) |
+|---|---|
+| `LEGACY` | Base and other older deployments |
+| `MIN_AMOUNT_OUT` | HyperEVM |
+| `TOKENS_TO_RETURN` | Arbitrum, contracts release of 2026-10-21 |
+
+Omitting `abi=` selects `LEGACY` and emits a `FutureWarning`. A future major release will require `abi=`. Code that turns warnings into errors (`-W error`, or pytest's `filterwarnings = error`) fails without it, so pass `abi=` explicitly, `LEGACY` included.
+
 ### Preview features (`ipor_fusion.crosschain`, `ipor_fusion.hypercore`)
 
 Not production (see the note at the top) and outside the stable top level:
