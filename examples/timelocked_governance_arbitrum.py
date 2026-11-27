@@ -351,6 +351,11 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # SIMULATION ONLY (impersonation): `from_` sends as the multisig without
     # its signatures, because the simulator runs with validation disabled.
     # Impossible in production.
+    # SIMULATION ONLY (per-call senders): `from_` also lets one process act as
+    # both the ATOMIST and, in step 8, the GUARDIAN. In production they are
+    # separate signers on separate systems: a guardian that shares the
+    # atomist's process cannot cancel what a compromised atomist schedules.
+    # Possible in production, but wrong.
     sim = VaultSimulator(web3=web3, block=PINNED_BLOCK)
     steps: list[str] = []
 
