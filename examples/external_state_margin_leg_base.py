@@ -159,9 +159,9 @@ BASE_EXTERNAL_STATE_BALANCE_FUSE = parse_fuse_address(
 # hold no role at all -- they are authorized by a market-50 CUSTODIAN substrate,
 # cached on the executor. The five:
 #   OWNER      -- governance/atomist; can reconfigure the whole vault, including
-#                 every substrate grant below. A cold key or multisig. (A fresh
-#                 clone forces OWNER to self-grant ATOMIST, so owner and atomist
-#                 coincide during bootstrap.)
+#                 every substrate grant below. A cold key or multisig. (OWNER
+#                 grants itself ATOMIST here, so one key grants every role; in
+#                 production OWNER can grant ATOMIST to a separate address.)
 #   ALPHA      -- the online operator; drives execute(), refreshes market
 #                 balances and releases withdrawal requests
 #                 (WithdrawManager.releaseFunds). Collapsing it into OWNER means a

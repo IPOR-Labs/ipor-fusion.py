@@ -119,11 +119,10 @@ ACCESS_MANAGER = parse_access_manager_address(
 # and sharing one key between OWNER and ATOMIST is not recommended: the docs
 # require separate OWNER keys (access-management, "Strict Key Separation").
 # With separate keys, a compromised atomist key cannot also change the roles
-# and their delays. In the other examples owner and atomist coincide only
-# during bootstrap: a fresh clone forces OWNER to self-grant ATOMIST, and in
-# production the atomist may be delegated to a separate address. This vault
-# keeps both roles on one multisig by choice; the example uses its actual
-# holders because it needs a live vault.
+# and their delays. The other examples give OWNER the ATOMIST role as well, so
+# that one key grants every role; OWNER can grant ATOMIST to a separate address
+# instead. This vault keeps both roles on one multisig by choice; the example
+# uses its actual holders because it needs a live vault.
 ATOMIST = parse_checksum_address("0xF6a9bd8F6DC537675D499Ac1CA14f2c55d8b5569")
 
 # A guardian: one of the vault's GUARDIAN holders, with no execution delay and
