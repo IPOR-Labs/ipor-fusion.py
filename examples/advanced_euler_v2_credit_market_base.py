@@ -139,9 +139,9 @@ BASE_CBETH_WHALE = parse_checksum_address("0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37E
 # OWNER and ALPHA are kept distinct on purpose, because they are distinct roles
 # that must NOT share an address in production:
 #   OWNER -- governance/atomist; can reconfigure the whole vault. A cold key or
-#            multisig. (A fresh clone forces OWNER to self-grant ATOMIST, so owner
-#            and atomist coincide during bootstrap; in production the atomist may
-#            be delegated to a separate address.)
+#            multisig. (OWNER grants itself ATOMIST here, so one key grants
+#            every role; in production OWNER can grant ATOMIST to a separate
+#            address.)
 #   ALPHA -- the online operator; drives execute(), refreshes market balances
 #            (update_markets_balances) and releases withdrawal requests
 #            (WithdrawManager.releaseFunds) -- least-privilege, it cannot
@@ -429,9 +429,12 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # clone: ipor-fusion, contracts/factory/lib/FusionFactoryLogicLib.sol,
     # _resolveAdmins.
     # ALPHA must stay a separate address from OWNER in production:
-    # a compromised alpha key must not equal governance. Each grant uses Period(0)
-    # (no execution delay) to keep the simulation legible; production governance
-    # often puts a nonzero delay -- a timelock -- on the sensitive roles.
+    # a compromised alpha key must not equal governance.
+    #
+    # Each grant uses Period(0), no execution delay. Production vaults put
+    # delays on their governance roles, which the simulation skips to stay
+    # legible. A delayed holder must schedule each restricted call, wait out the
+    # delay and execute it: see timelocked_governance_arbitrum.py.
     sim.add_call(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,

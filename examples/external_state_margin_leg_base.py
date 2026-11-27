@@ -159,9 +159,9 @@ BASE_EXTERNAL_STATE_BALANCE_FUSE = parse_fuse_address(
 # hold no role at all -- they are authorized by a market-50 CUSTODIAN substrate,
 # cached on the executor. The five:
 #   OWNER      -- governance/atomist; can reconfigure the whole vault, including
-#                 every substrate grant below. A cold key or multisig. (A fresh
-#                 clone forces OWNER to self-grant ATOMIST, so owner and atomist
-#                 coincide during bootstrap.)
+#                 every substrate grant below. A cold key or multisig. (OWNER
+#                 grants itself ATOMIST here, so one key grants every role; in
+#                 production OWNER can grant ATOMIST to a separate address.)
 #   ALPHA      -- the online operator; drives execute(), refreshes market
 #                 balances and releases withdrawal requests
 #                 (WithdrawManager.releaseFunds). Collapsing it into OWNER means a
@@ -695,16 +695,18 @@ def _queue_bootstrap(
     # clone: ipor-fusion, contracts/factory/lib/FusionFactoryLogicLib.sol,
     # _resolveAdmins.
     #
-    # Every grant here passes Period(0) -- no execution delay -- to keep the
-    # simulation legible. Production differs per role: 14 days on OWNER, 3 days
-    # on ATOMIST, 0 on GUARDIAN so it can cancel a queued malicious action
-    # instantly. Delays can be raised at once but only lowered after the full
-    # notice period. Figures from ipor.io/docs -> build-on-fusion -> atomists ->
-    # vault-configuration-step-by-step -> timelocks-and-execution-delays.
+    # Each grant uses Period(0), no execution delay. Production vaults put
+    # delays on their governance roles, which the simulation skips to stay
+    # legible. A delayed holder must schedule each restricted call, wait out the
+    # delay and execute it: see timelocked_governance_arbitrum.py.
     #
-    # A delayed role does not merely wait: it must schedule() an operation and
-    # execute() it later, so adding delays here would turn each setup call into
-    # three. Configuring them is its own workflow, not this example's.
+    # The docs recommend, per role: 14 days on OWNER, 3 days on ATOMIST and 0
+    # on GUARDIAN, which lets it pause the vault instantly. A raised delay
+    # applies as soon as the re-grant executes, a lowered one only after the
+    # difference between the old and the new delay
+    # (timelocked_governance_arbitrum.py, module docstring).
+    # Figures from ipor.io/docs -> build-on-fusion -> atomists ->
+    # vault-configuration-step-by-step -> timelocks-and-execution-delays.
     sim.add_call(
         call=access_manager.grant_role(Roles.ATOMIST_ROLE, OWNER, Period(0)),
         from_=OWNER,

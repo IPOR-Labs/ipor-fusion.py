@@ -45,6 +45,14 @@ transaction.
   brings the margin home and releases it for a user's scheduled withdrawal, then
   demonstrates the executor rejecting a confirmation that does not match its
   proposal.
+- [`timelocked_governance_arbitrum.py`](timelocked_governance_arbitrum.py) --
+  a governance call under an execution delay. It is the only example that works
+  on an existing vault instead of a fresh clone, since `read_call_plan` reads the
+  live chain. It reads the ATOMIST's 3-day delay on an Arbitrum vault, asks
+  `AccessManager.read_call_plan` how to get a supply-cap change through, sends the
+  `schedule` it returns, shows the change reverting while the delay runs, and
+  executes it once the delay has passed. A guardian then cancels a second
+  scheduled change, which reverts when the ATOMIST sends it after the delay.
 - [`crosschain_ccip_usdc_arbitrum_hyperevm.py`](crosschain_ccip_usdc_arbitrum_hyperevm.py) --
   a crosschain vault on the released CCIP contracts as they are deployed: an
   Arbitrum hub vault, a HyperEVM spoke vault and USDC over Chainlink CCIP. It
