@@ -66,9 +66,11 @@ from ipor_fusion.fuses.hypercore_event_decoding import (
     hypercore_events,
 )
 from ipor_fusion.fuses.hypercore_pre_hooks import (
+    HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID,
     HYPERCORE_CAPITAL_FLOW_SELECTORS,
     HYPERCORE_PENDING_ACTION_SELECTORS,
     HyperCorePreHookWiring,
+    capital_flow_pre_hook_id,
 )
 from ipor_fusion.readers.hypercore import (
     HYPERCORE_MARKET,
@@ -94,6 +96,7 @@ from ipor_fusion.readers.hypercore import (
     convert_to_wad_int,
     perp_px_decimals,
     read_hypercore_nav,
+    read_hypercore_pre_hook_check,
     read_hypercore_vault_state,
 )
 from ipor_fusion.readers.hypercore_outcome import (
@@ -127,6 +130,7 @@ __all__ = [
     "USD6_DECIMALS",
     "USDC_SYSTEM_ADDRESS",
     "USDC_TOKEN_INDEX",
+    "HYPERCORE_CAPITAL_FLOW_PRE_HOOK_ID",
     "HYPERCORE_CAPITAL_FLOW_SELECTORS",
     "HYPERCORE_EVENTS",
     "HYPERCORE_EVENT_CLASSES",
@@ -193,6 +197,7 @@ __all__ = [
     "HyperCoreVaultState",
     "RESERVED_HYPERCORE_CONFIG_KEYS",
     "TimeInForce",
+    "capital_flow_pre_hook_id",
     "compare_hypercore_transfer",
     "convert_to_wad_int",
     "decode_hypercore_event",
@@ -207,6 +212,7 @@ __all__ = [
     "precompile_index_of",
     "read_hypercore_evm_exit_ceiling",
     "read_hypercore_nav",
+    "read_hypercore_pre_hook_check",
     "read_hypercore_transfer_outcome",
     "read_hypercore_transfer_snapshot",
     "read_hypercore_vault_state",

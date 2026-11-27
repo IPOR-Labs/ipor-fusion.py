@@ -242,6 +242,13 @@ class HyperCoreEventDecodeError(IporFusionError, ValueError):
     ValueError: the log the caller passed is not a decodable event."""
 
 
+class HyperCorePreHookWiringError(IporFusionError, ValueError):
+    """The two HyperCore pre-hook addresses do not fit their roles: the
+    capital-flow hook lacks the capital-flow marker, the pending-action hook
+    carries it, or the pending-action hook has no code. Also a ValueError: the
+    addresses the caller passed are wrong."""
+
+
 class OwnerNotFoundError(IporFusionError, LookupError):
     """An access manager has no account holding ``OWNER_ROLE`` (every owner
     was revoked or renounced). Also a LookupError: the owner looked up is not
