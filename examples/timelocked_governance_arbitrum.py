@@ -60,8 +60,11 @@ The provider must be an archive node that implements ``eth_simulateV1`` (Alchemy
 and other geth/reth-based providers do).
 
 The docs sum up the delays as "tightening security is fast; loosening security
-is slow": raising a delay takes effect at once, and lowering one takes the full
-notice period (timelocks-and-execution-delays, as above).
+is slow" (timelocks-and-execution-delays, as above). The role's admin changes
+an account's delay by granting it the role again, a restricted call that waits
+out the admin's own delay. Once that grant executes, a raised delay applies at
+once. A lowered one applies after the difference between the two, so lowering
+3 days to 2 days takes one day (OpenZeppelin ``AccessManager._grantRole``).
 """
 
 from __future__ import annotations

@@ -701,8 +701,10 @@ def _queue_bootstrap(
     # delay and execute it: see timelocked_governance_arbitrum.py.
     #
     # The docs recommend, per role: 14 days on OWNER, 3 days on ATOMIST and 0
-    # on GUARDIAN, which lets it pause the vault instantly. Delays can be
-    # raised at once but only lowered after the full notice period.
+    # on GUARDIAN, which lets it pause the vault instantly. A raised delay
+    # applies as soon as the re-grant executes, a lowered one only after the
+    # difference between the old and the new delay
+    # (timelocked_governance_arbitrum.py, module docstring).
     # Figures from ipor.io/docs -> build-on-fusion -> atomists ->
     # vault-configuration-step-by-step -> timelocks-and-execution-delays.
     sim.add_call(
