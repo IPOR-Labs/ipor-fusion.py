@@ -124,9 +124,10 @@ ACCESS_MANAGER = parse_access_manager_address(
 ATOMIST = parse_checksum_address("0xF6a9bd8F6DC537675D499Ac1CA14f2c55d8b5569")
 
 # A guardian: one of the vault's GUARDIAN holders, with no execution delay and
-# neither OWNER nor ATOMIST (hasRole at PINNED_BLOCK). A guardian keeps a zero
-# delay so that it can cancel a queued operation at once, and it must not share
-# a key with the atomist whose operations it cancels.
+# neither OWNER nor ATOMIST (hasRole at PINNED_BLOCK). The docs recommend a zero
+# delay for a guardian, so that it can pause the vault (updateTargetClosed) at
+# once. `cancel` ignores the caller's delay, so step 8 needs none. A guardian
+# must not share a key with the atomist whose operations it cancels.
 GUARDIAN = parse_checksum_address("0x1d682c7eDC203B8A17dC9b8B96cbf1e2ef5B5645")
 
 # The docs' recommended execution delays for the three roles this example reads
@@ -280,7 +281,6 @@ def _log_delays(ctx: Web3Context, manager: AccessManager) -> Period:
     _check(atomist.execution_delay > 0, "ATOMIST has no execution delay")
     guardian = held[("GUARDIAN", Roles.GUARDIAN_ROLE)]
     _check(guardian.is_member, "GUARDIAN does not hold GUARDIAN_ROLE")
-    _check(guardian.execution_delay == 0, "GUARDIAN has an execution delay")
     for role in (Roles.OWNER_ROLE, Roles.ATOMIST_ROLE):
         _check(
             not held[("GUARDIAN", role)].is_member, f"GUARDIAN also holds {role.name}"
@@ -397,8 +397,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
     second_executable_at = sim.observe(manager.get_schedule(cancelled_id))
     steps.append("ATOMIST schedules a second cap change")
 
-    # 8. Cancel. The GUARDIAN has no delay, so it cancels at once, while the
-    #    ATOMIST's delay still runs.
+    # 8. Cancel. `cancel` needs only the GUARDIAN's role, so the GUARDIAN
+    #    cancels at once, while the ATOMIST's delay still runs.
     sim.add_call(call=cancel_call(), from_=GUARDIAN, label="cancel")
     cancelled_after = sim.observe(manager.get_schedule(cancelled_id))
     steps.append("GUARDIAN cancels the second change")

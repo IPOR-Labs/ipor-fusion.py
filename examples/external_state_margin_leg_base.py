@@ -700,9 +700,9 @@ def _queue_bootstrap(
     # legible. A delayed holder must schedule each restricted call, wait out the
     # delay and execute it: see timelocked_governance_arbitrum.py.
     #
-    # The docs recommend, per role: 14 days on OWNER, 3 days on ATOMIST, 0 on
-    # GUARDIAN so it can cancel a queued malicious action instantly. Delays
-    # can be raised at once but only lowered after the full notice period.
+    # The docs recommend, per role: 14 days on OWNER, 3 days on ATOMIST and 0
+    # on GUARDIAN, which lets it pause the vault instantly. Delays can be
+    # raised at once but only lowered after the full notice period.
     # Figures from ipor.io/docs -> build-on-fusion -> atomists ->
     # vault-configuration-step-by-step -> timelocks-and-execution-delays.
     sim.add_call(
