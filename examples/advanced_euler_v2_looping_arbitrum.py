@@ -38,7 +38,8 @@ from web3 import Web3
 from ipor_fusion import (
     ERC20,
     AccessManager,
-    Call,
+    EulerV2Substrate,
+    EulerV2VaultReader,
     FusionFactory,
     PlasmaVault,
     PriceOracleMiddlewareManager,
@@ -179,17 +180,18 @@ def _address_substrate(address: ChecksumAddress) -> bytes:
 
 
 def _euler_account(plasma_vault: ChecksumAddress) -> ChecksumAddress:
-    return Web3.to_checksum_address(f"0x{(int(plasma_vault, 16) ^ SUB_ACCOUNT):040x}")
+    """The EVC sub-account of ``plasma_vault`` that the Euler substrates name.
 
-
-def _debt_of(
-    contract: ChecksumAddress,
-    account: ChecksumAddress,
-) -> Call[int]:
-    data = function_signature_to_4byte_selector("debtOf(address)") + encode(
-        ["address"], [account]
+    The check ties the substrates this example grants to ``SUB_ACCOUNT``, which
+    every fuse action passes, so the reads address the account the actions use.
+    """
+    substrates = [EulerV2Substrate.from_bytes(s) for s in euler_market_substrates()]
+    ids = sorted({substrate.sub_account_id for substrate in substrates})
+    _check(
+        ids == [SUB_ACCOUNT],
+        f"the substrates name sub-accounts {ids}, the actions use {SUB_ACCOUNT}",
     )
-    return Call(to=contract, data=data, output_types=["uint256"])
+    return substrates[0].sub_account(plasma_vault)
 
 
 # ── Pure builders (no chain access) ──────────────────────────────────────────
@@ -441,9 +443,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     collateral_shares = sim.observe(
         ERC20(EVAULT_WBTC).balance_of(euler_account),
     )
-    usdc_debt = sim.observe(
-        _debt_of(EVAULT_USDC, euler_account),
-    )
+    usdc_debt = sim.observe(EulerV2VaultReader(EVAULT_USDC).debt_of(euler_account))
     vault_wbtc = sim.observe(wbtc.balance_of(preview.plasma_vault))
     vault_usdc = sim.observe(usdc.balance_of(preview.plasma_vault))
     euler_value = sim.observe(vault.total_assets_in_market(EULER_MARKET))

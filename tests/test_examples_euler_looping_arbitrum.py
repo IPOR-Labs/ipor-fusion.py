@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+from _simulation_fakes import simulated_call, simulation_result
 from eth_abi import decode
 from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
@@ -29,7 +31,8 @@ def test_euler_looping_substrates_are_narrow(load_example):
         UniversalTokenSwapperSubstrates.token(mod.ARBITRUM_WBTC),
         UniversalTokenSwapperSubstrates.target(mod.ARBITRUM_USDC),
         UniversalTokenSwapperSubstrates.target(mod.UNISWAP_UNIVERSAL_ROUTER),
-        UniversalTokenSwapperSubstrates.slippage(mod.MAX_SWAP_SLIPPAGE_WAD),
+        # A literal: the module's own constant would match any value.
+        UniversalTokenSwapperSubstrates.slippage(2 * 10**16),
     }
 
 
@@ -120,3 +123,21 @@ def test_euler_looping_callback_and_clone_are_import_safe(load_example):
     assert mod.unsigned_clone_calldata()[:4] == function_signature_to_4byte_selector(
         "clone(string,string,address,uint256,address,uint256)"
     )
+
+
+def test_euler_looping_assert_all_success_raises_on_failure(load_example):
+    mod = load_example("advanced_euler_v2_looping_arbitrum.py")
+
+    mod._assert_all_success(simulation_result([simulated_call("loop", success=True)]))
+    with pytest.raises(AssertionError, match="simulation calls failed"):
+        mod._assert_all_success(
+            simulation_result([simulated_call("loop", success=False)])
+        )
+
+
+def test_euler_looping_check_raises_only_on_a_false_condition(load_example):
+    mod = load_example("advanced_euler_v2_looping_arbitrum.py")
+
+    mod._check(True, "must not raise")
+    with pytest.raises(AssertionError, match="boom"):
+        mod._check(False, "boom")

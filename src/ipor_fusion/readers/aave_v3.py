@@ -8,7 +8,7 @@ from ipor_fusion.core.context import Web3Context
 from ipor_fusion.core.contract import Call, ContractWrapper
 from ipor_fusion.core.erc20 import ERC20
 from ipor_fusion.core.multicall import Multicall3
-from ipor_fusion.types import ZERO_ADDRESS, Amount
+from ipor_fusion.types import ZERO_ADDRESS, Amount, LtvBps
 
 # DataTypes.ReserveDataLegacy returned by Pool.getReserveData(address).
 # All fields are static, so the struct is encoded inline as a flat sequence.
@@ -38,8 +38,8 @@ class AaveV3UserAccountData:
     total_collateral_base: Amount
     total_debt_base: Amount
     available_borrows_base: Amount
-    current_liquidation_threshold: int
-    ltv: int
+    current_liquidation_threshold: LtvBps
+    ltv: LtvBps
     health_factor: int
 
 
@@ -83,8 +83,8 @@ def _user_account_data_decoder(
         total_collateral_base=Amount(collateral),
         total_debt_base=Amount(debt),
         available_borrows_base=Amount(available),
-        current_liquidation_threshold=liquidation_threshold,
-        ltv=ltv,
+        current_liquidation_threshold=LtvBps(liquidation_threshold),
+        ltv=LtvBps(ltv),
         health_factor=health_factor,
     )
 

@@ -45,15 +45,14 @@ import os
 import sys
 from typing import TypedDict
 
-from eth_abi import encode
 from eth_typing import ChecksumAddress
-from eth_utils import function_signature_to_4byte_selector
 from web3 import Web3
 
 from ipor_fusion import (
     ERC20,
     AccessManager,
-    Call,
+    EulerV2Substrate,
+    EulerV2VaultReader,
     FusionFactory,
     PlasmaVault,
     PriceOracleMiddlewareManager,
@@ -211,29 +210,22 @@ def _connected_web3() -> Web3:
 
 
 def _euler_account(plasma_vault: ChecksumAddress) -> ChecksumAddress:
-    """The EVC account for this position: ``plasma_vault XOR SUB_ACCOUNT``.
+    """The EVC sub-account of ``plasma_vault`` that the Euler substrates name.
 
-    Mirrors ``EulerFuseLib.generateSubAccountAddress`` -- Euler derives 256
-    sub-accounts per owner by XOR-ing the low byte. All reads of the position
-    (e.g. ``debtOf``) address this account, not the raw vault.
+    Euler derives 256 sub-accounts per owner by XOR-ing the low byte
+    (``EulerV2Substrate.sub_account``, mirroring
+    ``EulerFuseLib.generateSubAccountAddress``). The check ties the substrates
+    this example grants to ``SUB_ACCOUNT``, which every fuse action passes, so
+    the reads of the position (e.g. ``debtOf``) address the account the actions
+    act on, not the raw vault.
     """
-    return Web3.to_checksum_address(f"0x{(int(plasma_vault, 16) ^ SUB_ACCOUNT):040x}")
-
-
-def _evault_debt_of(
-    euler_vault: ChecksumAddress, account: ChecksumAddress
-) -> Call[int]:
-    """Read an Euler eVault's outstanding debt for an account (underlying units).
-
-    ``debtOf`` is the outstanding-debt read: the live truth of what the position
-    owes, straight from the debt eVault rather than from any vault accounting. It
-    is the amount owed, not a health factor (health would weigh it against the
-    collateral value and liquidation threshold).
-    """
-    data = function_signature_to_4byte_selector("debtOf(address)") + encode(
-        ["address"], [account]
+    substrates = [EulerV2Substrate.from_bytes(s) for s in market_substrates()]
+    ids = sorted({substrate.sub_account_id for substrate in substrates})
+    _check(
+        ids == [SUB_ACCOUNT],
+        f"the substrates name sub-accounts {ids}, the actions use {SUB_ACCOUNT}",
     )
-    return Call(to=euler_vault, data=data, output_types=["uint256"])
+    return substrates[0].sub_account(plasma_vault)
 
 
 # ── Pure builders (no chain access -- safe to import and unit-test offline) ───
@@ -399,6 +391,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     access_manager = AccessManager(preview.access_manager)
     price_manager = PriceOracleMiddlewareManager(preview.price_manager)
     cbeth = ERC20(BASE_CBETH)
+    weth_evault = EulerV2VaultReader(EVAULT_WETH)
     euler_account = _euler_account(preview.plasma_vault)
 
     # The whole flow runs as ONE eth_simulateV1 batch; nothing here is signed or
@@ -524,7 +517,8 @@ def run_simulation(web3: Web3) -> SimulationResult:
 
     # Borrow WETH against the cbETH collateral; debt is now open.
     sim.execute([borrow_action(BORROW_AMOUNT)])
-    debt_after_borrow = sim.observe(_evault_debt_of(EVAULT_WETH, euler_account))
+    # debtOf is the amount owed in underlying units, read from the debt eVault itself.
+    debt_after_borrow = sim.observe(weth_evault.debt_of(euler_account))
     plan.append("borrow 1 WETH against the cbETH collateral")
 
     # Re-value the market while the position is open so the balance fuse's
@@ -539,7 +533,7 @@ def run_simulation(web3: Web3) -> SimulationResult:
     # advance in this run, interest is negligible and the borrowed WETH covers it.
     # (Advancing time would accrue interest, requiring a small extra WETH buffer.)
     sim.execute([repay_action(Amount(MAX_UINT256))])
-    debt_after_repay = sim.observe(_evault_debt_of(EVAULT_WETH, euler_account))
+    debt_after_repay = sim.observe(weth_evault.debt_of(euler_account))
     plan.append("repay the full WETH debt")
 
     # Unwind in reverse of setup: disable the WETH controller, then the cbETH

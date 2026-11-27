@@ -14,6 +14,7 @@ from hypothesis import strategies as st
 from web3 import Web3
 
 from ipor_fusion import (
+    EulerV2Substrate,
     FuseAction,
     IporFusionMarkets,
     decode_execute_calldata,
@@ -35,7 +36,7 @@ from ipor_fusion.readers.morpho import (
     to_assets_down,
     to_assets_up,
 )
-from ipor_fusion.types import ChainId, FuseAddress, MarketId
+from ipor_fusion.types import ChainId, EulerSubAccountId, FuseAddress, MarketId
 
 BATCH_SIGNATURES = ("execute((address,bytes)[])", "claimRewards((address,bytes)[])")
 UINT88_MAX = (1 << 88) - 1  # CrosschainSubstrateLib: chainId in bits 247..160
@@ -239,6 +240,47 @@ def test_euler_substrate_matches_solidity_layout_and_decodes_back(
     assert info.extra["is_collateral"] == str(is_collateral)
     assert info.extra["can_borrow"] == str(can_borrow)
     assert info.extra["sub_account"] == f"0x{sub_account:02x}"
+
+
+@given(
+    euler_vault=addresses,
+    collateral_byte=st.integers(min_value=0, max_value=0xFF),
+    borrow_byte=st.integers(min_value=0, max_value=0xFF),
+    sub_account_id=st.integers(min_value=0, max_value=0xFF),
+    plasma_vault=addresses,
+)
+def test_euler_v2_substrate_decodes_the_solidity_layout(
+    euler_vault, collateral_byte, borrow_byte, sub_account_id, plasma_vault
+):
+    # Built by hand: the fuse encoder would round-trip a layout bug it shares.
+    raw = (
+        bytes.fromhex(euler_vault[2:])
+        + bytes([collateral_byte, borrow_byte, sub_account_id])
+        + bytes(9)
+    )
+
+    substrate = EulerV2Substrate.from_bytes(raw)
+
+    # EulerFuseLib.bytes32ToSubstrate reads each flag as `byte & 0x01 == 1`.
+    assert substrate == EulerV2Substrate(
+        euler_vault=euler_vault,
+        is_collateral=collateral_byte & 1 == 1,
+        can_borrow=borrow_byte & 1 == 1,
+        sub_account_id=EulerSubAccountId(sub_account_id),
+    )
+    # EulerFuseLib.generateSubAccountAddress: the id XORed into the last byte.
+    account = substrate.sub_account(plasma_vault)
+    vault_bytes = bytes.fromhex(plasma_vault[2:])
+    assert Web3.is_checksum_address(account)
+    assert bytes.fromhex(account[2:]) == vault_bytes[:19] + bytes(
+        [vault_bytes[19] ^ sub_account_id]
+    )
+
+
+@given(raw=st.binary(max_size=64).filter(lambda raw: len(raw) != 32))
+def test_euler_v2_substrate_rejects_any_length_but_32(raw):
+    with pytest.raises(ValueError, match="32 bytes"):
+        EulerV2Substrate.from_bytes(raw)
 
 
 @pytest.mark.parametrize("market_id", MARKETS)
