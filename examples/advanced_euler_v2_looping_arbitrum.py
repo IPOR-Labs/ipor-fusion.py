@@ -38,6 +38,7 @@ from web3 import Web3
 from ipor_fusion import (
     ERC20,
     AccessManager,
+    EulerV2Substrate,
     EulerV2VaultReader,
     FusionFactory,
     PlasmaVault,
@@ -179,7 +180,18 @@ def _address_substrate(address: ChecksumAddress) -> bytes:
 
 
 def _euler_account(plasma_vault: ChecksumAddress) -> ChecksumAddress:
-    return Web3.to_checksum_address(f"0x{(int(plasma_vault, 16) ^ SUB_ACCOUNT):040x}")
+    """The EVC sub-account of ``plasma_vault`` that the Euler substrates name.
+
+    The check ties the substrates this example grants to ``SUB_ACCOUNT``, which
+    every fuse action passes, so the reads address the account the actions use.
+    """
+    substrates = [EulerV2Substrate.from_bytes(s) for s in euler_market_substrates()]
+    ids = sorted({substrate.sub_account_id for substrate in substrates})
+    _check(
+        ids == [SUB_ACCOUNT],
+        f"the substrates name sub-accounts {ids}, the actions use {SUB_ACCOUNT}",
+    )
+    return substrates[0].sub_account(plasma_vault)
 
 
 # ── Pure builders (no chain access) ──────────────────────────────────────────

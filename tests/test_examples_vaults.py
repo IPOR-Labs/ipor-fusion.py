@@ -21,6 +21,7 @@ from web3 import Web3
 from ipor_fusion import CUSTOM_ERRORS
 from ipor_fusion.core import FusionFactory
 from ipor_fusion.core.fuse_action import FuseAction
+from ipor_fusion.fuses import euler_substrate
 from ipor_fusion.types import MAX_UINT256, Amount
 
 Loader = Callable[[str], ModuleType]
@@ -233,13 +234,73 @@ class TestAdvancedEulerV2CreditMarketBase(_ExampleOfflineChecks):
             assert Web3.to_checksum_address(decoded_tuple[0]) == vault
             assert decoded_tuple[1:] == tail
 
-    def test_euler_account_is_vault_xor_sub_account(self) -> None:
-        clear = Web3.to_checksum_address("0x000000000000000000000000000000000000ff00")
-        flipped = Web3.to_checksum_address("0x000000000000000000000000000000000000ff01")
-        # XOR with SUB_ACCOUNT (0x01) flips the low bit both ways; OR, AND-NOT,
-        # + 1 and - 1 each fail one of the two directions.
-        assert self.mod._euler_account(clear) == flipped
-        assert self.mod._euler_account(flipped) == clear
+
+# Each Euler example's file -> its substrate builder and its collateral and
+# borrow eVault constants.
+_EULER_EXAMPLES = {
+    "advanced_euler_v2_credit_market_base.py": (
+        "market_substrates",
+        "EVAULT_CBETH",
+        "EVAULT_WETH",
+    ),
+    "advanced_euler_v2_looping_arbitrum.py": (
+        "euler_market_substrates",
+        "EVAULT_WBTC",
+        "EVAULT_USDC",
+    ),
+}
+
+
+@pytest.mark.parametrize("filename", _EULER_EXAMPLES)
+def test_euler_account_is_vault_xor_sub_account(
+    load_example: Loader, filename: str
+) -> None:
+    mod = load_example(filename)
+    clear = Web3.to_checksum_address("0x000000000000000000000000000000000000ff00")
+    flipped = Web3.to_checksum_address("0x000000000000000000000000000000000000ff01")
+    # XOR with SUB_ACCOUNT (0x01) flips the low bit both ways; OR, AND-NOT,
+    # + 1 and - 1 each fail one of the two directions.
+    assert mod._euler_account(clear) == flipped
+    assert mod._euler_account(flipped) == clear
+
+
+@pytest.mark.parametrize("filename", _EULER_EXAMPLES)
+@pytest.mark.parametrize(
+    ("sub_accounts", "named"),
+    [((1, 2), r"\[1, 2\]"), ((2, 2), r"\[2\]"), (None, r"\[\]")],
+    ids=["two", "not-the-actions-one", "none"],
+)
+def test_euler_account_refuses_substrates_off_the_actions_sub_account(
+    load_example: Loader,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+    sub_accounts: tuple[int, int] | None,
+    named: str,
+) -> None:
+    mod = load_example(filename)
+    builder, collateral, borrow = _EULER_EXAMPLES[filename]
+    substrates = []
+    if sub_accounts is not None:
+        substrates = [
+            euler_substrate(
+                euler_vault=getattr(mod, collateral),
+                is_collateral=True,
+                can_borrow=False,
+                sub_account=sub_accounts[0],
+            ),
+            euler_substrate(
+                euler_vault=getattr(mod, borrow),
+                is_collateral=False,
+                can_borrow=True,
+                sub_account=sub_accounts[1],
+            ),
+        ]
+    monkeypatch.setattr(mod, builder, lambda: substrates)
+    vault = Web3.to_checksum_address("0x000000000000000000000000000000000000ff00")
+    with pytest.raises(
+        AssertionError, match=rf"sub-accounts {named}, the actions use 1"
+    ):
+        mod._euler_account(vault)
 
 
 def _substrate_address(substrate: bytes) -> str:
