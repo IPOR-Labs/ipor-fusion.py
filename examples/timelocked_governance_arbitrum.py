@@ -30,10 +30,12 @@ vault-configuration-step-by-step -> access-management, "Strict Key
 Separation"). Do not copy it. The example acts as the ATOMIST and, in step 8,
 as the GUARDIAN.
 
-The recommended delays per role and the 7-day expiry of a scheduled operation
-are IPOR policy: ipor.io/docs -> build-on-fusion -> atomists ->
-vault-configuration-step-by-step -> timelocks-and-execution-delays. The example
-reads the vault's delays from the chain rather than hardcoding them. A guardian
+The recommended delays per role are IPOR policy: ipor.io/docs ->
+build-on-fusion -> atomists -> vault-configuration-step-by-step ->
+timelocks-and-execution-delays. The example reads the vault's delays from the
+chain rather than hardcoding them. A scheduled operation expires 7 days after
+it becomes executable; that window is OpenZeppelin's, hardcoded in
+``AccessManager.expiration()``, so no vault can change it. A guardian
 cancels operations scheduled by OWNER, ATOMIST or FUSE_MANAGER, but not
 ``grantRole``, ``revokeRole`` or ``setGrantDelay`` (access-management, and the
 developer reference of timelocks-and-execution-delays, "Cancelling an
